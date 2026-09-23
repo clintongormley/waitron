@@ -637,16 +637,13 @@ describe("seatBooking", () => {
     });
   });
 
-  // The terminal write is a compare-and-swap on the `booked` predecessor (matching `advanceStatus`),
-  // not a bare id write — the concurrency backstop for the window between the lock-free `getBooking`
-  // read and the write. No test stages that window as a real race: one write transaction runs on the
-  // venue file at a time, so a cancel cannot land between the read and the write (the reasoning is in
-  // `bookings-cas.test.ts`'s header). This pins the guard directly instead, the way `advanceStatus`'s
-  // tests do: a booking that is no longer `booked` is refused
-  // with `booking.invalid_transition`, stays `cancelled`, and leaves NO open tab behind. (Removing the
-  // pre-`openTab` `booked` check leaves this green: the CAS then opens a tab, matches nothing on the
-  // predecessor, throws, and the tx rollback undoes the tab — proven by deletion, 2026-08-30.)
-  it("CAS guard: seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
+  // A booking that is no longer `booked` is refused by the check before `openTab`, with
+  // `booking.invalid_transition`; it stays `cancelled` and leaves NO open tab behind. The
+  // compare-and-swap in the final write is reached by the next case, not this one. (Removing the
+  // pre-`openTab` check leaves this green: the compare-and-swap then refuses it instead, and the
+  // rollback undoes the tab — measured 2026-09-23 on `node:sqlite`, Node v26.7.0, by deleting that
+  // check and running this case: 1 passed.)
+  it("seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
     const { cfg, core, createdBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3");
     const { id } = await scoped(cfg, (tx) =>
@@ -669,6 +666,39 @@ describe("seatBooking", () => {
     // handed back as a number, and this engine returns a plain JavaScript number already —
     // measured on node v26.7.0, `select count(*) as n` over a one-row table gives `{ n: 1 }` with
     // `typeof n === "number"`.
+    const tabs = await db.execute<{ n: number }>(sql`select count(*) as n from working_orders`);
+    expect(tabs.rows[0]!.n).toBe(0);
+  });
+
+  // The case above never reaches the compare-and-swap: the pre-`openTab` check refuses it first.
+  // This one cancels the booking INSIDE `openTab`, after that check has passed, so the final write
+  // finds it no longer `booked`. The seat must be refused, and the rollback must take the tab and
+  // the cancel with it.
+  it("CAS guard: a booking that leaves `booked` during openTab is refused and the tab rolled back", async () => {
+    const { cfg, core, createdBy } = await setupTillVenue();
+    const tableId = await seedTable(cfg, "3b");
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Núñez",
+        tableId,
+        createdBy,
+      }),
+    );
+    const cancellingCore: CoreServices = {
+      ...core,
+      async openTab(tx, req) {
+        await cancelBooking(tx, cfg, id);
+        return core.openTab(tx, req);
+      },
+    };
+    await expect(
+      scoped(cfg, (tx) => seatBooking(tx, cfg, id, {}, cancellingCore)),
+    ).rejects.toMatchObject({ code: "booking.invalid_transition" });
+    const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
+    expect(b).toMatchObject({ status: "booked", tabId: null, tableId });
     const tabs = await db.execute<{ n: number }>(sql`select count(*) as n from working_orders`);
     expect(tabs.rows[0]!.n).toBe(0);
   });

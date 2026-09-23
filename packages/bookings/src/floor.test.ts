@@ -167,6 +167,18 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
+  it("reads a location with no row as unreserved rather than throwing", async () => {
+    // Pins two things: the missing row does not throw, and the read stays scoped to the location it
+    // was given — the booking below is eligible at the table's REAL location, so it must not
+    // surface. Which zone the missing row falls back to is not observable here.
+    const v = await setupVenue();
+    const t = await makeTable(v, "13b");
+    await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
+    const missing = { locationId: brandLocationId(randomUUID()) };
+    const m = await annotate(missing, MADRID_NOON, [t]);
+    expect(m).toEqual(new Map([[t, { reservedTime: null }]]));
+  });
+
   it("derives venue-local 'today' from locations.time_zone, not UTC (date boundary)", async () => {
     // now = 2026-09-01T23:00:00Z. In Pacific/Kiritimati (UTC+14) that is 2026-09-02 13:00 — a DIFFERENT
     // calendar day than the UTC 2026-09-01.

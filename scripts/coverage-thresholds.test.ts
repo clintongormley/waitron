@@ -44,6 +44,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/db",
   "@waitron/payments",
   "@waitron/store",
+  "@waitron/bookings",
   "@waitron/composition",
   "@waitron/country",
   "@waitron/country-es",

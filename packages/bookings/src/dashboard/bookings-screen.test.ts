@@ -418,6 +418,90 @@ describe("bookings-screen", () => {
     );
   });
 
+  it("ignores an edit for a booking no longer in the list (a stale click)", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    // Hold the row's Edit button, then let a live refresh drop that booking from the list: the held
+    // button still carries the old id, which the screen must resolve against what it holds now.
+    const edit = q(el, "edit-bk-early")!;
+    vi.mocked(api.listBookings).mockResolvedValue([]);
+    liveData.invalidate([{ type: "bookings", id: "bk-early" }]);
+    await vi.waitFor(() => expect(q(el, "edit-bk-early")).toBeNull());
+    edit.click();
+    await el.updateComplete;
+    expect(form(el).open).toBe(false);
+    expect(form(el).booking).toBeNull();
+  });
+
+  it("single-flights an update: a second update while one is in flight is dropped", async () => {
+    let resolve!: () => void;
+    const updateBooking = vi
+      .fn()
+      .mockImplementation(() => new Promise<void>((r) => (resolve = () => r())));
+    const api = stubApi({ updateBooking });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, "edit-bk-early");
+    emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
+    emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
+    await el.updateComplete;
+    expect(updateBooking).toHaveBeenCalledTimes(1);
+    expect(form(el).busy).toBe(true);
+    resolve();
+    await flush(el);
+    expect(form(el).busy).toBe(false);
+    // A successful update closes the form, so re-open it the way a person would before the next one:
+    // the gate reopens once the first update settles.
+    expect(form(el).open).toBe(false);
+    await click(el, "edit-bk-early");
+    expect(form(el).open).toBe(true);
+    emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 7 } });
+    await el.updateComplete;
+    expect(updateBooking).toHaveBeenCalledTimes(2);
+    expect(updateBooking).toHaveBeenLastCalledWith("bk-early", { partySize: 7 });
+    resolve();
+    await flush(el);
+  });
+
+  it("single-flights a seat: a second Seat click while one is in flight is dropped", async () => {
+    let resolve!: () => void;
+    const seatBooking = vi
+      .fn()
+      .mockImplementation(
+        () => new Promise<{ tabId: string }>((r) => (resolve = () => r({ tabId: "tab-9" }))),
+      );
+    const api = stubApi({ seatBooking });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, "seat-bk-early"); // bk-early has a table → seats straight away
+    await click(el, "seat-bk-early");
+    expect(seatBooking).toHaveBeenCalledTimes(1);
+    resolve();
+    await flush(el);
+    // The gate reopens once the first seat settles.
+    await click(el, "seat-bk-early");
+    expect(seatBooking).toHaveBeenCalledTimes(2);
+  });
+
+  it("single-flights a lifecycle move: a second click while one is in flight is dropped", async () => {
+    let resolve!: () => void;
+    const markNoShow = vi
+      .fn()
+      .mockImplementation(() => new Promise<void>((r) => (resolve = () => r())));
+    const api = stubApi({ markNoShow });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, "no-show-bk-late");
+    await click(el, "no-show-bk-late");
+    expect(markNoShow).toHaveBeenCalledTimes(1);
+    resolve();
+    await flush(el);
+    await click(el, "no-show-bk-late");
+    expect(markNoShow).toHaveBeenCalledTimes(2);
+  });
+
   it("renders exactly one h1 (its own title)", async () => {
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", {
       api: stubApi(),
@@ -436,4 +520,34 @@ it("refreshes the selected day's bookings after an external change", async () =>
   vi.mocked(api.listBookings).mockResolvedValue([]);
   liveData.invalidate([{ type: "bookings", id: "booking" }]);
   await vi.waitFor(() => expect((el as unknown as { bookings: Booking[] }).bookings).toEqual([]));
+});
+
+it("refreshes the tables through the api's background copy after an external change", async () => {
+  const liveData = new LiveData();
+  const background = stubApi({ listTables: vi.fn().mockResolvedValue([TABLES[0]]) });
+  const api = Object.assign(stubApi(), { liveData, background });
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  expect(api.listTables).toHaveBeenCalledTimes(1);
+  liveData.invalidate([{ type: "dining_tables", id: "t-2" }]);
+  await vi.waitFor(() =>
+    expect((el as unknown as { tables: DashboardTable[] }).tables).toEqual([TABLES[0]]),
+  );
+  // The initial read went through the api itself; the refresh went through `background` alone.
+  expect(api.listTables).toHaveBeenCalledTimes(1);
+  expect(background.listTables).toHaveBeenCalledTimes(1);
+});
+
+it("refreshes the tables through the api itself when it has no background copy", async () => {
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+  await flush(el);
+  expect(api.listTables).toHaveBeenCalledTimes(1);
+  vi.mocked(api.listTables).mockResolvedValue([TABLES[0]!]);
+  liveData.invalidate([{ type: "dining_tables", id: "t-2" }]);
+  await vi.waitFor(() =>
+    expect((el as unknown as { tables: DashboardTable[] }).tables).toEqual([TABLES[0]]),
+  );
+  expect(api.listTables).toHaveBeenCalledTimes(2);
 });

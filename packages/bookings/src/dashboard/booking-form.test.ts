@@ -201,4 +201,44 @@ describe("booking-form", () => {
     await click(el, "confirm");
     expect(fired).toBe(false);
   });
+
+  it("clears the validation alert as soon as a field changes", async () => {
+    const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
+    await setInput(el, "booking-date", "2026-08-20");
+    await setInput(el, "booking-time", "20:00");
+    await setInput(el, "party-size", "4");
+    await click(el, "confirm"); // contact-name blank → the alert shows
+    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    await setInput(el, "contact-name", "García");
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("submits on Enter in a field, through the confirm button", async () => {
+    const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
+    const events: BookingInput[] = [];
+    el.addEventListener("create-booking", (e) =>
+      events.push((e as CustomEvent<BookingInput>).detail),
+    );
+    await fillValid(el);
+    const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=contact-name]",
+    )!;
+    await field.updateComplete;
+    // Dispatched from the native input inside wt-input's shadow root, so `composedPath()[0]` is the
+    // HTMLInputElement submitOnEnter requires.
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    expect(events).toEqual([
+      {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        contactPhone: null,
+        notes: null,
+        tableId: null,
+      },
+    ]);
+  });
 });
