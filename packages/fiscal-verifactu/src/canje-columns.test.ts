@@ -1,9 +1,9 @@
 import {
   CHECK_VIOLATION,
   captureError,
+  engineErrorMessage,
   isRefusal,
   newId,
-  engineErrorMessage,
   triggerRaised,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";

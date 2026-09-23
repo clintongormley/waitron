@@ -176,9 +176,8 @@ describe("appendToChain from many callers started together", () => {
     // `packages/catalogue/test/fixtures.ts`; written out here rather than imported because that
     // helper lives in another package's test directory.
     //
-    // NOT a translation of the old assertion: `driverErrorCode` answers the same string for every
-    // failure on this engine (`packages/db/src/testing/errors.ts`), so a `.toBe("55P03")` kept as
-    // `.toBe(<something>)` would have been a check that passes for the wrong reason.
+    // No error code is asserted: `driverErrorCode` answers the same string for every failure on
+    // this engine (`packages/db/src/testing/errors.ts`), so it cannot identify this refusal.
     //
     // CONTROL RUN, 2026-09-22: with both bodies calling `appendToChain(suite.db, …)` directly
     // instead of through `withTransaction` — no queue — this case reported

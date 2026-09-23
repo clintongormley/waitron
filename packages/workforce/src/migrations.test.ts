@@ -6,10 +6,10 @@ import {
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
+  engineErrorMessage,
   isRefusal,
   newId,
   nowIso,
-  engineErrorMessage,
 } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";

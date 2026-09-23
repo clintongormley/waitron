@@ -4,9 +4,9 @@ import {
   CHECK_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
+  engineErrorMessage,
   isRefusal,
   nowIso,
-  engineErrorMessage,
 } from "@waitron/db";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

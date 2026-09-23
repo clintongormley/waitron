@@ -226,9 +226,8 @@ describe("appendToChain", () => {
         huella: "0".repeat(64),
       }),
     );
-    // The class, and then WHICH key — stronger than the SQLSTATE this used to assert, which said
-    // only that something unique was violated. This engine names the table and the columns for a
-    // unique index over plain columns (`packages/db/src/constraint-target.ts`).
+    // The class, and then WHICH key. This engine names the table and the columns for a unique
+    // index over plain columns (`packages/db/src/constraint-target.ts`).
     expect(isUniqueViolation(error)).toBe(true);
     expect(constraintTarget(error)).toEqual({
       table: "registros_facturacion",

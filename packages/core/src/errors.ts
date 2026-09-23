@@ -138,8 +138,9 @@ declare module "@waitron/shared" {
      * number that already reached a committed sale. Still not thrown anywhere in this package:
      * Task 17's own "burned number" test (`record-void.test.ts`) proves the constraint fires by
      * reading the refusal off the rejected INSERT directly (`captureError`, then
-     * `isUniqueViolation` and `constraintTarget`), the same way `record-sale.test.ts`'s "never reissues a number" test already does — neither
-     * `recordSale` nor `recordVoid` catches and translates that violation into this code. */
+     * `isUniqueViolation` and `constraintTarget`), the same way `record-sale.test.ts`'s "never
+     * reissues a number" test already does — neither `recordSale` nor `recordVoid` catches and
+     * translates that violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
     /**
      * Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales`. An

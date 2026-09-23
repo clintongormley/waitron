@@ -4,8 +4,8 @@ import {
   CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   captureError,
-  isRefusal,
   engineErrorMessage,
+  isRefusal,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -46,12 +46,11 @@ describe("card_readers", () => {
       }),
     );
     // SQLite reports a result code on `errcode`, and a duplicate key two ways — a unique index
-    // (2067) and a primary key (1555) — so the class comes from `UNIQUE_VIOLATION` (`packages/db/src/sql-state.ts`), which holds both.
+    // (2067) and a primary key (1555) — so the class comes from `UNIQUE_VIOLATION`
+    // (`packages/db/src/sql-state.ts`), which holds both.
     expect(isRefusal(dup, UNIQUE_VIOLATION)).toBe(true);
-    // Was `/card_readers_provider_ref_key/`. SQLite names the COLUMNS of the index it refused, not
-    // the constraint's name, so the assertion moves to the columns — the same index, said the
-    // engine's way. Nothing is lost here: a message naming these two columns can only have come
-    // from this index.
+    // SQLite names the COLUMNS of the index it refused, not the constraint's name, so the assertion
+    // is on the columns. A message naming these two columns can only have come from this index.
     expect(engineErrorMessage(dup)).toMatch(
       /UNIQUE constraint failed: card_readers\.provider, card_readers\.provider_ref/,
     );

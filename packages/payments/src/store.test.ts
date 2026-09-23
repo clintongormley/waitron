@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   captureError,
-  nodes,
   engineErrorMessage,
+  nodes,
   tills,
   workingOrders,
 } from "@waitron/db";
@@ -861,10 +861,9 @@ describe("Mode 3 initiated lifecycle", () => {
   it("the partial unique index rejects a second initiated row with the same (provider, external_ref)", async () => {
     const seeded = await seedTenant();
     await initiate(seeded, HOSTED, "pay-1");
-    // `db.transaction`/`tx.insert` wrap the driver error in a `DrizzleQueryError` whose own
-    // `.message` is the generic "Failed query: ..." — the actual constraint-violation text lives on
-    // `.cause` (see `@waitron/db`'s `engineErrorMessage`, used the same way throughout
-    // packages/db/src/schema/*.test.ts for a unique/check-constraint assertion).
+    // Whether the engine's text is the error's own `.message` or sits on `.cause` depends on the
+    // path (`driverErrorCode` in `packages/db/src/testing/errors.ts` records both shapes);
+    // `@waitron/db`'s `engineErrorMessage` returns the engine's words either way.
     //
     // This engine names the COLUMNS, never the index: the PostgreSQL text this replaced carried
     // `payments_provider_external_ref_key`, so what an assertion can still see is the column PAIR.

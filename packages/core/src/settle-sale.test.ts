@@ -145,10 +145,8 @@ describe("settleSale — the happy path", () => {
         tenders: [{ ...cash, amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
     );
-    // Was `.toBe("23514")`, PostgreSQL's CHECK SQLSTATE. `isRefusal(error, CHECK_VIOLATION)` is
-    // the same question on this engine's own numbering (275), and the idiom the already-converted
-    // `packages/workforce/src/migrations.test.ts` uses throughout. NOT `driverErrorCode`, which
-    // answers the same string for every failure here.
+    // `isRefusal(error, CHECK_VIOLATION)` asks for the CHECK class (275 on this engine's own
+    // numbering); `driverErrorCode` would answer the same string for every failure here.
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId))).toEqual([]);
     expect(

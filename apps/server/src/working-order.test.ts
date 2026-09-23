@@ -924,10 +924,10 @@ describe("parkOrder", () => {
 
     // The re-park collides on the committed (now abandoned) row. Not being `open`, it is NOT a replayable
     // held order, so the ORIGINAL driver refusal is re-thrown rather than a result fabricated. Read
-    // through `isUniqueViolation` (not `.rejects.toMatchObject({ code })`) because drizzle wraps the
-    // driver error in a `DrizzleQueryError` whose own `code` is undefined, and the predicate walks
-    // the cause chain — the same normalisation `record-void.test.ts` makes for this identical
-    // assertion shape.
+    // through `isUniqueViolation` (not `.rejects.toMatchObject({ code })`) because the engine's
+    // result code sits at the top level or one wrapper down depending on the path
+    // (`driverErrorCode` in `packages/db/src/testing/errors.ts` records both shapes), and the
+    // predicate reads it either way.
     //
     // `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the
     // discriminating value on `errcode`, so no string code separates a duplicate key from anything

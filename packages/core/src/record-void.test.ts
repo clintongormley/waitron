@@ -280,12 +280,10 @@ describe("recordVoid — numbering", () => {
     // Enforced locally because the alternative is discovering it as a rejected record and a
     // halted chain, hours later and in production.
     //
-    // **Deviation from the brief.** The brief asserted `.rejects.toMatchObject({ code: "23505" })`
-    // directly on the raw insert. `.rejects.toMatchObject` does not see through Drizzle's own
-    // `DrizzleQueryError` wrapper (its `.code` is undefined; the real SQLSTATE lives on
-    // `.cause.code`) — record-sale.test.ts's own "never reissues a number" test already makes this
-    // exact correction for the identical shape of assertion, per this task's own governing
-    // context. The brief's raw INSERT also omitted `issuedOffsetMinutes`, a NOT NULL column.
+    // The assertion reads through `isUniqueViolation` rather than a `code` on the error: the
+    // engine's result code sits at the top level or one wrapper down depending on the path
+    // (`driverErrorCode` in `packages/db/src/testing/errors.ts` records both shapes), and the
+    // predicate reads it either way.
     const backend = new FakeFiscalBackend(suite.db);
     const first = await sell(backend);
     await voidSale(backend, first.saleId);

@@ -49,9 +49,10 @@ const SIF_PARAMS = {
 /**
  * The key `registro_sif_instalacion_uq` declares, in its own column order (./schema/sif.ts).
  *
- * SQLite reports no SQLSTATE — every failure carries `code: "ERR_SQLITE_ERROR"` and the discriminating value is a numeric `errcode`
- * (packages/db/src/sql-state.ts) — so the two cases below ask `refusalOn`, which matches the class
- * AND the table and columns the engine's own message named, on one layer of the cause chain.
+ * SQLite reports no SQLSTATE — every failure carries `code: "ERR_SQLITE_ERROR"` and the
+ * discriminating value is a numeric `errcode` (packages/db/src/sql-state.ts) — so the two cases
+ * below ask `refusalOn`, which matches the class AND the table and columns the engine's own
+ * message named, on one layer of the cause chain.
  *
  * Narrower than what it replaces, not wider: `23505` said only "some unique index", where this
  * names the index's own columns. Control: with the key's `numero_instalacion` entry removed, the

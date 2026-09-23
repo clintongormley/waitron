@@ -3581,9 +3581,19 @@ it; and a correction must not decrement a count where it should drop it.
   script's whole subject was dumping and diffing a PostgreSQL schema.
 - **The four helpers named after PostgreSQL — DONE (2026-09-23, `chore/rename-pg-helpers`).**
   Renamed, with no behaviour change: `isPgError` is `isRefusal`, `pgErrorCode` is
-  `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and the canje test's
-  `storeF3AsAppUser` is `storeF3`. Historical plans and specs under `docs/superpowers/` keep the
-  old names, as written.
+  `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and `storeF3AsAppUser` in
+  `packages/fiscal-verifactu/src/canje-path.e2e.test.ts` is `storeF3`. Historical plans and specs
+  under `docs/superpowers/` keep the old names, as written.
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** They
+  say drizzle wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined. On
+  `node:sqlite` only `db.run` wraps (as `DrizzleError`), while an awaited query builder rejects
+  with the engine's own error (`packages/db/src/testing/errors.ts` records both shapes). Each site
+  needs checking against the path it actually takes, then rewording:
+  `packages/core/src/record-sale.test.ts`, `packages/db/src/schema/series.test.ts`,
+  `packages/db/src/deployment.test.ts`, `packages/db/src/unique-violation.test.ts`,
+  `apps/server/src/restore-fiscal-receipt.test.ts`, `packages/credentials/src/bin.ts`,
+  `packages/provisioning/src/bin.ts`, `packages/provisioning/src/errors.ts` and
+  `packages/db/src/testing/errors.test.ts`.
 - **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
   `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
   `apps/server/src/management-api.ts` no longer take one. Every route still calls

@@ -4,8 +4,8 @@ import { UNIQUE_VIOLATION, type RefusalClass } from "./sql-state.js";
 /**
  * Is this error (or anything it wraps) one of `refusal`'s result codes?
  *
- * The code is not on the error a write path catches — Drizzle wraps the driver's error rather than
- * re-exposing its fields — so this reads the first result code in the cause chain
+ * The engine's result code may be at the top level or one wrapper down, depending on the path the
+ * refusal came through, so this reads the first result code in the cause chain
  * (`./constraint-target.ts`'s `refusalCode`, which owns the walk and its bound). Checking only the
  * top level would silently misreport a genuine violation that arrived wrapped.
  *
@@ -25,8 +25,8 @@ export function isRefusal(error: unknown, refusal: RefusalClass): boolean {
  * `packages/core`'s `recordVoid` mapping a duplicate `sale_voids.sale_id` to
  * `sale.already_voided`).
  *
- * `UNIQUE_VIOLATION` covers a primary key as well as any other unique index, which is what keeps
- * this answer the same as it was on PostgreSQL — see `./sql-state.ts`.
+ * `UNIQUE_VIOLATION` covers a primary key as well as any other unique index — see
+ * `./sql-state.ts`.
  */
 export function isUniqueViolation(error: unknown): boolean {
   return isRefusal(error, UNIQUE_VIOLATION);

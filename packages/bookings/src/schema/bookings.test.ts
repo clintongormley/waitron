@@ -62,17 +62,15 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so nothing here is a claim about a
-// privilege; what it still shows is the CHECK and the three foreign keys.
+// WHAT THIS SUITE SHOWS: the CHECK and the three foreign keys. This engine has no roles, so
+// nothing here is a claim about a privilege.
 //
-// The refusals themselves also carry less than they did. `driverErrorCode` answers
-// `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the refusal CLASS comes off
-// `errcode` instead (`packages/db/src/sql-state.ts`: 275 for a CHECK where this was `23514`, 787
-// for a foreign key where it was `23503`). And the foreign-key MESSAGE is the engine's own —
-// `FOREIGN KEY constraint failed`, the same three words whichever key was broken — where
-// PostgreSQL named the constraint. So the three key cases below can no longer tell each other
-// apart by their message, and each is separated only by which parent row it made absent. The
-// constraint NAMES are asserted where the engine still keeps them: on the drizzle object above.
+// `driverErrorCode` answers `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the
+// refusal CLASS comes off `errcode` (`packages/db/src/sql-state.ts`: 275 for a CHECK, 787 for a
+// foreign key). The foreign-key MESSAGE is `FOREIGN KEY constraint failed`, the same words
+// whichever key was broken, so the three key cases below cannot tell each other apart by their
+// message; each is separated only by which parent row it made absent. The constraint NAMES are
+// asserted where the engine keeps them: on the drizzle object above.
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 // A dining_tables row — the target of bookings.table_id.
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
