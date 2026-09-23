@@ -351,7 +351,7 @@ it("shows usage links and blocks a delete when the server reports uses", async (
   expect(client.deleteImage).not.toHaveBeenCalled();
 });
 
-it("links a blocking variant use to the editor of the product that owns it", async () => {
+it("links a blocking variant use to the variant's own product page, not its parent's", async () => {
   const client = api();
   client.getImage.mockResolvedValue({
     image: { ...image, usageCount: 1 },
@@ -369,9 +369,8 @@ it("links a blocking variant use to the editor of the product that owns it", asy
   await mount(client);
   click("[data-test=delete-one]");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Large"));
-  // A variant has no page of its own, so the link goes to its PRODUCT's editor, not to its own id.
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
-    "/manage/catalogue/product/product-1",
+    "/manage/catalogue/product/variant-1",
   );
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
 });

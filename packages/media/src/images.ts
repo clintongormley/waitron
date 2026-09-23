@@ -45,7 +45,7 @@ export type ImageUsage =
     }
   | {
       kind: "variant";
-      /** The variant's own id; `productId` is what a link to the editor needs. */
+      /** The variant's own `products` row id; `productId` is its parent's. */
       id: string;
       productId: string;
       catalogueId: string;
