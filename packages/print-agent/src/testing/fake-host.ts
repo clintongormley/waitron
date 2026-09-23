@@ -11,11 +11,12 @@ import type {
 import type { WireJob } from "../client.js";
 import { FakeSink, type PrinterTarget, type Transport } from "../transport.js";
 
-/** An in-memory Host: config/token live in fields, `sleep` resolves at once and records the ms,
- * `status` and the log are captured for assertions. The default `fetch` rejects (unreachable). The
- * device seam defaults to an empty box (no visible devices, no scan results) and a passthrough
- * `resolve` that maps a job's `localKey` straight to a device path — the shape a suite overrides per
- * test to drive discovery, resolution and pairing. */
+/** An in-memory Host: config and token start from the overrides (null when not given) and change
+ * only through `saveConfig`/`saveToken`; `sleep` resolves at once and records the ms; `status` and
+ * the log are captured for assertions. The default `fetch` rejects (unreachable). The device seam
+ * defaults to an empty box (no visible devices, no scan results) and a passthrough `resolve` that
+ * maps a job's `localKey` straight to a device path — the shape a suite overrides per test to drive
+ * discovery, resolution and pairing. */
 export function fakeHost(
   overrides: Partial<{
     config: AgentConfig | null;

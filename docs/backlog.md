@@ -2097,9 +2097,11 @@ image constraints under *Detail → Box image*.
   99.78/100/100/98.68); `print-agent` (**PR #PENDING**, 2026-09-23 — tests for a join refused for a
   reason other than closed pairing, an unreadable join status, a denial dropping the saved
   verification number, the environment named when no primary accepts, the agent's own client
-  built on the host's fetch, non-Error failures from a send, a scan and a whole tick, a stop
-  during a tick, malformed join, enrol and job-list replies, and the test fake host's documented
-  defaults; its two unused setters deleted; 100/100/100/100).
+  built on the host's fetch, non-Error failures from a send, a scan, an address probe, an
+  office-printer check and a whole tick, a stop during a tick, an enrol that times out, malformed
+  join, enrol and job-list replies, and the test fake host's defaults and recording behaviour; its
+  two unused setters (`setToken`, `setConfig` in `src/testing/fake-host.ts`) deleted;
+  100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

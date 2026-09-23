@@ -821,7 +821,9 @@ describe("createAgent — inventory, discovery and resolve", () => {
       }),
     );
     // Without a network device on the list the classifier is never asked, so one probe must succeed
-    // for its failure to be reached: the first tick probes and fails, the second classifies and fails.
+    // for its failure to be reached. The first tick neither scans nor probes an address: its pull
+    // opens the window and delivers the address list. The second scans and probes, and both fail;
+    // the third scans and fails again, then, with the address now answering, classifies and fails.
     const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
     await agent.runOnce();
     await agent.runOnce();

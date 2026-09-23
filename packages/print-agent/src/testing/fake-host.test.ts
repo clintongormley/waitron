@@ -3,9 +3,9 @@ import type { WireJob } from "../client.js";
 import { FakeSink } from "../transport.js";
 import { fakeHost } from "./fake-host.js";
 
-// Other suites (apps/server's print-agent e2e among them) build on these defaults without restating
-// them, so each one is pinned here.
-describe("fakeHost — defaults", () => {
+// Pins the fake's defaults and the behaviour other suites (apps/server's print-agent e2e among
+// them) rely on without restating them.
+describe("fakeHost", () => {
   it("starts unconfigured and without a token when given no overrides", async () => {
     const host = fakeHost();
     expect(await host.config()).toBeNull();
