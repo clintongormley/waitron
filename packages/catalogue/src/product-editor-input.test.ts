@@ -233,19 +233,25 @@ it("normalizes optional text and prices without mutating caller or copied allerg
 });
 it.each([
   [null, "variants.0"],
-  [{ id: "bad", name: "Small", unitPrice: "2.00", available: true }, "variants.0.id"],
-  [{ name: null, unitPrice: "2.00", available: true }, "variants.0.name"],
+  [{ id: "bad", name: "Small", unitPrice: "2.00", available: true, active: true }, "variants.0.id"],
+  [{ name: null, unitPrice: "2.00", available: true, active: true }, "variants.0.name"],
   [
-    { name: "Small", customerName: { en: 42 }, unitPrice: "2.00", available: true },
+    { name: "Small", customerName: { en: 42 }, unitPrice: "2.00", available: true, active: true },
     "variants.0.customerName",
   ],
   [
-    { name: "Small", kitchenName: 42, unitPrice: "2.00", available: true },
+    { name: "Small", kitchenName: 42, unitPrice: "2.00", available: true, active: true },
     "variants.0.kitchenName",
   ],
-  [{ name: "Small", image: 42, unitPrice: "2.00", available: true }, "variants.0.image"],
-  [{ name: "Small", unitPrice: "2.001", available: true }, "variants.0.unitPrice"],
-  [{ name: "Small", unitPrice: "2.00", available: "yes" }, "variants.0.available"],
+  [
+    { name: "Small", image: 42, unitPrice: "2.00", available: true, active: true },
+    "variants.0.image",
+  ],
+  [{ name: "Small", unitPrice: "2.001", available: true, active: true }, "variants.0.unitPrice"],
+  [{ name: "Small", unitPrice: "2.00", available: "yes", active: true }, "variants.0.available"],
+  [{ name: "Small", unitPrice: "2.00", available: true }, "variants.0.active"],
+  [{ name: "Small", unitPrice: "2.00", available: true, active: null }, "variants.0.active"],
+  [{ name: "Small", unitPrice: "2.00", available: true, active: "yes" }, "variants.0.active"],
 ] as const)("rejects a malformed variant %j", (variant, field) => {
   // A malformed variant is rejected while parsing that variant, before the min-two count check.
   expect(() => parse({ ...input, variants: [variant] })).toThrow(
@@ -260,6 +266,7 @@ it("parses a variant listed with a blank price as blank, so it follows the produ
     image: null,
     unitPrice: null,
     available: true,
+    active: true,
   };
   expect(parse({ ...input, variants: [blank] }).variants).toEqual([blank]);
   // Only an explicit null is a blank: a variant that omits its price is refused, not defaulted.
@@ -277,6 +284,7 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
     image: null,
     unitPrice: "2.00",
     available: true,
+    active: true,
   };
   // Spec §15.1: a product with exactly one variant is allowed.
   expect(parse({ ...input, variants: [one] }).variants).toEqual([one]);
@@ -291,6 +299,7 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
         image: "s.png",
         unitPrice: "2",
         available: true,
+        active: true,
       },
       {
         name: "Large",
@@ -299,6 +308,7 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
         image: null,
         unitPrice: "3.00",
         available: false,
+        active: false,
       },
     ],
   });
@@ -310,6 +320,7 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
       image: "s.png",
       unitPrice: "2.00",
       available: true,
+      active: true,
     },
     {
       name: "Large",
@@ -318,7 +329,27 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
       image: null,
       unitPrice: "3.00",
       available: false,
+      active: false,
     },
+  ]);
+});
+it("carries each variant's active apart from its available, so a removed one is saved Inactive", () => {
+  const variant = (active: boolean, available: boolean) => ({
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: "2.00",
+    available,
+    active,
+  });
+  expect(
+    parse({ ...input, variants: [variant(false, true), variant(true, false)] }).variants.map(
+      ({ active, available }) => ({ active, available }),
+    ),
+  ).toEqual([
+    { active: false, available: true },
+    { active: true, available: false },
   ]);
 });
 it("treats a blank customer name as absent on the product and its variants", () => {
@@ -326,7 +357,7 @@ it("treats a blank customer name as absent on the product and its variants", () 
   expect(parsed.customerName).toBeNull();
 });
 it("rejects a repeated variant ID even with a different case", () => {
-  const variant = { id: unitId, name: "Small", unitPrice: "2.00", available: true };
+  const variant = { id: unitId, name: "Small", unitPrice: "2.00", available: true, active: true };
   expect(() =>
     parse({
       ...input,

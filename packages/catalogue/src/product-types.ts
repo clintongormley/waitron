@@ -65,9 +65,23 @@ export interface ProductVariant {
   active: boolean;
 }
 
-/** A variant on the way IN: a new one omits `id`, an edited one carries it. Saving one makes it
- * Active; a variant left out of a save is made Inactive. */
-export type ProductVariantInput = Omit<ProductVariant, "id" | "active"> & { id?: string };
+/** A variant on the way IN: a new one omits `id`, an edited one carries it. `active` is written as
+ * sent; a current variant left out of a save is made Inactive. */
+export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
+
+/**
+ * One variant as the product list nests it under its parent: the variant as the editor reads it
+ * (`unitPrice` its OWN, null where it takes its parent's) and, in `effective`, what it actually
+ * carries once its blanks read as its parent's (`variant-fallback.ts`).
+ */
+export interface ListedVariant extends ProductVariant {
+  effective: {
+    unitPrice: string;
+    vatClass: VatClass;
+    primaryCategoryId: string | null;
+    categoryIds: string[];
+  };
+}
 
 /**
  * The slice of one product row the dashboard reads out of `GET /management-api/catalogues/:id/products`
@@ -119,7 +133,8 @@ export interface Product {
    * seeds its diet-override controls from THIS without double-counting the recipe-derived profile. */
   dietOverride: DietOverride | null;
   image: string | null;
-  variants: ProductVariant[];
+  /** Every variant, Inactive ones included, in variant order. */
+  variants: ListedVariant[];
 }
 
 /**

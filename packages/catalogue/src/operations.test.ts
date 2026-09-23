@@ -1756,7 +1756,7 @@ describe("menu offers nest a product's variants", () => {
     expect((await nested()).map(({ available }) => available)).toEqual([false, false]);
   });
 
-  it("lists only top-level products, each with its Active variants nested in order", async () => {
+  it("lists only top-level products, each with every variant nested in order, the removed ones last", async () => {
     const [w125, w175] = await run((tx) =>
       setProductVariants(
         tx,
@@ -1773,6 +1773,7 @@ describe("menu offers nest a product's variants", () => {
     ).toEqual([
       { name: "Wine 175", unitPrice: "5.50", active: true },
       { name: "Wine 125", unitPrice: null, active: true },
+      { name: "Wine 250", unitPrice: "7.00", active: false },
     ]);
   });
 });

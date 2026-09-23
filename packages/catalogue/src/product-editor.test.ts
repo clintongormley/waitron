@@ -50,6 +50,7 @@ beforeEach(async () => {
         image: null,
         unitPrice: "2.00",
         available: true,
+        active: true,
       },
       {
         name: "Large",
@@ -58,6 +59,7 @@ beforeEach(async () => {
         image: null,
         unitPrice: "3.00",
         available: true,
+        active: true,
       },
     ],
     categoryIds: [],
@@ -163,6 +165,72 @@ it("saves a product with exactly one variant, or none", async () => {
     saveProductEditor(tx, null, catalogueId, { ...input, variants: [] }, "en"),
   );
   expect(none.variants).toEqual([]);
+});
+
+describe("a removed variant in the parent's editor", () => {
+  const save = (productId: string | null, body: unknown) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, catalogueId, body, "en"));
+  const read = (productId: string) =>
+    withTransaction(fx.db, (tx) => readProductEditor(tx, productId));
+  const flags = (value: { variants: { name: string; active: boolean }[] }) =>
+    value.variants.map(({ name, active }) => ({ name, active }));
+
+  it("reads back with active false, and saving the read value back keeps it Inactive", async () => {
+    const saved = await save(null, input);
+    // Large is left out of the body, which is how a variant has always been removed.
+    await save(saved.id, { ...saved, variants: [saved.variants[0]!] });
+    const value = await read(saved.id);
+    expect(flags(value)).toEqual([
+      { name: "Small", active: true },
+      { name: "Large", active: false },
+    ]);
+    await save(saved.id, value);
+    expect(flags(await read(saved.id))).toEqual([
+      { name: "Small", active: true },
+      { name: "Large", active: false },
+    ]);
+  });
+
+  it("is made Inactive when sent active false, and Active again when sent active true", async () => {
+    const saved = await save(null, input);
+    const [small, large] = saved.variants;
+    await save(saved.id, { ...saved, variants: [small!, { ...large!, active: false }] });
+    expect(flags(await read(saved.id))).toEqual([
+      { name: "Small", active: true },
+      { name: "Large", active: false },
+    ]);
+    await save(saved.id, { ...saved, variants: [small!, { ...large!, active: true }] });
+    expect(flags(await read(saved.id))).toEqual([
+      { name: "Small", active: true },
+      { name: "Large", active: true },
+    ]);
+  });
+
+  it("refuses a body whose variant leaves out active, naming that variant's field", async () => {
+    const noActive: Record<string, unknown> = { ...input.variants[1]! };
+    delete noActive.active;
+    await expect(
+      save(null, { ...input, variants: [input.variants[0]!, noActive] }),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "variants.1.active" } });
+  });
+
+  it("does not block the save on an Inactive variant's missing default language, where an Active one does", async () => {
+    // Customer names only in Spanish: neither resolves in the default language, English.
+    const spanishOnly = { customerName: { es: "Grande" } };
+    const saved = await save(null, input);
+    const [small, large] = saved.variants;
+    const inactive = await save(saved.id, {
+      ...saved,
+      variants: [small!, { ...large!, ...spanishOnly, active: false }],
+    });
+    expect(inactive.variants[1]).toMatchObject({ ...spanishOnly, active: false });
+    await expect(
+      save(saved.id, { ...saved, variants: [small!, { ...large!, ...spanishOnly, active: true }] }),
+    ).rejects.toMatchObject({
+      code: "content.translation_required",
+      params: { language: "en" },
+    });
+  });
 });
 
 it("changes the product's unit on update", async () => {
@@ -420,6 +488,7 @@ describe("a variant's own page", () => {
               image: null,
               unitPrice: "2.00",
               available: true,
+              active: true,
             },
           ],
         },
@@ -575,7 +644,7 @@ describe("a variant's own page", () => {
     const before = await read(parentId);
     await save(variantId, { ...(await read(variantId)), vatClass: "zero", active: false });
     const after = await read(parentId);
-    expect(after).toEqual({ ...before, variants: [] });
+    expect(after).toEqual({ ...before, variants: [{ ...before.variants[0]!, active: false }] });
   });
 
   it.each([
