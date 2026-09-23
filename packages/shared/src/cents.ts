@@ -1,5 +1,5 @@
 import { AppError } from "./errors.js";
-import { assertMoney, MONEY_SCALE, toScale } from "./money.js";
+import { assertMoney, decimal, MONEY_SCALE, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 
@@ -34,6 +34,14 @@ import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
   return Number(BigInt(toScale(assertMoney(value), MONEY_SCALE).replace(".", "")));
+}
+
+/**
+ * The count of whole cents in a decimal string: "12.34" is 1234. Refuses a malformed
+ * string with `shared.invalid_decimal`.
+ */
+export function stringToCents(value: string): number {
+  return decimalToCents(decimal(value));
 }
 
 /**

@@ -40,7 +40,7 @@ export {
   workingOrderId,
   workingOrderLineId,
 } from "./ids.js";
-export { centsToDecimal, decimalToCents, rawCentsToDecimal } from "./cents.js";
+export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
 export {
   basisPointsToDecimal,
   decimalToBasisPoints,
@@ -51,6 +51,8 @@ export {
   RATE_SCALE,
   rawBasisPointsToDecimal,
   rawThousandthsToDecimal,
+  stringToBasisPoints,
+  stringToThousandths,
   thousandthsToDecimal,
 } from "./scales.js";
 export type { Decimal } from "./money.js";

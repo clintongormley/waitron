@@ -85,6 +85,14 @@ export function decimalToThousandths(value: Decimal): number {
 }
 
 /**
+ * The count of whole thousandths in a decimal string: "1.5" is 1500. Refuses a malformed
+ * string with `shared.invalid_decimal`.
+ */
+export function stringToThousandths(value: string): number {
+  return decimalToThousandths(decimal(value));
+}
+
+/**
  * The decimal literal for a stored count of thousandths: 1500 is "1.500".
  *
  * Always three places, because the literal is what a receipt prints and the scale is part of the
@@ -100,6 +108,14 @@ export function thousandthsToDecimal(count: number): Decimal {
 /** The count of whole basis points in a rate: "21.00" is 2100, and "10.50" is 1050. */
 export function decimalToBasisPoints(value: Decimal): number {
   return scaledCount(value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS);
+}
+
+/**
+ * The count of whole basis points in a decimal string: "21.00" is 2100. Refuses a malformed
+ * string with `shared.invalid_decimal`.
+ */
+export function stringToBasisPoints(value: string): number {
+  return decimalToBasisPoints(decimal(value));
 }
 
 /**

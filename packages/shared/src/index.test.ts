@@ -45,6 +45,9 @@ import {
   workingOrderId,
   workingOrderLineId,
   sqliteFailureOf,
+  stringToBasisPoints,
+  stringToCents,
+  stringToThousandths,
   worstBand,
 } from "./index.js";
 
@@ -104,6 +107,12 @@ describe("package public surface (./index.js)", () => {
     expect(MAX_QUANTITY_INTEGER_DIGITS).toBe(9);
     expect(RATE_SCALE).toBe(2);
     expect(MAX_RATE_INTEGER_DIGITS).toBe(3);
+  });
+
+  it("re-exports the string-to-stored-count converters", () => {
+    expect(stringToCents("12.34")).toBe(1234);
+    expect(stringToThousandths("1.5")).toBe(1500);
+    expect(stringToBasisPoints("21.00")).toBe(2100);
   });
 
   it("re-exports every locale binding", () => {
