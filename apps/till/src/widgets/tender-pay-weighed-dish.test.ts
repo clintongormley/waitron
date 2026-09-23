@@ -3,7 +3,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 const jamon: TillProduct = {
   id: "jamon",
@@ -26,8 +26,22 @@ const jamon: TillProduct = {
 const jamonWithVariants: TillProduct = {
   ...jamon,
   variants: [
-    { id: "v-iberico", name: "Ibérico", unitPrice: "30.00", available: true },
-    { id: "v-serrano", name: "Serrano", unitPrice: "10.00", available: true },
+    {
+      ...sellingValuesOf(jamon),
+      id: "v-iberico",
+      name: "Ibérico",
+      unitPrice: "30.00",
+      unitPriceDifference: "20.00",
+      available: true,
+    },
+    {
+      ...sellingValuesOf(jamon),
+      id: "v-serrano",
+      name: "Serrano",
+      unitPrice: "10.00",
+      unitPriceDifference: null,
+      available: true,
+    },
   ],
 };
 
