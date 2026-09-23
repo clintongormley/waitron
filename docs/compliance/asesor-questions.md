@@ -10,7 +10,10 @@ Question numbers are **stable identifiers**, not reading order — sections are 
 priority. Q9 is referenced from other documents; do not renumber it.
 
 Last revised **2026-09-23** — Q21 (when a table's invoice is issued: pre-bill first, or the invoice
-when the bill is presented) added beside Q14. Before that, **2026-09-13** — Q20 (zero-rate products shown as **No tax**) added. Q17 (F3 *canje*)
+when the bill is presented) added beside Q14; Q22 (printing the ticket only on request, or never) and
+Q23 (backup copies held abroad or by us) added; the preparation-environment question numbered Q24.
+The same day, the open questions were rewritten as a standalone document for the advisor, in English
+and Spanish (kept outside the repository). Before that, **2026-09-13** — Q20 (zero-rate products shown as **No tax**) added. Q17 (F3 *canje*)
 and Q18 (*modelo 303* IVA soportado) were added on 2026-08-26; Q16 was sharpened then. Prior
 substantive pass **2026-08-01**.
 
@@ -765,6 +768,26 @@ so there is nothing on the document that says who each *duplicado* belongs to.
 > tarjeta** separado y sin valor fiscal (sin número de factura, sin serie y sin código QR), uno por cada
 > pago recibido? ¿Existe algún requisito formal que evite que se confunda con una factura?
 
+### Q22. Printing the ticket only on request, or never (added 2026-09-23)
+
+**Why it matters.** Each venue sets `receipt_print_mode` (`packages/db/src/schema/tenants.ts`):
+`auto` prints after every sale, `on_request` and `never` do not. In every mode the invoice is issued
+and filed, and the reprint route has no mode gate, so a customer who asks can always be handed paper.
+RD 1619/2012 art. 1 obliges the business to *«expedir y entregar»*, and
+[verifactu-findings.md §9](verifactu-findings.md) reads art. 18 as making delivery to a consumer
+immediate, not on request. §15.6 flagged the tension for the advisor; this is that question.
+
+> Cada local elige cómo se imprime el ticket: automáticamente tras cada venta, sólo cuando el cliente
+> lo pide, o nunca. En todos los casos la factura simplificada se expide y se remite, y siempre puede
+> imprimirse si el cliente la pide. El artículo 1 del RD 1619/2012 obliga a «expedir y entregar» la
+> factura.
+>
+> **(a)** ¿Cumple la obligación de entrega un local que imprime la factura simplificada sólo cuando el
+> cliente la solicita?
+>
+> **(b)** ¿Y un local que nunca la imprime automáticamente? Si no cumple, ¿debería el programa dejar
+> de ofrecer estas opciones?
+
 ---
 
 ## SEPARATE — for a lawyer, not the asesor fiscal
@@ -1178,7 +1201,33 @@ correct treatment for the venue's particular product.
 
 ---
 
-## Separate preparation environment (added 2026-09-09)
+### Q23. Backup copies of the records held outside Spain, or by us (added 2026-09-23)
+
+**Why it matters.** The
+[SQLite slice 2 design](../superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md)
+streams each venue's database, fiscal records included, to an S3-compatible bucket **the owner
+supplies**, with any provider, so the copy may sit outside Spain; a dead box is rebuilt from it under a
+fresh chain. Waitron Cloud's own bucket plugs into the same setting later; the owner decision that
+closed Q16 places cloud instances in Spain, and the Spanish text below assumes the bucket follows. This revives two of the three ROF questions in
+[cloud-storage §8a](../superpowers/specs/2026-07-31-cloud-storage-model-design.md) for a shape that
+spec did not have: the owner's own bucket abroad, and our bucket as holder.
+
+> Estamos desarrollando una copia continua de la base de datos de cada local, registros de
+> facturación incluidos, a un almacenamiento en la nube que contrata el propio titular del local con
+> el proveedor que elija, y que puede estar fuera de España. Si se pierde el servidor del local, se
+> reconstruye uno nuevo a partir de esa copia, que inicia una nueva cadena. Más adelante podríamos
+> ofrecer nosotros ese almacenamiento, alojado en España.
+>
+> **(a)** Si la copia se conserva fuera de España, ¿debe el local comunicarlo previamente a la AEAT
+> conforme al artículo 22.2 del RD 1619/2012? ¿Influye que esté dentro o fuera de la Unión Europea?
+>
+> **(b)** Si somos nosotros quienes conservamos la copia por cuenta del local, ¿actuamos como tercero
+> que conserva la documentación por cuenta del obligado, y nos supone alguna obligación, como la de
+> facilitar a la AEAT el acceso en línea a los registros?
+
+---
+
+### Q24. Separate preparation environment (added 2026-09-09; numbered 2026-09-23)
 
 You configure your actual restaurant in a separate preproduction database, practise only simulated
 transactions and test payments, then export configuration into a fresh production database. Sales,
