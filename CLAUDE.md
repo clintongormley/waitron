@@ -509,7 +509,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   nothing checks. The engine will not catch it either: measured 2026-09-23 on `node:sqlite` (Node
   v26.7.0), a trigger whose body names a missing table is created without complaint and fails only
   when it fires, with `no such table`. Cost: the first `requires` graph was derived from `REFERENCES`
-  alone and missed two trigger edges, caught by hand in review. See
+  alone and missed two edges made by triggers ON another module's tables, caught by hand in review. See
   [conventions-data.md](docs/developers/conventions-data.md).
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
   table a module owns belongs to that module's own set, where its append-only classification
@@ -552,10 +552,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   path runs without the check — the cold restore, `rejoin-command` and `dev-setup` among them, and
   [conventions-data.md](docs/developers/conventions-data.md) holds the full list. Cost: without it an
   ahead database re-migrates CLEANLY and surfaces later as an unclassified driver error.
-- **An empty value is a value.** A path variable set to `""` must fall back to its default through
-  `isUnset` (`apps/server/src/env-value.ts`), never through `resolve("")`, which is the working
-  directory; a reader with no default refuses `""` explicitly, as `resolveVenueDir` does with
-  `provisioning.venue_dir_missing`. See [conventions-data.md](docs/developers/conventions-data.md).
+- **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into
+  "unset" itself. An env or prompt value set to `""` falls back to its default exactly as an unset
+  one does (in `apps/server`, through `isUnset` in `apps/server/src/env-value.ts`); a path never goes through `resolve("")`,
+  which is the working directory; and a reader with no default refuses `""` explicitly, as
+  `resolveVenueDir` does with `provisioning.venue_dir_missing`. See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Schema changes
   drop and recreate. This rule expires the day a real venue is live; add its replacement in the same
   change.
@@ -586,8 +588,8 @@ browser test** — most of these rules exist because a test passed while proving
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
-  container. The live subject is under `bench/`: `bench/sqlite-failover/src/store.ts` publishes a
-  port. See [testing-guide.md](docs/developers/testing-guide.md).
+  container. The live subjects are the two `bench/` rigs that start a container, both of which
+  publish a port. See [testing-guide.md](docs/developers/testing-guide.md).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
   Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.

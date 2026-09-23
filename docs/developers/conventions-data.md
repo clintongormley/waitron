@@ -1101,7 +1101,7 @@ maintain that buys nothing — and the first draft of the settlement design carr
 ever GUESS which tender a tip belonged to, which is worse than discarding. This rule expires the day a
 real venue is live; add its replacement in the same change.
 
-## An empty connection string is a valid connection string
+## An empty value is a valid value (first met as: an empty connection string is a valid connection string)
 
 `new Client({ connectionString: "" })` resolved to localhost with every default (`pg@8.23.0`), so an
 empty string was never "no value given". **No reader of a connection string is left** — the storage

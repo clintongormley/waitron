@@ -820,9 +820,10 @@ Cost: a bricked box, an hour of guesswork, and a wipe that destroyed the evidenc
 The upgrade regression that migrated real databases from each release point covered `core` alone.
 It was deleted with the PostgreSQL test harness on 2026-09-22 — its subject was PostgreSQL's own
 enum-safety rule inside drizzle's single migrate transaction, and there is no `ALTER TYPE` left —
-so **no test applies a shipped migration to a database already at an earlier point today.** The
-one test that migrates a database that is not virgin — the older-artifact case in
-`apps/server/src/restore-fiscal-e2e.test.ts` — replays a core step it makes up, not a shipped one.
+so **no test applies a shipped migration to a database already at an earlier point today.** One
+test does apply a migration step to a database that is already migrated — the older-artifact case in
+`apps/server/src/restore-fiscal-e2e.test.ts` — and the step it replays is one it makes up, not a
+shipped one.
 
 **2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
 was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the
