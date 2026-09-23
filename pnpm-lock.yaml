@@ -1717,6 +1717,9 @@ importers:
       axe-core:
         specifier: ^4.13.0
         version: 4.13.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       lit:
         specifier: ^3.2.0
         version: 3.3.3
