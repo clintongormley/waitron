@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./testing/schema-conformance.js": "./src/testing/schema-conformance.ts",
     "./testing/seed.js": "./src/testing/seed.ts",
     "./testing/venue-db.js": "./src/testing/venue-db.ts"
   },

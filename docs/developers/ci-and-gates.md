@@ -158,6 +158,89 @@ between 96.73% and 96.83% (2043 to 2045 of 2112) and all exited 0. Quote the ran
 the spread is mutants that TIME OUT, which Stryker counts as detected, and how many do moves with
 whatever else the machine is running — 8 to 13 across those four runs.
 
+## Moving harness code out of a `.test.ts` changes what gates it
+
+Test files are not measured for coverage and are not mutated. Ordinary source files under `src/`
+are both. So moving a block of test-support code out of a `.test.ts` and into a `src/testing/`
+module — a perfectly sensible thing to do when several packages need it — quietly hands that code
+to two gates it was never under. Neither shows up in the diff.
+
+The first half of that is a measurement, not an assumption: the `coverage-summary.json` a
+`pnpm --filter @waitron/db test:coverage` run writes under that package's `coverage/` directory
+listed 69 files when it was read on 2026-09-23, and not one of them was a `.test.ts`. (It is not
+backticked as a path here on purpose — `coverage/` is generated and gitignored, and
+`scripts/claude-md-pointers.test.ts` would fail on a backticked path that is missing from a fresh
+checkout.) The second half is config: `packages/db/stryker.config.json` takes `src/**/*.ts` and
+subtracts `*.test.ts`.
+
+**The coverage half.** `packages/db`'s `vitest.config.ts` deliberately does NOT exclude
+`src/testing/**`, and says why at that line: it was once excluded wholesale as "harness code, not
+product code", and that hid three helpers in it that no test executed at all. It is held to the same
+thresholds as the rest of `src/`, which for this package is the high bar — statements 98, lines 98,
+functions 98, branches 95.
+
+Measured on branch `feat/module-schema-conformance-guard`, 2026-09-23, with
+`pnpm --filter @waitron/db test:coverage`. The suite machinery moved out of
+`packages/db/src/schema/schema-conformance.test.ts` — which went from 505 lines to a call site of a
+few dozen — and into `packages/db/src/testing/schema-conformance.ts`, with nothing else changed:
+
+| `packages/db` | statements | branches | functions | lines |
+| --- | --- | --- | --- | --- |
+| before the move | 99.62 | 97.2 | 100 | 99.78 |
+| after the move, no other change | 98.41 | 93.03 | 98.73 | 99.32 |
+
+The second row exits 1: branches at 93.03 against a bar of 95.
+
+**What those uncovered lines were, as of that reading and not as of today.** The file has been
+restructured since, so this describes the version the row was measured against. They were of two
+kinds, and only one of them is a gap anybody would call a gap. Some were defensive refusals the core
+set's shape never trips — a declared default that renders with bind parameters, an unnamed unique
+constraint, a declared table the database stored no CREATE TABLE for. The rest were the prerequisite
+sets: the factory applied them itself, in a loop of its own, and core is the only migration set with
+no prerequisites, so that loop's body never ran inside `packages/db`. The four module suites written
+later did reach it, but they run in their own packages, where their coverage counts. That loop no
+longer
+exists — the factory now hands the prerequisites to `useVenueDb` as its `migrations` and keeps only
+a `?? []` for the set that has none (`packages/db/src/testing/schema-conformance.ts`) — so this half
+of the explanation is history, while the row above it is a measurement that stands.
+
+**Where the package ended up.** Getting back above the bar took a unit suite written against the
+moved code from inside `packages/db`. Measured 2026-09-23 on the finished branch with the same
+command, exit 0:
+
+| `packages/db`, finished | statements | branches | functions | lines |
+| --- | --- | --- | --- | --- |
+| 2026-09-23 | 99.13 | 95.86 | 99.16 | 99.83 |
+
+Branches are the figure to carry, because branches are what the move cost: **95.86 against the hard
+bar of 95, which is 232 of 242 covered — 0.86 of a percentage point of room.** Work the arithmetic
+rather than trusting the adjective: three more uncovered branches added to that report (232 of 245)
+reads 94.69 and fails, two (232 of 244) reads 95.08 and passes. So this package has roughly two
+uncovered branches of slack, and a change that adds a few unreached `??` or `?.` to `src/` here can
+redden the job on its own.
+
+**The mutation half, which is invisible until a Monday.** `packages/db/stryker.config.json` mutates
+`src/**/*.ts` minus `*.test.ts` and minus `src/english-only.ts`, so the moved code enters the
+mutation subject set too. On that branch `packages/db/src/testing/schema-conformance.ts` became the
+largest mutation-eligible file in the package, about half as long again as
+`packages/db/src/schema/sales.ts`. Recompute rather than trusting a figure written here:
+
+```bash
+find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -k2 -nr | head
+```
+
+That matters because `sales.ts` is the single entry in `scripts/mutation-shard.mjs`'s `HEAVY_FILES`
+— the list of files split into line ranges so one file's cost spreads across several parallel jobs
+instead of dominating one — and the reason recorded beside it is that it "alone ran 186min while
+every other N=10 shard finished <=90min". The shard packer weights a file by its size in bytes.
+
+**The new file's runtime under mutation was NOT measured, and no `HEAVY_FILES` entry was added.**
+Read that as a hedge, not as a reassurance. Size alone does not settle it either way: what dominated
+`sales.ts` was that nearly the whole suite covers its mutants, which is a different property from
+being long. And nothing on a pull request will tell anyone, because `packages/db`'s mutation score
+and its job durations belong to the weekly `mutation.yml` run — the table above says so. It is
+recorded as something to check in `docs/backlog.md` under B9.
+
 ## CI job layout and scheduling
 
 ### CI's shards run `test:coverage`, not `test`

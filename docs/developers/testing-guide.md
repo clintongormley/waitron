@@ -72,6 +72,93 @@ violations needs a guard, and the guard could not pass while a single suite stil
 helper. That is the shape the column-vocabulary rollout ended in too: #414 was the last conversion,
 and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together afterwards.
 
+## A migration set gets a whole database-backed suite by calling one function.
+
+`packages/db/src/testing/schema-conformance.ts` is a suite FACTORY — a function you call at the top
+level of a test file, which declares a whole suite of cases for you. One call and the calling
+package has a suite that builds a real database from a migration set and then compares it, table by
+table, with the drizzle declarations that set is supposed to have built — down to what each column
+and each constraint says, plus an inventory case both ways and one rule the database cannot state.
+**The exact list is written out at the top of the factory itself, and is not copied here**, because
+a second copy of it is a thing to keep in step and the last one had already dropped two entries.
+Read the header comment of `packages/db/src/testing/schema-conformance.ts`, and
+`SchemaConformanceOptions` below it, before you write a call site or read a failure.
+
+Two other checks in the tree look at the schema, and knowing what they leave out is how to see what
+this one is for. `scripts/schema-constraints.test.ts` holds every set's built database to three
+hand-written lists and only notices an entry the schema is MISSING; note that only two of the three
+match by name — its foreign-key list is `[child table, child columns, parent table]`, not a name,
+while its unique indexes and its check constraints are matched by name. The
+`schema-ownership.test.ts` several packages carry checks the table names a barrel exports against a
+hand-written list of the tables that package owns. Neither of them reads a column's own definition
+or what an object SAYS, in any systematic way. So a retyped column, a nullability or a default that
+moved, a referential action dropped, a foreign key pointing at the wrong parent column, an index's
+columns or its filter, or a changed check-constraint body went unnoticed until a query failed at
+runtime. Those are what the factory compares. The one narrow exception, so nobody reads "unnoticed"
+as "unreachable": two ownership suites do assert a parent column by hand, four keys in all —
+`packages/payments/src/schema-ownership.test.ts` and
+`packages/fiscal-verifactu/src/schema-ownership.test.ts` each name two in the generated SQL. Nothing
+makes the next key get a line.
+
+It reaches other packages through `@waitron/db`'s enumerated exports map, as
+`@waitron/db/testing/schema-conformance.js`; inside `packages/db` the import is relative. A call
+site lives at `packages/<pkg>/src/schema/schema-conformance.test.ts` and is a handful of lines.
+`ls packages/*/src/schema/schema-conformance.test.ts` says which sets have one; a set with none is
+not checked by anything.
+
+**What a call site states.** `SchemaConformanceOptions` in the factory is the list to trust, with a
+sentence on each field; this is the shape of it. Four fields are required:
+
+- `subject` — the migration set under test.
+- `subjectName` — the name the suite's own case names will use, `core` or `catalogue`. It names the
+  SET, not the package, and it is read by whoever reads a failure.
+- `declarations` — the package's schema barrel, handed in as `import * as barrel from "./index.js"`.
+  These are the declarations the subject set is supposed to have built.
+- `declaresClosedVocabularies` — whether any column in this set is declared with a closed
+  vocabulary. The caller states it and the suite checks the statement, rather than the suite
+  counting. The vocabulary block is one case per such column, so a set with none leaves that list
+  empty, and an empty list of cases is indistinguishable from a list that passed. `catalogue` states
+  `false` and is the reason the field exists.
+
+Three more are optional:
+
+- `prerequisites` — the sets that must be applied BEFORE the subject, in order. Omit it for a set
+  that has none, which today is core alone.
+- `reload` — an arrow function that re-imports that same barrel from inside a test. It earns its
+  keep only in a package that runs a mutation test, which among these callers is `packages/db`
+  alone, and that is the one call site passing it; the reason is written out at the field itself.
+  If you do pass it, it has to be written in the CALLING module: a relative specifier such as
+  `./index.js` resolves against the file it is written in, never the file that calls it.
+- `timeoutMs` — a bigger budget for this suite's own setup, passed straight through to
+  `useVenueDb`. No call site needs one today.
+
+**How the suite knows which tables are the subject's** is worth knowing before you read a failure. A
+module's database also holds its prerequisites' tables, so "every table in the database" would be
+the wrong inventory for anything but core. `useVenueDb` applies the sets it is handed and only then
+calls `setup`, so the factory hands it the prerequisites as its `migrations` and applies the
+subject alone inside `setup`: a list of the table names, then the subject set, then a second list.
+The difference between the two lists is the subject's own tables. A set with no prerequisites hands
+over an empty list and takes its first reading of an unmigrated database, which is the same code
+path rather than a special case.
+
+**Finding a module's prerequisites: read them off the package's own suites, do not guess.** Any
+existing `useVenueDb` call in the package already had to get the list and the order right, or its
+own migrations would not apply. `packages/workforce/src/migrations.test.ts:32` is the worked
+example, and it states the reason for a three-set case in the comment beside it: core first because
+shifts point at its `locations`, `tills` and `nodes`, then identity because `employments` and
+`time_entries` point at its `persons`, then workforce itself. Ordering across packages is the
+runtime's job and nothing enforces it, which is why each call site writes the reason down rather
+than just the list.
+
+**Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
+first check may report real drift. Treat that as its own piece of work rather than something to fix
+in passing.
+
+**Making the factory shared changed which gates the machinery itself has to pass.** The code left a
+`.test.ts` and landed in `src/testing/`, and `packages/db` both measures that directory for coverage
+and mutates it. What that cost, with the figures, is in [ci-and-gates.md](ci-and-gates.md) →
+"Moving harness code out of a `.test.ts` changes what gates it".
+
 **Containers and Docker**
 
 ## A container port-binding timeout needs Docker state as well as the container's own logs.

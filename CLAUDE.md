@@ -146,6 +146,17 @@ hook, or how tests are scheduled:
 - **CI's shards run `test:coverage`, not `test`.** Verify that package’s coverage job on the
   current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
   There is no single `test` job. Vitest `--shard` splits by FILE COUNT, so `N` must never exceed a package's test-file count.
+- **Moving harness code out of a `.test.ts` and into `src/testing/` puts it under coverage, and
+  under mutation too in the few packages that run one.** A test file is measured by neither; an
+  ordinary file under `src/` falls inside whatever its package's `coverage.include` names, and is
+  ALSO a mutation subject only where that package has a Stryker config —
+  `ls packages/*/stryker.config.json` says which, and it is a short list. `packages/db` is on it,
+  and neither its coverage `include` nor its `mutate` list leaves `src/testing/` out. Cost: one
+  branch moved a suite's
+  machinery out of a 505-line test file and `packages/db`'s branch coverage fell from 97.2 to 93.03
+  against a bar of 95 — red until a unit suite was written for the moved code — and the file became
+  the package's largest mutation subject, whose shard runtime nobody has measured. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **A shard can exit 1 with every one of its tests passing.** Vitest's worker-to-main reporting call
   has a sixty-second timeout that no config key or environment variable in this repository can raise,
   and it fails the shard on its own. Keep the job log before re-running, and read the test counts
@@ -445,8 +456,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   money rule's two guards and both its hedges apply unchanged, and `quantity`, `money` and
   `bigCount` are all `integer(name)`, so only the caller separates them. A rate's CHECK constraint
   is re-derived against 10000 rather than carried across: one written as `rate <= 100` refuses every
-  rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core set
-  only.
+  rate above one percent. Guard: the shared schema-conformance suite,
+  `packages/db/src/testing/schema-conformance.ts`, which a migration set opts into with a small call
+  site — `ls packages/*/src/schema/schema-conformance.test.ts` says which sets have one, and a set
+  with none is unguarded. `scripts/claude-md-pointers.test.ts` cannot keep this sentence honest: it
+  checks only that a backticked path exists on disk, which the old pointer still did after the
+  machinery moved out of it.
 - **The database never rounds a quantity — `decimalToThousandths` owns the third place.** The
   column stores what the converter already decided, so no SQL rounding stands behind it and a test
   asking storage to round is testing something no product path does. Cost: a
