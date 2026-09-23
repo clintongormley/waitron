@@ -3852,7 +3852,7 @@ What the preparation tasks left, with F1's own answers where it found them:
   claim, the slice-1 spec's four unannotated "211" mentions, and what became of
   `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
 - **Deferred cleanups, each with its reason in its PR**
-  - P7's three (#426) — **DONE** (2026-09-23, this branch, `chore/slice1-deferred-p7`). A new root
+  - P7's three (#426) — **DONE** (2026-09-23, PR #533). A new root
     guard, `scripts/migrations-match-schema.test.ts`, regenerates every migration set into a copy
     with `drizzle-kit generate` and fails if anything changes, so a schema edit that was never
     generated is now caught; it compares the TypeScript with the snapshot only, so a key added by
