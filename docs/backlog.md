@@ -2066,7 +2066,12 @@ image constraints under *Detail → Box image*.
   for the live event stream's default credentialed open, a stream it has replaced, a reset, an
   error the stream retries itself, malformed change and session-invalid messages, a stop before the
   first open, and the query controller's reads without a live-data session and a throwing apply;
-  one unreachable guard in `live-data.ts` deleted; 100/100/100/100).
+  one unreachable guard in `live-data.ts` deleted; 100/100/100/100); `fiscal-none` (**PR #TBD**,
+  2026-09-23 — tests for the slot binding no authority endpoint into activation evidence, even for
+  a certificate secret the verifactu slot turns into one; for the void and substitution refs and
+  the node registration checked field by field, where an empty void or substitution record id
+  had passed; and for a correction or substitution returning the new sale's id rather than the
+  replaced sale's; no source file changed; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

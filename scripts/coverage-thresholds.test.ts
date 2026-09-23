@@ -55,6 +55,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/dashboard-modules",
   "@waitron/diagnostics",
   "@waitron/fiscal",
+  "@waitron/fiscal-none",
   "@waitron/layouts",
   "@waitron/membership",
   "@waitron/migrations",

@@ -16,6 +16,7 @@ const tx = {} as never;
 const TILL = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const NODE = nodeId("7ba7b810-9dad-11d1-80b4-00c04fd430c1");
 const SALE = saleId("11111111-2222-3333-4444-555555555555");
+const EARLIER_SALE = saleId("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
 
 function sampleSale(): SaleForFiscalRecord {
   return {
@@ -52,14 +53,24 @@ describe("NoneBackend records nothing", () => {
     });
   });
 
-  it("recordVoid returns a recorded ref", async () => {
+  it("recordVoid returns a recorded ref for the voided sale, stamped now at a zero offset", async () => {
+    const before = Date.now();
     const ref = await make().recordVoid(tx, SALE, "mistake");
-    expect(ref).toMatchObject({ backend: "none", state: "recorded", verificationUrl: undefined });
+    expect(ref).toEqual({
+      backend: "none",
+      recordId: SALE,
+      state: "recorded",
+      issuedAt: expect.any(Date),
+      offsetMinutes: 0,
+      verificationUrl: undefined,
+    });
+    expect(ref.issuedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(ref.issuedAt.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it("recordCorrection returns a recorded ref carrying the corrective sale's instants", async () => {
     const sale = sampleSale();
-    const ref = await make().recordCorrection(tx, sale, { correctsSaleId: SALE });
+    const ref = await make().recordCorrection(tx, sale, { correctsSaleId: EARLIER_SALE });
     expect(ref).toEqual({
       backend: "none",
       recordId: sale.saleId,
@@ -70,18 +81,32 @@ describe("NoneBackend records nothing", () => {
     });
   });
 
-  it("recordSubstitution returns a recorded ref", async () => {
+  it("recordSubstitution returns a recorded ref carrying the substituting sale's instants", async () => {
     const sale = sampleSale();
     const ref = await make().recordSubstitution(tx, sale, {
-      substitutedSaleIds: [SALE],
+      substitutedSaleIds: [EARLIER_SALE],
     });
-    expect(ref).toMatchObject({ backend: "none", state: "recorded", verificationUrl: undefined });
+    expect(ref).toEqual({
+      backend: "none",
+      recordId: sale.saleId,
+      state: "recorded",
+      issuedAt: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
+      verificationUrl: undefined,
+    });
   });
 
-  it("registerNode returns an empty registration for the node", async () => {
+  it("registerNode returns an empty registration for the node, stamped now", async () => {
+    const before = Date.now();
     const reg = await make().registerNode(tx, NODE);
-    expect(reg).toMatchObject({ backend: "none", nodeId: NODE, registrationId: "" });
-    expect(reg.registeredAt).toBeInstanceOf(Date);
+    expect(reg).toEqual({
+      backend: "none",
+      nodeId: NODE,
+      registrationId: "",
+      registeredAt: expect.any(Date),
+    });
+    expect(reg.registeredAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(reg.registeredAt.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it("pendingCount is 0, checkIntegrity is checked:0, filedReceiptFor is undefined", async () => {
