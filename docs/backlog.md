@@ -2345,6 +2345,22 @@ image constraints under *Detail → Box image*.
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
+- **A table named inside a trigger's BODY is a cross-module edge no guard sees — OPEN (2026-09-23,
+  from #496).** `scripts/module-graph-honesty.test.ts` reads each `CREATE TRIGGER … ON <table>` but
+  never the statements between `BEGIN` and `END`, and the engine does not catch a missing target
+  either: on `node:sqlite` (Node v26.7.0) a trigger whose body names a table that does not exist is
+  created without complaint and fails only when it first fires. Today's only instance is declared
+  (media's triggers on `media_images` read core's `products` and catalogue's `category_details`, and
+  media's `requires` names both), so nothing is broken. **Next action:** extend the guard to collect
+  table names from trigger bodies (`FROM`, `JOIN`, `INSERT INTO`, `UPDATE`, `DELETE FROM`), with a
+  negative control per statement shape, and prove it by deleting `catalogue` from media's `requires`.
+- **The topic files still carry PostgreSQL history — OPEN, owner's call (2026-09-23, from #496).**
+  #496 took it out of `CLAUDE.md` and fixed every topic-file passage that contradicted the new
+  `CLAUDE.md`, but did not sweep `docs/developers/conventions-data.md` or `testing-guide.md`, which
+  held about 55 and 50 mentions of PostgreSQL or PGlite before it. Most are dated receipts, which is
+  where history belongs. **Next action, if wanted:** read both files for any passage that states a
+  PostgreSQL-era mechanism as CURRENT — a rule, a guard's behaviour, a command — and date or retire
+  it; leave dated receipts alone.
 
 ---
 
