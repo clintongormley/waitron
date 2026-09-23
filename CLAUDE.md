@@ -444,12 +444,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   vocabulary STOPS importing would leave the set the same day; the hand-written list that holds
   such a name forbidden sits beside the derived one, and it is empty.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
-  (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
-  for a raw-SQL read of an AMOUNT, which casts the expression `cast(x as text)` — this engine has no
-  `::` operator, and an uncast integer arrives as a JavaScript number, which that reader refuses).
-  Above the row every amount stays the exact `Decimal`. A money total summed out of JSON is summed
-  in JavaScript at the money scale, because this engine has no exact decimal type
-  (`packages/reporting/src/vat-summary.ts`). **Nothing guards the boundary itself, and there is no
+  (`packages/shared/src/cents.ts`: `decimalToCents` in (`stringToCents` when the value is still a
+  decimal string), `centsToDecimal` out, `rawCentsToDecimal` for a raw-SQL read of an AMOUNT, which
+  casts the expression `cast(x as text)` — this engine has no `::` operator, and an uncast integer
+  arrives as a JavaScript number, which that reader refuses). Above the row every amount stays the
+  exact `Decimal`. A money total summed out of JSON is summed in JavaScript at the money scale,
+  because this engine has no exact decimal type (`packages/reporting/src/vat-summary.ts`). **Nothing guards the boundary itself, and there is no
   LOUD form of getting it wrong.** A money column is a plain
   `integer` column with no strictness, so every one of these is accepted, measured 2026-09-22 on
   `node:sqlite` (Node v26.7.0), bound parameter and raw SQL alike: `25.00` and `"25.00"` store the
