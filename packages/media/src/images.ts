@@ -207,7 +207,7 @@ export async function readImage(tx: Transaction, imageId: string): Promise<Image
  * Adds a photo to the library, or returns the existing entry when one already stores these exact
  * bytes. Takes a `PreparedImage`, so every photo stored through here has been through
  * `prepareImage`: shrunk, upright, stripped of metadata and re-encoded. Configuration import
- * (`configuration-transfer.ts`) writes image rows directly and does not shrink them.
+ * copies the media image rows as they are (`MEDIA_CONFIGURATION_TRANSFER`) and does not shrink them.
  */
 export async function uploadImage(
   tx: Transaction,
