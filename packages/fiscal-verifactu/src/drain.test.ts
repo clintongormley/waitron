@@ -25,7 +25,7 @@ import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtu
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 // The `DrainDeps` a `VerifactuBackend` used to assemble internally, built here directly now that the
-// submission pass lives on the standalone `drain` function. `pg.db` is this file's one connection;
+// submission pass lives on the standalone `drain` function. `pg.db` is this file's one handle;
 // the resolver is per-test. Tests that need a custom cap (`maxRegistrosPorEnvio`) build their own
 // `DrainDeps` inline instead.
 const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({

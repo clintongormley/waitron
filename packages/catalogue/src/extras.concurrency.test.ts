@@ -15,7 +15,7 @@ import { racePair } from "../test/fixtures.js";
  *
  * This file replaces a real-PostgreSQL suite that took two and three pooled connections, held rows
  * `for update` from outside the code under test, and polled `pg_stat_activity` for a backend
- * waiting on a lock. None of that exists here: one connection per file, no row locks, and one write
+ * waiting on a lock. None of that exists here: one write connection per file, no row locks, and one write
  * transaction at a time (`racePair` in `test/fixtures.ts` carries the mechanism, the measurement
  * and the control). The two save races below keep every assertion they carried.
  *

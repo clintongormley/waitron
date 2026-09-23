@@ -75,7 +75,7 @@ const WRITERS = 20;
  *
  * On PostgreSQL it opened `WRITERS` separate connections, asserted they were distinct backend
  * PROCESSES (`pg_backend_pid`), and raced them at one node's counter — a read-then-write allocator
- * handed the same number out twice there. That whole shape is gone: SQLite has one connection per
+ * handed the same number out twice there. That whole shape is gone: SQLite has one write connection per
  * file and no backend to have a pid, so `suite.pg.connect()` has no counterpart and the
  * distinct-pid guard cannot be written at all.
  *

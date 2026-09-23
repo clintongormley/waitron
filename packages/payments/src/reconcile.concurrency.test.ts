@@ -39,7 +39,7 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  *
  * This suite used to take two `pg.connect()` handles, which were two backend PROCESSES, and let
  * PostgreSQL serialise the conflicting UPDATE/INSERT statements the two sweeps issued against the
- * same row. There is one connection per venue file here and no row locks, so both sweeps run on
+ * same row. There is one write connection per venue file here and no row locks, so both sweeps run on
  * the one handle and the venue file's write queue is what keeps their transactions apart
  * (`packages/store/src/write-queue.ts`, which issues `begin immediate`, awaits the body, then
  * `commit`s).

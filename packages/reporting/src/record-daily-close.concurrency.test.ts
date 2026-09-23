@@ -23,7 +23,7 @@
  *    what they are is separate `withTransaction` calls started without awaiting each other.
  * 2. `blocks a second closer while the chain head is locked (the single-writer lock)` — it held the
  *    head row on one connection and asserted SQLSTATE `55P03` from the other's `lock_timeout`.
- *    There is no lock to hold, no second connection and no `lock_timeout`, so the case is deleted
+ *    There is no lock to hold, no second writer and no `lock_timeout`, so the case is deleted
  *    outright rather than reworded. It was one of this file's two proof-by-deletion targets (remove
  *    `.for("update")` and the second closer sails through); that control cannot be re-run, because
  *    the clause it deleted is already deleted.

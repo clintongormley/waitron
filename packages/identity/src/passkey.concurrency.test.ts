@@ -9,7 +9,7 @@
  * after its consume-DELETE, before its commit — and then asked, from the other backend, whether
  * the challenge row was LOCKED: `select 1 … for update` with a `lock_timeout`, expecting SQLSTATE
  * `55P03`. SQLite has no row locks, no `for update` and no `lock_timeout`, and a venue file has one
- * connection.
+ * write connection.
  *
  * **What stopped being checked:** that the consume takes a LOCK. The `55P03` probe was this file's
  * proof by deletion — it discriminated a locking DELETE from a non-locking SELECT — and there is no

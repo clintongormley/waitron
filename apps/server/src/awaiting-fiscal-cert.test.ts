@@ -6,7 +6,7 @@
  *
  * ## What this suite does not check
  *
- * SQLite has no roles, and every call below runs on the one connection, so nothing here checks
+ * SQLite has no roles, and every call below runs on the one handle, so nothing here checks
  * that the deployment role can reach the vault and the fiscal tables.
  *
  * ## This suite is RED, and the reason is a FIXTURE in another package

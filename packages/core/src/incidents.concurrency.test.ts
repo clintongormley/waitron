@@ -18,7 +18,7 @@ import {
  *
  * It opened two PostgreSQL backends, had the first hold the incident row's write lock open, polled
  * `pg_stat_activity` until the second backend was genuinely WAITING on that lock, and then
- * released. None of that exists here: a venue file has one connection, there are no row locks, and
+ * released. None of that exists here: a venue file has one write connection, there are no row locks, and
  * `pg_stat_activity` has no counterpart — so `waitForLockWaiter` is gone with it.
  *
  * **LOST: the observation that the second caller had actually reached the contended row** rather

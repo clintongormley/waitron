@@ -41,6 +41,11 @@ const workingName = (path: string) => `${path}.partial`;
  * **Not callable from inside a transaction.** `VACUUM INTO` on a connection with one open is
  * refused outright — `cannot VACUUM from within a transaction`, errcode 1, no file written — so an
  * archive cannot be taken inside `withWriteLock`, whose body runs under `begin immediate`.
+ *
+ * From OUTSIDE a running body, while another one holds a transaction open, it is a different
+ * answer: the store routes the statement to that file's read connection, where the copy is allowed
+ * and holds the committed state. Measured both ways round on Node v26.7.0 and pinned by
+ * `./index.test.ts`, "archives the committed state while another caller's transaction is open".
  */
 export async function archiveTo(target: StatementTarget, path: string): Promise<void> {
   const working = workingName(path);

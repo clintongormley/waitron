@@ -19,7 +19,7 @@ const NOW = new Date("2026-07-25T04:00:00Z");
  *
  * It opened three PostgreSQL backends — two writers and a read-only probe — and forced each race
  * by holding one transaction open and polling `pg_locks` until the other backend was demonstrably
- * blocked. None of that exists here: a venue file has one connection, and `pg_locks` has no
+ * blocked. None of that exists here: a venue file has one write connection, and `pg_locks` has no
  * counterpart, so `waitForABlockedBackend` is gone with it. What replaces the forcing is the
  * write queue itself: two `withTransaction` calls started together are serialised, so the second
  * runner sees the first's COMMITTED state rather than racing it.

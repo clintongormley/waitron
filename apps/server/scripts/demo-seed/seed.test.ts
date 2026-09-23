@@ -7,7 +7,7 @@
  * Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
  * `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
  *
- * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
  * may write any of the seeded tables.
  *
  * Three read-back shapes moved with the engine, none of them changing what is asserted:

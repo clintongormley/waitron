@@ -394,6 +394,19 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   statements issued together run one after the other in an order nothing states. Measured
   2026-09-22: two reads and two `create table`s issued with `Promise.all` inside one
   `withTransaction` all completed, so the hazard is ORDER, not loss. No guard enforces it.
+- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** The
+  store opens a read-only connection per file beside the single writer and routes by ASYNCHRONOUS
+  CONTEXT and per-body identity, so a read written inside the body still sees that body's own rows
+  (`packages/store/src/connections.ts`). Three shapes are outside the rule and each is stated at its
+  site: a transaction opened by RUNNING `begin`, a write issued from outside a running body, and a
+  statement that changes a CONNECTION rather than the file — a temporary table, an `ATTACH`, a
+  connection-scoped pragma — which a read-only connection does not refuse. Cost: the flip landed one
+  connection per file and a concurrent read returned rows a rollback then removed; then keying the
+  routing on the engine's own `isTransaction` instead reddened most of `packages/db`'s suite,
+  because Drizzle's migrator runs `begin` as an ordinary statement. Guard: the routing cases in
+  `packages/store/src/index.test.ts` and `connections.test.ts` — weaker than the set looks, because
+  not every case in it fails when the routing is deleted. See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
   a refusal and carrying on in the same `tx` is safe, and the SAVEPOINT the PostgreSQL rule required
   here is not what makes it safe. Measured 2026-09-22 on `node:sqlite` (Node v26.7.0): inside one

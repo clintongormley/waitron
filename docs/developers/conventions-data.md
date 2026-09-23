@@ -953,6 +953,75 @@ not for two, because it fired only when a query was already waiting behind the r
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
 The missing guard is a Track C item in `docs/backlog.md`.
 
+## A read taken while ANOTHER caller's write transaction is open sees committed rows only
+
+The store opens two connections per database file: the single writer, and a reader opened
+`readOnly: true` beside it (`packages/store/src/index.ts` → `openReadConnection`). A statement goes
+to the reader only while one of the store's own transactions is running AND the caller's
+asynchronous context is outside THAT transaction's body — `packages/store/src/connections.ts` →
+`forStatement`. A read written inside the body still sees the body's own rows, which is what a
+transaction is for.
+
+Two refinements the first implementation did not have, each with its own control below. The window
+spans the whole transaction, `commit` and `rollback` included, not the body alone. And each body
+carries its own TOKEN rather than a shared mark, because asynchronous context is inherited and never
+expires.
+
+**What it fixed.** The flip landed one connection per file and recorded the consequence rather than
+hiding it: measured 2026-09-21 on Node v26.7.0, with a second connection to the same file as the
+control, a read issued while the write lock held a transaction open returned that transaction's
+rows — including a row a rollback then removed — where the second connection returned committed
+rows only. A second connection is what node-postgres's pool used to hand a reader, so this was a
+behaviour CHANGE and not something SQLite forces. It is reachable rather than theoretical: the
+write queue holds the lock across the body's awaits, so the event loop serves other requests inside
+that window.
+
+**Why the rule counts the store's own bodies instead of asking the engine.**
+`DatabaseSync.isTransaction` is the engine's own truth about whether a transaction is open, and
+keying the routing on it reads as equivalent. It is not. Drizzle's migrator opens and closes its
+transaction by RUNNING `begin`, `commit` and `rollback` as ordinary statements through the session,
+never through the transaction shim, so every statement between them routed to the read-only
+connection: the writes were refused errcode 8 and re-run on the writer, but `rollback` there is
+refused `cannot rollback - no transaction is active`, errcode 1 — not the read-only refusal, so
+nothing could route it back. Measured on the branch that built this: 54 of `packages/db`'s 65 test
+files failed that way on 2026-09-23 — a reading of that day's tree, not a standing count — and the
+case is now pinned as `keeps to the writer for a transaction opened as an ordinary statement`.
+
+**Three exposures left open deliberately**, all recorded in `docs/backlog.md`. A transaction opened
+by running `begin` is not one the store is told about, so a read concurrent with it still lands on
+the writer and sees its rows. A write issued from outside a running body while one is open is
+refused by the reader and re-run on the writer, where it joins that transaction and commits or rolls
+back with it — which is what one connection did, and nothing refuses it. And `readOnly: true`
+refuses a write to the database FILE rather than every write: measured 2026-09-23 on Node v26.7.0, a
+`create temp table` succeeds on such a connection, because SQLite keeps a temporary table outside
+that file.
+
+**Two things the review wave found by RUNNING, and both were real.** The window first closed when a
+transaction's BODY settled rather than when the transaction itself finished — the queue issues its
+`rollback` after the body, and a handler registered on the body's own promise runs in that gap and
+read the writer's still-uncommitted rows. And the asynchronous context first carried a plain "inside
+a body" mark, which never expires, so a callback detached inside one transaction and settling during
+a LATER one was read as inside that later one. Each is now a case in
+`packages/store/src/index.test.ts`, and each fails when its fix is reverted.
+
+The window fix is marked in TWO files, and it took a case each to pin them, because reverting one
+alone left the other's case green. Narrowing the window in `packages/store/src/write-queue.ts` back
+to the body alone reddens `sends a read registered on the write lock's body promise to the reader`;
+narrowing it in `packages/store/src/node-sqlite-adapter.ts`, which marks a transaction taken
+directly rather than through the lock, reddens
+`sends a read registered on a direct transaction's body promise to the reader` — measured by
+reverting that file alone, which fails that case on `expected [ { id: 1 } ] to deeply equal []` and
+passes restored. The never-expiring mark is pinned separately: replacing the per-body identity set
+in `packages/store/src/connections.ts` with a plain inside-a-body flag reddens the detached-callback
+cases in `index.test.ts` and `connections.test.ts`.
+
+**The routing cases are not all controls, and the set is weaker than its name.** Deleting the
+routing outright — `forStatement` replaced by `return write;`, so every statement goes to the writer
+— leaves `serves a read routed to the reader on a file with no tables in it` green: that case passes
+whichever connection serves it, so it is a smoke test over the read path rather than evidence about
+where a statement lands. Re-run that mutation before treating any single case in these files as a
+control; what the other cases in the set catch is not what this one catches.
+
 ## A refused statement does NOT abort the transaction here, and the savepoints that remain confine a losing attempt's own writes
 
 **The direction reversed with the engine, and this is the sentence in the file most worth getting

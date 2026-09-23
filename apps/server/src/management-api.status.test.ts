@@ -16,7 +16,7 @@ import { ALL_MODULES } from "./modules.js";
  *
  * ## What went with PostgreSQL
  *
- * SQLite has no roles and no grants, and every call below runs on the one connection. Nothing here
+ * SQLite has no roles and no grants, and every call below runs on the one handle. Nothing here
  * now says anything about which identity the routes reach the database as. The 403 and 401 gates
  * are unaffected: both are `authorizeManager` and `requireManagementSession`, never a privilege,
  * and both cases still pass.

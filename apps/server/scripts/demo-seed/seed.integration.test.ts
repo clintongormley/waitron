@@ -6,7 +6,7 @@
 // end-to-end proof of Phase 1's union-reprice: `parkOrder` re-prices the basket against the
 // location's WHOLE accessible catalogue set, so a line drawn from a non-default menu must resolve.
 //
-// SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+// SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
 // may write any seeded table. `seedSales` still writes real hash-chained preproduction
 // `registros_facturacion` rows through `recordSale`, and the append-only triggers `useVenueDb`
 // installs still fire.

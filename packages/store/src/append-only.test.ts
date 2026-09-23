@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { installAppendOnlyTriggers } from "./append-only.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
+import { connectionPair } from "./connections.js";
 
 const open = () => {
   const connection = new DatabaseSync(":memory:");
@@ -12,7 +13,7 @@ const open = () => {
   );
   connection.exec(`create table tables_ (id integer primary key, name text not null)`);
   connections.push(connection);
-  return drizzleNodeSqlite(connection, { schema: {} });
+  return drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} });
 };
 
 const connections: DatabaseSync[] = [];

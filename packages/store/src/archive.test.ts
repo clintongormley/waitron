@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { archiveTo } from "./archive.js";
 import { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
+import { connectionPair } from "./connections.js";
 
 const connections: DatabaseSync[] = [];
 afterEach(() => {
@@ -21,14 +22,18 @@ const open = () => {
   connection.exec("pragma journal_mode = wal");
   connection.exec("create table sales (id integer primary key, total integer not null)");
   connections.push(connection);
-  return { directory, path, db: drizzleNodeSqlite(connection, { schema: {} }) };
+  return {
+    directory,
+    path,
+    db: drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} }),
+  };
 };
 
 /** Reads an archive the way a restore would: a connection that knows nothing of the source. */
 const readBack = (path: string) => {
   const connection = new DatabaseSync(path);
   connections.push(connection);
-  return drizzleNodeSqlite(connection, { schema: {} });
+  return drizzleNodeSqlite(connectionPair(connection, connection), { schema: {} });
 };
 
 describe("archiveTo", () => {

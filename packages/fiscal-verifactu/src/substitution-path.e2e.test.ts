@@ -378,7 +378,7 @@ describe("recordSubstitution from five callers started together", () => {
   //
   // WHAT THIS BLOCK LOST. It used to open five SEPARATE PostgreSQL backends
   // (`suite.pg.connect()`) and have them race the chain-head row LOCK. Neither exists on this
-  // engine: a venue file has one connection, `chain.ts`'s `selectHead` no longer takes `for
+  // engine: a venue file has one write connection, `chain.ts`'s `selectHead` no longer takes `for
   // update`, and there is nothing left to contend for. So this is no longer a lock test.
   //
   // WHAT IT STILL PROVES. Five callers are started together, without awaiting each other, against
@@ -393,9 +393,10 @@ describe("recordSubstitution from five callers started together", () => {
   // shape, same engine): with `withTransaction` replaced by a bare call on `suite.db` — the same
   // five bodies, no queue — the case failed with `Error: no such savepoint: wt_sp_3`
   // (`ERR_SQLITE_ERROR`, errcode 1) from `appendToChain` (`src/chain.ts:322`), the five bodies
-  // having interleaved on the one connection and released each other's savepoints. It never
-  // reached the chain assertions. The control was not re-run here; the receipt names the file it
-  // WAS run on rather than claiming a run that did not happen.
+  // having interleaved on the one write connection and released each other's savepoints. It never
+  // reached the chain assertions. Re-run there on 2026-09-23, after `packages/store` gained a read
+  // connection per file, and it printed the same failure. The control was not re-run HERE; the
+  // receipt names the file it WAS run on rather than claiming a run that did not happen.
   //
   // Five, like `correction-path`, for the same reason: a wider start is a stronger probe.
   const RACERS = 5;

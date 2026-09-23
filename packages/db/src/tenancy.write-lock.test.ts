@@ -93,8 +93,10 @@ describe("withTransaction on the write queue", () => {
 
     await Promise.allSettled([write("A", true), write("B", false)]);
 
-    // Without the queue the two share one connection: B's `begin` is refused inside A's open
-    // transaction, and A's rollback then takes its own row, leaving the table empty.
+    // Without the queue the two share the one write connection: B's `begin` is refused inside A's
+    // open transaction, and A's rollback then takes its own row, leaving the table empty. RE-RUN
+    // 2026-09-23 against the read-connection routing, by replacing the queue's `tail` with an
+    // already-resolved promise: `expected [] to deeply equal [ 'B' ]`, unchanged.
     expect(labels(db)).toEqual(["B"]);
   });
 

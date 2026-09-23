@@ -19,7 +19,7 @@ import type { PrintConfig } from "./printers.js";
  *
  * This suite used to take TWO PostgreSQL backends, park the first mid-push holding its claimed
  * row's lock, and poll `pg_stat_activity` until the second showed up as a lock WAITER. None of
- * that exists here: one connection per venue file, no row locks, and no `pg_stat_activity`. What
+ * that exists here: one write connection per venue file, no row locks, and no `pg_stat_activity`. What
  * the engine has instead is the file's write queue — `withTransaction`
  * (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, and
  * `packages/store/src/write-queue.ts` issues `begin immediate`, awaits the body, then `commit`, so

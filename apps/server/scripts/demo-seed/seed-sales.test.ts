@@ -2,7 +2,7 @@
  * Back-dated preproduction sales through `recordSale`: the stored environment, the chain, and the
  * reports they light up.
  *
- * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
  * may write a sale, a tender or a fiscal record.
  */
 

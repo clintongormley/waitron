@@ -26,7 +26,7 @@ const WRITERS = 20;
  * turn.
  *
  * LOST when this file moved off PostgreSQL: **twenty independent connections.** There is one
- * connection per venue file, so the twenty appends below are twenty transactions started together
+ * write connection per venue file, so the twenty appends below are twenty transactions started together
  * and serialised by the file's write queue (`packages/store/src/write-queue.ts`). What they still
  * prove is the chain's own guarantee — twenty distinct, contiguous positions, each linked to its
  * predecessor — which a queue that failed to serialise would break. The serialisation itself is

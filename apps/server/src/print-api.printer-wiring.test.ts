@@ -56,7 +56,7 @@ import "./errors.js";
  *    below checks the table grants those routes need.
  * 2. **The cross-connection commit boundary.** The first case read the claimed job back "from a
  *    separate pooled backend" to show the claim's transaction had COMMITTED inside the request.
- *    There is one connection now, so that read cannot distinguish a committed claim from an open
+ *    There is one write connection now, so that read cannot distinguish a committed claim from an open
  *    one, and the case's comment is rewritten to say what it still proves.
  *
  * What survives is everything the route layer decides for itself: the `printer.manage` gate proven
@@ -287,7 +287,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     ]);
 
     // The claimed job reads `printing` the instant the response has returned. This is NOT the
-    // commit-boundary proof the PostgreSQL version of this case claimed: there is one connection
+    // commit-boundary proof the PostgreSQL version of this case claimed: there is one write connection
     // here, so the read cannot tell a committed claim from one still open on it. What it still
     // shows is that the request wrote the status rather than only reporting it.
     const seen = await suite.db.execute<{ status: string }>(

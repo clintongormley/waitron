@@ -21,7 +21,7 @@
 // rather than a hand-built fixture. Matching the siblings is the point; a lighter target would
 // prove the seed against a database no venue ever has.
 //
-// SQLite has no roles, and every call below runs on the one connection. Nothing here checks who
+// SQLite has no roles, and every call below runs on the one handle. Nothing here checks who
 // may write an option list.
 
 import { describe, expect, it } from "vitest";

@@ -6,16 +6,25 @@
 // singleton primary with a valid config it could open — starts a fresh sweep whose immediate first
 // tick takes a copy under the new config.
 //
-// **It opens its OWN connection to the venue directory rather than reusing boot's, and that is a
-// correctness requirement, not tidiness.** The archive is `VACUUM INTO`, which SQLite refuses on a
-// connection that has a transaction open. Measured on Node v26.7.0, `/tmp/f1-restore-probe/
-// vacuum-concurrency.mjs`, re-run 2026-09-21: a SECOND connection archiving while the first holds
-// an open `begin immediate` with an uncommitted insert SUCCEEDS, and the archive holds the
-// committed row and not the uncommitted one; the control — the SAME connection that holds the
-// transaction — answers `cannot VACUUM from within a transaction`, errcode 1, and writes no file.
-// On boot's handle, then, every backup that fired while a sale was mid-transaction would fail,
-// intermittently. This is also the answer `packages/store/src/archive.ts` left open for the app
-// layer: no queueing, a second connection.
+// **It opens its OWN handle on the venue directory rather than reusing boot's.** The archive is
+// `VACUUM INTO`, which SQLite refuses on a connection that has a transaction open. Measured on
+// Node v26.7.0, `/tmp/f1-restore-probe/vacuum-concurrency.mjs`, re-run 2026-09-21: a SECOND
+// connection archiving while the first holds an open `begin immediate` with an uncommitted insert
+// SUCCEEDS, and the archive holds the committed row and not the uncommitted one; the control — the
+// SAME connection that holds the transaction — answers `cannot VACUUM from within a transaction`,
+// errcode 1, and writes no file.
+//
+// **What that no longer establishes, since `packages/store` gained a read connection per file.**
+// It used to say here that on boot's handle every backup firing while a sale was mid-transaction
+// would fail, intermittently, so the separate handle was a correctness requirement. That is no
+// longer what happens: an archive issued from outside a running transaction body is routed to the
+// file's read connection, where `VACUUM INTO` is allowed — measured 2026-09-23 on Node v26.7.0
+// both ways round, the copy is written and holds the committed row alone, while the same statement
+// on the write connection at that moment is still refused errcode 1
+// (`packages/store/src/index.test.ts`, "archives the committed state while another caller's
+// transaction is open"). What the separate handle still buys is the reload above: `reload()` closes
+// it and opens the venue again under the freshly read config, and boot's handle is the one the
+// server answers requests on, so this cannot close that.
 //
 // `current()` is a SYNC, config-derived snapshot (no I/O) for the routes and the status shell.
 // `status()` adds the async freshness read (`readBackupStatus`) and `archiveUnderCurrentKey`, which
@@ -69,8 +78,8 @@ export interface BackupSupervisorDeps {
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;
   /** The venue directory holding `venue.db` and `node.db` (`config.venueDir`). The supervisor opens
-   * it ITSELF, on its own connection — see this file's header for the measurement that makes that a
-   * requirement rather than a preference. */
+   * it ITSELF rather than taking boot's handle — see this file's header for what that buys now and
+   * for the reason it used to give, which no longer holds. */
   venueDir: string;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;

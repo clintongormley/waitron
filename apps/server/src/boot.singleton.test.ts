@@ -36,7 +36,7 @@ import { startServer } from "./boot.js";
  * ## Two things to know about this file
  *
  * **There is no ROLE SPLIT on this engine.** Both boots below run every statement on the one
- * connection `openVenueStore` hands out, so nothing here shows that the deployment role can read
+ * handle `openVenueStore` hands out, so nothing here shows that the deployment role can read
  * `deployment` and cannot write it.
  *
  * **Boot owns the file, so the suite hands over a DIRECTORY and lets go of it.** `startServer`

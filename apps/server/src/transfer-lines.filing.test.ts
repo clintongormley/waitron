@@ -46,7 +46,7 @@ import "./errors.js";
  * twelve looped iterations deadlock.
  *
  * **That case is deleted and NOTHING replaces it.** There are no row locks left to order — every
- * `select … for update` in `working-order.ts` is gone — and no second connection to stage the pair
+ * `select … for update` in `working-order.ts` is gone — and no second writer to stage the pair
  * on: one venue file, one write transaction at a time
  * (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain). The
  * proof-by-deletion belongs to the shape of the code it was taken against, and that shape is gone

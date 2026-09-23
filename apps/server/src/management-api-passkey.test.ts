@@ -17,7 +17,7 @@ import { mountMeApi } from "./me-api.js";
 // management-session cookie, which needs a migrated database (persons + management_sessions).
 //
 // WHAT WENT WITH POSTGRESQL. SQLite has no roles and no grants, and every call below runs on the
-// one connection. Nothing here now says anything about which identity the routes reach the database
+// one handle. Nothing here now says anything about which identity the routes reach the database
 // as. One in-case receipt is retired with the column type and is flagged where it sits — the
 // `isUuid` screen on `challengeHandle`.
 //

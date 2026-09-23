@@ -28,7 +28,7 @@ import "./errors.js";
  * ## What this file was, and the one thing that went with PostgreSQL
  *
  * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
- * one connection. A missing grant can no longer fail anything here, because there are no grants.
+ * one handle. A missing grant can no longer fail anything here, because there are no grants.
  *
  * ## Which of the two `me-api` suites this is
  *

@@ -49,7 +49,7 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 // ## Two things to know about this file
 //
 // **There is no ROLE SPLIT on this engine.** Every statement below, and every statement each booted
-// server issues, runs on the one connection `openVenueStore` hands out. What the file drives for
+// server issues, runs on the one handle `openVenueStore` hands out. What the file drives for
 // real is the wall-clock loop — which is why the polling below stays.
 //
 // **The suite keeps a handle open on each venue directory while a server holds one, and only READS
