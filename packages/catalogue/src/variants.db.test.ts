@@ -35,7 +35,7 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-/** Leaves `active` out, as a caller in code may: {@link VariantWrite} saves that variant Active. */
+/** Leaves `active` out, as a caller in code may: a new variant is then created Active. */
 const wine = (
   name: string,
   unitPrice: string | null,
@@ -291,6 +291,26 @@ describe("setProductVariants stores each variant as a product under its parent",
       ),
     ).rejects.toMatchObject({ code: "product.variant_invalid", params: { field: "active" } });
     expect(await storedVariants(f.parentId)).toEqual([]);
+  });
+
+  // A re-save that leaves `active` out must not restore a removed variant without saying so.
+  it("keeps a variant sent by id with no active as it already is, Active or Inactive", async () => {
+    const f = await fixture();
+    const saved = await app((tx) =>
+      setProductVariants(
+        tx,
+        f.parentId,
+        [wine("Wine 125", null, { active: false }), wine("Wine 175", "5.50")],
+        "en",
+      ),
+    );
+    const withoutActive = saved.map((variant) => {
+      const sent: VariantWrite = { ...variant };
+      delete sent.active;
+      return sent;
+    });
+    await app((tx) => setProductVariants(tx, f.parentId, withoutActive, "en"));
+    expect((await storedVariants(f.parentId)).map(({ active }) => active)).toEqual([0, 1]);
   });
 
   it("refuses an id that is not a variant of this parent", async () => {

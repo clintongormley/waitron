@@ -21,8 +21,8 @@ import type { ProductVariant, ProductVariantInput } from "./product-types.js";
 export type { ProductVariant, ProductVariantInput } from "./product-types.js";
 
 /** What {@link setProductVariants} takes: the editor's {@link ProductVariantInput}, whose `active`
- * the editor body always carries, with `active` optional for a caller in code — absent saves the
- * variant Active. */
+ * the editor body always carries, with `active` optional for a caller in code — absent creates a new
+ * variant Active and leaves one sent by `id` Active or Inactive as it already is. */
 export type VariantWrite = Omit<ProductVariantInput, "active"> & { active?: boolean };
 
 /** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
@@ -131,16 +131,24 @@ export async function setProductVariants(
   fallbackLanguage: string,
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
-  const normalized: (VariantWrite & { active: boolean; cents: number | null })[] = [];
+  const checked: (VariantWrite & { cents: number | null })[] = [];
   for (const input of inputs) {
     if (input.id !== undefined) {
       if (seen.has(input.id)) throw new AppError("product.variant_invalid", { field: "id" });
       seen.add(input.id);
     }
     validateFlag(input.available, "available");
-    const active = input.active === undefined ? true : input.active;
-    validateFlag(active, "active");
+    if (input.active !== undefined) validateFlag(input.active, "active");
     const price = validatePrice(input.unitPrice, "unitPrice");
+    checked.push({ ...input, cents: price === null ? null : decimalToCents(price) });
+  }
+  const parent = await assertProductForWrite(tx, productId);
+  const current = await listProductVariants(tx, productId);
+  const currentActive = new Map(current.map((variant) => [variant.id, variant.active]));
+  const normalized: (VariantWrite & { active: boolean; cents: number | null })[] = [];
+  for (const input of checked) {
+    const active =
+      input.active ?? (input.id === undefined ? true : (currentActive.get(input.id) ?? true));
     // The staff `name` is plain text and needs no translation check; the customer-facing map is what
     // must satisfy the enabled languages. A null customer name is legal — it falls back to `name`.
     // An Inactive variant is on no menu offer and in no translation-gap report, so it is checked when
@@ -148,11 +156,9 @@ export async function setProductVariants(
     // save of its parent.
     if (active && input.customerName != null)
       await validateContentTranslations(tx, input.customerName, fallbackLanguage);
-    normalized.push({ ...input, active, cents: price === null ? null : decimalToCents(price) });
+    normalized.push({ ...input, active });
   }
-  const parent = await assertProductForWrite(tx, productId);
-  const current = await listProductVariants(tx, productId);
-  const currentIds = new Set(current.map((v) => v.id));
+  const currentIds = new Set(currentActive.keys());
   for (const id of seen) {
     if (!currentIds.has(id)) throw new AppError("product.variant_not_found", { variantId: id });
   }
