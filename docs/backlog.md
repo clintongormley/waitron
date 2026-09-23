@@ -3199,8 +3199,44 @@ the PR threads and in `CLAUDE.md`, [conventions-data.md](developers/conventions-
 **Task F1, the flip itself, LANDED as #489 on 2026-09-23** (main `aabdde6a`). A venue is a directory
 of two SQLite files opened through `node:sqlite`; there is no database server, no roles, no grants,
 no connection string and no container. What the flip cost, what it could not carry and what it
-deliberately deferred are in that pull request and in its commits. **The tidy items T1, T2 and T3 are
-now unblocked.** What the preparation tasks left, with F1's own answers where it found them:
+deliberately deferred are in that pull request and in its commits.
+
+**Task T1, the role-assumption sweep, LANDED as #490 on 2026-09-23** (main `fcc2d432`). `asAppUser`
+and its 796 call sites are gone, and so is the prose that described them. **T2 and T3 remain**; T3
+depends on T2.
+
+The reusable lesson, because it cost four passes: **the selection key kept turning out to be wider
+than the problem.** Sweeping by the IDENTIFIER `asAppUser` found 140 files. A further 44 cited the
+deleted FILE without ever naming the function — invisible to the first key. A further 152 described
+the mechanism in plain English ("runs as the app role", "`app_user` holds SELECT on `nodes`") and
+named neither — invisible to both, and found independently by two reviewers in the same wave. Then
+the re-read of that third sweep found ten more, three of them shapes worth carrying: a sweep can
+falsify a document in the same commit that rewraps it; shortening a file breaks every pointer INTO
+it; and a correction must not decrement a count where it should drop it.
+
+**What #490 found and deliberately did not fix**, so T2 and whoever follows do not rediscover it:
+
+- **Stale PGlite prose, around a dozen suites.** They open "PGlite, not real Postgres" or "proven on
+  real Postgres" while calling `useVenueDb`. That went stale with #489, not with #490, and it is a
+  different sweep key. **T2 is the right home** — its own note already says to read every claim
+  stated in prose across the whole range. `scripts/schema-equivalence.md` belongs to the same sweep.
+- **`isPgError`, `pgErrorCode`, `pgErrorMessage` and `storeF3AsAppUser` still carry the old engine's
+  name.** `packages/db/src/unique-violation.ts` records that renaming them touches every caller.
+  Nobody owns this yet; it is a rename-only change and wants its own item.
+- **`apps/server/src/join-requests.test.ts:102` and `apps/server/src/management-api.ts:500`** take a
+  `cfg` parameter they discard with `void cfg`. Verified pre-existing (#363, #378).
+- **Three dangling pointers #490 did not create**: `apps/server/src/testing/global-setup.ts`
+  (a deleted file), `apps/server/node-identity.ts` (missing its `/src`, cited at
+  `packages/db/src/schema/nodes.ts:43`), and `drizzle/0001_db_baseline_sql.sql`, which names no file
+  under `packages/db/drizzle/`.
+- **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`** say core
+  migrations must run first. After the grant clause came out neither carries a reason, and a
+  reviewer could not find one. The ordering may still be right; nothing now says why.
+- **One claim known to be false and left standing**:
+  `apps/server/src/promote-endpoint-e2e.test.ts:84` states a grep receipt returning "no matches"
+  that does not, when run as written.
+
+What the preparation tasks left, with F1's own answers where it found them:
 
 - **How the drain crosses the two database files, given `change_log`'s `local` classification —
   ANSWERED by F1 and still open as a decision.** The triggers writing it sit on `venue.db` tables,
