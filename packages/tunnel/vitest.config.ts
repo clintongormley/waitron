@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // Single fork: @vitest/coverage-v8 under-merges branch coverage across forks under the
-    // whole-workspace `pnpm -r test:coverage` the pre-push hook runs. The suite is tiny, so one
+    // Single fork: @vitest/coverage-v8 under-merges branch coverage across forks under a
+    // whole-workspace `pnpm -r test:coverage`. The suite is tiny, so one
     // fork costs nothing and makes the gate deterministic (the packages/shared precedent).
     maxWorkers: 1,
     coverage: {
@@ -14,7 +14,7 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel with no logic (packages/shared precedent).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

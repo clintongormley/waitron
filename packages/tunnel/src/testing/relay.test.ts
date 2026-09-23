@@ -148,6 +148,8 @@ describe("createRelayStandin", () => {
     const box = connect(relay.boxPort, "127.0.0.1");
     const frame = encodeFrame({ t: "register", boxId: "b", token: "t" });
     box.write(frame.subarray(0, 6)); // partial — decodeFrame returns null, the relay buffers
+    // The relay answers nothing to a partial frame, so this cannot wait for it to be read; if the
+    // halves ever arrive together the ack still comes, and only the partial-frame path goes unrun.
     await sleep(10);
     box.write(frame.subarray(6)); // completes the frame
     expect((await readFrame(box))!.frame).toEqual({ t: "ack" });
@@ -175,6 +177,36 @@ describe("createRelayStandin", () => {
     good.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
     expect((await readFrame(good))!.frame).toEqual({ t: "ack" });
     good.destroy();
+  });
+
+  it("does not crash when a parked box resets its connection, and still acks the next box", async () => {
+    // A hard reset (resetAndDestroy) reaches the relay's side as an 'error' (ECONNRESET). Unhandled,
+    // that error would crash the process. This checks only that the relay lives on: the dead box
+    // stays in the idle queue, so a client arriving next would still be paired with it.
+    relay = await createRelayStandin({ verifyToken: () => true });
+    const box = connect(relay.boxPort, "127.0.0.1");
+    box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
+    await readFrame(box); // ack — parked idle
+    box.resetAndDestroy();
+    await sleep(20); // let the reset reach the relay
+    const good = connect(relay.boxPort, "127.0.0.1");
+    good.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
+    expect((await readFrame(good))!.frame).toEqual({ t: "ack" });
+    good.destroy();
+  });
+
+  it("does not crash when a waiting client resets its connection, and still acks the next box", async () => {
+    // As above, the relay lives on; the dead client stays in the waiter queue and is handed the
+    // next box to register.
+    relay = await createRelayStandin({ verifyToken: () => true, waitForBoxMs: 5000 });
+    const client = connect(relay.clientPort, "127.0.0.1");
+    await sleep(20); // let the relay accept the client and park it as a waiter
+    client.resetAndDestroy();
+    await sleep(20); // let the reset reach the relay
+    const box = connect(relay.boxPort, "127.0.0.1");
+    box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
+    expect((await readFrame(box))!.frame).toEqual({ t: "ack" });
+    box.destroy();
   });
 
   it("pairs two clients with two idle connections from the same box", async () => {

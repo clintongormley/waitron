@@ -2016,7 +2016,9 @@ image constraints under *Detail → Box image*.
   tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
   100/100/100/100); `bookings` (**PR #503**, 2026-09-23 — tests for the seat refusal when a booking leaves
   `booked` inside `openTab`, a location with no row, the passive refresh copy, and the dashboard's
-  single-flight guards; 99.76/100/100/98.38).
+  single-flight guards; 99.76/100/100/98.38); `tunnel` (**PR #506**, 2026-09-23 — tests for a
+  repeated `ack`, a frame the client ignores before `go`, and the test relays surviving a peer's
+  connection reset; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2397,6 +2399,19 @@ reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that br
 three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
+
+**The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
+writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
+nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
+box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
+box and its bytes go nowhere (both reviewers of that branch ran this). When a waiting client closes,
+it stays in `waiters` until its wait window (`waitForBoxMs`) runs out, so a box registering inside
+that window is sent `go` and paired with the dead client. Three tests in `relay.test.ts` pass anyway
+because they check only the next `ack`: the two reset cases say so, and the older "drops an idle box
+that sends garbage after registering, and keeps serving" claims more than it checks. **Next
+action:** only if `@waitron/tunnel` outlives its planned retirement (see *Waitron retains* below) —
+drop the entry on close, test-first (a live client after the reset is paired with a live box), and
+narrow or extend that older test.
 
 **On SQLite a read taken while a write transaction is open could see uncommitted rows — CLOSED
 (found 2026-09-21, task F1; fixed 2026-09-23 by PR #493).** The flip opened ONE connection per database file,
