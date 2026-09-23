@@ -52,10 +52,10 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   `packages/db/drizzle/0001_behavioural_triggers.sql` and
  *   `packages/media/drizzle/0001_image_references.sql`, and media's triggers sit ON tables core and
  *   catalogue create — real cross-set edges, which is why this guard passes only because media
- *   DECLARES both in its `requires`. What the scan still cannot see is append-only enforcement,
- *   which is runtime code (`packages/store/src/append-only.ts`). The `CREATE CONSTRAINT TRIGGER`
- *   spelling it also accepts is
- *   PostgreSQL-only: sqlite3 3.51 answers `near "CONSTRAINT": syntax error`, so those two controls
+ *   DECLARES both in its `requires`; the anchor test pins one of them,
+ *   `media→core via trigger on products`. What the scan still cannot see is append-only
+ *   enforcement, which is runtime code (`packages/store/src/append-only.ts`). The
+ *   `CREATE CONSTRAINT TRIGGER` spelling it also accepts is PostgreSQL-only: sqlite3 3.51 answers `near "CONSTRAINT": syntax error`, so those two controls
  *   pin a spelling this engine cannot run.
  * - A SQLITE TRIGGER'S BODY IS NOT READ. On PostgreSQL a trigger reached another module through
  *   `EXECUTE FUNCTION <fn>`, and that edge kind was detected here; SQLite has no functions at all
@@ -337,15 +337,17 @@ describe("the tree's module graph is honest", () => {
   // just as `workforce→identity`, so it stays a control for the one detector it exercises: strip the
   // backtick from the `REFERENCES` character class and this goes red.
   //
-  // What this anchor does NOT cover is the trigger detector: the tree has real trigger edges again
-  // (media's), but no assertion here names one, so that detector's only controls are the crafted
-  // cases above. See the header's known limitation headed THE TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN.
+  // The trigger detector has its own real edge: `packages/media/drizzle/0001_image_references.sql`
+  // puts a trigger ON core's `products`. Break the `ON <table>` capture in `CREATE_TRIGGER` and the
+  // second assertion below goes red (tried 2026-09-23). See the header's known limitation headed THE
+  // TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN.
   it("discovers the modules and finds the known real cross-module edges", () => {
     for (const name of ["core", "identity", "payments", "workforce"]) {
       expect(modules).toContain(name);
     }
     expect(modules.length).toBeGreaterThanOrEqual(10);
     expect(foundEdgeDetails.has("workforce→identity via FK reference on persons")).toBe(true);
+    expect(foundEdgeDetails.has("media→core via trigger on products")).toBe(true);
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {

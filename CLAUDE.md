@@ -219,8 +219,8 @@ hook, or how tests are scheduled:
   SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
   what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
-- **No migration set has an upgrade test; every set is migrated from a VIRGIN database only**, so a
-  green gate is no evidence that any set can upgrade a box. See
+- **No test applies a shipped migration to a database already at an earlier point** — every set is
+  migrated from a VIRGIN database — so a green gate is no evidence that any set can upgrade a box. See
   [ci-and-gates.md](docs/developers/ci-and-gates.md). Cost: a bricked box, an hour of guesswork, and
   a wipe that destroyed the evidence.
 

@@ -33,7 +33,7 @@ import { describe, expect, it } from "vitest";
  * becomes a real check for a given set the moment it gains a SECOND migration —
  * and it is in place for that push rather than written after it.
  *
- * Root project, same reasoning as scripts/enum-add-value-safety.test.ts: it reads the whole tree, so
+ * Root project, same reasoning as scripts/module-graph-honesty.test.ts: it reads the whole tree, so
  * a package-resident copy would only run when its own package is in scope and most pushes never
  * reach packages/db.
  *

@@ -808,7 +808,7 @@ passed in Chromium. Check host execution before deferring browser testing to ano
 
 ## Migration-upgrade test coverage gap
 
-### No migration set has an upgrade test; every set is migrated from a VIRGIN database only
+### No test applies a shipped migration to a database already at an earlier point
 
 So a green gate is no evidence that any set can upgrade a box. Drizzle applies a set's
 PENDING migrations in one transaction, so a statement that is legal on a virgin database — where
