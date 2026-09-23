@@ -43,7 +43,7 @@ import "./errors.js";
  * ## The four cases this file LOST, and what covers them now
  *
  * It held seven cases; four of them staged two PostgreSQL backends through `suite.pg.connect()` and
- * asserted `pg_backend_pid()` was distinct. **There is no second connection to stage them on**: one
+ * asserted `pg_backend_pid()` was distinct. **There is no second writer to stage them on**: one
  * venue file, one write transaction at a time, which is wider than any row lock those cases were
  * written against — every `select … for update` in `working-order.ts` is gone, `mergeTabs`'s
  * four-lock class order with it (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts`

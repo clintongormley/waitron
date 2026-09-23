@@ -135,7 +135,7 @@ beforeEach(() => {
  * **The whole connection-string surface is gone, and with it the role split.** Neither
  * `DATABASE_URL` nor `WAITRON_MIGRATIONS_DATABASE_URL` exists any more —
  * `grep -c "DATABASE_URL" apps/server/src/config.ts` returns 0, and `config.venueDir` is what boot
- * opens. There are no roles on this engine either: every statement runs on the one connection
+ * opens. There are no roles on this engine either: every statement runs on the one handle
  * `openVenueStore` hands out. Each boot below therefore names `WAITRON_VENUE_DIR` and nothing else.
  * One case LOSES its subject outright and is deleted, with what it stopped proving written where it
  * stood: the least-privileged-pool case. One case KEEPS a clause the role split used to carry — the

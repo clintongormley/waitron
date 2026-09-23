@@ -46,7 +46,7 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 // ## Two things to know about this file
 //
 // **There is no ROLE SPLIT on this engine.** Every statement below, and every statement each booted
-// server issues, runs on the one connection `openVenueStore` hands out, so nothing here separates
+// server issues, runs on the one handle `openVenueStore` hands out, so nothing here separates
 // what the gate refuses from what a grant refuses.
 //
 // **The suite keeps a handle open on each venue directory while a server holds one.** Write-ahead

@@ -303,7 +303,7 @@ describe("recordCorrection from five callers started together", () => {
   //
   // WHAT THIS BLOCK LOST, stated plainly. It used to open five SEPARATE PostgreSQL backends
   // (`suite.pg.connect()`) and have them race the chain-head row LOCK. Neither exists on this
-  // engine: a venue file has one connection, `chain.ts`'s `selectHead` no longer takes `for
+  // engine: a venue file has one write connection, `chain.ts`'s `selectHead` no longer takes `for
   // update`, and there is nothing left to contend for. So this is no longer a lock test and does
   // not claim to be.
   //
@@ -323,11 +323,16 @@ describe("recordCorrection from five callers started together", () => {
   // `withTransaction` replaced by a bare `backend.recordCorrection(suite.db, …)` — the same five
   // bodies, the same assertions, no write queue — the case failed with
   // `Error: no such savepoint: wt_sp_3` (`ERR_SQLITE_ERROR`, errcode 1) thrown from
-  // `appendToChain` (`src/chain.ts:322`): the five bodies interleaved on the one connection and
-  // released each other's savepoints. It never reached the chain assertions. So the green this
+  // `appendToChain` (`src/chain.ts:322`): the five bodies interleaved on the one write connection
+  // and released each other's savepoints. It never reached the chain assertions. So the green this
   // case reports with the queue in place is not a reading that could never have printed anything
   // else. (I expected the duplicate-position refusal and got this instead — the interleaving
   // breaks the retry's savepoint nesting before the unique index is reached.)
+  //
+  // RE-RUN 2026-09-23, after `packages/store` gained a read connection per file: the same control
+  // printed the same failure, `Error: no such savepoint: wt_sp_13`, one failed case and five
+  // passed. A proof by deletion belongs to the shape of the code it was taken against, and the
+  // routing change is exactly the kind of restructure that can quietly stop one failing.
   //
   // Five, not two, for the same reason chain.concurrency ran twenty: a wider start is a stronger
   // probe of the same property.

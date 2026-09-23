@@ -2010,9 +2010,9 @@ export async function startServer(
   // `reload()` (so the wizard's `backup.env` takes effect without a restart), opens the venue
   // directory on its OWN connection — not this one — and starts the sweep ONLY on a singleton
   // primary. A venue it cannot open, or a non-primary role, leaves backup off and is logged, never
-  // stopping sales (§5). Why a second connection rather than this handle is measured and recorded in
-  // `backup-supervisor.ts`'s header: the archive is `VACUUM INTO`, which SQLite refuses on a
-  // connection with a transaction open. Provenance and the disk re-read both read the RAW `base`
+  // stopping sales (§5). What its own handle buys, and what it USED to buy and no longer does now
+  // that the store opens a read connection per file, are both in `backup-supervisor.ts`'s header.
+  // Provenance and the disk re-read both read the RAW `base`
   // env, not the merged `env`, so a file-sourced value is distinguishable from an env-sourced one
   // (spec §3.2).
   // The in-process record of each backup destination's last sweep outcome. The sweep the supervisor

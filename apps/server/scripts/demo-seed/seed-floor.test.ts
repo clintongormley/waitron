@@ -1,7 +1,7 @@
 /**
  * `seedFloor`: the floor-plan zones, the ~16 placed tables, and the four service statuses.
  *
- * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
  * may write the floor plan.
  *
  * `floor_zones.active` is read RAW below, and a raw read reaches no column mapper, so a boolean

@@ -2311,21 +2311,50 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**On SQLite a read taken while a write transaction is open can see uncommitted rows — OPEN (found
-2026-09-21, task F1).** The store opens ONE connection and one Drizzle instance per database file
-(`packages/store/src/index.ts`), following the flip plan's own interface rather than the slice-1
-spec's §3.3 "small set of connections for reading", because a read pool would have to route every
-read away from the write handle and no step in the plan describes that machinery. The consequence
-was measured rather than reasoned about, with a second connection to the same file as the control:
-while the write lock holds a transaction open, a read on the writer's own connection returns that
-transaction's rows — including a row a rollback then removes — where the second connection returns
-committed rows only. A second connection is what node-postgres's pool used to hand a reader, so this
-is a behaviour CHANGE, not a property SQLite forces. It is reachable in Waitron rather than
-theoretical: the write queue holds the lock across the transaction body's awaits, so the event loop
-can serve another request inside that window. Adding a read connection per file later touches
-`packages/store` and whatever routes reads, not the 1,556 `withTransaction` call sites. The full
-measurement, with the owner's options, is in the flip's pull request and in the campaign's
-`questions.md`.
+**On SQLite a read taken while a write transaction is open could see uncommitted rows — CLOSED
+(found 2026-09-21, task F1; fixed 2026-09-23).** The flip opened ONE connection per database file,
+following its own plan rather than the slice-1 spec's §3.3 "small set of connections for reading",
+so a read issued while the write lock held a transaction open ran on the writer's own connection and
+returned that transaction's rows — including a row a rollback then removed. A second connection to
+the same file, which is what node-postgres's pool used to hand a reader, returned committed rows
+only, so this was a behaviour change rather than something SQLite forces.
+
+`packages/store` now opens two connections per file: the single writer, and a reader opened
+`readOnly: true` beside it. A statement goes to the reader only while one of the store's own
+transaction bodies is running and the caller's asynchronous context is outside it; everywhere else
+the writer is used, so migrations, archives and writes outside a transaction are unchanged. The rule
+and its measurements are in `packages/store/src/connections.ts`, and the cases in
+`packages/store/src/index.test.ts` pin it — though not every one of them does: with the routing
+replaced by `return write;` the case `serves a read routed to the reader on a file with no tables in
+it` still passes, so it is a smoke test rather than a control, and it says so at its own site.
+
+**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3).** A
+transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
+Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
+A write issued from outside a running body while one is open is re-run on the writer, where it joins
+that transaction and commits or rolls back with it, which is what one connection did; nothing
+refuses it. And `readOnly: true` refuses a write to the database FILE, not every write: measured
+2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a connection, so a temporary table
+written from outside a running body would land on the reader and stay there — and the same holds
+for an `ATTACH` and for any connection-scoped pragma, because all three change a CONNECTION rather
+than the file, so nothing refuses them and nothing routes them back. A temporary table and an
+`ATTACH` have no site in this tree: searched 2026-09-23, a `create temp table`/`create temporary
+table` grep over `packages`, `apps` and `scripts` matched nothing, and `packages/store/src/index.ts`
+records the same result for `ATTACH`. A connection-scoped pragma is a different matter — those are
+issued through routed handles already. The one that runs on a request path,
+`pragma defer_foreign_keys = on` at `apps/server/src/configuration-transfer.ts:487`, is issued
+INSIDE the provisioning transaction's body, which is exactly where the routing sends a statement to
+the writer; the others are test setup issued outside any body, where the reader would serve them if
+a body happened to be running, and none of those suites runs one. **Next action:** none needed while
+that holds; a temporary table, an attachment or a connection pragma issued from OUTSIDE a running
+body has to be put on the writer deliberately, and a guard for that does not exist.
+
+Two things the review wave found by RUNNING, both fixed on the same branch rather than recorded: the
+window used to close when a transaction's BODY settled rather than when the transaction finished, so
+a handler registered on the body's own promise read the writer's still-uncommitted rows; and the
+asynchronous context used to carry a plain "inside a body" mark, which never expires, so a callback
+detached inside one transaction and settling during a LATER one was read as being inside that later
+one and saw its uncommitted rows.
 
 **The media library reads the whole `media_images` table on every page load, inside the venue write
 lock — OPEN (found 2026-09-23, task F1's review wave).** `packages/media/src/images.ts` selects

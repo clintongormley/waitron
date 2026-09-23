@@ -27,7 +27,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
  * that refused every write would pass all the refusal cases.
  *
- * WHAT IT DOES NOT COVER. One connection, one process: nothing here is a concurrency claim. It
+ * WHAT IT DOES NOT COVER. One writer, one process: nothing here is a concurrency claim. It
  * asserts the database's refusal, not the message a caller reads — `deleteImage` checks usages
  * itself and returns them rather than reaching the delete trigger.
  */

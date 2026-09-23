@@ -74,7 +74,7 @@ import "./errors.js";
  * ## The two cases this file LOST
  *
  * Both staged several PostgreSQL backends through `suite.pg.connect()` and asserted
- * `pg_backend_pid()` was distinct. **There is no second connection to stage them on**: one venue
+ * `pg_backend_pid()` was distinct. **There is no second writer to stage them on**: one venue
  * file, one write transaction at a time, which is wider than the per-table `select … for update`
  * they were written against — every one of those in `working-order.ts` is gone
  * (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain and the

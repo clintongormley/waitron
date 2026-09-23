@@ -19,7 +19,7 @@ import "./errors.js";
  *
  * ## What this file does not check
  *
- * **There are no roles on this engine**, and every call below runs on the one connection. Nothing
+ * **There are no roles on this engine**, and every call below runs on the one handle. Nothing
  * checks that the deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
  * `preparation_routes`, `kitchen_stations`, `floor_zones`, `product_categories`, `products` or
  * `product_modifiers`.

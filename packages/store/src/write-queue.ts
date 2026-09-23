@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { DatabaseSync } from "node:sqlite";
+import type { Connections } from "./connections.js";
 
 /**
  * One write transaction at a time.
@@ -14,7 +14,7 @@ import type { DatabaseSync } from "node:sqlite";
  * `begin immediate` rather than `begin`: it takes the write lock up front, so a transaction cannot
  * get partway through and then fail to upgrade.
  */
-export function createWriteQueue(db: DatabaseSync) {
+export function createWriteQueue(connections: Connections) {
   let tail: Promise<unknown> = Promise.resolve();
   /**
    * Whether THIS call is running inside one of this queue's own bodies.
@@ -47,17 +47,29 @@ export function createWriteQueue(db: DatabaseSync) {
       if (inBody.getStore() === true) {
         throw new Error("write lock: a body asked for the lock it is already holding");
       }
-      const mine = tail.then(async () => {
-        db.exec("begin immediate");
-        try {
-          const result = await inBody.run(true, body);
-          db.exec("commit");
-          return result;
-        } catch (error) {
-          db.exec("rollback");
-          throw error;
-        }
-      });
+      // The store's marking wraps the WHOLE transaction, `commit` and `rollback` included, not
+      // just the body. The queue finishes the transaction after the body has settled, and a
+      // handler registered on the body's own promise runs in between — so a window that closed
+      // with the body would let that handler read the writer's still-uncommitted rows. Pinned by
+      // the `a read registered on the write lock's body promise` case in ./index.test.ts.
+      //
+      // Two markings, and they answer different questions. `inBody` is this queue's own, and
+      // refuses a body that asks for the lock it holds. `asTransactionBody` is the store's, and
+      // says a read from here belongs on the write connection rather than on the read one
+      // (`./connections.ts`). Merging them would refuse a caller that only needs routing.
+      const mine = tail.then(() =>
+        connections.asTransactionBody(async () => {
+          connections.write.exec("begin immediate");
+          try {
+            const result = await inBody.run(true, body);
+            connections.write.exec("commit");
+            return result;
+          } catch (error) {
+            connections.write.exec("rollback");
+            throw error;
+          }
+        }),
+      );
       // The tail must not carry a rejection, or every later caller inherits it.
       tail = mine.catch(() => undefined);
       return mine;

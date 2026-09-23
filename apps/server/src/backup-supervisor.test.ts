@@ -14,7 +14,7 @@
 // than inferred from a shorter file.
 //
 // What replaces them is the case this engine makes necessary and the old one could not have:
-// `archives on its own connection`, below.
+// `archives while a write transaction is held on another handle`, below.
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -193,17 +193,24 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     }
   }, 60_000);
 
-  it("archives on its own connection, so a write transaction held elsewhere does not block it", async () => {
-    // The reason the supervisor opens the venue ITSELF rather than taking boot's handle. `VACUUM
-    // INTO` is refused on a connection with a transaction open — `cannot VACUUM from within a
-    // transaction`, errcode 1, no file written, measured on Node v26.7.0 in
+  it("archives while a write transaction is held on another handle", async () => {
+    // `VACUUM INTO` is refused on a connection with a transaction open — `cannot VACUUM from within
+    // a transaction`, errcode 1, no file written, measured on Node v26.7.0 in
     // `/tmp/f1-restore-probe/vacuum-concurrency.mjs` — while a SECOND connection to the same file
     // succeeds and copies the COMMITTED state. So: hold a write transaction open on another handle
     // to this very directory for the whole of the supervisor's first tick, and require the archive
     // to land anyway.
     //
-    // The control is the inversion, and it is not hypothetical: handing this suite's own `boot`
-    // handle in through `openVenue` makes the tick fail with that message instead.
+    // **WHAT THIS CASE STOPPED SEPARATING, found by RE-RUNNING its own stated control rather than
+    // by reading it.** It used to say here that the control was not hypothetical: hand this suite's
+    // own `boot` handle in through `openVenue` and the tick fails with that message instead. Re-run
+    // 2026-09-23, after `packages/store` gained a read connection per file — the suite PASSES that
+    // way, ten of ten, because an archive issued from outside a running transaction body is routed
+    // to the file's read connection, where the copy is allowed. So this case still shows the
+    // archive lands while a transaction is held; it no longer says anything about WHICH handle the
+    // supervisor opened, and the name no longer claims it does. The measurement is in
+    // `packages/store/src/index.test.ts`, "archives the committed state while another caller's
+    // transaction is open".
     const dest = await makeDestDir();
     const venueDir = await makeVenueDir();
     const boot = await openVenueDatabase(venueDir);

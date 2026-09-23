@@ -1,4 +1,10 @@
-import type { DatabaseSync, SQLInputValue, StatementResultingChanges } from "node:sqlite";
+import type {
+  DatabaseSync,
+  SQLInputValue,
+  StatementResultingChanges,
+  StatementSync,
+} from "node:sqlite";
+import { type Connections, isReadOnlyRefusal, settle } from "./connections.js";
 import { createTableRelationsHelpers, extractTablesRelationalConfig } from "drizzle-orm";
 import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
@@ -35,24 +41,6 @@ let savepointsTaken = 0;
 const nextSavepoint = () => `wt_sp_${(savepointsTaken += 1)}`;
 
 /**
- * Is this what a body returned, or what it will return later?
- *
- * The engine is synchronous and Drizzle's session is built for a synchronous driver, so its
- * transaction wrapper is written as though a body finishes when it returns. An `async` body returns
- * at its FIRST `await`, with its remaining work and its throw still ahead of it, so a wrapper that
- * believes the return commits early and never sees the throw at all.
- *
- * Every place in `packages` and `apps` that opens a transaction on a transaction-typed value hands
- * in a body that returns a promise (`tx.transaction(`, grepped). That is why this check exists —
- * but being reached is not the same as being COVERED: Drizzle emits a nested transaction itself,
- * without calling this client, so for a while the deeper level released its savepoint on return
- * whatever this function said. {@link addExecute} now routes that level back through here, which is
- * what makes the answer the same at every depth.
- */
-const isPending = (value: unknown): value is PromiseLike<unknown> =>
-  typeof (value as PromiseLike<unknown> | undefined)?.then === "function";
-
-/**
  * Lets Drizzle's SQLite session drive Node's own SQLite.
  *
  * Drizzle publishes no driver for `node:sqlite` (checked against 0.45.2, the installed and the
@@ -62,28 +50,85 @@ const isPending = (value: unknown): value is PromiseLike<unknown> =>
  * `raw()`, which maps onto `setReturnArrays`; and `transaction(fn)`, which `node:sqlite` has no
  * equivalent of.
  */
-export function adaptNodeSqlite(db: DatabaseSync) {
+export function adaptNodeSqlite(connections: Connections) {
   const bind = (params: unknown[]) => params as SQLInputValue[];
   const client = {
+    /**
+     * Compiles `query` against whichever connection it belongs on at the moment it RUNS.
+     *
+     * The statement is prepared inside the call rather than here, because `./connections.ts`
+     * answers a question about the instant of execution and Drizzle's session prepares and then
+     * runs as two steps.
+     *
+     * It costs no extra compilation ON THE PATH THIS TREE USES. Measured rather than read, by
+     * counting `prepare` calls on the connection (2026-09-23, Node v26.7.0, drizzle 0.45.2):
+     * `db.select().all()`, `db.run(sql…)` and each `db.query.<table>.findMany().sync()` compile
+     * once per execution, and one HELD prepared query compiles twice for two executions.
+     *
+     * The two halves arrive there by different routes, which matters to whoever changes this.
+     * `db.select()` and `db.run(sql…)` ask for a ONE-TIME query, which calls `client.prepare`
+     * afresh per execution (`sqlite-core/query-builders/select.js:610`'s
+     * `_prepare(isOneTimeQuery = true)`, and `sqlite-core/session.js:154/164/171/178`). The
+     * relational builders take the opposite branch — `query-builders/query.js:94`'s
+     * `_prepare(isOneTimeQuery = false)` is the REUSABLE one — and cost the same only because
+     * `findMany`/`findFirst` build a new query object per call (`query.js:18` and `:41`), so the
+     * statement that object keeps is used once and goes with it.
+     *
+     * A prepared query a CALLER holds is where the cost lands: it keeps the statement across
+     * executions, so under this shape it recompiles per call where it used to compile once — the
+     * two compiles above. No call site in `apps`, `packages`, `scripts` or `bench` holds one —
+     * grepped 2026-09-23, for `.prepare()` on a Drizzle builder and for `sql.placeholder` — and
+     * the first one that does should reconsider this shape.
+     *
+     * **A statement the read connection refuses because it is read-only is re-run on the write
+     * connection.** That case is a write issued from an asynchronous context outside a transaction
+     * while some other transaction is open, and on one connection it silently joined that
+     * transaction; re-running it there keeps exactly that behaviour instead of exchanging it for a
+     * refusal no caller in this tree is written to expect. It is safe to re-run because the
+     * refusal arrives before any work — see `SQLITE_READONLY` in `./connections.ts`. Nothing else
+     * is retried: a refusal for any other reason is the caller's to see, once.
+     */
     prepare(query: string) {
-      const stmt = db.prepare(query);
+      let asArrays = false;
+      const compile = (connection: DatabaseSync) => {
+        const stmt = connection.prepare(query);
+        if (asArrays) stmt.setReturnArrays(true);
+        return stmt;
+      };
+      const issue = <T>(use: (stmt: StatementSync) => T): T => {
+        const target = connections.forStatement();
+        try {
+          return use(compile(target));
+        } catch (error) {
+          if (target !== connections.read || !isReadOnlyRefusal(error)) throw error;
+          return use(compile(connections.write));
+        }
+      };
       const api = {
-        run: (...params: unknown[]) => stmt.run(...bind(params)),
-        all: (...params: unknown[]) => stmt.all(...bind(params)),
-        get: (...params: unknown[]) => stmt.get(...bind(params)),
+        run: (...params: unknown[]) => issue((stmt) => stmt.run(...bind(params))),
+        all: (...params: unknown[]) => issue((stmt) => stmt.all(...bind(params))),
+        get: (...params: unknown[]) => issue((stmt) => stmt.get(...bind(params))),
         /**
          * Rows as arrays rather than objects. Drizzle switches this on for any query it maps
          * against a column list of its own, and leaves it off for one it hands straight back.
          * It never switches back, so there is nothing to restore.
          */
         raw() {
-          stmt.setReturnArrays(true);
+          asArrays = true;
           return api;
         },
       };
       return api;
     },
-    close: () => db.close(),
+    /**
+     * Closes the write connection alone. The read connection beside it belongs to the store, which
+     * opened both and closes both (`./index.ts`).
+     *
+     * Drizzle never calls this: `close` appears nowhere in 0.45.2's `better-sqlite3/` or
+     * `sqlite-core/`, grepped 2026-09-23. It is part of the client SHAPE, and its one caller today
+     * is `./node-sqlite-adapter.test.ts`.
+     */
+    close: () => connections.write.close(),
     /**
      * Runs `fn` as a transaction, undoing its work if it throws.
      *
@@ -99,9 +144,12 @@ export function adaptNodeSqlite(db: DatabaseSync) {
      * `sqlite3_get_autocommit()`), never from a count kept here, so a transaction the engine ended
      * on its own is not one this client still believes in.
      *
-     * A body that returns a promise finishes when the promise settles, not when it returns — see
-     * {@link isPending}. That holds the transaction open across the wait, which is what the write
-     * queue already does for the enclosing one (`./write-queue.ts` runs one body at a time). What
+     * A body that returns a promise finishes when the promise settles, not when it returns — the
+     * distinction `settle` carries (`./connections.ts`). That holds the transaction
+     * open across the wait, which is what the write queue already does for the enclosing one
+     * (`./write-queue.ts` runs one body at a time). It has to hold at EVERY depth, and Drizzle
+     * emits a nested transaction itself without calling this client — so {@link addExecute} routes
+     * that level back through here rather than letting it release its savepoint on return. What
      * NOTHING here enforces is the order WITHIN one body: two transactions opened on this
      * connection concurrently — `Promise.all` over two `tx.transaction(...)` calls — would finish
      * out of order, and a savepoint released out of order takes every savepoint after it with it.
@@ -122,69 +170,65 @@ export function adaptNodeSqlite(db: DatabaseSync) {
     transaction<A extends unknown[], R>(fn: (...args: A) => R): TransactionWrapper<A, R> {
       const inMode =
         (behaviour: Behaviour) =>
-        (...args: A): R => {
-          const savepoint = db.isTransaction ? nextSavepoint() : undefined;
-          db.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
-          /**
-           * Finish the transaction — and undo it if FINISHING is what fails.
-           *
-           * `commit` runs after the body has already succeeded, and it can still be refused: a
-           * foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT, so the
-           * refusal comes from this statement rather than from anything the body wrote. Measured on
-           * node v26.7.0: the transaction is then still OPEN, the refused rows read back on this
-           * connection, and the next `begin` is refused `cannot start a transaction within a
-           * transaction` — a failure surfacing in an unrelated caller. `rollback` at that point
-           * succeeds and undoes the work, which is what this does.
-           *
-           * Only the `commit` branch has been seen to fail this way: measured the same day, a
-           * `release <savepoint>` inside an open transaction is NOT refused for a deferred key,
-           * because the check belongs to the outer commit. The savepoint branch takes the same
-           * handling anyway rather than a claim that nothing else can refuse it.
-           *
-           * The compensating rollback must not replace the refusal the caller has to see, so its
-           * own failure is discarded and the original error is the one thrown.
-           */
-          const keep = () => {
-            try {
-              db.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
-            } catch (error) {
+        (...args: A): R =>
+          // The marking wraps the WHOLE transaction, `keep`/`undo` included, rather than the body
+          // alone: a handler registered on the body's own promise runs between the body settling
+          // and this transaction finishing, and a window that closed with the body would send its
+          // read to the writer's still-uncommitted rows. Pinned by the `a read registered on a
+          // direct transaction's body promise` case in `./index.test.ts`, which records what
+          // moving this marking onto `fn(...args)` alone prints. `./write-queue.ts` brackets its own
+          // transaction the same way, for the same reason.
+          connections.asTransactionBody(() => {
+            const write = connections.write;
+            const savepoint = write.isTransaction ? nextSavepoint() : undefined;
+            write.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
+            /**
+             * Finish the transaction — and undo it if FINISHING is what fails.
+             *
+             * `commit` runs after the body has already succeeded, and it can still be refused: a
+             * foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT, so the
+             * refusal comes from this statement rather than from anything the body wrote. Measured on
+             * node v26.7.0: the transaction is then still OPEN, the refused rows read back on this
+             * connection, and the next `begin` is refused `cannot start a transaction within a
+             * transaction` — a failure surfacing in an unrelated caller. `rollback` at that point
+             * succeeds and undoes the work, which is what this does.
+             *
+             * Only the `commit` branch has been seen to fail this way: measured the same day, a
+             * `release <savepoint>` inside an open transaction is NOT refused for a deferred key,
+             * because the check belongs to the outer commit. The savepoint branch takes the same
+             * handling anyway rather than a claim that nothing else can refuse it.
+             *
+             * The compensating rollback must not replace the refusal the caller has to see, so its
+             * own failure is discarded and the original error is the one thrown.
+             */
+            const keep = () => {
               try {
-                undo();
-              } catch {
-                // The refusal above is what the caller needs; this one would hide it.
+                write.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
+              } catch (error) {
+                try {
+                  undo();
+                } catch {
+                  // The refusal above is what the caller needs; this one would hide it.
+                }
+                throw error;
               }
-              throw error;
-            }
-          };
-          const undo = () => {
-            if (savepoint === undefined) db.exec("rollback");
-            else {
-              db.exec(`rollback to ${savepoint}`);
-              db.exec(`release ${savepoint}`);
-            }
-          };
-          let result: R;
-          try {
-            result = fn(...args);
-          } catch (error) {
-            undo();
-            throw error;
-          }
-          if (!isPending(result)) {
-            keep();
-            return result;
-          }
-          return result.then(
-            (value: unknown) => {
-              keep();
-              return value;
-            },
-            (error: unknown) => {
+            };
+            const undo = () => {
+              if (savepoint === undefined) write.exec("rollback");
+              else {
+                write.exec(`rollback to ${savepoint}`);
+                write.exec(`release ${savepoint}`);
+              }
+            };
+            let result: R;
+            try {
+              result = fn(...args);
+            } catch (error) {
               undo();
               throw error;
-            },
-          ) as R;
-        };
+            }
+            return settle(result, keep, undo);
+          });
       const wrapper = inMode("deferred") as TransactionWrapper<A, R>;
       for (const behaviour of BEHAVIOURS) wrapper[behaviour] = inMode(behaviour);
       return wrapper;
@@ -253,7 +297,7 @@ export type NodeSqliteDatabase<TSchema extends Record<string, unknown> = Record<
  * separately and carry no such import.
  */
 export function drizzleNodeSqlite<TSchema extends Record<string, unknown>>(
-  db: DatabaseSync,
+  connections: Connections,
   config: { schema: TSchema; casing?: DrizzleConfig<TSchema>["casing"] },
 ): NodeSqliteDatabase<TSchema> {
   const dialect = new SQLiteSyncDialect({ casing: config.casing });
@@ -263,7 +307,7 @@ export function drizzleNodeSqlite<TSchema extends Record<string, unknown>>(
     schema: tables.tables,
     tableNamesMap: tables.tableNamesMap,
   };
-  const client = adaptNodeSqlite(db);
+  const client = adaptNodeSqlite(connections);
   const session = new BetterSQLiteSession(client, dialect, schema);
   const handle = new BaseSQLiteDatabase("sync", dialect, session, schema);
   // Through `unknown`: `Executable` names only the two members the decoration touches, so it does
@@ -310,7 +354,7 @@ type Executable = {
  * attempt's earlier writes were released rather than rolled back — measured, and pinned by the two
  * `ON A TRANSACTION` cases in `./node-sqlite-adapter.test.ts`. Routing this level through the same
  * client shim the outermost level uses makes the depth stop mattering: one savepoint discipline,
- * `isPending`-aware, at every level.
+ * `settle`-aware, at every level.
  *
  * The body is handed the object it was called on rather than a fresh one. At savepoint level there
  * is nothing a fresh object would carry that this one does not — a savepoint has no session, no

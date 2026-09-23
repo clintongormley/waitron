@@ -7,7 +7,7 @@
  * It ran against real PostgreSQL through `useTemplateDb`, opened one backend per writer, and
  * watched a `select … for update` on the `workforce_chains` head row make a second appender wait.
  * None of that exists now: `selectHead` (`./chain.ts`) takes no lock, SQLite has no row locks, and
- * a venue file has one connection. What serialises writers is the venue file's write queue —
+ * a venue file has one write connection. What serialises writers is the venue file's write queue —
  * `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, and
  * `packages/store/src/write-queue.ts` issues `begin immediate` / `commit` around it. The
  * measurement that the SECOND caller has not even STARTED while the first is open, with its

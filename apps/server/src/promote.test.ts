@@ -105,7 +105,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
   // not also fire around the mirror block's cases (the same split
   // `packages/db/src/node-membership.test.ts` makes for the same reason).
   //
-  // There is no target choice left to justify: one storage engine, one file, one connection, and no
+  // There is no target choice left to justify: one storage engine, one file, one write connection, and no
   // roles. What the block still proves is the promote LOGIC — fence, idempotency, mirror-guard,
   // the holder flip and the mint.
   //

@@ -16,7 +16,7 @@ export type Schema = typeof schema;
  * more properties. What has changed is the direction the leak runs. Before the storage switch the
  * handle a transaction callback received was a genuinely different object, so passing a
  * `Transaction` where a `Database` was wanted failed to compile. Now `withTransaction` hands the
- * caller's body the SAME handle it was given — SQLite has one connection per file and the
+ * caller's body the SAME handle it was given — SQLite has one write connection per file and the
  * transaction is a `begin` on it, not a second session — so a body that kept its `tx` could call
  * `withWriteLock` on it at runtime. Nothing does; the type is what says it must not.
  */

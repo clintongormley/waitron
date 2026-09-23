@@ -43,7 +43,7 @@ const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 // The drainer/reconcile deps a `VerifactuBackend` used to assemble internally — built here directly
 // now that the runtime pass lives on the standalone `drain`/`reconcile` functions, not on the
-// backend. `pg.db` is this file's one connection; `staticResolver(aeat.client())` and the seeded
+// backend. `pg.db` is this file's one handle; `staticResolver(aeat.client())` and the seeded
 // clock are per-test.
 const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
   db: pg.db,

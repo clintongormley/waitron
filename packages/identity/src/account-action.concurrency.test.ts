@@ -17,7 +17,7 @@
  * **What stopped being checked:** that a second issuer is made to WAIT. The `55P03` assertion is
  * gone and there is nothing on this engine that says the same thing — `lock_timeout` has no
  * counterpart, and a caller that is queued is indistinguishable here from one that has not started.
- * The two connections are gone with it: a venue file has one.
+ * The two connections are gone with it: a venue file has one writer.
  *
  * What is asserted instead is the OUTCOME the lock existed for, which is unchanged: after two
  * requests for the same account, exactly one action of that purpose is live. That is a claim the

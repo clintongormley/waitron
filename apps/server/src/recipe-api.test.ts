@@ -21,7 +21,7 @@ import "./errors.js";
 // session/persons in IDENTITY_MIGRATIONS, so those sets plus CATALOGUE_MIGRATIONS are what this
 // suite migrates rather than the whole manifest.
 //
-// There are no roles on this engine, and every call below runs on the one connection, so a
+// There are no roles on this engine, and every call below runs on the one handle, so a
 // refusal here is the route gate alone. The wider five-route sweep, with a manager's 201 and 200 as
 // positive controls, is `recipe-api.gate-sweep.test.ts`.
 const noopLog: Logger = () => {};

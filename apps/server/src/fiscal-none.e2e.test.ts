@@ -29,7 +29,7 @@ import "./errors.js";
  * write path must leave every fiscal table empty and stamp each sale's `fiscal_backend = "none"`.
  *
  * **There is no non-superuser subject.** There are no roles on this engine, so every call below
- * runs on the one connection, and nothing here distinguishes "the backend wrote nothing" from "the
+ * runs on the one handle, and nothing here distinguishes "the backend wrote nothing" from "the
  * role could not have".
  */
 const LOCALE = "en-GB";

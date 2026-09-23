@@ -109,7 +109,7 @@ export async function readOpenAlerts(
       // need"), so only the first half of that is still this line's doing.
       //
       // The source reads on the OUTER handle, not on the one Drizzle hands a nested body. The
-      // savepoint is opened on the CONNECTION, and the store opens one connection per file
+      // savepoint is opened on the CONNECTION, and the store opens one write connection per file
       // (`packages/store/src/index.ts`), so a statement issued on `tx` inside this bracket is
       // inside the savepoint — measured, with the no-savepoint control alongside it. The nested
       // handle also carries no `execute`: `node-sqlite-adapter.ts` adds that to the database

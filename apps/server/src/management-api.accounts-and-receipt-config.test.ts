@@ -6,7 +6,7 @@
  *
  * ## What went with PostgreSQL
  *
- * SQLite has no roles and no grants, so every call below runs on the one connection and nothing
+ * SQLite has no roles and no grants, so every call below runs on the one handle and nothing
  * here now says anything about which identity the routes reach the database as. No case was deleted
  * for it: each one names a route's behaviour, and all thirty-nine still run.
  *

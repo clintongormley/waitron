@@ -41,7 +41,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // (the fail-closed control), and an adoption-pending one holding no venue rows at all. The relay
 // recorded in `mirror_config` is UNREACHABLE and nothing on this boot dials it.
 //
-// WHAT THIS SUITE DOES NOT CHECK. There is no role on this engine, and no second connection
+// WHAT THIS SUITE DOES NOT CHECK. There is no role on this engine, and no second handle
 // either: boot opens the venue directory and every statement runs on it. Nothing below checks that
 // the ambient viewer's writes are ones the deployment role may make, and the idempotent-re-migrate
 // observation has no privilege content. What the cases prove is what a mirror boot MOUNTS and

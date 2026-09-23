@@ -323,7 +323,7 @@ describe("settleSale — two settlements started together", () => {
     // on that UNIQUE key. The point was design decision ③: **the UNIQUE constraint, not the
     // pre-check SELECT, is the real control.**
     //
-    // **LOST: exactly that.** There is one connection and one write transaction at a time, so a
+    // **LOST: exactly that.** There is one writer and one write transaction at a time, so a
     // second caller can never observe the state the first has written but not committed. Whichever
     // order the queue picks, the loser's pre-check now SEES the committed settlement and throws
     // `sale.already_settled` from there — the UNIQUE path is unreachable through the public verb.

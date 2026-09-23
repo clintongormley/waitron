@@ -21,7 +21,7 @@ const SETTLED = new Date("2026-07-23T10:00:00Z");
  * the payment row, and asserted that the second `recordRefund` was still unsettled after a 200ms
  * pause and that it took at least 150ms to finish. Neither half survives the engine change:
  * `recordRefund` (`store.ts`) takes no row lock now — read it, there is no `for update` in it —
- * and SQLite opens one connection per file, so there is no second backend to block.
+ * and SQLite opens one write connection per file, so there is no second backend to block.
  *
  * **The product claim underneath it does survive, and it is the one worth keeping.**
  * `recordRefund` is a read-modify-write over a running total: it sums the payment's succeeded

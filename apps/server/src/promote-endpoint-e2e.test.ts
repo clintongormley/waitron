@@ -72,7 +72,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 // non-superuser `app_login` pool, the promote's point-of-no-return write went through a separate
 // table-owner connection, and the promoted primary's fiscal drain ran as the deployment role. There
 // is no role on this engine — `pg.connectAs` has no counterpart — and there is no second
-// connection either: `PromoteDeps.db` is ONE handle (`promote.ts:40-52`) and boot opens the venue
+// handle either: `PromoteDeps.db` is ONE handle (`promote.ts:40-52`) and boot opens the venue
 // directory once. Nothing below now distinguishes a write the deployment role may make from one it
 // may not.
 //

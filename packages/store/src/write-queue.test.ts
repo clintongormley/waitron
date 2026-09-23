@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { createWriteQueue } from "./write-queue.js";
+import { connectionPair } from "./connections.js";
 
 const open = () => {
   const db = new DatabaseSync(":memory:");
@@ -14,7 +15,7 @@ const who = (db: DatabaseSync) =>
 describe("the write queue", () => {
   it("does not let one transaction's rollback take another's row", async () => {
     const db = open();
-    const queue = createWriteQueue(db);
+    const queue = createWriteQueue(connectionPair(db, db));
 
     const txn = (name: string, fail: boolean) =>
       queue.run(async () => {
@@ -35,7 +36,7 @@ describe("the write queue", () => {
 
   it("runs queued work in the order it arrived", async () => {
     const db = open();
-    const queue = createWriteQueue(db);
+    const queue = createWriteQueue(connectionPair(db, db));
     await Promise.all(
       ["A", "B", "C"].map((name) =>
         queue.run(async () => {
@@ -59,7 +60,7 @@ describe("the write queue", () => {
    */
   it("refuses a second lock taken from inside a running body, rather than hanging", async () => {
     const db = open();
-    const queue = createWriteQueue(db);
+    const queue = createWriteQueue(connectionPair(db, db));
     await expect(
       queue.run(async () => {
         await queue.run(async () => {
@@ -90,7 +91,7 @@ describe("the write queue", () => {
    */
   it("serves a caller that arrives after another body has already started", async () => {
     const db = open();
-    const queue = createWriteQueue(db);
+    const queue = createWriteQueue(connectionPair(db, db));
     let firstBodyStarted: () => void = () => {};
     const started = new Promise<void>((resolve) => {
       firstBodyStarted = resolve;
@@ -120,13 +121,13 @@ describe("the write queue", () => {
 
   it("hands the body's result back to the caller", async () => {
     const db = open();
-    const queue = createWriteQueue(db);
+    const queue = createWriteQueue(connectionPair(db, db));
     await expect(queue.run(async () => "value")).resolves.toBe("value");
   });
 
   it("carries the body's failure to the caller and keeps the queue usable", async () => {
     const db = open();
-    const queue = createWriteQueue(db);
+    const queue = createWriteQueue(connectionPair(db, db));
     await expect(queue.run(async () => Promise.reject(new Error("deliberate")))).rejects.toThrow(
       "deliberate",
     );

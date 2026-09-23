@@ -32,7 +32,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
  * database as.
  *
  * The claim that was ALSO in the old header — that the two refusals are unobservable without the
- * role — is false, and the measurement is this file: converted onto the one connection, the 403
+ * role — is false, and the measurement is this file: converted onto the one handle, the 403
  * (`authorization.not_permitted`) and all three 401s (`password.invalid`) still fail when they
  * should, because both gates live in `loginManagerById` and `authorizeManager` and never in a
  * GRANT. Run 2026-09-22: 5 passed, 0 failed.

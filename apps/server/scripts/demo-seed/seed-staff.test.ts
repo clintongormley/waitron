@@ -1,7 +1,7 @@
 /**
  * The staff seed, end to end, on the engine the box now runs.
  *
- * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
  * may write `persons`.
  */
 

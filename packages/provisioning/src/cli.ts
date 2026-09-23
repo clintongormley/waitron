@@ -489,7 +489,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 /**
  * Opens the venue DIRECTORY, runs `body` against its venue file, and closes the store in a
  * `finally`. The store owns both files, so closing it closes both — there is nothing else to
- * manage: no cluster handle, no second connection, no role to assume.
+ * manage: no cluster handle, no connection string, no role to assume.
  *
  * `body` is handed the VENUE handle. A venue plan writes `ledger` and `state` tables — the taxpayer,
  * the location, the till, the node, its series and each module's seed — and those live in the venue

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { blob, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import { adaptNodeSqlite, drizzleNodeSqlite } from "./node-sqlite-adapter.js";
+import { connectionPair } from "./connections.js";
 
 const rows = sqliteTable("t", {
   id: integer("id").primaryKey(),
@@ -13,7 +14,7 @@ const rows = sqliteTable("t", {
 const open = () => {
   const raw = new DatabaseSync(":memory:");
   raw.exec("create table t (id integer primary key, name text not null, doc blob)");
-  return { raw, db: drizzleNodeSqlite(raw, { schema: { rows } }) };
+  return { raw, db: drizzleNodeSqlite(connectionPair(raw, raw), { schema: { rows } }) };
 };
 
 const rowCount = (raw: DatabaseSync) =>
@@ -255,7 +256,7 @@ describe("the node:sqlite adapter", () => {
 
   it("offers a transaction in each mode SQLite names", () => {
     const { raw } = open();
-    const client = adaptNodeSqlite(raw);
+    const client = adaptNodeSqlite(connectionPair(raw, raw));
     // Drizzle picks the mode by property name rather than calling the wrapper
     // (drizzle-orm/better-sqlite3/session.js:40), so a missing mode is a type error, not a
     // query error.
@@ -349,7 +350,7 @@ describe("the node:sqlite adapter", () => {
       "create table child (id integer primary key, parent_id integer references parent(id))",
     );
     raw.exec("pragma foreign_keys = on");
-    return { raw, db: drizzleNodeSqlite(raw, { schema: { rows } }) };
+    return { raw, db: drizzleNodeSqlite(connectionPair(raw, raw), { schema: { rows } }) };
   };
 
   it("undoes the work of a transaction whose COMMIT is refused", () => {
@@ -443,9 +444,9 @@ describe("the node:sqlite adapter", () => {
     expect(raw.isTransaction).toBe(false);
   });
 
-  it("closes the database it was handed", () => {
+  it("closes the write connection it was handed", () => {
     const { raw } = open();
-    adaptNodeSqlite(raw).close();
+    adaptNodeSqlite(connectionPair(raw, raw)).close();
     expect(() => raw.prepare("select 1")).toThrow();
   });
 });

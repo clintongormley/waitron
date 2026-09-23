@@ -15,7 +15,7 @@ import "./errors.js";
 // CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, so those two sets are
 // what this suite migrates rather than the whole manifest.
 //
-// There are no roles on this engine, and every call below runs on the one connection, so the
+// There are no roles on this engine, and every call below runs on the one handle, so the
 // refusals here are the route gate alone and nothing checks that a deployment role's grants back
 // them up. The wider five-route sweep is `purchasing-api.gate-sweep.test.ts`, which says the same.
 const noopLog: Logger = () => {};

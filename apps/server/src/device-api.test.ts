@@ -3,7 +3,7 @@
  *
  * ## What this file does not check
  *
- * SQLite has no roles and no grants, so every call below runs on the one connection and nothing
+ * SQLite has no roles and no grants, so every call below runs on the one handle and nothing
  * here says anything about which identity the routes reach the database as. What each case names is
  * a route's behaviour.
  *

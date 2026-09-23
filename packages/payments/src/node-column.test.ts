@@ -14,7 +14,7 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
  *
  * One venue file (`useVenueDb`): a column-existence, nullability and FK-round-trip test, none of
  * which turns on who is connected or on two writers contending. The FK half is only refused
- * because the venue store opens every connection with `pragma foreign_keys = on`
+ * because the venue store opens its WRITE connection with `pragma foreign_keys = on`
  * (`packages/store/src/index.ts`) — SQLite checks no foreign key without it.
  */
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });

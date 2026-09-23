@@ -1,5 +1,5 @@
 // A real venue file, not `:memory:` and not a container: the triggers under test are ordinary
-// SQLite triggers, so what they write is visible to the one handle the engine gives a file
+// SQLite triggers, so what they write is visible to the one handle the store gives a file
 // (CLAUDE.md §4). The suite this replaces ran on a container because it watched the change rows
 // from a SECOND connection while the writing transaction was open, and because one case set
 // `session_replication_role = replica`. Neither survives the storage switch: there is one writer

@@ -17,7 +17,7 @@ import "./errors.js";
  * ## The one thing that went with PostgreSQL
  *
  * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
- * one connection. Nothing now checks that the deployment role's grants are part of the refusal.
+ * one handle. Nothing now checks that the deployment role's grants are part of the refusal.
  *
  * What survives is the reason the file is worth keeping beside `purchasing-api.test.ts`, and the
  * reason it is now named `purchasing-api.gate-sweep.test.ts`: that sibling gates the POST route only

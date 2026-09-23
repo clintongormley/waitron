@@ -154,7 +154,7 @@ function latch(): { waited: Promise<void>; open: () => void } {
  *
  * On PostgreSQL the suites that used this shape took TWO connections, held the first transaction
  * open, and polled `pg_blocking_pids` until the second backend was seen waiting on a lock the
- * first held. Neither half of that exists here: SQLite has one connection per file, no row locks,
+ * first held. Neither half of that exists here: SQLite has one write connection per file, no row locks,
  * and no advisory locks. What it has instead is the venue file's write queue —
  * `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, and
  * `packages/store/src/write-queue.ts` issues `begin immediate`, awaits the body, then `commit`,

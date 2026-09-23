@@ -34,7 +34,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // SAME identity seeded directly into each directory, because nothing copies rows between the two
 // nodes: the PostgreSQL replication that used to is deleted and its replacement has not landed.
 //
-// There is no role on this engine, and every call below runs on the one connection each directory
+// There is no role on this engine, and every call below runs on the one handle each directory
 // has. Nothing now checks that the deployment role may take the venue-wide read. What the case still
 // proves is the reroute itself — the three `/api/node` bodies, the standby's refusals, and a
 // promoted node inheriting the dead node's tab.
