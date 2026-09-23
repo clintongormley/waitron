@@ -177,7 +177,7 @@ export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]
  *
  * Two facts in one statement, exactly as the function it replaces selected them — the taxpayer row
  * and an `EXISTS` over the vault, so BOTH must hold. Its body, for comparison:
- * `git show origin/main:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`. The
+ * `git show aabdde6a8^:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`. The
  * `ORDER BY id` it carried is gone rather than kept: the caller reads emptiness, and `tenants` is a
  * singleton (`packages/db/src/schema/tenants.ts`'s `tenants_singleton_ck`), so no ordering is
  * observable. Pinned from both ends by `credentials.test.ts` — the vault half by a credential for a

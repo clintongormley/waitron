@@ -13,7 +13,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * image goes.
  *
  * This is what survived `images.pg.test.ts`, which was deleted 2026-09-22 with the PostgreSQL test
- * harness (recover it with `git show origin/main:packages/media/src/images.pg.test.ts`). What went,
+ * harness (recover it with `git show aabdde6a8^:packages/media/src/images.pg.test.ts`). What went,
  * and why, so nobody reads this file as the whole of it:
  *
  *  - Its constraint and index listing, read out of `pg_constraint` and `pg_indexes`: DELETED. The
@@ -21,7 +21,7 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  *    key, the filename unique) or pinned by name in `image-references.test.ts`
  *    (`products_media_image_fk`, `category_details_media_image_fk`, carried as triggers — see
  *    `packages/media/drizzle/0001_image_references.sql`). Its `media_images_search_idx`, a GIN
- *    index over `media_search_vector(...)`, describes an engine this branch replaced.
+ *    index over `media_search_vector(...)`, describes an engine #489 replaced.
  *  - Its two "absent image filename is refused" cases: covered, with an accepting control each, by
  *    `image-references.test.ts`.
  *  - Its four two-connection cases, which held one backend's transaction open and polled

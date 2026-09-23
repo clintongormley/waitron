@@ -9,7 +9,7 @@ import { MAX_CAUSE_DEPTH } from "./cause-chain.js";
  * classifying a database failure cannot use `firstCodeInCauseChain` (`cause-chain.ts`) at all — it
  * looks at `code`, which here says only that SQLite was involved. `sqlStateOf`, which read a
  * PostgreSQL SQLSTATE off the same field, stood in this file until the storage switch and was
- * deleted with the engine that produced one: `git show origin/main:packages/shared/src/sql-state.ts`.
+ * deleted with the engine that produced one: `git show aabdde6a8^:packages/shared/src/sql-state.ts`.
  *
  * The MESSAGE travels with the number because the number is often not enough: `errcode` 1 is
  * `SQL logic error`, which covers a missing table, a missing column and a plain typo alike

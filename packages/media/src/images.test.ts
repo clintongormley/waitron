@@ -38,7 +38,7 @@ const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 // packages/media` finds no definition, and `packages/media/drizzle/*.sql` creates no function at
 // all. Nothing holds the property now, and nothing needs to: there is no language-to-dictionary
 // mapping left to get wrong, because there are no dictionaries. Recover the case with
-// `git show origin/main:packages/media/src/images.test.ts` if the engine ever regains them.
+// `git show aabdde6a8^:packages/media/src/images.test.ts` if the engine ever regains them.
 //
 // STEMMING IS GONE, AND WITH IT THREE MORE CASES. The "matches 'ca'/'eu' word forms" pair is
 // deleted outright, and two assertions are deleted from the search case below (the `bread` query
@@ -60,7 +60,7 @@ const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 // `etxe` stems to `etx`, and the match is false). Taking it would mean an FTS5 virtual table and
 // triggers to keep it in step, which is a migration change and a product decision about search
 // quality, not a conversion. Recover any deleted case with
-// `git show origin/main:packages/media/src/images.test.ts`.
+// `git show aabdde6a8^:packages/media/src/images.test.ts`.
 
 describe("image library", () => {
   it("stores bytes with required default metadata and returns the same image for duplicate bytes", async () => {
@@ -476,7 +476,7 @@ it("sorts accented names alphabetically in both directions across pages", async 
   // Lifted from `name-sort.pg.test.ts`, which was the only place asserting that `Éclair` sorts
   // between `Bread` and `Zest` rather than after `Zest`. That file needed a PostgreSQL container
   // and was deleted with the harness on 2026-09-22; recover it with
-  // `git show origin/main:packages/media/src/name-sort.pg.test.ts`. The
+  // `git show aabdde6a8^:packages/media/src/name-sort.pg.test.ts`. The
   // `collate pg_catalog."und-x-icu"` that produced it has no SQLite counterpart: the engine ships
   // `BINARY`, `NOCASE` and `RTRIM`, and under a code-point comparison the lowercased `éclair`
   // (U+00E9) sorts after `zest`. `Intl.Collator` is the ICU that `und` named, which is why the

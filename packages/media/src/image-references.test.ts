@@ -13,13 +13,13 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * Under PostgreSQL those were two foreign keys — `products_media_image_fk` and
  * `category_details_media_image_fk`, `REFERENCES media_images(filename) ON DELETE RESTRICT` — in
  * hand-written `--custom` SQL at `git show
- * origin/main:packages/media/drizzle/0001_media_baseline_sql.sql`, lines 106-112. Regenerating the
+ * aabdde6a8^:packages/media/drizzle/0001_media_baseline_sql.sql`, lines 106-112. Regenerating the
  * baselines for the storage switch dropped them, and `packages/media/drizzle/0001_image_references.sql`
  * is where they come back, as triggers rather than as keys. That file's header carries why.
  *
  * WHY HERE. `images.pg.test.ts` pinned both by name out of `pg_constraint` and needed a
- * PostgreSQL container, so nothing had been watching them on this branch; that file was deleted
- * with the harness on 2026-09-22 (`git show origin/main:packages/media/src/images.pg.test.ts`).
+ * PostgreSQL container, so nothing had been watching them during #489; that file was deleted
+ * with the harness on 2026-09-22 (`git show aabdde6a8^:packages/media/src/images.pg.test.ts`).
  * This suite runs in the media package's own `node` project against a database the product's own
  * migration sets built.
  *

@@ -23,10 +23,10 @@ import { MEDIA_ROUTES } from "./routes.js";
  * untouched.
  *
  * Lifted from `routes.pg.test.ts`, deleted 2026-09-22 with the PostgreSQL test harness (recover it
- * with `git show origin/main:packages/media/src/routes.pg.test.ts`). `routes.test.ts` beside this
+ * with `git show aabdde6a8^:packages/media/src/routes.pg.test.ts`). `routes.test.ts` beside this
  * file already covers the manager happy path and a staff 403 on ONE route; the six-route matrix
  * and the "the library is unchanged afterwards" read are this file's, and had nothing running
- * behind them on this branch.
+ * behind them during #489.
  *
  * The authorization gate is the module's own code, and it is proven by deletion on this engine,
  * 2026-09-22 on Node v26.7.0: with the `authorizeManager` call in `MEDIA_ROUTES.mount`'s `gated`

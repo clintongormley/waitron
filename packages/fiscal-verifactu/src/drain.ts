@@ -148,7 +148,7 @@ type DueRow = RegistroRow & { intentos: number };
  * `unrecognized token: ":"`, and with the cast removed `no such function: envios_work_due`
  * (`packages/fiscal-verifactu/src/drain.containment.test.ts`, run 2026-09-22 before this
  * replacement). The old body is at
- * `git show origin/main:packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`.
+ * `git show aabdde6a8^:packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`.
  *
  * Its two disjuncts are carried over with their comparisons unchanged, and the difference between
  * them is not cosmetic:
