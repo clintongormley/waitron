@@ -3685,10 +3685,7 @@ What the preparation tasks left, with F1's own answers where it found them:
   --hookTimeout=2000` with `useVenueDb`'s default setup budget temporarily cut to 2s, on an
   18-core Mac with one package running at a time. No value changed. The review also dropped the
   `venue-db.ts` line pointers from sibling configs and test files, several of which were stale, and
-  a "(CLAUDE.md §4)" pointer that named no rule about worker pins. Follow-up: every other
-  `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`, which
-  carries its own measurement, still says the pin is needed without having measured it; the same
-  one-worker-against-several coverage comparison would settle each.
+  a "(CLAUDE.md §4)" pointer that named no rule about worker pins.
   - `purchasing`: 19 tests, slowest 6ms, database setup 14ms.
   - `fiscal-none`: 13 tests, slowest 2ms, setup 14ms; coverage at one and three workers wrote
     identical summaries, so its one-worker pin is recorded as a precaution, not a need.
@@ -3700,6 +3697,15 @@ What the preparation tasks left, with F1's own answers where it found them:
     and total counts per file at one worker (22.3s) and with `--maxWorkers=6` (6.2s), so its
     one-worker pin is recorded as a precaution, not a need. Its comment's `venue-db.ts:176`, `:183`
     and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
+  - Follow-up: every other `maxWorkers: 1` config whose comment gives the coverage reason, apart
+    from `payments`, which carries its own measurement, still says the pin is needed without having
+    measured it; the same one-worker-against-several coverage comparison would settle each. Two of
+    those comments, in `packages/shared/vitest.config.ts` and
+    `packages/diagnostics/vitest.config.ts`, also still say the pre-push hook runs a whole-workspace
+    `pnpm -r test:coverage`, and so does `apps/server/vitest.config.ts`'s comment on why it does not
+    pin one worker. The hook has run no package tests since #338; its only test run is the root
+    `pnpm vitest run --coverage`. #515 and the dashboard-kit coverage branch fixed the same words in
+    server-kit, dashboard-kit and dashboard-modules.
 - **Dead code and doc sweeps owed to the rollout's final sweep** — the unused `seedTenantWithSumUpKey`
   was deleted on 2026-09-23 (PR #516). The file's real-SumUp case
   seals no credential and passes, because the seat reads its credential only on first use; that

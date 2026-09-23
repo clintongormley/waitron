@@ -71,7 +71,10 @@ it("reopens a permanently closed stream with backoff and cancels retries on logo
   });
   const connection = new LiveConnection(data, { open });
   const read = vi.fn(async () => 1);
-  data.observe({ key: "printers", dependencies: [{ type: "printers" }], read }, () => {});
+  const observed = data.observe(
+    { key: "printers", dependencies: [{ type: "printers" }], read },
+    () => {},
+  );
   connection.start();
   try {
     await vi.advanceTimersByTimeAsync(0);
@@ -91,6 +94,7 @@ it("reopens a permanently closed stream with backoff and cancels retries on logo
     await vi.advanceTimersByTimeAsync(30_000);
     expect(open).toHaveBeenCalledTimes(3);
   } finally {
+    observed.unsubscribe();
     connection.stop();
     vi.useRealTimers();
   }
@@ -274,7 +278,10 @@ describe("live connection events", () => {
     const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
     const connection = new LiveConnection(data, { open });
     const read = vi.fn(async () => 1);
-    data.observe({ key: "printers", dependencies: [{ type: "printers" }], read }, () => {});
+    const observed = data.observe(
+      { key: "printers", dependencies: [{ type: "printers" }], read },
+      () => {},
+    );
     connection.start();
     try {
       await vi.advanceTimersByTimeAsync(0);
@@ -285,6 +292,7 @@ describe("live connection events", () => {
       expect(open).toHaveBeenCalledOnce();
       expect(open.mock.results[0]!.value.close).not.toHaveBeenCalled();
     } finally {
+      observed.unsubscribe();
       connection.stop();
       vi.useRealTimers();
     }

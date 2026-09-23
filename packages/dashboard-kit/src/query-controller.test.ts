@@ -159,6 +159,7 @@ describe("query controller without a live-data session", () => {
     await controller.watch("jobs", { key: "jobs", dependencies: [], read }, apply);
     expect(read).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledExactlyOnceWith(3);
+    controller.hostDisconnected();
   });
 
   it("drops a released slot's late value and late failure without reporting either", async () => {
