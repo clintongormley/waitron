@@ -18,10 +18,9 @@ import { locations, tills } from "./tenants.js";
  * §2c): the plaintext lives ONLY in the cookie, never at rest. Revoke by flipping `active = false`
  * (instant — `requireDevice` rejects it), NEVER a hard DELETE, because a device is a durable identity
  * and later tables may reference it. **Nothing in the database refuses the DELETE**: PostgreSQL
- * withheld it from `app_user`, and this engine has no roles and no grants (`../testing/roles.ts`) —
- * `delete from devices` on a real row succeeds, measured 2026-09-23 on Node v26.7.0 against the core
- * migration set. The no-hard-delete rule now lives in the code alone, as it does for
- * `kitchen_stations`.
+ * withheld it from `app_user`, and this engine has no roles and no grants — `delete from devices`
+ * on a real row succeeds, measured 2026-09-23 on Node v26.7.0 against the core migration set. The
+ * no-hard-delete rule now lives in the code alone, as it does for `kitchen_stations`.
  *
  * `station_id` references `kitchen_stations(id)` and is NULLABLE, so a non-kds device carries no
  * station; a foreign key does not check a NULL.

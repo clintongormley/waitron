@@ -22,8 +22,7 @@ import { ticketItems } from "./ticket-items.js";
 // LOSS, from the storage swap: the writes used to run as the non-owner `app_user` on a real
 // PostgreSQL, so each of the additive-column cases also established that the column fell inside the
 // existing table-wide grant — a write raising `42501` would have meant otherwise. SQLite has no
-// roles and no grants (`packages/db/src/testing/roles.ts`), so those cases now show only that the
-// column exists and round-trips.
+// roles and no grants, so those cases now show only that the column exists and round-trips.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";

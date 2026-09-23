@@ -32,8 +32,7 @@ import { locations, tenants, tills } from "./tenants.js";
  *    refusal in particular used to NAME the two amounts that did not match; it is a fixed sentence
  *    here (`packages/db/src/trigger-refusals.ts`), so a failing settlement no longer says by how
  *    much it was short.
- *  - the post-settlement case ran as the non-owner `app_user`; SQLite has no roles
- *    (`packages/db/src/testing/roles.ts`).
+ *  - the post-settlement case ran as the non-owner `app_user`; SQLite has no roles.
  */
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";

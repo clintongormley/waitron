@@ -14,8 +14,8 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  *
  *  - `is actually running as the non-owner application role` read `current_user` and `pg_roles`.
  *    SQLite has no roles: one process opens one file, and what a caller may do is decided outside
- *    the database (`packages/db/src/testing/roles.ts`). Nothing holds that property, and nothing
- *    is owed it — there is no second role for a session to be confused with.
+ *    the database. Nothing holds that property, and nothing is owed it — there is no second role
+ *    for a session to be confused with.
  *  - `rejects TRUNCATE by statement trigger` refused `truncate … cascade`. This engine has no
  *    TRUNCATE statement at all, so the PostgreSQL schema's separate truncate-blocking trigger has
  *    no counterpart (`packages/store/src/append-only.ts` states the same gap, and the one thing it

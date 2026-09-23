@@ -16,7 +16,7 @@ import { locations, tenants, tills } from "./tenants.js";
 //
 // LOSS, from the storage swap: every transition used to run as the non-owner `app_user` on a real
 // PostgreSQL, so a pass was also evidence about the role a venue actually runs as. SQLite has no
-// roles (`packages/db/src/testing/roles.ts`); there is one connection and it is the only one.
+// roles; there is one connection and it is the only one.
 //
 // The refusals are now the trigger's own `RAISE(ABORT, …)` text rather than PostgreSQL's `P0001`.
 // The text is what SQLite reports and nothing else — no table, no column, no constraint name — so

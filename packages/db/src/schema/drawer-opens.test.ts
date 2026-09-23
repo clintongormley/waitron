@@ -13,8 +13,8 @@ import { locations, tenants, tills } from "./tenants.js";
 
 // LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
 // PostgreSQL, so the suite also established that role's grants on `drawer_opens`, `tills` and
-// `locations`. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`); what is
-// left is the column mapping, the defaults, the reason CHECK and the two foreign keys.
+// `locations`. SQLite has no roles and no grants; what is left is the column mapping, the defaults,
+// the reason CHECK and the two foreign keys.
 //
 // SECOND LOSS: the three cases that ended in a rolled-back transaction did so to leave the SHARED
 // template clone untouched. There is no shared clone here — each suite gets its own file — so they

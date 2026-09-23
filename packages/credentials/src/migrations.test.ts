@@ -150,8 +150,8 @@ describe("the credentials migration set", () => {
  *
  *  - `names EXECUTE to app_user only — PUBLIC's default grant was revoked` read
  *    `has_function_privilege` and `aclexplode(pg_proc.proacl)` to pin who could call the seam.
- *    SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so there is no
- *    privilege to read back and nothing to re-point the case at.
+ *    SQLite has no roles and no grants, so there is no privilege to read back and nothing to
+ *    re-point the case at.
  *  - `pins search_path to pg_catalog, public` read the same function's `proconfig`. There is one
  *    file and no schema here, so there is no path to pin.
  *

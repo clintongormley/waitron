@@ -15,9 +15,9 @@ import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 // tables `authorizeManager` reads.
 //
 // What it does NOT show: no assertion here is about who may write `tenant_themes`. This engine has
-// no roles and no grants — one process opens one file (`packages/db/src/testing/roles.ts`) — so
-// there is no such property left for a suite to assert, and the store's own gates are the only
-// refusal. Every assertion below is the store's behaviour, which the engine does not touch.
+// no roles and no grants — one process opens one file — so there is no such property left for a
+// suite to assert, and the store's own gates are the only refusal. Every assertion below is the
+// store's behaviour, which the engine does not touch.
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 

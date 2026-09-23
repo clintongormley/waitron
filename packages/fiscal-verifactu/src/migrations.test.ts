@@ -31,8 +31,7 @@ import { FISCAL_MIGRATIONS } from "./migrations.js";
  *    this branch's regeneration dropped and this engine could not hold anyway. What the two
  *    THRESHOLD cases pinned is live again, through `drain()` rather than through SQL, in
  *    `drain.containment.test.ts`'s "the due-work gate's thresholds". The grant case has no
- *    successor and is not owed one: there are no roles on this engine
- *    (`packages/db/src/testing/roles.ts`).
+ *    successor and is not owed one: there are no roles on this engine.
  */
 const pg = useVenueDb({
   migrations: [],

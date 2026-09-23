@@ -115,17 +115,17 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
   return rows.rows[0]?.mode ?? "primary";
 }
 
-/** Sets this database's role. Mutable by design — a mirror is PROMOTED to a primary (design §10) — so,
- * unlike `stampDeployment`'s immutable environment, there is no "already stamped" guard. The only
- * non-test caller today is the adopt path, which sets `mirror` at setup (`adoptFromPrimary` → here,
- * `apps/server/src/adopt.ts`); the promotion path (design §10) that will set `primary` back is not
- * built yet. **Nothing in the database refuses this write.** It was an owner-role write on
+/** Sets this database's role. Mutable by design — a mirror is PROMOTED to a primary (design §10) —
+ * so, unlike `stampDeployment`'s immutable environment, there is no "already stamped" guard. The
+ * only non-test caller today is the adopt path, which sets `mirror` at setup (`adoptFromPrimary` →
+ * here, `apps/server/src/adopt.ts`); the promotion path (design §10) that will set `primary` back
+ * is not built yet. **Nothing in the database refuses this write.** It was an owner-role write on
  * PostgreSQL, where `app_user` held no UPDATE on `deployment`; this engine has no roles and no
- * grants (`./testing/roles.ts`), and `deployment` carries no trigger, so an `update deployment …`
- * on an ordinary handle succeeds — measured 2026-09-23 on Node v26.7.0 against the core migration
- * set. Which code may set the mode is now a convention the callers keep, nothing more. Requires the
- * singleton row (stamp the environment first) — a 0-row UPDATE is a silent no-op on an unstamped DB,
- * which never happens for a real mirror. */
+ * grants, and `deployment` carries no trigger, so an `update deployment …` on an ordinary handle
+ * succeeds — measured 2026-09-23 on Node v26.7.0 against the core migration set. Which code may set
+ * the mode is now a convention the callers keep, nothing more. Requires the singleton row (stamp
+ * the environment first) — a 0-row UPDATE is a silent no-op on an unstamped DB, which never happens
+ * for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
   await db.withWriteLock(async () => setDeploymentModeTx(db, mode));
 }

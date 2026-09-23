@@ -13,7 +13,7 @@ import { locations, tenants } from "./tenants.js";
 
 // LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
 // PostgreSQL, so the suite also established that the additive columns fell under the existing
-// table-wide grants. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`).
+// table-wide grants. SQLite has no roles and no grants.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";

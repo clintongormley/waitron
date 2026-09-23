@@ -15,9 +15,8 @@
  *    `packages/catalogue/test/fixtures.ts`.
  *  - the append-only case was a LAYERED proof: `app_user` is refused UPDATE and DELETE by the
  *    grant, so the case granted the privilege inside a rolled-back transaction and watched the
- *    trigger refuse anyway. SQLite has no roles and no grants
- *    (`packages/db/src/testing/roles.ts`), so there is one layer and the case is now simply that
- *    the append-only trigger refuses.
+ *    trigger refuse anyway. SQLite has no roles and no grants, so there is one layer and the case
+ *    is now simply that the append-only trigger refuses.
  *  - the chain is read back through the Drizzle export rather than raw SQL. A raw `select` of
  *    `is_first_entry` answers 0 or 1, not a boolean, and `verifyAmendmentChain` reads that field.
  *

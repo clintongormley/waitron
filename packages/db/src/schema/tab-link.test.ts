@@ -15,8 +15,8 @@ import { workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 // LOSS, from the storage swap: the two columns' visibility to the non-owner `app_user` was half of
-// what this suite asserted, and SQLite has no roles and no grants
-// (`packages/db/src/testing/roles.ts`). What is left is the two mutual foreign keys.
+// what this suite asserted, and SQLite has no roles and no grants. What is left is the two mutual
+// foreign keys.
 //
 // SECOND LOSS, at the two proofs-by-deletion. On PostgreSQL each dropped ITS OWN named constraint
 // (`dining_tables_tab_fk`, `working_orders_delivery_table_fk`) inside a rolled-back transaction, so

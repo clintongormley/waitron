@@ -53,12 +53,12 @@ export async function readNodeMembership(
  * **Which caller may use this one is a convention, and nothing in the database holds it.** The two
  * setters were told apart by the connection they ran on — PostgreSQL granted `app_user` INSERT and
  * UPDATE here, and this plain one ran on the owner connection instead. There are no roles and no
- * grants on this engine (`./testing/roles.ts`). The split stands on its own terms: a caller that
- * cannot assume it is the only writer goes through the term-guarded `persistNodeMembershipIfNewer`
- * below — gossip adoption (`membership-adopt.ts`), retirement (`retire.ts`) and the adopt
- * handshake's org-chart append (`mirror-bundle-api.ts`) — and this one is for where no concurrent
- * writer exists: seeding (`membership-seed.ts`) and the promote transaction (`promote.ts`, via
- * `writeNodeMembershipTx`) — owner decision, Slice 2.
+ * grants on this engine. The split stands on its own terms: a caller that cannot assume it is the
+ * only writer goes through the term-guarded `persistNodeMembershipIfNewer` below — gossip adoption
+ * (`membership-adopt.ts`), retirement (`retire.ts`) and the adopt handshake's org-chart append
+ * (`mirror-bundle-api.ts`) — and this one is for where no concurrent writer exists: seeding
+ * (`membership-seed.ts`) and the promote transaction (`promote.ts`, via `writeNodeMembershipTx`) —
+ * owner decision, Slice 2.
  */
 export async function writeNodeMembership(
   db: Database,

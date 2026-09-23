@@ -13,8 +13,8 @@ import { locations, tenants } from "./tenants.js";
 
 // LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
 // PostgreSQL, so the suite also established that role's INSERT and DELETE grants on these two
-// tables. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so what is left
-// is the column mapping and the composite primary key.
+// tables. SQLite has no roles and no grants, so what is left is the column mapping and the
+// composite primary key.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)", () => {

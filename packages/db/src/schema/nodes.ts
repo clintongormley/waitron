@@ -44,8 +44,8 @@ export const nodes = table("nodes", {
   // the primary's nodes row to a mirror today: the bundle carries identity and dial details only
   // (mirror-bundle.ts's header), and the row copy that used to went with the deleted replication.
   // Set at provision by setNodePublicKey. Nothing in the database refuses another writer: this
-  // engine has no roles and no grants (../testing/roles.ts), where PostgreSQL granted app_user
-  // SELECT alone on this table.
+  // engine has no roles and no grants, where PostgreSQL granted app_user SELECT alone on this
+  // table.
   publicKey: label("public_key"),
   // The primary's ENDORSEMENT of this node's public_key (design §4/§6 R2): a signed
   // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document

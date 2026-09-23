@@ -23,9 +23,9 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * **One case went with the storage switch**, stated here rather than left as a silent deletion:
  * `refuses an UPDATE of tipo_rectificativa as the app role, on privilege grounds` asked whether
  * `app_user` held UPDATE on this table. SQLite has no roles and no grants — one process opens one
- * file and what a caller may do is decided outside the database
- * (`packages/db/src/testing/roles.ts`) — so there is no privilege layer left to ask about, and
- * nothing else holds that property. The trigger case below is the layer that DOES survive.
+ * file and what a caller may do is decided outside the database — so there is no privilege layer
+ * left to ask about, and nothing else holds that property. The trigger case below is the layer that
+ * DOES survive.
  */
 const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,

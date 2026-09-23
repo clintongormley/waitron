@@ -20,8 +20,8 @@ import { locations, tenants } from "./tenants.js";
 //  - the PostgreSQL version proved each refusal against a role that HAD been granted the privilege,
 //    inside a rolled-back transaction — a layered proof, because `app_user` is refused UPDATE by
 //    the grant first and a trigger nobody has seen fire is a comment, not a backstop. SQLite has no
-//    roles and no grants (`packages/db/src/testing/roles.ts`), so there is only one layer left and
-//    the refusal below is simply the trigger's.
+//    roles and no grants, so there is only one layer left and the refusal below is simply the
+//    trigger's.
 //  - the TRUNCATE case is deleted. SQLite has no `TRUNCATE` statement and no trigger event for
 //    `DROP TABLE`, so the statement-level trigger that blocked a table-wide wipe has no counterpart
 //    at all (`packages/store/src/append-only.ts` says so in its own words). What a caller that can

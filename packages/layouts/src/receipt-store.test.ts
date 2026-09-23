@@ -16,9 +16,9 @@ import type { ReceiptConfig } from "./types.js";
 // tables `authorizeManager` reads.
 //
 // What it does NOT show: no assertion here is about who may write `tenant_receipts`. This engine
-// has no roles and no grants — one process opens one file (`packages/db/src/testing/roles.ts`) —
-// so there is no such property left for a suite to assert, and the store's own gates are the only
-// refusal. Every assertion below is the store's behaviour, which the engine does not touch.
+// has no roles and no grants — one process opens one file — so there is no such property left for a
+// suite to assert, and the store's own gates are the only refusal. Every assertion below is the
+// store's behaviour, which the engine does not touch.
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 

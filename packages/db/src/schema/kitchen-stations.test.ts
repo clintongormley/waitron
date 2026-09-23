@@ -12,8 +12,8 @@ import { locations, tenants } from "./tenants.js";
 
 // LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
 // PostgreSQL, so the suite also established that role's grants on `kitchen_stations`. SQLite has no
-// roles and no grants (`packages/db/src/testing/roles.ts`); what is left is the column mapping, the
-// threshold CHECK and the partial unique index.
+// roles and no grants; what is left is the column mapping, the threshold CHECK and the partial
+// unique index.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";

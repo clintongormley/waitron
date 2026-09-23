@@ -2,10 +2,9 @@
 //
 // LOSS, from the storage swap: a fourth case ran on real PostgreSQL only and proved that `app_user`
 // may SELECT this column but is refused an UPDATE of it with `42501` — the spec §9.3 rule that the
-// verifier is an owner-role write. SQLite has no roles and no grants
-// (`packages/db/src/testing/roles.ts`), so that question has no counterpart here and the case is
-// deleted rather than kept in a form that asserts nothing. Nothing in this package now states that
-// the application must not write this column.
+// verifier is an owner-role write. SQLite has no roles and no grants, so that question has no
+// counterpart here and the case is deleted rather than kept in a form that asserts nothing. Nothing
+// in this package now states that the application must not write this column.
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { readBreakGlassVerifier, setBreakGlassVerifierTx, stampDeployment } from "./deployment.js";

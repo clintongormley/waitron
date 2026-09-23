@@ -1,9 +1,9 @@
 // LOSS, from the storage swap. Three things this suite established are gone and have no counterpart
 // on this engine:
 //  - a fourth case proved `app_user` is refused an INSERT into `tenants` by the GRANT (`42501`)
-//    BEFORE either constraint below is reached. SQLite has no roles and no grants
-//    (`packages/db/src/testing/roles.ts`), so nothing now states that the application role may read
-//    this table and not write it — CLAUDE.md §3 still states the rule, and nothing here holds it.
+//    BEFORE either constraint below is reached. SQLite has no roles and no grants, so nothing now
+//    states that the application role may read this table and not write it — CLAUDE.md §3 still
+//    states the rule, and nothing here holds it.
 //  - the surviving case used to assert `rolsuper` on its own connection first, so that "even to the
 //    session that owns the table" was a checked claim rather than a hope. There is no privileged
 //    session here to be distinguished from an unprivileged one: one process opens one file.
