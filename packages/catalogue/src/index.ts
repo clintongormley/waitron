@@ -40,6 +40,7 @@ export type {
   ProductVariantInput,
   SelectedName,
   SelectedVariant,
+  SellingValues,
 } from "./variants.js";
 export * from "./variant-fallback.js";
 export * from "./dietary-declarations.js";

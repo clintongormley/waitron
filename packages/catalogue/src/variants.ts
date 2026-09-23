@@ -99,6 +99,7 @@ export async function variantsOfProducts(
   productIds: readonly string[],
 ): Promise<Map<string, ProductVariant[]>> {
   const grouped = new Map<string, ProductVariant[]>();
+  if (productIds.length === 0) return grouped;
   const rows = await tx
     .select({ parentId: products.parentId, ...variantColumns })
     .from(products)

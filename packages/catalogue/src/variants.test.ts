@@ -15,6 +15,7 @@ import {
 import {
   listProductVariants,
   setProductVariants,
+  variantsOfProducts,
   listMenuVariants,
   setMenuVariants,
   resolveMenuVariant,
@@ -445,5 +446,19 @@ describe("resolving a menu offer's line", () => {
       productId: small!.id,
       unitPrice: "8.00",
     });
+  });
+});
+
+describe("reading the variants of no products", () => {
+  it("asks the database nothing for an empty product list", async () => {
+    // A stub whose `select` throws pins "no query at all": a query against the real connection
+    // would also answer an empty map.
+    const refuses = {
+      select: () => {
+        throw new Error("variantsOfProducts queried the database for no products");
+      },
+    } as unknown as Transaction;
+
+    expect(await variantsOfProducts(refuses, [])).toEqual(new Map());
   });
 });

@@ -71,6 +71,19 @@ export function nonBlankTranslations<T extends Record<string, string>>(
   return map && Object.values(map).some((text) => text.trim() !== "") ? map : null;
 }
 
+/** Each locale of `text` left blank takes `staffName`; every other locale keeps its own text. */
+export function fillBlankLocalesWithStaffName(
+  text: Readonly<Record<string, string>>,
+  staffName: string,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(text).map(([locale, value]) => [
+      locale,
+      value.trim() === "" ? staffName : value,
+    ]),
+  );
+}
+
 export function customerPresentationText(
   p: ProductPresentation,
   defaultLanguage: string,

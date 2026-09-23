@@ -67,6 +67,7 @@ import {
   readContentLanguages,
   selectMenuVariant,
   customerPresentationText,
+  fillBlankLocalesWithStaffName,
   effectiveProductColumns,
   kitchenPresentationName,
   parentJoin,
@@ -574,15 +575,13 @@ async function priceOrderLines(
       contentConfig.defaultLanguage,
     );
     if (line.variantDescriptions != null) {
-      const variantName = line.variantName ?? "";
-      line.variantDescriptions = Object.fromEntries(
-        Object.entries(
-          toInvoiceLineDescriptions(
-            line.variantDescriptions,
-            invoiceLocales,
-            contentConfig.defaultLanguage,
-          ),
-        ).map(([locale, text]) => [locale, text.trim() === "" ? variantName : text]),
+      line.variantDescriptions = fillBlankLocalesWithStaffName(
+        toInvoiceLineDescriptions(
+          line.variantDescriptions,
+          invoiceLocales,
+          contentConfig.defaultLanguage,
+        ),
+        line.variantName ?? "",
       );
     }
   }
@@ -2050,8 +2049,9 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
 /** One line of an OPEN tab, for the table-order screen (FP-1, design §3b). `unitPriceGross` is the gross
  *  unit price LOCKED at add-time (`working_order_lines.unit_price_gross`), NOT a re-price; `servedAt` is
  *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
- *  frozen staff `name` as well as the `productId`: {@link readTabLines} joins the line's product and
- *  variant labels into it, so the screen has no catalogue lookup left to do for a name.
+ *  frozen staff `name` as well as the `productId`: {@link readTabLines} resolves the line's staff name
+ *  into it — the variant's on a variant line — so the screen has no catalogue lookup left to do for a
+ *  name.
  *  `quantity` is a three-place decimal string and `unitPriceGross` a two-place one, each converted
  *  from the whole number its column stores by the mapping in {@link readTabLines}. */
 export interface TabLine {
@@ -2064,9 +2064,9 @@ export interface TabLine {
   lineNo: number;
   // `string | null` because the COLUMN is (`working_order_lines.product_id`,
   // packages/db/src/schema/orders.ts), not because a tab line can lack a product: a PARENT row
-  // carries its dish and a CHILD row the picked extra product, which is what the kitchen cooks
-  // and the diner is charged for (spec §3.4). Every `insert(workingOrderLines)` in this file sets
-  // it.
+  // carries its dish — the variant itself on a line sold as a variant — and a CHILD row the picked
+  // extra product, which is what the kitchen cooks and the diner is charged for (spec §3.4). Every
+  // `insert(workingOrderLines)` in this file sets it.
   productId: string | null;
   /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else null on a top-level
    * dish — the ONE field on this wire that tells the two apart. `productId` cannot: a child carries the

@@ -411,8 +411,8 @@ async function addOptionList(
  * Publish one "Coffee" product with a "Large" variant on `catalogueId`, both carrying a
  * customer-facing name of their own that DIFFERS from their staff name, and return the offer and
  * variant ids. The two customer names differ from the staff names on purpose: a label built from the
- * staff names, or from the product's customer name alone, reads differently from the joined one, so a
- * reader that drops the variant is tellable apart from one that keeps it.
+ * staff names, or from the product's customer name alone, reads differently from the variant's own,
+ * so a reader that drops the variant is tellable apart from one that keeps it.
  */
 async function seedVariantOffer(
   tx: Transaction,
@@ -485,11 +485,11 @@ async function seedVariantOffer(
  * here rather than passing. All four readers run over the SAME fired order, so one revert on any
  * single reader fails this.
  */
-describe("a sold line's label carries its variant", () => {
+describe("a sold line naming a variant is labelled by the variant's own name", () => {
   const STAFF = "Large";
   const KITCHEN = "LG";
 
-  it("carries product and variant onto the tab, the station queue, the pass and the retrieve screen", async () => {
+  it("shows the variant's name alone on the tab, the station queue and the pass, and hands the retrieve screen both names", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
@@ -6709,6 +6709,37 @@ describe("a variant is sold as the product it is", () => {
       expo: ["Wine 125"],
       receipt: [{ [LOCALE]: "Wine 125", "en-GB": "Wine 125" }],
     });
+  });
+
+  it("stores a variant's own staff name in each invoice locale its customer text leaves blank", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const locales = [LOCALE, "en-GB"];
+    await db
+      .update(locations)
+      .set({ invoiceLocales: locales })
+      .where(eq(locations.id, cfg.locationId));
+    const twoLocales = { ...cfg, invoiceLocales: locales };
+    const id = randomUUID();
+    const wine = await withTransaction(db, async (tx) => {
+      const seeded = await seedWine(tx, twoLocales, catalogueId);
+      // Text in a language neither invoice locale nor the default resolves to, so both come out
+      // blank and each takes the variant's staff name, not the parent's "Vino de la casa".
+      await tx
+        .update(products)
+        .set({ customerName: { "fr-FR": "Grand verre" } })
+        .where(eq(products.id, seeded.wine175));
+      return seeded;
+    });
+    await parkOrder({ db }, twoLocales, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" }],
+    });
+    const [stored] = await db
+      .select({ variantDescriptions: workingOrderLines.variantDescriptions })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(stored!.variantDescriptions).toEqual({ [LOCALE]: "Wine 175", "en-GB": "Wine 175" });
   });
 
   it("re-prices a kept line whose variant alone changed", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   staffPresentationName,
   customerPresentationText,
+  fillBlankLocalesWithStaffName,
   joinCustomerPresentationText,
   kitchenPresentationName,
   type ProductPresentation,
@@ -69,10 +70,10 @@ describe("joinCustomerPresentationText", () => {
   });
   test("a locale the variant map lacks takes the variant's stored language, not the product's text", () => {
     expect(
-      joinCustomerPresentationText({ en: "Coffee", es: "Café" }, { en: "Large" }, "Large"),
+      joinCustomerPresentationText({ en: "Coffee", es: "Café" }, { en: "Large cup" }, "Large"),
     ).toEqual({
-      en: "Large",
-      es: "Large",
+      en: "Large cup",
+      es: "Large cup",
     });
   });
   test("a variant map with nothing in it falls back to the variant's staff name", () => {
@@ -101,5 +102,15 @@ describe("kitchenPresentationName", () => {
     const plain = { ...full, variantName: null, variantKitchenName: null };
     expect(kitchenPresentationName(plain)).toBe("COF");
     expect(kitchenPresentationName({ ...plain, kitchenName: " " })).toBe("Coffee");
+  });
+});
+
+describe("fillBlankLocalesWithStaffName", () => {
+  test("gives each blank locale the staff name and keeps every stored text as it is", () => {
+    expect(fillBlankLocalesWithStaffName({ en: "Large cup", es: "  ", fr: "" }, "Large")).toEqual({
+      en: "Large cup",
+      es: "Large",
+      fr: "Large",
+    });
   });
 });
