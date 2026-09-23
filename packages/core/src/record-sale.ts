@@ -19,7 +19,7 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
-  decimalToCents,
+  stringToCents,
   percentOf,
   sumDecimals,
 } from "@waitron/shared";
@@ -283,7 +283,7 @@ export async function recordSale(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      total: decimalToCents(decimal(input.total)),
+      total: stringToCents(input.total),
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,

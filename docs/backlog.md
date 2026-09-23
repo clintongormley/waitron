@@ -3873,13 +3873,14 @@ What the preparation tasks left, with F1's own answers where it found them:
     (2026-09-23, PR #531). **Done:** the two-call write conversion
     `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
     other two scales, `stringToThousandths` and `stringToBasisPoints` (the pattern had spread to
-    them since #475), at 50 sites outside `packages/shared`. Two places keep the two calls: the
-    converters' own tests, because they test the converter; and the fiscal record builders —
-    `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
-    which only those three use — seven sites the unattended campaign run may not change without
-    the owner's review. **OPEN:** swap those seven in a session the owner attends; the golden
-    huella test in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` passed unedited with
-    them swapped, before they were put back. #475 declined it because a helper taking a plain string "would hide that
+    them since #475), at 50 sites outside `packages/shared`. Only the converters' own tests keep
+    the two calls, because they test the converter. The seven sites in the fiscal record builders
+    — `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
+    which only those three use — were held back from #531 for the owner's review and are **DONE**
+    (2026-09-23, branch `chore/fiscal-builders-one-call`, on the owner's "Just do the swap without
+    me"): each helper is `decimalToX(decimal(value))` and nothing more, and the golden huella test
+    in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad` passed unedited.
+    #475 declined it because a helper taking a plain string "would hide that
     validation and invite passing something unchecked"; that does not hold — a helper calling
     `decimal()` inside refused all six malformed strings tried (`abc`, `1e3`, `+1.00`, `01.00`,
     the empty string and a leading space) with `shared.invalid_decimal`, the same as the two
