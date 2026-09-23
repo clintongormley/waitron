@@ -311,16 +311,39 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       diet: product.diet ?? null,
       dietDerivation: product.dietDerivation ?? null,
       dietOverride: product.dietOverride ?? null,
-      // The source `TillProduct` types these two looser than the offer's wire shape (declarations as
-      // plain `string[]`, variants with the three names optional), so the fixture narrows them — the
-      // fixtures only ever supply real labels and complete variants.
+      // The source `TillProduct` types the declarations looser than the offer's wire shape (plain
+      // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
       dietaryDeclarations: (product.dietaryDeclarations ??
         []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
       // The ordered attachment list a dish exposes, carried straight through from the source
       // `TillProduct` so a fixture that offers a list reaches the grid and the picker.
       offeredModifiers: product.offeredModifiers ?? [],
-      variants: (product.variants ??
-        []) as unknown as ZoneOfferCatalogue["offers"][number]["variants"],
+      // Each variant as an offer lists it: its own names, price and availability, and the source
+      // product's values for every field a variant inherits.
+      variants: (product.variants ?? []).map(
+        (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({
+          id: variant.id,
+          name: variant.name,
+          customerName: variant.customerName ?? null,
+          kitchenName: variant.kitchenName ?? null,
+          image: variant.image ?? null,
+          unitPrice: variant.unitPrice,
+          menuPrice: null,
+          offered: true,
+          available: variant.available,
+          unit: productUnit(product),
+          pricingUnit: productUnit(product).hardwareUnit === null ? "each" : "weight",
+          vatClass: product.vatClass,
+          category: product.category ?? "Other",
+          allergens: product.allergens,
+          diet: product.diet ?? null,
+          dietDerivation: product.dietDerivation ?? null,
+          dietOverride: product.dietOverride ?? null,
+          dietaryDeclarations: (product.dietaryDeclarations ??
+            []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
+          courseId: product.courseId ?? null,
+        }),
+      ),
       courseId: product.courseId ?? null,
     })),
   };

@@ -53,8 +53,9 @@ already *sold* — see below.
 A line freezes what it was sold as and never reads the catalogue again, so editing a product does not
 rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
 
-- `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. This is
-  what the basket and a retrieved tab show after the product has been renamed or deleted.
+- `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
+  line with no variant this is what the basket and a retrieved tab show after the product has been
+  renamed or deleted; on a variant line they show `variant_name` instead.
 - `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
   then narrowed to exactly the venue's invoice languages by `toInvoiceLineDescriptions`.
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
@@ -184,18 +185,12 @@ The editor still keeps its own draft at **no variants, or at least two**, with a
 - Removing variants down to one folds that one's price back into the plain price field and drops the
   row.
 
-A variant shares the product's unit, tax rate, categories, modifiers and allergen and dietary
-declarations. It has its own name (all three of them) and availability, and its own price and image
-only where it sets them.
-
-A variant is sold as the product it is. A product with an Active variant is never rung up as itself
-(`product.variant_required`); on the till it is one button, and tapping it opens its variants with
-the first available one chosen, each labelled with its difference from the parent's price ("+€1.50")
-where it has one; a product none of whose variants is available here gets no button. The line is
-priced and taxed at the variant's own values, its parent's where it leaves one blank, and reaches the
-kitchen as its parent would: the parent's product-level preparation route, and the station, course,
-category, allergens and dietary labels read through `effectiveProductColumns`
-(`packages/catalogue/src/variant-fallback.ts`), unless the variant sets its own. On a menu it is charged the most specific price set
+A variant has its own name (all three of them) and availability. Its tax rate, station, course,
+image and allergen and dietary declarations are its parent's while it leaves them blank and its own
+once it sets them (`effectiveProductColumns`, `packages/catalogue/src/variant-fallback.ts`); its unit,
+and its categories with the reporting category among them, are its parent's while it stores none of
+its own (`unitOwnerJoin`, `categoryOwnerJoin`, same file). Its extras and options
+lists are always its parent's. On a menu it is charged the most specific price set
 (`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`): that menu's price for the variant,
 else its own price, else its parent's price on that menu, else its parent's own price. A menu may
 leave any product's price blank (`menu_items.gross_price` is nullable), which means the product's
@@ -203,6 +198,16 @@ own price; the menu screen shows that price as the empty field's hint. `setProdu
 (`packages/catalogue/src/variants.ts`) and the storage beneath it accept a variant with no price of
 its own; the product-editor save refuses one (`price()` in
 `packages/catalogue/src/product-editor-input.ts`).
+
+A variant is sold as the product it is. A product with an Active variant is never rung up as itself
+(`product.variant_required`); on the till it is one button, and tapping it opens its variants with
+the first available one chosen, each labelled with its difference from the parent's price ("+€1.50")
+where it has one; a product none of whose variants is available here gets no button. The line's
+`product_id` is the variant, and it is priced and taxed at the variant's effective values above. It
+reaches the kitchen as its parent would unless the variant sets its own value: the parent's
+product-level preparation route, and the effective station, course, category, allergens and dietary
+labels. The till splits a tab line by the unit precision the line froze (`TabLine.unitPrecision`),
+since a variant is not one of the till's products.
 
 A variant's own photo is `products.image` on its row. The image library lists it among a photo's
 uses as a `variant` of its parent and refuses to delete a photo one still uses (`listImageUsages`

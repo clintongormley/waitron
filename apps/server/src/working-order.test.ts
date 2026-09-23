@@ -6691,6 +6691,7 @@ describe("a variant is sold as the product it is", () => {
       return {
         stored: stored!.variantDescriptions,
         tab: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.name),
+        tabUnitPrecision: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.unitPrecision),
         station: (await listStationQueue(tx, barra.id))[0]!.items.map((i) => i.name),
         expo: (await listExpoQueue(tx, twoLocales))[0]!.courses.flatMap((c) =>
           c.items.map((i) => i.name),
@@ -6701,6 +6702,9 @@ describe("a variant is sold as the product it is", () => {
     expect(seen).toEqual({
       stored: { [LOCALE]: "Wine 125", "en-GB": "Wine 125" },
       tab: ["Wine 125"],
+      // The line's own frozen precision: the till splits by it, since a variant is never one of the
+      // till's products (it lists the offers' parents).
+      tabUnitPrecision: [0],
       station: ["Wine 125"],
       expo: ["Wine 125"],
       receipt: [{ [LOCALE]: "Wine 125", "en-GB": "Wine 125" }],
@@ -6792,7 +6796,7 @@ describe("a variant is sold as the product it is", () => {
   });
 
   it("returns a retrieved variant line's variant id, and none for a line without one", async () => {
-    const { cfg, zoneId, catalogueId, cafeOfferId } = await setupVenue();
+    const { cfg, zoneId, catalogueId, cafeId, cafeOfferId } = await setupVenue();
     const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
@@ -6807,6 +6811,11 @@ describe("a variant is sold as the product it is", () => {
     expect(held.lines.map((l) => [l.menuItemId, l.variantId, l.product?.variantId])).toEqual([
       [wine.offerId, wine.wine175, wine.wine175],
       [cafeOfferId, undefined, undefined],
+    ]);
+    // The dish is the variant's PARENT, as the till built it from the offer at add time.
+    expect(held.lines.map((l) => [l.productId, l.product?.id, l.product?.productId])).toEqual([
+      [wine.parentId, wine.parentId, wine.parentId],
+      [cafeId, cafeId, cafeId],
     ]);
   });
 });

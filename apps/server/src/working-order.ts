@@ -2076,6 +2076,11 @@ export interface TabLine {
    * from the stored `parent_line_id` over the rows it has already read, so it costs no extra query. */
   parentLineNo: number | null;
   quantity: string;
+  /** How many decimal places the line's unit takes, frozen at add time
+   * (`working_order_lines.unit_precision`; 0 = sold by the unit), or null on an extras child. The
+   * till's split reads it: a line sold as a variant names the variant, which the till has no
+   * product for. */
+  unitPrecision: number | null;
   unitPriceGross: string;
   servedAt: string | null;
   /** The line's RESOLVED kitchen course (KDS-2 `working_order_lines.course_id`), or null when it has
@@ -2134,6 +2139,7 @@ export async function readTabLines(
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
+      unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
       servedAt: workingOrderLines.servedAt,
       courseId: workingOrderLines.courseId,
@@ -2166,6 +2172,7 @@ export async function readTabLines(
     productId: row.productId,
     parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
     quantity: thousandthsToDecimal(row.quantity),
+    unitPrecision: row.unitPrecision,
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     servedAt: row.servedAt,
     courseId: row.courseId,

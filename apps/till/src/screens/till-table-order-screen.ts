@@ -18,7 +18,7 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { selectStyles } from "../select-styles.js";
 import { type DietPredicate, hasDietData, visibleProducts } from "../menu-filter.js";
-import { lineProductName, productName, productUnit } from "../widgets/product-name.js";
+import { lineProductName, productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
@@ -1380,17 +1380,18 @@ export class TillTableOrderScreen extends LitElement {
     this.#setSplitQuantity(line.lineNo, next);
   }
 
-  #splitProduct(line: TabLine): TillProduct | undefined {
-    return this.products.find((product) => product.id === line.productId);
+  /** The decimal places a split of `line` may take: the precision the line froze when it was rung,
+   * else the storage limit of three places. */
+  #splitPrecision(line: TabLine): number {
+    return line.unitPrecision ?? 3;
   }
 
-  /** Return localized field copy when a selected quantity cannot be sent. The product's unit sets
-   * the decimal precision; a retired product falls back to the storage limit of three places. Every
-   * value is bounded by the exact ordered quantity using shared decimal arithmetic. */
+  /** Return localized field copy when a selected quantity cannot be sent. The line's frozen unit
+   * precision sets the decimal places. Every value is bounded by the exact ordered quantity using
+   * shared decimal arithmetic. */
   #splitQuantityError(line: TabLine): string {
     const value = this.splitQuantities.get(line.lineNo) ?? "";
-    const product = this.#splitProduct(line);
-    const precision = product === undefined ? 3 : productUnit(product).precision;
+    const precision = this.#splitPrecision(line);
     const pattern =
       precision === 0 ? /^[1-9]\d*$/ : new RegExp(`^(?:0|[1-9]\\d*)(?:\\.\\d{1,${precision}})?$`);
     if (!pattern.test(value)) {
@@ -1626,7 +1627,6 @@ export class TillTableOrderScreen extends LitElement {
   #splitLineRow(line: TabLine): TemplateResult {
     const selected = this.splitQuantities.has(line.lineNo);
     const quantity = this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity);
-    const product = this.#splitProduct(line);
     const name = this.#nameForLine(line);
     const error = this.splitAttempted && selected ? this.#splitQuantityError(line) : "";
     return html`<div class="split-line-row">
@@ -1642,7 +1642,7 @@ export class TillTableOrderScreen extends LitElement {
       </wt-button>
       ${
         selected
-          ? product !== undefined && productUnit(product).precision === 0
+          ? this.#splitPrecision(line) === 0
             ? this.#splitEachQuantity(line, name, quantity)
             : html`<wt-input
                 class="split-quantity"

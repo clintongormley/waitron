@@ -1316,6 +1316,12 @@ export interface TabLine {
    * fixture that predates the field, and reads as a dish. */
   parentLineNo?: number | null;
   quantity: string;
+  /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit),
+   * or null on an extras child. The split reads this, never the product: a line sold as a variant
+   * names the variant, which is not one of the till's products. Mirrors the server's
+   * `TabLine.unitPrecision`; OPTIONAL like {@link parentLineNo}, so a fixture that predates it reads
+   * as the storage limit of three places. */
+  unitPrecision?: number | null;
   unitPriceGross: string;
   servedAt: string | null;
   /** The line's RESOLVED kitchen course (KDS-2), or null when it has none. The tab-order screen groups
