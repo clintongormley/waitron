@@ -15,15 +15,15 @@ import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 
-// The app registers these at startup; without them every icon in the editor — the "+" chip, both
-// chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
-// cannot catch a defect in it.
 declare module "vitest/browser" {
   interface BrowserCommands {
     setViewportSize: (width: number, height: number) => Promise<void>;
   }
 }
 
+// The app registers these at startup; without them every icon in the editor — the "+" chip, both
+// chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
+// cannot catch a defect in it.
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 const unit = { id: "unit-each", name: { en: "Each" }, abbreviation: { en: "ea" } };
