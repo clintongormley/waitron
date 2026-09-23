@@ -2016,7 +2016,7 @@ image constraints under *Detail → Box image*.
   tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
   100/100/100/100); `bookings` (**PR #503**, 2026-09-23 — tests for the seat refusal when a booking leaves
   `booked` inside `openTab`, a location with no row, the passive refresh copy, and the dashboard's
-  single-flight guards; 99.76/100/100/98.38); `tunnel` (**PR #TBD**, 2026-09-23 — tests for a
+  single-flight guards; 99.76/100/100/98.38); `tunnel` (**PR #506**, 2026-09-23 — tests for a
   repeated `ack`, a frame the client ignores before `go`, and the test relays surviving a peer's
   connection reset; 100/100/100/100).
 
@@ -2398,7 +2398,7 @@ does when its tables change under it (re-pick the first, or close) and fix it te
 may make one or both of those branches reachable, or show they can go.
 
 **The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
-writing tunnel's coverage tests, PR #TBD).** `packages/tunnel/src/testing/relay.ts` is test-only:
+writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
 nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
 box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
 box and its bytes go nowhere (both reviewers of that branch ran this). When a waiting client closes,
