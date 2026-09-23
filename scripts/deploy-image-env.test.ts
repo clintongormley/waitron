@@ -348,6 +348,8 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
       (manifest) =>
         (manifest.scripts?.build ?? "").includes("esbuild ") && reachesMedia(manifest.name),
     );
+    // An empty listing would pass every loop over it.
+    expect(found.length).toBeGreaterThan(0);
     return found;
   };
 
@@ -381,7 +383,8 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
  * THIS machine. That stands for the box's linux packages only because one sharp-libvips release
  * carries one libvips version on every platform: checked 2026-09-24 for 1.3.3, where darwin-arm64's
  * `versions.json` and the `./binary` export `npm view` printed for linux-x64 and linux-arm64 all
- * name 8.18.6.
+ * name 8.18.6. So the check needs that release installed on the machine running it, and throws where
+ * none is.
  */
 function libvipsRelease(): { packageVersion: string; libvips: string } {
   const lockfile = read("pnpm-lock.yaml");
