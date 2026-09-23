@@ -519,7 +519,9 @@ and then bundles `src/bin.ts` to `dist/server.js` with esbuild. Run the bundle d
 
 `scripts/copy-migrations.mjs` also writes `dist/package.json` (`{"type":"module"}`), so `dist/` is
 portable as a directory on its own — copied into a Docker image with nothing else from this
-package, say. `dist/server.js` is ESM (esbuild's `--format=esm`), and a bare `.js` file's module
+package, say — with one exception: sharp is left out of the bundle and must be installed beside it
+(`deploy/Dockerfile` puts it in `/app/node_modules`); it is loaded only when a photo is first
+prepared. `dist/server.js` is ESM (esbuild's `--format=esm`), and a bare `.js` file's module
 system is normally decided by Node walking up from it for the nearest `package.json` — today that
 walk finds `apps/server/package.json`'s own `"type": "module"` purely because `dist/` sits two
 directories under it, not because the bundle carries that fact itself. Copy `dist/` out on its own

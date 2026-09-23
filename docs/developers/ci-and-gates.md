@@ -678,6 +678,15 @@ stage deletes them. A linux/amd64 build of the same Dockerfile (`docker buildx b
 linux/amd64`, emulated on an arm64 Mac) carried `@img/sharp-linux-x64` and
 `@img/sharp-libvips-linux-x64`, also 23 MB, and passed the same shrink script.
 
+What the guards leave open. `scripts/deploy-image-env.test.ts` finds the bundles to check by
+following `dependencies` through each workspace member's `package.json`, and compares the number of
+`--external:sharp` flags in a package's `build` script with the number of `esbuild ` commands in it.
+Measured 2026-09-24: with the flag taken off the `dist/record-one-sale.js` command in
+`apps/server/package.json` and a second copy added to the `dist/server.js` command, its flag case
+still passed. bundle-smoke's `grep -q 'import("sharp")'` step reads `apps/server/dist/server.js`
+only, so the other bundles the server's `build` makes, and `waitron-provision`
+(`packages/provisioning/dist/bin.js`), are not read by it.
+
 ## Two TypeScript compilers are installed, and that is deliberate
 
 Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on

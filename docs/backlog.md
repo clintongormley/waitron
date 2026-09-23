@@ -282,9 +282,10 @@ carries it in `/app/node_modules`.
 What it leaves open:
 
 - **The upload limit is 20 MB (owner decision 2026-09-23, up from 5 MB).** It limits what may be
-  uploaded, not what is stored, and so bounds only the decode: a 100-megapixel picture raised memory
-  by about 29 MiB when decoded (the plan drafter's measurement), and `MAX_INPUT_PIXELS` refuses
-  anything larger. What current phones produce has not been measured.
+  uploaded, not what is stored: it bounds how large an upload the server will buffer. The decode is
+  bounded by the pixel limit, `MAX_INPUT_PIXELS` (100 million), because a small file can declare
+  that many pixels; a 100-megapixel picture raised memory by about 29 MiB when decoded (the plan
+  drafter's measurement). What current phones produce has not been measured.
 - **The library grid loads the full 1600-pixel copy for each tile.** The screen asks for 24 photos a
   page (`packages/media/src/dashboard/image-library.ts`), about 4 MB at the average size, fetched as
   the tiles scroll into view and cached afterwards. A small thumbnail copy would help over slow
