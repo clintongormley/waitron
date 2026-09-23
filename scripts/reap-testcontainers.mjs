@@ -2,13 +2,18 @@ import { execFileSync } from "node:child_process";
 
 // Reap STALE waitron Testcontainers resources.
 //
-// Why this exists: the one caller left that starts a container, `bench/sqlite-failover`, runs with
-// `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory locally — Ryuk hangs on this machine, CLAUDE.md
-// §4), which disables Testcontainers' own reaper. A caller that finishes normally stops its own
-// container; an INTERRUPTED run (Ctrl-C, a timeout SIGTERM, a crash) leaves a running container and
-// its anonymous volume behind, un-reaped. Over many interrupted runs these accumulate and bloat the
-// Docker daemon, which slows container ops and adds host-side overhead. This script is the
-// compensating reaper (the manual `pnpm reap`).
+// Why this exists: containers here are started with `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory
+// locally — Ryuk hangs on this machine, CLAUDE.md §4), which disables Testcontainers' own reaper. A
+// caller that finishes normally stops its own container; an INTERRUPTED run (Ctrl-C, a timeout
+// SIGTERM, a crash) leaves a running container and its anonymous volume behind, un-reaped. Over many
+// interrupted runs these accumulate and bloat the Docker daemon, which slows container ops and adds
+// host-side overhead. This script is the compensating reaper (the manual `pnpm reap`).
+//
+// WHAT IT CANNOT REACH, stated here so `pnpm reap` is not read as "everything is cleaned up":
+// starting a container and being reapable are not the same thing, because guard 1 below selects on a
+// label each rig has to stamp for itself. `runPostgres` in `bench/pglite-throughput/src/bench.ts:331`
+// starts a `postgres:18-alpine` with no `.withLabels` call at all, so an interrupted run of that rig
+// leaves a container this script will never select, to be removed by hand.
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
 //  1. LABEL. It removes only containers carrying `com.waitron.reapable`, never the generic
@@ -17,8 +22,9 @@ import { execFileSync } from "node:child_process";
 //     `grep -rn com.waitron.reapable` finds that stamp and no other executable one outside this
 //     script and its own suite — every remaining hit is prose (this repo's docs and the bench
 //     README, plus historical plans quoting PostgreSQL fixtures the storage switch deleted). So
-//     another repo's containers — and this repo's compose dev DB, which is not a testcontainer at
-//     all — are out of scope.
+//     another repo's containers are out of scope, and so is whatever this repo's dev stack runs:
+//     nothing `docker-compose.yml` declares carries the label, and a dev venue is a directory of
+//     SQLite files on the host rather than a container at all.
 //  2. AGE. Of those, it removes only ones older than STALE_CONTAINER_MS. A container younger than that
 //     may belong to a watch-mode vitest running RIGHT NOW in another terminal (its container lives for
 //     the whole process, which is necessarily younger than the threshold when freshly started), so it

@@ -99,7 +99,7 @@ describe("the container image's environment", () => {
   it("binds every interface, not the container's own loopback", () => {
     // config.ts defaults httpHost to 127.0.0.1, which in a container serves nobody while the
     // loopback healthcheck still reports healthy.
-    expect(load({ ...IMAGE_ENV }).httpHost).toBe("0.0.0.0");
+    expect(load(IMAGE_ENV).httpHost).toBe("0.0.0.0");
   });
 
   it("sets every variable config.ts requires in production", () => {

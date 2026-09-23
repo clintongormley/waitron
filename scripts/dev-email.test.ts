@@ -20,6 +20,19 @@ describe("development account email", () => {
     expect(compose).toContain('"127.0.0.1:8025:8025"');
   });
 
+  it("starts no database server for the dev stack, and needs no database secret", () => {
+    // A dev venue is a DIRECTORY of SQLite files on the host — `resetVenueDir` in
+    // `apps/server/scripts/dev-setup.ts` removes it — so the dev stack runs no cluster and holds no
+    // database credential. Pinned as absences, the same shape and for the same reason as the box
+    // file's guard in `scripts/deploy-image-env.test.ts`: the mailpit case above still passes with a
+    // `db:` service pasted back in beside it, so only an explicit absence fails. The service key is
+    // spelled at mailpit's own indent, which is what the first pattern matches.
+    expect(compose).not.toMatch(/^ {2}db:$/m);
+    expect(compose).not.toContain("POSTGRES_PASSWORD");
+    expect(compose).not.toContain("postgres");
+    expect(compose).not.toContain("5432");
+  });
+
   it("packages the same loopback-only capture service for installed nodes", () => {
     const installed = readFileSync(join(REPO_ROOT, "deploy/compose.yml"), "utf8");
     expect(installed).toContain("image: axllent/mailpit:v1.31.1");

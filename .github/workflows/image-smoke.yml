@@ -46,17 +46,19 @@ jobs:
             echo "WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:ci"
           } > deploy/.env
 
-      # 443 and 9110 are bound in the HOST namespace by the two containers this job starts, so a
-      # process already holding either one leaves the box unable to bind, and the stack-up step
-      # further down then fails on its 300-second health timeout, naming neither the port nor what is
-      # holding it.
+      # These ports are bound in the HOST namespace — not by every container this job starts, but by
+      # whichever services declare `network_mode: host` in deploy/compose.yml. A bridged service
+      # publishes on loopback instead and is not what this check is about. A process already holding
+      # one of these leaves the host-networked container that wants it unable to bind, and the
+      # stack-up step further down then fails on its 300-second health timeout, naming neither the
+      # port nor what is holding it.
       - name: Refuse to smoke against something already listening
         run: |
           set -euo pipefail
           for port in 443 9110; do
             if ss -ltn "( sport = :$port )" | grep -q LISTEN; then
               ss -ltn
-              echo "port $port is already in use — the smoke below would measure the wrong thing" >&2
+              echo "port $port is already in use — the host-networked container that binds it would fail to start, and the stack-up below would report only a health timeout" >&2
               exit 1
             fi
           done

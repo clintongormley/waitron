@@ -70,10 +70,12 @@ exercised on a developer machine without touching `/opt`).
 The compose project is named `waitron`. On a developer machine that is also running the repository's
 dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT_NAME=waitron`) the
 two collide. A `docker compose up` here would then reconcile that running project, and because
-`waitron.sh` passes `--remove-orphans` on every compose command it runs, it stops and removes the dev
-stack's containers rather than warning about them. Their volumes are left alone, so the dev database
-survives. Pass `COMPOSE_PROJECT_NAME=waitron-<something>` when
-exercising this file on such a machine; on a box the collision cannot arise.
+`waitron.sh` passes `--remove-orphans` on every `up` and `down` it runs, it stops and removes the dev
+stack's containers rather than warning about them. That dev stack declares no volume at all, and a
+dev venue is a directory of SQLite files on the host rather than a container resource, so the seeded
+venue is untouched and `wa-wt` brings the containers back. Pass
+`COMPOSE_PROJECT_NAME=waitron-<something>` when exercising this file on such a machine; on a box the
+collision cannot arise.
 
 If HTTP is disabled, use the installer's **Secure help** address, `https://waitron.local/setup/trust`.
 The main listener serves this guide during setup, trading, pending adoption and boot recovery.
