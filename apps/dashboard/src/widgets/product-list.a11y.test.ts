@@ -14,8 +14,8 @@ import type { Product } from "../api/client.js";
  * WITHOUT (the placeholder) — so axe sees the whole rendered surface, every branch of the row
  * template. The Inactive product sits behind the status filter, so one case shows every status. A
  * product with an Active variant (its own VAT, noted under its price) and a removed one covers the
- * variant rows, and under the Inactive filter
- * the muted row its product is drawn as while it is there only as the removed variant's context.
+ * variant rows, and under the Inactive filter the muted row its product is drawn as while it is
+ * there only as the removed variant's context.
  */
 const products: Product[] = [
   {

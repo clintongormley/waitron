@@ -232,8 +232,8 @@ describe("a removed variant in the parent's editor", () => {
     });
   });
 
-  // R8: removing a variant through its OWN page (the products list's Remove) is never refused for
-  // a customer name lacking the default language, exactly as its product's save allows; making it
+  // Removing a variant through its OWN page (the products list's Remove) is never refused for a
+  // customer name lacking the default language, exactly as its product's save allows; making it
   // Active again is still checked.
   it("saves a variant's own page Inactive without the default language, and refuses it Active", async () => {
     const spanishOnly = { customerName: { es: "Grande" } };

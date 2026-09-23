@@ -138,7 +138,8 @@ export async function saveProductEditor(
   // must satisfy the default content language. A blank one is legal (it falls back to `name`), so
   // only a supplied customer name is validated — validateContentTranslations({}) would wrongly
   // demand a default-language entry. A variant saved Inactive is skipped, as its product's save
-  // skips it (`setProductVariants`), so removing it is never refused; it is checked when made Active.
+  // skips it (`setProductVariants`), so removing it is never refused for its customer name; it is
+  // checked on every save as Active.
   if (value.customerName !== null && (!isVariant || value.active))
     await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId === null) {

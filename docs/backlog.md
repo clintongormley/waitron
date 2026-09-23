@@ -558,9 +558,10 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
 - **A removed variant can be reached again, and its photo cleared (resolved by Task 7).**
   Removing a variant makes it Inactive and keeps its row, photo included. Since Task 7 a removed
   variant is shown behind the status filter in the products list and in its product's variants
-  section, and its own page opens from either; that page's Remove photo clears the variant's photo,
+  section, and its own page opens from either; that page's Remove image clears the variant's photo,
   after which the image library no longer counts it for that variant (`countUsages`,
-  `packages/media/src/images.ts`, reads `products.image` alone). The translation-gap report skips
+  `packages/media/src/images.ts`, counts a variant's photo only through the variant's own
+  `products` row). The translation-gap report skips
   Inactive variants (`packages/catalogue/src/content-languages.ts`). A variant's customer name is
   checked against the venue's default content language only when the variant is saved Active —
   through its product's save (`setProductVariants`, `packages/catalogue/src/variants.ts`) and
