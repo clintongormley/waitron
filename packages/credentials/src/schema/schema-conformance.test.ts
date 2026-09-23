@@ -1,0 +1,23 @@
+// The CREDENTIALS migration set's instance of the shared schema-conformance suite
+// (`@waitron/db/testing/schema-conformance.js`), which is where the machinery, what it compares and
+// each of its limits are described. What is here is what is true of the credentials set in
+// particular.
+//
+// Two facts the factory cannot state for a set it has not seen. Every check constraint in
+// `drizzle/0000_baseline.sql` is written with a `CONSTRAINT <name>` clause, so `checksInDdl`'s
+// blindness to an anonymous check reaches nothing here. And no declaration in this package carries
+// a `unique()` at all, named or otherwise, so the unnamed-constraint refusal reaches nothing
+// either.
+import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
+import { CREDENTIALS_MIGRATIONS } from "../migrations.js";
+import * as barrel from "./index.js";
+
+describeSchemaConformance({
+  subjectName: "credentials",
+  // No prerequisites: `drizzle/0000_baseline.sql` declares no foreign key, so the set migrates on
+  // an empty database. The runtime still applies core first, because `credentialProvisioned` reads
+  // `tenants` — a reason about the CODE, not about what this set builds.
+  subject: CREDENTIALS_MIGRATIONS,
+  declarations: barrel,
+  declaresClosedVocabularies: false,
+});
