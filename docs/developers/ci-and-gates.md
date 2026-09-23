@@ -96,13 +96,14 @@ Bypassing the hook with `--no-verify` is for emergencies; the failure still has 
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
 unfiltered `main` run, not a wrong hook.
 
-## Coverage thresholds are split by package
+## Coverage thresholds: every package to the high bar
 
 **The goal is every package at `statements 98 / lines 98 / functions 98 / branches 95`** (owner
-decision 2026-09-23). That retires the split of 2026-09-05, which reserved the high bar for the fiscal
-core and the data-layer foundations "by consequence" and put every other package, browser packages
-included, at the `90/90/85/85` floor. The owner chose the whole bar over two narrower answers to the
-questions task T3 left open — raising only the floor's functions minimum, to 95 or to 90. The split
+decision 2026-09-23). That retires the split of 2026-09-05, which reserved the high bar for the
+fiscal core and the data-layer foundations on the grounds of consequence, and put every other
+package, browser packages included, at the `90/90/85/85` floor. The owner chose the whole bar over
+two narrower answers to the questions task T3 left open — raising only the floor's functions
+minimum, to 95 or to 90. The split
 stays in the code only while it is being retired: a package sits at the floor until tests bring it
 to the bar, and is promoted in the same change; the floor itself goes once no package is left on it.
 
@@ -113,13 +114,29 @@ Promoting a package is an edit to that list and to the package's `vitest.config.
 Historical plans and specs under `docs/superpowers/` still say there are six high-bar packages; they
 record what was true when they were written and are left alone.
 
+Three live places repeated the list and all three were wrong at once. This file and `CLAUDE.md`
+went on naming four packages after the flip (#489) added `@waitron/store` and made it five;
+`packages/bookings/vitest.config.ts` asserted "the owner's six high-bar packages". The enumeration is
+gone from all three rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES`
+away, and a guard over prose would fail on rewording that changed nothing. Worth noting how the third
+was found: the sweep used the package names and the two bar strings as its keys, and the key that
+finds bookings is the word "six".
+
+The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
+`packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
+them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
+`.ts` file under `scripts/` but one is a guard SUITE, which Vitest leaves out of its own table
+whatever `coverage.include` says; the exception is `scripts/dev-server-proxy.ts`, and the T3
+subsection below says what it costs to leave it where it is.
+
 ### The first promotion — measured 2026-09-23
 
 `pnpm -r --no-bail --workspace-concurrency=4 test:coverage` on `9cd2fda58`: green in all 46 members
 that run coverage, 1,066 test files and 13,811 tests. Every member's
 `coverage/coverage-summary.json` was read, and none holds a path outside its own package directory
 (the sibling-prefix leak described below). **21 packages cleared `98/98/98/95` on all four metrics
-and were promoted together**, joining the five already there: `composition`, `country`,
+and were promoted together**, joining the five already there — as measured then;
+`HIGH_BAR_PACKAGES` is authoritative from here on: `composition`, `country`,
 `country-es`, `country-gb`, `country-packs`, `credentials`, `dashboard-modules`, `diagnostics`,
 `fiscal`, `layouts`, `membership`, `migrations`, `module`, `purchasing`, `recipes`, `reporting`,
 `scheduler`, `shared`, `ui`, `workforce` and `workforce-es`. The nearest to its new bar is
@@ -135,22 +152,10 @@ The 20 still under it, with the metric furthest below its bar — `printing` (fu
 `media` (branches, 7.80) and `venue-service` (branches, 8.07). These are one day's figures, not a
 standing list: the package's own `test:coverage` table is the receipt for any of them.
 
-Three live places repeated the list and all three were wrong at once. This file and `CLAUDE.md`
-went on naming four packages after the flip (#489) added `@waitron/store` and made it five;
-`packages/bookings/vitest.config.ts` asserted "the owner's six high-bar packages". The enumeration is
-gone from all three rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES`
-away, and a guard over prose would fail on rewording that changed nothing. Worth noting how the third
-was found: the sweep used the package names and the two bar strings as its keys, and the key that
-finds bookings is the word "six".
-
-The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
-`packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
-them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
-`.ts` file under `scripts/` but one is a guard SUITE, which Vitest leaves out of its own table
-whatever `coverage.include` says; the exception is `scripts/dev-server-proxy.ts`, and the subsection
-below says what it costs to leave it where it is.
-
 ### What the storage switch did to the bars — measured 2026-09-23 (task T3)
+
+Recorded before the owner's 2026-09-23 decision: which package holds which bar below is as it
+stood then, before the first promotion above.
 
 **No bar moved, and the reason is that the workspace did not shrink.** Both whole-tree runs were
 taken on `c33a4bc11`, T2's backlog pointer: `pnpm -r test:coverage` green in all 46 members that run
@@ -248,7 +253,8 @@ dev tooling rather than to a coverage bar, which is why T3 did not make it. The 
 considering, and not taken here because it is a refactor rather than a bar decision, is to move the
 file into a package where its coverage would count.
 
-**Two questions were left for the owner rather than decided here**, because both would change the
+**Two questions were left for the owner rather than decided here** — answered 2026-09-23: every
+package to `98/98/98/95`, see the top of this section. Both would change the
 basis of the 2026-09-05 split, which is consequence — the fiscal core, the data layer — and not how
 well a package happens to be covered today. They are in this task's pull request with the
 numbers attached: whether to promote the packages that now clear `98/98/98/95` on all four metrics,

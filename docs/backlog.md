@@ -2000,6 +2000,16 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **Every package to the high coverage bar, `98/98/98/95` — IN PROGRESS (owner decision
+  2026-09-23).** The first promotion is done: every package that already cleared all four metrics
+  on 2026-09-23 was promoted in one change, 21 of them. Each package still under the bar gets tests
+  in a pull request of its own and is promoted in the same change; when none is left at the floor,
+  the floor is retired from `scripts/coverage-thresholds.test.ts`, `CLAUDE.md` §2 and the developer
+  docs. Coverage rises only through tests that assert behaviour, never an exclude or a lowered bar.
+  Which packages are still under it: `HIGH_BAR_PACKAGES` against the workspace; the starting figures
+  are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first promotion — measured
+  2026-09-23*.
+
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
   pattern that looks for a slash-star opener anywhere in the raw text, so a glob path written
@@ -3346,17 +3356,14 @@ and the answer is that **the storage switch did not shrink the workspace**: non-
 the per-tenant PostgreSQL cluster. It still clears the floor by 7.7 points on statements, and the
 other three (`recipes`, `purchasing`, `workforce-es`) are at 100% on all four metrics. The numbers, the two traps that were checked rather than assumed, and
 the one source file that turns out to be measured by no coverage table at all are in
-[ci-and-gates.md](developers/ci-and-gates.md) → *Coverage thresholds are split by package*.
+[ci-and-gates.md](developers/ci-and-gates.md) → *What the storage switch did to the bars*.
 
 **The two coverage questions T3 left open are ANSWERED (owner, 2026-09-23): every package goes to
 the high bar, `98/98/98/95`.** T3 had asked whether to promote the packages that already cleared it,
 and whether to raise the floor's functions minimum of 85, which no package came within six points
 of. The owner chose the whole bar over raising only the functions minimum to 95 or to 90, which
-retires the 2026-09-05 split "by consequence". **The first promotion is done**: 21 packages that
-already cleared all four metrics were promoted together, making 26 of the 46 members that run
-coverage. The other 20 get tests one package per pull request, each promoted as it reaches the bar,
-and the floor is retired when none is left on it. Figures and the list of the 20 are in
-[ci-and-gates.md](developers/ci-and-gates.md) → *The first promotion — measured 2026-09-23*.
+retires the 2026-09-05 split by consequence. The first promotion is done, and the rest of the work
+is tracked in **B9. CI and test infra** → *Every package to the high coverage bar*.
 
 **What T2's review wave found, and it is the reason the run-it seat keeps its seat — OPEN as a
 lesson, nothing left to fix.** `is_production` in `deploy/waitron.sh` **failed OPEN**. It read the
@@ -3544,6 +3551,8 @@ conflict.
   [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
 - **Comments carry invariants, not history** (CLAUDE.md §1). The coverage bar is negotiable with a
   reason.
+- **Every package holds the high coverage bar, `98/98/98/95`** (owner, 2026-09-23), superseding the
+  2026-09-05 split that reserved it for the fiscal core and the data layer. Progress: B9.
 
 ---
 
@@ -3895,8 +3904,9 @@ it: a worker limit is still a per-package call, and the reason that is left is t
 `@vitest/coverage-v8` cross-fork branch-merge artifact, which needs `maxWorkers: 1` where a small
 package runs under `pnpm -r` oversubscription — `packages/payments` carries the worked reasoning.
 `packages/db` keeps `maxWorkers: 4`, and its own comment says the cap now guards nothing it can name.
-Either way a new package that copies one of those configs must set the `90/90/85/85` floor
-(CLAUDE.md §2), or `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
+Either way a new package that copies one of those configs must either hold `98/98/98/95` and be
+added to `HIGH_BAR_PACKAGES`, or set the `90/90/85/85` floor until it is promoted (CLAUDE.md §2) —
+anything else and `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
