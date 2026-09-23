@@ -1,11 +1,13 @@
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, checkFailed, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { isAppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   clearPersonPin,
+  createPerson,
   deactivatePerson,
   invitePerson,
   listPersons,
@@ -15,7 +17,14 @@ import {
 } from "./staff.js";
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
-import { codeOf, openManagementSession, seedPerson, seedTill } from "../test/fixtures.js";
+import type { PersonRoleValue } from "./permissions.js";
+import {
+  codeOf,
+  openManagementSession,
+  openSession,
+  seedPerson,
+  seedTill,
+} from "../test/fixtures.js";
 
 // Reset per test (the default), deliberately. The last-admin guard counts every admin in the
 // database, so admins created by earlier tests would be counted too and the "only active admin"
@@ -386,5 +395,456 @@ describe("invited person lifecycle", () => {
         ),
       ),
     ).toBe("authorization.not_permitted");
+  });
+});
+
+async function sessionEndedAt(sessionId: string): Promise<string | null> {
+  const rows = await suite.db.execute<{ ended_at: string | null }>(
+    sql`select ended_at from sessions where id = ${sessionId}`,
+  );
+  return rows.rows[0]!.ended_at;
+}
+
+async function statusOf(personId: string): Promise<string> {
+  const rows = await suite.db.execute<{ status: string }>(
+    sql`select status from persons where id = ${personId}`,
+  );
+  return rows.rows[0]!.status;
+}
+
+/** An active staff member with a login email and an open till session. */
+async function seedStaffWithSession(
+  email: string,
+): Promise<{ personId: string; tillSessionId: string }> {
+  const personId = await seedPerson(suite.db, "staff");
+  await suite.db.execute(sql`update persons set email = ${email} where id = ${personId}`);
+  const tillId = await seedTill(suite.db);
+  const tillSessionId = await openSession(suite.db, tillId, personId);
+  return { personId, tillSessionId };
+}
+
+function details(
+  sessionId: string,
+  personId: string,
+  overrides: Partial<Parameters<typeof updatePersonDetails>[1]> = {},
+): Parameters<typeof updatePersonDetails>[1] {
+  return {
+    managementSessionId: sessionId,
+    personId,
+    displayName: "Edited",
+    firstNames: "Edited",
+    lastNames: "Person",
+    telephone: null,
+    email: "edited@example.com",
+    role: "staff",
+    status: "active",
+    ...overrides,
+  };
+}
+
+const MISSING_ID = "00000000-0000-4000-8000-000000000000";
+
+describe("updatePersonDetails refusals and side effects", () => {
+  it("refuses an edit to a person who does not exist", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      run((tx) => updatePersonDetails(tx, details(sessionId, MISSING_ID))),
+    ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
+  });
+
+  it("refuses to move a Pending account straight to Active", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "staff", "pending");
+    expect(
+      await codeOf(() =>
+        run((tx) => updatePersonDetails(tx, details(sessionId, target, { status: "active" }))),
+      ),
+    ).toBe("person.transition_invalid");
+    expect(await statusOf(target)).toBe("pending");
+  });
+
+  it("keeps the email-verified stamp when the address is unchanged", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId } = await seedStaffWithSession("kept@example.com");
+    await suite.db.execute(
+      sql`update persons set email_verified_at = '2026-09-01T00:00:00.000Z' where id = ${personId}`,
+    );
+    await run((tx) =>
+      updatePersonDetails(tx, details(sessionId, personId, { email: "kept@example.com" })),
+    );
+    const rows = await suite.db.execute<{ email_verified_at: string | null }>(
+      sql`select email_verified_at from persons where id = ${personId}`,
+    );
+    expect(rows.rows).toEqual([{ email_verified_at: "2026-09-01T00:00:00.000Z" }]);
+  });
+
+  it("leaves the person's sessions open when neither the address nor the status changes", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, tillSessionId } = await seedStaffWithSession("same@example.com");
+    await run((tx) =>
+      updatePersonDetails(
+        tx,
+        details(sessionId, personId, { displayName: "Renamed", email: "same@example.com" }),
+      ),
+    );
+    expect(await sessionEndedAt(tillSessionId)).toBeNull();
+  });
+
+  it("ends the person's sessions when only the status changes", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, tillSessionId } = await seedStaffWithSession("same@example.com");
+    await run((tx) =>
+      updatePersonDetails(
+        tx,
+        details(sessionId, personId, { email: "same@example.com", status: "suspended" }),
+      ),
+    );
+    expect(await sessionEndedAt(tillSessionId)).toEqual(expect.any(String));
+  });
+
+  it("lets a manager edit the only active admin's details when role and status stay the same", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const admin = await seedPerson(suite.db, "admin");
+    await run((tx) =>
+      updatePersonDetails(
+        tx,
+        details(sessionId, admin, { displayName: "Only admin", role: "admin", status: "active" }),
+      ),
+    );
+    const rows = await suite.db.execute<{ display_name: string; role: string; status: string }>(
+      sql`select display_name, role, status from persons where id = ${admin}`,
+    );
+    expect(rows.rows).toEqual([{ display_name: "Only admin", role: "admin", status: "active" }]);
+  });
+});
+
+describe("deactivatePerson refusals", () => {
+  it("refuses a person who does not exist", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId: MISSING_ID })),
+    ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
+  });
+
+  it("refuses to let a manager deactivate themselves, whatever the case of the id", async () => {
+    const { sessionId, personId } = await openManagementSession(suite.db, "manager");
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          deactivatePerson(tx, {
+            managementSessionId: sessionId,
+            personId: personId.toUpperCase(),
+          }),
+        ),
+      ),
+    ).toBe("person.self_deactivation");
+    expect(await statusOf(personId)).toBe("active");
+  });
+
+  it("refuses to deactivate the only active admin", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const admin = await seedPerson(suite.db, "admin");
+    expect(
+      await codeOf(() =>
+        run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId: admin })),
+      ),
+    ).toBe("person.last_admin");
+    expect(await statusOf(admin)).toBe("active");
+  });
+
+  it("deactivates an admin while another active admin remains", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const admin = await seedPerson(suite.db, "admin");
+    await run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId: admin }));
+    expect(await statusOf(admin)).toBe("suspended");
+  });
+
+  it("does nothing to an account that is already inactive, its sessions included", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, tillSessionId } = await seedStaffWithSession("inactive@example.com");
+    await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
+    await run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId }));
+    expect(await statusOf(personId)).toBe("suspended");
+    expect(await sessionEndedAt(tillSessionId)).toBeNull();
+  });
+});
+
+describe("clearPersonPin refusals", () => {
+  it("refuses a person who does not exist", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      run((tx) => clearPersonPin(tx, { managementSessionId: sessionId, personId: MISSING_ID })),
+    ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
+  });
+});
+
+describe("resetPersonLogin refusals", () => {
+  it("refuses a person who does not exist", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: MISSING_ID })),
+    ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
+  });
+
+  it("refuses to reset the only active admin", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const admin = await seedPerson(suite.db, "admin");
+    expect(
+      await codeOf(() =>
+        run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: admin })),
+      ),
+    ).toBe("person.last_admin");
+    expect(await statusOf(admin)).toBe("active");
+  });
+
+  it("resets an admin while another active admin remains", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const admin = await seedPerson(suite.db, "admin");
+    await run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: admin }));
+    expect(await statusOf(admin)).toBe("pending");
+  });
+});
+
+describe("reactivatePersonForInvitation refusals", () => {
+  it("refuses a person who does not exist", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      run((tx) =>
+        reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: MISSING_ID }),
+      ),
+    ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
+  });
+
+  it("refuses an account that is not inactive", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "staff");
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: target }),
+        ),
+      ),
+    ).toBe("person.transition_invalid");
+    expect(await statusOf(target)).toBe("active");
+  });
+});
+
+describe("invitePerson required text", () => {
+  it.each(["displayName", "firstNames", "lastNames"] as const)(
+    "refuses a blank %s, naming the field",
+    async (field) => {
+      const { sessionId } = await openManagementSession(suite.db, "admin");
+      await expect(
+        run((tx) =>
+          invitePerson(tx, {
+            managementSessionId: sessionId,
+            displayName: "Blank",
+            firstNames: "Blank",
+            lastNames: "Field",
+            telephone: null,
+            role: "staff",
+            email: "blank@example.com",
+            [field]: "   ",
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "profile.invalid", params: { field } });
+    },
+  );
+});
+
+/**
+ * A row that lands between a write path's availability pre-check and its write.
+ *
+ * Writes are serialised one transaction at a time per venue file, so no second writer can land in
+ * that gap for real; a `before` trigger on `persons` is how these cases put a colliding row there
+ * and get the engine's own refusal back from the write under test. The planted row is `Racer`,
+ * `racer@example.com`, active. The trigger text is constant: SQLite binds no value inside a trigger
+ * body. It is dropped in `finally` because the per-test reset recreates only the triggers the
+ * migrations installed and leaves any other in place.
+ */
+const PLANT_RACER = {
+  insert: "before insert",
+  update: "before update",
+} as const;
+
+async function withRacerPlanted<T>(
+  event: keyof typeof PLANT_RACER,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await suite.db.execute(
+    sql.raw(`create trigger tmp_plant_racer ${PLANT_RACER[event]} on persons
+      when new.id <> 'racer' and not exists (select 1 from persons where id = 'racer')
+      begin
+        insert into persons
+          (id, display_name, display_name_folded, email, email_folded, role, status, created_at)
+        values
+          ('racer', 'Racer', 'racer', 'racer@example.com', 'racer@example.com', 'staff', 'active',
+           '2026-09-23T00:00:00.000Z');
+      end`),
+  );
+  try {
+    return await fn();
+  } finally {
+    await suite.db.execute(sql`drop trigger tmp_plant_racer`);
+  }
+}
+
+async function personCount(): Promise<number> {
+  const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from persons`);
+  return rows.rows[0]!.n;
+}
+
+describe("a colliding row that lands after the pre-check", () => {
+  it("invitePerson reports a display-name collision as person.display_name_taken", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const before = await personCount();
+    await expect(
+      withRacerPlanted("insert", () =>
+        run((tx) =>
+          invitePerson(tx, {
+            managementSessionId: sessionId,
+            displayName: "Racer",
+            firstNames: "Late",
+            lastNames: "Comer",
+            telephone: null,
+            role: "staff",
+            email: "late@example.com",
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "person.display_name_taken",
+      params: { displayName: "Racer" },
+    });
+    expect(await personCount()).toBe(before);
+  });
+
+  it("invitePerson reports a login-email collision as person.email_taken", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      withRacerPlanted("insert", () =>
+        run((tx) =>
+          invitePerson(tx, {
+            managementSessionId: sessionId,
+            displayName: "Late comer",
+            firstNames: "Late",
+            lastNames: "Comer",
+            telephone: null,
+            role: "staff",
+            email: " Racer@Example.com ",
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "person.email_taken", params: { email: "racer@example.com" } });
+  });
+
+  it("invitePerson passes a refusal that is not a collision through untranslated", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const error = await captureError(() =>
+      run((tx) =>
+        invitePerson(tx, {
+          managementSessionId: sessionId,
+          displayName: "Bad role",
+          firstNames: "Bad",
+          lastNames: "Role",
+          telephone: null,
+          role: "owner" as PersonRoleValue,
+          email: "bad-role@example.com",
+        }),
+      ),
+    );
+    expect(isAppError(error)).toBe(false);
+    expect(checkFailed(error, "persons_role_ck")).toBe(true);
+  });
+
+  it("createPerson reports a display-name collision as person.display_name_taken", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const before = await personCount();
+    await expect(
+      withRacerPlanted("insert", () =>
+        run((tx) =>
+          createPerson(tx, {
+            managementSessionId: sessionId,
+            displayName: "Racer",
+            role: "staff",
+            pin: "5678",
+            email: "late@example.com",
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "person.display_name_taken",
+      params: { displayName: "Racer" },
+    });
+    expect(await personCount()).toBe(before);
+  });
+
+  it("createPerson reports a login-email collision as person.email_taken", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    await expect(
+      withRacerPlanted("insert", () =>
+        run((tx) =>
+          createPerson(tx, {
+            managementSessionId: sessionId,
+            displayName: "Late comer",
+            role: "staff",
+            pin: "5678",
+            email: " Racer@Example.com ",
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "person.email_taken", params: { email: "racer@example.com" } });
+  });
+
+  it("createPerson passes a refusal that is not a collision through untranslated", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const error = await captureError(() =>
+      run((tx) =>
+        createPerson(tx, {
+          managementSessionId: sessionId,
+          displayName: "Bad role",
+          role: "owner" as PersonRoleValue,
+          pin: "5678",
+          email: "bad-role@example.com",
+        }),
+      ),
+    );
+    expect(isAppError(error)).toBe(false);
+    expect(checkFailed(error, "persons_role_ck")).toBe(true);
+  });
+
+  it("updatePersonDetails reports a display-name collision as person.display_name_taken", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId } = await seedStaffWithSession("editing@example.com");
+    await expect(
+      withRacerPlanted("update", () =>
+        run((tx) =>
+          updatePersonDetails(
+            tx,
+            details(sessionId, personId, { displayName: "Racer", email: "editing@example.com" }),
+          ),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "person.display_name_taken",
+      params: { displayName: "Racer" },
+    });
+  });
+
+  it("reactivatePersonForInvitation reports a display-name collision as person.display_name_taken", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const target = await seedPerson(suite.db, "staff", "suspended");
+    await suite.db.execute(sql`update persons set display_name = 'Racer' where id = ${target}`);
+    await expect(
+      withRacerPlanted("update", () =>
+        run((tx) =>
+          reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: target }),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "person.display_name_taken",
+      params: { displayName: "Racer" },
+    });
+    expect(await statusOf(target)).toBe("suspended");
   });
 });

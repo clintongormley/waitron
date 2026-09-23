@@ -36,4 +36,18 @@ describe("TOTP secret encryption", () => {
     expect(decryptTotpSecret(`${stored}.extra`, { current })).toBeNull();
     expect(decryptTotpSecret(stored.replace(/^v1\.7\./, "v1.seven."), { current })).toBeNull();
   });
+
+  it("returns null when the ciphertext does not authenticate under the key its version names", () => {
+    // The version matches a ring member, so decryption is attempted: a different key under the same
+    // version, and an altered ciphertext under the right key, both fail the GCM tag check.
+    const stored = encryptTotpSecret("JBSWY3DPEHPK3PXP", current);
+    expect(
+      decryptTotpSecret(stored, { current: { version: 7, key: Buffer.alloc(32, 8) } }),
+    ).toBeNull();
+    const parts = stored.split(".");
+    const tampered = Buffer.from(parts[4]!, "base64url");
+    tampered[0] = tampered[0]! ^ 1;
+    parts[4] = tampered.toString("base64url");
+    expect(decryptTotpSecret(parts.join("."), { current })).toBeNull();
+  });
 });

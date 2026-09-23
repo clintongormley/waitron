@@ -86,6 +86,21 @@ describe("Google OpenID Connect state", () => {
     expect(session.personId).toBe(first);
   });
 
+  it("refuses to link a person who is not active, or who does not exist, and writes no subject", async () => {
+    const suspended = await seedPerson(suite.db, "staff", "suspended");
+    for (const personId of [suspended, "00000000-0000-4000-8000-000000000000"]) {
+      expect(
+        await codeOf(() =>
+          run((tx) => completeGoogleLink(tx, { personId, subject: "google-refused" })),
+        ),
+      ).toBe("google.invalid");
+    }
+    const linked = await suite.db.execute<{ id: string }>(
+      sql`select id from persons where google_subject = 'google-refused'`,
+    );
+    expect(linked.rows).toEqual([]);
+  });
+
   it("does not let Google bypass an enrolled Waitron authenticator", async () => {
     const personId = await seedPerson(suite.db, "staff");
     const encrypted = encryptTotpSecret("JBSWY3DPEHPK3PXP", {
