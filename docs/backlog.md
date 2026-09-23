@@ -3406,6 +3406,8 @@ CI covers both packages and the weekly mutation matrix retains both. See the
 Next, configure private package distribution and pin a release in Cloud before
 building its account screens. Cloud owns those follow-ups; no registry publication
 or Cloud screen delivery is included in this extraction.
+Read the first weekly mutation results for both UI packages after the split; this
+branch preserves the 90% gates but does not measure their new full mutation scores.
 
 
 Cloud product and infrastructure work moved to the

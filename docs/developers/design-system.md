@@ -27,6 +27,8 @@ and `inherit` are legitimate escape hatches, not chrome. This is enforced by
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
 styles`, and fails the build on violations — a new component under `src/components/` is covered
 the moment it exists, with nothing to remember to register.
+The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
+`packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
 If a token you need does not exist, add it to the token layer — do not inline a value.
 

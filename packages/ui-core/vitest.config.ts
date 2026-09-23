@@ -24,8 +24,6 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
-  // Prebundle the table directives so discovering one cannot reload an in-flight browser test.
-  optimizeDeps: { include: ["lit/directives/repeat.js", "lit/directives/class-map.js"] },
   test: {
     globals: true,
     clearMocks: false,
@@ -47,23 +45,10 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `coverage.exclude` replaces rather than merges, but Vitest 4's own default list is EMPTY
-      // (`coverageConfigDefaults.exclude` is `[]`), so the spread adds nothing today — keep it so a
-      // later non-empty default is not silently dropped. What scopes the report now is `include`
-      // above; the test files the runner ran are left out by the runner itself, not by this list.
-      // This package's own non-source surfaces: the demo/workbench app, the brand assets and their
-      // hand-run generator, and the test-only helpers that exist purely to support
-      // *.test.ts files (mount/cleanup, axe assertions).
+      // Measure the shipped controls and helpers; mounting, axe and Node-side pointer support
+      // are test infrastructure and are excluded from the artifact too.
       exclude: [
         ...coverageConfigDefaults.exclude,
-        "demo/**",
-        // Without this the hand-run generator counts as 0%-covered source and drags the package
-        // under its coverage bar — measured at 88.87% against an earlier, shorter draft of it — which
-        // would buy a test of a tool whose whole job is shelling out to a binary that is not a
-        // workspace dependency. What the exclude gives up is coverage pressure to test that tool;
-        // the property worth holding instead, that the apps' icon links and publicDir still agree
-        // with this directory, is pinned from the root project by scripts/brand-icons.test.ts.
-        "brand/**",
         "src/test-helpers.ts",
         "src/vitest-park-pointer.ts",
         "src/a11y-helpers.ts",

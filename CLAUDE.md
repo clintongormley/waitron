@@ -314,6 +314,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   words.** Only the error CODE and the LOG TAIL come from outside the image, which is why no code's
   params may carry a secret. A page edit that interpolates a caught message breaks a security
   boundary nothing outside the design states.
+  The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
+  `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md)
 

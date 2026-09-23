@@ -180,6 +180,8 @@ one place wider: `packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/u
 only, and its forbidden list includes `color()`, which design-system.md's wording omits. Where the
 two differ, the guard decides what CI does and design-system.md decides what a reviewer should ask
 for.
+The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
+`packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
 ## No hardcoded chrome
 

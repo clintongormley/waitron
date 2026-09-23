@@ -47,6 +47,15 @@ test("a packed release works in an independent browser consumer", { timeout: 170
     assert(
       !files.some((name) => /\.test\.|test-helpers|\.ts$/.test(name) && !name.endsWith(".d.ts")),
     );
+    assert.deepEqual(Object.keys(packed.exports).sort(), Object.keys(source.exports).sort());
+    for (const [entry, target] of Object.entries(packed.exports)) {
+      for (const path of typeof target === "string" ? [target] : Object.values(target)) {
+        assert(
+          files.includes(`package/${path.replace(/^\.\//, "")}`),
+          `${entry} must resolve to a packed file: ${path}`,
+        );
+      }
+    }
     await cp(join(root, "test/consumer"), dir, { recursive: true });
     const lit = JSON.parse(await readFile(join(root, "node_modules/lit/package.json"), "utf8"));
     await writeFile(
