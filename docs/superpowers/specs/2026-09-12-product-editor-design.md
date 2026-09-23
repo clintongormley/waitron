@@ -6,8 +6,8 @@ product editor and the final integration of Units, Categories and Modifiers.
 Naming decision, 2026-09-13: display `primaryCategoryId` as **Reporting Category**. Use this name
 in its label and validation messages, as confirmed in the shared design.
 
-Update, 2026-09-15, widened 2026-09-16: two parts of what follows record the original design rather
-than current behaviour.
+Update, 2026-09-15, widened 2026-09-16 and 2026-09-23: some parts of what follows record the
+original design rather than current behaviour.
 
 1. The Unit field is no longer required. A product may have no unit, which shows as **Each** and is
    never stored; the seeded "each" unit was dropped. The "Required, defaults to the existing each
@@ -21,6 +21,13 @@ than current behaviour.
    the "Variants and menu prices" section's "translated name", the public-field list's
    `name: LocalizedText`, and the paragraph about auditing the old `descriptions` field all describe
    the design before this change.
+3. (2026-09-23) Menu offers and variant prices changed. Variants now follow their product onto
+   every menu, with an optional per-menu price override for each (Task 3, #528), and a menu's price
+   may be left empty, meaning the product's own price. So the paragraph beginning "Product prices
+   are defaults for authoring menu offers" — `menu_items.grossPrice` as always the explicit selling
+   price, each offer recording its available variant IDs and an explicit price per variant, and a
+   new variant needing publication on an offer — describes the design before this change. See
+   [the one-product model, §15.3](2026-09-18-one-product-model-design.md).
 
 The current product-editor design is `2026-09-15-product-editor-rework-design.md`.
 

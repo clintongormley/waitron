@@ -9,6 +9,7 @@ import {
   createMenuSection,
   listMenuOffers,
   listProducts,
+  updateMenuItem,
   updateProduct,
 } from "./operations.js";
 import {
@@ -365,6 +366,25 @@ it("prices a required variant at its menu price, falling back to its own", async
   await expect(run((tx) => resolveMenuVariant(tx, offerId, small!.id))).rejects.toMatchObject({
     code: "product.unavailable",
   });
+});
+
+it("charges a blank menu price at the product's own price, with or without a variant", async () => {
+  // The product's own price (9.00) differs from the menu's (8.00), so reading the wrong one fails.
+  const [inherits, owns] = await run((tx) =>
+    setProductVariants(
+      tx,
+      productId,
+      [{ ...variant("Small", "2.00"), unitPrice: null }, variant("Large", "6.00")],
+      "en",
+    ),
+  );
+  expect((await run((tx) => resolveMenuVariant(tx, offerId, inherits!.id))).unitPrice).toBe("8.00");
+  await run((tx) => updateMenuItem(tx, menuId, offerId, { grossPrice: null }));
+  expect((await run((tx) => resolveMenuVariant(tx, offerId, inherits!.id))).unitPrice).toBe("9.00");
+  expect((await run((tx) => resolveMenuVariant(tx, offerId, owns!.id))).unitPrice).toBe("6.00");
+  // With every variant removed the product sells as itself, at its own price.
+  await run((tx) => setProductVariants(tx, productId, [], "en"));
+  expect((await run((tx) => resolveMenuVariant(tx, offerId, null))).unitPrice).toBe("9.00");
 });
 
 it("refuses a variant of a product that is Active but Unavailable", async () => {

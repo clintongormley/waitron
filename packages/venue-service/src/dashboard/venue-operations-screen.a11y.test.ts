@@ -89,6 +89,7 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             name: "Wine by the glass",
             customerName: null,
             grossPrice: "4.50",
+            unitPrice: "4.50",
             variants: [
               {
                 id: "v2",
@@ -117,6 +118,68 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[name="offer-variant-offered-v2"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("describes a blank menu price by its hint, with the product's price as placeholder", async () => {
+    setLocale("en");
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
+    el.api = {
+      load: vi.fn().mockResolvedValue({
+        readiness: [],
+        departments: [],
+        zones: [],
+        routes: [],
+        hours: [],
+        zoneMenus: [],
+        menus: [{ id: "m1", name: "Bar", active: true }],
+        categories: [],
+        stations: [],
+        floorZones: [],
+        products: [
+          {
+            id: "p1",
+            name: "Olives",
+            customerName: null,
+            pricingUnit: "each",
+            unitPrice: "3.00",
+            active: true,
+            variants: [],
+          },
+        ],
+        offers: [
+          {
+            id: "i1",
+            menuId: "m1",
+            productId: "p1",
+            sectionId: "s1",
+            sectionName: { en: "Snacks" },
+            name: "Olives",
+            customerName: null,
+            grossPrice: null,
+            unitPrice: "3.00",
+            variants: [],
+          },
+        ],
+        sections: [],
+      }),
+    } as unknown as VenueServiceApi;
+    host.append(el);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="menus"]')!.click();
+    await el.updateComplete;
+    const edit = findDeep(el.shadowRoot!, '[data-test="edit-offer-i1"]')!;
+    edit.closest("wt-row-actions")?.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    edit.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const price = el.shadowRoot!.querySelector<HTMLInputElement>('[name="offer-price-i1"]')!;
+    expect(price.value).toBe("");
+    expect(price.placeholder).toBe("3.00");
+    expect(el.shadowRoot!.querySelector('[data-hint="offer-price-i1"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

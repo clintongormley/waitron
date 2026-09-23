@@ -2947,6 +2947,73 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     ).toBe(204);
   });
 
+  it("the two menu-item writes take a blank grossPrice as the product's own price", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Blank menu price catalogue");
+    // The product's own price is 1.00, so a blank menu price must charge exactly that.
+    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
+      body: { name: { es: "Sección" }, displayOrder: 0 },
+    });
+    const sectionId = ((await section.json()) as { id: string }).id;
+    const items = `/management-api/catalogues/${catalogueId}/items`;
+    const offer = async () =>
+      (
+        (await (
+          await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
+        ).json()) as { id: string; grossPrice: string | null; unitPrice: string }[]
+      )[0]!;
+
+    const created = await send(app, "POST", items, {
+      body: { productId, sectionId, grossPrice: null, displayOrder: 0 },
+    });
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ grossPrice: null });
+    expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
+    const itemId = (await offer()).id;
+
+    expect(
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: "2.50" } })).status,
+    ).toBe(204);
+    expect(await offer()).toMatchObject({ grossPrice: "2.50", unitPrice: "2.50" });
+    expect(
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: null } })).status,
+    ).toBe(204);
+    expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
+
+    // A value of the wrong type is still refused on both routes, and changes nothing.
+    const wrongPatch = await send(app, "PATCH", `${items}/${itemId}`, {
+      body: { grossPrice: 2.5 },
+    });
+    expect(wrongPatch.status).toBe(400);
+    expect(await wrongPatch.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    });
+    const wrongCreate = await send(app, "POST", items, {
+      body: { productId, sectionId, grossPrice: 2.5, displayOrder: 0 },
+    });
+    expect(wrongCreate.status).toBe(400);
+    expect(await wrongCreate.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    });
+    expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
+
+    // Only an explicit null means blank: a create that leaves the field out is refused, and adds
+    // no offer. A product not yet on the menu, so nothing but the missing field can refuse it.
+    const otherProductId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const absentCreate = await send(app, "POST", items, {
+      body: { productId: otherProductId, sectionId, displayOrder: 1 },
+    });
+    expect(absentCreate.status).toBe(400);
+    expect(await absentCreate.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    });
+    const offers = (await (
+      await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
+    ).json()) as { id: string }[];
+    expect(offers.map((row) => row.id)).toEqual([itemId]);
+  });
+
   it("leaves a malformed price to the refusal it already had, so no shipped code changes meaning", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Malformed price catalogue");

@@ -6,7 +6,7 @@ import { validateContentTranslations } from "./content-languages.js";
 import { menuItems, menuSections } from "./schema/menu.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
-import { resolveOfferPrice } from "./offer-price.js";
+import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
 import {
   effectiveProductColumns as effective,
@@ -58,9 +58,6 @@ function blankInherited(written: object): Partial<Record<(typeof INHERITED_KEYS)
     INHERITED_KEYS.filter((key) => !(key in written)).map((key) => [key, null]),
   );
 }
-
-const priceOrNull = (cents: number | null): string | null =>
-  cents === null ? null : centsToDecimal(cents);
 
 /**
  * The product exists and is not itself a variant; returns the catalogue its variants are created in.
@@ -364,7 +361,7 @@ export async function resolveMenuVariant(
       offerAvailable: menuItems.active,
       menuAvailable: catalogues.active,
       sectionAvailable: menuSections.active,
-      unitPrice: menuItems.grossPrice,
+      menuPrice: menuItems.grossPrice,
       productPrice: effective.unitPrice,
     })
     .from(menuItems)
@@ -395,7 +392,13 @@ export async function resolveMenuVariant(
       variantName: null,
       variantCustomerName: null,
       variantKitchenName: null,
-      unitPrice: centsToDecimal(offer.unitPrice),
+      // No variant: the chain's last two steps, this menu's price else the product's own.
+      unitPrice: resolveOfferPrice({
+        variantMenuPrice: null,
+        variantPrice: null,
+        parentMenuPrice: priceOrNull(offer.menuPrice),
+        parentPrice: centsToDecimal(offer.productPrice),
+      }),
     };
   const variant = variants.find((v) => v.id === variantId);
   const [override] = await tx
@@ -418,9 +421,9 @@ export async function resolveMenuVariant(
     variantCustomerName: variant.customerName,
     variantKitchenName: variant.kitchenName,
     unitPrice: resolveOfferPrice({
-      variantMenuPrice: override?.price == null ? null : centsToDecimal(override.price),
+      variantMenuPrice: priceOrNull(override?.price ?? null),
       variantPrice: variant.unitPrice === null ? null : decimal(variant.unitPrice),
-      parentMenuPrice: centsToDecimal(offer.unitPrice),
+      parentMenuPrice: priceOrNull(offer.menuPrice),
       parentPrice: centsToDecimal(offer.productPrice),
     }),
   };

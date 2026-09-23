@@ -14,7 +14,7 @@ export const menuItemVariantOverrides = table(
     menuItemId: id("menu_item_id").notNull(),
     productId: id("product_id").notNull(),
     variantId: id("variant_id").notNull(),
-    // Null follows the variant's own price, then the parent's price on this menu.
+    // Null follows the variant's own price, then the parent's on this menu, then the parent's own.
     price: money("price"),
     offered: flag("offered").notNull().default(true),
   },

@@ -839,10 +839,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (typeof body.sectionId !== "string") {
         throw new AppError("management.request_invalid", { field: "sectionId" });
       }
-      if (typeof body.grossPrice !== "string") {
+      // Required on create, and null is a value: a blank menu price is the product's own price.
+      if (typeof body.grossPrice !== "string" && body.grossPrice !== null) {
         throw new AppError("management.request_invalid", { field: "grossPrice" });
       }
-      refuseNegativePrice(body.grossPrice, "grossPrice");
+      if (body.grossPrice !== null) refuseNegativePrice(body.grossPrice, "grossPrice");
       const productId = requireUuidParam(body.productId, "ProductId");
       const sectionId = requireUuidParam(body.sectionId, "MenuSectionId");
       const displayOrder = parseDisplayOrder(body.displayOrder);
@@ -851,7 +852,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           menuId,
           productId,
           sectionId,
-          grossPrice: body.grossPrice as string,
+          grossPrice: body.grossPrice as string | null,
           ...(displayOrder === undefined ? {} : { displayOrder }),
         }),
       );
@@ -865,7 +866,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      if (body.grossPrice !== undefined) {
+      if (body.grossPrice !== undefined && body.grossPrice !== null) {
         if (typeof body.grossPrice !== "string") {
           throw new AppError("management.request_invalid", { field: "grossPrice" });
         }
@@ -874,7 +875,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const displayOrder = parseDisplayOrder(body.displayOrder);
       await gated(sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
-          ...(body.grossPrice === undefined ? {} : { grossPrice: body.grossPrice as string }),
+          ...(body.grossPrice === undefined
+            ? {}
+            : { grossPrice: body.grossPrice as string | null }),
           ...(displayOrder === undefined ? {} : { displayOrder }),
         }),
       );

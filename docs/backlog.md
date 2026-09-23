@@ -455,8 +455,10 @@ onto every menu, prices fall back from the most specific one set, and Active and
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
 (`~/waitron-campaign-b`), which is working through it task by task; Tasks 1, 2 and 3 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
-(measured): Task 1's migration aborts outright, and Task 4's reports success while emptying the
-menus' extras attachments and variant price overrides. So every dev venue needs
+(measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
+the menus' extras publications, their per-item extras prices and the variant price overrides, or,
+once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
+does not boot. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
 Task 3's migration drops the per-menu variant table, `menu_item_variants`
 (`packages/catalogue/drizzle/0001_drop_menu_item_variants.sql`), and nothing but the configuration
@@ -523,6 +525,27 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
 - **The dashboard's variant form turns a missing variant price into `0.00`**
   (`apps/dashboard/src/widgets/variant-form.ts`). Nothing reaches it today, because the product-editor
   save still refuses a variant with no price; Task 7 settles both ends.
+
+**Task 4: a blank menu price follows the product's own price.** A menu row's price
+(`menu_items.gross_price`) may be left empty, meaning the product's own price — the last step of the
+price chain, for every product on a menu, with variants or without. The menu screen shows the
+product's price as the empty field's hint and saves an emptied field as blank. **It cannot upgrade a
+venue that holds data, and part of the damage is silent.** Making the column nullable rebuilds
+`menu_items` (`packages/catalogue/drizzle/0003_menu_price_nullable.sql`), and inside the migrator's
+transaction foreign keys stay on, so dropping the old table acts on every row pointing at it.
+Measured 2026-09-23 through `applyMigrations` on Node v26.7.0, on a venue migrated with `main`'s
+catalogue set and holding one menu offer with an extras publication, one per-item extras override
+and one variant price override, then migrated with this branch's sets: with no order line naming the
+offer the upgrade reports success and empties `menu_item_extra_lists`, `menu_item_extra_items` and
+`menu_item_variant_overrides` (1 → 0 each, no error); with one `working_line_contexts` row naming
+the offer it fails at `DROP TABLE menu_items` with `FOREIGN KEY constraint failed` and rolls back,
+so the box does not boot. The control — the same row naming a menu item that does not exist — let
+the upgrade through. A paid order keeps that row (measured 2026-09-23: after a completed walk-up
+cash sale from a menu offer, its `working_line_contexts` row was still there on a `settled` order),
+so any venue that has sold from a menu fails to boot, not only one with an order still open. A
+fresh database migrates cleanly. So **every dev venue needs
+`wa-wt reset demo <name>`, and any provisioned box must be wiped**, the owner's home box included,
+once this lands.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated

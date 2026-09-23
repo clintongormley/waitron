@@ -547,6 +547,23 @@ describe("recordTillSale", () => {
     expect(prep.rows).toEqual([{ count: 1 }]);
   });
 
+  // Spec §15.3's last step: a menu that sets no price sells the product at its own (1.50), never
+  // at the old menu price (2.25) and never at nothing.
+  it("files a walk-up from a blank menu price at the product's own price", async () => {
+    const { cfg, zoneId, waterOfferId } = await setupVenue();
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`update menu_items set gross_price = null where id = ${waterOfferId}`),
+    );
+
+    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, quantity: "2" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(result.total).toBe("3.00");
+  });
+
   it("walk-up: prices the sent basket authoritatively and files a chained immediate cash sale", async () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)

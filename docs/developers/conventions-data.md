@@ -928,6 +928,31 @@ afterwards, while a trigger on another table whose body reads `products` failed 
 `error in trigger t_body: no such table: main.products`. What that means for venues is in
 `docs/backlog.md`, Track A, the paragraph opening **Task 1 (`feat/variants-parent-id`)**.
 
+**A drizzle table rebuild runs with foreign keys ON, so its `DROP TABLE` acts on every row that
+points at the table.** Drizzle rebuilds a SQLite table to change a column's nullability, with the
+sequence `PRAGMA foreign_keys=OFF`, create `__new_<table>`, copy the rows, `DROP TABLE <table>`,
+rename, `PRAGMA foreign_keys=ON`. SQLite ignores `PRAGMA foreign_keys` inside an open transaction,
+and the migrator runs each set inside one. Measured 2026-09-23 on `node:sqlite` (Node v26.7.0), with
+that sequence on a parent holding one row and a child holding one row that points at it: inside
+`begin … commit`, an `ON DELETE CASCADE` child went from 1 row to 0 with no error, while a child
+with no `ON DELETE` action, and separately one with `ON DELETE RESTRICT`, failed the drop itself with
+`FOREIGN KEY constraint failed`. The control, the same sequence outside a transaction, kept the
+child row in all three cases and raised nothing. Two rebuilds in
+the variants plan hit it. Task 1's rebuild of `products` (core's
+`packages/db/drizzle/0003_variant_inherited_nullable.sql`) cascade-deleted `product_categories` on a
+venue without the media triggers (the plan,
+`docs/superpowers/plans/2026-09-23-variants-as-products.md`, the section "Task 1 cannot upgrade an
+existing venue"). Task 4's rebuild of `menu_items`
+(`packages/catalogue/drizzle/0003_menu_price_nullable.sql`), measured 2026-09-23 through
+`applyMigrations`, emptied `menu_item_extra_lists`, `menu_item_extra_items` and
+`menu_item_variant_overrides` while reporting success, and failed with
+`FOREIGN KEY constraint failed` when a `working_line_contexts` row named the offer. A paid order
+keeps such a row (measured 2026-09-23: after a completed walk-up cash sale from a menu offer, its
+`working_line_contexts` row was still there on a `settled` order), so that failure is any venue that
+has sold from a menu. Today this costs
+nothing beyond a reset, while the rule of no data-migration code until production stands. Once a
+venue is live, a rebuild has to carry the child rows across by hand.
+
 `scripts/module-graph-honesty.test.ts` derives both edge kinds from the SQL text, and says so. **Two
 hedges from its own header belong here, because a failing test can never restore them.** The
 `EXECUTE (FUNCTION|PROCEDURE)` detector was DELETED as dead syntax — SQLite has no functions, so
