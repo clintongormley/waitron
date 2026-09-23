@@ -60,6 +60,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/module",
   "@waitron/print-agent-app",
   "@waitron/printing",
+  "@waitron/provisioning",
   "@waitron/purchasing",
   "@waitron/recipes",
   "@waitron/reporting",

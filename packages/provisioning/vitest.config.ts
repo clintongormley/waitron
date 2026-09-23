@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // Headroom for the suites that open and migrate a venue directory — the two `useVenueDb`
+    // Headroom for the suites that open and migrate a venue directory — the `useVenueDb`
     // callers, and `schema-ahead.migrate.test.ts`, which owns its own directory. `hookTimeout`
     // below bounds a hook that passes no timeout of its OWN; a hook given one overrides this config
     // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). So it does not bound
@@ -27,7 +27,7 @@ export default defineConfig({
       // process exit code — is verifiable only by running the built bundle, which the plan does
       // rather than a test.
       exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/index.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });
