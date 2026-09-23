@@ -83,16 +83,16 @@ export interface CliDeps {
  * fallback and the error that reports nothing supplied it cannot drift apart. */
 const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
 
-/** The env var the admin PIN is read from. A login PIN is a secret, so — exactly like the admin
- * connection string above — it is NEVER an argv flag (`argv` is world-readable in `ps` and lands in
- * shell history): it comes from this variable or an echo-off prompt, and from nowhere else. `parse`
+/** The env var the admin PIN is read from. A login PIN is a secret, so it is NEVER an argv flag
+ * (`argv` is world-readable in `ps` and lands in shell history): it comes from this variable or an
+ * echo-off prompt, and from nowhere else. `parse`
  * declares no `--admin-pin`, so `strict: true` turns one into a parse error rather than a silent
  * acceptance. */
 const ADMIN_PIN_VARIABLE = "WAITRON_ADMIN_PIN";
 
-/** The env var the admin dashboard PASSWORD is read from. Like the PIN and the admin connection
- * string, a login secret never comes from argv (`argv` is world-readable in `ps` and lands in shell
- * history): it comes from this variable or an echo-off prompt, and from nowhere else. `parse` declares
+/** The env var the admin dashboard PASSWORD is read from. Like the PIN, a login secret never comes
+ * from argv (`argv` is world-readable in `ps` and lands in shell history): it comes from this
+ * variable or an echo-off prompt, and from nowhere else. `parse` declares
  * no `--password`/`--admin-password`, so `strict: true` turns either into a parse error. */
 const ADMIN_PASSWORD_VARIABLE = "WAITRON_ADMIN_PASSWORD";
 
@@ -176,8 +176,8 @@ function parse<T extends NonNullable<Parameters<typeof parseArgs>[0]>["options"]
  * `node dist/bin.js keyring --admin-url=postgres://admin:hunter2@h/db --password hunter2` printed
  * the key ring and exited 0. Nothing read or printed the flags, so no secret leaked out of the
  * tool — but the operator had just been told such a flag would be REFUSED, and their shell history
- * now held a connection string on the strength of that. A guarantee that holds for two commands out
- * of three is not the guarantee the documentation makes.
+ * now held a connection string on the strength of that. A guarantee that holds for every command
+ * but one is not the guarantee the documentation makes.
  *
  * `parse(argv, {})` with no declared options means every flag is unknown and every positional is
  * stray, so `strict: true` and `allowPositionals: false` reject the lot.
@@ -304,8 +304,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const adminEmail = normalizeAndValidateEmail(
       await resolveOption(values["admin-email"], "admin email: ", deps),
     );
-    // The PIN and dashboard password are SECRETS, resolved exactly as the admin connection string is:
-    // from WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD or an echo-OFF prompt, NEVER from argv
+    // The PIN and dashboard password are SECRETS, so each is read from WAITRON_ADMIN_PIN /
+    // WAITRON_ADMIN_PASSWORD or an echo-OFF prompt, NEVER from argv
     // (`readAdminPin` / `readAdminPassword`). Each is then checked against the same floor the identity
     // package enforces, through the SAME `assertPinLength` / `assertPasswordLength` — this seeds the
     // MOST-privileged account (`role='admin'`) and `hashPin` / `hashPassword` themselves validate
@@ -715,8 +715,9 @@ function assertCountry(value: string): string {
  *
  * Exported because `bin.ts` prints the SAME line for an `AppError` that escaped `runCli` entirely,
  * and it had its own copy of this template. Two implementations of "never a message" is one too
- * many when the message is what carries `CREATE ROLE … PASSWORD '<generated>'`, and `bin.ts` is on
- * the coverage-excluded side, so the copy that could drift was the one no test would catch.
+ * many when the message is the part that can carry whatever a statement put in its own text, and
+ * `bin.ts` is on the coverage-excluded side, so the copy that could drift was the one no test would
+ * catch.
  */
 export function formatAppError(error: AppError): string {
   return `${error.code} ${JSON.stringify(error.params)}`;

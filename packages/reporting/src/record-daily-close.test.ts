@@ -13,17 +13,15 @@ import { computeCloseEntryHash } from "./daily-close-hash.js";
 import { isBusinessDayConflict, recordDailyClose } from "./record-daily-close.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
-// PGlite, deliberately — and it is the RIGHT target here, not a shortcut. Everything this suite
-// asserts is DETERMINISTIC LOGIC over immutable commercial rows: the snapshot captures exactly what
-// `computeDailyClose` returns, the per-till variance arithmetic, the chain-position/`prev_entry_hash`
-// bookkeeping, the hash reproduction, and the input validation. None of it turns on the non-superuser
-// deployment role or on two writers contending — the two things PGlite cannot show (CLAUDE.md §4).
-// Those live in `record-daily-close.concurrency.test.ts` on real Postgres: the single-writer `FOR UPDATE`
-// lock, the concurrent `close.already_closed`, and the gap-free sequence under ten racing closers.
-// This mirrors `daily-close.test.ts`, which computes the same close on PGlite for the
-// same reason. The `close.already_closed` catch path is driven by a real unique violation here (the sequential
-// second close, and the raw insert that pins the refusal's table and columns) and again on
-// node-postgres in `record-daily-close.concurrency.test.ts`, where the two closers actually contend.
+// Everything this suite asserts is DETERMINISTIC LOGIC over immutable commercial rows: the snapshot
+// captures exactly what `computeDailyClose` returns, the per-till variance arithmetic, the
+// chain-position/`prev_entry_hash` bookkeeping, the hash reproduction, and the input validation.
+// Every close below is awaited before the next — there is no `Promise.all` in this file — so nothing
+// here observes two closers overlapping. That is `record-daily-close.concurrency.test.ts`, which
+// starts its closes without awaiting each other and holds the concurrent `close.already_closed` and
+// the gap-free sequence under ten racing closers. The `close.already_closed` catch path is driven by
+// a real unique violation here (the sequential second close, and the raw insert that pins the
+// refusal's table and columns) and again there, where the two closers actually contend.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -271,7 +269,8 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   });
 
   it("surfaces a sequence-key collision RAW, not masked as close.already_closed", async () => {
-    // A daily_closes_sequence_key collision cannot happen under the FOR UPDATE lock, so if one ever
+    // A daily_closes_sequence_key collision cannot happen while one write transaction runs on the
+    // venue file at a time (`withTransaction`, `packages/db/src/tenancy.ts:44`), so if one ever
     // does it is a genuine single-writer bug for a day that is NOT closed — it must propagate, never
     // be reported as "already closed". Provoke it deterministically: close day 4, rewind the head's
     // sequence_no by hand, then close a DIFFERENT day 5. That recomputes sequence 1 and collides with

@@ -15,8 +15,8 @@ export interface Tenant {
  * Reads the database's one taxpayer row by `where id = 1`, so its readers share one query instead of
  * a copy each. It is NOT the only way the row is reached, so a change made here does not reach every
  * reader: provisioning, module seeds and the configuration export each query `tenants` directly —
- * one of them for `for update`, some with no `id` predicate at all, and at least one through a
- * `cross join` rather than a `from`. That last spelling is why no single grep finds them all, and
+ * some with no `id` predicate at all, and at least one through a `cross join` rather than a `from`.
+ * That last spelling is why no single grep finds them all, and
  * why this comment names no sites — search for the ones you need rather than trusting a list here.
  *
  * Returns `null` rather than throwing when the row is absent, because callers do genuinely

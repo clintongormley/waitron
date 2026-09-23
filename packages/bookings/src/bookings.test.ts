@@ -522,8 +522,9 @@ async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
 
 // `seatBooking` opens a real TS-1 tab through `core.openTab` — the boundary the module reaches core's
 // tab verb across. In production boot binds the venue's full `TillConfig` into `core`; here `fakeCore`
-// stands in (testing/fake-core.ts), reproducing `openTab`'s observable behaviour (FOR UPDATE lock,
-// table/tab guards, the working_orders insert + back-pointer) so the assertions below are unchanged.
+// stands in (testing/fake-core.ts), reproducing `openTab`'s observable behaviour (the table and tab
+// guards, the working_orders insert + back-pointer) so the assertions below are unchanged. Not the
+// row lock the real one used to take: the fake's own header records that SQLite has none.
 // The seat cfg is a plain `BookingConfig`; the till + node the tab row needs are captured by `fakeCore`.
 describe("seatBooking", () => {
   async function setupTillVenue(): Promise<{

@@ -224,12 +224,17 @@ export interface RotationResult {
  * no-op rather than a pointless re-encryption of everything. A row deleted between the listing and
  * its re-seal is not counted at all.
  *
- * `tryGetCredential` and `putCredential` share one `withTransaction` transaction per row. It does NOT
- * make the pair atomic against a concurrent `set`: under READ COMMITTED the SELECT takes no row lock,
- * so a `set` committing between the two is overwritten by this rotation's stale value. Preventing
- * that would need `SELECT ... FOR UPDATE` inside this transaction, or REPEATABLE READ plus a retry
- * loop — deliberately absent, because `rotate` is a maintenance-window operation and "rotation without
- * downtime" is out of scope (design spec §8).
+ * `tryGetCredential` and `putCredential` share one `withTransaction` transaction per row. On
+ * PostgreSQL that did NOT make the pair atomic against a concurrent `set`: under READ COMMITTED the
+ * SELECT took no row lock, so a `set` committing between the two was overwritten by this rotation's
+ * stale value. It was accepted rather than fixed — `rotate` is a maintenance-window operation and
+ * "rotation without downtime" is out of scope (design spec §8) — and what it declined was
+ * `SELECT ... FOR UPDATE` inside the transaction, or REPEATABLE READ plus a retry loop. There is
+ * nothing to accept on this engine: `withTransaction` runs its body inside `db.withWriteLock`
+ * (`packages/db/src/tenancy.ts:44`), so one write transaction runs on the venue file at a time
+ * (`packages/store/src/write-queue.ts`) and no `set` can commit between ONE row's read and its
+ * write. Between two rows it still can — this paragraph is only about the pair inside one row's
+ * transaction.
  */
 /* Coupled to the `PURPOSES` field registry, which is worth knowing before editing either.
  *

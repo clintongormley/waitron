@@ -104,7 +104,7 @@ describe("node_membership accessors", () => {
 });
 
 describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)", () => {
-  // A separate PGlite instance (not the suite above's) so this describe's beforeEach reset is
+  // A separate `useVenueDb` database (not the suite above's) so this describe's beforeEach reset is
   // independent of the other describe's ordering — moved from apps/server/src/membership-adopt.test.ts,
   // where it exercised the same accessor before it lived here.
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });

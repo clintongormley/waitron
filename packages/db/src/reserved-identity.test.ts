@@ -21,10 +21,6 @@ import { captureError } from "./testing/errors.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// PGlite, not real Postgres: this proves the query/insert logic (a dormant node lands with its public
-// key + endorsement, the reserved series default to next_number 1, the endorsement round-trips and null
-// for a keyless node).
-
 const ENDORSEMENT: Endorsement = {
   nodeId: "22222222-2222-2222-2222-222222222222",
   publicKey: "cloudpub",

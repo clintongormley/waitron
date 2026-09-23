@@ -209,13 +209,12 @@ describe("applyVenue", () => {
   });
 
   it("writes the admin's real names and UI language onto the seeded person when the request carries them", async () => {
-    // PGlite, not the real-container sibling. CLAUDE.md §4 sends a suite to real PostgreSQL for
-    // privileges, triggers as the deployment role, or concurrency; none applies here. The insert is
-    // made by the OWNER of `persons` on both targets, so no grant separates them, and PGlite runs the
-    // real migration manifest (see the suite's `useVenueDb` options), so the nullable columns and
-    // their `is null or length > 0` checks are the real ones — a value this test stores is a value
-    // the shipped schema accepts. A distinct tenant, because seed-admin is idempotent per tenant and
-    // the suite shares one database.
+    // The suite migrates the real manifest (see its `useVenueDb` options), so the nullable columns
+    // and their `is null or length > 0` checks are the shipped ones — a value this test stores is a
+    // value the shipped schema accepts (`packages/identity/src/schema/persons.ts`, carried into
+    // `packages/identity/drizzle/0000_baseline.sql`). The distinct tax id is not what keeps this
+    // case off the other cases' rows: `useVenueDb` empties every migrated table after each test
+    // (`buildResetPlan`, `packages/db/src/testing/venue-db.ts`).
     const seedRequest = request("B31313131");
     seedRequest.admin = {
       displayName: "Clint",
