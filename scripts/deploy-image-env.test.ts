@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
@@ -374,6 +374,45 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
 });
 
 /**
+ * The `@img/sharp-libvips-*` release pnpm-lock.yaml resolves, and the libvips version it carries.
+ *
+ * The package version comes from the lockfile, which names every platform's package. The libvips
+ * version is not in the lockfile, so it comes from the `versions.json` of the package installed for
+ * THIS machine. That stands for the box's linux packages only because one sharp-libvips release
+ * carries one libvips version on every platform: checked 2026-09-24 for 1.3.3, where darwin-arm64's
+ * `versions.json` and the `./binary` export `npm view` printed for linux-x64 and linux-arm64 all
+ * name 8.18.6.
+ */
+function libvipsRelease(): { packageVersion: string; libvips: string } {
+  const lockfile = read("pnpm-lock.yaml");
+  const versions = new Set(
+    [...lockfile.matchAll(/^ {2}'@img\/sharp-libvips-[\w-]+@([^']+)':$/gm)].map((m) => m[1]!),
+  );
+  if (versions.size !== 1) {
+    throw new Error(`expected one @img/sharp-libvips-* version, found [${[...versions]}]`);
+  }
+  const [packageVersion] = [...versions] as [string];
+  for (const arch of ["x64", "arm64"]) {
+    expect(lockfile).toContain(`'@img/sharp-libvips-linux-${arch}@${packageVersion}':`);
+  }
+  const store = `${ROOT}node_modules/.pnpm`;
+  const installed = readdirSync(store).filter(
+    (dir) => dir.startsWith("@img+sharp-libvips-") && dir.endsWith(`@${packageVersion}`),
+  );
+  const libvips = new Set(
+    installed.map((dir) => {
+      const name = dir.slice(0, dir.lastIndexOf("@")).replace("+", "/");
+      const path = `${store}/${dir}/node_modules/${name}/versions.json`;
+      return (JSON.parse(readFileSync(path, "utf8")) as { vips: string }).vips;
+    }),
+  );
+  if (libvips.size !== 1) {
+    throw new Error(`expected one installed libvips version, found [${[...libvips]}]`);
+  }
+  return { packageVersion, libvips: [...libvips][0]! };
+}
+
+/**
  * libvips ships in the image as its own shared library, under LGPL-3.0-or-later. Reads TEXT: it
  * proves the files exist and the Dockerfile names them, not that the built image holds them — the
  * image-smoke step below is what looks inside the image.
@@ -392,7 +431,12 @@ describe("the box image carries libvips's licence, its notices and a written sou
     expect(lgpl).toContain("Version 3, 29 June 2007");
     expect(read("deploy/third-party/licenses/GPL-3.0.txt")).toContain("GNU GENERAL PUBLIC LICENSE");
     const offer = read("deploy/third-party/README.md");
-    expect(offer).toContain("libvips 8.18.6");
+    const { packageVersion, libvips } = libvipsRelease();
+    expect(offer).toContain(`libvips ${libvips}`);
+    expect(offer).toContain(`libvips-cpp.so.${libvips}`);
+    expect(offer).toContain(packageVersion);
+    // Every version the offer names is one of those two, so a stale one anywhere in it fails.
+    expect(new Set(offer.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(new Set([libvips, packageVersion]));
     expect(offer).toContain("info@waitron.io");
     // GPL-3.0 §6(b)'s term for a physical product, and §6(d)'s directions for a download.
     expect(offer).toMatch(/at least three years/);
