@@ -3894,7 +3894,7 @@ What the preparation tasks left, with F1's own answers where it found them:
     the two calls, because they test the converter. The seven sites in the fiscal record builders
     — `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
     which only those three use — were held back from #531 for the owner's review and are **DONE**
-    (2026-09-23, branch `chore/fiscal-builders-one-call`, on the owner's "Just do the swap without
+    (2026-09-23, PR #535, on the owner's "Just do the swap without
     me"): each helper is `decimalToX(decimal(value))` and nothing more, and the golden huella test
     in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad` passed unedited.
     #475 declined it because a helper taking a plain string "would hide that
