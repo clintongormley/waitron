@@ -324,6 +324,8 @@ now". Today they wait five minutes (`recoverStaleClaims`, `packages/fiscal-verif
 **On every start, before filing anything, the box puts every such sale back to waiting.** This is the
 reset the topology design's §5.2 requires and the prototype listed as unbuilt.
 
+**2026-09-23: the reset itself is built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it once per boot, before the first filing pass. The single-process lock below is not.
+
 **What a resend costs.** A sale AEAT already holds is answered with error 3000, and the drain resolves
 it by what AEAT holds (`drain.ts`, `handleDuplicate`): if AEAT's copy matches the sale's fingerprint
 (huella), the sale is marked accepted; if AEAT's copy is annulled, or its fingerprint differs, the sale

@@ -23,4 +23,5 @@ export const FISCAL_NONE_SLOT: FiscalContribution = {
   activationReadinessTarget: () => null,
   makeBackend: () => new NoneBackend(),
   drain: async () => emptyDrainResult(),
+  resetInFlight: async () => {},
 };

@@ -380,6 +380,8 @@ describe("runCli venue", () => {
       activationReadiness: "not-applicable",
       makeBackend: () => ({ id }) as unknown as FiscalBackend,
       drain: () => Promise.reject(new Error("cli selection tests never run the drain seat")),
+      resetInFlight: () =>
+        Promise.reject(new Error("cli selection tests never run the reset seat")),
     });
     const modules: readonly WaitronModule[] = [
       fakeModule("core"),

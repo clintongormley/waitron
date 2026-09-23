@@ -514,6 +514,7 @@ Stated together, because each is something a reader would otherwise assume the g
   is written into the topology design §5.2 and it is **not built**. Today the only reset of a sale left
   that way is `recoverStaleClaims`'s five-minute one in `packages/fiscal-verifactu/src/drain.ts`, plus
   the backoff that returns a sale whose submission threw — read on 2026-09-17, not run.
+  **2026-09-23: built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it once per boot, before the first filing pass.
 - **Own the cloud-generation/pointer case, or write down that nothing covers it.**
 - **Measure the sales-a-day rate** before quoting S4's days-per-GiB at anyone; 250 is an assumption.
 - **Re-run everything on a litestream or MinIO bump.** The verdicts do not carry across a version.

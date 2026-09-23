@@ -1,7 +1,7 @@
 import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
-import { drain as runDrain } from "./drain.js";
+import { drain as runDrain, resetInFlightClaims } from "./drain.js";
 import { parseAeatCert, sealAeatSecret } from "./provisioning-secret.js";
 import { validateVenueFiscalFields, validateOperationDescription } from "./venue-fields.js";
 
@@ -45,6 +45,7 @@ export const FISCAL_SLOT: FiscalContribution = {
       await resolver.closeAll();
     }
   },
+  resetInFlight: ({ db }, now) => resetInFlightClaims(db, now),
   // The provision-time secret: a Veri*Factu venue's AEAT signing certificate. Required only for a
   // PRODUCTION provision (a preproduction box records its chain locally and never submits, so the
   // cert is optional there — spec §10). `validate` refuses a malformed blob with `setup.request_invalid`

@@ -8,7 +8,13 @@ import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
-import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
+import {
+  DEFAULT_SKIP_RETRY_MS,
+  backoffMs,
+  drain,
+  resetInFlightClaims,
+  type DrainDeps,
+} from "./drain.js";
 import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
@@ -407,6 +413,68 @@ describe("drain — stale claim recovery", () => {
     );
     expect(rows.rows[0]?.estado).toBe("enviando");
     expect(rows.rows[0]?.incidencia).toBe(false);
+  });
+});
+
+describe("resetInFlightClaims — the restart reset (topology design §5.2)", () => {
+  const now = new Date("2026-07-21T00:01:00Z");
+
+  /** Leaves the seeded rows as a previous run's claim: `enviando`, stamped one second ago. */
+  const claimOneSecondAgo = (seeded: SeededDrain) =>
+    withTransaction(pg.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
+        where ${ownChain(seeded)}
+      `),
+    );
+
+  const stateOf = async (seeded: SeededDrain) =>
+    decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number; proximo_intento_en: string }>(sql`
+          select estado, incidencia, proximo_intento_en from envios where ${ownChain(seeded)}
+        `),
+      ),
+    ).rows;
+
+  it("files a claim a previous run left behind on the next pass, with no five-minute wait", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    await claimOneSecondAgo(seeded);
+
+    await resetInFlightClaims(pg.db, now);
+    const result = await drain(drainDeps(staticResolver(aeat.client())), now);
+
+    expect(result.recordsSubmitted).toBe(1);
+    const rows = await stateOf(seeded);
+    expect(rows[0]?.estado).toBe("aceptado");
+    expect(rows[0]?.incidencia).toBe(true);
+  });
+
+  it("returns the claim to pendiente, due now, with incidencia raised", async () => {
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    await claimOneSecondAgo(seeded);
+
+    await resetInFlightClaims(pg.db, now);
+
+    expect(await stateOf(seeded)).toEqual([
+      { estado: "pendiente", incidencia: true, proximo_intento_en: now.toISOString() },
+    ]);
+  });
+
+  it("leaves pendiente, aceptado and detenido rows alone", async () => {
+    const seeded = await seedPendingEnvios(pg.db, { count: 3 });
+    const [, second, third] = seeded.registroIds;
+    await withTransaction(pg.db, async (tx) => {
+      await tx.execute(sql`update envios set estado = 'aceptado' where registro_id = ${second}`);
+      await tx.execute(sql`update envios set estado = 'detenido' where registro_id = ${third}`);
+    });
+    const before = await stateOf(seeded);
+    expect(before.map((row) => row.estado).sort()).toEqual(["aceptado", "detenido", "pendiente"]);
+
+    await resetInFlightClaims(pg.db, now);
+
+    expect(await stateOf(seeded)).toEqual(before);
   });
 });
 

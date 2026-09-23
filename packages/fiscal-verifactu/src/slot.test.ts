@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -7,6 +8,7 @@ import { CREDENTIALS_MIGRATIONS, getCredential, loadKeyRing } from "@waitron/cre
 import { hasCode, isAppError } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_SLOT, rejectResolveClient } from "./slot.js";
 
@@ -58,6 +60,25 @@ describe("FISCAL_SLOT.drain", () => {
     expect(result.batchesSent).toBe(0);
     expect(result.recordsSubmitted).toBe(0);
     expect(result.nextDueAt).toBeNull();
+  });
+
+  it("resetInFlight returns a fresh enviando claim to pendiente", async () => {
+    const now = new Date("2026-07-21T00:01:00Z");
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    const [registroId] = seeded.registroIds;
+    await withTransaction(pg.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
+        where registro_id = ${registroId}
+      `),
+    );
+
+    await FISCAL_SLOT.resetInFlight({ db: pg.db }, now);
+
+    const rows = await pg.db.execute<{ estado: string }>(
+      sql`select estado from envios where registro_id = ${registroId}`,
+    );
+    expect(rows.rows).toEqual([{ estado: "pendiente" }]);
   });
 });
 

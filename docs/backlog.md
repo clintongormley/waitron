@@ -3422,10 +3422,17 @@ any of this code, so you can still read how something worked under PostgreSQL.
   Waitron retains the engine's required semantics and checks for claimed self-host targets.
   Every store result in the prototype note is MinIO's. Topology §12.2's real-store gate remains
   open; the conditional-write promotion tie-break must be demonstrated on each target (risk 11).
-- **Build the restart reset** — a node must, on restart and before it files anything, reset every
-  sale it inherited in the "being filed right now" state, with no five-minute wait. Written into
-  topology §5.2, not built. Today the only reset is `recoverStaleClaims`'s five-minute one in
-  `packages/fiscal-verifactu/src/drain.ts`.
+- **The restart reset is built (2026-09-23), and its precondition is not.** `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it once per boot, before the first filing pass — so a
+  node that restarts files an inherited "being filed right now" sale on its first pass, with no
+  five-minute wait. It runs only where the drain does: on the singleton primary, with submission
+  switched on. What it assumes and nothing enforces is ONE server process per venue folder: a second
+  process filing from the same database would have its claims undone. The slice-2 spec puts that
+  lock first ([§6](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
+  §9 step 3), and it is still to build.
+- **Two suite headers in `apps/server` say their suite is RED, and both pass.**
+  `apps/server/src/boot.promote.test.ts` ("One case below is RED") and
+  `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") — run 2026-09-23, 3 of 3 and
+  1 of 1 passed. Delete both paragraphs.
 - **Bounding the offline write-ahead log is an open design question, and the lever risk 9 names is not
   one.** Measured: while a litestream daemon is attached AND cannot reach its store, the log's space
   cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks

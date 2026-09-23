@@ -499,6 +499,22 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
 }
 
 /**
+ * The restart reset (topology design §5.2): every `enviando` row back to `pendiente`, due now, with
+ * no staleness gate, raising `incidencia` as `recoverStaleClaims` does. Sound only before this
+ * process's first drain pass and while no other process files from this database, so the host
+ * calls it once per boot. A resend of a record the previous run had filed meets AEAT's duplicate
+ * check (error 3000), which `handleDuplicate` resolves against AEAT's copy.
+ */
+export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
+  await withTransaction(db, (tx) =>
+    tx.execute(sql`
+      update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
+      where estado = 'enviando'
+    `),
+  );
+}
+
+/**
  * Claim due pending rows → `enviando`, incrementing `intentos` and stamping `enviado_en` at claim
  * time (not at persist time) — `enviado_en` is what `recoverStaleClaims` above measures staleness
  * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
