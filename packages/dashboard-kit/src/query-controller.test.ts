@@ -133,3 +133,69 @@ it("releases a slot when its view has no selection", async () => {
   await Promise.resolve();
   expect(read).toHaveBeenCalledOnce();
 });
+
+describe("query controller without a live-data session", () => {
+  it("reads once and applies the value", async () => {
+    const apply = vi.fn();
+    const controller = new QueryController(
+      host(),
+      () => undefined,
+      () => {},
+    );
+    await controller.watch("jobs", { key: "jobs", dependencies: [], read: async () => 3 }, apply);
+    expect(apply).toHaveBeenCalledExactlyOnceWith(3);
+  });
+
+  it("drops a released slot's late value and late failure without reporting either", async () => {
+    const apply = vi.fn();
+    const error = vi.fn();
+    const controller = new QueryController(host(), () => undefined, error);
+    let complete!: (value: number) => void;
+    const kept = controller.watch(
+      "kept",
+      {
+        key: "kept",
+        dependencies: [],
+        read: () =>
+          new Promise<number>((resolve) => {
+            complete = resolve;
+          }),
+      },
+      apply,
+    );
+    let fail!: (reason: unknown) => void;
+    const failed = controller.watch(
+      "failed",
+      {
+        key: "failed",
+        dependencies: [],
+        read: () =>
+          new Promise<number>((_, reject) => {
+            fail = reject;
+          }),
+      },
+      apply,
+    );
+    await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
+    controller.hostDisconnected();
+    complete(1);
+    fail({ code: "server.internal" });
+    await expect(kept).resolves.toBeUndefined();
+    await expect(failed).resolves.toBeUndefined();
+    expect(apply).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+});
+
+it("reports and rejects when applying the initial value throws", async () => {
+  const error = vi.fn();
+  const controller = new QueryController(host(), () => new LiveData(), error);
+  const failure = new Error("render failed");
+  await expect(
+    controller.watch("jobs", { key: "jobs", dependencies: [], read: async () => 1 }, () => {
+      throw failure;
+    }),
+  ).rejects.toBe(failure);
+  expect(error).toHaveBeenCalledExactlyOnceWith(failure);
+  controller.hostDisconnected();
+});
