@@ -4,19 +4,19 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // A hook given its OWN timeout overrides `hookTimeout` rather than narrowing it, so this bounds
-    // only hooks written without one — `useVenueDb`'s afterEach reset and afterAll close
-    // (`packages/db/src/testing/venue-db.ts:176` and `:183`) and any untimed hook a test file writes.
-    // It does not bound that helper's setup, which carries its own 60s budget (`venue-db.ts:174`).
-    // testTimeout covers work inside an individual test.
+    // `useVenueDb` passes its own budget to the `beforeAll` that migrates the database, and a hook's
+    // own timeout overrides `hookTimeout`, so this one reaches only the helper's `afterEach` reset and
+    // `afterAll` close (`packages/db/src/testing/venue-db.ts`) and any untimed hook a test writes.
+    // Neither value is sized to a need: measured 2026-09-23, every test passes under
+    // `--testTimeout=2000 --hookTimeout=2000` with the helper's setup budget also cut to 2s; the
+    // slowest test took 185ms and the slowest setup 49ms. They are margin for a loaded CI runner.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // Run the whole suite in ONE fork. Across the repo, one worker guards the @vitest/coverage-v8
-    // cross-fork branch under-merge — v8 can report a branch covered only in one worker as uncovered
-    // after merging profiles (packages/payments and packages/scheduler pin one worker for that).
-    // Whether identity's own thresholds need it has not been re-measured on this branch; it is kept
-    // because dropping it is a behaviour change, and the parallelism forgone is minor.
+    // One worker is kept as a precaution against @vitest/coverage-v8 under-merging branch coverage
+    // across workers. This package does not need it on its own: measured 2026-09-23, `test:coverage`
+    // at one worker (22.3s) and with `--maxWorkers=6` (6.2s) gave the same covered and total counts
+    // for every file. Whether other packages running at the same time change that is not measured.
     maxWorkers: 1,
     coverage: {
       provider: "v8",

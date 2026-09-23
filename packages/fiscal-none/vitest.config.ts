@@ -5,23 +5,17 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // migrations.test.ts opens a venue database through `useVenueDb` in a beforeAll and applies
-    // the core and fiscal-none migration sets. That helper passes its OWN budget to the hook it
-    // registers, so `hookTimeout` never bounds the setup; what it bounds is the helper's per-test
-    // reset and close, and any hook a test file writes without a timeout of its own. There is no
-    // globalSetup: nothing here is shared across test files.
-    //
-    // Both numbers were sized for a PGlite boot that no longer happens, and were brought down when
-    // that was noticed. Measured 2026-09-23 in this worktree on an otherwise quiet machine:
-    // `pnpm --filter @waitron/fiscal-none exec vitest run --testTimeout=2000 --hookTimeout=2000`
-    // passes all three files, 12 tests, in 568ms end to end. These bounds sit an order of magnitude
-    // above that, which is the headroom a cold CI runner gets, and match the small sibling packages
-    // that also reach a database through `useVenueDb`.
+    // `useVenueDb` passes its own budget to the `beforeAll` that migrates the database, and a hook's
+    // own timeout overrides `hookTimeout`, so this one reaches only the helper's per-test reset and
+    // close (`packages/db/src/testing/venue-db.ts`) and any untimed hook a test writes. Neither value
+    // is sized to a need: measured 2026-09-23, every test passes under
+    // `--testTimeout=2000 --hookTimeout=2000` with the helper's setup budget also cut to 2s; the
+    // slowest test took 2ms and the setup 14ms. They are margin for a loaded CI runner.
     testTimeout: 30_000,
     hookTimeout: 60_000,
-    // Keep one worker (CLAUDE.md §4): @vitest/coverage-v8 under-merges BRANCH coverage across fork
-    // workers, and a package this small has a handful of mis-merged branches sink the ratio under
-    // threshold. Same finding as the other small packages.
+    // One worker is kept as a precaution against @vitest/coverage-v8 under-merging branch coverage
+    // across workers. This package does not need it on its own: measured 2026-09-23, coverage at
+    // `--maxWorkers=1` and `--maxWorkers=3` wrote identical summaries.
     maxWorkers: 1,
     coverage: {
       provider: "v8",
