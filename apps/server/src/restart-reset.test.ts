@@ -76,6 +76,39 @@ describe("resetBeforeFirstDrain", () => {
     expect(calls).toEqual(["reset", "reset", "drain"]);
   });
 
+  it("contains a reset that throws before returning a promise, and tries it again on the next pass", async () => {
+    const calls: string[] = [];
+    const { lines, log } = recordingLog();
+    let failures = 1;
+    const drain = resetBeforeFirstDrain({
+      reset: () => {
+        calls.push("reset");
+        if (failures-- > 0) throw new AppError("server.internal", {});
+        return Promise.resolve();
+      },
+      drain: async () => {
+        calls.push("drain");
+        return emptyDrainResult();
+      },
+      skipRetryMs: SKIP_RETRY_MS,
+      log,
+    });
+
+    const failed = await drain(NOW);
+    expect(failed.skipped).toEqual([{ errorCode: "server.internal" }]);
+    expect(lines).toEqual([
+      {
+        level: "error",
+        event: "drain.restart_reset_failed",
+        fields: { errorCode: "server.internal" },
+      },
+    ]);
+
+    await drain(NOW);
+
+    expect(calls).toEqual(["reset", "reset", "drain"]);
+  });
+
   it("gives two overlapping first passes the same skipped result from one failed reset, and retries on the next pass", async () => {
     const calls: string[] = [];
     const { lines, log } = recordingLog();

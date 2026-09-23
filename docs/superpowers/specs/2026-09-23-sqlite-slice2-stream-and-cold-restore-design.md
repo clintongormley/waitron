@@ -326,10 +326,12 @@ reset the topology design's §5.2 requires and the prototype listed as unbuilt.
 
 **2026-09-23: the reset itself is built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a boot's first filing pass, and again only if that attempt failed. The single-process lock below is not.
 
-**What a resend costs.** A sale AEAT already holds is answered with error 3000, and that answer says
-what state AEAT's stored copy is in. The drain acts on that state. If AEAT's copy is accepted, with or
-without errors, the sale is marked accepted, and no fingerprint (huella) is compared
-(`resolveEstadoEfectivo` in `@waitron/verifactu`, then `applyOutcome` in `drain.ts`). If AEAT's copy
+**What a resend costs.** A sale AEAT already holds is answered with error 3000, and that answer
+may say what state AEAT's stored copy is in. The drain acts on that state. If AEAT's copy is
+accepted, the sale is marked accepted; if it is accepted with errors, the sale is marked accepted
+with errors and a warning incident (`fiscal.aceptado_con_errores`) is raised. In both cases no
+fingerprint (huella) is compared (`resolveEstadoEfectivo` in `@waitron/verifactu`, then
+`applyOutcome` in `drain.ts`). If AEAT's copy
 is annulled, the sale and every later one in its chain stop and an incident is raised for a person. If
 AEAT does not say what state its copy is in, the drain asks AEAT for its copy and compares
 fingerprints (`handleDuplicate`): a match marks the sale accepted, and a difference stops the sale and
@@ -474,7 +476,7 @@ Dated pointers go into the topology design in task 10, not rewrites:
 | The vault master key is generated per box into `secrets.env` | `apps/server/src/box-secrets.ts` | read |
 | The box holds the recovery key | `WAITRON_BACKUP_RECOVERY_KEY`, `apps/server/src/backup-config.ts` | read (search agent, spot-checked) |
 | Fiscal restore mints above a clock floor | `packages/fiscal-verifactu/src/restore.ts`, `installationFloor` | read |
-| Error 3000: accepted on a matching fingerprint, halted on an annulled or divergent copy | `packages/fiscal-verifactu/src/drain.ts`, `handleDuplicate` | read, not run |
+| Error 3000: accepted when AEAT reports its copy accepted, with no fingerprint compared; halted when it reports it annulled; an unstated state is looked up and compared by fingerprint | `resolveEstadoEfectivo` (`@waitron/verifactu`); `applyOutcome` and `handleDuplicate` in `packages/fiscal-verifactu/src/drain.ts` | read, not run |
 | The archive also carries `backup.env`, `modules.json`, a manifest and declared module files | `apps/server/src/backup-optional-state.ts`, `backup-sweep.ts` | read |
 | The restore request takes only an encrypted archive | `apps/server/src/restore-request.ts` (`RestoreRequest`), `restore.ts` | read |
 | Dashboard and till session ids are raw bearer cookies; pairing tokens and Google state are hashed | `management-api.ts` (`setManagementCookie`), `till-session.ts`; `token_hash` / `state_hash` columns | read |

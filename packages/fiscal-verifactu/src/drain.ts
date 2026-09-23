@@ -38,7 +38,8 @@ export const TIEMPO_ESPERA_INICIAL_SEG = 60;
  * vanishes with the process. Five minutes is comfortably longer than one AEAT round trip (a normal
  * in-flight submission never approaches it) but short enough that a claim abandoned while this
  * process stays up does not leave a record stuck for art. 16.4's hourly duty to notice. A crashed
- * run's claims are requeued at the next boot by `resetInFlightClaims`, before its first pass.
+ * run's claims are requeued by `resetInFlightClaims` before the next drain of a restarted filing
+ * node (`resetBeforeFirstDrain`, `apps/server/src/restart-reset.ts`).
  */
 export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 
@@ -261,9 +262,10 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * T1/T2 split (spec §7.2): claim due rows in their own short transaction (T1), which commits
  * before the network call — so the venue file's single writer slot is not held across the AEAT
  * round-trip (the whole of what makes `claimBatch`'s selection a claim; see its own paragraph), and
- * a crash leaves real committed `enviando` rows, which the next boot's `resetInFlightClaims`
- * requeues; `recoverStaleClaims` (called at the top of this function) requeues a claim abandoned
- * while this process stays up.
+ * a crash leaves real committed `enviando` rows, which `resetInFlightClaims` requeues before the
+ * next drain of a restarted filing node (`resetBeforeFirstDrain`,
+ * `apps/server/src/restart-reset.ts`); `recoverStaleClaims` (called at the top of this function)
+ * requeues a claim abandoned while this process stays up.
  * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
  * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
  * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk the due
@@ -503,7 +505,8 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * calls it before that pass, and again only if that attempt failed. A resend of a record the
  * previous run had filed meets AEAT's duplicate check (error 3000): when AEAT reports its stored
  * copy `Correcta` or `AceptadaConErrores`, `resolveEstadoEfectivo` reads that as an accept and
- * `applyOutcome` marks the row accepted without comparing fingerprints; only an annulled or
+ * `applyOutcome` marks the row `aceptado`, or `aceptado_con_errores` with a warning
+ * `fiscal.aceptado_con_errores` incident, without comparing fingerprints; only an annulled or
  * unstated copy reaches `handleDuplicate`.
  */
 export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
@@ -537,12 +540,12 @@ async function requeueClaims(
  * writer holds the venue file at a time: a second drainer — another scheduler instance, or a retried
  * call overlapping a slow one — does not begin until the selection below and its `enviando` stamp
  * have committed together, and it then matches none of those rows because they are no longer
- * `pendiente`. A second PROCESS starting on this database is outside that: its restart reset,
- * `resetInFlightClaims`, puts these claims back to `pendiente`, which is sound only under that
- * reset's assumption of one process per venue database. What that arranges against is a genuine DUPLICATE SUBMISSION of the same batch to
+ * `pendiente`. What that arranges against is a genuine DUPLICATE SUBMISSION of the same batch to
  * AEAT, not merely a wasted query. So the SELECT and the stamp must stay inside one
  * `withTransaction`, and the SELECT must stamp nothing itself: the deployment-environment cases in
- * `drain.test.ts` go red if it does.
+ * `drain.test.ts` go red if it does. A second PROCESS starting on this database is outside that:
+ * its restart reset, `resetInFlightClaims`, puts these claims back to `pendiente`, which is sound
+ * only under that reset's assumption of one process per venue database.
  *
  * **The deployment-environment guard** (Task 6 of the deployment-environment plan; chain-order and
  * starvation properties added in that task's fix round after review). Every SELECTed row's OWN

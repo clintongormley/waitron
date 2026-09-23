@@ -119,7 +119,9 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       for (const skipped of result.skipped) {
         // Due fiscal work this pass could not submit at all is an unmet legal
         // obligation. It has no ledger row and no incident (`incidents.till_id` is NOT NULL and a
-        // drain has no till), so this line is the only place it exists.
+        // drain has no till), so this line is the only place it exists. When
+        // `drain.restart_reset_failed` is also logged, the restart reset failed before any work was
+        // looked for, and the cause is the database, not the credential (`restart-reset.ts`).
         deps.log("warn", "drain.tenant_skipped", skipped);
         if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
       }

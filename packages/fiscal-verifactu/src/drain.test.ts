@@ -346,10 +346,9 @@ describe("drain — flow control (envio_flujo)", () => {
 });
 
 /**
- * Task 8: a row left `enviando` proves a process crashed between T1 (claim, committed) and T2
- * (persist) — this is exactly what the T1/T2 split (Task 6) makes possible to recover: T1's commit
- * is what leaves a real, committed `enviando` row behind for a LATER drain() to find, rather than
- * an in-flight uncommitted claim that simply vanishes with the crashed process.
+ * A row left `enviando` past `RECUPERACION_ENVIANDO_MS` is a claim abandoned while this process
+ * stays up: T1 (claim) committed and no T2 (persist) followed, so a LATER drain() finds a real,
+ * committed row. A restart's claims are requeued by `resetInFlightClaims` instead.
  *
  * Every update/select below filters explicitly by the seeded fixture's own chain (`ownChain`),
  * unlike the brief's own inline sample — this file's shared `pg.db` accumulates rows from every
@@ -361,9 +360,9 @@ describe("drain — stale claim recovery", () => {
   it("recovers a stale enviando row back to pendiente with incidencia set, then resubmits it this same pass", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    // Simulate the crash: T1 committed (estado -> 'enviando') but the process died before T2
-    // could persist a response. enviado_en is stamped well over RECUPERACION_ENVIANDO_MS (5 min)
-    // in the past, so THIS drain() pass must recover it rather than leave it stuck forever.
+    // Simulate an abandoned claim: T1 committed (estado -> 'enviando') and no T2 persisted a
+    // response. enviado_en is stamped well over RECUPERACION_ENVIANDO_MS (5 min) in the past, so
+    // THIS drain() pass must recover it rather than leave it stuck forever.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
@@ -391,9 +390,9 @@ describe("drain — stale claim recovery", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const now = new Date("2026-07-21T00:01:00Z");
-    // enviado_en 1 minute ago — well within RECUPERACION_ENVIANDO_MS (5 min). Models a genuinely
-    // in-flight submission (mid network round-trip in another process), not a crash: recovering
-    // this would resubmit a record someone else may still be about to persist a CSV for.
+    // enviado_en 1 minute ago — well within RECUPERACION_ENVIANDO_MS (5 min). Models a slow
+    // submission in this process still waiting on AEAT, not an abandoned claim: recovering this
+    // would resubmit a record its own T2 may still be about to persist a CSV for.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}

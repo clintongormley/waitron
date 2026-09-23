@@ -389,7 +389,9 @@ in one line, and is the fastest way to see why a duty reads unhealthy without co
 skip/failure/park events yourself. For a skipped
 `fiscal.drain` pass, the fix is almost always provisioning or repairing the venue's `fiscal.aeat`
 credential (via `packages/credentials`'s CLI) — credentials are read fresh every pass (spec §6), so
-there is no restart needed once the credential is fixed. A skipped duty reports itself due
+there is no restart needed once the credential is fixed. The exception is a skip logged beside
+`drain.restart_reset_failed`: the restart reset failed before any work was looked for, and the cause
+is the database, not the credential. A skipped duty reports itself due
 again `now + WAITRON_SKIP_RETRY_MS` (5 minutes by default, never `null`) rather than `now` — folded
 as a minimum against whatever a healthy duty computed the same pass, so it can only come in
 sooner, never later. That means the fix lands within one skip-retry interval, not necessarily the
@@ -410,17 +412,23 @@ One structured JSON line per event on stdout, `{ ...fields, at, level, event }` 
 The ones worth grepping for:
 
 - **`drain.tenant_skipped`** (`warn`) — `{ errorCode }`. The pass had due fiscal work and could not
-  submit any of it. There is at most one of these per pass: one database files for one taxpayer.
-  This line is the ONLY place this fact exists outside `/health`'s
-  `skipped` count — a skipped drain has no ledger row (`drain` has no table of its own)
-  and no incident (`incidents.till_id` is `NOT NULL`, and a drain has no till). `errorCode` is
-  typically `server.credential_unusable` (a `fiscal.aeat` credential exists but a declared field —
-  most often `certKind`, absent from a row sealed before that field joined the purpose registry — is
-  missing or unusable) or a credential-store code from `getCredential`
-  (`credentials.missing` — no row for that purpose at all, `credentials.decrypt_failed`,
-  `credentials.key_version_unknown`, `credentials.malformed_payload`). The event NAME still reads
-  `tenant`, and stays that way: a log event is a name operators grep for, so it is renamed
-  deliberately or not at all.
+  submit any of it — unless `drain.restart_reset_failed` is also logged, in which case the restart
+  reset failed before any work was looked for, and the cause is the database, not the credential.
+  There is at most one of these per pass: one database files for one taxpayer. This line is the
+  ONLY place this fact exists outside `/health`'s `skipped` count — a skipped drain has no ledger
+  row (`drain` has no table of its own) and no incident (`incidents.till_id` is `NOT NULL`, and a
+  drain has no till). `errorCode` is typically `server.credential_unusable` (a `fiscal.aeat`
+  credential exists but a declared field — most often `certKind`, absent from a row sealed before
+  that field joined the purpose registry — is missing or unusable) or a credential-store code from
+  `getCredential` (`credentials.missing` — no row for that purpose at all,
+  `credentials.decrypt_failed`, `credentials.key_version_unknown`, `credentials.malformed_payload`).
+  The event NAME still reads `tenant`, and stays that way: a log event is a name operators grep
+  for, so it is renamed deliberately or not at all.
+- **`drain.restart_reset_failed`** (`error`) — `{ errorCode }`. Before this process's first drain,
+  the reset that returns a previous run's in-flight submissions to the queue failed
+  (`src/restart-reset.ts`), so no drain ran. Logged once per failed attempt; each pass that waited
+  on it also logs `drain.tenant_skipped` with the same `errorCode` (`unknown` for a raw database
+  error), and the next pass tries the reset again.
 - **`reconcile.pair_skipped`** (`warn`) — `{ duty, errorCode }`. The Stripe reconcile
   equivalent, one duty abandoned mid-sweep — an infrastructure failure, a credential
   code as above, or `payment.credential_environment_mismatch` (the `payments.stripe` key's
