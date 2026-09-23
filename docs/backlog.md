@@ -2177,7 +2177,16 @@ image constraints under *Detail → Box image*.
   Unavailable or not offered on a menu, a product with no variant sold as itself, a delete
   preview's menus in offer-id order, a product extras read handed a wider attachment map or one
   naming a deleted list, and non-text names and ids in the extras and options contracts; no
-  source file changed; 98.82/99.53/100/97.37).
+  source file changed; 98.82/99.53/100/97.37); `apps/server` (**PR #TBD**, 2026-09-23 — tests
+  for the boot's wiring (account email through the saved SMTP gateway, read on each send; a
+  language change refused while a library image has no name in it; a failing tunnel client or log
+  directory; the plain-HTTP landing page; and, in setup mode, a provision resumed after its venue
+  committed, a restore refused before staging, an adoption refused for an unreachable primary, and
+  a staged configuration import), the setup routes' refusals, locks and restart resumption, the
+  management and profile API's Google sign-in, password back-off, invitations, staff status, PIN
+  and authenticator paths, the till's reader, kitchen-display and PIN back-off refusals, payment
+  and backup refusals, print-agent screening and payment slips with nothing to print, and the
+  recovery commands failing part-way; no source file changed; 99.18/99.21/99.29/97.33).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3840,10 +3849,10 @@ What the preparation tasks left, with F1's own answers where it found them:
     measured it; the same one-worker-against-several coverage comparison would settle each. Two of
     those comments, in `packages/shared/vitest.config.ts` and
     `packages/diagnostics/vitest.config.ts`, also still say the pre-push hook runs a whole-workspace
-    `pnpm -r test:coverage`, and so does `apps/server/vitest.config.ts`'s comment on why it does not
-    pin one worker. The hook has run no package tests since #338; its only test run is the root
-    `pnpm vitest run --coverage`. #515 and the dashboard-kit coverage branch fixed the same words in
-    server-kit, dashboard-kit and dashboard-modules.
+    `pnpm -r test:coverage`. The hook has run no package tests since #338; its only test run is the
+    root `pnpm vitest run --coverage`. #515, the dashboard-kit coverage branch and the apps/server
+    coverage branch fixed the same words in server-kit, dashboard-kit, dashboard-modules and
+    `apps/server/vitest.config.ts`.
 - **Dead code and doc sweeps owed to the rollout's final sweep** — **DONE** (2026-09-23). The unused
   `seedTenantWithSumUpKey` was deleted by PR #516; the file's real-SumUp case seals no credential and
   passes, because the seat reads its credential only on first use, and that case's name and the file
