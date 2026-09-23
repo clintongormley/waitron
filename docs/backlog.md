@@ -555,11 +555,23 @@ every menu.** A menu now stores something for a variant only to override its pri
 there (`menu_item_variant_overrides`), and the price charged is the most specific one set: the
 variant's price on that menu, then its own, then its product's price on that menu. Every dev venue
 needs `wa-wt reset demo <name>` (see above). What it left open:
-- **A removed variant's photo cannot be deleted.** Removing a variant makes it Inactive and keeps
-  its row, photo included, so the image library counts the photo as used and the database refuses
-  the delete, while the product editor does not show Inactive variants. Accepted until Task 7, which
-  shows them behind a filter; the translation-gap check skips Inactive variants for the same reason
-  (`packages/catalogue/src/content-languages.ts`) and Task 7 must revisit it.
+- **A removed variant is not checked for translations, except when its own page saves it.**
+  Removing a variant makes it Inactive and keeps its row, photo included. Since Task 7 a removed
+  variant is shown behind the status filter in the products list and in its product's variants
+  section, and its own page opens from either; that page's Remove photo clears the variant's photo,
+  after which the image library no longer counts it for that variant (`countUsages`,
+  `packages/media/src/images.ts`, reads `products.image` alone). The translation-gap report still
+  skips Inactive variants (`packages/catalogue/src/content-languages.ts`), and saving a product does
+  not translation-check a variant it saves Inactive (`setProductVariants`,
+  `packages/catalogue/src/variants.ts`). A variant's OWN page checks its customer name whether it is
+  Active or not (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`), so removing a
+  variant from the products list, which saves through that page, is refused
+  `content.translation_required` when its customer name lacks an enabled language, while removing
+  it in its product's variants section is not. Measured 2026-09-24 with a scratch case in
+  `packages/catalogue/src/product-editor.test.ts`: a variant saved Inactive with a Spanish-only
+  customer name, English the default, was refused on its own page; the same save with an English
+  name went through. **Next action:** decide whether a variant's own page should skip the check when
+  it saves the variant Inactive.
 - **A variant's id is refused by the management routes that read or write a product by id**, each
   answering as it does for an id naming no product (the recipe route answers `product.not_found`) —
   except the product editor's two routes, which since Task 6 are a variant's own page. The
@@ -586,9 +598,9 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   product's variants list, so a product whose variant has no price of its own can be saved back
   unchanged. The dashboard's variant form shows such a price as an empty field and saves it back
   blank (`apps/dashboard/src/widgets/variant-form.ts`); the price field is no longer marked
-  required. What is still missing: the empty field shows no hint of the price it falls back to,
-  and a NEW variant's form still starts at `0.00`. **Next action (Task 7):** show the product's
-  price as the empty field's hint, and decide whether a new variant starts blank.
+  required. Since Task 7 an empty variant price shows the price it falls back to: the variant form's
+  price field and the variant's own page carry the product's price as the field's hint, and the
+  variants list reads "Same as" that price. A new variant's form starts blank, not at `0.00`.
 - **The units screen lists variants too, and offers them a target labelled as Each.**
   `productsUsingUnit` (`packages/catalogue/src/units.ts`) does not limit itself to top-level
   products, so a variant with its own unit appears in the screen's list of products using a unit.

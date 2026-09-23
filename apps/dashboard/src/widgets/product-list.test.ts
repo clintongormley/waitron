@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { allergenStateName } from "../i18n/domain.js";
+import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList } from "./product-list.js";
@@ -212,7 +212,7 @@ describe("product-list", () => {
   // options list this product does NOT hold, so a column printing the loaded set instead of the
   // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
   // against the options lists — which also reaches "Punto" — loses "Salsas".
-  it("shows reporting and other categories, attached modifier list names, and no VAT column", async () => {
+  it("shows reporting and other categories, attached modifier list names, and the VAT class", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -241,7 +241,10 @@ describe("product-list", () => {
     expect(headers).toContain(t("product.reporting_category"));
     expect(headers).toContain(t("product.other_categories"));
     expect(headers).toContain(t("editor.modifiers"));
-    expect(headers).not.toContain(t("product.vat"));
+    expect(headers).toContain(t("product.vat"));
+    expect(cellUnder(root, "prod-1", t("product.vat")).textContent!.trim()).toBe(
+      vatClassName("reduced"),
+    );
     const text = root.querySelector("tbody tr")!.textContent!;
     expect(text).toContain("Comida");
     expect(text).toContain("Temporada, Terraza");
@@ -534,29 +537,185 @@ describe("product-list", () => {
     );
   });
 
-  // A variant row answers the status filter with its PRODUCT's state, for the reason the
-  // sold-on-its-own filter gives above; its own cell carries only its own Unavailable badge.
-  it("keeps a variant with its product under the status filter, and badges an Unavailable variant", async () => {
-    const soldOutVariant = { ...bunVariant, id: "large", name: "Large", available: false };
+  // Spec §15.6: a removed variant is Inactive and hidden behind the same status filter as a deleted
+  // product. A variant row answers the filter with its OWN state, and with Inactive while its
+  // product is Inactive, because the till sells neither. Under Inactive, an Active product with a
+  // removed variant stays on screen as the variant's context (the table keeps a match's ancestors).
+  it("applies the status filter to variant rows, keeping an Active product as a removed variant's context", async () => {
+    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+    const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "bun", active: true, variants: [bunVariant, soldOutVariant] }),
-        product({ id: "roll", active: false, variants: [{ ...bunVariant, id: "roll-small" }] }),
+        product({ id: "bun", name: "Bun", active: true, variants: [bunVariant, soldOut, removed] }),
+        product({
+          id: "roll",
+          name: "Roll",
+          active: false,
+          variants: [{ ...bunVariant, id: "r1" }],
+        }),
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["bun", "bun:large", "bun:small"]);
+    expect(rowKeys(root)).toEqual(["bun", "bun:medium", "bun:small"]);
     const small = cellUnder(root, "bun:small", t("product.status"));
-    const large = cellUnder(root, "bun:large", t("product.status"));
-    expect(small.querySelector("[data-test=active-badge]")).toBeNull();
+    expect(small.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
+      "true",
+    );
     expect(small.querySelector("[data-test=unavailable-badge]")).toBeNull();
-    expect(small.textContent!.trim()).toBe("—");
-    expect(large.querySelector("[data-test=unavailable-badge]")).not.toBeNull();
+    const medium = cellUnder(root, "bun:medium", t("product.status"));
+    expect(medium.querySelector("[data-test=unavailable-badge]")).not.toBeNull();
+
     await choose(el, "active", "inactive");
-    expect(rowKeys(root)).toEqual(["roll"]);
+    expect(rowKeys(root)).toEqual(["bun", "bun:large", "roll"]);
+    expect(
+      cellUnder(root, "bun:large", t("product.status"))
+        .querySelector("[data-test=active-badge]")!
+        .getAttribute("data-active"),
+    ).toBe("false");
+    // The Active product is there only as context, and is drawn muted so the match stands out.
+    expect(
+      cellUnder(root, "bun", t("product.name")).querySelector('[part~="context"]'),
+    ).not.toBeNull();
+    expect(
+      cellUnder(root, "roll", t("product.name")).querySelector('[part~="context"]'),
+    ).toBeNull();
+    root.querySelector<HTMLElement>(`tr[data-row-key="roll"] .tree-toggle`)!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["bun", "bun:large", "roll", "roll:r1"]);
+
+    await choose(el, "active", "");
+    expect(rowKeys(root)).toEqual([
+      "bun",
+      "bun:large",
+      "bun:medium",
+      "bun:small",
+      "roll",
+      "roll:r1",
+    ]);
+  });
+
+  // Spec §15.1: a product with an Active variant is sold only as one of them, and one with none sells
+  // as itself — so the product's price is the range over its Active variants, or its own price.
+  it("prices a product across its Active variants only, or at its own price when it has none", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "wine",
+          unitPrice: "4.00",
+          variants: [
+            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: "4.50" },
+            { ...bunVariant, id: "w175", name: "Wine 175", unitPrice: "5.50" },
+            { ...bunVariant, id: "w250", name: "Wine 250", unitPrice: "9.00", active: false },
+          ],
+        }),
+        product({
+          id: "beer",
+          unitPrice: "3.00",
+          variants: [{ ...bunVariant, id: "pint", name: "Pint", unitPrice: "6.00", active: false }],
+        }),
+      ],
+    });
+    const root = await tableRoot(el);
+    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe("4.50–5.50");
+    expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe("3.00");
+  });
+
+  // Since #539 a variant may set its own VAT and categories, so its row shows the values it is
+  // sold and reported under — the server's `effective` — rather than its product's. Every field
+  // differs between the two here, so a row reading the product's values fails.
+  it("shows a variant's own name and its effective price, VAT and categories", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "wine",
+          name: "Wine by the glass",
+          unitPrice: "4.00",
+          vatClass: "reduced",
+          primaryCategoryId: "food",
+          categoryIds: ["food", "terrace"],
+          variants: [
+            {
+              ...bunVariant,
+              id: "w175",
+              name: "Wine 175",
+              unitPrice: null,
+              effective: {
+                unitPrice: "4.00",
+                vatClass: "general",
+                primaryCategoryId: "drinks",
+                categoryIds: ["drinks", "bar"],
+              },
+            },
+          ],
+        }),
+      ],
+      categories: [
+        { id: "food", name: { es: "Comida" }, image: null, color: null, parentId: null },
+        { id: "terrace", name: { es: "Terraza" }, image: null, color: null, parentId: null },
+        { id: "drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
+        { id: "bar", name: { es: "Barra" }, image: null, color: null, parentId: null },
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    const cell = (header: string) => cellUnder(root, "wine:w175", header).textContent!.trim();
+    expect(cell(t("product.name"))).toBe("Wine 175");
+    expect(cell(t("product.price"))).toBe("4.00");
+    expect(cell(t("product.vat"))).toBe(vatClassName("general"));
+    expect(cell(t("product.reporting_category"))).toBe("Bebidas");
+    expect(cell(t("product.other_categories"))).toBe("Barra");
+    expect(cellUnder(root, "wine", t("product.vat")).textContent!.trim()).toBe(
+      vatClassName("reduced"),
+    );
+    expect(cellUnder(root, "wine", t("product.other_categories")).textContent!.trim()).toBe(
+      "Terraza",
+    );
+  });
+
+  it("gives a variant row its own Edit and Remove, and Restore once it is removed", async () => {
+    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun", variants: [bunVariant, removed] })],
+    });
+    await choose(el, "active", "");
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    const actions = root.querySelector<HTMLElement>('[data-test="actions-small"]')!;
+    expect(actions.tagName).toBe("WT-ROW-ACTIONS");
+    expect(actions.getAttribute("label")).toBe(`${t("staff.actions")}: Small`);
+    expect(actions.querySelector('[data-test="edit-small"]')!.textContent).toContain(
+      t("action.edit"),
+    );
+    expect(actions.querySelector('[data-test="delete-small"]')!.textContent).toContain(
+      t("action.remove"),
+    );
+    expect(actions.querySelector('[data-test="restore-small"]')).toBeNull();
+    const large = root.querySelector<HTMLElement>('[data-test="actions-large"]')!;
+    expect(large.querySelector('[data-test="delete-large"]')).toBeNull();
+    expect(large.querySelector('[data-test="restore-large"]')!.textContent).toContain(
+      t("product.restore"),
+    );
+
+    const seen: [string, string][] = [];
+    for (const name of ["edit-product", "delete-product", "restore-product"])
+      el.addEventListener(name, (event) =>
+        seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
+      );
+    actions.querySelector<HTMLElement>('[data-test="edit-small"]')!.click();
+    actions.querySelector<HTMLElement>('[data-test="delete-small"]')!.click();
+    large.querySelector<HTMLElement>('[data-test="restore-large"]')!.click();
+    expect(seen).toEqual([
+      ["edit-product", "small"],
+      ["delete-product", "small"],
+      ["restore-product", "large"],
+    ]);
   });
 
   // The three-state allergen invariant (design §7): null=PENDING, {}=none, {…}=declared. PENDING and

@@ -1053,6 +1053,9 @@ export const en = {
   "product.delete_named": "Delete {name}",
   "product.delete_warning":
     "This makes the product inactive: the till stops selling it and it leaves this list until you choose to show inactive products. You can restore it, and its past sales are kept.",
+  "product.remove_variant_named": "Remove {name}",
+  "product.remove_variant_warning":
+    "This makes the variant inactive: the till stops offering it and it leaves this list until you choose to show inactive products. You can restore it, and its past sales are kept.",
   "product.status": "Status",
   "product.allergens": "Allergens",
   // Product → diet override (Task 8b): tri-state forced labels + contains-tag add/remove
@@ -2396,6 +2399,9 @@ export const es: Record<StringKey, string> = {
   "product.delete_named": "Eliminar {name}",
   "product.delete_warning":
     "Esto desactiva el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos inactivos. Puedes restaurarlo, y sus ventas anteriores se conservan.",
+  "product.remove_variant_named": "Eliminar {name}",
+  "product.remove_variant_warning":
+    "Esto desactiva la variante: la caja deja de ofrecerla y sale de esta lista hasta que elijas mostrar los productos inactivos. Puedes restaurarla, y sus ventas anteriores se conservan.",
   "product.status": "Estado",
   "product.allergens": "Alérgenos",
   "diet.section": "Anulación dietética",

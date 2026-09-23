@@ -814,5 +814,63 @@ describe("catalogue-screen", () => {
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", variantValue);
     });
+
+    // Spec §15.6: removing a variant makes it Inactive, through its own page's write, and leaves
+    // its availability and every other stored value as they were.
+    it("confirms a variant's Remove and makes the variant Inactive through its own write", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "v1" });
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+      expect(dialog.getAttribute("heading")).toBe(
+        t("product.remove_variant_named").replace("{name}", "Media ración"),
+      );
+      expect(dialog.textContent).toContain(t("product.remove_variant_warning"));
+      const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+      expect(confirm.textContent!.trim()).toBe(t("action.remove"));
+      confirm.click();
+      await flush(el);
+      expect(api.getProductEditor).toHaveBeenCalledWith("v1");
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
+        ...variantValue,
+        active: false,
+        available: true,
+      });
+      expect(dialog.getAttribute("open")).toBeNull();
+    });
+
+    it("restores a removed variant through its own write, then refreshes the list", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
+        Promise.resolve(id === "v1" ? { ...variantValue, active: false } : value),
+      );
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      vi.mocked(api.listProducts).mockClear();
+      emit(list(el), "restore-product", { productId: "v1" });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", { ...variantValue, active: true });
+      expect(api.listProducts).toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    it("reports a refused restore on the screen", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      vi.mocked(api.updateProductEditor).mockRejectedValue({ code: "server.internal" });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "restore-product", { productId: "v1" });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        codeMessage("server.internal"),
+      );
+    });
   });
 });

@@ -84,7 +84,8 @@ export class CatalogueScreen extends LitElement {
   @state() private busy = false;
   @state() private errorKey: string | null = null;
   @state() private languageSettingsOpen = false;
-  @state() private deletingProduct: Product | null = null;
+  /** The product or variant the Delete confirmation is open for. */
+  @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
   /** The modifier list the nested extras or options form is EDITING, or null while it is creating
    * one. The same form does both, and this is what decides which write its Save performs; one state
@@ -248,7 +249,14 @@ export class CatalogueScreen extends LitElement {
   }
 
   #openDelete(productId: string): void {
-    this.deletingProduct = this.products.find(({ id }) => id === productId) ?? null;
+    const product = this.products.find(({ id }) => id === productId);
+    const variant = this.products
+      .flatMap(({ variants }) => variants)
+      .find(({ id }) => id === productId);
+    const found = product ?? variant;
+    this.deletingProduct = found
+      ? { id: found.id, name: found.name, isVariant: product === undefined }
+      : null;
     this.deleteErrorKey = null;
     this.errorKey = null;
   }
@@ -274,6 +282,23 @@ export class CatalogueScreen extends LitElement {
     }
     this.#closeDelete();
     try {
+      await this.#reloadProducts();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Makes a removed variant Active again through its own page's write, the same write Delete
+   * uses to make it Inactive. */
+  async #restoreProduct(productId: string): Promise<void> {
+    if (this.busy || !this.#knows(productId)) return;
+    this.busy = true;
+    this.errorKey = null;
+    try {
+      const value = await this.api.getProductEditor(productId);
+      await this.api.updateProductEditor(productId, { ...value, active: true });
       await this.#reloadProducts();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -468,6 +493,10 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 this.#openDelete(event.detail.productId);
               }}
+              @restore-product=${(event: CustomEvent<{ productId: string }>) => {
+                event.stopPropagation();
+                void this.#restoreProduct(event.detail.productId);
+              }}
             ></dashboard-product-list>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
@@ -504,13 +533,21 @@ export class CatalogueScreen extends LitElement {
       <wt-modal
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}
-        heading=${t("product.delete_named").replace("{name}", this.deletingProduct?.name ?? "")}
+        heading=${t(
+          this.deletingProduct?.isVariant ? "product.remove_variant_named" : "product.delete_named",
+        ).replace("{name}", this.deletingProduct?.name ?? "")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (!this.busy) this.#closeDelete();
         }}
       >
-        <p>${t("product.delete_warning")}</p>
+        <p>
+          ${t(
+            this.deletingProduct?.isVariant
+              ? "product.remove_variant_warning"
+              : "product.delete_warning",
+          )}
+        </p>
         ${
           this.deleteErrorKey
             ? html`<p class="error" role="alert">${codeMessage(this.deleteErrorKey)}</p>`
@@ -528,7 +565,7 @@ export class CatalogueScreen extends LitElement {
             variant="danger"
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
-            >${t("action.delete")}</wt-button
+            >${t(this.deletingProduct?.isVariant ? "action.remove" : "action.delete")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

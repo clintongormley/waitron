@@ -68,8 +68,8 @@ export async function listContentTranslationGaps(
   // (`packages/db/src/schema/columns.ts`). It is parsed below rather than compared as text.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
   // rows and the variant branch to the rest; otherwise each variant would be counted twice. An
-  // Inactive (removed) variant is shown on no screen, so it cannot be completed and must not block
-  // a change of default.
+  // Inactive (removed) variant is on no menu offer (`readOfferVariants`, operations.ts), so a
+  // language it lacks reaches no diner and must not block a change of default.
   const result = await tx.execute<{
     kind: string;
     id: string;
