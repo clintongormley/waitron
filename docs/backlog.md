@@ -3774,7 +3774,50 @@ What the preparation tasks left, with F1's own answers where it found them:
   `packages/workforce/src/chain.test.ts` covers exhaustion and a non-collision error but not a
   refusal followed by a successful retry. The fiscal case above is the shape to copy (found by
   #509's review).
-- **Stale `vitest.config.ts` comments — DONE (2026-09-23, PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
+- **Stale `vitest.config.ts` comments — DONE (2026-09-23, branch `chore/vitest-config-comments`).**
+  The entry asked for each package to be checked "read not run"; it was the other way round — run,
+  not read — and this supersedes it. Most of the named claims had gone before this branch: "every
+  test here boots a WASM PostgreSQL" in #467, "nowhere else in the repo" and the 2026-08-20
+  single-fork receipt in #489, and `fiscal` and `fiscal-none` mentioned PGlite only as history,
+  which is now cut. What was left was corrected against runs. Each of the five packages' timeout
+  comments now says the value is margin, because each package passed `vitest run --testTimeout=2000
+  --hookTimeout=2000` with `useVenueDb`'s default setup budget temporarily cut to 2s, on an
+  18-core Mac with one package running at a time. No value changed. The review also dropped the
+  `venue-db.ts` line pointers from sibling configs and test files, several of which were stale, and
+  a "(CLAUDE.md §4)" pointer that named no rule about worker pins.
+  - `purchasing`: 19 tests, slowest 6ms, database setup 14ms.
+  - `fiscal-none`: 13 tests, slowest 2ms, setup 14ms; coverage at one and three workers wrote
+    identical summaries, so its one-worker pin is recorded as a precaution, not a need.
+  - `fiscal`: 186 tests, slowest 2ms, setup 5ms in the one file that opens a database.
+  - `db`: 577 tests, slowest 74ms, slowest setup 83ms; 20.3s at one worker, 6.4s at four, 5.9s at
+    eight; coverage covered and total counts the same per file at one and at four workers; the
+    48-line history of the `english-only.ts` exclusion is cut to a pointer at f8d6097d0.
+  - `identity`: 278 tests, slowest 185ms, slowest setup 49ms; `test:coverage` gave the same covered
+    and total counts per file at one worker (22.3s) and with `--maxWorkers=6` (6.2s), so its
+    one-worker pin is recorded as a precaution, not a need. Its comment's `venue-db.ts:176`, `:183`
+    and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
+  - Follow-up: every other `maxWorkers: 1` config whose comment gives the coverage reason, apart
+    from `payments`, which carries its own measurement, still says the pin is needed without having
+    measured it; the same one-worker-against-several coverage comparison would settle each. Two of
+    those comments, in `packages/shared/vitest.config.ts` and
+    `packages/diagnostics/vitest.config.ts`, also still say the pre-push hook runs a whole-workspace
+    `pnpm -r test:coverage`, and so does `apps/server/vitest.config.ts`'s comment on why it does not
+    pin one worker. The hook has run no package tests since #338; its only test run is the root
+    `pnpm vitest run --coverage`. #515 and the dashboard-kit coverage branch fixed the same words in
+    server-kit, dashboard-kit and dashboard-modules.
+- **Dead code and doc sweeps owed to the rollout's final sweep** — **DONE** (2026-09-23). The unused
+  `seedTenantWithSumUpKey` was deleted by PR #516; the file's real-SumUp case seals no credential and
+  passes, because the seat reads its credential only on first use, and that case's name and the file
+  header had said otherwise and now do not. The twelve plans with a `usePgliteDb` sketch already carried a dated `useVenueDb`
+  pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
+  claim, the slice-1 spec's four unannotated "211" mentions, and what became of
+  `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
+- **Deferred cleanups, each with its reason in its PR** — P5's three declined review suggestions;
+  and P7's three (assert `drizzle-kit generate` is a no-op; unify the three root-project schema
+  readers into `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class
+  map).
+  - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
+    PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
     pattern instead of copies; its raw reader keeps the number type's bound rather than the money
     digit bound, because most raw reads are totals, which can be wider than one amount — pinned in
     `cents.test.ts` and shown failing when the digit bound is put in. `updatePurchaseInvoice` now
