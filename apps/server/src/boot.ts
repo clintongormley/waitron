@@ -1,3 +1,5 @@
+import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+import { mountCloudApi } from "./cloud-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
@@ -738,6 +740,7 @@ export async function startServer(
   // built below (the logger writes to `<stateDir>/logs` by default). A boot with invalid config still
   // escapes here (§8) before any logger, pool or listener exists.
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  const cloudOrigin = loadCloudOrigin(env);
   // The addresses this box tells the LAN to reach it on — the leaf's iPAddress SANs, the discovery
   // document's IP URLs (and the QR built from them) and the mDNS answers. One resolver, so all three
   // read the same list on any single call: the operator's `WAITRON_BOX_ADDRESSES` when set, else the
@@ -2126,6 +2129,26 @@ export async function startServer(
   // box's persisted secret files (config.stateDir) into a passphrase-encrypted bundle. Mounted in the
   // trading branch only — a setup box has no provisioned identity to recover.
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
+  mountCloudApi(
+    app,
+    {
+      db,
+      managementOrigin: config.managementOrigin,
+      isPrimary: () =>
+        holders.mode.current === "primary" &&
+        holders.singletonRole.current === "primary" &&
+        !fenced,
+      connection: cloudOrigin
+        ? createCloudConnection({
+            stateDir: config.stateDir,
+            origin: cloudOrigin,
+            localVenueId: till.locationId,
+            environment: config.environment === "production" ? "production" : "test",
+          })
+        : undefined,
+    },
+    log,
+  );
 
   // The authenticated backup admin routes (BR-1 Task 6): the same management gate as box-status,
   // reading and hot-reloading the SAME `backupSupervisor` above so the wizard can enable/rotate

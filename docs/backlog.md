@@ -79,6 +79,21 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 
 ---
 
+## Cloud connection integration — 2026-09-24
+
+The Settings → Cloud services screen and local manager adapter now implement the
+[connection journey](developers/cloud-connection.md). Two real Waitron SQLite servers
+pass the Cloud repository's browser integration proof, including restart, a lost
+completion reply and swapped installation proof refusal. Cloud and local approvals
+remain separate; the local server checks live manager permission and serving-primary
+status before final signing. Installation keys stay in node-local state.
+
+Next on this integration track: credential renewal/status/revocation, local remote
+access, then SQLite/Litestream backup and replacement recovery. Connected does not
+mean those services are configured. Cloud service ownership stays in the Cloud
+backlog; this repository owns its adapter, screen and node-side behavior. Public
+hosting, ingress controls and Cloud audit/retention remain deployment work.
+
 ## What to work on next
 
 Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own

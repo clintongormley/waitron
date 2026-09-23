@@ -61,6 +61,7 @@ import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
+import "./screens/cloud-services-screen.js";
 import "./screens/email-screen.js";
 import "./screens/payments-screen.js";
 import "./screens/alerts-screen.js";
@@ -121,6 +122,7 @@ type CoreScreen =
   | "device-profiles"
   | "diagnostics"
   | "backup"
+  | "cloud"
   | "email"
   | "payments"
   | "alerts";
@@ -214,6 +216,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
+      { screen: "cloud", labelKey: "nav.cloud", requiresManager: true },
       { screen: "email", labelKey: "nav.email", requiresManager: true },
     ],
   },
@@ -1672,6 +1675,10 @@ export class DashboardApp extends LitElement {
         ></dashboard-device-profiles-screen>`;
       case "diagnostics":
         return html`<dashboard-diagnostics-screen .api=${this.api}></dashboard-diagnostics-screen>`;
+      case "cloud":
+        return html`<dashboard-cloud-services-screen
+          .api=${this.api}
+        ></dashboard-cloud-services-screen>`;
       case "backup":
         return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
       case "email":

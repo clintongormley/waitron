@@ -694,6 +694,12 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
       ).rows[0]!.seen;
     const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
     const before = await age();
+    const cloud = await fetch(`http://127.0.0.1:${port}/management-api/cloud/status`, {
+      headers: { cookie },
+    });
+    expect(cloud.status).toBe(200);
+    expect(await cloud.json()).toMatchObject({ configured: false, state: "not_connected" });
+    expect(await seen()).toBe(before);
     const passive = await fetch(`http://127.0.0.1:${port}/management-api/printers`, {
       headers: { cookie, "x-waitron-live": "1" },
     });

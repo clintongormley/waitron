@@ -1283,6 +1283,28 @@ export type BackupDestinationStatus = {
 export type BackupFreshness =
   { configured: false } | { configured: true; destinations: BackupDestinationStatus[] };
 
+export interface CloudConnectionStatus {
+  configured: boolean;
+  isPrimary: boolean;
+  state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
+  code: string;
+  openCloudUrl?: string;
+  requestId?: string;
+  expiresAt?: string;
+  localVenueId?: string;
+  environment?: "test" | "production";
+  organisationId?: string;
+  legalBusinessId?: string;
+  organisationName?: string;
+  legalBusinessName?: string;
+  registration?: {
+    venueId: string;
+    installationId: string;
+    organisationId: string;
+    legalBusinessId: string;
+  };
+}
+
 /** `GET /api/backup/status` — the running backup duty projected for the admin surface, the server's
  * `BackupRuntimeStatus` MINUS the secret `recoveryKey`, plus the async freshness read (`backupStatus`)
  * and the derived `archiveUnderCurrentKey`. `schedule`/`retention`/`keyFingerprint`/`keyRotatedAt` are
@@ -3006,6 +3028,23 @@ export class DashboardApi {
   }
 
   // ── Backup admin (recovery-key wizard) ────────────────────────────────────────────────────────
+
+  getCloudStatus(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/status", "GET");
+  }
+  startCloudConnection(restart = false): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/start", "POST", { restart });
+  }
+  checkCloudConnection(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/check", "POST", {});
+  }
+  completeCloudConnection(choice: {
+    requestId: string;
+    organisationId: string;
+    legalBusinessId: string;
+  }): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/complete", "POST", choice);
+  }
 
   /** `GET /api/backup/status` — the running backup duty, projected without the recovery key (see
    * {@link BackupStatusView}). Backs the always-available status view. */
