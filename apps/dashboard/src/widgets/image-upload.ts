@@ -34,10 +34,17 @@ export class ImageUpload extends LitElement {
         max-height: 16rem;
         border-radius: var(--wt-radius-md);
       }
+      .hint {
+        margin: var(--wt-space-2) 0 0;
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
   @property({ attribute: false }) api!: ImageUploader;
   @property() image: string | null = null;
+  /** The photo a blank `image` falls back to — a variant's parent's — shown as a hint, not stored
+   * (spec §9.1). */
+  @property() inheritedImage: string | null = null;
   @state() private pickerOpen = false;
   @state() private altText: Record<string, string> = {};
   #selectedFilename: string | null = null;
@@ -78,6 +85,17 @@ export class ImageUpload extends LitElement {
         }
       </div>
       ${this.image ? html`<img class="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.altText : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
+      ${
+        !this.image && this.inheritedImage
+          ? html`<p class="hint" data-test="inherited-hint">${t("editor.inherited_image")}</p>
+              <img
+                class="preview"
+                data-test="inherited-preview"
+                src=${`/media/${encodeURIComponent(this.inheritedImage)}`}
+                alt=${t("editor.inherited_image_alt")}
+              />`
+          : nothing
+      }
       ${
         this.pickerOpen
           ? html`<wt-modal

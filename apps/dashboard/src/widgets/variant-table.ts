@@ -11,11 +11,14 @@ import { priceLabel } from "./form-fields.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-/** One rendered row: the variant and the key that follows it while the table is on screen. */
+/** One row: the variant and the key that follows it while the table is on screen. */
 interface VariantRow {
   key: string;
   variant: ProductEditorVariant;
 }
+
+/** Which variants the status filter shows (spec §15.6: a removed variant is Inactive, not gone). */
+type StatusFilter = "active" | "inactive" | "all";
 
 /**
  * The product editor's list of variants — a plain `<table>` this widget owns, deliberately NOT
@@ -23,10 +26,10 @@ interface VariantRow {
  * sort and search.
  *
  * The host owns the variants. Every row action leaves as an event carrying the row's INDEX, which
- * is the same index in the array the host handed over. A reorder is the one action the table also
- * shows immediately: the row follows the key or the finger, and `wt-reorder` tells the host to make
- * the same move in its draft. A host that ignores that event therefore drifts out of step with what
- * is on screen.
+ * is the same index in the array the host handed over — rows the status filter hides included. A
+ * reorder is the one action the table also shows immediately: the row follows the key or the
+ * finger, and `wt-reorder` tells the host to make the same move in its draft. A host that ignores
+ * that event therefore drifts out of step with what is on screen.
  *
  * The name shown is the STAFF name. The customer-facing name belongs to a receipt or a menu, and
  * the fallback between them belongs to `packages/catalogue/src/product-presentation.ts`.
@@ -77,6 +80,31 @@ export class VariantTable extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
+      .filter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-2);
+        color: var(--wt-color-text);
+        font-family: var(--wt-font-family);
+      }
+      /* A filter over the rows below, not a field of the product: sized to its choices so it does
+         not read as one more full-width input in the form. */
+      .filter select {
+        width: auto;
+      }
+      .muted {
+        color: var(--wt-color-text-muted);
+      }
+      .price-hint {
+        white-space: nowrap;
+      }
+      .notice {
+        margin: var(--wt-space-2) 0 0;
+        color: var(--wt-color-text-muted);
+        font-family: var(--wt-font-family);
+      }
       .visually-hidden {
         position: absolute;
         width: 1px;
@@ -92,6 +120,8 @@ export class VariantTable extends LitElement {
   ];
 
   @property({ attribute: false }) variants: ProductEditorVariant[] = [];
+  /** The product's own price, which a variant with no price of its own sells at. */
+  @property() basePrice = "";
   /** The product's pricing unit, named once in the price column's header. */
   @property() unitLabel = "";
   @property({ attribute: false }) unitId: string | null = null;
@@ -101,12 +131,14 @@ export class VariantTable extends LitElement {
   /** A problem with one row, keyed by that row's index in `variants`. The host validates; this
    * only shows what it reports, beside the row it belongs to. */
   @property({ attribute: false }) errors: Record<number, string> = {};
-  /** The rows in display order. A reorder rewrites this before the host confirms it. */
+  /** Every row in list order, hidden ones included. A reorder rewrites this before the host
+   * confirms it. */
   @state() private rows: VariantRow[] = [];
+  @state() private status: StatusFilter = "active";
   #nextKey = 0;
 
   readonly #reorder = new ReorderController(this, {
-    order: () => this.rows.map((row) => row.key),
+    order: () => this.#visible().map((row) => row.key),
     move: (key, to) => this.#move(key, to),
     label: (key) => this.#label(this.rows.find((row) => row.key === key)?.variant),
     busy: () => this.busy,
@@ -122,19 +154,46 @@ export class VariantTable extends LitElement {
     this.shadowRoot?.querySelector<HTMLElement>(`[data-test="actions-${index}"]`)?.focus();
   }
 
+  #shows(variant: ProductEditorVariant): boolean {
+    return this.status === "all" || variant.active === (this.status === "active");
+  }
+
+  #visible(): VariantRow[] {
+    return this.rows.filter((row) => this.#shows(row.variant));
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
-    if (!changed.has("variants")) return;
+    const added = changed.has("variants") ? this.#rekey() : [];
+    if (!changed.has("variants") && !changed.has("errors")) return;
+    // A reported problem, or a variant just added, must never sit on a row the filter hides: the
+    // person would be told something is wrong, or that they added a row, and see nothing.
+    const hidden = this.rows.some(
+      (row, index) =>
+        !this.#shows(row.variant) &&
+        (this.errors[index] !== undefined || (added.includes(row) && row.variant.id === undefined)),
+    );
+    if (hidden) this.status = "all";
+  }
+
+  /** Re-reads the host's variants into rows, returning the rows it had not seen before. */
+  #rekey(): VariantRow[] {
     // Keys follow the variant OBJECT, so the array coming back from a host that applied a reorder
     // carries the same keys in the same order — which is what keeps a keyboard user's focus on the
     // row they just moved. A host that rebuilds its variants mints new keys and merely loses that
     // focus; it never moves the wrong row, because a key that is gone matches no handle.
     const previous = new Map(this.rows.map((row) => [row.variant, row.key]));
+    const added: VariantRow[] = [];
     this.rows = this.variants.map((variant) => {
       const key = previous.get(variant);
-      if (key === undefined) return { key: `variant-${++this.#nextKey}`, variant };
+      if (key === undefined) {
+        const row = { key: `variant-${++this.#nextKey}`, variant };
+        added.push(row);
+        return row;
+      }
       previous.delete(variant);
       return { key, variant };
     });
+    return added;
   }
 
   /** The staff name, or a generic one so a nameless draft row still has something to be called. */
@@ -146,25 +205,59 @@ export class VariantTable extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
+  /** `to` is a position among the rows on screen. The row lands where the visible row now at that
+   * position is in the whole list, which keeps the visible rows' order what the person made it
+   * while the hidden rows stay where they were relative to their neighbours. */
   #move(key: string, to: number): void {
     const from = this.rows.findIndex((row) => row.key === key);
+    const target = this.#visible()[to];
+    const at = target === undefined ? -1 : this.rows.indexOf(target);
     // A key that no longer names a row, or a move that lands where it started, would otherwise be
     // reported to the host as a move — one of them from index -1.
-    if (from < 0 || from === to) return;
-    this.rows = reorder(this.rows, from, to);
-    this.#emit("wt-reorder", { from, to });
+    if (from < 0 || at < 0 || from === at) return;
+    this.rows = reorder(this.rows, from, at);
+    this.#emit("wt-reorder", { from, to: at });
+  }
+
+  #action(name: string, index: number, label: string, variant: "secondary" | "danger") {
+    return html`<wt-button
+      variant=${variant}
+      data-test=${`${name}-${index}`}
+      .disabled=${this.busy}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        if (this.busy) return;
+        this.#emit(`wt-${name}`, { index });
+      }}
+      >${label}</wt-button
+    >`;
   }
 
   #row(row: VariantRow, index: number) {
-    const label = this.#label(row.variant);
+    const { variant } = row;
+    const label = this.#label(variant);
     const error = this.errors[index] ?? "";
     return html`<tr class=${error ? "invalid" : ""} data-test=${`row-${index}`}>
       <td>${this.#reorder.handle(row.key)}</td>
       <td>
         ${label}
+        ${
+          variant.active
+            ? nothing
+            : html`<span class="muted" data-test=${`inactive-${index}`}
+                >${t("product.inactive_badge")}</span
+              >`
+        }
         ${error ? html`<p class="error" data-test=${`error-${index}`}>${error}</p>` : nothing}
       </td>
-      <td>${row.variant.unitPrice}</td>
+      <td>
+        ${
+          variant.unitPrice ??
+          html`<span class="muted price-hint"
+            >${t("editor.same_as").replace("{value}", this.basePrice)}</span
+          >`
+        }
+      </td>
       <td>
         <wt-switch
           name=${`available-${index}`}
@@ -185,34 +278,43 @@ export class VariantTable extends LitElement {
           align="end"
           data-test=${`actions-${index}`}
           label=${`${t("editor.variant_actions")}: ${label}`}
-          ><wt-button
-            variant="secondary"
-            data-test=${`edit-${index}`}
-            .disabled=${this.busy}
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              if (this.busy) return;
-              this.#emit("wt-edit", { index });
-            }}
-            >${t("action.edit")}</wt-button
-          ><wt-button
-            variant="danger"
-            data-test=${`remove-${index}`}
-            .disabled=${this.busy}
-            @click=${(event: Event) => {
-              event.stopPropagation();
-              if (this.busy) return;
-              this.#emit("wt-remove", { index });
-            }}
-            >${t("action.remove")}</wt-button
-          ></wt-row-actions
+          >${
+            variant.id === undefined
+              ? nothing
+              : this.#action("open", index, t("editor.open_variant"), "secondary")
+          }${this.#action("edit", index, t("action.edit"), "secondary")}${
+            variant.active
+              ? this.#action("remove", index, t("action.remove"), "danger")
+              : this.#action("restore", index, t("product.restore"), "secondary")
+          }</wt-row-actions
         >
       </td>
     </tr>`;
   }
 
   override render() {
-    return html`<div class="wrap">
+    const visible = this.#visible();
+    return html`<label class="filter"
+        >${t("editor.variants_show")}<select
+          name="variant-status"
+          @change=${(event: Event) => {
+            event.stopPropagation();
+            this.status = (event.target as HTMLSelectElement).value as StatusFilter;
+          }}
+        >
+          ${(
+            [
+              ["active", t("product.active_badge")],
+              ["inactive", t("product.inactive_badge")],
+              ["all", t("product.filter_status_all")],
+            ] as const
+          ).map(
+            ([value, text]) =>
+              html`<option value=${value} .selected=${value === this.status}>${text}</option>`,
+          )}
+        </select></label
+      >
+      <div class="wrap">
         <table>
           <caption class="visually-hidden">
             ${t("editor.variants")}
@@ -262,13 +364,18 @@ export class VariantTable extends LitElement {
           </thead>
           <tbody>
             ${repeat(
-              this.rows,
+              visible,
               (row) => row.key,
-              (row, index) => this.#row(row, index),
+              (row) => this.#row(row, this.rows.indexOf(row)),
             )}
           </tbody>
         </table>
       </div>
+      ${
+        visible.length
+          ? nothing
+          : html`<p class="notice" data-test="no-variants">${t("editor.no_variants_status")}</p>`
+      }
       ${this.#reorder.liveRegion()}`;
   }
 }

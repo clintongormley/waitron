@@ -29,7 +29,8 @@ import {
  * fallback itself belongs to `packages/catalogue/src/product-presentation.ts`, never to a screen.
  *
  * The pricing unit is the PRODUCT's, so this window names it beside the price and offers no control
- * for it. The whole variant travels back to the product editor as one `wt-submit`; nothing here
+ * for it. A blank price and a blank photo follow the product's, which the fields show as their hints
+ * (spec §9.1). The whole variant travels back to the product editor as one `wt-submit`; nothing here
  * writes to the server, so a variant is only saved when the product is.
  */
 @customElement("dashboard-variant-form")
@@ -52,16 +53,22 @@ export class VariantForm extends LitElement {
   @property({ attribute: false }) value: ProductEditorVariant | null = null;
   /** The product's pricing unit, shown with the price. Blank until a unit has been chosen. */
   @property() unitLabel = "";
+  /** The product's price, which a blank price sells at. */
+  @property() basePrice = "";
+  /** The product's photo, which a variant with no photo of its own shows. */
+  @property({ attribute: false }) inheritedImage: string | null = null;
   @property({ attribute: false }) api?: ImageUploader;
   @state() private errors: Record<string, string> = {};
   @state() private name = "";
-  @state() private unitPrice = "0.00";
+  @state() private unitPrice = "";
   @state() private available = true;
   @state() private kitchenName = "";
   @state() private customerName: Record<string, string> = {};
   @state() private image: string | null = null;
   /** The saved variant's id, or undefined for one that has never been stored. */
   #variantId: string | undefined;
+  /** Carried through unchanged: this window never makes a variant Active or Inactive. */
+  #active = true;
   /** The field a refused submit puts focus in, applied in `updated` so the message beside it is on
    * screen by the time the keyboard lands there. */
   #focusField: string | null = null;
@@ -77,9 +84,9 @@ export class VariantForm extends LitElement {
     if (!(changed.has("open") && this.open) && !changed.has("value")) return;
     const value = this.value;
     this.#variantId = value?.id;
+    this.#active = value?.active ?? true;
     this.name = value?.name ?? "";
-    // A saved variant's blank price stays blank: it follows the product's (spec §15.3).
-    this.unitPrice = value ? (value.unitPrice ?? "") : "0.00";
+    this.unitPrice = value?.unitPrice ?? "";
     this.available = value?.available ?? true;
     this.kitchenName = value?.kitchenName ?? "";
     this.customerName = { ...value?.customerName };
@@ -128,6 +135,7 @@ export class VariantForm extends LitElement {
       image: this.image,
       unitPrice,
       available: this.available,
+      active: this.#active,
     };
     this.dispatchEvent(
       new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
@@ -139,6 +147,7 @@ export class VariantForm extends LitElement {
     return html`<dashboard-image-upload
       .api=${this.api}
       .image=${this.image}
+      .inheritedImage=${this.inheritedImage}
       @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
         event.stopPropagation();
         this.image = event.detail.image;
@@ -188,6 +197,8 @@ export class VariantForm extends LitElement {
           (unitPrice) => {
             this.unitPrice = unitPrice;
           },
+          false,
+          this.basePrice,
         )}
         ${switchField(fields, "available", t("editor.available"), this.available, (available) => {
           this.available = available;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ImageUpload, type ImageUploader } from "./image-upload.js";
 import { setContentLanguages } from "@waitron/ui";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
@@ -149,5 +149,33 @@ describe("image-upload", () => {
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
     );
     expect(keys).toHaveBeenCalledOnce();
+  });
+  it("shows the main product's photo as a hint while a variant has none of its own", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      inheritedImage: "parent.png",
+    });
+    const hint = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=inherited-preview]")!;
+    expect(hint.getAttribute("src")).toBe("/media/parent.png");
+    expect(hint.alt).toBe(t("editor.inherited_image_alt"));
+    expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")!.textContent!.trim()).toBe(
+      t("editor.inherited_image"),
+    );
+    // The hint is not the variant's own photo, so there is nothing to remove.
+    expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+  });
+
+  it("drops the hint once the variant has a photo of its own", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      image: "own.png",
+      inheritedImage: "parent.png",
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=inherited-preview]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=preview]")!.getAttribute("src")).toBe(
+      "/media/own.png",
+    );
   });
 });

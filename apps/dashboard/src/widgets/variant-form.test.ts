@@ -22,6 +22,7 @@ const halfPortion: ProductEditorVariant = {
   image: "half.png",
   unitPrice: "6.50",
   available: true,
+  active: true,
 };
 
 function stubApi(): ImageUploader {
@@ -172,6 +173,7 @@ it("emits the edited variant, keeping its id and folding blank optional text to 
     image: "half.png",
     unitPrice: "12.00",
     available: false,
+    active: true,
   });
   expect(event.bubbles).toBe(true);
   expect(event.composed).toBe(true);
@@ -193,6 +195,7 @@ it("emits a variant with no id and no optional text when it opened empty", async
     image: null,
     unitPrice: "3.00",
     available: true,
+    active: true,
   });
   expect("id" in value).toBe(false);
 });
@@ -334,4 +337,37 @@ it("holds Escape while the save it started is in flight", async () => {
   // The control in the other direction: with nothing in flight the key is left alone, so the dialog
   // closes and the window reports a cancel the ordinary way.
   expect(await press(false)).toBe(false);
+});
+
+it("opens a new variant with a blank price whose hint is the base price, and saves it blank", async () => {
+  const el = await mountForm({ basePrice: "9.00" });
+  expect(field(el, "unitPrice").value).toBe("");
+  expect((field(el, "unitPrice") as unknown as { placeholder: string }).placeholder).toBe("9.00");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await change(el, "name", "Copa");
+  await click(el, "variant-save");
+  const value = (submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>).detail
+    .value;
+  expect(value.unitPrice).toBeNull();
+  expect(value.active).toBe(true);
+});
+
+it("keeps an Inactive variant Inactive when it is edited", async () => {
+  const el = await mountForm({ value: { ...halfPortion, active: false } });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await change(el, "name", "Media ración");
+  await click(el, "variant-save");
+  expect(
+    (submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>).detail.value.active,
+  ).toBe(false);
+});
+
+it("hints the main product's photo while the variant has none of its own", async () => {
+  const el = await mountForm({
+    value: { ...halfPortion, image: null },
+    inheritedImage: "whole.png",
+  });
+  expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.inheritedImage).toBe("whole.png");
 });
