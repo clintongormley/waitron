@@ -265,17 +265,18 @@ function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-/** The one line a probe prints. Values holding whitespace are JSON-quoted so the line splits cleanly. */
+/** The probe's one Markdown table row: whitespace in a string value is JSON-quoted, `|` escaped. */
 export function report(
   probe: string,
   verdict: string,
   detail: Record<string, string | number | boolean | null>,
 ): void {
   const text = Object.entries(detail)
-    .map(
-      ([key, value]) =>
-        `${key}=${typeof value === "string" && /[\s|]/.test(value) ? JSON.stringify(value) : String(value)}`,
-    )
+    .map(([key, value]) => {
+      if (typeof value !== "string") return `${key}=${String(value)}`;
+      const quoted = /[\s|]/.test(value) ? JSON.stringify(value) : value;
+      return `${key}=${quoted.replaceAll("|", "\\|")}`;
+    })
     .join(" ");
   console.log(`| ${probe} | ${verdict} | ${text} |`);
 }

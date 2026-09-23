@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     const crossed = D.walByRound.findIndex((bytes) => bytes >= TRUNCATE_THRESHOLD_BYTES);
     const shrankAfterThreshold =
       crossed !== -1 &&
-      D.walByRound.slice(crossed + 1).some((bytes) => bytes < D.walByRound[crossed]!);
+      D.walByRound.slice(crossed + 1).some((bytes, i) => bytes < D.walByRound[crossed + i]!);
 
     report(PROBE, voided ? "VOID" : `AUTOCHECKPOINT_OFF_NEEDED=${offNeeded}`, {
       version: litestream.version,

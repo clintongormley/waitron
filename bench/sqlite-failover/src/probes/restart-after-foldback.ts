@@ -89,9 +89,10 @@ async function main(): Promise<void> {
       configPath: join(dir, "unreachable.yml"),
     });
     const node = openNode("box-a", dbPath);
+    let daemon: ReturnType<typeof replicate> | undefined;
     try {
       // Phase 1: stream, and see the store hold it.
-      let daemon = replicate(bin, reachable, onLog);
+      daemon = replicate(bin, reachable, onLog);
       await waitForAttach(dbPath);
       sell(node, STREAMED);
       const phase1 = await waitForStoredRows({
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
       assert.ok(phase1.reached, `precondition: the store never held the first ${STREAMED} sales`);
       daemon.kill();
       await daemon.exited;
+      daemon = undefined;
 
       // Phase 2: attached but offline. Our checkpoint is expected to be refused here (S4's finding).
       daemon = replicate(bin, unreachable, onLog);
@@ -113,6 +115,7 @@ async function main(): Promise<void> {
       const heldCheckpoint = checkpoint(node);
       daemon.kill();
       await daemon.exited;
+      daemon = undefined;
 
       // Phase 3: the fold-back, sales with nothing attached, and a second fold-back.
       const foldBack = checkpoint(node);
@@ -154,6 +157,7 @@ async function main(): Promise<void> {
       const daemonAlive = state.exit === "alive";
       daemon.kill();
       await daemon.exited;
+      daemon = undefined;
 
       const complete =
         after.reached &&
@@ -186,6 +190,10 @@ async function main(): Promise<void> {
         "first-problem": problems[0] ?? "none",
       });
     } finally {
+      if (daemon) {
+        daemon.kill();
+        await daemon.exited;
+      }
       node.close();
       await offline.store.stop();
     }
