@@ -284,26 +284,34 @@ export class VenueOperationsScreen extends LitElement {
     value = "",
     type = "text",
     required = true,
-    extra: { placeholder?: string; onInput?: (value: string) => void } = {},
+    extra: { placeholder?: string; hint?: string; onInput?: (value: string) => void } = {},
   ) {
-    const { onInput } = extra;
+    const { onInput, hint } = extra;
+    const describedBy = [
+      ...(this.fieldErrors[name] ? [`error-${name}`] : []),
+      ...(hint === undefined ? [] : [`hint-${name}`]),
+    ].join(" ");
     return html`<label
-      ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
-      ><input
-        name=${name}
-        type=${type}
-        .value=${value}
-        placeholder=${extra.placeholder ?? nothing}
-        ?required=${required}
-        aria-invalid=${!!this.fieldErrors[name]}
-        aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
-        @input=${
-          onInput === undefined
-            ? nothing
-            : (event: Event) => onInput((event.currentTarget as HTMLInputElement).value)
-        }
-      />${this.#fieldError(name)}</label
-    >`;
+        ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
+        ><input
+          name=${name}
+          type=${type}
+          .value=${value}
+          placeholder=${extra.placeholder ?? nothing}
+          ?required=${required}
+          aria-invalid=${!!this.fieldErrors[name]}
+          aria-describedby=${describedBy || nothing}
+          @input=${
+            onInput === undefined
+              ? nothing
+              : (event: Event) => onInput((event.currentTarget as HTMLInputElement).value)
+          }
+        />${this.#fieldError(name)}</label
+      >${
+        hint === undefined
+          ? nothing
+          : html`<p id=${`hint-${name}`} class="hint" data-hint=${name}>${hint}</p>`
+      }`;
   }
   #select(
     name: string,
@@ -595,8 +603,8 @@ export class VenueOperationsScreen extends LitElement {
                     key: "price",
                     label: t("venue.price"),
                     align: "end",
-                    cell: (row) => row.grossPrice,
-                    sortValue: (row) => Number(row.grossPrice),
+                    cell: (row) => row.unitPrice,
+                    sortValue: (row) => Number(row.unitPrice),
                   },
                   {
                     key: "actions",
@@ -974,7 +982,9 @@ export class VenueOperationsScreen extends LitElement {
               "text",
               language === defaultLanguage,
             ),
-          )}${this.#input(priceName, t("venue.price"), row?.grossPrice, "text", true, {
+          )}${this.#input(priceName, t("venue.price"), row?.grossPrice ?? "", "text", false, {
+            placeholder: product?.unitPrice ?? "",
+            hint: t("venue.offer_price_hint"),
             onInput: (value) => {
               this.offerPrice = value;
             },
@@ -1010,7 +1020,6 @@ export class VenueOperationsScreen extends LitElement {
           save: () => {
             if (
               !this.#validate([
-                { name: priceName, label: t("venue.price") },
                 { name: `offer-section-${menuId}`, label: t("venue.section") },
                 ...(row
                   ? []
@@ -1024,8 +1033,10 @@ export class VenueOperationsScreen extends LitElement {
               ])
             )
               return;
-            const grossPrice = this.#value(priceName).trim();
-            if (!PRICE.test(grossPrice)) {
+            const typed = this.#value(priceName).trim();
+            // Blank is a price: the product's own.
+            const grossPrice = typed === "" ? null : typed;
+            if (grossPrice !== null && !PRICE.test(grossPrice)) {
               this.fieldErrors = { [priceName]: t("venue.price_invalid") };
               return;
             }

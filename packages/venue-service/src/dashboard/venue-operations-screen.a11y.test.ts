@@ -89,6 +89,7 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             name: "Wine by the glass",
             customerName: null,
             grossPrice: "4.50",
+            unitPrice: "4.50",
             variants: [
               {
                 id: "v2",

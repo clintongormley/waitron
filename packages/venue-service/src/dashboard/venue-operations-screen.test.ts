@@ -108,6 +108,7 @@ const model: VenueServiceView = {
       name: "Negroni",
       customerName: { en: "House Aperitivo" },
       grossPrice: "11.00",
+      unitPrice: "11.00",
       variants: [
         {
           id: "v1",
@@ -457,6 +458,7 @@ describe("venue operations screen", () => {
           name: "Olives",
           customerName: { en: "Manzanilla Olives" },
           grossPrice: "4.00",
+          unitPrice: "4.00",
         },
       ],
     };
@@ -678,6 +680,7 @@ describe("venue operations screen", () => {
         name: "Bravas",
         customerName: { en: "Patatas bravas" },
         grossPrice: "5.00",
+        unitPrice: "5.00",
         variants: [],
       },
     ],
@@ -714,6 +717,33 @@ describe("venue operations screen", () => {
     expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i-lentils", [
       { variantId: "v-bowl", price: null, offered: true },
     ]);
+  });
+
+  it("creates an offer with no menu price, hinting the picked product's own price", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(twoProductModel),
+      createMenuSection: vi.fn().mockResolvedValue({ id: "sec3" }),
+      createMenuItem: vi.fn().mockResolvedValue({ id: "i-new" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m2");
+    expect(field(el, "offer-price-m2").value).toBe("");
+    expect(input(el, "offer-price-m2").placeholder).toBe("5.00");
+    const select = field(el, "offer-product-m2") as HTMLSelectElement;
+    select.value = "p-lentils";
+    select.dispatchEvent(new Event("change"));
+    await settle(el);
+    expect(input(el, "offer-price-m2").placeholder).toBe("6.00");
+    field(el, "offer-section-m2").value = "Guisos";
+    await action(el, "save-editor");
+    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+      productId: "p-lentils",
+      sectionId: "sec3",
+      grossPrice: null,
+      displayOrder: 0,
+    });
   });
 
   it("follows the dropdown to the picked product's variants", async () => {
@@ -850,6 +880,86 @@ describe("venue operations screen", () => {
     await settle(el);
     expect(input(el, "offer-variant-price-v1").placeholder).toBe("12.50");
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-gone"]')).toBeNull();
+  });
+
+  // The product's own price (10.00), the menu's stored price (blank) and every other price in play
+  // differ, so a field hinting or listing the wrong one fails.
+  const blankPriceModel: VenueServiceView = {
+    ...model,
+    products: [
+      {
+        ...model.products[0]!,
+        variants: [{ ...model.products[0]!.variants![0]!, unitPrice: null }],
+      },
+    ],
+    offers: [{ ...model.offers[0]!, grossPrice: null, unitPrice: "10.00", variants: [] }],
+  };
+
+  it("leaves a blank menu price empty, hints the product's own price, and keeps it blank", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(blankPriceModel),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    // The list shows the price the offer is charged at, never an empty cell.
+    expect(tableText(el, "menu-offers-m1")).toContain("10.00");
+    await action(el, "edit-offer-i1");
+    expect(field(el, "offer-price-i1").value).toBe("");
+    expect(input(el, "offer-price-i1").placeholder).toBe("10.00");
+    // Optional, so neither required nor marked as required.
+    expect(field(el, "offer-price-i1").hasAttribute("required")).toBe(false);
+    expect(field(el, "offer-price-i1").closest("label")!.querySelector(".required")).toBeNull();
+    // A placeholder reads like a value, so the form also says what an empty price means.
+    expect(el.shadowRoot!.querySelector('[data-hint="offer-price-i1"]')?.textContent).toContain(
+      "Leave the price empty to charge the product's own price.",
+    );
+    expect(field(el, "offer-price-i1").getAttribute("aria-describedby")).toBe(
+      "hint-offer-price-i1",
+    );
+    // A variant with no price of its own falls to the parent's RESOLVED price here.
+    expect(input(el, "offer-variant-price-v1").placeholder).toBe("10.00");
+    await action(el, "save-editor");
+    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: null });
+  });
+
+  it("saves a cleared menu price as blank, moving the variant hint to the product's price", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...blankPriceModel,
+        offers: [{ ...model.offers[0]!, variants: [] }],
+      }),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    expect(field(el, "offer-price-i1").value).toBe("11.00");
+    expect(input(el, "offer-variant-price-v1").placeholder).toBe("11.00");
+    field(el, "offer-price-i1").value = "";
+    field(el, "offer-price-i1").dispatchEvent(new Event("input"));
+    await settle(el);
+    expect(input(el, "offer-variant-price-v1").placeholder).toBe("10.00");
+    await action(el, "save-editor");
+    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: null });
+  });
+
+  it("refuses a malformed offer price beside its field", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      setMenuVariants: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    field(el, "offer-price-i1").value = "1.234";
+    await action(el, "save-editor");
+    expect(api.updateMenuItem).not.toHaveBeenCalled();
+    expect(summary(el)).toContain("Enter a non-negative price with up to two decimal places.");
+    expect(el.shadowRoot!.querySelector('[data-field-error="offer-price-i1"]')).not.toBeNull();
   });
 
   it("refuses a malformed variant price beside its field", async () => {

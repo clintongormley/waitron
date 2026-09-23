@@ -129,7 +129,10 @@ export interface MenuOffer {
   sectionName: Record<string, string>;
   name: string;
   customerName: Record<string, string> | null;
-  grossPrice: string;
+  /** The price this menu sets, or null when the product's own price applies. */
+  grossPrice: string | null;
+  /** The price the offer is charged at: `grossPrice`, else the product's own. */
+  unitPrice: string;
   variants?: MenuOfferVariant[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
@@ -237,12 +240,21 @@ export class VenueServiceApi {
 
   createMenuItem(
     menuId: string,
-    input: { productId: string; sectionId: string; grossPrice: string; displayOrder: number },
+    input: {
+      productId: string;
+      sectionId: string;
+      grossPrice: string | null;
+      displayOrder: number;
+    },
   ): Promise<{ id: string }> {
     return this.request(`/management-api/catalogues/${menuId}/items`, "POST", input);
   }
 
-  updateMenuItem(menuId: string, menuItemId: string, input: { grossPrice: string }): Promise<void> {
+  updateMenuItem(
+    menuId: string,
+    menuItemId: string,
+    input: { grossPrice: string | null },
+  ): Promise<void> {
     return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "PATCH", input);
   }
 

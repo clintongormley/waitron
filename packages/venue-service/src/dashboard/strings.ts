@@ -59,8 +59,9 @@ const en = {
   "venue.price": "Price",
   "venue.variants": "Variants",
   "venue.offered": "Offered on this menu",
+  "venue.offer_price_hint": "Leave the price empty to charge the product's own price.",
   "venue.variant_price_hint":
-    "Leave a variant's price empty to charge its own price, or the product's price on this menu if it has none.",
+    "Leave a variant's price empty to charge its own price, or the product's if it has none. The hint shows the price that applies.",
   "venue.add_offer": "Add product to menu",
   "venue.save_price": "Save price",
   "venue.remove_offer": "Remove from menu",
@@ -161,8 +162,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.price": "Precio",
   "venue.variants": "Variantes",
   "venue.offered": "Se ofrece en esta carta",
+  "venue.offer_price_hint": "Deja el precio vacío para cobrar el precio propio del producto.",
   "venue.variant_price_hint":
-    "Deja vacío el precio de una variante para cobrar su propio precio o, si no tiene, el del producto en esta carta.",
+    "Deja vacío el precio de una variante para cobrar su propio precio o, si no tiene, el del producto. La sugerencia muestra el precio que se aplica.",
   "venue.add_offer": "Añadir producto a la carta",
   "venue.save_price": "Guardar precio",
   "venue.remove_offer": "Quitar de la carta",
