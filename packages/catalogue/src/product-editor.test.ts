@@ -84,7 +84,7 @@ it("saves and reads the canonical editor shape with independent content and vari
   expect(saved).toEqual({
     ...input,
     id: saved.id,
-    variants: input.variants.map((v, i) => ({ ...v, id: saved.variants[i]!.id })),
+    variants: input.variants.map((v, i) => ({ ...v, id: saved.variants[i]!.id, active: true })),
     stationId: null,
     courseId: null,
   });
@@ -115,13 +115,15 @@ it("saves and reads the canonical editor shape with independent content and vari
   });
 });
 
-it("refuses a save with exactly one variant but allows none or two", async () => {
-  await expect(
-    withTransaction(fx.db, (tx) =>
-      saveProductEditor(tx, null, catalogueId, { ...input, variants: [input.variants[0]!] }, "en"),
-    ),
-  ).rejects.toMatchObject({ code: "product.variant_count_invalid", params: { minimum: 2 } });
-  expect(await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).toEqual([]);
+it("saves a product with exactly one variant, or none", async () => {
+  // Spec §15.1: one variant is allowed; the server no longer requires a second.
+  const one = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...input, variants: [input.variants[0]!] }, "en"),
+  );
+  expect(one.variants).toEqual([{ ...input.variants[0]!, id: expect.any(String), active: true }]);
+  expect(
+    (await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).map((p) => p.id),
+  ).toEqual([one.id]);
   const none = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, { ...input, variants: [] }, "en"),
   );

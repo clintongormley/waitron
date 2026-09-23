@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import { categoryIdArray, replaceProductCategories } from "./categories.js";
@@ -55,7 +55,7 @@ export async function readProductEditor(
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(productCategories, categoryOwnerJoin)
-    .where(eq(products.id, productId))
+    .where(and(eq(products.id, productId), isNull(products.parentId)))
     .groupBy(products.id);
   if (!row) throw new AppError("product.not_found", { productId });
   return {
@@ -66,7 +66,9 @@ export async function readProductEditor(
     // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
     // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],
-    variants: await listProductVariants(tx, productId),
+    // Active variants only: a save sends back every variant it received and makes each Active, so
+    // listing an Inactive one here would restore it on the parent's next save.
+    variants: (await listProductVariants(tx, productId)).filter((variant) => variant.active),
   };
 }
 
@@ -92,7 +94,7 @@ export async function saveProductEditor(
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.id, productId));
+      .where(and(eq(products.id, productId), isNull(products.parentId)));
     if (!product) throw new AppError("product.not_found", { productId });
   } else {
     const [catalogue] = await tx

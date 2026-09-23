@@ -291,6 +291,7 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       productId: product.productId ?? product.id,
       sectionId: `section-${index}`,
       grossPrice: product.unitPrice,
+      unitPrice: product.unitPrice,
       displayOrder: index,
       active: true,
       menuName: product.catalogueName ?? catalogue.menus[0]?.name ?? "Menu",

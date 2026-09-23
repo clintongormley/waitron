@@ -26,7 +26,8 @@ import {
 } from "./schema/extras.js";
 import { optionLabels } from "./schema/options.js";
 import { productUnits, unitSeedStates, units } from "./schema/units.js";
-import { menuItemVariants, productVariants } from "./schema/variants.js";
+import { productVariants } from "./schema/variants.js";
+import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 
 // One SQLite file with the core set and this package's set applied, which is what the product
 // opens. There is no second target and no role dimension any more: one process holds one file.
@@ -50,7 +51,7 @@ const TABLES = [
   "unit_seed_states",
   "product_units",
   "product_variants",
-  "menu_item_variants",
+  "menu_item_variant_overrides",
   "option_lists",
   "option_labels",
   "extra_lists",
@@ -161,7 +162,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       unit_seed_states: "id",
       product_units: "product_id",
       product_variants: "id",
-      menu_item_variants: "menu_item_id, variant_id",
+      menu_item_variant_overrides: "menu_item_id, variant_id",
       option_lists: "id",
       option_labels: "id",
       extra_lists: "id",
@@ -181,10 +182,10 @@ describe("the catalogue migration set carries no tenant column", () => {
       "menu_item_extra_items(product_id)": "products(id) on delete restrict",
       "menu_item_extra_lists(list_id)": "extra_lists(id) on delete cascade",
       "menu_item_extra_lists(menu_item_id)": "menu_items(id) on delete cascade",
-      "menu_item_variants(menu_item_id, product_id)":
+      "menu_item_variant_overrides(menu_item_id, product_id)":
         "menu_items(id, product_id) on delete cascade",
-      "menu_item_variants(product_id, variant_id)":
-        "product_variants(product_id, id) on delete restrict",
+      "menu_item_variant_overrides(product_id, variant_id)":
+        "products(parent_id, id) on delete restrict",
       "menu_items(menu_id)": "catalogues(id) on delete cascade",
       "menu_items(menu_id, section_id)": "menu_sections(menu_id, id) on delete restrict",
       "menu_items(product_id)": "products(id) on delete restrict",
@@ -214,7 +215,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
       unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
       product_variants_price_ck: `"product_variants"."unit_price" >= 0`,
-      menu_item_variants_price_ck: `"menu_item_variants"."unit_price" >= 0`,
+      menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
+      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" = 0`,
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
@@ -361,15 +363,16 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
         .values({ menuId, productId, sectionId, grossPrice: 3 })
         .returning({ id: menuItems.id })
     )[0]!.id;
-    const variant = async (owner: string, name: string, price: number) =>
+    // A variant as a `products` row under its parent, which is what an override names.
+    const productVariant = async (parentId: string, name: string) =>
       (
         await db
-          .insert(productVariants)
-          .values({ productId: owner, name, unitPrice: price })
-          .returning({ id: productVariants.id })
+          .insert(products)
+          .values({ catalogueId: menuId, parentId, name, dietaryDeclarations: null })
+          .returning({ id: products.id })
       )[0]!.id;
-    const variantId = await variant(productId, "Bowl", 4);
-    const otherVariantId = await variant(otherProductId, "Loaf", 2);
+    const soupBowlId = await productVariant(productId, "Soup bowl");
+    const breadLoafId = await productVariant(otherProductId, "Bread loaf");
     return {
       menuId,
       otherMenuId,
@@ -380,8 +383,8 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       sectionId,
       otherSectionId,
       menuItemId,
-      variantId,
-      otherVariantId,
+      soupBowlId,
+      breadLoafId,
     };
   }
 
@@ -491,52 +494,91 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     );
   });
 
-  it("refuses variants whose product, offer or product variant does not exist or does not match", async () => {
-    const c = await catalogue();
+  it("refuses a product_variants row whose product does not exist", async () => {
+    await catalogue();
     await refusal(
       () => db.insert(productVariants).values({ productId: missing, name: "X", unitPrice: 1 }),
       "product_variants_product_fk",
     );
+  });
+
+  it("refuses a variant override whose offer or variant does not exist or does not match", async () => {
+    const c = await catalogue();
+    const override = (values: { menuItemId: string; productId: string; variantId: string }) =>
+      db.insert(menuItemVariantOverrides).values({ ...values, price: 100 });
     await refusal(
-      () =>
-        db.insert(menuItemVariants).values({
-          menuItemId: missing,
-          productId: c.productId,
-          variantId: c.variantId,
-          unitPrice: 1,
-        }),
-      "menu_item_variants_offer_fk",
+      () => override({ menuItemId: missing, productId: c.productId, variantId: c.soupBowlId }),
+      "menu_item_variant_overrides_offer_fk",
     );
+    // A real variant, but of a product this offer does not sell.
     await refusal(
       () =>
-        db.insert(menuItemVariants).values({
+        override({
           menuItemId: c.menuItemId,
           productId: c.otherProductId,
-          variantId: c.otherVariantId,
-          unitPrice: 1,
+          variantId: c.breadLoafId,
         }),
-      "menu_item_variants_offer_fk",
+      "menu_item_variant_overrides_offer_fk",
     );
+    // Another parent's variant under this offer's product.
     await refusal(
       () =>
-        db.insert(menuItemVariants).values({
-          menuItemId: c.menuItemId,
-          productId: c.productId,
-          variantId: missing,
-          unitPrice: 1,
-        }),
-      "menu_item_variants_variant_fk",
+        override({ menuItemId: c.menuItemId, productId: c.productId, variantId: c.breadLoafId }),
+      "menu_item_variant_overrides_variant_fk",
     );
+    // A top-level product is not a variant of anything.
     await refusal(
       () =>
-        db.insert(menuItemVariants).values({
+        override({
           menuItemId: c.menuItemId,
           productId: c.productId,
-          variantId: c.otherVariantId,
-          unitPrice: 1,
+          variantId: c.otherProductId,
         }),
-      "menu_item_variants_variant_fk",
+      "menu_item_variant_overrides_variant_fk",
     );
+    // The accepting control: this offer's product and one of its own variants.
+    await expect(
+      override({ menuItemId: c.menuItemId, productId: c.productId, variantId: c.soupBowlId }),
+    ).resolves.toBeDefined();
+  });
+
+  it("refuses a variant override that overrides nothing, or a negative price", async () => {
+    const c = await catalogue();
+    const row = { menuItemId: c.menuItemId, productId: c.productId, variantId: c.soupBowlId };
+    for (const [values, check] of [
+      [{ price: null, offered: true }, "menu_item_variant_overrides_overrides_ck"],
+      [{ price: -1, offered: true }, "menu_item_variant_overrides_price_ck"],
+    ] as const) {
+      const error = await captureError(() =>
+        db.insert(menuItemVariantOverrides).values({ ...row, ...values }),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION), check).toBe(true);
+      expect(engineErrorMessage(error)).toContain(check);
+    }
+    // The two ways a row may override something are each accepted on their own.
+    await db.insert(menuItemVariantOverrides).values({ ...row, price: null, offered: false });
+    await db
+      .update(menuItemVariantOverrides)
+      .set({ price: 0, offered: true })
+      .where(sql`${menuItemVariantOverrides.variantId} = ${c.soupBowlId}`);
+  });
+
+  it("drops an offer's variant overrides with the offer, and keeps an overridden variant", async () => {
+    const c = await catalogue();
+    await db.insert(menuItemVariantOverrides).values({
+      menuItemId: c.menuItemId,
+      productId: c.productId,
+      variantId: c.soupBowlId,
+      price: 250,
+    });
+    const error = await captureError(() =>
+      db.delete(products).where(sql`${products.id} = ${c.soupBowlId}`),
+    );
+    // `on delete restrict` is refused through the engine's own trigger machinery, so it reports
+    // errcode 1811 (SQLITE_CONSTRAINT_TRIGGER) rather than a plain key's 787 — measured here.
+    expect(error).toMatchObject({ errcode: 1811, message: "FOREIGN KEY constraint failed" });
+    await db.delete(menuItems).where(sql`${menuItems.id} = ${c.menuItemId}`);
+    expect(await db.select().from(menuItemVariantOverrides)).toEqual([]);
   });
 
   it("refuses a label whose options list does not exist", async () => {

@@ -335,7 +335,7 @@ async function priceOrderLines(
         kitchenName: offer.kitchenName,
         unit: offer.unit,
         pricingUnit: offer.unit.hardwareUnit === null ? "each" : "weight",
-        unitPrice: offer.grossPrice,
+        unitPrice: offer.unitPrice,
         vatClass: offer.vatClass as AvailableProduct["vatClass"],
         category: offer.category,
         allergens: offer.allergens,
@@ -395,7 +395,7 @@ async function priceOrderLines(
     const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
     const offer = offerBySelectionId.get(line.productId);
     // The three names this line freezes. An OFFER may name a variant, so it resolves through
-    // `selectMenuVariant` (which also refuses a missing or unpublished one); the plain catalogue read
+    // `selectMenuVariant` (which also refuses one not offered here now); the plain catalogue read
     // never names a variant and carries no kitchen name, so it fills the same shape with nulls. Both
     // then go through `product-presentation.ts`, the ONE home of the blank-falls-back-to-the-staff-name
     // rule — nothing here re-implements it.

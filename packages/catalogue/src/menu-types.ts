@@ -3,7 +3,7 @@ import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
-import type { ProductVariant, SellableUnit } from "./product-types.js";
+import type { SellableUnit } from "./product-types.js";
 
 /**
  * The SELL-SIDE wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a
@@ -29,6 +29,9 @@ export interface MenuItem {
 
 /** One sellable identity. The menu-item id, rather than the product id, selects its price. */
 export interface MenuOffer extends MenuItem {
+  /** The price the server's order path charges for this offer; today it equals `grossPrice`, the
+   * STORED menu price. */
+  unitPrice: string;
   menuName: string;
   sectionName: Record<string, string>;
   name: string;
@@ -46,7 +49,39 @@ export interface MenuOffer extends MenuItem {
   /** The ordered extras and options lists this OFFER puts in front of a diner — see
    * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. */
   offeredModifiers: OfferedModifier[];
-  variants: ProductVariant[];
+  /** The product's ACTIVE variants in the one variant order (spec §15.5); an Inactive one is left
+   * out. A variant is only ever listed here, under its parent's offer, never as an offer itself. */
+  variants: MenuOfferVariant[];
+}
+
+/**
+ * One variant as a menu offers it. The names are the variant's own; every other product value is
+ * its EFFECTIVE one — its own, or its parent's where it leaves the field blank.
+ */
+export interface MenuOfferVariant {
+  id: string;
+  name: string;
+  customerName: Record<string, string> | null;
+  kitchenName: string | null;
+  image: string | null;
+  /** The price charged here, RESOLVED along spec §15.3's chain (`offer-price.ts`). */
+  unitPrice: string;
+  /** The price this menu sets for the variant, or null when it sets none. */
+  menuPrice: string | null;
+  /** False when this menu switches the variant off. */
+  offered: boolean;
+  /** Active, Available and offered on this menu: whether a till may sell it here now. */
+  available: boolean;
+  unit: SellableUnit;
+  pricingUnit: PricingUnit;
+  vatClass: VatClass;
+  category: string | null;
+  allergens: ProductAllergens | null;
+  diet: DietProfile | null;
+  dietDerivation: DietDerivation | null;
+  dietOverride: DietOverride | null;
+  dietaryDeclarations: DietaryLabel[];
+  courseId: string | null;
 }
 
 /**

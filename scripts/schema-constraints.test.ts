@@ -18,7 +18,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *
  * WHERE THE LISTS CAME FROM. Both halves were read off a LIVE engine, never parsed out of SQL:
  * PostgreSQL's `pg_constraint` and `pg_index` after applying the pre-switch migration sets, minus
- * every key whose column list named the tenant column (that column went on 2026-09-14).
+ * every key whose column list named the tenant column (that column went on 2026-09-14). Entries
+ * for constraints added since the switch are written by the change that adds them.
  *
  * WHY A TREE-WIDE ROOT-PROJECT PROGRAM. The tables are created by every domain package's
  * `drizzle/` directory and no package suite can see all thirteen sets at once. Like everything
@@ -97,8 +98,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["menu_item_extra_items", ["product_id"], "products"],
   ["menu_item_extra_lists", ["list_id"], "extra_lists"],
   ["menu_item_extra_lists", ["menu_item_id"], "menu_items"],
-  ["menu_item_variants", ["menu_item_id", "product_id"], "menu_items"],
-  ["menu_item_variants", ["product_id", "variant_id"], "product_variants"],
+  ["menu_item_variant_overrides", ["menu_item_id", "product_id"], "menu_items"],
+  ["menu_item_variant_overrides", ["product_id", "variant_id"], "products"],
   ["menu_items", ["menu_id"], "catalogues"],
   ["menu_items", ["menu_id", "section_id"], "menu_sections"],
   ["menu_items", ["product_id"], "products"],
@@ -330,7 +331,8 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "media_images_filename_ck",
   "media_images_names_ck",
   "menu_item_extra_items_price_ck",
-  "menu_item_variants_price_ck",
+  "menu_item_variant_overrides_overrides_ck",
+  "menu_item_variant_overrides_price_ck",
   "menu_items_gross_price_ck",
   "mirror_config_singleton_ck",
   "node_membership_singleton_ck",

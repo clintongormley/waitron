@@ -10,7 +10,8 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "product_variants" },
     { name: "menu_sections" },
     { name: "menu_items" },
-    { name: "menu_item_variants" },
+    // After both parents its keys name: the menu item above and the variant's `products` row.
+    { name: "menu_item_variant_overrides" },
     // Each list before its rows: `importConfigurationTables` inserts in this order and deletes in
     // its reverse, so the parent has to be written before the rows whose foreign key names it.
     { name: "option_lists" },

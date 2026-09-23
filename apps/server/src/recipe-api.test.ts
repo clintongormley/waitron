@@ -9,6 +9,7 @@ import {
   createCatalogue,
   createProduct,
   createUnit,
+  setProductVariants,
 } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountRecipeApi } from "./recipe-api.js";
@@ -139,6 +140,37 @@ describe("mountRecipeApi", () => {
     });
     expect(got.status).toBe(200);
     expect(((await got.json()) as { name: string }[]).map((i) => i.name)).toEqual(["bread"]);
+  });
+
+  it("refuses a variant's recipe with 404 product.not_found", async () => {
+    const app = mountApp();
+    const ing = (await (
+      await send(app, "POST", "/management-api/ingredients", { body: { name: "egg" } })
+    ).json()) as { id: string };
+    const [variant] = await withTransaction(suite.db, (tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [
+          {
+            name: "Tostada doble",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.80",
+            available: true,
+          },
+        ],
+        "es",
+      ),
+    );
+    const put = await send(app, "PUT", `/management-api/products/${variant!.id}/recipe`, {
+      body: { ingredientIds: [ing.id] },
+    });
+    expect(put.status).toBe(404);
+    expect(await put.json()).toMatchObject({
+      error: { code: "product.not_found", params: { productId: variant!.id } },
+    });
   });
 
   it("rejects a missing ingredient name with 400 management.request_invalid { field }", async () => {

@@ -31,6 +31,7 @@ import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+const PRICE = /^\d+(?:\.\d{1,2})?$/;
 const VIEWS = ["status", "departments", "menus", "zones", "routing"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
@@ -99,6 +100,40 @@ export class VenueOperationsScreen extends LitElement {
         margin: 0;
         font-weight: normal;
       }
+      fieldset {
+        display: grid;
+        gap: var(--wt-space-3);
+        margin: 0;
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      legend {
+        padding-inline: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .hint {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
+      .variant {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: var(--wt-space-2) var(--wt-space-4);
+      }
+      .variant > label:first-child {
+        flex: 1 1 calc(var(--wt-tap-min) * 4);
+      }
+      label.check {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        font-weight: normal;
+      }
+      input::placeholder {
+        color: var(--wt-color-text-muted);
+      }
       wt-form-actions {
         width: 100%;
       }
@@ -122,6 +157,8 @@ export class VenueOperationsScreen extends LitElement {
   @state() private menuId = "";
   @state() private zoneId = "";
   @state() private offerProductId = "";
+  /** The offer's price as typed so far, while an offer editor is open; undefined until it is edited. */
+  @state() private offerPrice?: string;
   #opener?: HTMLElement;
   #editorLanguages = currentContentLanguages();
 
@@ -181,7 +218,10 @@ export class VenueOperationsScreen extends LitElement {
     this.editor = editor;
     // The operator has picked nothing yet; which product an offer form is about is derived where the
     // form is built, from the products that menu can still be given.
-    if (editor.kind === "offer") this.offerProductId = "";
+    if (editor.kind === "offer") {
+      this.offerProductId = "";
+      this.offerPrice = undefined;
+    }
     this.fieldErrors = {};
     this.error = undefined;
   }
@@ -238,16 +278,30 @@ export class VenueOperationsScreen extends LitElement {
         </p>`
       : nothing;
   }
-  #input(name: string, label: string, value = "", type = "text", required = true) {
+  #input(
+    name: string,
+    label: string,
+    value = "",
+    type = "text",
+    required = true,
+    extra: { placeholder?: string; onInput?: (value: string) => void } = {},
+  ) {
+    const { onInput } = extra;
     return html`<label
       ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
       ><input
         name=${name}
         type=${type}
         .value=${value}
+        placeholder=${extra.placeholder ?? nothing}
         ?required=${required}
         aria-invalid=${!!this.fieldErrors[name]}
         aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
+        @input=${
+          onInput === undefined
+            ? nothing
+            : (event: Event) => onInput((event.currentTarget as HTMLInputElement).value)
+        }
       />${this.#fieldError(name)}</label
     >`;
   }
@@ -864,19 +918,27 @@ export class VenueOperationsScreen extends LitElement {
         // The one answer to which product this form is about: an existing offer's own product,
         // otherwise the operator's pick, falling back to the first product the dropdown can show —
         // the option a browser selects when the form marks none. The offer that gets saved and the
-        // variants that get published both read it, so they are never two different products.
+        // variants whose overrides it lists and saves both read it, so they are never two products.
         const product = row
           ? model.products.find((candidate) => candidate.id === row.productId)
           : (products.find((candidate) => candidate.id === this.offerProductId) ?? products[0]);
         const productId = product?.id ?? "";
-        const publishedById = new Map(
+        const overridesById = new Map(
           (row?.variants ?? []).map((variant) => [variant.id, variant]),
         );
-        const offerVariants = (product?.variants ?? []).map((variant) => ({
-          ...variant,
-          unitPrice: publishedById.get(variant.id)?.unitPrice ?? variant.unitPrice,
-          available: publishedById.get(variant.id)?.available ?? false,
-        }));
+        // The price a variant is charged here when this menu sets none: its own, else the offer's
+        // price on this menu as typed, else the product's own (spec §15.3).
+        const typedPrice = (this.offerPrice ?? row?.grossPrice ?? "").trim();
+        const parentPrice = PRICE.test(typedPrice) ? typedPrice : (product?.unitPrice ?? "");
+        const offerVariants = (product?.variants ?? [])
+          .filter((variant) => variant.active)
+          .map((variant) => ({
+            id: variant.id,
+            name: variant.name,
+            menuPrice: overridesById.get(variant.id)?.menuPrice ?? null,
+            offered: overridesById.get(variant.id)?.offered ?? true,
+            applicablePrice: variant.unitPrice ?? parentPrice,
+          }));
         const { defaultLanguage, languages } = this.#editorLanguages;
         const sectionField = (language: string) =>
           `offer-section-${menuId}${language === defaultLanguage ? "" : `-${language}`}`;
@@ -912,26 +974,34 @@ export class VenueOperationsScreen extends LitElement {
               "text",
               language === defaultLanguage,
             ),
-          )}${this.#input(priceName, t("venue.price"), row?.grossPrice)}${
+          )}${this.#input(priceName, t("venue.price"), row?.grossPrice, "text", true, {
+            onInput: (value) => {
+              this.offerPrice = value;
+            },
+          })}${
             offerVariants.length === 0
               ? nothing
-              : html`<fieldset>
+              : html`<fieldset class="variants">
                   <legend>${t("venue.variants")}</legend>
+                  <p class="hint">${t("venue.variant_price_hint")}</p>
                   ${offerVariants.map(
                     (variant) =>
-                      html`<div>
+                      html`<div class="variant" role="group" aria-label=${variant.name}>
                         ${this.#input(
                           `offer-variant-price-${variant.id}`,
                           `${variant.name} · ${t("venue.price")}`,
-                          variant.unitPrice,
+                          variant.menuPrice ?? "",
+                          "text",
+                          false,
+                          { placeholder: variant.applicablePrice },
                         )}
-                        <label>
+                        <label class="check">
                           <input
-                            name=${`offer-variant-available-${variant.id}`}
+                            name=${`offer-variant-offered-${variant.id}`}
                             type="checkbox"
-                            .checked=${variant.available}
+                            .checked=${variant.offered}
                           />
-                          <span>${t("venue.available")}</span>
+                          <span>${t("venue.offered")}</span>
                         </label>
                       </div>`,
                   )}
@@ -955,20 +1025,23 @@ export class VenueOperationsScreen extends LitElement {
             )
               return;
             const grossPrice = this.#value(priceName).trim();
-            if (!/^\d+(?:\.\d{1,2})?$/.test(grossPrice)) {
+            if (!PRICE.test(grossPrice)) {
               this.fieldErrors = { [priceName]: t("venue.price_invalid") };
               return;
             }
-            const variants = offerVariants.map((variant) => ({
-              variantId: variant.id,
-              unitPrice: this.#value(`offer-variant-price-${variant.id}`).trim(),
-              available:
-                this.renderRoot.querySelector<HTMLInputElement>(
-                  `[name="offer-variant-available-${variant.id}"]`,
-                )?.checked ?? false,
-            }));
+            const variants = offerVariants.map((variant) => {
+              const price = this.#value(`offer-variant-price-${variant.id}`).trim();
+              return {
+                variantId: variant.id,
+                price: price === "" ? null : price,
+                offered:
+                  this.renderRoot.querySelector<HTMLInputElement>(
+                    `[name="offer-variant-offered-${variant.id}"]`,
+                  )?.checked ?? true,
+              };
+            });
             const badVariant = variants.find(
-              (variant) => !/^\d+(?:\.\d{1,2})?$/.test(variant.unitPrice),
+              (variant) => variant.price !== null && !PRICE.test(variant.price),
             );
             if (badVariant) {
               this.fieldErrors = {

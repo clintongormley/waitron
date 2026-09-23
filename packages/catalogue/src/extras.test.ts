@@ -573,9 +573,8 @@ describe("what the database refuses under an extras list", () => {
     );
 
     // `isProductPrice` (modifier-limits.ts) refuses a leading minus before the write, so a negative
-    // price cannot arrive through the contract; this is the database backstop under that, in the
-    // shape `product_variants.unit_price` and `menu_item_variants.unit_price` already carry
-    // (schema/variants.ts). An item's price becomes a sale line and so reaches a fiscal record.
+    // price cannot arrive through the contract; this is the database backstop under that. An item's
+    // price becomes a sale line and so reaches a fiscal record.
     const error = await captureError(() =>
       Promise.resolve(
         fx.db.execute(

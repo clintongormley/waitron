@@ -228,8 +228,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         LOCALE,
       );
       await setMenuVariants(tx, offer.id, [
-        { variantId: variants[0]!.id, unitPrice: "4.10", available: true },
-        { variantId: variants[1]!.id, unitPrice: "4.80", available: false },
+        { variantId: variants[0]!.id, price: "4.10", offered: true },
+        { variantId: variants[1]!.id, price: "4.80", offered: false },
       ]);
       variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
     }
@@ -304,7 +304,7 @@ function decodeNames<T extends StoredNames>(
 }
 
 describe("recordTillSale", () => {
-  it("requires a published variant and freezes its menu price and presentation facts", async () => {
+  it("requires an offered variant and freezes its menu price and presentation facts", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
     const deps = { db: suite.db, backend, clock };
     await expect(
@@ -359,6 +359,41 @@ describe("recordTillSale", () => {
       { ...names, unit_price_gross: null },
     ]);
   });
+  // Spec §15.5: a variant follows its parent onto the menu; with nothing set for it there, it is
+  // charged its own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
+  it("sells a variant this menu sets nothing for at the variant's own price", async () => {
+    const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
+    await withTransaction(suite.db, (tx) => setMenuVariants(tx, waterOfferId, []));
+    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+      tender: { method: "cash", amount: "3.80" },
+    });
+    expect(result.total).toBe("3.80");
+  });
+
+  // Spec §15.1: a product with no Active variant sells as itself, at its menu price.
+  it("sells a product whose every variant was removed as itself", async () => {
+    const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
+      variants: true,
+    });
+    await withTransaction(suite.db, (tx) => setProductVariants(tx, waterProductId, [], LOCALE));
+    const deps = { db: suite.db, backend, clock };
+    await expect(
+      recordTillSale(deps, cfg, {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
+        tender: { method: "cash", amount: "4.10" },
+      }),
+    ).rejects.toMatchObject({ code: "product.variant_unavailable" });
+    const result = await recordTillSale(deps, cfg, {
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+      tender: { method: "cash", amount: "2.25" },
+    });
+    expect(result.total).toBe("2.25");
+  });
+
   it("prints the variant on the receipt line that identifies the goods (art. 7.1.e)", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
@@ -395,8 +430,8 @@ describe("recordTillSale", () => {
     const workingOrderId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
       await setMenuVariants(tx, waterOfferId, [
-        { variantId: variantIds!.double, unitPrice: "4.10", available: true },
-        { variantId: variantIds!.unavailable, unitPrice: "4.80", available: true },
+        { variantId: variantIds!.double, price: "4.10", offered: true },
+        { variantId: variantIds!.unavailable, price: "4.80", offered: true },
       ]);
       await createOpenOrder(
         tx,
@@ -440,8 +475,8 @@ describe("recordTillSale", () => {
         LOCALE,
       );
       await setMenuVariants(tx, waterOfferId, [
-        { variantId: variantIds!.double, unitPrice: "31.00", available: true },
-        { variantId: variantIds!.unavailable, unitPrice: "41.00", available: true },
+        { variantId: variantIds!.double, price: "31.00", offered: true },
+        { variantId: variantIds!.unavailable, price: "41.00", offered: true },
       ]);
     });
 

@@ -163,15 +163,16 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "content.translation_required" });
   });
 
-  it("keeps menu prices independent and requires explicit publication of new variants", async () => {
+  it("offers new variants at once and keeps a menu price independent of the variant's own", async () => {
     const variants = await run((tx) =>
       setProductVariants(tx, productId, [variant("Small", "2.00"), variant("Large", "3.00")], "en"),
     );
-    expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([]);
+    expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([
+      { variantId: variants[0]!.id, price: null, offered: true },
+      { variantId: variants[1]!.id, price: null, offered: true },
+    ]);
     await run((tx) =>
-      setMenuVariants(tx, offerId, [
-        { variantId: variants[0]!.id, unitPrice: "4.00", available: true },
-      ]),
+      setMenuVariants(tx, offerId, [{ variantId: variants[0]!.id, price: "4.00", offered: true }]),
     );
     await run((tx) =>
       setProductVariants(
@@ -181,15 +182,30 @@ describe("product variants", () => {
         "en",
       ),
     );
-    const published = await run((tx) => listMenuVariants(tx, offerId));
-    expect(published).toEqual([{ variantId: variants[0]!.id, unitPrice: "4.00", available: true }]);
+    const overrides = await run((tx) => listMenuVariants(tx, offerId));
+    expect(overrides).toEqual([
+      { variantId: variants[0]!.id, price: "4.00", offered: true },
+      { variantId: variants[1]!.id, price: null, offered: true },
+    ]);
     expect((await run((tx) => listProducts(tx)))[0]!.variants).toEqual([
       expect.objectContaining({ id: variants[0]!.id, name: "Small", unitPrice: "2.50" }),
       expect.objectContaining({ id: variants[1]!.id, name: "Large", unitPrice: "3.00" }),
     ]);
     expect(await run((tx) => listMenuOffers(tx, []))).toEqual([]);
     const offers = await run((tx) => listMenuOffers(tx, [menuId]));
-    expect(offers[0]!.variants).toEqual([
+    expect(
+      offers[0]!.variants.map(
+        ({ id, name, customerName, kitchenName, image, unitPrice, available }) => ({
+          id,
+          name,
+          customerName,
+          kitchenName,
+          image,
+          unitPrice,
+          available,
+        }),
+      ),
+    ).toEqual([
       {
         id: variants[0]!.id,
         name: "Small",
@@ -197,6 +213,15 @@ describe("product variants", () => {
         kitchenName: null,
         image: null,
         unitPrice: "4.00",
+        available: true,
+      },
+      {
+        id: variants[1]!.id,
+        name: "Large",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.00",
         available: true,
       },
     ]);
@@ -210,14 +235,22 @@ describe("product variants", () => {
     );
     expect((await run((tx) => listMenuOffers(tx, [menuId])))[0]!.variants).toEqual([
       expect.objectContaining({ id: variants[0]!.id, available: false }),
+      expect.objectContaining({ id: variants[1]!.id, available: true }),
     ]);
-    await expect(
-      run((tx) => setProductVariants(tx, productId, [variants[1]!], "en")),
-    ).rejects.toMatchObject({ code: "product.variant_in_use" });
-    expect(await run((tx) => listProductVariants(tx, productId))).toHaveLength(2);
+    // Removing a variant a menu overrides is allowed (spec §15.6): it becomes Inactive.
+    await run((tx) => setProductVariants(tx, productId, [variants[1]!], "en"));
+    expect(
+      (await run((tx) => listProductVariants(tx, productId))).map(({ id, active }) => ({
+        id,
+        active,
+      })),
+    ).toEqual([
+      { id: variants[1]!.id, active: true },
+      { id: variants[0]!.id, active: false },
+    ]);
   });
 
-  it("refuses to publish a variant belonging to another product and publishes nothing", async () => {
+  it("refuses to override a variant belonging to another product and stores no override", async () => {
     const [foreign] = await run(async (tx) => {
       const unit = await createUnit(
         tx,
@@ -240,30 +273,35 @@ describe("product variants", () => {
     await expect(
       run((tx) =>
         setMenuVariants(tx, offerId, [
-          { variantId: own!.id, unitPrice: "4.00", available: true },
-          { variantId: foreign!.id, unitPrice: "5.00", available: true },
+          { variantId: own!.id, price: "4.00", offered: true },
+          { variantId: foreign!.id, price: "5.00", offered: true },
         ]),
       ),
     ).rejects.toMatchObject({
       code: "product.variant_not_found",
       params: { variantId: foreign!.id },
     });
-    expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([]);
+    expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([
+      { variantId: own!.id, price: null, offered: true },
+    ]);
   });
 });
 
-it("prices the required published variant instead of the base or product variant price", async () => {
+it("prices a required variant at its menu price, falling back to its own", async () => {
   const [small] = await run((tx) =>
     setProductVariants(tx, productId, [variant("Small", "2.00")], "en"),
   );
   await expect(run((tx) => resolveMenuVariant(tx, offerId, null))).rejects.toMatchObject({
     code: "product.variant_required",
   });
-  await expect(run((tx) => resolveMenuVariant(tx, offerId, small!.id))).rejects.toMatchObject({
-    code: "product.variant_unavailable",
+  // A variant follows its parent onto the menu (spec §15.5), at its own price until the menu
+  // sets one.
+  expect(await run((tx) => resolveMenuVariant(tx, offerId, small!.id))).toMatchObject({
+    variantId: small!.id,
+    unitPrice: "2.00",
   });
   await run((tx) =>
-    setMenuVariants(tx, offerId, [{ variantId: small!.id, unitPrice: "4.00", available: true }]),
+    setMenuVariants(tx, offerId, [{ variantId: small!.id, price: "4.00", offered: true }]),
   );
   const selected = await run((tx) => resolveMenuVariant(tx, offerId, small!.id));
   expect(selected).toEqual({

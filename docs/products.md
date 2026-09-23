@@ -60,7 +60,7 @@ product fields remain in place if the nested save fails or you cancel it.
 
 Use variants for forms of the same product that need distinct names and prices, such as **Coffee,
 single** and **Coffee, double**. Each variant has its own availability. Reordering or editing the
-variants keeps their stable identities, so existing menu publications still point to the right one.
+variants keeps their stable identities, so a menu's settings for a variant keep pointing at it.
 
 Variants appear as a table under the price. Drag a row by the handle at its start to reorder it, or
 focus the handle and use the up and down arrow keys. The row menu offers **Edit** and **Remove**, and
@@ -75,10 +75,11 @@ the second one, so you always end up with a pair. Cancel that window and the Reg
 back into the plain price, undoing the whole thing. Remove variants until one is left and its price
 folds back the same way.
 
-Adding a variant to a product does not publish it automatically on an existing menu. Open the menu
-offer and publish the variants you want to sell there. A menu can set a different price for each
-variant. That menu price wins at the till; changing the product's price later does not overwrite the
-menu price.
+A variant follows its product onto every menu the product is on, including a variant you add later.
+In the menu offer you can optionally give a variant its own price on that menu, or clear its
+**Offered on this menu** box to stop offering it there. An order charges the first of these that is
+set: the variant's price on that menu, the variant's own price, then the product's price on that
+menu.
 
 ## Declare allergens and dietary suitability directly
 
@@ -110,8 +111,8 @@ prices and modifier answers. Later catalogue edits apply to new selections. The 
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name and direct dietary declarations. Its menu variant prices
-deliberately differ from the product definitions, so you can see which price wins at the till. The
+two variants, a separate kitchen name and direct dietary declarations. Its menu sets no price of its
+own for either variant, so each sells at the variant's own price. The
 demo sirloin carries a seeded options list, **Punto**, asking how the steak should be cooked. The
 demo venue seeds no extras list, so nothing in it shows an extra being added to a dish.
 

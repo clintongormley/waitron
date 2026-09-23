@@ -62,8 +62,8 @@ export interface SeedProduct {
     customerName: Record<SeedLocale, string>;
     staffName?: string;
     kitchenName?: string;
-    productPrice: string;
-    menuPrice: string;
+    /** The variant's own price, or null to sell at its parent's. */
+    unitPrice: string | null;
     available: boolean;
   }[];
   pricingUnit: PricingUnit;
@@ -522,21 +522,18 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           dietaryDeclarations: ["vegetarian", "halal"],
           variants: [
             {
-              customerName: { en: "Single", es: "Solo" },
-              staffName: "Solo",
-              kitchenName: "SOLO",
-              productPrice: "1.40",
-              menuPrice: "1.75",
+              customerName: { en: "Espresso", es: "Espresso solo" },
+              staffName: "Café solo",
+              kitchenName: "ESPRESSO",
+              unitPrice: "1.40",
               available: true,
             },
             {
-              // No kitchen name of its own, so the kitchen ticket falls back to this variant's staff
-              // name while the product half still resolves its own — the independent fallback the
-              // developer guide describes.
-              customerName: { en: "Double", es: "Doble" },
-              staffName: "Doble",
-              productPrice: "2.10",
-              menuPrice: "2.60",
+              // No kitchen name of its own, so the kitchen ticket falls back to this variant's own
+              // staff name, never the parent's.
+              customerName: { en: "Double espresso", es: "Espresso doble" },
+              staffName: "Café doble",
+              unitPrice: "2.10",
               available: true,
             },
           ],

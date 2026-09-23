@@ -16,8 +16,8 @@ So a product carries up to three names, and so does each of its variants.
 | **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and the printed allergen sheet |
 | **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
 
-A variant carries the same three, in `product_variants.name` (also `not null`),
-`product_variants.customer_name` and `product_variants.kitchen_name`.
+A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
+three in the same three columns.
 
 Two rules govern how those six fields become one displayed string, and both of them live in
 `packages/catalogue/src/product-presentation.ts`. Nothing else re-implements either one, with one
@@ -160,12 +160,11 @@ holds no map for the report to read.
 
 ## Variants
 
-A product has **no variants, or at least two**. Exactly one is refused with
-`product.variant_count_invalid` (`minimum: 2`), thrown by `parseProductEditorInput`
-(`packages/catalogue/src/product-editor-input.ts`) — on the server, so an API caller cannot get to a
-state the editor will not let a person reach.
+The server accepts a product with any number of variants, one included (spec
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15.1).
+`product.variant_count_invalid` stays registered and nothing throws it.
 
-The editor keeps that rule with a fold, in its own draft:
+The editor still keeps its own draft at **no variants, or at least two**, with a fold:
 
 - Pressing **Add variant** on a product with a plain price turns that price into a variant named with
   the translated default "Regular", and opens the Add window for the *second* one. So the first Add
@@ -178,15 +177,21 @@ The editor keeps that rule with a fold, in its own draft:
   row.
 
 A variant shares the product's unit, tax rate, categories, modifiers and allergen and dietary
-declarations. It has its own name (all three of them), price, availability and image.
+declarations. It has its own name (all three of them) and availability, and its own price and image
+only where it sets them. On a menu it is charged the most specific price set
+(`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`): that menu's price for the variant,
+else its own price, else its parent's price on that menu. `setProductVariants`
+(`packages/catalogue/src/variants.ts`) and the storage beneath it accept a variant with no price of
+its own; the product-editor save refuses one (`price()` in
+`packages/catalogue/src/product-editor-input.ts`).
 
-The image library refuses to delete a photo a variant still uses, and lists the variant among the
-uses it shows you — `listImageUsages` and `deleteImage` in `packages/media/src/images.ts` both cover
-`product_variants.image`. **That protection is application-level only**, and the contrast with
-`products.image` is narrower than it used to be.
+A variant's own photo is `products.image` on its row. The image library lists it among a photo's
+uses as a `variant` of its parent and refuses to delete a photo one still uses (`listImageUsages`
+and `deleteImage` in `packages/media/src/images.ts`); a variant with no photo of its own shows its
+parent's and holds no use of it.
 
-`products.image` is protected by the database and `product_variants.image` is not. But
-`products.image` no longer carries a real foreign key: on PostgreSQL it was
+`products.image` is protected by the database, variant rows included, but not by a real foreign
+key: on PostgreSQL it was
 `products_media_image_fk`, `REFERENCES media_images (filename) ON DELETE RESTRICT`, written by hand
 into the media set's baseline; regenerating every migration set for the storage switch dropped it,
 and `packages/media/drizzle/0001_image_references.sql` brings it back as **four triggers** instead —
@@ -195,14 +200,11 @@ That file's own header states what a trigger is not, and two of its points matte
 this page: `pragma foreign_key_list('products')` does not list the rule, so nothing that enumerates
 keys from the engine sees it; and the refusal arrives as errcode 1811
 (`SQLITE_CONSTRAINT_TRIGGER`), not 787 (`SQLITE_CONSTRAINT_FOREIGNKEY`). Guard:
-`packages/media/src/image-references.test.ts`.
-
-`product_variants.image` has no rule at all — neither a key nor a trigger. It is a plain label
-column declared in the TypeScript schema (`packages/catalogue/src/schema/variants.ts`), which says
-so at the column, and the image-references migration says in as many words that leaving it
-unguarded is deliberate: it carried no key on PostgreSQL either, so guarding it now would be a new
-rule rather than a restoration. So a delete that does not go through `deleteImage` is not stopped by
-the database.
+`packages/media/src/image-references.test.ts`, whose cases use top-level products. For a variant
+row, measured 2026-09-23 with a throwaway suite over the core, catalogue and media migration sets:
+inserting a variant naming a photo that does not exist, and deleting with raw SQL a photo a variant
+uses, were each refused with errcode 1811 by `products_media_image_fk`, while a variant naming a
+photo that exists was accepted.
 
 ## The editor form
 
@@ -258,5 +260,6 @@ it is both (`listMenuOffers`, `listAvailableProducts` and `readExtraProducts` in
 except that a held order's line kept at or below its quantity is still billed although its dish or
 an extra has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`.
 `listMenuOffers` keeps an Unavailable product's offer only when its caller passes
-`includeUnavailable`, as the menu management route and the venue readiness check do. Until
-variants become products (plan Task 3), a variant carries only its own `available`.
+`includeUnavailable`, as the menu management route and the venue readiness check do. A variant is
+listed only under its parent's offer, only while Active, and as available only while Available and
+offered on that menu.

@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
-import { ingredients, recipeLines } from "@waitron/db";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { ingredients, products, recipeLines } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import {
   applyDietDerivation,
@@ -85,6 +86,13 @@ export async function setProductRecipe(
   productId: string,
   ingredientIds: string[],
 ): Promise<void> {
+  // A variant's recipe would write derived allergens and diet onto its own row, breaking its
+  // inheritance from its parent; an unknown id is deliberately left to its existing answer.
+  const [variant] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.id, productId), isNotNull(products.parentId)));
+  if (variant) throw new AppError("product.not_found", { productId });
   await tx.delete(recipeLines).where(eq(recipeLines.productId, productId));
   if (ingredientIds.length > 0) {
     await tx.insert(recipeLines).values(

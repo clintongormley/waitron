@@ -7,6 +7,7 @@ import {
   createMenuItem,
   createMenuSection,
   createProduct,
+  setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
 import {
@@ -865,6 +866,39 @@ const UNKNOWN_ID = "00000000-0000-4000-8000-000000000099";
 describe("resolvePreparationRoutes", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("refuses a route for a variant, which is routed as its parent is", async () => {
+    const { cfg } = await seedRoutingVenue();
+    await scoped(async (tx) => {
+      const grill = await insertStation(tx, cfg.locationId, "Grill");
+      const menu = await createCatalogue(tx, { name: "Variants" });
+      const parent = await productWithCategory(tx, menu.id, "Steak");
+      const [variant] = await setProductVariants(
+        tx,
+        parent.id,
+        [
+          {
+            name: "Steak 300g",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "22.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      await expect(
+        createPreparationRoute(tx, cfg, { productId: variant!.id, target: station(grill) }),
+      ).rejects.toMatchObject({
+        code: "route.subject_not_found",
+        params: { subject: "product", id: variant!.id },
+      });
+      await expect(
+        createPreparationRoute(tx, cfg, { productId: parent.id, target: station(grill) }),
+      ).resolves.toEqual(expect.any(String));
+    });
   });
 
   it("picks the most specific route for every product in one batch", async () => {

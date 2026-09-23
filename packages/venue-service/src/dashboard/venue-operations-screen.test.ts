@@ -83,6 +83,7 @@ const model: VenueServiceView = {
       name: "Negroni",
       customerName: { en: "House Aperitivo" },
       pricingUnit: "each",
+      unitPrice: "10.00",
       active: true,
       variants: [
         {
@@ -91,6 +92,7 @@ const model: VenueServiceView = {
           customerName: { en: "Generous Pour" },
           unitPrice: "13.00",
           available: true,
+          active: true,
         },
       ],
     },
@@ -112,6 +114,8 @@ const model: VenueServiceView = {
           name: "Double",
           customerName: { en: "Generous Pour" },
           unitPrice: "15.00",
+          menuPrice: "15.00",
+          offered: true,
           available: true,
         },
       ],
@@ -172,6 +176,9 @@ async function action(el: VenueOperationsScreen, name: string) {
 
 function field(el: VenueOperationsScreen, name: string) {
   return el.shadowRoot!.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${name}"]`)!;
+}
+function input(el: VenueOperationsScreen, name: string) {
+  return el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
 }
 function table(el: VenueOperationsScreen, name: string) {
   const result = el.shadowRoot!.querySelector(`[data-test="${name}"]`)!;
@@ -337,8 +344,9 @@ describe("venue operations screen", () => {
       grossPrice: "9.00",
       displayOrder: 0,
     });
+    // A new offer overrides nothing: every variant follows the product onto the menu.
     expect(api.setMenuVariants).toHaveBeenCalledWith("m2", "i2", [
-      { variantId: "v1", unitPrice: "13.00", available: false },
+      { variantId: "v1", price: null, offered: true },
     ]);
   });
 
@@ -434,6 +442,7 @@ describe("venue operations screen", () => {
           name: "Olives",
           customerName: { en: "Manzanilla Olives" },
           pricingUnit: "each",
+          unitPrice: "3.00",
           active: true,
         },
       ],
@@ -603,13 +612,13 @@ describe("venue operations screen", () => {
       grossPrice: "5.00",
       displayOrder: 0,
     });
-    // Olives has no variants of its own, so nothing is published — least of all the Negroni variant
-    // the same model carries.
+    // Olives has no variants of its own, so the menu overrides nothing — least of all for the
+    // Negroni variant the same model carries.
     expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i2", []);
   });
 
   // Two products whose staff name, customer-facing name and variant set all differ, so an assertion
-  // can tell which product a saved offer and its published variants belong to. Bravas is already on
+  // can tell which product a saved offer and its variants belong to. Bravas is already on
   // menu m1, which is what takes it out of that menu's dropdown.
   const twoProductModel: VenueServiceView = {
     ...model,
@@ -619,6 +628,7 @@ describe("venue operations screen", () => {
         name: "Bravas",
         customerName: { en: "Patatas bravas" },
         pricingUnit: "each",
+        unitPrice: "5.00",
         active: true,
         variants: [
           {
@@ -627,6 +637,7 @@ describe("venue operations screen", () => {
             customerName: { en: "Media racion" },
             unitPrice: "4.00",
             available: true,
+            active: true,
           },
           {
             id: "v-full",
@@ -634,6 +645,7 @@ describe("venue operations screen", () => {
             customerName: { en: "Racion" },
             unitPrice: "7.00",
             available: true,
+            active: true,
           },
         ],
       },
@@ -642,6 +654,7 @@ describe("venue operations screen", () => {
         name: "Stewed lentils",
         customerName: { en: "Lentejas de la casa" },
         pricingUnit: "each",
+        unitPrice: "6.00",
         active: true,
         variants: [
           {
@@ -650,6 +663,7 @@ describe("venue operations screen", () => {
             customerName: { en: "Cuenco" },
             unitPrice: "6.50",
             available: false,
+            active: true,
           },
         ],
       },
@@ -664,11 +678,12 @@ describe("venue operations screen", () => {
         name: "Bravas",
         customerName: { en: "Patatas bravas" },
         grossPrice: "5.00",
+        variants: [],
       },
     ],
   };
 
-  it("publishes the variants of the product a new offer is saved for, dropdown untouched", async () => {
+  it("offers every variant of the product a new offer is saved for, dropdown untouched", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
       createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
@@ -681,7 +696,10 @@ describe("venue operations screen", () => {
     // Nobody touches the dropdown: the product it shows is the one the fieldset and the save use.
     expect(field(el, "offer-product-m1").value).toBe("p-lentils");
     expect(field(el, "offer-product-m1").textContent).not.toContain("Bravas");
-    expect(field(el, "offer-variant-price-v-bowl").value).toBe("6.50");
+    // Left empty, with the variant's own price as the hint: nothing is overridden yet.
+    expect(field(el, "offer-variant-price-v-bowl").value).toBe("");
+    expect(input(el, "offer-variant-price-v-bowl").placeholder).toBe("6.50");
+    expect((field(el, "offer-variant-offered-v-bowl") as HTMLInputElement).checked).toBe(true);
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-full"]')).toBeNull();
     field(el, "offer-section-m1").value = "Guisos";
@@ -694,7 +712,7 @@ describe("venue operations screen", () => {
       displayOrder: 0,
     });
     expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i-lentils", [
-      { variantId: "v-bowl", unitPrice: "6.50", available: false },
+      { variantId: "v-bowl", price: null, offered: true },
     ]);
   });
 
@@ -709,12 +727,12 @@ describe("venue operations screen", () => {
     await selectTab(el, "menus");
     await action(el, "new-offer-m2");
     expect(field(el, "offer-product-m2").value).toBe("p-bravas");
-    expect(field(el, "offer-variant-price-v-half").value).toBe("4.00");
+    expect(input(el, "offer-variant-price-v-half").placeholder).toBe("4.00");
     const select = field(el, "offer-product-m2") as HTMLSelectElement;
     select.value = "p-lentils";
     select.dispatchEvent(new Event("change"));
     await settle(el);
-    expect(field(el, "offer-variant-price-v-bowl").value).toBe("6.50");
+    expect(input(el, "offer-variant-price-v-bowl").placeholder).toBe("6.50");
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
     field(el, "offer-section-m2").value = "Guisos";
     field(el, "offer-price-m2").value = "8.00";
@@ -726,11 +744,11 @@ describe("venue operations screen", () => {
       displayOrder: 0,
     });
     expect(api.setMenuVariants).toHaveBeenCalledWith("m2", "i-new", [
-      { variantId: "v-bowl", unitPrice: "6.50", available: false },
+      { variantId: "v-bowl", price: null, offered: true },
     ]);
   });
 
-  it("shows a refused variant publication on the form, not only in the console", async () => {
+  it("shows a refused variant override on the form, not only in the console", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
       createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
@@ -773,6 +791,85 @@ describe("venue operations screen", () => {
     expect(summary(el)).toContain("Product");
     expect(el.shadowRoot!.querySelector('[data-field-error="offer-product-m1"]')).not.toBeNull();
   });
+  it("clears a variant's menu price and switches it off on this menu", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    field(el, "offer-variant-price-v1").value = "";
+    (field(el, "offer-variant-offered-v1") as HTMLInputElement).checked = false;
+    await action(el, "save-editor");
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i1", [
+      { variantId: "v1", price: null, offered: false },
+    ]);
+  });
+
+  it("hints the parent's price on this menu for a variant with no price of its own", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        products: [
+          {
+            ...model.products[0]!,
+            variants: [
+              {
+                id: "v1",
+                name: "Double",
+                customerName: { en: "Generous Pour" },
+                unitPrice: null,
+                available: true,
+                active: true,
+              },
+              // Removed from the product: never listed on a menu.
+              {
+                id: "v-gone",
+                name: "Triple",
+                customerName: null,
+                unitPrice: "20.00",
+                available: true,
+                active: false,
+              },
+            ],
+          },
+        ],
+        offers: [{ ...model.offers[0]!, variants: [] }],
+      }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    expect(field(el, "offer-variant-price-v1").value).toBe("");
+    expect(input(el, "offer-variant-price-v1").placeholder).toBe("11.00");
+    // Typing a new price for the parent on this menu moves the hint with it.
+    field(el, "offer-price-i1").value = "12.50";
+    field(el, "offer-price-i1").dispatchEvent(new Event("input"));
+    await settle(el);
+    expect(input(el, "offer-variant-price-v1").placeholder).toBe("12.50");
+    expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-gone"]')).toBeNull();
+  });
+
+  it("refuses a malformed variant price beside its field", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      setMenuVariants: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "edit-offer-i1");
+    field(el, "offer-variant-price-v1").value = "1.234";
+    await action(el, "save-editor");
+    expect(api.setMenuVariants).not.toHaveBeenCalled();
+    expect(summary(el)).toContain("Enter a non-negative price with up to two decimal places.");
+    expect(
+      el.shadowRoot!.querySelector('[data-field-error="offer-variant-price-v1"]'),
+    ).not.toBeNull();
+  });
+
   it("edits and removes an offer from the shared data table", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
@@ -785,12 +882,14 @@ describe("venue operations screen", () => {
     table(el, "menu-offers-m1");
     await action(el, "edit-offer-i1");
     expect(field(el, "offer-price-i1").value).toBe("11.00");
+    // The menu's own price for the variant, with the variant's own price as the hint beneath it.
     expect(field(el, "offer-variant-price-v1").value).toBe("15.00");
+    expect(input(el, "offer-variant-price-v1").placeholder).toBe("13.00");
     field(el, "offer-price-i1").value = "12.50";
     field(el, "offer-variant-price-v1").value = "16.50";
     await action(el, "save-editor");
     expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i1", [
-      { variantId: "v1", unitPrice: "16.50", available: true },
+      { variantId: "v1", price: "16.50", offered: true },
     ]);
     expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "12.50" });
     await action(el, "remove-offer-i1");

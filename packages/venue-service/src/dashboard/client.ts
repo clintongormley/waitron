@@ -85,20 +85,34 @@ export interface Product {
   name: string;
   customerName: Record<string, string> | null;
   pricingUnit: "each" | "weight";
+  unitPrice: string;
   active: boolean;
   variants?: ProductVariant[];
 }
+/** `unitPrice` is the variant's OWN price, null where it takes its parent's. */
 export interface ProductVariant {
   id: string;
   name: string;
   customerName: Record<string, string> | null;
+  unitPrice: string | null;
+  available: boolean;
+  active: boolean;
+}
+/** One variant as a menu offers it: `menuPrice` is this menu's override, null where it sets none. */
+export interface MenuOfferVariant {
+  id: string;
+  name: string;
+  customerName: Record<string, string> | null;
   unitPrice: string;
+  menuPrice: string | null;
+  offered: boolean;
   available: boolean;
 }
-export interface MenuVariantPublication {
+/** A menu's override for one variant. An entry that overrides nothing clears the stored one. */
+export interface MenuVariantOverride {
   variantId: string;
-  unitPrice: string;
-  available: boolean;
+  price: string | null;
+  offered: boolean;
 }
 export interface MenuSection {
   id: string;
@@ -116,7 +130,7 @@ export interface MenuOffer {
   name: string;
   customerName: Record<string, string> | null;
   grossPrice: string;
-  variants?: ProductVariant[];
+  variants?: MenuOfferVariant[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -235,8 +249,8 @@ export class VenueServiceApi {
   setMenuVariants(
     menuId: string,
     menuItemId: string,
-    variants: MenuVariantPublication[],
-  ): Promise<MenuVariantPublication[]> {
+    variants: MenuVariantOverride[],
+  ): Promise<MenuVariantOverride[]> {
     return this.request(
       `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,
       "PUT",

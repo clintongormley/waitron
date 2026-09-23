@@ -131,7 +131,7 @@ export class ProductList extends LitElement {
 
   #price(product: Product): string {
     if (product.variants.length === 0) return Number(product.unitPrice).toFixed(2);
-    const prices = product.variants.map(({ unitPrice }) => Number(unitPrice));
+    const prices = product.variants.map(({ unitPrice }) => Number(unitPrice ?? product.unitPrice));
     const low = Math.min(...prices).toFixed(2);
     const high = Math.max(...prices).toFixed(2);
     return low === high ? low : `${low}–${high}`;
@@ -183,9 +183,12 @@ export class ProductList extends LitElement {
         key: "price",
         label: t("product.price"),
         align: "end",
-        cell: ({ product, variant }) => variant?.unitPrice ?? this.#price(product),
+        cell: ({ product, variant }) =>
+          variant ? (variant.unitPrice ?? product.unitPrice) : this.#price(product),
         sortValue: ({ product, variant }) =>
-          Number(variant?.unitPrice ?? this.#price(product).split("–")[0]),
+          Number(
+            variant ? (variant.unitPrice ?? product.unitPrice) : this.#price(product).split("–")[0],
+          ),
       },
       {
         key: "modifiers",

@@ -868,14 +868,42 @@ describe("mountCatalogueApi — products", () => {
       `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
       {
         body: {
-          variants: [{ variantId: saved.variants[0]!.id, unitPrice: "4.10", available: true }],
+          variants: [{ variantId: saved.variants[0]!.id, price: "4.10", offered: true }],
         },
       },
     );
     expect(published.status).toBe(200);
+    // Every Active variant is listed, the one this menu sets nothing for with the defaults.
     expect(await published.json()).toEqual([
-      { variantId: saved.variants[0]!.id, unitPrice: "4.10", available: true },
+      { variantId: saved.variants[0]!.id, price: "4.10", offered: true },
+      { variantId: saved.variants[1]!.id, price: null, offered: true },
     ]);
+    const malformed = await send(
+      app,
+      "PUT",
+      `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
+      { body: { variants: [{ variantId: saved.variants[0]!.id, price: 4.1, offered: true }] } },
+    );
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "variants.0" } },
+    });
+    // A variant follows its parent onto the menu; it is never put there on its own.
+    const variantOffer = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/items`,
+      {
+        body: { productId: saved.variants[0]!.id, sectionId, grossPrice: "4.00", displayOrder: 1 },
+      },
+    );
+    expect(variantOffer.status).toBe(400);
+    expect(await variantOffer.json()).toMatchObject({
+      error: {
+        code: "menu_item.variant_not_allowed",
+        params: { productId: saved.variants[0]!.id },
+      },
+    });
     const otherCatalogueId = await createCatalogueVia(app, "Other catalogue");
     const mismatched = await send(
       app,
@@ -886,7 +914,8 @@ describe("mountCatalogueApi — products", () => {
     expect(await mismatched.json()).toMatchObject({ error: { code: "menu_item.not_found" } });
     const offers = await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`);
     expect(((await offers.json()) as { variants: unknown[] }[])[0]!.variants).toEqual([
-      expect.objectContaining({ id: saved.variants[0]!.id, unitPrice: "4.10" }),
+      expect.objectContaining({ id: saved.variants[0]!.id, unitPrice: "4.10", menuPrice: "4.10" }),
+      expect.objectContaining({ id: saved.variants[1]!.id, unitPrice: "2.00", menuPrice: null }),
     ]);
     await send(app, "PUT", `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`, {
       body: { variants: [] },
@@ -932,6 +961,127 @@ describe("mountCatalogueApi — products", () => {
       ...extra,
     };
   }
+
+  // A variant is a `products` row, but no management route reads or writes it by id as a product:
+  // each answers exactly what it answers for an id that names nothing.
+  it("refuses a variant's id on every product-by-id route, and accepts its parent's", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Variant ids");
+    const categoryId = await createCategoryVia(app, { es: `Vinos ${crypto.randomUUID()}` });
+    const variant = {
+      name: "Copa",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: "3.25",
+      available: true,
+    };
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app, { name: "Vino", vatClass: "reduced", variants: [variant] }) },
+    );
+    expect(created.status).toBe(201);
+    const parent = (await created.json()) as { id: string; variants: { id: string }[] };
+    const variantId = parent.variants[0]!.id;
+    const variantRow = async () =>
+      (
+        await suite.db.execute<{ vat_class: string | null; category_id: string | null }>(
+          sql`select vat_class, category_id from products where id = ${variantId}`,
+        )
+      ).rows[0];
+    const notFound = { error: { code: "product.not_found", params: { productId: variantId } } };
+
+    const readVariant = await send(app, "GET", `/management-api/products/${variantId}/editor`);
+    expect(readVariant.status).toBe(404);
+    expect(await readVariant.json()).toMatchObject(notFound);
+    expect((await send(app, "GET", `/management-api/products/${parent.id}/editor`)).status).toBe(
+      200,
+    );
+
+    const saveVariant = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+      body: await editorBody(app, { name: "Copa", vatClass: "general", variants: [variant] }),
+    });
+    expect(saveVariant.status).toBe(404);
+    expect(await saveVariant.json()).toMatchObject(notFound);
+    expect(
+      (await suite.db.execute(sql`select id from products where parent_id = ${variantId}`)).rows,
+    ).toEqual([]);
+
+    const patchVariant = await send(app, "PATCH", `/management-api/products/${variantId}`, {
+      body: { vatClass: "general" },
+    });
+    expect(patchVariant.status).toBe(403);
+    expect(await patchVariant.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+    expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/products/${parent.id}`, {
+          body: { vatClass: "general" },
+        })
+      ).status,
+    ).toBe(204);
+
+    const readCategories = await send(
+      app,
+      "GET",
+      `/management-api/products/${variantId}/categories`,
+    );
+    expect(readCategories.status).toBe(404);
+    expect(await readCategories.json()).toMatchObject(notFound);
+    const membership = { categoryIds: [categoryId], primaryCategoryId: categoryId };
+    const writeCategories = await send(
+      app,
+      "PUT",
+      `/management-api/products/${variantId}/categories`,
+      { body: membership },
+    );
+    expect(writeCategories.status).toBe(404);
+    expect(await writeCategories.json()).toMatchObject(notFound);
+    const addToCategory = await send(
+      app,
+      "POST",
+      `/management-api/categories/${categoryId}/products`,
+      { body: { productIds: [variantId] } },
+    );
+    expect(addToCategory.status).toBe(400);
+    expect(await addToCategory.json()).toMatchObject({
+      error: { code: "category.membership_invalid" },
+    });
+    expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select product_id from product_categories where product_id = ${variantId}`,
+        )
+      ).rows,
+    ).toEqual([]);
+
+    expect(
+      (await send(app, "GET", `/management-api/products/${parent.id}/categories`)).status,
+    ).toBe(200);
+    expect(
+      (
+        await send(app, "POST", `/management-api/categories/${categoryId}/products`, {
+          body: { productIds: [parent.id] },
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(app, "PUT", `/management-api/products/${parent.id}/categories`, {
+          body: membership,
+        })
+      ).status,
+    ).toBe(200);
+    const saveParent = await send(app, "PUT", `/management-api/products/${parent.id}/editor`, {
+      body: await editorBody(app, { name: "Vino", vatClass: "reduced", variants: [variant] }),
+    });
+    expect(saveParent.status).toBe(200);
+  });
 
   // Spec §15.6: the editor writes Active and Available as two separate states. Each save sets the
   // two to DIFFERENT values, so a route that writes one flag into the other column fails.
@@ -2920,13 +3070,13 @@ describe("catalogue routes that already refused a negative price", () => {
       `/management-api/catalogues/${catalogueId}/items/${itemId}/variants`,
       {
         body: {
-          variants: [{ variantId: saved.variants[0]!.id, unitPrice: "-1.00", available: true }],
+          variants: [{ variantId: saved.variants[0]!.id, price: "-1.00", offered: true }],
         },
       },
     );
     expect(badOfferVariant.status).toBe(400);
     expect(await badOfferVariant.json()).toMatchObject({
-      error: { code: "product.variant_invalid", params: { field: "unitPrice" } },
+      error: { code: "product.variant_invalid", params: { field: "price" } },
     });
 
     const badExtra = await send(app, "POST", "/management-api/modifiers/extras", {

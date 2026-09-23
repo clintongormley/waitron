@@ -30,8 +30,9 @@ import {
 import type { PricingUnit, VatClass } from "./pricing.js";
 import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
-import { menuItemVariants, productVariants } from "./schema/variants.js";
-import type { ProductVariant } from "./variants.js";
+import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
+import { listProductVariantsForProducts, type ProductVariant } from "./variants.js";
+import { resolveOfferPrice } from "./offer-price.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -49,12 +50,19 @@ import {
   unitOwnerJoin,
 } from "./variant-fallback.js";
 import type { Product } from "./product-types.js";
-import type { AccessibleCatalogue, AvailableProduct, MenuItem, MenuOffer } from "./menu-types.js";
+import type {
+  AccessibleCatalogue,
+  AvailableProduct,
+  MenuItem,
+  MenuOffer,
+  MenuOfferVariant,
+} from "./menu-types.js";
 export type {
   AccessibleCatalogue,
   AvailableProduct,
   MenuItem,
   MenuOffer,
+  MenuOfferVariant,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedModifier,
@@ -351,11 +359,14 @@ export async function createMenuItem(
   },
 ): Promise<MenuItem> {
   const [product] = await tx
-    .select({ id: products.id })
+    .select({ parentId: products.parentId })
     .from(products)
     .where(eq(products.id, input.productId));
   if (product === undefined)
     throw new AppError("product.not_found", { productId: input.productId });
+  // A variant follows its parent onto every menu (spec §15.5) and never has a menu row of its own.
+  if (product.parentId !== null)
+    throw new AppError("menu_item.variant_not_allowed", { productId: input.productId });
   const [section] = await tx
     .select({ id: menuSections.id })
     .from(menuSections)
@@ -427,9 +438,78 @@ export async function deactivateMenuItem(
 }
 
 /**
+ * What an offer and each of its variants both carry beyond their names and prices, as one column
+ * set and one mapping, so a field added here reaches both. A query selecting these must
+ * also have `.leftJoin(parentProducts, parentJoin)`, `.leftJoin(productUnits, unitOwnerJoin)`,
+ * `.leftJoin(units, …)` and `.leftJoin(categories, …)`.
+ */
+const offerLineColumns = {
+  unitId: units.id,
+  unitName: units.name,
+  unitAbbreviation: units.abbreviation,
+  unitPrecision: units.precision,
+  hardwareUnit: units.hardwareUnit,
+  pricingUnit: effective.pricingUnit,
+  vatClass: effective.vatClass,
+  category: categories.name,
+  allergens: effective.allergens,
+  diet: effective.diet,
+  dietDerivation: effective.dietDerivation,
+  dietOverride: effective.dietOverride,
+  dietaryDeclarations: effective.dietaryDeclarations,
+  courseId: effective.courseId,
+};
+
+type ProductRow = typeof products.$inferSelect;
+type UnitRow = typeof units.$inferSelect;
+
+/** A row selecting {@link offerLineColumns}; the unit and category are LEFT-joined, so nullable. */
+interface OfferLineRow {
+  unitId: UnitRow["id"] | null;
+  unitName: UnitRow["name"] | null;
+  unitAbbreviation: UnitRow["abbreviation"] | null;
+  unitPrecision: UnitRow["precision"] | null;
+  hardwareUnit: UnitRow["hardwareUnit"] | null;
+  pricingUnit: NonNullable<ProductRow["pricingUnit"]>;
+  vatClass: NonNullable<ProductRow["vatClass"]>;
+  category: (typeof categories.$inferSelect)["name"] | null;
+  allergens: ProductRow["allergens"];
+  diet: ProductRow["diet"];
+  dietDerivation: ProductRow["dietDerivation"];
+  dietOverride: ProductRow["dietOverride"];
+  dietaryDeclarations: NonNullable<ProductRow["dietaryDeclarations"]>;
+  courseId: ProductRow["courseId"];
+}
+
+function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
+  return {
+    unit: sellableUnit(
+      row.unitId,
+      row.unitName,
+      row.unitPrecision,
+      row.hardwareUnit,
+      row.unitAbbreviation,
+    ),
+    pricingUnit: row.pricingUnit as PricingUnit,
+    vatClass: row.vatClass as VatClass,
+    category:
+      row.category === null
+        ? null
+        : resolveContentText(row.category, defaultLanguage, defaultLanguage),
+    allergens: row.allergens,
+    diet: row.diet as DietProfile | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
+    dietOverride: row.dietOverride as DietOverride | null,
+    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
+    courseId: row.courseId,
+  };
+}
+
+/**
  * The Active offers on the given menus. Unavailable (sold-out) products are left out unless the
  * caller is a management read passing `includeUnavailable`: spec §15.6 lets Available hide an item
- * from the till, never from the dashboard.
+ * from the till, never from the dashboard. Only a top-level product is an offer; each Active
+ * variant of it is nested under its offer, an Unavailable one listed as unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
@@ -451,20 +531,7 @@ export async function listMenuOffers(
       name: products.name,
       customerName: products.customerName,
       kitchenName: products.kitchenName,
-      unitId: units.id,
-      unitName: units.name,
-      unitAbbreviation: units.abbreviation,
-      unitPrecision: units.precision,
-      hardwareUnit: units.hardwareUnit,
-      pricingUnit: effective.pricingUnit,
-      vatClass: effective.vatClass,
-      category: categories.name,
-      allergens: effective.allergens,
-      diet: effective.diet,
-      dietDerivation: effective.dietDerivation,
-      dietOverride: effective.dietOverride,
-      dietaryDeclarations: effective.dietaryDeclarations,
-      courseId: effective.courseId,
+      ...offerLineColumns,
     })
     .from(menuItems)
     .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
@@ -480,6 +547,7 @@ export async function listMenuOffers(
         eq(menuItems.active, true),
         eq(menuSections.active, true),
         eq(catalogues.active, true),
+        isNull(products.parentId),
         eq(products.active, true),
         options.includeUnavailable === true ? undefined : eq(products.available, true),
       ),
@@ -493,39 +561,18 @@ export async function listMenuOffers(
     tx,
     rows.map((row) => ({ productId: row.productId, menuItemId: row.id })),
   );
-  const variantRows = await tx
-    .select({
-      menuItemId: menuItemVariants.menuItemId,
-      id: productVariants.id,
-      name: productVariants.name,
-      customerName: productVariants.customerName,
-      kitchenName: productVariants.kitchenName,
-      image: productVariants.image,
-      unitPrice: menuItemVariants.unitPrice,
-      productAvailable: productVariants.available,
-      menuAvailable: menuItemVariants.available,
-    })
-    .from(menuItemVariants)
-    .innerJoin(
-      productVariants,
-      and(
-        eq(productVariants.productId, menuItemVariants.productId),
-        eq(productVariants.id, menuItemVariants.variantId),
-      ),
-    )
-    .where(
-      inArray(
-        menuItemVariants.menuItemId,
-        rows.map((row) => row.id),
-      ),
-    )
-    .orderBy(menuItemVariants.displayOrder, menuItemVariants.variantId);
+  const variantsByItem = await readOfferVariants(
+    tx,
+    rows.map((row) => row.id),
+    content.defaultLanguage,
+  );
   return rows.map((row) => ({
     id: row.id,
     menuId: row.menuId,
     productId: row.productId,
     sectionId: row.sectionId,
     grossPrice: centsToDecimal(row.grossPrice),
+    unitPrice: centsToDecimal(row.grossPrice),
     displayOrder: row.displayOrder,
     active: row.active,
     menuName: row.menuName,
@@ -533,38 +580,79 @@ export async function listMenuOffers(
     name: row.name,
     customerName: row.customerName,
     kitchenName: row.kitchenName,
-    unit: sellableUnit(
-      row.unitId,
-      row.unitName,
-      row.unitPrecision,
-      row.hardwareUnit,
-      row.unitAbbreviation,
-    ),
-    pricingUnit: row.pricingUnit as PricingUnit,
-    vatClass: row.vatClass as VatClass,
-    category:
-      row.category === null
-        ? null
-        : resolveContentText(row.category, content.defaultLanguage, content.defaultLanguage),
-    allergens: row.allergens,
-    diet: row.diet as DietProfile | null,
-    dietDerivation: row.dietDerivation as DietDerivation | null,
-    dietOverride: row.dietOverride as DietOverride | null,
-    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-    courseId: row.courseId,
+    ...offerLineValues(row, content.defaultLanguage),
     offeredModifiers: offeredByItem.get(row.id) ?? [],
-    variants: variantRows
-      .filter((variant) => variant.menuItemId === row.id)
-      .map((variant) => ({
-        id: variant.id,
-        name: variant.name,
-        customerName: variant.customerName,
-        kitchenName: variant.kitchenName,
-        image: variant.image,
-        unitPrice: centsToDecimal(variant.unitPrice),
-        available: variant.productAvailable && variant.menuAvailable,
-      })),
+    variants: variantsByItem.get(row.id) ?? [],
   }));
+}
+
+/**
+ * The Active variants of each offer's product, keyed by menu-item id, in variant order: each with
+ * its EFFECTIVE values (`variant-fallback.ts`), what this menu overrides for it, and the price the
+ * chain in `offer-price.ts` resolves. ONE query however many offers.
+ */
+async function readOfferVariants(
+  tx: Transaction,
+  menuItemIds: readonly string[],
+  defaultLanguage: string,
+): Promise<Map<string, MenuOfferVariant[]>> {
+  const rows = await tx
+    .select({
+      menuItemId: menuItems.id,
+      id: products.id,
+      name: products.name,
+      customerName: products.customerName,
+      kitchenName: products.kitchenName,
+      image: effective.image,
+      // RAW, not the effective price: a blank one must fall to the parent's MENU price.
+      ownPrice: products.unitPrice,
+      parentMenuPrice: menuItems.grossPrice,
+      parentPrice: parentProducts.unitPrice,
+      menuPrice: menuItemVariantOverrides.price,
+      offered: menuItemVariantOverrides.offered,
+      available: products.available,
+      ...offerLineColumns,
+    })
+    .from(menuItems)
+    .innerJoin(products, eq(products.parentId, menuItems.productId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(categories, eq(categories.id, effective.categoryId))
+    .leftJoin(
+      menuItemVariantOverrides,
+      and(
+        eq(menuItemVariantOverrides.menuItemId, menuItems.id),
+        eq(menuItemVariantOverrides.variantId, products.id),
+      ),
+    )
+    .where(and(inArray(menuItems.id, [...menuItemIds]), eq(products.active, true)))
+    .orderBy(menuItems.id, products.variantOrder, products.id);
+  const grouped = new Map<string, MenuOfferVariant[]>();
+  for (const row of rows) {
+    const offered = row.offered ?? true;
+    const held = grouped.get(row.menuItemId) ?? [];
+    held.push({
+      id: row.id,
+      name: row.name,
+      customerName: row.customerName,
+      kitchenName: row.kitchenName,
+      image: row.image,
+      unitPrice: resolveOfferPrice({
+        variantMenuPrice: row.menuPrice === null ? null : centsToDecimal(row.menuPrice),
+        variantPrice: row.ownPrice === null ? null : centsToDecimal(row.ownPrice),
+        parentMenuPrice: centsToDecimal(row.parentMenuPrice),
+        // The parent of a variant is top-level, so `products_top_level_owns_ck` sets its price.
+        parentPrice: centsToDecimal(row.parentPrice!),
+      }),
+      menuPrice: row.menuPrice === null ? null : centsToDecimal(row.menuPrice),
+      offered,
+      available: row.available && offered,
+      ...offerLineValues(row, defaultLanguage),
+    });
+    grouped.set(row.menuItemId, held);
+  }
+  return grouped;
 }
 
 /**
@@ -797,46 +885,31 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(productCategories, categoryOwnerJoin)
-    .where(catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId))
+    .where(
+      and(
+        isNull(products.parentId),
+        catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
+      ),
+    )
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
-  const variantRows = await tx
-    .select({
-      productId: productVariants.productId,
-      id: productVariants.id,
-      name: productVariants.name,
-      customerName: productVariants.customerName,
-      kitchenName: productVariants.kitchenName,
-      image: productVariants.image,
-      unitPrice: productVariants.unitPrice,
-      available: productVariants.available,
-    })
-    .from(productVariants)
-    .where(
-      inArray(
-        productVariants.productId,
-        rows.map((row) => row.id),
-      ),
-    )
-    .orderBy(productVariants.displayOrder, productVariants.id);
   // ONE query for every product read, never one per product (CLAUDE.md §3).
   const modifiers = await readProductModifiers(
     tx,
     rows.map((row) => row.id),
   );
-  // Grouped by product ONCE, the way `readProductModifiers` groups its own rows. A `.filter()`
-  // inside the `map` below would rescan every variant row for each product, which is the whole
-  // list read once per product.
-  const variantsByProduct = new Map<string, ProductVariant[]>();
-  for (const variant of variantRows) {
-    const held = variantsByProduct.get(variant.productId) ?? [];
-    const { productId, unitPrice, ...rest } = variant;
-    held.push({ ...rest, unitPrice: centsToDecimal(unitPrice) });
-    variantsByProduct.set(productId, held);
-  }
+  // A variant is listed under its parent, never on its own, and only while it is Active.
+  const variantsByProduct = await listProductVariantsForProducts(
+    tx,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => ({
-    ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
+    ...toProduct(
+      row,
+      row.categoryIds,
+      (variantsByProduct.get(row.id) ?? []).filter((variant) => variant.active),
+    ),
     modifiers: modifiers.get(row.id) ?? [],
   }));
 }

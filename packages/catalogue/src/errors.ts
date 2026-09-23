@@ -73,28 +73,30 @@ declare module "@waitron/shared" {
     "catalogue.not_found": { catalogueId: string };
     /** A menu offer operation names no active item; menuId is present when the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
+    /** A menu offer was asked for a variant. A variant follows its parent onto every menu the
+     * parent is on (spec §15.5) and is never offered on its own. */
+    "menu_item.variant_not_allowed": { productId: string };
     /** A variant field is malformed or a submitted variant identity is duplicated. */
     "product.variant_invalid": { field: string };
-    /** A submitted variant identity does not belong to the product. */
+    /** A submitted variant identity is not a variant of the product or, in a menu's variant
+     * overrides, not an Active one. */
     "product.variant_not_found": { variantId: string };
-    /** A variant cannot be removed while menu offers still publish it. */
+    /** A variant could not be removed while menu offers still published it. Nothing throws it
+     * now: removing a variant makes it Inactive and is always allowed (spec §15.6). Kept
+     * registered because a shipped code is never removed. */
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
-    /** A product with variants cannot be sold without selecting one. */
+    /** A product with Active variants cannot be sold without selecting one. */
     "product.variant_required": { productId: string };
     /** A selected variant is disabled or absent from the menu offer. */
     "product.variant_unavailable": { variantId: string };
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
-    /** A product's variant COUNT is not allowed: a product has NO variants or at least `minimum` of
-     * them, so exactly one is refused — that stops an API caller bypassing the editor's "Regular"
-     * default variant rule. What every numeric-bound code here shares is that the NUMBER stays out
-     * of the code's name: `unit.precision_invalid` states its range in its doc and carries no params,
-     * `options.group_invalid` carries a `reason` code rather than the offending numbers. This one
-     * goes one step further and hands the caller the bound in `minimum`, so raising it later renames
-     * nothing. */
+    /** A product's variant COUNT was not allowed: exactly one variant was refused. Nothing throws
+     * it now — a product may have one variant (spec §15.1). Kept registered because a shipped code
+     * is never removed. */
     "product.variant_count_invalid": { minimum: number };
     "menu_section.not_found": { menuId?: string; sectionId: string };
     /**

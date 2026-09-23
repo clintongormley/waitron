@@ -143,9 +143,6 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
       available: boolean(variant.available, `${field}.available`),
     };
   });
-  // A product has NO variants or at least two; exactly one is refused so an API caller cannot bypass
-  // the editor's "Regular" default-variant rule (product.variant_count_invalid).
-  if (variants.length === 1) throw new AppError("product.variant_count_invalid", { minimum: 2 });
   const allergens =
     body.allergens === null
       ? null

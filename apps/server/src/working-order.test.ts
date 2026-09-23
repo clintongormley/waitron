@@ -459,8 +459,8 @@ async function seedVariantOffer(
     LOCALE,
   );
   await setMenuVariants(tx, offer.id, [
-    { variantId: variants[0]!.id, unitPrice: "3.20", available: true },
-    { variantId: variants[1]!.id, unitPrice: "2.20", available: true },
+    { variantId: variants[0]!.id, price: "3.20", offered: true },
+    { variantId: variants[1]!.id, price: "2.20", offered: true },
   ]);
   return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
 }
@@ -590,8 +590,8 @@ describe("parkOrder", () => {
         LOCALE,
       );
       await setMenuVariants(tx, offer.id, [
-        { variantId: variants[0]!.id, unitPrice: "3.20", available: true },
-        { variantId: variants[1]!.id, unitPrice: "2.20", available: true },
+        { variantId: variants[0]!.id, price: "3.20", offered: true },
+        { variantId: variants[1]!.id, price: "2.20", offered: true },
       ]);
       return { offerId: offer.id, large: variants[0]!.id, small: variants[1]!.id };
     });
