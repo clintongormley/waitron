@@ -404,9 +404,9 @@ Task 2's `available`).
 --
 -- The second statement holds the fixed parent on an insert that names a taken id. This trigger runs
 -- before the conflict is resolved, while the stored row is still in the table, so any such insert
--- naming a different parent is refused whatever its conflict clause — among them `INSERT OR
--- REPLACE`, which never runs the update trigger below, and a plain insert, before the primary key
--- sees it.
+-- naming a different parent is refused whatever its conflict clause, when the one-level check has
+-- not already refused it — among them `INSERT OR REPLACE`, which never runs the update trigger
+-- below, and a plain insert, before the primary key sees it.
 CREATE TRIGGER products_variant_one_level_insert
 BEFORE INSERT ON products
 FOR EACH ROW
@@ -814,7 +814,7 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
 **Files:**
 - Modify: `packages/db/src/schema/orders.ts`, `sales.ts` (drop `variantId`; fix the stale `0031` pointer at `sales.ts:230`); Create (generated): `packages/db/drizzle/0006_*.sql`
 - Modify: `packages/core/src/sale-line.ts`, `sale-line-rows.ts`; `packages/catalogue/src/pricing.ts`, `variants.ts` (delete `listProductVariantsForProducts`), `product-presentation.ts`, `menu-types.ts`, `operations.ts`, `index.ts`
-- Modify: `apps/server/src/working-order.ts` (the offer-line build and the variant text re-keying in `priceOrderLines`, kitchen routing in `fireLines`, kitchen-screen allergens in `readQueueSubItems`, the held-order fast path in `updateHeldOrder`); `packages/venue-service/src/operations.ts` (preparation routes, `resolvePreparationRouteOutcomes`)
+- Modify: `apps/server/src/working-order.ts` (the offer-line build and the variant text re-keying in `priceOrderLines`, kitchen routing in `fireLines`, kitchen-screen allergens in `readQueueSubItems` — the dish's, and each extra's allergens and dietary declarations — the held-order fast path in `updateHeldOrder`); `packages/venue-service/src/operations.ts` (preparation routes, `resolvePreparationRouteOutcomes`)
 - Modify: `apps/till/src/api/client.ts`, `state/order-line.ts`, `widgets/modifier-picker.ts`, `widgets/product-grid.ts`, `widgets/product-name.ts`, `menu-filter.ts`, `till-app.ts` (retrieval)
 - Test: `packages/db/src/schema/variant-snapshot-columns.test.ts`, `sales.test.ts` (`:516-525`: `["variant_id"]` → `[]`), `orders.test.ts` (`:500-517`: `["product_id","variant_id"]` → `["product_id"]`), `packages/core/src/sale-line-rows.test.ts`, `packages/catalogue/src/pricing.test.ts`, `product-presentation.test.ts`, `variants.db.test.ts`; `apps/server/src/till-sale.test.ts`, `working-order.test.ts`, `kitchen-print.test.ts`, `receipt-ticket.test.ts`, `tabs.test.ts`; `apps/till/src/widgets/modifier-picker.test.ts`, `product-grid.test.ts`, `product-name.test.ts`, `basket.test.ts`, `state/order-line.test.ts`; `packages/fiscal-verifactu/src/write-path.e2e.test.ts`
   (Tighten pinned column lists rather than deleting those cases. The name-join assertions that change are listed in Step 2 and named in the PR.)
@@ -850,6 +850,10 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
     then category route), carries the parent's course, shows the PARENT's allergens on the kitchen
     screen, and takes a preparation route keyed on the parent's product id — each with a Wine 175
     control that overrides the field and gets its own value.
+  - Review Focus 3, extras: an extras line whose product is a variant inheriting its allergens and
+    dietary declarations shows its PARENT's allergens and dietary labels on the kitchen screen
+    (`addAllergens` and `suitableFor` in `readQueueSubItems`), with a control variant that overrides
+    both and shows its own.
   - Review Focus 5 / V2: a Wine 125 line with NO customer or kitchen name prints "Wine 125" on the
     receipt in every invoice locale, on the kitchen ticket, in the basket, on the tab and in the expo
     queue; its stored `variant_descriptions` carries exactly the venue's invoice locales, filled with
@@ -883,18 +887,20 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
   `variant-snapshot-columns.test.ts` and tighten `sales.test.ts` / `orders.test.ts`.
 
 - [ ] **Step 6: Implement.** `selectMenuVariant` returns `productId` and the chosen row's effective
-  pricing values, and raises `variant_required` when `offer.variants` is non-empty. `working-order.ts`'s
-  offer-line build takes `vatClass`, `pricingUnit`, `unit`, `courseId`, `category` and price from the
-  selection. Kitchen routing, the kitchen-screen allergen read and preparation-route resolution join
-  the parent through `parentProducts` / `effectiveProductColumns` and match product-level routes on
+  pricing values, and raises `variant_required` when `offer.variants` is non-empty.
+  `working-order.ts`'s offer-line build takes `vatClass`, `pricingUnit`, `unit`, `courseId`,
+  `category` and price from the selection. Kitchen routing, the kitchen-screen allergen read (the
+  dish's, in `readQueueSubItems`), the same function's child read of each extra's allergens and
+  dietary declarations, and preparation-route resolution join the parent through `parentProducts` /
+  `effectiveProductColumns` and match product-level routes on
   `coalesce(products.parent_id, products.id)`. The variant-text re-keying (in `priceOrderLines`)
-  fills a blank locale with the VARIANT's staff name. `product-presentation.ts` implements V2 in its one join
-  function. Delete `listProductVariantsForProducts` (V15). Remove every `variantId` from the row
-  writes, `readLockedLines`, `carveOffLines`, `getHeldOrder` (which derives it from the product's
-  parent), the pricing types and `RecordSaleLine` / `saleLineRows`; `updateHeldOrder`'s same-line
-  test compares the stored `product_id` with the resolved one. Till: `menuOfferToTillProduct` maps
-  the price difference; `visibleProducts` / `product-grid` applies V4; the picker
-  lists variants only and preselects the first available.
+  fills a blank locale with the VARIANT's staff name. `product-presentation.ts` implements V2 in its
+  one join function. Delete `listProductVariantsForProducts` (V15). Remove every `variantId` from
+  the row writes, `readLockedLines`, `carveOffLines`, `getHeldOrder` (which derives it from the
+  product's parent), the pricing types and `RecordSaleLine` / `saleLineRows`; `updateHeldOrder`'s
+  same-line test compares the stored `product_id` with the resolved one. Till:
+  `menuOfferToTillProduct` maps the price difference; `visibleProducts` / `product-grid` applies V4;
+  the picker lists variants only and preselects the first available.
 
 - [ ] **Step 7: Run to verify they pass**, then `pnpm --filter @waitron/server exec vitest run
   src/kitchen-print.test.ts src/receipt-ticket.test.ts src/split-bill.test.ts src/tabs.test.ts

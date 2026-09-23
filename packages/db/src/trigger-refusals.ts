@@ -73,8 +73,8 @@ export const VARIANT_ONE_LEVEL_REFUSAL =
 /**
  * `products_variant_parent_fixed_update`: `parent_id` changed — set, moved or cleared — after
  * insert. Also `products_variant_one_level_insert`, for any insert naming a taken id with a
- * different parent, whatever its conflict clause: that trigger refuses it before the conflict is
- * resolved.
+ * different parent, whatever its conflict clause, when the one-level check has not already refused
+ * it: that trigger refuses it before the conflict is resolved.
  */
 export const VARIANT_PARENT_FIXED_REFUSAL = "a variant's parent is fixed when it is created";
 

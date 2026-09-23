@@ -239,8 +239,9 @@ async function priceOrderLines(
   // list its dish attaches, frozen onto the dish row as `option_snapshots` — and `extras`, whose picks
   // each become a CHILD row carrying the picked PRODUCT, its three frozen names, the offer's resolved
   // price and that product's vat class — its own, or its parent's where a variant leaves it blank,
-  // never the dish's. Both are validated against the definitions resolved for the whole basket above. Absent/empty = a plain single line, except that an ACTIVE options list must
-  // still be answered.
+  // never the dish's. Both are validated against the definitions resolved for the whole basket
+  // above. Absent/empty = a plain single line, except that an ACTIVE options list must still be
+  // answered.
   //
   // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note`, which is
   // NON-FISCAL. It is trimmed and length-capped (`working_order.note_too_long`), and attaches to the

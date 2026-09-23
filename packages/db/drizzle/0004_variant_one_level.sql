@@ -19,9 +19,9 @@
 --
 -- The second statement holds the fixed parent on an insert that names a taken id. This trigger runs
 -- before the conflict is resolved, while the stored row is still in the table, so any such insert
--- naming a different parent is refused whatever its conflict clause — among them `INSERT OR
--- REPLACE`, which never runs the update trigger below, and a plain insert, before the primary key
--- sees it.
+-- naming a different parent is refused whatever its conflict clause, when the one-level check has
+-- not already refused it — among them `INSERT OR REPLACE`, which never runs the update trigger
+-- below, and a plain insert, before the primary key sees it.
 CREATE TRIGGER products_variant_one_level_insert
 BEFORE INSERT ON products
 FOR EACH ROW

@@ -133,8 +133,8 @@ function seedOneRowEverywhere(connection) {
  * every trigger a migration file writes: the BEHAVIOURAL rules
  * `packages/db/drizzle/0001_behavioural_triggers.sql` restores — a settlement's tender coverage, a
  * tender after settlement, a working order's status transitions, and the rest — core's variant rules
- * on `products`, and media's image references. The seeding below writes one generic row into EVERY table in
- * alphabetical order, and those rules refuse some of those rows: measured on this tree, the
+ * on `products`, and media's image references. The seeding below writes one generic row into EVERY
+ * table in alphabetical order, and those rules refuse some of those rows: measured on this tree, the
  * `sale_settlements` row lands before the `tenders` one, so the tender is refused with "tender
  * rejected: the sale is already settled" and the whole suite fails to load.
  *
