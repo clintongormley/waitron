@@ -70,5 +70,12 @@ export const REGISTER_BINDING_REFUSAL = "a non-kds device binds a register and n
 export const VARIANT_ONE_LEVEL_REFUSAL =
   "a variant's parent must be a product with no parent, and a variant cannot have variants of its own";
 
-/** `products_variant_parent_fixed_update`: `parent_id` changed — set, moved or cleared — after insert. */
+/**
+ * `products_variant_parent_fixed_update`: `parent_id` changed — set, moved or cleared — after
+ * insert. Also `products_variant_one_level_insert`, for an `INSERT OR REPLACE` naming a different
+ * parent from the row it replaces.
+ */
 export const VARIANT_PARENT_FIXED_REFUSAL = "a variant's parent is fixed when it is created";
+
+/** `products_id_fixed_update`: a product's `id` changed after insert. */
+export const PRODUCT_ID_FIXED_REFUSAL = "a product's id never changes";

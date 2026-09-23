@@ -302,19 +302,29 @@ and the `product_units` unit row — a variant with NO row of its own reads its 
 `customer_name`, `kitchen_name`, `active`, `sold_alone`, `parent_id`, `variant_order`, timestamps (and
 Task 2's `available`).
 
-- [ ] **Step 1: Write the failing trigger cases.** In `scripts/behavioural-triggers.test.ts`, add a
-  `describe("a variant has exactly one level")` block migrated through `applyMigrations` like the
-  file's other blocks, each case asserting the exact refusal text, each with an accepting control:
+- [ ] **Step 1: Write the failing trigger cases.** In `scripts/behavioural-triggers.test.ts`, add one
+  `describe` block per trigger, named after it, migrated through `applyMigrations` like the file's
+  other blocks, each case asserting the exact refusal text, each with an accepting control:
   - inserting a product whose `parent_id` names a product that itself has a `parent_id` →
     `VARIANT_ONE_LEVEL_REFUSAL`; control: naming a parent with no parent is accepted.
   - updating `parent_id` on an existing row — setting it on a top-level product (including one that
-    HAS variants, the only way a second level could otherwise arise), changing it, or clearing it →
+    HAS variants), changing it, or clearing it →
     `VARIANT_PARENT_FIXED_REFUSAL`; control: updating any other column of a variant is accepted, and
     inserting a second variant under the same parent is accepted.
   - a product naming itself as parent → `VARIANT_ONE_LEVEL_REFUSAL`.
-  Two triggers make the whole rule: a new row has no children yet, so the insert trigger only checks
-  the parent it names, and every later way to a second level is an update of `parent_id`, which the
-  fixed-parent trigger refuses outright. Add both names to the file's name pin.
+  - a new row naming a parent when a variant naming IT was already written (foreign keys deferred) →
+    `VARIANT_ONE_LEVEL_REFUSAL`; control: the same order with the new row top-level is accepted.
+  - `INSERT OR REPLACE` of a variant naming another parent, or none → `VARIANT_PARENT_FIXED_REFUSAL`;
+    control: the same replace naming the parent it already has is accepted.
+  - changing a product's `id` → `PRODUCT_ID_FIXED_REFUSAL`, including a variant renamed onto an id a
+    waiting child names, and `UPDATE OR REPLACE` onto a variant's id; control: an update writing the
+    same id back is accepted.
+  Three triggers make the whole rule. The insert trigger checks the parent a new row names, and also
+  that the new row has no variants already, because deferred foreign keys let a variant be written
+  before its parent; it also refuses an `INSERT OR REPLACE` that names a different parent from the
+  row it replaces, which the update triggers never see. Every UPDATE route to a second level changes
+  `parent_id` or `id`, and the other two triggers refuse each outright. Add all three names to the
+  file's name pin.
 
 - [ ] **Step 2: Write the failing schema-constraint entries.** In `scripts/schema-constraints.test.ts`
   add the foreign-key entry `["products", ["parent_id", "catalogue_id"], "products"]` (this guard's
@@ -379,34 +389,65 @@ Task 2's `available`).
      must carry the composite key and the check.
   3. Run `pnpm --filter @waitron/db db:generate:custom --name=variant_one_level` and write
      `0004_variant_one_level.sql` in the style of `0001_behavioural_triggers.sql` (a body of
-     `select raise(abort, '…') where <refused case>;`, one trigger per event). Its header says the
+     `SELECT raise(abort, '…') WHERE <refused case>;`). Its header says the
      triggers live on `products` and that **any later migration that recreates `products` drops
      them** — the name pin in `scripts/behavioural-triggers.test.ts` is what notices.
 
+  The file below its header, verbatim:
+
 ```sql
-create trigger products_variant_one_level_insert before insert on products
-begin
-  select raise(abort, 'a variant''s parent must be a product with no parent, and a variant cannot have variants of its own')
-  where new.parent_id is not null
-    and (new.parent_id = new.id
-      or (select parent_id from products where id = new.parent_id) is not null
-      or exists (select 1 from products where parent_id = new.id));
-end;
+-- A new row naming a parent is refused when that parent is the row itself or is a variant, or when
+-- the new row already has variants of its own. The last case exists because foreign keys can be
+-- deferred, as configuration transfer defers them (`apps/server/src/configuration-transfer.ts`),
+-- so a variant can be written before the parent it names.
+--
+-- The second statement holds the fixed parent against `INSERT OR REPLACE`, which runs this trigger
+-- while the row it replaces is still in the table and never runs the update trigger below. It reads
+-- the stored row, so a plain insert of a taken id naming a different parent is refused here too,
+-- before the primary key sees it.
+CREATE TRIGGER products_variant_one_level_insert
+BEFORE INSERT ON products
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a variant''s parent must be a product with no parent, and a variant cannot have variants of its own')
+  WHERE new.parent_id IS NOT NULL
+    AND (new.parent_id = new.id
+      OR (SELECT parent_id FROM products WHERE id = new.parent_id) IS NOT NULL
+      OR exists (SELECT 1 FROM products WHERE parent_id = new.id));
+  SELECT raise(abort, 'a variant''s parent is fixed when it is created')
+  WHERE exists (SELECT 1 FROM products WHERE id = new.id AND parent_id IS NOT new.parent_id);
+END;
 --> statement-breakpoint
-create trigger products_variant_parent_fixed_update before update of parent_id on products
-begin
-  select raise(abort, 'a variant''s parent is fixed when it is created')
-  where new.parent_id is not old.parent_id;
-end;
+-- `parent_id` never changes after insert: not set on a top-level product, not moved, not cleared.
+CREATE TRIGGER products_variant_parent_fixed_update
+BEFORE UPDATE OF parent_id ON products
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a variant''s parent is fixed when it is created')
+  WHERE new.parent_id IS NOT old.parent_id;
+END;
+--> statement-breakpoint
+-- `id` never changes after insert. Without this an UPDATE reaches a second level without naming
+-- `parent_id`: a variant renamed onto an id a waiting child already names (foreign keys deferred),
+-- or `UPDATE OR REPLACE` moving a top-level row onto a variant's id, which deletes the variant and
+-- leaves a top-level row in its place.
+CREATE TRIGGER products_id_fixed_update
+BEFORE UPDATE OF id ON products
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a product''s id never changes')
+  WHERE new.id IS NOT old.id;
+END;
 ```
 
-  The insert trigger also refuses a new row that already has variants, because deferred foreign keys
-  (as configuration transfer runs them) let a variant be written before the parent it names —
-  `scripts/behavioural-triggers.test.ts`'s case "refuses a product naming a parent when it already
-  has a variant of its own".
+  The insert trigger also refuses a new row that names a parent and already has variants, because
+  deferred foreign keys (as configuration transfer runs them) let a variant be written before the
+  parent it names — `scripts/behavioural-triggers.test.ts`'s case "refuses a product naming a parent
+  when it already has a variant of its own".
 
-  Put the two messages in `trigger-refusals.ts` as `VARIANT_ONE_LEVEL_REFUSAL` and
-  `VARIANT_PARENT_FIXED_REFUSAL`, exported from `packages/db/src/index.ts`.
+  Put the messages in `trigger-refusals.ts` as `VARIANT_ONE_LEVEL_REFUSAL`,
+  `VARIANT_PARENT_FIXED_REFUSAL` and `PRODUCT_ID_FIXED_REFUSAL`, the first two exported from
+  `packages/db/src/index.ts`.
 
 - [ ] **Step 6: Prove the migration APPLIES, and record the upgrade result.** Run
   `pnpm --filter @waitron/db exec vitest run` and `pnpm --filter @waitron/catalogue exec vitest run
