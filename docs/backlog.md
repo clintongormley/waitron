@@ -1857,10 +1857,11 @@ image constraints under *Detail → Box image*.
   only real repair is a squashed baseline — **an owner decision nobody has taken**. Until it is, the
   hazard stands: **do not run `pnpm --filter @waitron/db db:generate`** (it proposes dropping the
   bookings table, which left core's barrel but stayed in core's snapshot chain).
-- **Four paths migrate a live database with no ahead-of-image check** (`instance-apply.ts`,
-  `restore.ts`, `rejoin-command.ts`, `dev-setup.ts`); only the boot path has one.
-- **`waitron-provision instance` migrates on every run**, which against a trading shop can lock
-  tables — gate it (a flag, a refusal, a louder confirmation)? A product decision before production.
+- **Three paths migrate a live database with no ahead-of-image check** (`restore.ts`,
+  `rejoin-command.ts`, `dev-setup.ts`); only the boot path has one. (A fourth, `instance-apply.ts`,
+  went with `waitron-provision instance` when a venue became a directory of SQLite files, and with it
+  the question of gating a migrate that could lock a trading shop's tables — the reason is recorded
+  at `packages/provisioning/src/errors.ts`.)
 - **Provisioning's migrate path still runs the linear full `manifestSets()`** — route it through the
   resolver once it gains per-module enablement.
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
@@ -3328,16 +3329,16 @@ PostgreSQL from the dependencies and the dev stack, LANDED as #492 on 2026-09-23
 `fc8753a6`). It takes the cluster out of the box and out of the dev stack,
 the client packages out of every manifest that did not import them, the two unread Docker switches out
 of both workflows, the PostgreSQL schema differ off disk, the two identity-function claim helpers out
-of `@waitron/db`, and the target-choice framing out of the comments. **Task T3, revisiting the coverage bars, is the last
-of the sixteen**, and with it slice 1 is done.
+of `@waitron/db`, and the target-choice framing out of the comments. **Task T3, revisiting the coverage bars, is the last task
+in the slice-1 plan**, and with it slice 1 is done.
 
 **What T3 measured, and why no bar moved.** The whole workspace was run — 46 members green at their
 current bars, 1,065 test files and 13,784 tests, plus the root project's 54 files and 3,255 tests —
 and the answer is that **the storage switch did not shrink the workspace**: non-test source under
-`packages/*/src` and `apps/*/src` went 8,323 KB before the flip to 8,359 KB after it, so a bar that
+`packages/*/src` and `apps/*/src` went 8,323 KB before the flip to 8,339 KB after it, so a bar that
 was meaningful in September still is. Only `packages/provisioning` shrank materially, by about a
 third, when `waitron-provision instance` went with the per-tenant PostgreSQL cluster, and it still
-clears the floor by 7.7 points. The numbers, the two traps that were checked rather than assumed, and
+clears the floor by 7.7 points on statements. The numbers, the two traps that were checked rather than assumed, and
 the one source file that turns out to be measured by no coverage table at all are in
 [ci-and-gates.md](developers/ci-and-gates.md) → *Coverage thresholds are split by package*.
 

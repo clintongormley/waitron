@@ -111,22 +111,34 @@ This file and `CLAUDE.md` used to repeat the names, and both drifted: the flip (
 both rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES` away, and a guard
 over prose would fail on rewording that changed nothing.
 
-The root project keeps the high bar. Its coverage table is seven `scripts/*.mjs` files plus
-`packages/db/src/english-only.ts`; the `.ts` files under `scripts/` are all guard SUITES, which
-Vitest leaves out of their own table whatever `coverage.include` says. Two of the seven are the
-classifiers that decide what CI and the hook run.
+The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
+`packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
+them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
+`.ts` file under `scripts/` but one is a guard SUITE, which Vitest leaves out of its own table
+whatever `coverage.include` says; the exception is `scripts/dev-server-proxy.ts`, and the subsection
+below says what it costs to leave it where it is.
 
 ### What the storage switch did to the bars — measured 2026-09-23 (task T3)
 
 **No bar moved, and the reason is that the workspace did not shrink.** `pnpm -r test:coverage` on
 `c33a4bc11` (T2's backlog pointer) was green in all 46 members that run coverage — 1,065 test files,
-13,784 tests, no threshold failure — and `pnpm vitest run --coverage` at the root was green over its
-eight files, 54 suites and 3,255 tests. Non-test source under `packages/*/src` and `apps/*/src`
-measured 8,323 KB at `320f1dc08`, the commit before the flip, and 8,359 KB after it: the deletions
-and the new code very nearly cancel. One package shrank materially — `packages/provisioning`, down about a
-third, when `waitron-provision instance` went with the per-tenant PostgreSQL cluster — and it still
-clears the floor by 7.7 points on statements. One is new, `packages/store`, at 100% on all four
-metrics against the high bar.
+13,784 tests, no threshold failure — and `pnpm vitest run --coverage` at the root was green over
+54 test files and 3,255 tests, against a coverage table of eight files. #493 landed 14 more packages'
+worth of change while this was being written, so those 14 were re-measured on top of it: every figure
+below is from the tree that merges, and none of them moved. The tree is the same size either side of the
+flip: summing the blob sizes of every `.ts` file under `packages/*/src` and `apps/*/src` whose name
+does not end `.test.ts` gives 8,323 KB at `320f1dc08`, the commit before the flip, and 8,339 KB at
+`c33a4bc11` — 1,013 files against 986, so the deletions and the new code very nearly cancel. Re-run
+it with
+
+```
+git ls-tree -r -l <ref> | awk -F'\t' '$2 ~ "^(packages|apps)/[^/]+/src/" && $2 ~ "[.]ts$" && $2 !~ "[.]test[.]ts$" { split($1, f, " "); n += f[4] } END { printf "%.0f KB\n", n/1024 }'
+```
+
+and per package by grouping on the first two path segments. The only package that shrank by more than
+a tenth is `packages/provisioning`, by about a third, when `waitron-provision instance` went with the
+per-tenant PostgreSQL cluster; it still clears the floor by 7.7 points on statements. One package is
+new, `packages/store`, at 100% on all four metrics against the high bar.
 
 **The high bar is the one doing the work, and which metric binds differs by package** — worth saying
 because it is easy to assume branches always binds, and it does not. Taking each package's smallest
@@ -154,21 +166,31 @@ measuring the wrong files:
 mislead.** `scripts/dev-server-proxy.ts` is real source — the three front-ends' `vite.config.ts`
 import it — and the root project's `coverage.include` names `scripts/**/*.mjs`, not `*.ts`. The
 config's comment justified that by claiming every `.ts` under `scripts/` is a guard suite, which is
-false by one file. Widening the include to `scripts/**/*.ts` was tried and measured: the root project
-reads 99.71/95.18/100/100 with it, still green, but only 0.18 over its branch bar — and the two
-branches it adds cannot honestly be covered.
+false by that one file. Widening the include to `scripts/**/*.ts` was tried and measured: the root
+project reads 99.71/95.18/100/100 with it — still green, but 0.18 over its branch bar instead of
+1.07, on two branches a test can EXECUTE and cannot meaningfully ASSERT.
 
-- `resolve(configured)` makes no observable difference, because `existsSync` already resolves a
-  relative path against the working directory. Control run on 2026-09-23: replacing
-  `isAbsolute(configured) ? configured : resolve(configured)` with plain `configured` left all three
-  cases in `scripts/dev-proxy-config.test.ts` green, including one written specifically to catch it.
-  That case was deleted rather than kept — a test whose control does not bite is a false receipt
-  (CLAUDE.md §1).
-- The `WAITRON_STATE_DIR` fallback to `apps/server/src/state` can only be told apart from any other
-  leafless directory by writing a TLS leaf into that directory, which is the box's real state
-  directory in a developer's checkout.
+- **`resolve(configured)` makes no observable difference**, because `existsSync` already resolves a
+  relative path against the working directory. Measured 2026-09-23. A case was added to
+  `scripts/dev-proxy-config.test.ts` pointing `WAITRON_STATE_DIR` at the suite's own state directory
+  spelled relative to the repository root, which vitest runs from:
 
-So the include is unchanged and the comment now states the real reason. The alternative worth
+  ```ts
+  process.env.WAITRON_STATE_DIR = relative(REPO_ROOT, stateDir);
+  expect(devServerProxy()).toEqual({ target: "https://127.0.0.1:8080", secure: false });
+  ```
+
+  Then the control: replacing `isAbsolute(configured) ? configured : resolve(configured)` with plain
+  `configured` left that case green, and the suite's two existing cases with it. The case was never
+  committed — a test whose control does not bite is a false receipt (CLAUDE.md §1) — but it would
+  have raised the branch percentage anyway, which is the whole point.
+- **The `WAITRON_STATE_DIR` fallback** to `apps/server/src/state` runs whenever the variable is
+  unset, so a test can reach it — but its answer cannot be told apart from any other leafless
+  directory without writing a TLS leaf into that directory, which is the box's real state directory
+  in a developer's checkout.
+
+So the include is unchanged and the comment now states the real reason: covering those two branches
+would be the "there is a test" that CLAUDE.md §4 calls an unfinished sentence. The alternative worth
 considering, and not taken here because it is a refactor rather than a bar decision, is to move the
 file into a package where its coverage would count.
 

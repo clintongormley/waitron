@@ -108,8 +108,9 @@ Unknown ranges keep the full local gate, including workspace typechecking. See
 fiscal core and the data-layer foundations, the `90/90/85/85` floor everywhere else, browser packages
 included. **Which packages hold the high bar is written once**, as `HIGH_BAR_PACKAGES` in
 `scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it.
-Prose that re-enumerates the list drifts: the flip added `store` to it and two files went on naming
-four packages until T3 measured them.
+Prose that re-enumerates the list drifts, and three places were wrong at once: two still named
+four packages after the flip made it five, and a third asserted six. More:
+[ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`,
 `shared`, `fiscal` and `db`** (`shared` since July 2026; `fiscal`, `ui` and `db`
@@ -694,7 +695,12 @@ browser test** — most of these rules exist because a test passed while proving
 - **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated `lint`
   job and the hook run on every non-docs push. Two costs of living there: the root project does not
   typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
-  from its own package's.
+  from its own package's. **The root `include` names FILE TYPES, so source of any other type that
+  lives at the root is measured by nothing, suite or no suite** — `scripts/dev-server-proxy.ts` is
+  imported by all three front-ends' `vite.config.ts` and exercised by
+  `scripts/dev-proxy-config.test.ts`, and appears in no coverage table in the repository. Left that
+  way deliberately, and the cost of the alternative is measured:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
 - **A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own
   case.** Deletion shows the guard catches what it was written for; only a case in the other
@@ -741,12 +747,6 @@ browser test** — most of these rules exist because a test passed while proving
   no trailing slash — so a SIBLING package whose directory name extends this one's lands in this
   package's report. Cost: `packages/sync` read 81.57% statements on files belonging to
   `packages/sync-enrolment`. See [testing-guide.md](docs/developers/testing-guide.md).
-- **Source that lives at the workspace ROOT is counted only where the ROOT config's
-  `coverage.include` names its file type, and having a suite is not the same as being counted.**
-  `scripts/dev-server-proxy.ts` is imported by all three front-ends' `vite.config.ts` and exercised
-  by `scripts/dev-proxy-config.test.ts`, and it appears in no coverage table in the repository: the
-  root `include` names `scripts/**/*.mjs`. Left that way deliberately — two of its branches cannot be
-  covered honestly. Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
   Measured both ways on `packages/sync-enrolment/src/migration-tables.ts` under
   `@vitest/coverage-v8@4.1.11`: with the pair the package reads 2 of 2 branches and passes; with the
