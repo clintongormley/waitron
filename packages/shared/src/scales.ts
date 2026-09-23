@@ -3,7 +3,8 @@ import { decimal, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 
 // The sanctioned crossings between a SCALED-INTEGER column and the exact decimal type, for the
-// two scales that are not money.
+// two scales that are not money. It also supplies money's literal renderer and raw pattern to
+// `./cents.ts`.
 //
 // A quantity column stores a count of whole thousandths and a rate column a count of whole basis
 // points, while every arithmetic and every printed literal above the storage boundary is an exact
@@ -19,22 +20,18 @@ import type { Decimal } from "./money.js";
 // cases in `scales.test.ts`). The names are separate anyway, because a rate and an amount sharing
 // a scale today is a coincidence of this tax regime, not a property to build on.
 //
-// `./money.ts` is where the rounding happens — `toScale`, in BigInt, half away from zero, which
-// is the rule the decimal columns applied on the way in. Nothing here rounds a float;
-// `conventions.test.ts` reads this file's text and fails on any float-shaped operation but the
-// number constructor these conversions exist for.
+// `./money.ts` is where the rounding happens — `toScale`, in BigInt, half away from zero. Nothing
+// here rounds a float; `conventions.test.ts` reads this file's text and fails on any float-shaped
+// operation but the number constructor these conversions exist for.
 
 /** Three decimal places, so five grams is a quantity and not a rounding error. */
 export const QUANTITY_SCALE = 3;
 
 /**
- * Nine, which is what `numeric(12, 3)` admitted before the column became an integer.
- *
- * The bound moves here rather than disappearing: the decimal column refused a wider quantity
- * with a `22003`, and an eight-byte integer would take it silently. Eight bytes and not four,
- * because the widest quantity the old column accepted is 999999999.999, which is 999999999999
- * thousandths — past `integer`'s 2147483647 (the measurement is in `columns.ts`'s `money`
- * docstring) and well inside the 9007199254740991 a JavaScript number counts exactly.
+ * Nine integer digits. The column is an eight-byte integer and takes a wider count silently, so
+ * this bound is the only width limit (see the header of `packages/db/src/schema/columns.ts`). The
+ * widest quantity it admits, 999999999.999, is 999999999999 thousandths — well inside the
+ * 9007199254740991 a JavaScript number counts exactly.
  */
 export const MAX_QUANTITY_INTEGER_DIGITS = 9;
 
@@ -42,23 +39,40 @@ export const MAX_QUANTITY_INTEGER_DIGITS = 9;
 export const RATE_SCALE = 2;
 
 /**
- * Three, which is what `numeric(5, 2)` admitted. 999.99 is 99999 basis points, so unlike a
- * quantity a rate fits a four-byte `integer` with room to spare.
+ * Three integer digits: 999.99 is 99999 basis points. The column is an eight-byte integer, so this
+ * bound is the only digit limit; the VAT-rate and deductible-proportion columns also carry a CHECK
+ * capping the count at 10000.
  */
 export const MAX_RATE_INTEGER_DIGITS = 3;
 
 function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
-  const scaled = toScale(value, scale);
-  const negative = scaled.startsWith("-");
-  const digits = (negative ? scaled.slice(1) : scaled).replace(".", "");
-  const magnitude = BigInt(digits);
-  if (magnitude >= 10n ** BigInt(maxIntegerDigits + scale)) {
-    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
-  }
-  return Number(negative ? -magnitude : magnitude);
+  return boundedCount(
+    BigInt(toScale(value, scale).replace(".", "")),
+    value,
+    scale,
+    maxIntegerDigits,
+  );
 }
 
-function scaledLiteral(count: number, scale: number): Decimal {
+function boundedCount(
+  count: bigint,
+  value: string,
+  scale: number,
+  maxIntegerDigits: number,
+): number {
+  if ((count < 0n ? -count : count) >= 10n ** BigInt(maxIntegerDigits + scale)) {
+    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
+  }
+  return Number(count);
+}
+
+/**
+ * The literal for a count at `scale`, always with every place: 1234 at scale 2 is "12.34".
+ *
+ * Package-internal — not re-exported from `index.ts`. Callers check `Number.isInteger` first, as
+ * `centsToDecimal`, `thousandthsToDecimal` and `basisPointsToDecimal` do.
+ */
+export function scaledLiteral(count: number, scale: number): Decimal {
   const negative = count < 0;
   const digits = String(negative ? -count : count).padStart(scale + 1, "0");
   const point = digits.length - scale;
@@ -74,8 +88,7 @@ export function decimalToThousandths(value: Decimal): number {
  * The decimal literal for a stored count of thousandths: 1500 is "1.500".
  *
  * Always three places, because the literal is what a receipt prints and the scale is part of the
- * value — it is also what the `numeric(12, 3)` column rendered, so a line's printed quantity does
- * not change with the storage.
+ * value.
  */
 export function thousandthsToDecimal(count: number): Decimal {
   if (!Number.isInteger(count)) {
@@ -102,22 +115,13 @@ export function basisPointsToDecimal(count: number): Decimal {
   return scaledLiteral(count, RATE_SCALE);
 }
 
-// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the shape both
-// engines render for an integer, or a scale-0 `numeric`, cast to text. Not ONLY that shape: it
-// also admits "-0". Measured 2026-09-21 on the development container: PostgreSQL 18.6 renders
-// `'-0'::bigint::text` and `'-0'::numeric::text` as "0", so nothing on that side produces the
-// string — and a caller that hands it over anyway is read here as zero, which is what the engine
-// reads it as too, so admitting it costs nothing (pinned in `scales.test.ts`).
-// The `numeric` half is not a corner case, because one of the two raw reads in the tree is an
-// AGGREGATE. Measured 2026-09-21 against the development container `waitron-db-1`, where
-// `show server_version` reports 18.6, with `pg_typeof`: `sum(...)` over a `bigint` is a `numeric`,
-// and over an `integer` or a `smallint` it is a `bigint`. So the summed quantity in
-// `packages/reporting/src/top-sellers.ts` arrives as a `numeric`; the one rate read,
-// `packages/reporting/src/input-vat.ts`, is the bare `integer` column, and a summed rate would
-// arrive as a `bigint`. The `::text` cast is what makes all three the same string. The reasoning, the driver measurements and the reason the cast is `::text` and not
-// `::int` are written out once, on `rawCentsToDecimal` in `./cents.ts`; everything there applies
-// here unchanged.
-const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
+// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the shape this
+// engine renders for an integer cast to text, column or aggregate alike. It also admits "-0", read
+// as zero (pinned in `scales.test.ts`). A value carrying a decimal point is refused rather than
+// converted, which is the case that would otherwise be wrong by a power of ten. Shared by every raw
+// reader, money's included; the reasoning and the measurements are on `rawCentsToDecimal` in
+// `./cents.ts`.
+export const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
  * `malformed` is the caller's own scale code, as `rawCentsToDecimal` refuses in money's own words:
@@ -135,20 +139,12 @@ function rawCount(
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
     throw new AppError(malformed, { value: String(value) });
   }
-  const negative = value.startsWith("-");
-  const magnitude = BigInt(negative ? value.slice(1) : value);
-  if (magnitude >= 10n ** BigInt(maxIntegerDigits + scale)) {
-    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
-  }
-  return Number(negative ? -magnitude : magnitude);
+  return boundedCount(BigInt(value), value, scale, maxIntegerDigits);
 }
 
 /**
  * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
- *
- * The bound is the one the `::numeric(12, 3)` cast this replaced enforced: a sum past nine integer
- * digits was refused by PostgreSQL with a 22003, and it is refused here instead. The refusal moved
- * from the engine to the reader; it did not disappear.
+ * A sum past nine integer digits is refused here, since no column type below refuses it.
  */
 export function rawThousandthsToDecimal(value: string): Decimal {
   return thousandthsToDecimal(

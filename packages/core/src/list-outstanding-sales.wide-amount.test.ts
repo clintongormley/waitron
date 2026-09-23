@@ -20,9 +20,8 @@ import { listOutstandingSales } from "./list-outstanding-sales.js";
  *
  * **LOST with the container:** the cross-target disagreement itself. Nothing now distinguishes a
  * driver that hands a big integer back as a string from one that hands it back as a number,
- * because there is only one driver. The `::int`-vs-`::text` question that motivated the second
- * case has moved into `packages/shared/src/cents.ts`'s `rawCentsToDecimal` and the convention
- * `CLAUDE.md` §3 states.
+ * because there is only one driver. The text-versus-integer cast question is stated on
+ * `packages/shared/src/cents.ts`'s `rawCentsToDecimal`.
  *
  * The first case is kept even though `list-outstanding-sales.test.ts:55` asserts the same thing on
  * the same engine: it is this file's CONTROL. Without an ordinary amount beside the wide one, a
@@ -49,14 +48,9 @@ describe("listOutstandingSales reads a wide count of cents back as its printed a
   });
 
   it("reads an amount past the four-byte ceiling", async () => {
-    // 2147483648 cents is one past what a four-byte integer renders, and an ordinary amount for a
-    // column that stores twelve integer digits. Under the `::int` cast this read failed on
-    // PostgreSQL with `22003` / "integer out of range" — a value the column had already accepted
-    // on the way in being refused on the way out, which is the band the columns were widened to
-    // carry. On this engine the refusal does not arrive at all: SQLite has no integer overflow at
-    // that width (measured on this branch, `docs/handoffs/2026-09-21-f1-step25-disposition.md` §2),
-    // so what the case now checks is the narrower thing it always ALSO checked — that the wide
-    // count converts to the exact printed amount rather than to a rounded or truncated one.
+    // 2147483648 cents is one past what a four-byte integer holds, and an ordinary amount for a
+    // column that stores twelve integer digits. The case checks that the wide count converts to
+    // the exact printed amount rather than to a rounded or truncated one.
     const seed = await seedTenant(suite.db);
     const saleId = await seedBareSale(suite.db, seed, {
       total: "21474836.48",

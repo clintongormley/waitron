@@ -2827,21 +2827,6 @@ so the numbers it produces are about a schema nothing runs. Nobody swept it beca
 `packages/` nor `apps/` — which is the path-set hedge `CLAUDE.md` §1 already carries, hit again.
 Either bring the three decisions across and re-baseline, or change the sentence to say what it is.
 
-**The two storage codecs are a copy of each other — OPEN (found 2026-09-21, task P6).**
-`packages/shared/src/cents.ts` and `packages/shared/src/scales.ts` between them hold every crossing
-between a scaled-integer column and the exact decimal type, and their PRIVATE bodies are the same
-code twice: the sign-strip/`BigInt` block, the `padStart` rendering block, and a raw-text pattern
-that is character-for-character identical. `scales.ts` already parameterises its own by scale, so
-`cents.ts` could call the same two helpers while every public name in both files stays exactly where
-it is — and they are worth keeping separate, which `scales.test.ts` pins well. The merge is NOT purely mechanical, which is why it
-was left: `rawCentsToDecimal` bounds with `Number.isSafeInteger` while `scales.ts`'s `rawCount`
-bounds on a digit count, and for money those two disagree — the digit count stops at 10^14 (twelve
-integer digits, exactly `assertMoney`'s bound) while `Number.isSafeInteger` lets through
-9007199254740991, about ninety times more. So the digit count is the TIGHTER of the two, and
-`rawCentsToDecimal("123456789012345")` returns `1234567890123.45` today, an amount `assertMoney`
-refuses with `shared.decimal_overflow` (both measured 2026-09-21). Merging them tightens money's
-raw bound, which is a decision to take deliberately, not a deletion.
-
 **Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).** Two follow-ups.
 
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
@@ -3827,10 +3812,34 @@ What the preparation tasks left, with F1's own answers where it found them:
   pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
   claim, the slice-1 spec's four unannotated "211" mentions, and what became of
   `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
-- **Deferred cleanups, each with its reason in its PR** — P6's deferred codec, constant and
-  optional-shape merges; P5's three declined review suggestions; and P7's three (assert
-  `drizzle-kit generate` is a no-op; unify the three root-project schema readers into
-  `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class map).
+- **Deferred cleanups, each with its reason in its PR** — P5's three declined review suggestions;
+  and P7's three (assert `drizzle-kit generate` is a no-op; unify the three root-project schema
+  readers into `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class
+  map).
+  - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23, branch
+    `chore/slice1-deferred-p6`). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
+    pattern instead of copies; its raw reader keeps the number type's bound rather than the money
+    digit bound, because most raw reads are totals, which can be wider than one amount — pinned in
+    `cents.test.ts` and shown failing when the digit bound is put in. `updatePurchaseInvoice` now
+    writes an absent field the way create does, as `undefined`, which drizzle's `set` leaves out
+    (`mapUpdateSet` in drizzle-orm 0.45.2 filters `undefined`); a case pins that an omitted total
+    and proportion stay as stored, shown failing when the total is written as null. **Declined:**
+    one constant for the `10000` literals. Four sit in check constraints, and measured with
+    drizzle-orm's `SQLiteSyncDialect`, a JavaScript number interpolated into a check renders as
+    `"rate" <= ?`, its value held apart as a parameter; drizzle-kit 0.31.10 builds a check's text
+    from `sqlToQuery(check.value).sql` alone (read in its bundled source, not run), so the
+    migration would say `?`. Only `sql.raw(String(n))` renders the number, and a constant that
+    works only through `sql.raw` is a trap for the next tidy-up, so the literals stay.
+    **OPEN** (found 2026-09-23 in this branch's review, left unchanged): the quantity raw reader,
+    `rawThousandthsToDecimal`, still refuses any value past nine integer digits, although
+    `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of quantities. That is the
+    opposite choice to money's raw reader, which deliberately admits a total wider than any one
+    amount; needs a decision.
+    **OPEN** (same review): `decimalToCents` checks the money bound BEFORE rounding to cents, so
+    `decimalToCents("999999999999.995")` returns `100000000000000`, an amount with thirteen integer
+    digits that `assertMoney` refuses (measured 2026-09-23 on this branch). `main` checks in the same
+    order (`toScale(assertMoney(value), MONEY_SCALE)`), so this predates the branch; fixing it
+    changes money behaviour, so it needs a decision.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
     **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
     contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,

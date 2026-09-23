@@ -1,6 +1,7 @@
 import { AppError } from "./errors.js";
-import { assertMoney, decimal, MONEY_SCALE, toScale } from "./money.js";
+import { assertMoney, MONEY_SCALE, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
+import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 
 // The one sanctioned crossing between a money COLUMN and the amount type.
 //
@@ -27,16 +28,12 @@ import type { Decimal } from "./money.js";
 // Every direction is exact. A count of cents is an integer, and the widest amount this system
 // admits — 12 integer digits, guarded by `assertMoney` — is 99999999999999 cents against a safe
 // integer of 9007199254740991, so no amount in range can lose a cent to the number type. Nothing
-// here rounds a float: the rounding that does happen is `toScale`'s, in BigInt, and it is the same
-// half-away-from-zero rule the decimal column applied on the way in.
+// here rounds a float: the rounding that does happen is `toScale`'s, in BigInt, half away from
+// zero.
 
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
-  const scaled = toScale(assertMoney(value), MONEY_SCALE);
-  const negative = scaled.startsWith("-");
-  const digits = (negative ? scaled.slice(1) : scaled).replace(".", "");
-  const magnitude = BigInt(digits);
-  return Number(negative ? -magnitude : magnitude);
+  return Number(BigInt(toScale(assertMoney(value), MONEY_SCALE).replace(".", "")));
 }
 
 /**
@@ -49,17 +46,8 @@ export function centsToDecimal(cents: number): Decimal {
   if (!Number.isInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value: String(cents) });
   }
-  const negative = cents < 0;
-  const digits = String(negative ? -cents : cents).padStart(MONEY_SCALE + 1, "0");
-  const point = digits.length - MONEY_SCALE;
-  return decimal(`${negative ? "-" : ""}${digits.slice(0, point)}.${digits.slice(point)}`);
+  return scaledLiteral(cents, MONEY_SCALE);
 }
-
-// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the exact shape
-// this engine renders for an integer, column or aggregate alike, cast to text, and nothing else. A
-// value carrying a decimal point is refused rather than converted, which is the case that would
-// otherwise be wrong by a factor of a hundred.
-const RAW_CENTS_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
  * The amount for a count of cents read by RAW SQL, where the count arrives as TEXT.
@@ -87,11 +75,7 @@ const RAW_CENTS_PATTERN = /^-?(?:0|[1-9]\d*)$/;
  * NOT a cast to an integer type, and this is the part that is easy to get wrong when adding a call
  * site: `cast(x as integer)` would hand back a number this function refuses, and a fixed-scale
  * rendering would be worse — a count of 7734 cents written as "7734.00" is a plausible string a
- * hundred times the amount, which the pattern above refuses for exactly that reason.
- *
- * The four-byte overflow that first argued for text — PostgreSQL's `::int` topping out at
- * 2147483647 cents while a money column carries twelve integer digits — belonged to the previous
- * engine and is not the reason any more. The rule it produced is unchanged.
+ * hundred times the amount, which `RAW_COUNT_PATTERN` refuses for exactly that reason.
  *
  * None of this applies to a typed drizzle `.select()` over a schema column — the column's own
  * mapping converts the value, so those call sites use `centsToDecimal` directly and need no cast.
@@ -99,12 +83,12 @@ const RAW_CENTS_PATTERN = /^-?(?:0|[1-9]\d*)$/;
  * untyped on both ends.
  */
 export function rawCentsToDecimal(value: string): Decimal {
-  if (typeof value !== "string" || !RAW_CENTS_PATTERN.test(value)) {
+  if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
     throw new AppError("shared.invalid_cents", { value: String(value) });
   }
   const cents = Number(value);
-  // Twelve integer digits is 99999999999999 cents against a safe integer of 9007199254740991, so
-  // no amount in range reaches this. A longer string would drop digits without saying so.
+  // Not the money bound: a total can be wider than any one amount (pinned in `cents.test.ts`). A
+  // count past what a number holds exactly would drop digits without saying so.
   if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value });
   }

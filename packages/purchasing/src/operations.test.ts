@@ -254,6 +254,20 @@ describe("purchase-invoice operations", () => {
     expect(after?.lines).toHaveLength(1); // untouched
   });
 
+  it("leaves the stored total and proportion alone when the patch omits them", async () => {
+    const after = await asApp(async (tx) => {
+      const c = await createPurchaseInvoice(tx, {
+        ...baseInput(),
+        header: { ...baseInput().header, total: d("300.50"), deductibleProportion: d("50.00") },
+      });
+      await updatePurchaseInvoice(tx, c.id, { header: { note: "solo la nota" } });
+      return getPurchaseInvoice(tx, c.id);
+    });
+    expect(after?.note).toBe("solo la nota");
+    expect(after?.total).toBe("300.50");
+    expect(after?.deductibleProportion).toBe("50.00");
+  });
+
   it("replaces the VAT lines when the update supplies them (fix a mis-keyed rate)", async () => {
     const after = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, baseInput());

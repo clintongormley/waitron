@@ -204,8 +204,7 @@ export function toScale(value: Decimal, scale: number): Decimal {
 /**
  * Guards the magnitude a money amount may carry: twelve integer digits, `MAX_MONEY_INTEGER_DIGITS`.
  * That is this system's own bound, not a column type's — a money column holds a count of whole
- * cents in an eight-byte integer, and `numeric(12, 2)`, which an older version of this comment
- * named, admits only TEN integer digits anyway (`packages/fiscal-verifactu/src/monetary-columns.test.ts`).
+ * cents in an eight-byte integer.
  *
  * Checks the integer digits only — scaling to two places is `toScale`'s job, and fusing the two
  * would make it impossible to hold an intermediate at full precision while still bounding it.
@@ -224,9 +223,10 @@ export function assertMoney(value: Decimal): Decimal {
 }
 
 // There is deliberately no `toNumber`, and this file names no float-shaped operation at all —
-// `conventions.test.ts` reads its text and fails on any of them. The one sanctioned crossing
-// into the number type, a count of whole cents, lives in `./cents.ts` and is built on the
-// exports above. The only honest reason to want a float conversion is formatting for
+// `conventions.test.ts` reads its text and fails on any of them. The sanctioned crossings into
+// the number type are a count of whole cents in `./cents.ts` and counts of thousandths and basis
+// points in `./scales.ts`; `cents.ts` is built on the exports above and on `scales.ts`'s literal
+// renderer and raw pattern. The only honest reason to want a float conversion is formatting for
 // display, and a display formatter takes the string. Exporting a conversion would put the float
 // path one autocomplete away from every call site in the repo, and the resulting defect is
 // invisible: totals that are individually plausible, disagree by a cent, and are already signed
