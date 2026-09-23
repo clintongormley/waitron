@@ -496,6 +496,9 @@ submit, by construction — which is why the submitter role and the key ring co-
    mirrors, a row a departing submitter marked `enviando` is visible to the arriving one, which does
    not re-claim it inside the window. This holds only while replication lag < the reclaim window — a
    **tuning relationship to prototype** (§11.4), not a correctness guarantee.
+   **2026-09-23:** a node now returns every `enviando` row to `pendiente` before its first filing
+   pass after a restart — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md` — so a row it holds when it restarts is re-claimed at once,
+   not after the window.
 3. **AEAT error 3000 is the hard backstop.** A record submitted twice is rejected as duplicate
    (#33 §12), which the drainer already handles. Worst case of a botched relocation is a wasted
    round-trip and a 3000 — never a corrupted chain or a lost record.

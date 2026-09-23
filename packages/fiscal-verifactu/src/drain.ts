@@ -36,8 +36,9 @@ export const TIEMPO_ESPERA_INICIAL_SEG = 60;
  * commits `estado = 'enviando'` BEFORE the network call, so a process that crashes between T1 and
  * T2 leaves a real, committed `enviando` row behind — not an uncommitted claim that simply
  * vanishes with the process. Five minutes is comfortably longer than one AEAT round trip (a normal
- * in-flight submission never approaches it) but short enough that a genuine crash does not leave a
- * record stuck for art. 16.4's hourly duty to notice.
+ * in-flight submission never approaches it) but short enough that a claim abandoned while this
+ * process stays up does not leave a record stuck for art. 16.4's hourly duty to notice. A crashed
+ * run's claims are requeued at the next boot by `resetInFlightClaims`, before its first pass.
  */
 export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 
@@ -260,8 +261,9 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * T1/T2 split (spec §7.2): claim due rows in their own short transaction (T1), which commits
  * before the network call — so the venue file's single writer slot is not held across the AEAT
  * round-trip (the whole of what makes `claimBatch`'s selection a claim; see its own paragraph), and
- * `recoverStaleClaims` (Task 8, called at the top of this function) has real committed `enviando`
- * rows to recover after a crash.
+ * a crash leaves real committed `enviando` rows, which the next boot's `resetInFlightClaims`
+ * requeues; `recoverStaleClaims` (called at the top of this function) requeues a claim abandoned
+ * while this process stays up.
  * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
  * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
  * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk the due
@@ -491,11 +493,7 @@ function bumpNextDue(result: DrainResult, at: Date | null): void {
  * scope note, `drain.test.ts`, and the Task 8 brief).
  */
 async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
-  const cutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
-  await tx.execute(sql`
-    update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
-    where estado = 'enviando' and enviado_en < ${cutoff}
-  `);
+  await requeueClaims(tx, now, new Date(now.getTime() - RECUPERACION_ENVIANDO_MS));
 }
 
 /**
@@ -503,15 +501,27 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * no staleness gate, raising `incidencia` as `recoverStaleClaims` does. Sound only before this
  * process's first drain pass and while no other process files from this database, so the host
  * calls it once per boot. A resend of a record the previous run had filed meets AEAT's duplicate
- * check (error 3000), which `handleDuplicate` resolves against AEAT's copy.
+ * check (error 3000): when AEAT reports its stored copy `Correcta` or `AceptadaConErrores`,
+ * `resolveEstadoEfectivo` reads that as an accept and `applyOutcome` marks the row accepted without
+ * comparing fingerprints; only an annulled or unstated copy reaches `handleDuplicate`.
  */
 export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
-  await withTransaction(db, (tx) =>
-    tx.execute(sql`
-      update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
-      where estado = 'enviando'
-    `),
-  );
+  await withTransaction(db, (tx) => requeueClaims(tx, now, null));
+}
+
+/** `enviando` rows back to `pendiente`, due `now`, with `incidencia` raised — only those claimed
+ * before `claimedBefore` when one is given, every one when it is `null`. */
+async function requeueClaims(
+  tx: Transaction,
+  now: Date,
+  claimedBefore: Date | null,
+): Promise<void> {
+  const stale =
+    claimedBefore === null ? sql.empty() : sql` and enviado_en < ${claimedBefore.toISOString()}`;
+  await tx.execute(sql`
+    update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
+    where estado = 'enviando'${stale}
+  `);
 }
 
 /**
@@ -526,7 +536,9 @@ export async function resetInFlightClaims(db: Database, now: Date): Promise<void
  * writer holds the venue file at a time: a second drainer — another scheduler instance, or a retried
  * call overlapping a slow one — does not begin until the selection below and its `enviando` stamp
  * have committed together, and it then matches none of those rows because they are no longer
- * `pendiente`. What that arranges against is a genuine DUPLICATE SUBMISSION of the same batch to
+ * `pendiente`. A second PROCESS starting on this database is outside that: its restart reset,
+ * `resetInFlightClaims`, puts these claims back to `pendiente`, which is sound only under that
+ * reset's assumption of one process per venue database. What that arranges against is a genuine DUPLICATE SUBMISSION of the same batch to
  * AEAT, not merely a wasted query. So the SELECT and the stamp must stay inside one
  * `withTransaction`, and the SELECT must stamp nothing itself: the deployment-environment cases in
  * `drain.test.ts` go red if it does.
@@ -860,7 +872,7 @@ async function persistResponse(
     // than throwing: a line this batch cannot match would otherwise crash the whole T2 over one
     // unparseable line, leaving every OTHER line in this same response unpersisted too. A row that
     // is skipped here simply stays `enviando` — recovered by `recoverStaleClaims` on a later pass,
-    // the same recovery path a crash mid-T2 already relies on.
+    // or by `resetInFlightClaims` if the process restarts first, as a crash mid-T2 is.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
     // Already halted as a successor of an earlier rejection IN THIS SAME RESPONSE — see this

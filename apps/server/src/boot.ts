@@ -2322,17 +2322,18 @@ export async function startServer(
   // against the database at boot, and the regime's `entorno` guard refuses any due registro
   // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
   //
-  // Built once per boot, outside the per-pass closure, so the restart reset runs before this
-  // boot's first filing pass and never again — only on a node that files, since the pass below runs
-  // it behind both the singleton check and the submission policy.
-  const fiscalDrain = resetBeforeFirstDrain(
-    (at) => enabledFiscal.resetInFlight({ db }, at),
-    (at) =>
+  // The restart reset runs only on a node that files: the pass below calls this drain behind both
+  // `singletonPass` and the submission policy.
+  const fiscalDrain = resetBeforeFirstDrain({
+    reset: (at) => enabledFiscal.resetInFlight({ db }, at),
+    drain: (at) =>
       enabledFiscal.drain(
         { db, ring, environment: config.environment, skipRetryMs: config.skipRetryMs, log },
         at,
       ),
-  );
+    skipRetryMs: config.skipRetryMs,
+    log,
+  });
 
   const controller = new AbortController();
   const loop = runLoop({

@@ -388,7 +388,7 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
    **Fence before ship: decommission the old primary before the tail moves (owner decision,
    2026-09-17).** The old primary does not have to resolve its own in-flight submissions first — the
    receiver is what covers those: today its drain's five-minute reset, and, for the copy it inherited
-   through the stream, the boot reset this section requires once that is built. Terminal-state-wins narrows a *same-identity*
+   through the stream, the boot reset this section requires once that is built (**2026-09-23: built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`). Terminal-state-wins narrows a *same-identity*
    double submission to a refused duplicate — a real AEAT answers error 3000 and our drain records
    that as filed (`packages/verifactu/src/xml/parse-suministro.ts`, `resolveEstadoEfectivo`) — so it
    is not by itself a double *filing*. It does not remove two shapes the SQLite failover prototype

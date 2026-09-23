@@ -1,27 +1,38 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { emptyDrainResult } from "@waitron/fiscal";
+import { AppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
+import type { Logger } from "./logger.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 
 const NOW = new Date("2026-07-21T00:01:00Z");
+const SKIP_RETRY_MS = 60_000;
+
+type LogLine = { level: string; event: string; fields?: Record<string, unknown> };
+function recordingLog(): { lines: LogLine[]; log: Logger } {
+  const lines: LogLine[] = [];
+  return { lines, log: (level, event, fields) => lines.push({ level, event, fields }) };
+}
 
 describe("resetBeforeFirstDrain", () => {
   it("resets before the first drain of this boot and never again", async () => {
     const calls: string[] = [];
-    const drain = resetBeforeFirstDrain(
-      async () => {
+    const drain = resetBeforeFirstDrain({
+      reset: async () => {
         calls.push("reset");
       },
-      async () => {
+      drain: async () => {
         calls.push("drain");
         return emptyDrainResult();
       },
-    );
+      skipRetryMs: SKIP_RETRY_MS,
+      log: recordingLog().log,
+    });
 
     await drain(NOW);
     await drain(NOW);
@@ -29,21 +40,65 @@ describe("resetBeforeFirstDrain", () => {
     expect(calls).toEqual(["reset", "drain", "drain"]);
   });
 
-  it("does not drain when the reset fails, and tries the reset again on the next pass", async () => {
+  it("does not drain when the reset fails, reports the pass skipped, and tries the reset again on the next pass", async () => {
     const calls: string[] = [];
+    const { lines, log } = recordingLog();
     let failures = 1;
-    const drain = resetBeforeFirstDrain(
-      async () => {
+    const drain = resetBeforeFirstDrain({
+      reset: async () => {
         calls.push("reset");
-        if (failures-- > 0) throw new Error("database busy");
+        if (failures-- > 0) throw new AppError("server.internal", {});
       },
-      async () => {
+      drain: async () => {
         calls.push("drain");
         return emptyDrainResult();
       },
-    );
+      skipRetryMs: SKIP_RETRY_MS,
+      log,
+    });
 
-    await expect(drain(NOW)).rejects.toThrow("database busy");
+    const failed = await drain(NOW);
+    expect(failed).toEqual({
+      ...emptyDrainResult(),
+      nextDueAt: new Date(NOW.getTime() + SKIP_RETRY_MS),
+      skipped: [{ errorCode: "server.internal" }],
+    });
+    expect(lines).toEqual([
+      {
+        level: "error",
+        event: "drain.restart_reset_failed",
+        fields: { errorCode: "server.internal" },
+      },
+    ]);
+
+    await drain(NOW);
+
+    expect(calls).toEqual(["reset", "reset", "drain"]);
+  });
+
+  it("gives two overlapping first passes the same skipped result from one failed reset, and retries on the next pass", async () => {
+    const calls: string[] = [];
+    const { lines, log } = recordingLog();
+    let failures = 1;
+    const drain = resetBeforeFirstDrain({
+      reset: async () => {
+        calls.push("reset");
+        await new Promise((resolve) => setImmediate(resolve));
+        if (failures-- > 0) throw new Error("database busy");
+      },
+      drain: async () => {
+        calls.push("drain");
+        return emptyDrainResult();
+      },
+      skipRetryMs: SKIP_RETRY_MS,
+      log,
+    });
+
+    const [first, second] = await Promise.all([drain(NOW), drain(NOW)]);
+    expect(first.skipped).toEqual([{ errorCode: "unknown" }]);
+    expect(second.skipped).toEqual([{ errorCode: "unknown" }]);
+    expect(lines).toHaveLength(1);
+
     await drain(NOW);
 
     expect(calls).toEqual(["reset", "reset", "drain"]);
@@ -51,16 +106,18 @@ describe("resetBeforeFirstDrain", () => {
 
   it("runs one reset when two first passes overlap", async () => {
     const calls: string[] = [];
-    const drain = resetBeforeFirstDrain(
-      async () => {
+    const drain = resetBeforeFirstDrain({
+      reset: async () => {
         calls.push("reset");
         await new Promise((resolve) => setImmediate(resolve));
       },
-      async () => {
+      drain: async () => {
         calls.push("drain");
         return emptyDrainResult();
       },
-    );
+      skipRetryMs: SKIP_RETRY_MS,
+      log: recordingLog().log,
+    });
 
     await Promise.all([drain(NOW), drain(NOW)]);
 
@@ -90,10 +147,12 @@ describe("resetBeforeFirstDrain over the Veri*Factu seat", () => {
     const [inherited, ownClaim] = seeded.registroIds as [string, string];
     await claim(inherited);
 
-    const drain = resetBeforeFirstDrain(
-      (at) => FISCAL_SLOT.resetInFlight({ db: suite.db }, at),
-      async () => emptyDrainResult(),
-    );
+    const drain = resetBeforeFirstDrain({
+      reset: (at) => FISCAL_SLOT.resetInFlight({ db: suite.db }, at),
+      drain: async () => emptyDrainResult(),
+      skipRetryMs: SKIP_RETRY_MS,
+      log: recordingLog().log,
+    });
 
     await drain(NOW);
     expect(await estadoOf(inherited)).toBe("pendiente");

@@ -47,8 +47,10 @@ export interface FiscalContribution {
    * DrainResult. The sale-path backend (makeBackend) never contacts an authority; this does. */
   drain(deps: FiscalDutyDeps, now: Date): Promise<DrainResult>;
   /** Returns every submission a previous run left in flight to the queue, with no wait. The host
-   * calls it once, before this process's first `drain`: only then can nothing in flight belong to
-   * a live pass of this process. A regime that files nothing has nothing to reset. */
+   * calls it before the first `drain` it runs against a venue database, and again only if it
+   * failed: only then can nothing in flight belong to a live pass of this process. Required, not
+   * optional like `provisioningSecret`, so a regime that files cannot omit it; a regime that files
+   * nothing has nothing to reset. */
   resetInFlight(deps: { readonly db: Database }, now: Date): Promise<void>;
   /** The provision-time secret this regime seals into a fresh venue's vault (a Veri*Factu venue's
    * AEAT signing certificate; absent for a regime that files nothing). The host holds the opaque

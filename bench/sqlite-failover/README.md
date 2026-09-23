@@ -1138,7 +1138,7 @@ The second follow-up is done on this branch: the topology design now states that
 decommissioned (fenced) before the secondary is promoted (§5.2), and that a row left in flight is the
 RECEIVER's to deal with rather than something the fence must resolve first. Which mechanism deals
 with it depends on how the row got there, and §5.2 is careful about this: a copy the promoted node
-inherited through the stream is what the boot reset would catch once it is built, while a row that
+inherited through the stream is what the boot reset would catch once it is built (**2026-09-23: built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`), while a row that
 ARRIVES in a tail after that node is already running is caught only by `recoverStaleClaims`'s
 five-minute reset, because a reset that runs at boot cannot see a row delivered later. S2's exit code
 records the MODEL's same-identity double SUBMISSION, which is a wasted call against a real AEAT, and

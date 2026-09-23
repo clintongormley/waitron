@@ -55,7 +55,7 @@ chain with nothing re-entered but one recovery kit, and staff can see how curren
 - A rebuild of a dead box from the bucket — setup wizard and command line — that comes back as the
   same node, with its certificate authority and credentials, under a fresh fiscal chain.
 - The restart reset the topology design's §5.2 requires, and the single-process lock on the venue
-  folder that makes it safe.
+  folder that makes it safe. (2026-09-23: the reset landed first, see §6; the lock is still to build.)
 
 **Does not deliver**, stated so nobody assumes otherwise: promotion, seats, a second live node, the
 tail shipper, the mirror box, fencing a running box remotely, the Waitron Cloud bucket, streaming to a
@@ -326,12 +326,15 @@ reset the topology design's §5.2 requires and the prototype listed as unbuilt.
 
 **2026-09-23: the reset itself is built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it once per boot, before the first filing pass. The single-process lock below is not.
 
-**What a resend costs.** A sale AEAT already holds is answered with error 3000, and the drain resolves
-it by what AEAT holds (`drain.ts`, `handleDuplicate`): if AEAT's copy matches the sale's fingerprint
-(huella), the sale is marked accepted; if AEAT's copy is annulled, or its fingerprint differs, the sale
-and every later one in its chain stop and an incident is raised for a person. An unchanged resend of a
-sale that was accepted takes the first path. That is read from the code and the prototype's results
-note (S2), not run against AEAT.
+**What a resend costs.** A sale AEAT already holds is answered with error 3000, and that answer says
+what state AEAT's stored copy is in. The drain acts on that state. If AEAT's copy is accepted, with or
+without errors, the sale is marked accepted, and no fingerprint (huella) is compared
+(`resolveEstadoEfectivo` in `@waitron/verifactu`, then `applyOutcome` in `drain.ts`). If AEAT's copy
+is annulled, the sale and every later one in its chain stop and an incident is raised for a person. If
+AEAT does not say what state its copy is in, the drain asks AEAT for its copy and compares
+fingerprints (`handleDuplicate`): a match marks the sale accepted, and a difference stops the sale and
+its chain with an incident. An unchanged resend of a sale that was accepted takes the first path. That
+is read from the code and the prototype's results note (S2), not run against AEAT.
 
 **What a rebuild cannot recover.** Sales the old box filed in its last moments but did not stream are
 not in the restored database at all, so nothing resends them: AEAT holds records the venue's books
@@ -428,7 +431,8 @@ Each lands on its own. The first three do not need Litestream.
 1. Per-machine rows keyed by node id; session identifiers stored as hashes (§2).
 2. The secrets row locked with the recovery key, and a recovery key without an archive destination
    (§3.1).
-3. The single-process lock on the venue folder, then the restart reset (§6).
+3. The single-process lock on the venue folder, then the restart reset (§6). (2026-09-23: the reset
+   landed first, so this step is now the lock alone.)
 4. The measurements (§8.1), results recorded.
 5. `@waitron/stream`: the S3 client, the pointer and generations (§4.4).
 6. The supervisor, the binary in the box image, the side-file limit (§4.1, §4.2, §4.5).

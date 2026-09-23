@@ -61,8 +61,12 @@ describe("FISCAL_SLOT.drain", () => {
     expect(result.recordsSubmitted).toBe(0);
     expect(result.nextDueAt).toBeNull();
   });
+});
 
-  it("resetInFlight returns a fresh enviando claim to pendiente", async () => {
+describe("FISCAL_SLOT.resetInFlight", () => {
+  const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+  it("returns a fresh enviando claim to pendiente", async () => {
     const now = new Date("2026-07-21T00:01:00Z");
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const [registroId] = seeded.registroIds;
