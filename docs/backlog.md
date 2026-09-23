@@ -454,7 +454,7 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1, 2 and 3 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 4 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
 the menus' extras publications, their per-item extras prices and the variant price overrides, or,
 once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
@@ -526,7 +526,7 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   (`apps/dashboard/src/widgets/variant-form.ts`). Nothing reaches it today, because the product-editor
   save still refuses a variant with no price; Task 7 settles both ends.
 
-**Task 4: a blank menu price follows the product's own price.** A menu row's price
+**Task 4 LANDED as #532 (2026-09-23): a blank menu price follows the product's own price.** A menu row's price
 (`menu_items.gross_price`) may be left empty, meaning the product's own price — the last step of the
 price chain, for every product on a menu, with variants or without. The menu screen shows the
 product's price as the empty field's hint and saves an emptied field as blank. **It cannot upgrade a
@@ -545,7 +545,17 @@ cash sale from a menu offer, its `working_line_contexts` row was still there on 
 so any venue that has sold from a menu fails to boot, not only one with an order still open. A
 fresh database migrates cleanly. So **every dev venue needs
 `wa-wt reset demo <name>`, and any provisioned box must be wiped**, the owner's home box included,
-once this lands.
+now that it has landed. What it left open, both put to the owner in #532 and neither blocking:
+- **Creating a menu offer with no price field at all is still refused** (`management.request_invalid`);
+  only an explicit `null` means "blank, charge the product's own price", matching the rule that a
+  default is taken only when the route says a field may be absent. Pinned by a test in
+  `apps/server/src/catalogue-api.test.ts`. **Next action, only if the owner prefers it:** let a
+  missing field mean blank — one line in `apps/server/src/catalogue-api.ts`, and that test flips.
+- **The menu's offers list shows the price each offer is charged at, and nothing marks one that is
+  blank and following the product.** The spec does not decide it. **Next action, if wanted:** mark
+  such a price in the list cell (`packages/venue-service/src/dashboard/venue-operations-screen.ts`).
+The till's "+€" label on a variant, priced from the parent's resolved price, is Task 5's work: the
+offer already carries that price (`MenuOffer.unitPrice`).
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
