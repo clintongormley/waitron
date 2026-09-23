@@ -3,6 +3,16 @@ import { AppError } from "./errors.js";
 import { centsToDecimal, decimalToCents, rawCentsToDecimal } from "./cents.js";
 import { decimal, MAX_MONEY_INTEGER_DIGITS } from "./money.js";
 
+/** The code and params an AppError-throwing call refuses with, so a refusal is checked in full. */
+function refusalOf(call: () => unknown): { code: string; params: unknown } {
+  try {
+    call();
+  } catch (error) {
+    return { code: (error as AppError).code, params: (error as AppError).params };
+  }
+  return expect.unreachable("the call was expected to throw");
+}
+
 describe("centsToDecimal", () => {
   it("renders a count of cents as a two-place decimal", () => {
     expect(centsToDecimal(1234)).toBe("12.34");
@@ -25,7 +35,10 @@ describe("centsToDecimal", () => {
   it("refuses a value that is not a whole number of cents", () => {
     // Half a cent cannot be stored and cannot be spent. A caller holding one has divided
     // somewhere without deciding how to round, and rounding silently here would hide it.
-    expect(() => centsToDecimal(12.5)).toThrow(AppError);
+    expect(refusalOf(() => centsToDecimal(12.5))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: "12.5" },
+    });
   });
 
   it("refuses a value that is not finite", () => {
@@ -88,6 +101,14 @@ describe("rawCentsToDecimal", () => {
     expect(rawCentsToDecimal("99999999999999")).toBe("999999999999.99");
   });
 
+  it("reads a total wider than any one amount may be", () => {
+    // Most raw reads are totals — `cast(sum(...) as text)` in `packages/reporting`'s top-sellers,
+    // cash-up and input-vat — and amounts that each pass `assertMoney` can sum past its twelve
+    // integer digits. So this reader's bound is what a number counts exactly, not the money
+    // bound, and it is deliberately not the digit bound the two readers in `scales.ts` apply.
+    expect(rawCentsToDecimal("123456789012345")).toBe("1234567890123.45");
+  });
+
   it("reads zero, and an empty `sum()` that `coalesce`d to zero", () => {
     expect(rawCentsToDecimal("0")).toBe("0.00");
   });
@@ -99,7 +120,17 @@ describe("rawCentsToDecimal", () => {
   it("refuses a count that is not a whole number of cents", () => {
     // A `numeric` cast to text renders a decimal point. That means the expression was not a
     // count of cents at all, so converting it would be a hundredfold error reported as success.
-    expect(() => rawCentsToDecimal("7734.00")).toThrow(AppError);
+    expect(refusalOf(() => rawCentsToDecimal("7734.00"))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: "7734.00" },
+    });
+  });
+
+  it("refuses a value that is not text at all", () => {
+    expect(refusalOf(() => rawCentsToDecimal(1234 as unknown as string))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: "1234" },
+    });
   });
 
   it("refuses anything that is not a plain integer string", () => {
@@ -111,7 +142,10 @@ describe("rawCentsToDecimal", () => {
   it("refuses a magnitude beyond what a number counts exactly", () => {
     // Longer than the money bound admits, so no stored amount reaches this — but a digit
     // silently dropped by the number type is the one failure this file must never produce.
-    expect(() => rawCentsToDecimal("9007199254740993")).toThrow(AppError);
+    expect(refusalOf(() => rawCentsToDecimal("9007199254740993"))).toEqual({
+      code: "shared.invalid_cents",
+      params: { value: "9007199254740993" },
+    });
     expect(() => rawCentsToDecimal("-9007199254740993")).toThrow(AppError);
   });
 });

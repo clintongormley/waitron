@@ -30,6 +30,16 @@ function codeOf(call: () => unknown): string {
   return expect.unreachable("the call was expected to throw");
 }
 
+/** The code and params an AppError-throwing call refuses with, so a refusal is checked in full. */
+function refusalOf(call: () => unknown): { code: string; params: unknown } {
+  try {
+    call();
+  } catch (error) {
+    return { code: (error as AppError).code, params: (error as AppError).params };
+  }
+  return expect.unreachable("the call was expected to throw");
+}
+
 describe("decimalToThousandths", () => {
   it("counts the thousandths in a three-place quantity", () => {
     expect(decimalToThousandths(decimal("1.500"))).toBe(1500);
@@ -66,6 +76,10 @@ describe("decimalToThousandths", () => {
     // refusal moves here rather than disappearing.
     expect(() => decimalToThousandths(decimal("1000000000"))).toThrow(AppError);
     expect(decimalToThousandths(decimal("999999999.999"))).toBe(999999999999);
+    expect(refusalOf(() => decimalToThousandths(decimal("-1000000000")))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "-1000000000", maxIntegerDigits: 9 },
+    });
   });
 });
 
@@ -88,7 +102,10 @@ describe("thousandthsToDecimal", () => {
   });
 
   it("refuses a value that is not a whole number of thousandths", () => {
-    expect(() => thousandthsToDecimal(1.5)).toThrow(AppError);
+    expect(refusalOf(() => thousandthsToDecimal(1.5))).toEqual({
+      code: "shared.invalid_thousandths",
+      params: { value: "1.5" },
+    });
   });
 
   it("refuses a value that is not finite", () => {
@@ -135,7 +152,10 @@ describe("basisPointsToDecimal", () => {
   });
 
   it("refuses a value that is not a whole number of basis points", () => {
-    expect(() => basisPointsToDecimal(2100.5)).toThrow(AppError);
+    expect(refusalOf(() => basisPointsToDecimal(2100.5))).toEqual({
+      code: "shared.invalid_basis_points",
+      params: { value: "2100.5" },
+    });
   });
 });
 
@@ -167,14 +187,15 @@ describe("rawThousandthsToDecimal", () => {
 
   it("refuses a value that is not text at all", () => {
     expect(() => rawThousandthsToDecimal(1500 as unknown as string)).toThrow(AppError);
-    expect(codeOf(() => rawThousandthsToDecimal(1500 as unknown as string))).toBe(
-      "shared.invalid_thousandths",
-    );
+    expect(refusalOf(() => rawThousandthsToDecimal(1500 as unknown as string))).toEqual({
+      code: "shared.invalid_thousandths",
+      params: { value: "1500" },
+    });
   });
 
   it("reads a minus zero as zero, which is the only value it can be", () => {
-    // The pattern admits "-0" as well as the shape PostgreSQL actually renders — the comment
-    // above the pattern carries the measurement. This is what the reader does with it.
+    // The pattern admits "-0" as well as the plain integer shape; this is what the reader does
+    // with it.
     expect(rawThousandthsToDecimal("-0")).toBe("0.000");
   });
 

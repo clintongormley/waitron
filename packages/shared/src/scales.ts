@@ -48,17 +48,25 @@ export const RATE_SCALE = 2;
 export const MAX_RATE_INTEGER_DIGITS = 3;
 
 function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
-  const scaled = toScale(value, scale);
-  const negative = scaled.startsWith("-");
-  const digits = (negative ? scaled.slice(1) : scaled).replace(".", "");
-  const magnitude = BigInt(digits);
-  if (magnitude >= 10n ** BigInt(maxIntegerDigits + scale)) {
-    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
-  }
-  return Number(negative ? -magnitude : magnitude);
+  return Number(
+    boundedCount(BigInt(toScale(value, scale).replace(".", "")), value, scale, maxIntegerDigits),
+  );
 }
 
-function scaledLiteral(count: number, scale: number): Decimal {
+function boundedCount(
+  count: bigint,
+  value: string,
+  scale: number,
+  maxIntegerDigits: number,
+): bigint {
+  if ((count < 0n ? -count : count) >= 10n ** BigInt(maxIntegerDigits + scale)) {
+    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
+  }
+  return count;
+}
+
+/** The literal for a count at `scale`, always with every place: 1234 at scale 2 is "12.34". */
+export function scaledLiteral(count: number, scale: number): Decimal {
   const negative = count < 0;
   const digits = String(negative ? -count : count).padStart(scale + 1, "0");
   const point = digits.length - scale;
@@ -102,22 +110,13 @@ export function basisPointsToDecimal(count: number): Decimal {
   return scaledLiteral(count, RATE_SCALE);
 }
 
-// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the shape both
-// engines render for an integer, or a scale-0 `numeric`, cast to text. Not ONLY that shape: it
-// also admits "-0". Measured 2026-09-21 on the development container: PostgreSQL 18.6 renders
-// `'-0'::bigint::text` and `'-0'::numeric::text` as "0", so nothing on that side produces the
-// string — and a caller that hands it over anyway is read here as zero, which is what the engine
-// reads it as too, so admitting it costs nothing (pinned in `scales.test.ts`).
-// The `numeric` half is not a corner case, because one of the two raw reads in the tree is an
-// AGGREGATE. Measured 2026-09-21 against the development container `waitron-db-1`, where
-// `show server_version` reports 18.6, with `pg_typeof`: `sum(...)` over a `bigint` is a `numeric`,
-// and over an `integer` or a `smallint` it is a `bigint`. So the summed quantity in
-// `packages/reporting/src/top-sellers.ts` arrives as a `numeric`; the one rate read,
-// `packages/reporting/src/input-vat.ts`, is the bare `integer` column, and a summed rate would
-// arrive as a `bigint`. The `::text` cast is what makes all three the same string. The reasoning, the driver measurements and the reason the cast is `::text` and not
-// `::int` are written out once, on `rawCentsToDecimal` in `./cents.ts`; everything there applies
-// here unchanged.
-const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
+// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the shape this
+// engine renders for an integer cast to text, column or aggregate alike. It also admits "-0", read
+// as zero (pinned in `scales.test.ts`). A value carrying a decimal point is refused rather than
+// converted, which is the case that would otherwise be wrong by a power of ten. Shared by every raw
+// reader, money's included; the reasoning and the measurements are on `rawCentsToDecimal` in
+// `./cents.ts`.
+export const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
  * `malformed` is the caller's own scale code, as `rawCentsToDecimal` refuses in money's own words:
@@ -135,20 +134,12 @@ function rawCount(
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
     throw new AppError(malformed, { value: String(value) });
   }
-  const negative = value.startsWith("-");
-  const magnitude = BigInt(negative ? value.slice(1) : value);
-  if (magnitude >= 10n ** BigInt(maxIntegerDigits + scale)) {
-    throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
-  }
-  return Number(negative ? -magnitude : magnitude);
+  return Number(boundedCount(BigInt(value), value, scale, maxIntegerDigits));
 }
 
 /**
  * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
- *
- * The bound is the one the `::numeric(12, 3)` cast this replaced enforced: a sum past nine integer
- * digits was refused by PostgreSQL with a 22003, and it is refused here instead. The refusal moved
- * from the engine to the reader; it did not disappear.
+ * A sum past nine integer digits is refused here, since no column type below refuses it.
  */
 export function rawThousandthsToDecimal(value: string): Decimal {
   return thousandthsToDecimal(
