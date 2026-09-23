@@ -46,7 +46,8 @@ async function choose(el: ProductList, column: string, value: string): Promise<v
   await table.updateComplete;
 }
 
-/** A bun variant used by the filter tests; its own fields carry nothing the filter reads. */
+/** A bun variant used by the filter tests. Of its own fields only `active` is read by a filter (the
+ * Status one); the sold-on-its-own filter reads its product's answer. */
 const bunVariant = {
   id: "small",
   name: "Small",
@@ -329,12 +330,8 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish", "topping"]);
   });
 
-  // A variant row answers the filter with its PRODUCT's `sold_alone`, so the two move together.
-  // Read in packages/ui/src/components/wt-data-table.ts: `#visibleRows` judges EVERY row against the
-  // chosen value, and `#treeVisible` adds back a match's ANCESTORS only, never a match's children.
-  // Any other answer breaks one side — an empty value strands the product as a childless row that
-  // still prices a range across variants nobody can see, and a value that matched while the product
-  // did not would render the product as an ancestor-only ghost.
+  // Sold-on-its-own is the PRODUCT's answer — a listed variant carries none of its own — so every
+  // variant row answers this filter with its product's, and the two are shown and hidden together.
   it("keeps a product and its variants together on both sides of the filter", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -620,9 +617,10 @@ describe("product-list", () => {
     expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe("3.00");
   });
 
-  // Since #539 a variant may set its own price, VAT and categories, so its row shows the values it
-  // is sold and reported under — the server's `effective` — rather than its product's. Every field
-  // differs between Wine 175 and its product, so a row reading the product's values fails.
+  // A variant may set its own price, VAT and categories, so its row shows the values it is sold and
+  // reported under — the server's `effective` — rather than its product's. Every field differs
+  // between Wine 175 and its product, and its three names differ from one another, so a row reading
+  // the product's values or the wrong name fails.
   it("shows a variant's own name and its effective price and categories", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -638,6 +636,8 @@ describe("product-list", () => {
               ...bunVariant,
               id: "w175",
               name: "Wine 175",
+              customerName: { es: "Copa grande de vino" },
+              kitchenName: "VINO 175",
               unitPrice: "4.75",
               effective: {
                 unitPrice: "4.75",
@@ -686,6 +686,8 @@ describe("product-list", () => {
               ...bunVariant,
               id: "w175",
               name: "Wine 175",
+              customerName: { es: "Copa grande de vino" },
+              kitchenName: "VINO 175",
               unitPrice: "4.75",
               effective: {
                 unitPrice: "4.75",
@@ -694,7 +696,14 @@ describe("product-list", () => {
                 categoryIds: ["category-1"],
               },
             },
-            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: null },
+            {
+              ...bunVariant,
+              id: "w125",
+              name: "Wine 125",
+              customerName: { es: "Copa pequeña de vino" },
+              kitchenName: "VINO 125",
+              unitPrice: null,
+            },
           ],
         }),
       ],
@@ -712,6 +721,12 @@ describe("product-list", () => {
     );
     expect(note("wine:w125")).toBeNull();
     expect(note("wine")).toBeNull();
+    // The staff name, not the customer-facing or kitchen one, heads each variant row.
+    for (const [rowKey, name] of [
+      ["wine:w175", "Wine 175"],
+      ["wine:w125", "Wine 125"],
+    ] as const)
+      expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
     expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe("4.00");
     // Cell markup lives in the table's shadow root, so only ::part reaches it: a muted, smaller line.
     const style = getComputedStyle(note("wine:w175")!);
