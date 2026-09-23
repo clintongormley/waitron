@@ -114,7 +114,7 @@ export async function promoteLocalSecondaryToPrimary(
 
   // Read the freshest state before deciding — a concurrent write, or a prior half-completed promote, is
   // reflected here, which is what makes the flow idempotent on re-run (§3e).
-  await refreshDeploymentHolders(deps.db, deps.holders);
+  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
 
   if (deps.holders.mode.current === "mirror") {
     // A mirror cannot become the submitter by a bare role flip; refuse with a clean code before the write
@@ -147,7 +147,7 @@ export async function promoteLocalSecondaryToPrimary(
   // PONR: the role flip and the new document commit together in ONE transaction (CLAUDE.md §3), so a
   // crash between the two writes cannot leave a primary with no document.
   await withTransaction(deps.db, async (tx) => {
-    await setSingletonRoleTx(tx, "primary"); // claims the submitter (§7)
+    await setSingletonRoleTx(tx, deps.nodeId, "primary"); // claims the submitter (§7)
     await writeNodeMembershipTx(tx, document);
   });
 
@@ -157,7 +157,7 @@ export async function promoteLocalSecondaryToPrimary(
   // path re-syncs the holder) or a restart starts the drain, and fiscal submission is a delay-tolerant
   // outbox. A re-run is a no-op on the document too — the already-primary early return above fires before
   // any re-mint, so the term is never bumped twice.
-  await refreshDeploymentHolders(deps.db, deps.holders);
+  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
 
   deps.log("info", "promotion.completed", { target: "local_secondary" });
   return { alreadyPrimary: false };
@@ -198,7 +198,7 @@ export interface MirrorPromoteDeps extends PromoteDeps {
 /**
  * The point-of-no-return body of a mirror→primary promote, extracted so the term-guard can be proven
  * as a unit (parent spec §8 "R3 sharp edge"; CLAUDE.md §4). Runs in ONE transaction, in an order
- * that respects `deployment_role_valid_ck`: flip `mode → primary` FIRST (leaving `singleton_role`, so
+ * that respects `node_roles_role_valid_ck`: flip `mode → primary` FIRST (leaving `singleton_role`, so
  * the transient pair is the valid `(primary, secondary)`, never the forbidden `(mirror, primary)`), then
  * `singleton_role → primary`, then the TERM-GUARDED document write. A `false` from the guard means a
  * concurrent gossip-adopt already landed a >= term, so writing would REGRESS the org chart — the whole
@@ -211,10 +211,11 @@ export interface MirrorPromoteDeps extends PromoteDeps {
  */
 export async function commitMirrorPromotionTx(
   tx: Transaction,
+  nodeId: string,
   document: SignedMembershipDocument,
 ): Promise<void> {
-  await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid transient pair
-  await setSingletonRoleTx(tx, "primary"); // (primary, primary)
+  await setDeploymentModeTx(tx, nodeId, "primary"); // (primary, secondary) — valid transient pair
+  await setSingletonRoleTx(tx, nodeId, "primary"); // (primary, primary)
   const accepted = await persistNodeMembershipIfNewerTx(tx, document);
   if (!accepted) {
     const current = await readNodeMembership(tx);
@@ -253,7 +254,7 @@ export async function promoteMirrorToPrimary(
 ): Promise<MirrorPromotionResult> {
   assertFenced(attestation); // before PONR: abortable, zero lasting effect
 
-  await refreshDeploymentHolders(deps.db, deps.holders);
+  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
   // Read the corrected series id up front — it is also the value an already-primary re-run returns.
   const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);
 
@@ -290,10 +291,10 @@ export async function promoteMirrorToPrimary(
 
   // PONR: mode + singleton + term-guarded doc in ONE transaction (CLAUDE.md §3).
   await withTransaction(deps.db, async (tx) => {
-    await commitMirrorPromotionTx(tx, document);
+    await commitMirrorPromotionTx(tx, deps.nodeId, document);
   });
 
-  await refreshDeploymentHolders(deps.db, deps.holders);
+  await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
   deps.log("info", "promotion.completed", { target: "mirror" });
   return { alreadyPrimary: false, seriesId };
 }

@@ -10,6 +10,7 @@ import { joinRequests } from "./join-requests.js";
 import { locations, tenants } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("join_requests", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -32,6 +33,7 @@ describe("join_requests", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(joinRequests).values([
         {
+          nodeId: NODE,
           locationId: LOCATION_A,
           kind: "device",
           label: "Bar till",
@@ -40,6 +42,7 @@ describe("join_requests", () => {
           decoyNumbers: ["12", "83"],
         },
         {
+          nodeId: NODE,
           locationId: LOCATION_A,
           kind: "print_agent",
           label: "Kitchen box",
@@ -68,8 +71,9 @@ describe("join_requests", () => {
       withTransaction(suite.db, async (tx) => {
         await tx.run(sql`
           insert into join_requests
-            (id, location_id, kind, label, token_hash, verification_number, decoy_numbers, created_at)
-          values ('jr-bad', ${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', '["01","02"]',
+            (id, node_id, location_id, kind, label, token_hash, verification_number, decoy_numbers,
+             created_at)
+          values ('jr-bad', ${NODE}, ${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', '["01","02"]',
                   ${new Date().toISOString()})`);
       }),
     );

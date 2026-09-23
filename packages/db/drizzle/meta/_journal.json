@@ -50,6 +50,20 @@
       "when": 1790190783009,
       "tag": "0006_drop_line_variant_id",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790204961008,
+      "tag": "0007_node_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790204981184,
+      "tag": "0008_node_keyed_rows",
+      "breakpoints": true
     }
   ]
 }

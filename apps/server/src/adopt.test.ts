@@ -148,8 +148,10 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
     // The mirror is stamped + flipped, mirror_config written with the PRIMARY's node as the origin.
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
-    expect(await readDeploymentMode(suite.db)).toBe("mirror");
-    const cfg = (await readMirrorConfig(suite.db))!;
+    // Both are keyed by the node id the mirror boots under, the one written to trading.env.
+    const ownNodeId = persistedTrading[0]!.nodeId;
+    expect(await readDeploymentMode(suite.db, ownNodeId)).toBe("mirror");
+    const cfg = (await readMirrorConfig(suite.db, ownNodeId))!;
     expect(cfg.relayUrl).toBe("https://relay.test:9000/");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
 
@@ -170,7 +172,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(await verifyBreakGlass(suite.db, result.breakGlassSecret)).toBe(true);
+    expect(await verifyBreakGlass(suite.db, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {

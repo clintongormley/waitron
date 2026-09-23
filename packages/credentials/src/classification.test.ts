@@ -30,7 +30,7 @@ describe("CREDENTIALS_CLASSIFICATION", () => {
     const names = CREDENTIALS_CLASSIFICATION.map((c) => c.table);
     expect(new Set(names).size).toBe(names.length);
   });
-  it("classifies tenant_credentials as local — a per-node vault never replicates (swap step 4)", () => {
+  it("classifies tenant_credentials as local — a row opens only on the node that sealed it", () => {
     const entry = CREDENTIALS_CLASSIFICATION.find((c) => c.table === "tenant_credentials");
     expect(entry?.class).toBe("local");
   });

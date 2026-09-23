@@ -28,7 +28,8 @@ const { loginManagerById, authorizeManager, endManagementSession, verifyBreakGla
     authorizeManager: vi.fn(async () => {}),
     endManagementSession: vi.fn(async () => {}),
     verifyBreakGlass: vi.fn(
-      async (_db: unknown, secret: string) => secret === "correct-break-glass-secret",
+      async (_db: unknown, _nodeId: string, secret: string) =>
+        secret === "correct-break-glass-secret",
     ),
   }),
 );
@@ -50,6 +51,7 @@ vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 import { mountPromoteApi } from "./promote-api.js";
 
 const fakeDb = {} as Database;
+const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function appWith(
   run: (a: { oldNodeNeutralised: boolean }) => Promise<PromoteRunResult> = vi.fn(async () => ({
@@ -58,7 +60,7 @@ function appWith(
   })),
 ): { app: Hono; run: typeof run } {
   const app = new Hono();
-  mountPromoteApi(app, { appDb: fakeDb, run });
+  mountPromoteApi(app, { appDb: fakeDb, nodeId: NODE, run });
   return { app, run };
 }
 
@@ -103,6 +105,8 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(200);
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
+    // The secret is checked against THIS node's verifier.
+    expect(verifyBreakGlass).toHaveBeenCalledWith(fakeDb, NODE, GOOD_SECRET);
     // The break-glass path never touches the manager-login path.
     expect(loginManagerById).not.toHaveBeenCalled();
   });

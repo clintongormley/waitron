@@ -223,9 +223,9 @@ beforeAll(async () => {
   // guard passes; idempotent when the value already matches) then flip singleton_role to 'secondary'.
   // `mode` keeps its column default ('primary'). => (mode=primary, singleton_role=secondary).
   await stampDeployment(appDb, "production");
-  await setSingletonRole(appDb, "secondary");
-  expect(await readDeploymentMode(appDb)).toBe("primary");
-  expect(await readSingletonRole(appDb)).toBe("secondary");
+  await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
+  expect(await readDeploymentMode(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
+  expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("secondary");
 }, 180_000);
 
 afterAll(async () => {
@@ -339,7 +339,7 @@ describe("promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
     // A fresh (mode=primary, singleton_role=secondary) starting point for this test (a prior test may
     // have flipped the shared venue directory's singleton_role to 'primary').
-    await setSingletonRole(appDb, "secondary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -375,7 +375,7 @@ describe("promote: local secondary → primary, live", () => {
       // singleton_role to 'primary'; the holder refresh flips the running fiscal pass on its next tick.
       const result = await server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: true });
       expect(result).toEqual({ alreadyPrimary: false });
-      expect(await readSingletonRole(appDb)).toBe("primary");
+      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
 
       // Phase B — now the singleton. The next drain pass claims the seeded row and attempts the submit;
       // the mocked `undici` fetch rejects, so `claimBatch` incremented intentos to 1 and `backoffBatch`
@@ -402,7 +402,7 @@ describe("promote: local secondary → primary, live", () => {
 
   it("refuses an unattested promote and keeps filing off", async () => {
     // A fresh (mode=primary, singleton_role=secondary) starting point and its own seeded work.
-    await setSingletonRole(appDb, "secondary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -428,7 +428,7 @@ describe("promote: local secondary → primary, live", () => {
       expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
 
       // The refusal left the node exactly as it was: still a secondary, still filing nothing.
-      expect(await readSingletonRole(appDb)).toBe("secondary");
+      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("secondary");
       expect(await readEnvio(registroIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
@@ -533,7 +533,7 @@ async function seedMirrorIdentity(
   // The mirror's DB-stored connection config + sealed sync token the mirror boot requires (owner writes).
   // The relay is a dead loopback port — the pull/tunnel workers dial it and back off in the background,
   // which never blocks boot and is aborted on close().
-  await writeMirrorConfig(db, {
+  await writeMirrorConfig(db, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -542,7 +542,7 @@ async function seedMirrorIdentity(
 
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
   await stampDeployment(db, "production");
-  await setDeploymentMode(db, "mirror");
+  await setDeploymentMode(db, standby.nodeId, "mirror");
   const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
   return { nodeId: standby.nodeId, standardSeriesId };
 }
@@ -590,8 +590,8 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
       expect(result).toEqual({ alreadyPrimary: false, seriesId: seed.standardSeriesId });
 
       // The point-of-no-return committed: deployment flipped to (primary, primary).
-      expect(await readDeploymentMode(mirrorDb)).toBe("primary");
-      expect(await readSingletonRole(mirrorDb)).toBe("primary");
+      expect(await readDeploymentMode(mirrorDb, seed.nodeId)).toBe("primary");
+      expect(await readSingletonRole(mirrorDb, seed.nodeId)).toBe("primary");
 
       // The next-tick restart timer has fired into the spy — never a real SIGTERM.
       await delay(50);

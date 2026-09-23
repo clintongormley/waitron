@@ -88,9 +88,7 @@ export interface SetupDeps {
    * document right after `establishIdentity` seals the identity key. A fresh primary signs its own
    * single-node org chart (design §6 R1), so a document exists before any promotion needs to bump one.
    * Optional like the other provision deps so an unwired box refuses via the deps gate. Provision path
-   * only — a mirror mints none. `node_membership` is classified `local` ("this node's membership
-   * record; not copied", packages/db/src/classification.ts), so it is not a table any node-to-node copy
-   * carries. */
+   * only — a mirror mints none. */
   seedMembership?: (nodeId: string) => Promise<void>;
   /** `writeTradingEnv(stateDir, …)` bound in boot: persists `<stateDir>/trading.env` so the next boot
    * enters trading mode. */

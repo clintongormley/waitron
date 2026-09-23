@@ -8,6 +8,10 @@ import type { FormFactor } from "@waitron/layouts";
 import { resolveDeviceBinding } from "./device.js";
 import type { TillConfig } from "./till-config.js";
 
+/** The predicate every statement here carries: a pending request belongs to the node that received
+ * it (`join_requests.node_id`). */
+const ownedBy = (cfg: Pick<TillConfig, "nodeId">) => eq(joinRequests.nodeId, cfg.nodeId);
+
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
 export type JoinRequestKind = "device" | "print_agent";
 
@@ -15,31 +19,35 @@ export type JoinRequestKind = "device" | "print_agent";
  * cannot outlive the window that admitted it by more than one window. */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
-/** Pending rows per kind, across the whole database. Ten is enough for the largest install anyone
+/** Pending rows per kind, across this node's requests. Ten is enough for the largest install anyone
  * runs at once, and it bounds both the admin's attention and the numbers the decoy rule must avoid. */
 export const PENDING_CAP = 10;
 
-/** Delete every lapsed request in the database. Called at the head of every verb that reads or counts
- * them, so a lapsed row never occupies the cap, never blocks a number, and never appears in the
+/** Delete every lapsed request this node holds. Called at the head of every verb that reads or
+ * counts them, so a lapsed row never occupies the cap, never blocks a number, and never appears in the
  * pending list. Swept opportunistically at read, not by a background job. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
-  void cfg;
   await tx
     .delete(joinRequests)
-    .where(lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()));
+    .where(
+      and(
+        ownedBy(cfg),
+        lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()),
+      ),
+    );
 }
 
-/** Every number currently spoken for in this database, EITHER kind, split by role. The cross-surface
- * scope is the point (design §1.2 rule 3): an agent request and a device request must never show the
+/** Every number currently spoken for among this node's requests, EITHER kind, split by role. The
+ * cross-surface scope is the point (design §1.2 rule 3): an agent request and a device request must never show the
  * same number, or an admin comparing across two screens can be honestly misled. */
 export async function pendingNumbers(
   tx: Transaction,
   cfg: TillConfig,
 ): Promise<{ reals: Set<string>; decoys: Set<string> }> {
-  void cfg;
   const rows = await tx
     .select({ n: joinRequests.verificationNumber, d: joinRequests.decoyNumbers })
-    .from(joinRequests);
+    .from(joinRequests)
+    .where(ownedBy(cfg));
   return {
     reals: new Set(rows.map((r) => r.n)),
     decoys: new Set(rows.flatMap((r) => r.d)),
@@ -56,20 +64,18 @@ function twoDigits(n: number): string {
  * Mint a pending join request: one real number and two decoys, obeying the cross-surface exclusion
  * (design §1.2 rule 3) and the per-kind cap.
  *
- * INVARIANT: number allocation and the cap are serialised across the WHOLE DATABASE (both kinds,
+ * INVARIANT: number allocation and the cap are serialised across this node's requests (both kinds,
  * every location), so the whole sweep → count → pendingNumbers → pick → insert sequence is atomic
  * against every other creator. WHY: two concurrent creators otherwise cannot see each other's
  * uncommitted rows, so both pick off a stale reserved-set — one's real can collide with the other's
  * (rule 3, the guarantee the one-in-three guess rate rests on), and both can pass a count of 9 and
  * insert to 11 (bypassing the cap and the decoy budget).
  *
- * WHAT ARRANGES IT is the venue file's write queue, not a lock this function takes. On PostgreSQL
- * this opened with a transaction-scoped advisory lock on a constant key, because two creators in
- * two transactions could interleave. `withTransaction` (`packages/db/src/tenancy.ts`) now runs its
- * body inside that queue, and the queue admits ONE write transaction on the file at a time — the
- * mechanism, and the receipt, are written out on `assertExtraListForWrite`
- * (`packages/catalogue/src/extras.ts`). The scope the constant key bought — the whole database,
- * never a location or a kind — is what the queue gives by construction, since it is per FILE.
+ * WHAT ARRANGES IT is the venue file's write queue, not a lock this function takes:
+ * `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside that queue, which admits ONE
+ * write transaction on the file at a time — the mechanism, and the receipt, are written out on
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The queue is per FILE, so it
+ * serialises every creator on the file, never only those of one location or kind.
  */
 export async function createJoinRequest(
   tx: Transaction,
@@ -87,7 +93,7 @@ export async function createJoinRequest(
   const [{ count }] = await tx
     .select({ count: sql<number>`count(*)` })
     .from(joinRequests)
-    .where(eq(joinRequests.kind, input.kind));
+    .where(and(ownedBy(cfg), eq(joinRequests.kind, input.kind)));
   if (count >= PENDING_CAP) throw new AppError("device.join_full", {});
 
   // The REAL number avoids every existing real AND every issued decoy; the DECOYS avoid every real.
@@ -130,6 +136,7 @@ export async function createJoinRequest(
   const [row] = await tx
     .insert(joinRequests)
     .values({
+      nodeId: cfg.nodeId,
       locationId: cfg.locationId,
       kind: input.kind,
       label: input.label,
@@ -166,12 +173,11 @@ export async function listPendingJoinRequests(
       createdAt: joinRequests.createdAt,
     })
     .from(joinRequests)
-    .where(eq(joinRequests.kind, kind))
+    .where(and(ownedBy(cfg), eq(joinRequests.kind, kind)))
     .orderBy(joinRequests.createdAt);
 }
 
-/** Fetch one pending request by id, or throw. One tenant per database, so the id alone identifies
- * the row. */
+/** Fetch one of this node's pending requests by id, or throw `join_request.not_found`. */
 async function requirePending(
   tx: Transaction,
   cfg: TillConfig,
@@ -197,13 +203,13 @@ async function requirePending(
       locationId: joinRequests.locationId,
     })
     .from(joinRequests)
-    .where(eq(joinRequests.id, id));
+    .where(and(ownedBy(cfg), eq(joinRequests.id, id)));
   if (row === undefined) throw new AppError("join_request.not_found", {});
   return row;
 }
 
 /**
- * The KIND of one pending request, or `undefined` when this tenant holds no such row.
+ * The KIND of one of this node's pending requests, or `undefined` when this node holds no such row.
  *
  * Deliberately not {@link requirePending}'s throw. The shared by-id routes (`join-api.ts`) take their
  * permission from the row's kind, so they must read it BEFORE they authorize — and a caller holding
@@ -223,7 +229,7 @@ export async function joinRequestKind(
   const [row] = await tx
     .select({ kind: joinRequests.kind })
     .from(joinRequests)
-    .where(eq(joinRequests.id, id));
+    .where(and(ownedBy(cfg), eq(joinRequests.id, id)));
   return row?.kind;
 }
 
@@ -267,7 +273,7 @@ export async function readJoinStatus(
   const [pending] = await tx
     .select({ tokenHash: joinRequests.tokenHash })
     .from(joinRequests)
-    .where(eq(joinRequests.id, joinId));
+    .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
   if (pending !== undefined) {
     return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
   }
@@ -332,7 +338,7 @@ export async function acceptDeviceJoinRequest(
 
   const [row] = await tx
     .delete(joinRequests)
-    .where(and(eq(joinRequests.id, id), eq(joinRequests.kind, "device")))
+    .where(and(ownedBy(cfg), eq(joinRequests.id, id), eq(joinRequests.kind, "device")))
     .returning({
       id: joinRequests.id,
       label: joinRequests.label,
@@ -392,7 +398,7 @@ export async function acceptPrintAgentJoinRequest(
   await sweepLapsed(tx, cfg);
   const [row] = await tx
     .delete(joinRequests)
-    .where(and(eq(joinRequests.id, id), eq(joinRequests.kind, "print_agent")))
+    .where(and(ownedBy(cfg), eq(joinRequests.id, id), eq(joinRequests.kind, "print_agent")))
     .returning({
       id: joinRequests.id,
       label: joinRequests.label,
@@ -433,7 +439,7 @@ export async function readAgentJoinStatus(
   const [pending] = await tx
     .select({ tokenHash: joinRequests.tokenHash })
     .from(joinRequests)
-    .where(eq(joinRequests.id, joinId));
+    .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
   if (pending !== undefined) {
     return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
   }
@@ -455,7 +461,7 @@ export async function denyJoinRequest(
   id: string,
 ): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
-  await tx.delete(joinRequests).where(eq(joinRequests.id, id));
+  await tx.delete(joinRequests).where(and(ownedBy(cfg), eq(joinRequests.id, id)));
   return row.kind;
 }
 

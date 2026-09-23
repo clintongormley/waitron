@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected.js";
 
 /**
- * Four tables the application code may read and never write: `tenants`, `nodes`, `deployment` and
- * `mirror_config`.
+ * Five tables the application code may read and never write: `tenants`, `nodes`, `deployment`,
+ * `mirror_config` and `node_roles`.
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants — one process opens one
  * file — and every path, request and provisioning alike, shares that one venue handle. So the rule
@@ -19,18 +19,19 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  * those writes in a handful of named files is the property being defended; hedge 2 below is what it
  * costs.
  *
- * WHY A ROOT-PROJECT PROGRAM. The list of four lives in a different package from the code that
+ * WHY A ROOT-PROJECT PROGRAM. The list of tables lives in a different package from the code that
  * could write them, which is spread across every app and package, so no per-package suite can see
  * both sides — the same reason `two-file-foreign-keys.test.ts` and `classification-complete.test.ts`
  * live here. The root project is not typechecked (the root `vitest.config.ts` carries the mutation
  * that measured it), so the import of `PRIVILEGES` above is checked by running, not by `tsc`.
  *
  * WHERE THE LIST COMES FROM. `packages/fiscal-verifactu/src/privileges.expected.ts` — the matrix
- * that recorded `app_user`'s table privileges. The four tables are the ones it records as `S`. It
+ * that recorded `app_user`'s table privileges. Four of the tables are the ones it records as `S`;
+ * `node_roles` came later and inherits `deployment`'s rule (`ADDED_SINCE_THE_MATRIX` below). It
  * is a frozen record, not a measurement: nothing checks it against a database. It only ever
  * measured TABLE-level grants, so a column-scoped write grant on one of the four never showed up in
- * it or here. `write-path-tables.json` beside this file holds the same four FROZEN, because the
- * matrix goes when the rest of the grant-era record does; the case below cross-checks the two while
+ * it or here. `write-path-tables.json` beside this file holds the same four FROZEN, plus
+ * `node_roles`, because the matrix goes when the rest of the grant-era record does; the case below cross-checks the two while
  * both exist, and deleting the matrix breaks this file's import rather than making it quietly pass.
  *
  * It is WEAKER than "no write path touches a forbidden table", in four ways that are worth stating
@@ -51,8 +52,8 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *    of fixtures that hides the real ones. Outside the walk entirely, and so unseen: a package's
  *    `test/` directory, `apps/<app>/scripts` (four demo scripts there write `tenants`, three of them `nodes` too),
  *    and anything at a package root.
- * 4. **It is about the four tables that were refused AT ALL.** The grants used to refuse plenty more
- *    one operation at a time — no DELETE on the sale tables, UPDATE narrowed to named columns on two
+ * 4. **It is about the tables that were refused AT ALL**, plus `node_roles`. The grants used to
+ *    refuse plenty more one operation at a time — no DELETE on the sale tables, UPDATE narrowed to named columns on two
  *    others — and none of that was ever checked here, nor is any of it refused now.
  *    `docs/backlog.md` → B9 carries the decision.
  */
@@ -73,10 +74,11 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
  *                                                adoption worker.
- *   `packages/db/src/deployment.ts`              stamps the environment, the mode, the singleton role
- *                                                and the fence position, from setup provision and
- *                                                adopt, the promote path, the boot demote, the
- *                                                break-glass mint and the provisioning command line.
+ *   `packages/db/src/deployment.ts`              stamps the environment, and writes a node's mode,
+ *                                                singleton role and break-glass verifier, from setup
+ *                                                provision and adopt, the promote path, the boot
+ *                                                demote, the break-glass mint and the provisioning
+ *                                                command line.
  *   `packages/db/src/mirror-config.ts`           writes the cloud mirror's connection config, from
  *                                                the setup-mode adopt route.
  */
@@ -162,7 +164,7 @@ function withoutComments(source: string): string {
  * The builder's receiver has to look like a database handle — a name ending in `db`, `tx`, `trx`,
  * `transaction`, `conn` or `client`, or nothing at all where the call opens its line as part of a
  * chain. Without that, `cache.delete(nodes)` on an ordinary `Set` is reported as a write to the
- * `nodes` table, and all four of these tables have names an ordinary variable might carry. The cost
+ * `nodes` table, and every one of these tables has a name an ordinary variable might carry. The cost
  * is the other half of the same coin: a real write through a handle named something else, on a line
  * that does not start with the dot, is invisible here.
  */
@@ -181,7 +183,7 @@ function detector(table: string): string {
 }
 
 const TABLES = Object.keys(ALLOWED);
-/** Built once. The combined form is a cheap reject: most files match none of the four. */
+/** Built once. The combined form is a cheap reject: most files match none of the tables. */
 const DETECTORS = new Map(TABLES.map((table) => [table, new RegExp(detector(table), "im")]));
 const ANY_TABLE = new RegExp(TABLES.map((table) => detector(table)).join("|"), "im");
 
@@ -247,6 +249,10 @@ function productionSources(): string[] {
 const SOURCES = productionSources();
 const ALLOWANCES = new Map(TABLES.map((table) => [table, new Set(ALLOWED[table])]));
 
+// Tables created after the privilege matrix froze, each inheriting a frozen table's rule.
+// `node_roles` holds the three columns that left `deployment` (slice-2 spec §2).
+const ADDED_SINCE_THE_MATRIX = ["node_roles"];
+
 describe("no source writes a table the application role may only read", () => {
   it("finds no forbidden write", () => {
     const offenders: string[] = [];
@@ -269,12 +275,11 @@ describe("no source writes a table the application role may only read", () => {
     ).toEqual([]);
   });
 
-  it("holds exactly the tables the privilege matrix records as readable but not writable", () => {
+  it("holds exactly the tables the privilege matrix records as readable but not writable, plus those added since", () => {
     const readOnly = Object.entries(PRIVILEGES)
       .filter(([, letters]) => !/[IUDT]/.test(letters))
-      .map(([table]) => table)
-      .sort();
-    expect(TABLES.slice().sort()).toEqual(readOnly);
+      .map(([table]) => table);
+    expect(TABLES.slice().sort()).toEqual([...readOnly, ...ADDED_SINCE_THE_MATRIX].sort());
   });
 
   // Non-vacuity, end to end, and deliberately NOT a count of how many files were read: every

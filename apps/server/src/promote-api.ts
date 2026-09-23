@@ -45,6 +45,8 @@ export interface PromoteRunResult {
  */
 export interface PromoteApiDeps {
   appDb: Database;
+  /** This node's id — whose break-glass verifier is checked. */
+  nodeId: string;
   run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
@@ -95,7 +97,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       // present break-glass secret is authoritative — it is never silently downgraded to the login
       // path, so a wrong secret is refused here rather than falling through to `password.invalid`.
       if (typeof body.breakGlass === "string") {
-        if (!(await verifyBreakGlass(deps.appDb, body.breakGlass))) {
+        if (!(await verifyBreakGlass(deps.appDb, deps.nodeId, body.breakGlass))) {
           throw new AppError("promotion.break_glass_invalid", {});
         }
       } else if (

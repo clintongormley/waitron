@@ -23,6 +23,8 @@ import { withTransaction } from "./tenancy.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
+const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
 // A database with NO migration set applied, so `deployment` does not exist — the state of a
 // first-ever boot, before the set that creates the table has run, and the state the boot-time
 // readers must answer without throwing. It needs its own handle: `useVenueDb` applies the sets it
@@ -35,13 +37,13 @@ describe("before any migration set has run", () => {
     expect(await readDeploymentEnvironment(bare.db)).toBeNull();
     // Same pre-migration handle: readDeploymentMode must see the table as absent and answer
     // "primary" (an unstamped database is a primary) rather than throw.
-    expect(await readDeploymentMode(bare.db)).toBe("primary");
+    expect(await readDeploymentMode(bare.db, NODE)).toBe("primary");
     // Same pre-migration handle: readSingletonRole must see the table as absent and answer
     // "primary" (an unstamped database is a sole primary) rather than throw.
-    expect(await readSingletonRole(bare.db)).toBe("primary");
+    expect(await readSingletonRole(bare.db, NODE)).toBe("primary");
     // readDeploymentAxes answers for both axes at once, so an unstamped database must read primary
     // on both rather than throwing halfway.
-    expect(await readDeploymentAxes(bare.db)).toEqual({
+    expect(await readDeploymentAxes(bare.db, NODE)).toEqual({
       mode: "primary",
       singletonRole: "primary",
     });
@@ -67,8 +69,8 @@ describe("the deployment stamp", () => {
     // The table exists but holds no row — no migration seeds one, only stampDeployment does — so
     // the readers fall back rather than reading an absent row. A box between its first migration
     // and its first stamp is in exactly this state, and it must still sell.
-    expect(await readSingletonRole(db)).toBe("primary");
-    expect(await readDeploymentMode(db)).toBe("primary");
+    expect(await readSingletonRole(db, NODE)).toBe("primary");
+    expect(await readDeploymentMode(db, NODE)).toBe("primary");
   });
 
   it("reads back what was stamped", async () => {
@@ -111,55 +113,58 @@ describe("the deployment stamp", () => {
 
   it("readDeploymentMode returns 'primary' by default and 'mirror' after setDeploymentMode", async () => {
     // Fresh migrated DB, unstamped: an unstamped database is a primary.
-    expect(await readDeploymentMode(db)).toBe("primary");
+    expect(await readDeploymentMode(db, NODE)).toBe("primary");
     await stampDeployment(db, "preproduction"); // creates the id=1 row
-    expect(await readDeploymentMode(db)).toBe("primary"); // default on the new row
-    await setDeploymentMode(db, "mirror");
-    expect(await readDeploymentMode(db)).toBe("mirror");
-    await setDeploymentMode(db, "primary"); // promotion is a legitimate reverse
-    expect(await readDeploymentMode(db)).toBe("primary");
+    expect(await readDeploymentMode(db, NODE)).toBe("primary"); // default on the new row
+    await setDeploymentMode(db, NODE, "mirror");
+    expect(await readDeploymentMode(db, NODE)).toBe("mirror");
+    await setDeploymentMode(db, NODE, "primary"); // promotion is a legitimate reverse
+    expect(await readDeploymentMode(db, NODE)).toBe("primary");
   });
 
   it("setDeploymentMode fails loud on an unstamped database (no silent 0-row no-op)", async () => {
-    // Fresh migrated DB: the deployment singleton row does not exist yet. setDeploymentMode is a
-    // promotion primitive, so a mis-sequenced call (before stampDeployment) must THROW, not silently
-    // succeed while leaving the database unpromoted. Proven by deletion: dropping the rows.length guard
-    // makes the UPDATE a 0-row no-op and captureError sees no error, reddening this.
-    const error = await captureError(() => setDeploymentMode(db, "mirror"));
+    // Fresh migrated DB: the deployment row does not exist yet. setDeploymentMode is a promotion
+    // primitive, so a mis-sequenced call (before stampDeployment) must THROW, not record a role on a
+    // database nothing has stamped. The refusal is `requireStamp` in deployment.ts.
+    const error = await captureError(() => setDeploymentMode(db, NODE, "mirror"));
     expect(error).toMatchObject({ code: "deployment.not_stamped" });
     // Nothing was written — still reads the unstamped default.
-    expect(await readDeploymentMode(db)).toBe("primary");
+    expect(await readDeploymentMode(db, NODE)).toBe("primary");
   });
 
   it("the mode CHECK rejects any value outside primary/mirror", async () => {
     await stampDeployment(db, "preproduction");
-    // Not `.rejects.toThrow(/deployment_mode_ck/)`: drizzle-orm@0.45.2 wraps every failed query in
+    // Not `.rejects.toThrow(/node_roles_mode_ck/)`: drizzle-orm@0.45.2 wraps every failed query in
     // a DrizzleQueryError whose own `.message` is `Failed query: <sql>` — the engine's words and
     // its result code live on `.cause`, which `toThrow` never reads. Read the reason off the cause
     // instead.
     const error = await captureError(() =>
-      Promise.resolve(db.run(sql`update deployment set mode = 'bogus' where id = 1`)),
+      Promise.resolve(
+        db.run(
+          sql`insert into node_roles (node_id, mode, updated_at) values (${NODE}, 'bogus', ${new Date().toISOString()})`,
+        ),
+      ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/deployment_mode_ck/);
+    expect(engineErrorMessage(error)).toMatch(/node_roles_mode_ck/);
   });
 
   it("reads singleton_role as 'primary' on a freshly stamped database", async () => {
     await stampDeployment(db, "preproduction");
-    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readSingletonRole(db, NODE)).toBe("primary");
   });
 
   it("reads back a singleton_role that was set to 'secondary'", async () => {
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary");
-    expect(await readSingletonRole(db)).toBe("secondary");
+    await setSingletonRole(db, NODE, "secondary");
+    expect(await readSingletonRole(db, NODE)).toBe("secondary");
   });
 
   it("demoting to mirror co-sets singleton_role to 'secondary'", async () => {
     await stampDeployment(db, "preproduction");
-    await setDeploymentMode(db, "mirror");
-    expect(await readDeploymentMode(db)).toBe("mirror");
-    expect(await readSingletonRole(db)).toBe("secondary");
+    await setDeploymentMode(db, NODE, "mirror");
+    expect(await readDeploymentMode(db, NODE)).toBe("mirror");
+    expect(await readSingletonRole(db, NODE)).toBe("secondary");
   });
 
   it("setDeploymentMode('primary') leaves an already-'secondary' singleton_role untouched", async () => {
@@ -168,10 +173,10 @@ describe("the deployment stamp", () => {
     // (primary, secondary) sell-only-local-secondary transition — a read-write node holding no
     // singletons — which the 'mirror' co-set test does not exercise.
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary"); // a (primary, secondary) sell-only node
-    await setDeploymentMode(db, "primary");
-    expect(await readDeploymentMode(db)).toBe("primary");
-    expect(await readSingletonRole(db)).toBe("secondary"); // NOT reset by the mode write
+    await setSingletonRole(db, NODE, "secondary"); // a (primary, secondary) sell-only node
+    await setDeploymentMode(db, NODE, "primary");
+    expect(await readDeploymentMode(db, NODE)).toBe("primary");
+    expect(await readSingletonRole(db, NODE)).toBe("secondary"); // NOT reset by the mode write
   });
 
   it("setDeploymentMode('primary') leaves a sole primary holding the singletons", async () => {
@@ -181,20 +186,20 @@ describe("the deployment stamp", () => {
     // the singletons, so the same wrong write demotes it — a venue whose only node stops being the
     // one that sells.
     await stampDeployment(db, "preproduction");
-    await setDeploymentMode(db, "primary");
-    expect(await readSingletonRole(db)).toBe("primary");
+    await setDeploymentMode(db, NODE, "primary");
+    expect(await readSingletonRole(db, NODE)).toBe("primary");
   });
 
-  it("refuses singleton_role='primary' on a mirror (deployment_role_valid_ck)", async () => {
+  it("refuses singleton_role='primary' on a mirror (node_roles_role_valid_ck)", async () => {
     await stampDeployment(db, "preproduction");
-    await setDeploymentMode(db, "mirror");
-    const error = await captureError(() => setSingletonRole(db, "primary"));
+    await setDeploymentMode(db, NODE, "mirror");
+    const error = await captureError(() => setSingletonRole(db, NODE, "primary"));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/deployment_role_valid_ck/);
+    expect(engineErrorMessage(error)).toMatch(/node_roles_role_valid_ck/);
   });
 
   it("setSingletonRole fails loudly on an unstamped database", async () => {
-    const error = await captureError(() => setSingletonRole(db, "secondary"));
+    const error = await captureError(() => setSingletonRole(db, NODE, "secondary"));
     expect(isAppError(error) && error.code).toBe("deployment.not_stamped");
   });
 
@@ -203,28 +208,28 @@ describe("the deployment stamp", () => {
     // transaction): stamp first, run it on a caller-provided tx, confirm the flip persists.
     await stampDeployment(db, "preproduction");
     await withTransaction(db, async (tx) => {
-      await setSingletonRoleTx(tx, "secondary");
+      await setSingletonRoleTx(tx, NODE, "secondary");
     });
-    expect(await readSingletonRole(db)).toBe("secondary");
+    expect(await readSingletonRole(db, NODE)).toBe("secondary");
   });
 
   it("setDeploymentModeTx flips mode on a caller tx and co-sets singleton_role for mirror", async () => {
     await stampDeployment(db, "preproduction");
-    await withTransaction(db, (tx) => setDeploymentModeTx(tx, "mirror"));
-    expect(await readDeploymentMode(db)).toBe("mirror");
-    expect(await readSingletonRole(db)).toBe("secondary");
+    await withTransaction(db, (tx) => setDeploymentModeTx(tx, NODE, "mirror"));
+    expect(await readDeploymentMode(db, NODE)).toBe("mirror");
+    expect(await readSingletonRole(db, NODE)).toBe("secondary");
   });
 
   it("setDeploymentModeTx to primary leaves singleton_role untouched", async () => {
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary");
-    await setDeploymentMode(db, "mirror"); // (mirror, secondary)
+    await setSingletonRole(db, NODE, "secondary");
+    await setDeploymentMode(db, NODE, "mirror"); // (mirror, secondary)
     await withTransaction(db, async (tx) => {
-      await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid, no CHECK violation
-      await setSingletonRoleTx(tx, "primary"); // (primary, primary)
+      await setDeploymentModeTx(tx, NODE, "primary"); // (primary, secondary) — valid, no CHECK violation
+      await setSingletonRoleTx(tx, NODE, "primary"); // (primary, primary)
     });
-    expect(await readDeploymentMode(db)).toBe("primary");
-    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readDeploymentMode(db, NODE)).toBe("primary");
+    expect(await readSingletonRole(db, NODE)).toBe("primary");
   });
 
   it("readDeploymentAxes returns both axes in one read", async () => {
@@ -232,20 +237,29 @@ describe("the deployment stamp", () => {
     // singletons. The single read must return exactly this pair — asserted with toEqual so a
     // stray extra key or a wrong field fails.
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary");
-    expect(await readDeploymentAxes(db)).toEqual({ mode: "primary", singletonRole: "secondary" });
+    await setSingletonRole(db, NODE, "secondary");
+    expect(await readDeploymentAxes(db, NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "secondary",
+    });
   });
 
   it("readDeploymentAxes reflects a mirror's co-set (mirror, secondary) pair", async () => {
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary");
-    await setDeploymentMode(db, "mirror");
-    expect(await readDeploymentAxes(db)).toEqual({ mode: "mirror", singletonRole: "secondary" });
+    await setSingletonRole(db, NODE, "secondary");
+    await setDeploymentMode(db, NODE, "mirror");
+    expect(await readDeploymentAxes(db, NODE)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
   });
 
   it("readDeploymentAxes returns (primary, primary) on a freshly migrated, unstamped database", async () => {
-    // Unstamped: the singleton row does not exist. Each field falls back to 'primary', matching
+    // Unstamped, and this node has no row. Each field falls back to 'primary', matching
     // readDeploymentMode/readSingletonRole — an unstamped database is a sole primary.
-    expect(await readDeploymentAxes(db)).toEqual({ mode: "primary", singletonRole: "primary" });
+    expect(await readDeploymentAxes(db, NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
   });
 });

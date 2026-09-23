@@ -44,5 +44,6 @@ export * from "./change-log.js";
 // from this barrel, `scripts/classification-complete.test.ts` reported all three as classified by
 // core with no migration creating them.
 export * from "./deployment.js";
+export * from "./node-roles.js";
 export * from "./mirror-config.js";
 export * from "./node-membership.js";

@@ -1,6 +1,7 @@
 {
   "deployment": ["packages/db/src/deployment.ts"],
   "mirror_config": ["packages/db/src/mirror-config.ts"],
+  "node_roles": ["packages/db/src/deployment.ts"],
   "nodes": [
     "packages/db/src/node-identity.ts",
     "packages/db/src/reserved-identity.ts",

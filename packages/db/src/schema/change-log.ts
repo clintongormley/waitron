@@ -15,17 +15,10 @@ import { id, json, newId, table } from "./columns.js";
  * orphan looks exactly like a row written a second ago. Accepted rather than fixed: the sweep makes
  * an orphan short-lived, and a timestamp column would be read by nothing.
  *
- * `local`: this node's own signal to its own dashboard, never venue data, and the INTENTION is that
- * it travels in neither a backup nor a replication stream — a standby inheriting a half-drained log
- * would deliver changes for work it did not do. Nothing holds the backup half today: a backup is
- * `VACUUM INTO` over the whole venue file (`packages/store/src/archive.ts`), which excludes no
- * table, so an archive carries whatever was in this one. The replication half is a property of
- * whatever stream is declared, and no product code replicates yet (CLAUDE.md §3).
- *
- * OPEN for the storage switch, and NOT settled here: after the flip the class also picks the
- * database FILE, and `local` would put this table on the far side of the split from the triggers
- * that write it. The question, the reason `local` is still right for replication, and what to check
- * first are in `docs/backlog.md` under Task P3.
+ * `local`: one node's signal to its own dashboard. It is in `venue.db` like every table and streams
+ * with it (slice-2 spec §2); a row a direct writer left behind is delivered by the next
+ * `withTransaction` on whichever node then holds the file — to a rebuilt box, a notice to re-read one
+ * resource.
  *
  * It is deliberately NOT one of its own change sources — see `CORE_CHANGE_SOURCES` in
  * `../classification.ts`.

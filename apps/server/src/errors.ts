@@ -127,10 +127,10 @@ declare module "@waitron/shared" {
     /**
      * A write reached a node running as a read-only MIRROR. A mirror serves the dashboard read-only and
      * refuses every non-GET at the HTTP layer (the read-only gate, `read-only-gate.ts`), because
-     * `deployment.mode = 'mirror'`. `node.*`, not `server.*`: it is a
+     * this node's `node_roles.mode = 'mirror'`. `node.*`, not `server.*`: it is a
      * fact about the node's role in the topology, not about the process. No params — the refusal names no
      * row, so a log line leaks nothing. Cleared by promotion
-     * (`deployment.mode = 'primary'`), read live so no restart is needed.
+     * (`node_roles.mode = 'primary'`), read live so no restart is needed.
      */
     "node.read_only": Record<string, never>;
     /**
@@ -1309,11 +1309,11 @@ declare module "@waitron/shared" {
     "promotion.fence_not_attested": Record<string, never>;
     /**
      * A local-secondary promote (promotion runbook design §5a) was called on a node that is a read-only
-     * MIRROR (`deployment.mode='mirror'`). A mirror holds no SIF and cannot become the submitter by a bare
-     * `singleton_role` flip — it needs the mirror→primary path (fresh-SIF mint from the pre-reserved
+     * MIRROR (its `node_roles.mode` is `'mirror'`). A mirror holds no SIF and cannot become the
+     * submitter by a bare `singleton_role` flip — it needs the mirror→primary path (fresh-SIF mint from the pre-reserved
      * identity, §5b), a later slice. Refused with THIS code BEFORE the write, giving a clean domain error
-     * rather than the raw `deployment_role_valid_ck` CHECK violation the `(mirror, primary)` write would
-     * otherwise raise (the CHECK is the backstop). `mode` is the node's own configured role, already in its
+     * rather than the raw `node_roles_role_valid_ck` CHECK violation the `(mirror, primary)` write
+     * would otherwise raise (the CHECK is the backstop). `mode` is the node's own configured role, already in its
      * config and not a secret — echoing it is what tells the operator which path to use, the same shape
      * `deployment.environment_mismatch` follows. `promotion.*`, not `server.*`, for the reason
      * `promotion.fence_not_attested` gives. Never renamed once shipped.

@@ -8,12 +8,11 @@ import {
 } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
- * Two database files, and nothing joining them at the database level.
+ * No foreign key joins a `local` table to a `ledger`/`state` one, in either direction.
  *
- * The SQLite switch puts everything classified `ledger` or `state` in `venue.db` and everything
- * classified `local` in `node.db` (topology design §2.1). A foreign key across the two would make it
- * impossible to back up or restore either file on its own, which is the whole reason for splitting
- * them, so the split's precondition is checked here rather than discovered at the flip.
+ * Every table lives in `venue.db` (slice-2 spec §2). A `local` row belongs to one node and means
+ * nothing to another, so no venue row may depend on one; and `node.db` is reserved, empty, for a
+ * later slice that may move `local` tables into it, which a key across the classes would block.
  *
  * WHY A ROOT-PROJECT PROGRAM. The classification is assembled in `@waitron/composition` and the
  * foreign keys are spread across a dozen packages' own migration sets, so no per-package suite can
@@ -45,9 +44,9 @@ import {
 const repoRoot = join(import.meta.dirname, "..");
 const sets = migrationSets(repoRoot);
 
-/** Which file a class lives in (topology design §2.1). */
-function fileOfClass(cls: string): string {
-  return cls === "local" ? "node.db" : "venue.db";
+/** Which side of the boundary a class is on. */
+function sideOfClass(cls: string): string {
+  return cls === "local" ? "node" : "venue";
 }
 
 /** Physical table name (lowercased) -> declared class, across every module. */
@@ -114,10 +113,10 @@ function violationOf(edge: Edge, classes: Map<string, string>): string | null {
   if (from === undefined || to === undefined) {
     return `${where} [unclassified: ${from ?? edge.from}, ${to ?? edge.to}]`;
   }
-  return fileOfClass(from) !== fileOfClass(to) ? `${where} [${from} -> ${to}]` : null;
+  return sideOfClass(from) !== sideOfClass(to) ? `${where} [${from} -> ${to}]` : null;
 }
 
-describe("the two database files are independent", () => {
+describe("no key crosses between a node's own tables and the venue's", () => {
   it("has no foreign key crossing between them", () => {
     const violations = declaredForeignKeys()
       .map((edge) => violationOf(edge, classes))

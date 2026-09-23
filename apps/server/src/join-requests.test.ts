@@ -70,7 +70,9 @@ import { verifySecret } from "@waitron/identity";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import type { TillConfig } from "./till-config.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -113,6 +115,30 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
     return (e as { code?: string }).code;
   }
 }
+
+describe("pending joins belong to the node that received them", () => {
+  it("does not list or challenge another node's pending request", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const made = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+
+    const here = await withTransaction(suite.db, (tx) =>
+      listPendingJoinRequests(tx, venue.cfg, "device"),
+    );
+    const there = await withTransaction(suite.db, (tx) =>
+      listPendingJoinRequests(tx, otherNode, "device"),
+    );
+    expect(here.map((r) => r.id)).toContain(made.joinId);
+    expect(there.map((r) => r.id)).not.toContain(made.joinId);
+    expect(
+      await codeOf(() =>
+        withTransaction(suite.db, (tx) => challengeFor(tx, otherNode, made.joinId)),
+      ),
+    ).toBe("join_request.not_found");
+  });
+});
 
 describe("createJoinRequest", () => {
   it("mints a two-digit number, an id and a token, and leaves one pending row", async () => {
@@ -180,6 +206,7 @@ describe("createJoinRequest", () => {
     // the `::join_request_kind` cast has nothing to name), and `decoy_numbers` is a JSON array in a
     // text column, not a `text[]`.
     await suite.db.insert(joinRequests).values({
+      nodeId: venue.cfg.nodeId,
       locationId: venue.cfg.locationId,
       kind: "device",
       label: "seeded",
@@ -205,6 +232,7 @@ describe("createJoinRequest", () => {
     // and the column notes on the seed above apply unchanged.
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 98 }, (_, i) => i + 2).map((n) => ({
+        nodeId: venue.cfg.nodeId,
         locationId: venue.cfg.locationId,
         kind: "print_agent" as const,
         label: `seed ${n}`,
@@ -334,6 +362,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
     // Seed nine pending `device` requests directly — one shy of the cap. Reals 01..09, empty decoys.
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 9 }, (_, i) => i + 1).map((n) => ({
+        nodeId: venue.cfg.nodeId,
         locationId: venue.cfg.locationId,
         kind: "device" as const,
         label: `seed ${n}`,
