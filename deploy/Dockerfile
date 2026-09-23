@@ -33,7 +33,8 @@ RUN pnpm --filter @waitron/server build \
 # library the addon loads cannot be bundled. This gathers sharp and what it loads at run time into
 # one plain directory, following pnpm's links, for the runtime stage to put beside the bundle. pnpm
 # also installs the musl builds; node:26-slim is glibc, so they are dropped. The last line fails the
-# build when the addon or libvips for this machine's architecture is missing.
+# build when no linux glibc build of the addon or of libvips was gathered, for any architecture;
+# image-smoke's sharp step is what loads sharp in the built image.
 RUN set -eux; \
   [ "$(ls -d /src/node_modules/.pnpm/sharp@* | wc -l)" -eq 1 ]; \
   mkdir -p /sharp-runtime/node_modules; \

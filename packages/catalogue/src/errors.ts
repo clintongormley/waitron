@@ -62,10 +62,8 @@ declare module "@waitron/shared" {
      */
     "media.unsupported_type": { detected?: string };
     /**
-     * The uploaded image exceeds `maxUploadBytes`. Thrown by the server route. Facts, not bytes.
-     * `size` is the true `file.size` when the precise per-file check rejects it, but a LOWER BOUND
-     * (the raw-body ceiling that was exceeded) when the coarse `bodyLimit` middleware rejects the
-     * stream before the file is measured — so a consumer must not render it as "your file was N bytes".
+     * Not thrown: an upload over the size limit is refused as `image.too_large`
+     * (`packages/media`). Kept because a shipped code is never renamed or removed.
      */
     "media.too_large": { size: number; limit: number };
     /** A location-menu write names no catalogue. The trust-boundary check returns 404 before

@@ -2660,8 +2660,8 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
 
 describe("MAX_UPLOAD_BYTES", () => {
   it("is 20 MiB — the image-library upload ceiling", () => {
-    // What is stored is the shrunk copy (prepareImage), so this bounds only what one upload may
-    // make the server decode. Pinned so a later edit cannot move the ceiling without this failing.
+    // Bounds how large an upload the server will buffer; MAX_INPUT_PIXELS bounds the decode.
+    // Pinned so a later edit cannot move the ceiling without this failing.
     expect(MAX_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
   });
 });

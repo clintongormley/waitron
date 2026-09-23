@@ -291,10 +291,9 @@ const BACKUP_ENV_KEYS = [
 export const BOX_HOSTNAME = "waitron.local";
 
 /**
- * The upper bound on a single product-image upload, 20 MiB (owner decision 2026-09-23; the image
- * library design's §5e proposed 5 MiB). What is stored is the shrunk copy `prepareImage` makes, so
- * this bounds only what one upload may make the server decode: a 100-megapixel PNG raised memory by
- * about 29 MiB when decoded (slice-2 plan, Task 0), and `MAX_INPUT_PIXELS` refuses anything larger.
+ * The upper bound on a single product-image upload, 20 MiB. What is stored is the shrunk copy
+ * `prepareImage` makes, so this bounds how large an upload the server will buffer; the decode is
+ * bounded by `MAX_INPUT_PIXELS`, since a small file can declare that many pixels.
  * A settled constant rather than config: it is a DoS ceiling on an unauthenticated-adjacent write
  * path, not an operator knob. The media upload route (`packages/media/src/routes.ts`) enforces it
  * coarsely (a `bodyLimit` middleware) and precisely (`prepareImage`'s size check,

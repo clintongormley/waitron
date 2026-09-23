@@ -117,9 +117,10 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       (c) =>
         run(c, log, async () => {
           const session = requireManagementSession(c);
-          // Authorised before the body is read or decoded: a caller without `image.manage` costs no
-          // image work. A read, taking no write lock and not counting as activity; the check under
-          // the lock below is the one that admits the write.
+          // Authorised before the body is parsed or the photo decoded: a caller without
+          // `image.manage` costs no image work. A read, taking no write lock and not counting as
+          // activity. The decode runs outside the write lock, so the store is a second transaction,
+          // and permission is checked again inside it; that check is the one that admits the write.
           await withPassiveManagementRead(() =>
             authorizeManager(ctx.db, { managementSessionId: session, permission: "image.manage" }),
           );

@@ -247,7 +247,9 @@ it("refuses a picture declaring too many pixels as 413", async () => {
     body: form,
   });
   expect(response.status).toBe(413);
-  expect(await response.json()).toMatchObject({ error: { code: "image.too_many_pixels" } });
+  expect(await response.json()).toEqual({
+    error: { code: "image.too_many_pixels", params: { maxPixels: 100_000_000 } },
+  });
 });
 
 it("falls back to a 20 MiB upload limit when the host names none", async () => {
