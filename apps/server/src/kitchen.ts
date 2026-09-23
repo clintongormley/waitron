@@ -281,7 +281,7 @@ export async function setCategoryStation(
  * route that wins over its category default. Same shape as {@link setCategoryStation}: a non-null
  * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears it,
  * and the UPDATE names the product by id (an absent `productId`, or a variant's, is a no-op — the
- * route layer resolves product ids, and KDS-1 mints no `product.not_found`).
+ * route checks only that the id is well-formed, and KDS-1 mints no `product.not_found`).
  */
 export async function setProductStation(
   tx: Transaction,
@@ -559,8 +559,8 @@ export async function deactivateCourse(
  * course a line falls to at ring time when the line carries no override. Same shape as
  * {@link setProductStation}: a non-null `courseId` must be a LIVE course of this venue
  * ({@link requireLiveCourse}, `course.not_found` otherwise), null clears it, and the UPDATE names
- * the product by id (an absent `productId`, or a variant's, is a no-op — the route layer resolves
- * product ids, and KDS-2 mints no `product.not_found`).
+ * the product by id (an absent `productId`, or a variant's, is a no-op — the route checks only
+ * that the id is well-formed, and KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,

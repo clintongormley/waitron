@@ -86,6 +86,8 @@ export async function setProductRecipe(
   productId: string,
   ingredientIds: string[],
 ): Promise<void> {
+  // A variant's recipe would write derived allergens and diet onto its own row, breaking its
+  // inheritance from its parent; an unknown id is deliberately left to its existing answer.
   const [variant] = await tx
     .select({ id: products.id })
     .from(products)
