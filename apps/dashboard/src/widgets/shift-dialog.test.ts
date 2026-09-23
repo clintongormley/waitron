@@ -148,16 +148,14 @@ describe("shift-dialog guards and keyboard submit", () => {
       "[data-test=shift-role]",
     )!;
     await field.updateComplete;
-    field
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          composed: true,
-          cancelable: true,
-        }),
-      );
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
     expect(update).toHaveBeenCalledExactlyOnceWith({
       shiftId: "s1",
       patch: {

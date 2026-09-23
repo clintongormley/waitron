@@ -614,16 +614,14 @@ describe("reader dialog request lifetime", () => {
 
 describe("payments-screen remaining edges", () => {
   function pressEnter(field: HTMLElement): void {
-    field
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          composed: true,
-          cancelable: true,
-        }),
-      );
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
   }
 
   const bodyRowNames = (el: PaymentsScreen): string[] =>

@@ -467,16 +467,14 @@ describe("purchase-form keyboard submit", () => {
       "[data-test=supplier-name]",
     )!;
     await field.updateComplete;
-    field
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          composed: true,
-          cancelable: true,
-        }),
-      );
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
     expect(events).toHaveLength(1);
     expect(events[0]!.detail.header.supplierName).toBe("Distribuciones García SL");
     expect(events[0]!.detail.lines).toEqual([

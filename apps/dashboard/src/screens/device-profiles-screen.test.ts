@@ -561,16 +561,14 @@ describe("device-profiles-screen remaining edges", () => {
     const field = el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-inactivity]")!;
     await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
 
-    field
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          composed: true,
-          cancelable: true,
-        }),
-      );
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
 
     await vi.waitFor(() =>
       expect(api.updateDeviceProfile).toHaveBeenCalledWith(

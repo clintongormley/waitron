@@ -254,16 +254,14 @@ describe("person-edit validation and keyboard submit", () => {
       "[data-test=edit-email]",
     )!;
     await field.updateComplete;
-    field
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          composed: true,
-          cancelable: true,
-        }),
-      );
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
     expect(events.map((event) => event.detail)).toEqual([
       {
         displayName: "Ada",

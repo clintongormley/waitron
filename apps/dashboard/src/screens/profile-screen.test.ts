@@ -611,16 +611,14 @@ describe("your profile — validation, refusals and the remaining actions", () =
   async function pressEnter(el: ProfileScreen, name: string) {
     const input = field(el, name);
     await input.updateComplete;
-    input
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Enter",
-          bubbles: true,
-          composed: true,
-          cancelable: true,
-        }),
-      );
+    input.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
   }
 
   it("navigates the page itself to Google when no navigate hook is given", async () => {
