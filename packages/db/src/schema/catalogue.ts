@@ -83,12 +83,12 @@ export const products = table(
     // allergens, category, unit) intended only to be referenced from elsewhere rather than offered
     // standalone; the menu and till selection is what enforces that (a later slice).
     soldAlone: flag("sold_alone").notNull().default(true),
-    // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
-    // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and
-    // null here just means "no picture" — unlike `allergens`' null, which is a PENDING state the
-    // till surfaces. Nothing at the database decides who may write it: this engine has no roles and
-    // no grants (../testing/roles.ts), so a column added to this table needs no privilege change,
-    // where on PostgreSQL that followed from the table-wide GRANT naming no column list.
+    // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served
+    // by apps/server's /media route), never bytes. Nullable: a product legitimately has no photo,
+    // and null here just means "no picture" — unlike `allergens`' null, which is a PENDING state
+    // the till surfaces. Nothing at the database decides who may write it: this engine has no roles
+    // and no grants, so a column added to this table needs no privilege change, where on PostgreSQL
+    // that followed from the table-wide GRANT naming no column list.
     image: label("image"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +

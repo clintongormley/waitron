@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, tenders, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedSale, seedTender, seedTill, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -23,7 +23,6 @@ function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
     ...overrides,
   };
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return computeCashUp(tx, input);
   });
 }

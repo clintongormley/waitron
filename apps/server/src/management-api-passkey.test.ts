@@ -16,13 +16,10 @@ import { mountMeApi } from "./me-api.js";
 // the unit layer in `@waitron/identity`'s `passkey.test.ts`. The register route is GATED on a
 // management-session cookie, which needs a migrated database (persons + management_sessions).
 //
-// WHAT WENT WITH POSTGRESQL. The file's stated reason was the deployment ROLE: the credential write
-// and the session lookup ran under `app_user`'s grants, so a missing grant failed the second
-// assertion of each case. SQLite has no roles and no grants; `asAppUser` is an inert function
-// (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection. Nothing here
-// now says anything about which identity the routes reach the database as. One in-case receipt is
-// retired with the column type and is flagged where it sits — the `isUuid` screen on
-// `challengeHandle`.
+// WHAT WENT WITH POSTGRESQL. SQLite has no roles and no grants, and every call below runs on the
+// one connection. Nothing here now says anything about which identity the routes reach the database
+// as. One in-case receipt is retired with the column type and is flagged where it sits — the
+// `isUuid` screen on `challengeHandle`.
 //
 // The WebAuthn ceremony is mocked the same way `@waitron/identity`'s `passkey.test.ts` mocks it:
 // `generateRegistrationOptions`/`generateAuthenticationOptions` run FOR REAL (they mint a random
@@ -311,8 +308,8 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
 
-    // Re-read as the app role: exactly one credential landed, owned by the manager — a real
-    // write, not merely a 200.
+    // Re-read: exactly one credential landed, owned by the manager — a real write, not merely a
+    // 200.
     const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({

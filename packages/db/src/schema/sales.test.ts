@@ -500,8 +500,8 @@ describe("sales — immutability", () => {
 
   it("refuses an UPDATE and a DELETE, via the append-only trigger", async () => {
     // On PostgreSQL the grants stopped the application and the trigger stopped the owner, and this
-    // case was the only one that distinguished them. SQLite has neither roles nor grants
-    // (`packages/db/src/testing/roles.ts`), so there is one layer and this is it.
+    // case was the only one that distinguished them. SQLite has neither roles nor grants, so there
+    // is one layer and this is it.
     const update = await captureError(() =>
       suite.db.update(sales).set({ total: 99900 }).where(eq(sales.id, saleId)),
     );

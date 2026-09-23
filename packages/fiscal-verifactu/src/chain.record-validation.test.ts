@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, sales, withTransaction } from "@waitron/db";
+import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
@@ -42,7 +42,6 @@ async function useSeriesCode(code: string): Promise<void> {
 
 function sell() {
   return withTransaction(pg.db, async (tx) => {
-    await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
@@ -135,7 +134,6 @@ describe("a record whose totals disagree with themselves is written, filed and f
   it("records the sale rather than refusing it", async () => {
     await useSeriesCode("FS");
     const { saleId } = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(tx, backend, mismatchedSale());
     });
     expect(saleId).toBeDefined();
@@ -147,7 +145,6 @@ describe("a record whose totals disagree with themselves is written, filed and f
   it("raises a warning incident against that sale", async () => {
     await useSeriesCode("FS");
     const { saleId } = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(tx, backend, mismatchedSale());
     });
 
@@ -193,7 +190,6 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     const saleId = `77777777-7777-4777-8777-7777777770${String(sequence).padStart(2, "0")}`;
     const invoiceNumber = 900 + sequence;
     return withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,
         tillId,

@@ -6,7 +6,7 @@ import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 // subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, asAppUser, incidents, nowIso, sales, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, incidents, nowIso, sales, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -152,7 +152,6 @@ function failingChain(): FakeFiscalBackend {
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
@@ -274,7 +273,6 @@ describe("incidents — chain verification failure", () => {
     const backend = failingChain();
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await backend.registerNode(tx, nodeId);
         await recordSale(tx, backend, input());
         throw new Error("simulated crash before commit");
@@ -319,7 +317,6 @@ describe("recordIncident — no sale attached", () => {
     // (`recordSale`/`recordVoid` always have one), so this is the one place that path is
     // exercised at all before plan 3 exists to call it for real.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordIncident(tx, {
         tillId,
         error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
@@ -346,7 +343,6 @@ describe("openIncidents", () => {
     await sell(failingChain());
     await sell(failingChain(), { clock: later });
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
     expect(rows).toHaveLength(2);
@@ -356,15 +352,10 @@ describe("openIncidents", () => {
   it("excludes acknowledged incidents", async () => {
     await sell(failingChain());
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
-      // Acknowledges the fixture rows, so the read below has something to exclude. This used to
-      // double as a privilege check — `app_user` held UPDATE on `acknowledged_at` alone, so a
-      // column-level GRANT that omitted it would have failed right here. On this engine there are
-      // no grants, so it is only a setup write now.
+      // Acknowledges the fixture rows, so the read below has something to exclude.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
     expect(rows).toHaveLength(0);
@@ -374,24 +365,20 @@ describe("openIncidents", () => {
     const other = await seedTenant(suite.db);
     await sell(failingChain());
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openIncidents(tx, other.tillId);
     });
     expect(rows).toHaveLength(0);
   });
 
   // DELETED with the storage switch: "refuses to rewrite an incident's code as the application
-  // role". Its subject was a column-level GRANT — `app_user` held UPDATE on `acknowledged_at` and
-  // `acknowledged_by` alone, and PostgreSQL refused any other column with
-  // `permission denied for table incidents`. SQLite has no roles and no grants, so there is nothing
-  // left to refuse it and the case passed only by asserting that a write it expected to fail did.
+  // role". Nothing on this engine refuses that write, so the case passed only by asserting that a
+  // write it expected to fail did.
   //
-  // It is NOT replaced. `scripts/write-path-tables.test.ts` (task P9) is the replacement for what
-  // grants enforced, and it covers whole TABLES the application may not write, not one column of
-  // one table — `CLAUDE.md` §3 says so of that guard in its own words, and `docs/backlog.md` → B9
-  // is where the per-operation half is tracked. So "an incident is a record, not a note anyone may
-  // rewrite" now rests on nobody writing the UPDATE, which is exactly what this case existed to
-  // stop resting on.
+  // It is NOT replaced. `scripts/write-path-tables.test.ts` (task P9) covers whole TABLES the
+  // application may not write, not one column of one table — `CLAUDE.md` §3 says so of that guard
+  // in its own words, and `docs/backlog.md` → B9 is where the per-operation half is tracked. So
+  // "an incident is a record, not a note anyone may rewrite" now rests on nobody writing the
+  // UPDATE, which is exactly what this case existed to stop resting on.
 });
 
 describe("recordIncidentOnce", () => {
@@ -430,7 +417,6 @@ describe("recordIncidentOnce", () => {
 
   it("inserts the first time and returns true", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const inserted = await recordIncidentOnce(tx, {
         tillId,
         saleId: undefined,
@@ -445,7 +431,6 @@ describe("recordIncidentOnce", () => {
 
   it("de-dups a second raise for the same open (till, code, sale) and returns false", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const input: RecordIncidentInput = {
         tillId,
         saleId: undefined,
@@ -466,7 +451,6 @@ describe("recordIncidentOnce", () => {
 
   it("raises a fresh one after the prior incident is acknowledged", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const input: RecordIncidentInput = {
         tillId,
         saleId: undefined,
@@ -492,7 +476,6 @@ describe("recordIncidentOnce", () => {
 
   it("does not de-dup a different code for the same till", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const base = {
         tillId,
         saleId: undefined,
@@ -519,7 +502,6 @@ describe("recordIncidentOnce", () => {
     const { saleId: saleB } = await sell(backend);
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
         tillId,
@@ -543,14 +525,6 @@ describe("recordIncidentOnce", () => {
 });
 
 describe("incidents open-dedup invariant (partial unique index)", () => {
-  // **Deviation from the brief.** The brief's sketch called `recordIncident(asAppUser(tx), input)` /
-  // `recordIncidentOnce(asAppUser(tx), input)` — but `asAppUser(tx): Promise<void>` (`@waitron/db`'s
-  // `testing/roles.ts`) sets the role as a side effect and does not return `tx`; passing its result
-  // as the `tx` argument does not type-check. Every other test in this file (see
-  // `recordIncidentOnce`'s own describe above) awaits `asAppUser(tx)` as its own statement inside an
-  // async callback and then uses `tx` directly — reusing that exact, already-established pattern here
-  // instead.
-  //
   // **Deviation from the brief.** The brief's orphan/ack tests used `payment.offline_forward_
   // declined`, an `AppError` code registered by `@waitron/payments`'s `errors.ts` via declaration
   // merging. `@waitron/core` does not depend on `@waitron/payments` (see this file's own
@@ -577,11 +551,9 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordIncident(tx, input);
     });
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordIncident(tx, input);
     });
     const rows = await incidentsForTill(tillId);
@@ -592,7 +564,6 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
     const { tillId } = await seedTillForIncidents();
     const raise = () =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         return recordIncidentOnce(tx, {
           tillId,
           // no saleId — orphan
@@ -619,7 +590,6 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
     };
     const raise = () =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         return recordIncidentOnce(tx, input);
       });
     expect(await raise()).toBe(true);
@@ -640,7 +610,6 @@ describe("tenant incident reads", () => {
 
   async function raise(forTill: TillId, detectedAt: Date): Promise<void> {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordIncident(tx, {
         tillId: forTill,
         error: chainFailed(forTill),
@@ -652,7 +621,6 @@ describe("tenant incident reads", () => {
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return fn(tx);
     });
   }

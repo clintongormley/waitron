@@ -24,17 +24,10 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
  *
  * ## The role this file was built around is gone, and is replaced by nothing
  *
- * Every call below used to run on `server_pass_probe`, a non-superuser LOGIN role inheriting
- * `app_user`'s grants, opened with `RealPostgres.connectAs` and created cluster-wide by this
- * package's now-deleted `global-setup.ts`. Being non-superuser was the whole point: it is what made
- * a missing SELECT/INSERT/UPDATE grant on `scheduled_runs`, `tenant_credentials` or the reconcile
- * tables fail rather than pass.
- *
- * **SQLite has no roles**, `connectAs` has no counterpart and `asAppUser` is an empty function body
- * (`packages/db/src/testing/roles.ts:25`), so both cases now run on the one venue handle. What is no
- * longer checked by anything: that the deployment role can reach the vault, the reconcile tables and
- * the scheduler ledger, and no further. The two cases keep their assertions unchanged; only the
- * handle they run on changed.
+ * **SQLite has no roles**, so both cases now run on the one venue handle. What is no longer checked
+ * by anything: that the deployment role can reach the vault, the reconcile tables and the scheduler
+ * ledger, and no further. The two cases keep their assertions unchanged; only the handle they run
+ * on changed.
  *
  * The `nonInfo` assertion in the first case was doing double duty and now does single duty. It was
  * the outside-in signal for a MISSING GRANT, because `runDue` folds a permission-denied error into
@@ -114,7 +107,7 @@ describe("one composed pass against a migrated database", () => {
       {
         // No `envios` rows exist, so the drainer finds no tenants and never asks for a
         // certificate. Its transport is covered by aeat-transport.test.ts against a real
-        // handshake; what this asserts is that the composed pass runs as app_user.
+        // handshake; what this asserts is that the composed pass runs.
         drain: (now) =>
           drain(
             {
@@ -141,8 +134,7 @@ describe("one composed pass against a migrated database", () => {
     // `runDue` catches a duty's error and folds it into `TickResult.skipped` rather than throwing,
     // so `report.duties.every(ok)` above stays `true` through a failure. Nothing above `info` is
     // what actually notices: a `drain.tenant_skipped` or `reconcile.pair_skipped` warning is how a
-    // broken duty looks from the outside. (Under PostgreSQL this doubled as the missing-grant
-    // signal; see the header for what went with the role.)
+    // broken duty looks from the outside.
     const nonInfo = lines
       .map((line) => JSON.parse(line) as { level: string; event: string })
       .filter((entry) => entry.level !== "info");

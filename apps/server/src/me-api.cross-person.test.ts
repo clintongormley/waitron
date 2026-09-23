@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -27,11 +27,8 @@ import "./errors.js";
  *
  * ## What this file was, and the one thing that went with PostgreSQL
  *
- * Its header said the routes ran their database work as the non-superuser `app_user`, so a grant the
- * role lacked would fail these tests. **There are no roles on this engine**: `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs
- * on the one connection. A missing grant can no longer fail anything here, because there are no
- * grants.
+ * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
+ * one connection. A missing grant can no longer fail anything here, because there are no grants.
  *
  * ## Which of the two `me-api` suites this is
  *
@@ -182,7 +179,6 @@ async function setupVenue(): Promise<VenueResult> {
  */
 async function seedPerson(name: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [row] = await tx
       .insert(persons)
       .values({ displayName: name, pinHash: hashPin("0000"), role: "staff" })
@@ -191,11 +187,10 @@ async function seedPerson(name: string): Promise<string> {
   });
 }
 
-/** Open a real management session (through `startManagementSession` on the app role) and return the
- * cookie header — the credential every me route gates on. */
+/** Open a real management session (through `startManagementSession`) and return the cookie
+ * header — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;

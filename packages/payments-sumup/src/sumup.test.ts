@@ -13,20 +13,8 @@ import { SumUpCloudProvider } from "./provider.js";
 
 const NODE = "11111111-1111-4111-8111-111111111111";
 
-// This suite used to run on real PostgreSQL, connecting as `sumup_probe` — a non-superuser LOGIN
-// inheriting `app_user`'s grants — so that a missing INSERT/UPDATE on `payments` would fail here
-// and not in `provider.test.ts`, which connected as a superuser holding every grant.
-//
-// **That reason is GONE and has no replacement.** This engine has no roles, so nothing now checks
-// that the adapter's writes would be permitted to an ordinary application role. Its FIRST case
-// went with it: "collect() lands a captured row when handed the only Database handle the API can
-// build" asserted the same capture `provider.test.ts` already asserts at
-// `SumUpCloudProvider.collect > captures: T1 attempting → checkout keyed by our payment_ref → poll
-// → T2 captured with SumUp's transaction id`, and once the role is gone the two are the same test
-// on the same handle.
-//
-// The case below is the one thing here that was never about the role — nothing else in this
-// package asserts it — so the file stays for it rather than being deleted.
+// Nothing else in this package asserts the case below, so the file stays for it rather than being
+// deleted.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("the sumup cloud adapter's reader requirement", () => {

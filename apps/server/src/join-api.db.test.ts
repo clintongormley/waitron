@@ -2,14 +2,10 @@
  * The management-side join routes — the pairing window, the queue, the challenge, deny, accept and
  * self-enrol — on the engine the box now runs.
  *
- * ## What went with PostgreSQL, and is replaced by nothing
+ * ## What this file does not check
  *
- * The old header argued this file needed real PostgreSQL rather than PGlite because every route
- * runs as `app_user` under `withTransaction`, so the `join_requests` / `devices` / `tills` grants
- * were enforced, where a superuser session would let a missing GRANT pass. SQLite has no roles and
- * no grants: one process opens one file and `asAppUser` is an empty function body
- * (`packages/db/src/testing/roles.ts:25`). Nothing here or elsewhere now checks that these routes
- * reach only what the deployment role is allowed to reach.
+ * SQLite has no roles and no grants: one process opens one file. Nothing here or elsewhere checks
+ * that these routes reach only what the deployment role is allowed to reach.
  *
  * What every case below still proves is the ROUTE: its permission gate, its refusal codes, the
  * shape of what it returns, and what it leaves in the tables — none of which the database enforced.
@@ -27,7 +23,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -86,7 +82,6 @@ async function knock(
   input: { kind: JoinRequestKind; label: string; numbers?: () => number },
 ): Promise<{ joinId: string; verificationNumber: string }> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const made = await createJoinRequest(tx, venue.cfg, input);
     return { joinId: made.joinId, verificationNumber: made.verificationNumber };
   });

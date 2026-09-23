@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -86,7 +86,6 @@ beforeEach(async () => {
   const venue = await seedVenue(fx.db);
   locationId = venue.locationId;
   await run(async (tx) => {
-    await asAppUser(tx);
     const menu = await createCatalogue(tx, { name: "Deli" });
     catalogueId = menu.id;
     const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Mains" } });
@@ -178,12 +177,10 @@ const attach = async (
 describe("what a product offers", () => {
   it("walks the product's own attachment order", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       return attach(tx, ["options", "extras"]);
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
     });
 
@@ -195,12 +192,10 @@ describe("what a product offers", () => {
 
   it("reverses the walk when the attachment order is reversed", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       return attach(tx, ["extras", "options"]);
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
     });
 
@@ -212,12 +207,10 @@ describe("what a product offers", () => {
 
   it("gives the options list its own three names, its labels' three names and its default", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       return attach(tx, ["options", "extras"]);
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
     });
 
@@ -249,12 +242,10 @@ describe("what a product offers", () => {
 
   it("prices each item from the list item and then the product, and carries the product's own facts", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       return attach(tx, ["extras", "options"]);
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
     });
 
@@ -311,14 +302,12 @@ describe("what a product offers", () => {
 
   it("leaves out a list the manager has deactivated", async () => {
     await run(async (tx) => {
-      await asAppUser(tx);
       const seeded = await attach(tx, ["options", "extras"]);
       await updateOptionList(tx, seeded.optionsId, { ...cooked(), active: false }, "en");
       await updateExtraList(tx, seeded.extrasId, { ...toppings(), active: false }, "en");
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
     });
 
@@ -331,13 +320,11 @@ describe("what a product offers", () => {
     // the authoring API cannot leave the two out of step. The column is written directly here to
     // reach the state anyway, because nothing in the database keeps it consistent.
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       return attach(tx, ["options"]);
     });
     await fx.db.execute(sql`update option_labels set available = false where id = ${RARE}`);
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
     });
 
@@ -350,7 +337,6 @@ describe("what a product offers", () => {
 describe("what a menu offer publishes", () => {
   it("replaces each extras list with the offer's own narrowed, repriced version", async () => {
     await run(async (tx) => {
-      await asAppUser(tx);
       const seeded = await attach(tx, ["options", "extras"]);
       await setMenuItemExtraLists(tx, offerId, [
         {
@@ -364,7 +350,6 @@ describe("what a menu offer publishes", () => {
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
     });
 
@@ -379,7 +364,6 @@ describe("what a menu offer publishes", () => {
 
   it("omits an extras list the offer does not publish, and keeps the options list", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       const attached = await attach(tx, ["options", "extras"]);
       const second = await createExtraList(tx, sauces(), "en");
       await writeProductModifiers(tx, ids.burger, [
@@ -393,7 +377,6 @@ describe("what a menu offer publishes", () => {
     });
 
     const offered = await run(async (tx) => {
-      await asAppUser(tx);
       return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
     });
 
@@ -407,12 +390,10 @@ describe("what a menu offer publishes", () => {
 describe("the two reads a till sells from", () => {
   it("listAvailableProducts carries the product-side walk", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       return attach(tx, ["options", "extras"]);
     });
 
     const { products: available } = await run(async (tx) => {
-      await asAppUser(tx);
       return listAvailableProducts(tx, locationId);
     });
 
@@ -427,7 +408,6 @@ describe("the two reads a till sells from", () => {
 
   it("listMenuOffers carries the menu-resolved walk", async () => {
     const seeded = await run(async (tx) => {
-      await asAppUser(tx);
       const attached = await attach(tx, ["options", "extras"]);
       await setMenuItemExtraLists(tx, offerId, [
         { listId: attached.extrasId, items: [{ productId: ids.bacon, price: "1.00" }] },
@@ -436,7 +416,6 @@ describe("the two reads a till sells from", () => {
     });
 
     const offers = await run(async (tx) => {
-      await asAppUser(tx);
       return listMenuOffers(tx, [catalogueId]);
     });
 
@@ -461,7 +440,6 @@ describe("one shared resolution for a set of dishes", () => {
 
   it("reads the product side alone for dishes that name no offer", async () => {
     await run(async (tx) => {
-      await asAppUser(tx);
       await attach(tx, ["options", "extras"]);
     });
     const menuExtras = vi.spyOn(extraProjection, "readMenuExtras");
@@ -471,7 +449,6 @@ describe("one shared resolution for a set of dishes", () => {
 
     // Three dishes, the first twice, so a read that moved inside a per-dish loop would count 3.
     await run(async (tx) => {
-      await asAppUser(tx);
       return resolveAttachedModifiers(tx, [
         { productId: ids.burger, menuItemId: null },
         { productId: ids.burger, menuItemId: null },
@@ -493,7 +470,6 @@ describe("one shared resolution for a set of dishes", () => {
 
   it("reads the menu side alone for dishes ordered through an offer", async () => {
     await run(async (tx) => {
-      await asAppUser(tx);
       const attached = await attach(tx, ["options", "extras"]);
       await setMenuItemExtraLists(tx, offerId, [{ listId: attached.extrasId, items: [] }]);
     });
@@ -503,7 +479,6 @@ describe("one shared resolution for a set of dishes", () => {
     const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
 
     await run(async (tx) => {
-      await asAppUser(tx);
       return resolveAttachedModifiers(tx, [
         { productId: ids.burger, menuItemId: offerId },
         { productId: ids.burger, menuItemId: offerId },

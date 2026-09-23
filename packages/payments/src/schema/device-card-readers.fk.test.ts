@@ -21,10 +21,7 @@ import { freshNif } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 import { deviceCardReaders } from "./device-card-readers.js";
 
-// This suite used to run on real PostgreSQL under a non-superuser LOGIN inheriting `app_user`'s
-// grants, and doubled as the grant check for 0001_payments_baseline_sql.sql's
-// SELECT/INSERT/UPDATE/DELETE on this table. That half is GONE and has no replacement: this engine
-// has no roles. What is left is the primary key and the two foreign keys.
+// What this suite covers is the primary key and the two foreign keys.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 interface Seeded {

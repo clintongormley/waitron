@@ -18,7 +18,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { FenceAttestation } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
@@ -39,10 +39,9 @@ export interface PromoteRunResult {
 }
 
 /**
- * `appDb` authenticates + authorizes (under `withTransaction` + `asAppUser`, the
- * dashboard-login shape) AND backs `verifyBreakGlass`'s verifier read. `run` is the boot-wired
- * promote closure (Task 7) — the endpoint delegates to it and
- * never calls the promote functions itself.
+ * `appDb` authenticates + authorizes (under `withTransaction`, the dashboard-login shape) AND backs
+ * `verifyBreakGlass`'s verifier read. `run` is the boot-wired promote closure (Task 7) — the
+ * endpoint delegates to it and never calls the promote functions itself.
  */
 export interface PromoteApiDeps {
   appDb: Database;
@@ -111,7 +110,6 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         // refusal: the `persons.id` read would neither object to it nor match it.
         const { personId, password, totp } = body;
         await withTransaction(deps.appDb, async (tx) => {
-          await asAppUser(tx);
           const session = await loginManagerById(tx, {
             personId,
             password,

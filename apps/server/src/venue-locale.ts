@@ -2,14 +2,14 @@
 // country-pack locale resolver), so it is not in the throw graph the sibling route/config files load
 // the registry for.
 import { eq } from "drizzle-orm";
-import { asAppUser, locations, readTenant, withTransaction, type Database } from "@waitron/db";
+import { locations, readTenant, withTransaction, type Database } from "@waitron/db";
 import { resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
 
 /**
  * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
- * Reads the tenant's country and the till location's province under the app role (`withTransaction` +
- * `asAppUser`), then applies the shared `override →
+ * Reads the tenant's country and the till location's province under `withTransaction`, then applies
+ * the shared `override →
  * area → country → English` chain (the installed-country resolver returns an AVAILABLE
  * code, so nothing here post-processes its result).
  *
@@ -26,7 +26,6 @@ export async function readVenueLocale(
   params: { locationId: string; override?: string },
 ): Promise<SupportedLocale> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const t = await readTenant(tx);
     const [loc] = await tx
       .select({ province: locations.province })

@@ -35,14 +35,9 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
  *
  * ## What went with PostgreSQL, and is replaced by nothing
  *
- * `appDb` used to be a second connection opened as `app_login` — a cluster LOGIN role inheriting
- * `app_user`'s grants, created by the now-deleted `apps/server/src/testing/global-setup.ts`. The
- * endpoint authenticates, authorizes and reads the venue's tenant and node identity through it, so
- * that connection is what put all of it behind the grants a real box runs under.
- *
- * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
- * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). Every call
- * runs on the suite's one handle, so nothing here checks the deployment role's privileges.
+ * **The role is gone and nothing replaces it.** SQLite has no roles and `pg.connectAs` has no
+ * counterpart. Every call runs on the suite's one handle, so nothing here checks the deployment
+ * role's privileges.
  *
  * ## One case is DELETED, because this engine cannot stage the race it existed for
  *

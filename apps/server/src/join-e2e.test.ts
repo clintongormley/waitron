@@ -7,12 +7,9 @@
  * window one surface opens is the window the other honours because it is the same holder instance.
  * That reason is engine-independent and is why the file survives the storage switch.
  *
- * **What went with PostgreSQL, and is replaced by nothing.** The header this replaces said the suite
- * needed real PostgreSQL because every route runs as `app_user` under `withTransaction`, so the
- * `join_requests` / `devices` / `device_profiles` grants were enforced where PGlite's superuser
- * connection would hide a missing one. There are no roles and no grants on this engine, and
- * `asAppUser` is an empty body (`packages/db/src/testing/roles.ts`). Nothing now checks that the
- * deployment role can reach these three tables and no more.
+ * **What went with PostgreSQL, and is replaced by nothing.** There are no roles and no grants on
+ * this engine. Nothing now checks that the deployment role can reach these three tables and no
+ * more.
  *
  * **A blocker this header used to declare is fixed.** The shared fixture seeded `persons` with raw
  * SQL, which reaches no `$defaultFn` generator, so every case here died on

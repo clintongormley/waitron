@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
+import { locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -69,17 +69,16 @@ const suite = useVenueDb({
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
+    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
-    // One product in a catalogue assigned to the counter location, seeded on the APP role via the
-    // catalogue helpers — the same `withTransaction` + `asAppUser` path `openTab` prices it through.
+    // One product in a catalogue assigned to the counter location, seeded via the catalogue
+    // helpers — the same `withTransaction` path `openTab` prices it through.
     const product = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
       const p = await createProduct(tx, {
@@ -154,11 +153,10 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
- * `loginWithPin` path the login route runs — and returns its id. */
+/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
+ * route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,
@@ -178,7 +176,6 @@ async function setupTabApp(
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tableA } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
     const tabAResult = await openTab(tx, d.cfg, {
       tableId: a.id,
@@ -205,7 +202,6 @@ async function setupJoinedApp(): Promise<{
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tableB, tableFree } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
     const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
     const free = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });

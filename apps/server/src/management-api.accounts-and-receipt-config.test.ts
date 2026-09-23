@@ -6,10 +6,7 @@
  *
  * ## What went with PostgreSQL
  *
- * The file's stated reason for demanding a real cluster was `app_user`: every route dropped to the
- * non-owner deployment role, so a person created here had to land under that role's grants. SQLite
- * has no roles and no grants — `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`) — so every call below runs on the one connection and nothing
+ * SQLite has no roles and no grants, so every call below runs on the one connection and nothing
  * here now says anything about which identity the routes reach the database as. No case was deleted
  * for it: each one names a route's behaviour, and all thirty-nine still run.
  *
@@ -55,7 +52,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
@@ -153,7 +150,6 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   // (`packages/identity/src/schema/persons.ts`), and a raw statement reaches no generator —
   // `NOT NULL constraint failed: persons.id`.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [manager] = await tx
       .insert(persons)
       .values({
@@ -232,11 +228,10 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Count the persons named `displayName`, read back as the app role — the proof a real row
- * landed, not merely that a route returned a success status. */
+/** Count the persons named `displayName`, read back — the proof a real row landed, not merely
+ * that a route returned a success status. */
 async function countPersonsNamed(displayName: string): Promise<number> {
   const rows = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const r = await tx.execute<{ display_name: string }>(
       sql`select display_name from persons where display_name = ${displayName}`,
     );
@@ -393,7 +388,6 @@ describe("Management API staff + session routes", () => {
   it("does not count the expected authenticator transition as a failed password", async () => {
     await setupTenant();
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(persons).values({
         displayName: "Factor Manager",
         email: "factor@example.com",
@@ -448,8 +442,8 @@ describe("Management API staff + session routes", () => {
     expect(created.status).toBe(201);
     expect((await created.json()) as { id: string }).toHaveProperty("id");
 
-    // Re-read as the app role: exactly one 'Ada' row landed through the route — proving a
-    // real write, not just a 201.
+    // Re-read: exactly one 'Ada' row landed through the route — proving a real write, not just a
+    // 201.
     expect(await countPersonsNamed("Ada")).toBe(1);
   });
 

@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
-import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
+import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -150,11 +150,9 @@ describe("drain — happy path, an anulación row", () => {
     });
 
     const sale = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
 
@@ -1347,18 +1345,9 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
 });
 
 /**
- * WHAT WAS HERE, and where the property went. A case named "refuses the same selection when the
- * lock is not narrowed" ran `claimBatch`'s selection twice as `app_user` — once with
- * `for update skip locked` and once with `for update of e skip locked` — and pinned the first at
- * SQLSTATE `42501` and the second at "allowed". It held the reason the claim narrowed its lock:
- * `app_user` could read `registros_facturacion` and never write it, so an unnarrowed `FOR UPDATE`
- * over that join was refused before it read anything.
- *
- * Both halves of that subject are gone on this engine, so the case is deleted rather than
- * re-spelled: there is no `FOR UPDATE` (`claimLockedRows` adds no lock clause — see `claimBatch`'s
- * own paragraph in `./drain.ts`, and `packages/db/src/job-claim.ts`'s doc comment for what
- * replaced it), and there are no roles to hold or withhold a privilege. Nothing in this file can
- * state the property any more. What keeps a second drain off these rows now is that one writer
- * holds the file at a time and the claim commits with its stamps inside one `withTransaction`;
- * that is `packages/store/src/write-queue.ts`'s subject, and its own cases hold it.
+ * What keeps a second drain off these rows is that one writer holds the file at a time and the
+ * claim commits with its stamps inside one `withTransaction`; that is
+ * `packages/store/src/write-queue.ts`'s subject, and its own cases hold it. There is no
+ * `FOR UPDATE`: `claimLockedRows` adds no lock clause — see `claimBatch`'s own paragraph in
+ * `./drain.ts`, and `packages/db/src/job-claim.ts`'s doc comment for what replaced it.
  */

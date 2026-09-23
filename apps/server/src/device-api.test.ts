@@ -1,14 +1,11 @@
 /**
  * The device join, enrolment and management surface end to end, on the engine the box now runs.
  *
- * ## What went with PostgreSQL
+ * ## What this file does not check
  *
- * The file's stated reason for demanding a real cluster was `app_user`: every route ran as the
- * non-owner deployment role so a missing GRANT showed up here rather than in production. SQLite has
- * no roles and no grants — `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) —
- * so every call below runs on the one connection and nothing here now says anything about which
- * identity the routes reach the database as. No case was deleted for it: what each case names is a
- * route's behaviour, and all forty are still driven.
+ * SQLite has no roles and no grants, so every call below runs on the one connection and nothing
+ * here says anything about which identity the routes reach the database as. What each case names is
+ * a route's behaviour.
  *
  * ## The two binding refusals, and the unit tests that used to sit beside them
  *
@@ -40,7 +37,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, devices, deviceProfiles, printers, withTransaction } from "@waitron/db";
+import { devices, deviceProfiles, printers, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -282,7 +279,6 @@ async function knockAndAccept(
   expect(res.status).toBe(200);
   const knock = (await res.json()) as { joinId: string; verificationNumber: string };
   const accepted = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
       choice: knock.verificationNumber,
       profileId: input.profileId,
@@ -566,7 +562,6 @@ describe("GET /api/device/join/status", () => {
 
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
         choice: verificationNumber,
         profileId,
@@ -596,7 +591,6 @@ describe("GET /api/device/join/status", () => {
     const { joinId } = (await knock.json()) as { joinId: string };
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return denyJoinRequest(tx, venue.cfg, joinId);
     });
     const denied = await send(app, "GET", "/api/device/join/status", { cookie: jar });
@@ -661,7 +655,6 @@ describe("Device API — the device-guarded routes", () => {
     const app = mountApp(venue.cfg);
 
     const fria = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return createStation(tx, venue.cfg, { name: "Fría", isDefault: false });
     });
     const { items } = await fireOrder(venue);

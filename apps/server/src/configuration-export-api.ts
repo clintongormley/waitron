@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -46,7 +46,6 @@ export function mountConfigurationExportApi(
       // `begin immediate`, and `packages/store/src/write-queue.ts` admits one write transaction at
       // a time, so nothing can commit underneath this read.
       const bundle = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const authorization = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "system.manage",

@@ -34,13 +34,10 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // SAME identity seeded directly into each directory, because nothing copies rows between the two
 // nodes: the PostgreSQL replication that used to is deleted and its replacement has not landed.
 //
-// WHAT WENT WITH POSTGRESQL, AND IS NOT REPLACED. The suite used to justify a real container by the
-// venue-wide read running under `app_user` (`super = false`) rather than a PGlite superuser, so that
-// a missing GRANT failed here. There is no role on this engine: `pg.connectAs` has no counterpart and
-// `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below runs on
-// the one connection each directory has. Nothing now checks that the deployment role may take the
-// venue-wide read. What the case still proves is the reroute itself — the three `/api/node` bodies,
-// the standby's refusals, and a promoted node inheriting the dead node's tab.
+// There is no role on this engine, and every call below runs on the one connection each directory
+// has. Nothing now checks that the deployment role may take the venue-wide read. What the case still
+// proves is the reroute itself — the three `/api/node` bodies, the standby's refusals, and a
+// promoted node inheriting the dead node's tab.
 //
 // The arc:
 //

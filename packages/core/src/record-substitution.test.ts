@@ -8,7 +8,6 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   captureError,
   constraintTarget,
   isPgError,
@@ -178,7 +177,6 @@ function substitutionInput(
  * node already registered with the backend. */
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
@@ -191,7 +189,6 @@ async function substitute(
   overrides: Partial<RecordSubstitutionInput> = {},
 ) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return recordSubstitution(tx, backend, substitutionInput(substitutedSaleIds, overrides));
   });
 }
@@ -247,7 +244,6 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
     });
     await expect(substitute(backend, [saleId])).rejects.toMatchObject({

@@ -26,18 +26,7 @@ const DEFAULT_POLL = {
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
   /** A plain `Database` handle. This adapter opens its own transactions and scopes each one with
-   * `withTransaction(db, …)`, so nothing is required of the handle itself.
-   *
-   * This option once demanded a "TENANT-SCOPED `Database` handle", which cannot be constructed —
-   * see `StripeOnDeviceProviderOptions.db` for the mechanism and
-   * `2026-07-26-provider-tenant-scoping-design.md` for the full account. Here it meant `collect`
-   * failed on `insertAttempting` with `42501` under any real role, on every sale. It failed CLOSED
-   * (T1 precedes the reader network call, so no money moved), which is the only reason this
-   * adapter's version was less serious than the on-device one. The proof was `stripe.test.ts`,
-   * deleted with the real-PostgreSQL tier: it drove `collect` through a non-superuser LOGIN, which
-   * is what made the `42501` visible, and this engine has no roles. `provider.test.ts` still
-   * drives `collect` on the handle a host can build; what is no longer checked anywhere is that an
-   * ordinary application role may make that write. */
+   * `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path. A
    * per-till provider serves one node, so the id is known at construction. */

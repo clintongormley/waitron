@@ -4,19 +4,10 @@
  * NOT crash, must NOT submit, must leave local chaining untouched, and must surface the "awaiting
  * fiscal certificate" state on box-status (once in the log, then quiet).
  *
- * ## What went with PostgreSQL, and is replaced by nothing
+ * ## What this suite does not check
  *
- * The drain used to run on a SECOND connection, opened as `server_pass_probe` — a non-superuser
- * LOGIN role inheriting `app_user`'s grants, created cluster-wide by apps/server's now-deleted
- * `global-setup.ts` — while the seeding and the read-back ran on the owner connection. That put the
- * credential read and the fiscal-table SELECTs behind the grants a real box runs under.
- *
- * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
- * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). Every
- * call below runs on the one connection, so nothing here now checks that the deployment role can
- * reach the vault and the fiscal tables. No case was deleted for it: the suite's single case
- * asserts drain behaviour, not a refusal, so it converts with the privilege claim dropped from its
- * header rather than its body.
+ * SQLite has no roles, and every call below runs on the one connection, so nothing here checks
+ * that the deployment role can reach the vault and the fiscal tables.
  *
  * ## This suite is RED, and the reason is a FIXTURE in another package
  *

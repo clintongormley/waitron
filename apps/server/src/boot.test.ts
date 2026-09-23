@@ -132,10 +132,8 @@ beforeEach(() => {
  *
  * ## What the move off PostgreSQL took out of this file
  *
- * **The whole connection-string surface is gone, and with it the role split.** This suite used to
- * point `DATABASE_URL` at a purpose-made non-superuser role (`server_boot_probe`) and
- * `WAITRON_MIGRATIONS_DATABASE_URL` at a second, more-privileged one, because spec §10 required the
- * pool to run under a least-privileged role. Neither variable exists any more —
+ * **The whole connection-string surface is gone, and with it the role split.** Neither
+ * `DATABASE_URL` nor `WAITRON_MIGRATIONS_DATABASE_URL` exists any more —
  * `grep -c "DATABASE_URL" apps/server/src/config.ts` returns 0, and `config.venueDir` is what boot
  * opens. There are no roles on this engine either: every statement runs on the one connection
  * `openVenueStore` hands out. Each boot below therefore names `WAITRON_VENUE_DIR` and nothing else.
@@ -2119,12 +2117,12 @@ describe("startServer, against a migrated venue directory", () => {
 
   it("does not schedule the backup sweep when WAITRON_BACKUP_DIR is unset, and boots unaffected", async () => {
     // The backup off-switch (slice 4b-ii): no WAITRON_BACKUP_DIR, so loadBackupConfig returns
-    // undefined and boot runs neither the read-privilege probe nor the sweep — it logs the
-    // backup-off line and leaves backup OFF. Every OTHER trading boot in this suite is this same
-    // case (none sets WAITRON_BACKUP_*), so the real guard is that they all still pass; this
-    // asserts the off branch explicitly. Proven via the logged backup.disabled event (the wiring
-    // ran the else branch) plus a clean shutdown. Box-status's own configured:false report on
-    // this branch is covered directly by box-status.route.test.ts.
+    // undefined and boot does not run the sweep — it logs the backup-off line and leaves backup
+    // OFF. Every OTHER trading boot in this suite is this same case (none sets WAITRON_BACKUP_*),
+    // so the real guard is that they all still pass; this asserts the off branch explicitly. Proven
+    // via the logged backup.disabled event (the wiring ran the else branch) plus a clean shutdown.
+    // Box-status's own configured:false report on this branch is covered directly by
+    // box-status.route.test.ts.
     const port = await freePort();
     const [server, disabled] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -2239,21 +2237,6 @@ describe("startServer, against a migrated venue directory", () => {
       await server.close();
     }
   }, 60_000);
-
-  // DELETED, not converted: "boots with a least-privileged DATABASE_URL when migrations run under a
-  // separate WAITRON_MIGRATIONS_DATABASE_URL". It booted with the pool on a role carrying `app_user`
-  // membership and nothing else, migrations on a second role carrying `CREATE`, and asserted a clean
-  // first pass — C1's claim that the host can run under the least-privileged role spec §10 names.
-  //
-  // Its subject is gone twice over. Neither variable exists (`grep -c "DATABASE_URL"
-  // apps/server/src/config.ts` → 0), and neither does the role: SQLite has no `GRANT`, no
-  // `SET ROLE`, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). There is
-  // one connection and it can do everything.
-  //
-  // LOST and covered by nothing: that the duty work a pass performs stays inside the privileges an
-  // application role holds. Nothing in this tree can express that question today; what replaces it
-  // is a decision recorded elsewhere — one database file per node, reached by one process — not
-  // another test.
 
   // I5 / I7: a bind failure must log a structured code and exit non-zero (spec §8's "everything
   // escapes" applied to the one boot failure that cannot literally throw — see boot.ts's own
@@ -2645,9 +2628,9 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   // Two devices are enrolled (bound to two DIFFERENT tills) so the assertion proves the header
   // SELECTS a specific device rather than defaulting to whatever one device happens to exist:
   // `/api/device/me` returns device-2's id AND device-2's bound `tillId`, not device-1's. Enrolled
-  // via the genuine knock-then-accept path (`enrolDeviceForTest`) on the app role under the tenant,
-  // exactly as `sale-till-source.receipt.test.ts` does — though the override path never checks the
-  // token, the real enrol path proves the wiring against a genuinely-provisioned device.
+  // via the genuine knock-then-accept path (`enrolDeviceForTest`) under the tenant, exactly as
+  // `sale-till-source.receipt.test.ts` does — though the override path never checks the token, the
+  // real enrol path proves the wiring against a genuinely-provisioned device.
   let deviceId1: string;
   let deviceId2: string;
   let till2: string;
@@ -2668,8 +2651,8 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     const till1 = await insertTill("SP-C dev override till 1");
     till2 = await insertTill("SP-C dev override till 2");
     // Enrol a `till`-kind device bound to `boundTillId` and return its id — the mint->redeem runs
-    // on the app role under the tenant (the production enrol path), so `tryReadDevice`'s
-    // id-selected, `active = true` read resolves a genuine binding.
+    // under the tenant (the production enrol path), so `tryReadDevice`'s id-selected,
+    // `active = true` read resolves a genuine binding.
     const enrolTillDevice = async (boundTillId: string): Promise<string> => {
       // Since Task 7 a `till` device auto-creates its OWN register; binding a SPECIFIC existing register
       // is the sale-capable handheld leg (`registerId`). The dev-override read below only cares that the

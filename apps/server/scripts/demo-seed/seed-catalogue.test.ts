@@ -2,11 +2,8 @@
  * `seedCatalogues`: the two demo menus, each category routed to its KDS station, the default and
  * the accessible second menu, and the image→product map the media and sales steps read.
  *
- * **What went with PostgreSQL.** The seed used to run as `app_user`, so a missing SELECT/INSERT on
- * `kitchen_stations`, an INSERT on `catalogues`/`categories`/`products` or an UPDATE of
- * `categories.station_id` would have failed this file. SQLite has no roles, `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
- * Nothing now checks who may write the catalogue.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write the catalogue.
  *
  * Three read-back shapes moved with the engine, none of them changing what is asserted:
  * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is
@@ -20,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -93,7 +90,6 @@ describe("seedCatalogues", () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const out = await seedCatalogues(tx, { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);

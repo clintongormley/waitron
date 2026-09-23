@@ -6,7 +6,6 @@ import { serve } from "@hono/node-server";
 import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
-  asAppUser,
   installChangeFeed,
   subscribeToChanges,
   persistNodeMembershipIfNewer,
@@ -395,9 +394,9 @@ export function withPendingSweep(
  * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
  * plus every pooled card provider this tenant has a SEALED CREDENTIAL for — the same
  * credential-presence signal `payments-api`'s GET providers and `/api/pay`'s connected pre-check use.
- * Read EACH pass, as the app role, so a provider connected mid-run is swept next
- * pass without a restart. A provider with no sealed credential is NOT swept (its `resolvePending`
- * would only fail on a missing credential), which is the negative control the test pins.
+ * Read EACH pass, so a provider connected mid-run is swept next pass without a restart. A provider
+ * with no sealed credential is NOT swept (its `resolvePending` would only fail on a missing
+ * credential), which is the negative control the test pins.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`, PGlite + a seeded credential + a fake
  * pool). */
@@ -414,7 +413,6 @@ export function connectedCardProviderSweep(deps: {
     // No card seats at all → nothing pooled to sweep (only the simulator, already added).
     if (purposes.length > 0) {
       const held = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const rows = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
@@ -721,12 +719,10 @@ function makeStartedServer(
  * `close()`'s own sequencing including its idempotency guard. `pass.db.test.ts` does NOT import this
  * file — it builds its own, separate composition of the same pieces and runs the REAL duties against
  * a migrated database; it predates `boot.test.ts` and remains evidence for the same SHAPE of wiring,
- * not a substitute for testing this function directly. What it USED to add — running that
- * composition as a non-superuser role, so a missing grant failed it — is gone with the roles, and is
- * replaced by nothing; its own header states that. The manual end-to-end boot recorded in the Task
- * 11 report (`node dist/server.js` through to a clean `/health` and a graceful `SIGTERM`) remains
- * the only evidence that the BUNDLE, not just the source, boots — `boot.test.ts` runs from source,
- * matching every other suite in this package.
+ * not a substitute for testing this function directly. The manual end-to-end boot recorded in the
+ * Task 11 report (`node dist/server.js` through to a clean `/health` and a graceful `SIGTERM`)
+ * remains the only evidence that the BUNDLE, not just the source, boots — `boot.test.ts` runs from
+ * source, matching every other suite in this package.
  *
  * Boot failures ESCAPE, deliberately: invalid config, an unloadable key ring, a failed migration or
  * an unreachable database exit non-zero and let the supervisor decide. A host that boots
@@ -2038,7 +2034,6 @@ export async function startServer(
     // local time rather than the interim UTC placeholder the previous task carried.
     readClock: () =>
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         return resolveVenueClock(tx, till.nodeId);
       }),
     outcomes: backupOutcomes,

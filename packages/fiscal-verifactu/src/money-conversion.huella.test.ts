@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -41,7 +41,6 @@ beforeEach(async () => {
 
 async function sell(overrides: Record<string, unknown> = {}) {
   return withTransaction(pg.db, async (tx) => {
-    await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
   });
 }

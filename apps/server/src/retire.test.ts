@@ -46,10 +46,8 @@ const CARRIER_ID = "carrier-1";
 // `node_membership` singleton itself, and `seedTenant` is a no-op on a second call
 // (`packages/db/src/testing/seed.ts:29`, `onConflictDoNothing`).
 //
-// NOTHING about roles is lost with PGlite here, because nothing role-shaped was ever asserted: the
-// comment this replaces recorded that the privilege-sensitive `app_user`/`withTransaction` path
-// "is never exercised here — it is the caller's concern". The reads and writes below are the retire
-// LOGIC — the standing gates, the mint, and the term-guarded persist.
+// The reads and writes below are the retire LOGIC — the standing gates, the mint, and the
+// term-guarded persist.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,

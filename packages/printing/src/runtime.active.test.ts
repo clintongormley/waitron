@@ -19,11 +19,8 @@ import type { PrintConfig } from "./printers.js";
 // The venue file, through the product's own opener. These cases use sequential transactions;
 // competing agents are covered by runtime.race.test.ts.
 //
-// WHAT THIS SUITE NO LONGER SHOWS, and is not recoverable here. It used to run every write after
-// `set local role app_user`, against a real PostgreSQL cluster, so the deployment role's grants on
-// `printers` and `print_jobs` were exercised rather than bypassed. This engine has no roles at all
-// and `asAppUser` is an empty body (`packages/db/src/testing/roles.ts`), so nothing below is a
-// claim about a privilege. What it still shows is the `p.active = true` conjunct in
+// WHAT THIS SUITE NO LONGER SHOWS, and is not recoverable here. This engine has no roles at all, so
+// nothing below is a claim about a privilege. What it still shows is the `p.active = true` conjunct in
 // `claimPrintJobs`, which is what both cases are about, and which is proven by deletion on THIS
 // engine: 2026-09-22 on Node v26.7.0, with `p.active = true` replaced by `1 = 1` in
 // `claimPrintJobs` (`packages/printing/src/runtime.ts`) and nothing else changed, both cases below

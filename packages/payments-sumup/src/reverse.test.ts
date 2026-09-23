@@ -6,9 +6,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
 
 // This file proves the reversal LOGIC (the T1 pre-check, the network refund between the two
-// transactions, the T2 write). Whether the same writes land as a non-superuser `app_user` member
-// used to be `sumup.test.ts`'s question; that question has no home now, because this engine has no
-// roles. `setup` is shared with `provider.test.ts`.
+// transactions, the T2 write). `setup` is shared with `provider.test.ts`.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,

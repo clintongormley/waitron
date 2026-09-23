@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -53,7 +53,6 @@ describe("markIncidentHandled — two managers at once", () => {
   it("keeps the first committed handler and time, and both calls succeed", async () => {
     const seed = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordIncident(tx, {
         tillId: seed.tillId,
         error: new AppError("chain.verification_failed", {
@@ -65,7 +64,6 @@ describe("markIncidentHandled — two managers at once", () => {
       });
     });
     const [open] = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return listOpenIncidents(tx);
     });
     const first = { personId: "00000000-0000-4000-8000-000000000001", handledAt: BASE };
@@ -75,7 +73,6 @@ describe("markIncidentHandled — two managers at once", () => {
     };
     const mark = (by: typeof first) =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await markIncidentHandled(tx, { id: open!.id, ...by });
       });
 
@@ -85,7 +82,6 @@ describe("markIncidentHandled — two managers at once", () => {
     await Promise.all([mark(first), mark(second)]);
 
     const stored = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return findIncident(tx, open!.id);
     });
     expect({

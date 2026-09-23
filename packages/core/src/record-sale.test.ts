@@ -23,7 +23,6 @@ import type {
 } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   captureError,
   constraintTarget,
   isUniqueViolation,
@@ -149,8 +148,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 
 /**
  * Runs the write path exactly as the application will: in one transaction, on a node already
- * registered with the injected backend. (The `asAppUser` call inside is inert on this engine —
- * `packages/db/src/testing/roles.ts` — so it is the transaction, not a role, that this mirrors.)
+ * registered with the injected backend.
  *
  * Registration is not in the brief's own `run` helper, but it is required: `FakeFiscalBackend` is
  * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a node
@@ -161,10 +159,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    // Never as the owner. An owner can disable any trigger, so an owner-run
-    // write-path test would prove the code runs, not that the application role is permitted to
-    // run it.
-    await asAppUser(tx);
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
@@ -712,7 +706,6 @@ describe("recordSale — settlement modes", () => {
 
     // Path A — immediate, on the beforeEach venue.
     const a = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await backend.registerNode(tx, nodeId);
       return recordSale(
         tx,
@@ -724,7 +717,6 @@ describe("recordSale — settlement modes", () => {
     // Path B — a second, independent venue: deferred record, then a SEPARATE settleSale.
     const other = await seedTenant(suite.db);
     const b = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await backend.registerNode(tx, other.nodeId);
       return recordSale(
         tx,
@@ -738,7 +730,6 @@ describe("recordSale — settlement modes", () => {
       );
     });
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await settleSale(tx, { saleId: b.saleId, tenders: tendersInput });
     });
 
@@ -848,7 +839,6 @@ describe("recordSale — numbering", () => {
     await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await tx.insert(sales).values({
           tillId,
           nodeId,

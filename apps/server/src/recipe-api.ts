@@ -10,7 +10,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createIngredient,
   updateIngredient,
@@ -78,17 +78,16 @@ const run = createErrorBoundary(STATUS, "recipe.failed");
  * The deployment holds one tenant per database. Mounts the dashboard's gated recipe-authoring
  * group on an existing Hono app — `mountPurchasingApi`'s sibling, attached to the SAME app (the
  * `mountCatalogueApi`/`mountPurchasingApi` convention). Every route wraps its handler in `run`,
- * calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction` +
- * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/recipes` op, in this
- * database. The `recipe.manage` gate runs on every route through one constant.
+ * calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
+ * `withTransaction`, `authorizeManager(...)` (→ 403) before the headless `@waitron/recipes` op, in
+ * this database. The `recipe.manage` gate runs on every route through one constant.
  */
 export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
-  // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
-  // applied identically and in exactly one place — the catalogue §3 seam.
+  // Open a transaction, confirm the caller's management session carries RECIPE_WRITE_PERMISSION,
+  // then run `fn`. Every route funnels its DB work through here so the gate is applied identically
+  // and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: RECIPE_WRITE_PERMISSION,

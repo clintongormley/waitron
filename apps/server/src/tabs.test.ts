@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  asAppUser,
   locations,
   nowIso,
   ticketItems,
@@ -110,7 +109,6 @@ async function setupVenue(): Promise<Seeded> {
   };
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } =
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
       const cafe = await createProduct(tx, {
@@ -163,7 +161,6 @@ async function setupVenue(): Promise<Seeded> {
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

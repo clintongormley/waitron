@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, nowIso, withTransaction } from "@waitron/db";
+import { nowIso, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -28,27 +28,13 @@ import "./errors.js";
  * equivalents never see — the decider columns a decide stamps, and a populated planned-vs-actual
  * row where the sibling asserts an empty window.
  *
- * ## What this file was, and the two things that went with PostgreSQL
- *
- * 1. **The ROLE is gone and is replaced by nothing.** The header said every touch ran
- *    `withTransaction` + `asAppUser` so the routes executed as the non-superuser app role, where a
- *    PGlite superuser would hold every privilege. `asAppUser` is an inert function
- *    (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the
- *    one connection.
- *
- * 2. **The decide case's STATED SUBJECT is gone with it.** It existed to show that migration 0010 added
- *    `decided_by_person_id`/`decided_at` with no new grant, relying on a TABLE-level
- *    `GRANT ... UPDATE ON shift_swaps TO app_user` to cover the later-added columns — proven in both
- *    directions by narrowing that grant to `grant update (status, decided_at)` and watching the route
- *    500 on `42501`. There are no grants on this engine, so **nothing now checks that a later-added
- *    column is writable by the deployment role.** The case is kept, and renamed, for the inch that
- *    survives the grant: it is the only test that reads `decided_by_person_id` and `decided_at` back
- *    THROUGH the route. Receipt for the "only" —
- *    `grep -rln 'decided_by_person_id\|decidedByPersonId' --include='*.test.ts' apps packages`
- *    returns three files, and the other two read those columns back from the VERB
- *    (`packages/workforce/src/shift-swaps.test.ts:271`, `packages/workforce/src/absences.test.ts:205`,
- *    each calling `decideSwap`/`setAbsenceStatus` directly). The sibling `workforce-api.test.ts`
- *    decide cases assert only the 204 and that the row leaves the pending queue.
+ * The decide case is the only test that reads `decided_by_person_id` and `decided_at` back THROUGH
+ * the route. Receipt for the "only" —
+ * `grep -rln 'decided_by_person_id\|decidedByPersonId' --include='*.test.ts' apps packages`
+ * returns three files, and the other two read those columns back from the VERB
+ * (`packages/workforce/src/shift-swaps.test.ts:270`, `packages/workforce/src/absences.test.ts:203`,
+ * each calling `decideSwap`/`setAbsenceStatus` directly). The sibling `workforce-api.test.ts`
+ * decide cases assert only the 204 and that the row leaves the pending queue.
  *
  * The end-to-end publish case is DELETED rather than converted: `workforce-api.test.ts`,
  * "publishes a draft and returns { breaches } (a clean roster → empty array)", drives the same two
@@ -107,7 +93,6 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const seeded = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     // Through the table definitions, not raw SQL: every `id` and `created_at` here is a JavaScript
     // `$defaultFn` generator on this engine, which a raw insert never reaches.
@@ -265,9 +250,8 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
     ).map((r) => r.id);
     expect(aSwaps).toContain(swapA);
 
-    // The decide route stamps the decider on the row it approves. The grant half of this case's
-    // original subject has no subject on this engine (see the file header); what is asserted here is
-    // the stamp itself, read back through the route's own write — which nothing else does.
+    // The decide route stamps the decider on the row it approves. What is asserted here is the
+    // stamp itself, read back through the route's own write — which nothing else does.
     const aDecides = await send(
       appA,
       "POST",

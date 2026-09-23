@@ -62,8 +62,8 @@ export const tenderMethod = enumType(["cash", "card", "voucher", "transfer", "ot
  * legal record?" with no cross-boundary join per row.
  *
  * EVERY column here is written once, fiscal_state included. There is no
- * exemption from immutability anywhere in this table — the app role has no
- * UPDATE on it at all. Submission progress is not here; it is on `envios`.
+ * exemption from immutability anywhere in this table. Submission progress is
+ * not here; it is on `envios`.
  */
 export const sales = table(
   "sales",
@@ -130,8 +130,7 @@ export const sales = table(
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
     // ordinary sale. Set by recordCorrection (sale.rectify) at insert (Task 10). Plain uuid, no FK —
     // the same shape as sale_voids.voided_by — NULLABLE with no backfill (pre-production, no deployed
-    // data), and immutable/write-once at insert like every other column here (the app role has no
-    // UPDATE on this table at all).
+    // data), and immutable/write-once at insert like every other column here.
     authorizedBy: id("authorized_by"),
     // The operator who rang this sale (attribution), from their open session — set by recordSale at
     // insert (Task 11), NULL until the till (#7) supplies it. Plain uuid, no FK; NULLABLE with no
@@ -339,10 +338,9 @@ export const tenders = table(
 
 /**
  * One row per fully-settled sale — appended when settlement is *declared*
- * complete. Append-only (REVOKE UPDATE/DELETE + reject_mutation triggers) like
- * `tenders`. Its existence is the answer to "is this sale paid?"; under
- * invoice-first an unsettled sale is a legitimate steady state, not an anomaly
- * (design §3).
+ * complete. Append-only like `tenders`. Its existence is the answer to "is
+ * this sale paid?"; under invoice-first an unsettled sale is a legitimate
+ * steady state, not an anomaly (design §3).
  */
 export const saleSettlements = table(
   "sale_settlements",

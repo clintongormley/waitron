@@ -5,7 +5,7 @@ import { locations } from "./tenants.js";
 /**
  * An approved local print worker. Its bearer secret stays in the worker; the database holds only a
  * scrypt hash. Revocation retains the identity referenced by print-job claims while denying further
- * authentication. The app role has SELECT/INSERT/UPDATE only (0001_db_baseline_sql.sql).
+ * authentication.
  */
 export const printAgents = table(
   "print_agents",

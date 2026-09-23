@@ -14,7 +14,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createPurchaseInvoice,
   deletePurchaseInvoice,
@@ -213,17 +213,16 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
  * The deployment holds one tenant per database. Mounts the dashboard's gated purchase-invoice
  * write group on an existing Hono app — `mountCatalogueApi`'s sibling, attached to the SAME app
  * (the `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
- * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction` +
- * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in
- * this database. The `purchase.manage` gate runs on every route through one constant.
+ * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction`,
+ * `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in this database.
+ * The `purchase.manage` gate runs on every route through one constant.
  */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // PURCHASE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: PURCHASE_WRITE_PERMISSION,

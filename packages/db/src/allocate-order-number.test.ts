@@ -1,8 +1,4 @@
-// LOSS, from the storage swap: every `asAppUser` wrapper here was the point of the case it sat in
-// — the allocator is the first writer of `working_order_counters`, so running it as the non-owner
-// role was what showed the INSERT and the ON CONFLICT UPDATE both passed that table's grants.
-// SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so nothing here says
-// anything about privileges any more.
+// SQLite has no roles and no grants, so nothing here says anything about privileges.
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";

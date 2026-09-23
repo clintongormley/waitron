@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -94,7 +94,6 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     let priced: ReturnType<typeof priceBasket>;
 
     const { saleId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await backend.registerNode(tx, nodeId);
 
       // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English

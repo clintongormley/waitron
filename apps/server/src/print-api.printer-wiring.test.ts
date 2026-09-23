@@ -4,7 +4,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  asAppUser,
   kitchenStations,
   locations,
   nowIso,
@@ -53,11 +52,8 @@ import "./errors.js";
  * Its old header said real PostgreSQL was MANDATORY here rather than PGlite, for two properties
  * that a single-superuser-connection engine cannot show. Both are gone and neither is replaced.
  *
- * 1. **The GRANT half.** Every route below ran as `app_user`, and the header claimed the suite
- *    proved the table grants those routes need. SQLite has no roles and no grants: one process
- *    opens one file, and `asAppUser` is an empty function body
- *    (`packages/db/src/testing/roles.ts:25`). The `asAppUser(tx)` calls below are kept where they
- *    were because the product code still calls it, not because they check anything.
+ * 1. **The GRANT half.** SQLite has no roles and no grants: one process opens one file, so nothing
+ *    below checks the table grants those routes need.
  * 2. **The cross-connection commit boundary.** The first case read the claimed job back "from a
  *    separate pooled backend" to show the claim's transaction had COMMITTED inside the request.
  *    There is one connection now, so that read cannot distinguish a committed claim from an open
@@ -113,7 +109,6 @@ async function seedTenantWithLocation(): Promise<Tenant> {
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -203,7 +198,6 @@ async function joinAndAccept(
   };
   const joinId = token.slice(0, token.indexOf("."));
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
       choice: verificationNumber,
     });
@@ -233,7 +227,6 @@ async function createUsbPrinter(app: Hono, localKey: string, name: string): Prom
 
 async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
     return jobId;
   });
@@ -315,11 +308,11 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("derived eligibility: a usb job is NOT claimed by a box that cannot see its key", async () => {
-    // The key-scoped isolation (design §3/§5) run as the REAL app role: a usb printer's job is claimed
-    // only by the box currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job
-    // stays queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
-    // cross-agent claim of a network printer is expected; key visibility is the isolation.) The positive
-    // key-claim path is proven under PGlite; here the point is the negative branch under the app grants.
+    // The key-scoped isolation (design §3/§5): a usb printer's job is claimed only by the box
+    // currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job stays
+    // queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
+    // cross-agent claim of a network printer is expected; key visibility is the isolation.) The
+    // positive key-claim path is proven under PGlite; here the point is the negative branch.
     const app = mountApp(tenantA);
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
@@ -360,10 +353,10 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("discovered-printers reads registered keys + agent names", async () => {
-    // The two new management routes run their reads through the same `gated` (asAppUser) transaction as
-    // the sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
-    // `print_agents` — succeeds under the real app grants, and that a device the agent reports appears in
-    // the list marked against the registered set (registered → true, unregistered → false).
+    // The two new management routes run their reads through the same `gated` transaction as the
+    // sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
+    // `print_agents` — succeeds, and that a device the agent reports appears in the list marked
+    // against the registered set (registered → true, unregistered → false).
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Inventory");
     const registered = `SN-${randomUUID()}`;
@@ -415,7 +408,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the management routes require printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion)", async () => {
-    // THE GUARD, proven by DELETION as the app role: a `staff`-role session holds no `printer.manage`,
+    // THE GUARD, proven by DELETION: a `staff`-role session holds no `printer.manage`,
     // so `authorizeManager` (inside print-api's `gated`) throws `authorization.not_permitted` before any
     // op runs. Deleting the `authorizeManager(...)` call from print-api.ts's `gated` makes every staff
     // request below SUCCEED (201/200), flipping the 403 assertions red; restoring it turns them green.

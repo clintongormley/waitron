@@ -9,7 +9,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
@@ -132,7 +132,7 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
  *     refuses the OTHER kind 404 via the predicate riding its consuming delete.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // `permission`, then run `fn` — `device-api.ts`'s `gated`, with the permission passed in rather than
   // baked in, because this surface gates on two of them.
   const gated = <T>(
@@ -141,7 +141,6 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
@@ -150,7 +149,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
    * The shared by-id routes need the permission the ROW's kind demands, which is not known until the
    * row is read — so `gated` cannot take it up front. The shape, exactly:
    *
-   *   1. inside `withTransaction` + `asAppUser`, read the row's kind;
+   *   1. inside `withTransaction`, read the row's kind;
    *   2. `authorizeManager` for `PERMISSION_FOR[kind]`;
    *   3. act.
    *
@@ -169,7 +168,6 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       const kind = isUuid(id) ? await joinRequestKind(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
         managementSessionId: sessionId,

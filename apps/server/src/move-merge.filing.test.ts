@@ -15,7 +15,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -62,11 +62,6 @@ import "./errors.js";
  * **LOST and replaced by nothing: the lock-ORDER guarantee between `mergeTabs` and
  * `payWorkingOrder`** — that a merge and a settle on the same tab cannot cross-lock. Nothing covers
  * it and nothing here can, because the pair of holders it ordered no longer exists.
- *
- * **Also lost, and not replaced:** the deployment role. These writes ran after `set local role
- * app_user` on a non-superuser connection; `asAppUser` is an empty body now
- * (`packages/db/src/testing/roles.ts`), so nothing checks that role's grants are part of any
- * refusal below.
  */
 const LOCALE = "es-ES";
 
@@ -133,8 +128,8 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app
- * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
+ * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue and read
+ * back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
  * order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
@@ -174,7 +169,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -201,22 +195,20 @@ async function setupVenue(): Promise<SeededVenue> {
   return { cfg, available, cafe, agua };
 }
 
-/** Seed one active dining table in the venue as the app role; returns its id. */
+/** Seed one active dining table in the venue; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return createTable(tx, cfg, { label }).then((r) => r.id);
   });
 }
 
-/** Open a tab on a table as the app role; returns its tab (working_order) id. */
+/** Open a tab on a table; returns its tab (working_order) id. */
 async function openTabOn(
   cfg: TillConfig,
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId);
   });
 }
@@ -296,7 +288,6 @@ describe("joinTable → one bill", () => {
     const t2 = await seedTable(cfg, "JP2");
     const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await joinTable(tx, cfg, tabId, t2);
     });
     expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab (durable: settle clears status_id, not tab_id)
@@ -322,7 +313,6 @@ describe("mergeTabs → one registro (H2)", () => {
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
     });
 
@@ -357,7 +347,6 @@ describe("mergeTabs join → one bill covering both tables", () => {
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false });
     });
     expect(await tabIdOf(tFrom)).toBe(intoTab);

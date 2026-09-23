@@ -7,20 +7,17 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  * Four tables the application code may read and never write: `tenants`, `nodes`, `deployment` and
  * `mirror_config`.
  *
- * NOTHING BUT THIS FILE REFUSES THEM. The database used to: the connection a request was served on
- * wore `app_user`, which held SELECT and no write on the four, so PostgreSQL answered a write with
- * `42501`. SQLite has no roles and no grants — one process opens one file, and
- * `packages/db/src/testing/roles.ts` records what went with them — and every path, request and
- * provisioning alike, now shares that one venue handle. So the rule survives only as a convention
- * over source text, and this guard is the whole of its enforcement rather than a second opinion on
- * an engine that would refuse the write anyway. Read the four hedges below before trusting it.
+ * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants — one process opens one
+ * file — and every path, request and provisioning alike, shares that one venue handle. So the rule
+ * survives only as a convention over source text, and this guard is the whole of its enforcement.
+ * Read the four hedges below before trusting it.
  *
  * It is about WHICH FILE does the write, not about being a request. A request can legitimately
  * reach these tables: the promote route reaches `deployment`, and the setup-mode provision and
  * adopt routes reach `tenants`, `nodes` and `mirror_config`. Each does it by calling into one of
  * the files `write-path-tables.json` names, which is where such a write is allowed to live. Keeping
  * those writes in a handful of named files is the property being defended; hedge 2 below is what it
- * costs, and there is no longer a separate connection making the distinction for us.
+ * costs.
  *
  * WHY A ROOT-PROJECT PROGRAM. The list of four lives in a different package from the code that
  * could write them, which is spread across every app and package, so no per-package suite can see
@@ -30,15 +27,11 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *
  * WHERE THE LIST COMES FROM. `packages/fiscal-verifactu/src/privileges.expected.ts` — the matrix
  * that recorded `app_user`'s table privileges. The four tables are the ones it records as `S`. It
- * is a frozen record now, not a measurement: the suite its own header points at,
- * `privileges.test.ts`, read every table's privileges back from a live PostgreSQL catalogue, and it
- * is gone with the engine (`ls packages/fiscal-verifactu/src/privileges*.ts` returns the matrix
- * alone, 2026-09-22), so nothing checks the matrix against a database any more. It only ever
- * measured TABLE-level grants, as its own header says, so a column-scoped write grant on one of the
- * four never showed up in it or here. `write-path-tables.json` beside this file holds the same four
- * FROZEN, because the matrix goes when the rest of the grant-era record does; the case below
- * cross-checks the two while both exist, and deleting the matrix breaks this file's import rather
- * than making it quietly pass.
+ * is a frozen record, not a measurement: nothing checks it against a database. It only ever
+ * measured TABLE-level grants, so a column-scoped write grant on one of the four never showed up in
+ * it or here. `write-path-tables.json` beside this file holds the same four FROZEN, because the
+ * matrix goes when the rest of the grant-era record does; the case below cross-checks the two while
+ * both exist, and deleting the matrix breaks this file's import rather than making it quietly pass.
  *
  * It is WEAKER than "no write path touches a forbidden table", in four ways that are worth stating
  * because a failing test can never restore a missing hedge:
@@ -70,17 +63,16 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  * table -> the files allowed to write it, repo-relative.
  *
  * A frozen JSON file rather than a constant here, because it has to outlive the grants it was taken
- * from. Why each entry is allowed, traced caller by caller on 2026-09-19 — every one reaches the
- * database through an owner or migrator handle, never the connection a request is served on:
+ * from. Why each entry is allowed, traced caller by caller on 2026-09-19:
  *
  *   `packages/provisioning/src/venue-apply.ts`   creates the taxpayer row and the node, under the
  *                                                setup-mode provision route, the `waitron-provision`
  *                                                command line, and the fiscal-readiness runner's
  *                                                throwaway database.
  *   `packages/db/src/node-identity.ts`           stamps a node's public key, from the setup-mode
- *                                                provision route on the owner handle.
+ *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
- *                                                adoption worker on the migrator handle.
+ *                                                adoption worker.
  *   `packages/db/src/deployment.ts`              stamps the environment, the mode, the singleton role
  *                                                and the fence position, from setup provision and
  *                                                adopt, the promote path, the boot demote, the

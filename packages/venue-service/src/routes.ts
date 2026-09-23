@@ -1,6 +1,6 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes, ServiceMode } from "@waitron/module";
 import {
@@ -108,7 +108,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: MANAGE_VENUE_SERVICE,

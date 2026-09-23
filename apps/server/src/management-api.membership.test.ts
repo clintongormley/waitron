@@ -27,14 +27,11 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
  *
  * ## What went with PostgreSQL
  *
- * Every request below used to be served on a second connection opened as the `app_login` LOGIN
- * role — `suite.pg.connectAs("app_login", "app_pw")` — and the header claimed that was what made
- * the login and the `mirror.create` gate observable. **The role is gone and is replaced by
- * nothing:** SQLite has no roles, `connectAs` has no counterpart, and `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`). Nothing here now says anything about which
- * identity the endpoint reaches the database as.
+ * **The role is gone and is replaced by nothing:** SQLite has no roles and `connectAs` has no
+ * counterpart. Nothing here now says anything about which identity the endpoint reaches the
+ * database as.
  *
- * The claim that was ALSO in that header — that the two refusals are unobservable without the
+ * The claim that was ALSO in the old header — that the two refusals are unobservable without the
  * role — is false, and the measurement is this file: converted onto the one connection, the 403
  * (`authorization.not_permitted`) and all three 401s (`password.invalid`) still fail when they
  * should, because both gates live in `loginManagerById` and `authorizeManager` and never in a

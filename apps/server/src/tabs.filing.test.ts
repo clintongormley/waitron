@@ -16,7 +16,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
@@ -89,10 +89,6 @@ import "./errors.js";
  *    without deleting or re-pricing existing lines"; the contiguity-under-load property is covered
  *    by nothing.
  *
- * **Also lost, and not replaced:** the deployment role. These writes ran after `set local role
- * app_user` on a non-superuser connection; `asAppUser` is an empty body now
- * (`packages/db/src/testing/roles.ts`).
- *
  * ## Why there are still TWO databases
  *
  * The two H2 cases file two records carrying the IDENTICAL AEAT identity, and
@@ -143,9 +139,9 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app
- * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its counts are
- * order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * `each`/general(21%) products. Each test gets its OWN tenant so its counts are order-independent
+ * (CLAUDE.md §4).
  */
 async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -184,7 +180,6 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -211,10 +206,9 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   return { cfg, cafe, agua };
 }
 
-/** Seed one active dining table in the venue as the app role; returns its id. */
+/** Seed one active dining table in the venue; returns its id. */
 async function seedTable(cfg: TillConfig, label: string, db: Database = suite.db): Promise<string> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const { id } = await createTable(tx, cfg, { label });
     return id;
   });
@@ -305,11 +299,9 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
     });
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return addTabRound(tx, cfg, tabId, [{ productId: agua.id, quantity: "1" }]);
     });
 
@@ -344,7 +336,6 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     // payWorkingOrder → priceStoredOrder → readLockedLines on a zero-line order — the exact
     // empty-tab-pay flow that used to throw a RAW Error → opaque `server.internal` 500.
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openTab(tx, cfg, { tableId });
     });
 
@@ -471,7 +462,6 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
-      await asAppUser(tx);
       return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
     });
     await payWorkingOrder(depsB, cfgB, {

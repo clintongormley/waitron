@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, subtractDecimal } from "@waitron/shared";
 import {
@@ -37,7 +37,6 @@ function run(opts: { year: number; month: number }): Promise<VatReturn> {
 // year 2026, the year every period suite below seeds into.
 function runPeriod(period: LiquidationPeriod, opts: { year?: number } = {}): Promise<VatReturn> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return computeVatReturn(tx, { year: opts.year ?? 2026, period });
   });
 }

@@ -6,7 +6,7 @@
 import "./errors.js";
 import type { Context } from "hono";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authenticateAgent } from "@waitron/printing";
 
 /**
@@ -31,7 +31,7 @@ export interface PrintAgentSessionDeps {
  * never reaches `authenticateAgent`. Every other failure (an unknown selector, a REVOKED agent, a
  * secret that does not verify) folds into the SAME `agent.unauthorized` inside the core, so a
  * revoked agent fails INSTANTLY (its row is simply not found) with no oracle. The token
- * verification and the sighting write run under `withTransaction` + `asAppUser`.
+ * verification and the sighting write run under `withTransaction`.
  */
 export async function requireAgent(
   deps: PrintAgentSessionDeps,
@@ -44,7 +44,6 @@ export async function requireAgent(
   // off the connection pool (the same posture the enrol rate-limit takes for the sale path).
   if (token.length === 0) throw new AppError("agent.unauthorized", {});
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     return authenticateAgent(tx, token);
   });
 }

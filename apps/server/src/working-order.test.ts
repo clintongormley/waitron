@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  asAppUser,
   captureError,
   isUniqueViolation,
   locations,
@@ -90,7 +89,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
 // PGlite exercises working-order state, validation, foreign keys, triggers and node-scoped reads.
-// Writes run as app_user. Real PostgreSQL covers concurrent order-number allocation.
+// Real PostgreSQL covers concurrent order-number allocation.
 const LOCALE = "es-ES";
 
 /**
@@ -179,7 +178,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
       const cafe = await createProduct(tx, {
@@ -491,7 +489,6 @@ describe("a sold line's label carries its variant", () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { offerId, variantId, productId } = await seedVariantOffer(tx, catalogueId);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await tx.execute(sql`
@@ -547,7 +544,6 @@ describe("parkOrder", () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const id = randomUUID();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const product = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -766,7 +762,6 @@ describe("parkOrder", () => {
     // (1500) from cents (150) and from a bare unit count (1 or 2).
     const { cfg, cafeId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       // Café is priced `each` by default, and `assertQuantityPrecision` refuses a fractional
       // quantity on it; the kg unit's precision of 3 is what admits 1.500.
       await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
@@ -848,19 +843,18 @@ describe("parkOrder", () => {
       }),
     ).rejects.toMatchObject({ code: "sale.unknown_product" });
     const parked = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(workingOrders);
     });
     expect(parked).toHaveLength(0);
   });
 
   it("replays the existing order on a re-sent park, creating no second order", async () => {
-    // PGlite (a single backend) is correct here: this is a SEQUENTIAL lost-response retry — the first
-    // park commits, then the re-sent park with the SAME client-minted id collides against that already-
-    // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
-    // real non-superuser role to serialise): one connection replaying its own committed write is exactly
-    // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
-    // proven separately against real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
+    // PGlite (a single backend) is correct here: this is a SEQUENTIAL lost-response retry — the
+    // first park commits, then the re-sent park with the SAME client-minted id collides against
+    // that already-committed row on the SAME backend. It is NOT concurrency (two backends racing):
+    // one connection replaying its own committed write is exactly what a single backend proves. The
+    // CONCURRENT park backstop — two backends racing the same id — is proven separately against
+    // real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -955,7 +949,6 @@ describe("openTab service context", () => {
   it("derives the service zone from the table and prices its menu offer", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
@@ -982,7 +975,6 @@ describe("openTab service context", () => {
   it("uses the tab's stored zone for later menu-offer rounds", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       await tx.execute(sql`
         insert into preparation_routes
@@ -1012,7 +1004,6 @@ describe("openTab service context", () => {
   it("routes the same product to the station configured for each table zone", async () => {
     const { cfg, zoneId, premiumCafeOfferId, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const department = await tx.execute<{ id: string }>(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}
@@ -1085,7 +1076,6 @@ describe("openTab service context", () => {
   it("stores an explicitly no-preparation offer without creating a kitchen ticket", async () => {
     const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
@@ -1112,7 +1102,6 @@ describe("openTab service context", () => {
   it("refuses to open a table tab in a counter-mode zone", async () => {
     const { cfg, zoneId } = await setupVenue("prepay");
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})
@@ -1126,10 +1115,10 @@ describe("openTab service context", () => {
 });
 
 /**
- * Read a working order and its lines back RAW (superuser, no tenant scope), for computing what
+ * Read a working order and its lines back RAW (no tenant scope), for computing what
  * `listHeldOrders`/`getHeldOrder` should independently return. `openedAt` is the actual persisted
- * value, so a `toEqual` on the list carries every field rather than an `objectContaining` that would
- * let an unasserted key slip through (CLAUDE.md §4).
+ * value, so a `toEqual` on the list carries every field rather than an `objectContaining` that
+ * would let an unasserted key slip through (CLAUDE.md §4).
  */
 async function readOrder(id: string): Promise<{
   openedAt: string;
@@ -1159,7 +1148,6 @@ async function grossBasketTotal(
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const { products: available } = await listAvailableProducts(tx, cfg.locationId);
     const byId = new Map(available.map((p) => [p.id, p]));
     // A catalogue row is not priceable as read: its customer-facing text is resolved from
@@ -1191,7 +1179,6 @@ async function grossBasketTotal(
 /** Drive a parked order to a terminal status by UPDATE, the transition the enforce trigger allows. */
 async function setStatus(id: string, status: "settled" | "abandoned"): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     // `settled` demands a settled_at (working_orders_settled_at_ck is a biconditional); `abandoned`
     // demands it stay NULL. The BEFORE UPDATE enforce_transition trigger permits open→either.
     if (status === "settled") {
@@ -1296,7 +1283,6 @@ describe("getHeldOrder", () => {
   it("keeps a fractional item's unit snapshot after the live unit is renamed", async () => {
     const { cfg, catalogueId, zoneId } = await setupVenue();
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into units (id, name, abbreviation, precision, hardware_unit)
         values (${randomUUID()}, ${JSON.stringify({ [LOCALE]: "kg" })},
@@ -1377,7 +1363,6 @@ describe("getHeldOrder", () => {
   it("reconstructs a parked offer with its extras, customisation and locked display prices", async () => {
     const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
         price: "0.10",
         maxQuantity: 2,
@@ -1546,7 +1531,6 @@ describe("updateHeldOrder", () => {
   it("keeps extras rows and customisation on a quantity-only edit", async () => {
     const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
         price: "0.10",
         maxQuantity: 2,
@@ -1909,8 +1893,8 @@ describe("abandonHeldOrder", () => {
 // SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
 // tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
 // and the no-default refusal — plain SQL a single backend proves; the `ticket_items` schema's own
-// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every write runs through
-// `withTransaction` + `asAppUser`, so the tenant scope and grants are exercised, not bypassed.
+// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every
+// write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
@@ -2088,7 +2072,6 @@ describe("createOpenOrder empty-basket skips the full catalogue read (perf)", ()
     const { cfg } = await setupVenue();
     const spy = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createOpenOrder(tx, cfg, randomUUID(), [], null);
     });
     expect(spy).not.toHaveBeenCalled();
@@ -2098,7 +2081,6 @@ describe("createOpenOrder empty-basket skips the full catalogue read (perf)", ()
     const { cfg, cafeId } = await setupVenue();
     const spy = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createOpenOrder(tx, cfg, randomUUID(), [line(cafeId)], null);
     });
     expect(spy).toHaveBeenCalledTimes(1);
@@ -2134,7 +2116,6 @@ describe("basket-wide modifier resolution (perf)", () => {
   it("reads each PRODUCT-side definition once for a walk-up basket", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
       const cafe = await addOptionList(tx, cafeId, "Punto");
       await addExtraList(tx, catalogueId, aguaId, "Hielo");
@@ -2177,7 +2158,6 @@ describe("basket-wide modifier resolution (perf)", () => {
   it("does not resolve the catalogue twice for an edit that cannot be preserved", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
       return addOptionList(tx, cafeId, "Punto");
     });
@@ -2221,7 +2201,6 @@ describe("basket-wide modifier resolution (perf)", () => {
   it("reads each MENU-side definition once for an offer basket", async () => {
     const { cfg, cafeId, aguaId, catalogueId, zoneId, cafeOfferId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const section = await createMenuSection(tx, {
         menuId: catalogueId,
         name: { [LOCALE]: "Aguas" },
@@ -2282,7 +2261,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("routes product > category > default and snapshots the station at fire time", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const drinks = await createCategory(tx, { name: { en: "Copas" } });
@@ -2310,7 +2288,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("routes a multi-category product by its primary category and freezes that label on its line", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const bar = await createStation(tx, cfg, { name: "Bar" });
       const drinks = await createCategory(tx, { name: { en: "Drinks" } });
@@ -2350,7 +2327,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // the value; this pins that it stays FROZEN against a later edit — the immutability half.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const p = await makeProduct(tx, cfg, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -2390,7 +2366,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("refuses to fire when the location has no default station (station.no_default)", async () => {
     const { cfg, catalogueId } = await setupVenue(); // no default station created
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
       await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
         code: "station.no_default",
@@ -2406,7 +2381,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // never surface — silently dropped. With the filter it resolves no default and fires fail loud.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await deactivateStation(tx, cfg, cocina.id);
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
@@ -2420,7 +2394,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("a re-fire of an already-fired line is refused ticket.already_fired, not a raw 23505", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const orderId = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const p = await makeProduct(tx, cfg, catalogueId, {});
       const { id } = await placeOrderWith(tx, cfg, [line(p)]);
@@ -2432,7 +2405,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // in its OWN transaction so the 23505 poisons that one and the mapped AppError rolls it back cleanly.
     await expect(
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         const fired = await tx
           .select({
             id: workingOrderLines.id,
@@ -2454,7 +2426,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("addTabRound fires the appended round's lines to the resolved station (the tab round-send)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tableId = await makeTable(tx, cfg);
@@ -2474,7 +2445,6 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // per line or per product on the shared transaction.
     const { cfg, zoneId, catalogueId, premiumCafeOfferId, cafeId, aguaId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
@@ -2531,7 +2501,6 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   it("placeOrder fires one ticket item per line to the resolved station (Mode T)", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { cocinaId, cafe } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const p = await makeProduct(tx, cfg, catalogueId, {});
       return { cocinaId: cocina.id, cafe: p };
@@ -2542,7 +2511,6 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
 
     const items = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return ticketItemsFor(tx, id);
     });
     expect(items).toHaveLength(1);
@@ -2568,8 +2536,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
 // grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
-// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`, so the app
-// role's grants are in force, not bypassed.
+// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
@@ -2590,7 +2557,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("bumps a line queued→preparing→ready, refuses illegal moves, and whole-ticket bumps together", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const agua = await makeProduct(tx, cfg, catalogueId, {});
@@ -2633,7 +2599,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("advanceTicketItem refuses a skip (queued→ready), to='queued', and a nonexistent item", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
@@ -2664,7 +2629,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("advanceTicketItem refuses a garbage or missing `to` with the same code, not a raw TypeError", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
@@ -2696,7 +2660,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("listStationQueue groups a station's items by order oldest-first, dropping collected and abandoned orders", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
@@ -2743,7 +2706,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("carries each line's snapshotted kitchen name + quantity, items ordered by line_no", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // Line 1 → 2× Café, line 2 → 3× Agua, both routed to the default station.
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -2775,7 +2737,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches a parent's picked extras as sub-items on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // Café with TWO picked extras — each a child line, never its own ticket item.
       const grande = await addExtra(tx, catalogueId, cafeId, "Grande");
@@ -2819,7 +2780,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("surfaces a fired line's snapshotted note on listStationQueue and listExpoQueue", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         { productId: cafeId, quantity: "1", note: "sin cebolla" },
@@ -2858,7 +2818,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("surfaces a null note for a plain fired line", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await placeOrderWith(tx, cfg, [{ productId: cafeId, quantity: "1" }]);
 
@@ -2875,7 +2834,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches the dish's own allergens, ignoring a gluten-removing option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // A gluten burger with a "gluten-free bun" option: base `{gluten: contains}`. The option states no
       // allergens of its own; the dish shows its OWN gluten (options are never folded into the dish).
@@ -2927,7 +2885,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("marks the as-served profile pending when the dish's base allergens are unreviewed", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
       const opt = await addExtra(tx, catalogueId, dish, "Extra");
@@ -2951,7 +2908,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches a pending profile to a plain, modifier-less unreviewed dish (KDS errs safe)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
       await placeOrderWith(tx, cfg, [line(dish)]); // no options at all
@@ -2972,7 +2928,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("attaches the dish's own allergens, ignoring an added allergen from an option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await createProduct(tx, {
         catalogueId,
@@ -3002,7 +2957,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("shows the dish's own vegan declaration when an option is selected", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await createProduct(tx, {
         catalogueId,
@@ -3054,7 +3008,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("keeps the dish's own vegan/vegetarian claims regardless of a selected invalidating option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await createProduct(tx, {
         catalogueId,
@@ -3105,7 +3058,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("reads unknown suitability when a product has no direct declarations", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {});
       await placeOrderWith(tx, cfg, [line(dish)]);
@@ -3127,7 +3079,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   it("bands each item by the station's thresholds and carries them on the group", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const agua = await makeProduct(tx, cfg, catalogueId, {});
@@ -3199,7 +3150,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
   it("auto-fires the earliest course, holds later ones, and fireCourse releases a held course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3235,7 +3185,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     // coursed hold: the loose (courseless) line fires at once while the later Principales line waits.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3260,7 +3209,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
   it("fireCourse is idempotent — re-firing an already-fired course leaves its timestamps untouched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3295,7 +3243,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     // immediately, even when that course is NOT the earliest.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3344,7 +3291,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     // so the whole-ticket sweep addresses both; only the fired one is in the match.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3375,7 +3321,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
     // — so the release works; the former `requireLiveCourse` gate threw `course.not_found` here forever.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3396,7 +3341,6 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
   it("fireCourse rejects an unknown course with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
@@ -3418,14 +3362,13 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
 // plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
-// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`,
-// so the app role's grants are in force, not bypassed.
+// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through
+// `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3461,7 +3404,6 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("clears a held line's course to null (fire-earliest), updating both snapshots", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3488,7 +3430,6 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("refuses to re-course a FIRED line (ticket.already_fired)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3511,7 +3452,6 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("refuses an unknown OR retired target course (course.not_found)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const retired = await createCourse(tx, cfg, { name: "Postres", displayOrder: 1 });
@@ -3539,7 +3479,6 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
   it("throws tab.line_not_found for a line_no not on the tab", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await makeProduct(tx, cfg, catalogueId, {});
@@ -3586,7 +3525,6 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("fires a SUBSET of held lines (refreshing queued_at) and leaves the rest held", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3633,7 +3571,6 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("an empty line list releases EVERY held line (send-all together)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3666,7 +3603,6 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("is idempotent — an already-fired line in the set is left untouched", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3716,7 +3652,6 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   it("a held line produces NO kitchen print until sent, then exactly one after", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       // A printer per station, so the HELD line's print can be counted in isolation from the auto-fired
       // starter's (which prints at Cocina the moment it is rung).
       await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
@@ -3765,7 +3700,6 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("un-fires a fired-not-started line back to held (fired_at → null, state stays queued)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await makeProduct(tx, cfg, catalogueId, {});
@@ -3791,7 +3725,6 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("refuses a STARTED (preparing/ready) line with ticket.already_started, naming its item id", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await makeProduct(tx, cfg, catalogueId, {});
@@ -3819,7 +3752,6 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("refuses an AWAY (ready + dispatched) line with ticket.already_started, naming its item id", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await makeProduct(tx, cfg, catalogueId, {});
@@ -3849,7 +3781,6 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("is a no-op on an already-HELD line (its fired_at stays null)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3875,7 +3806,6 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   it("throws tab.line_not_found for a line_no not on the tab", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await makeProduct(tx, cfg, catalogueId, {});
@@ -3899,7 +3829,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
 // actually un-fires (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
 // reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
 // `ticket_items`/`working_order_lines`/`print_jobs`. PGlite proves the enqueue count + payload in both
-// directions; every write runs through `withTransaction`/`asAppUser`.
+// directions; every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("correction slips on recall & void (A6)", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
@@ -3935,7 +3865,6 @@ describe("correction slips on recall & void (A6)", () => {
   it("(a) recalling a FIRED line enqueues ONE RECALLED slip at that station's printer", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { printerId: pCocina } = await attachedPrinter(
         tx,
         cfg,
@@ -3967,7 +3896,6 @@ describe("correction slips on recall & void (A6)", () => {
   it("(b) recalling a HELD line enqueues NO slip (it never printed)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -3992,7 +3920,6 @@ describe("correction slips on recall & void (A6)", () => {
   it("(c) voiding a FIRED line enqueues ONE VOID slip at that station's printer", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { printerId: pCocina } = await attachedPrinter(
         tx,
         cfg,
@@ -4023,7 +3950,6 @@ describe("correction slips on recall & void (A6)", () => {
   it("(d) voiding a HELD line enqueues NO slip (it never printed)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await attachedPrinter(tx, cfg, { name: "Cocina", isDefault: true }, "P-Cocina");
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -4051,13 +3977,12 @@ describe("correction slips on recall & void (A6)", () => {
 // it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
 // the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
 // time, never stored (no migration). PGlite proves the hold short-circuit and the parent correlation under
-// modifier expansion — plain SQL a single backend proves; every write runs through `withTransaction`/`asAppUser`.
+// modifier expansion — plain SQL a single backend proves; every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("addTabRound hold-on-send (A3)", () => {
   it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { printerId: pCocina } = await attachedPrinter(
         tx,
         cfg,
@@ -4101,7 +4026,6 @@ describe("addTabRound hold-on-send (A3)", () => {
     // held, isolating the correlation from coursing.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { printerId: pCocina } = await attachedPrinter(
         tx,
         cfg,
@@ -4146,13 +4070,12 @@ describe("addTabRound hold-on-send (A3)", () => {
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
 // single backend proves; the NODE scoping is real-Postgres's job (working-order.pay-and-dispatch.test.ts).
-// Every read/write runs through `withTransaction` + `asAppUser`, so the app role's grants are in force.
+// Every read/write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
@@ -4209,7 +4132,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("groups by course in display_order; a held later course reads fired:false, and the away roll-up follows per course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -4250,7 +4172,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("drops a FULLY-away order but keeps one that still has a not-yet-away item", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const a = await makeProduct(tx, cfg, catalogueId, {});
@@ -4280,7 +4201,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("surfaces the dining-table label for a tab and omits it for a walk-up; openedMinutes is derived from opened_at", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {}); // null course → fires immediately
 
@@ -4311,7 +4231,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("carries each item's own station thresholds/band, and rolls the order up to the worst", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
       const barra = await createStation(tx, cfg, { name: "Barra" });
       // Distinct thresholds so a per-item mix-up (Barra's item reading Cocina's thresholds, or vice
@@ -4359,7 +4278,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("drops a served line off the order's worst band (design §3 — ages until it reaches the guest)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true }); // 5/10/15 defaults
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const agua = await makeProduct(tx, cfg, catalogueId, {});
@@ -4394,8 +4312,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
 // dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
-// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
-// `withTransaction` + `asAppUser`, so the app role's grants are in force, not bypassed.
+// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs
+// through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
@@ -4421,7 +4339,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
   it("bumps a whole course ready across stations, then marks it away", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
 
       // Both items start fired + queued, across two stations, under the one course.
@@ -4445,7 +4362,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
   it("bumpCourseReady skips held items; markCourseAway only aways ready items", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -4488,7 +4404,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
   it("markCourseAway rejects an unknown course with course.not_found (requireCourse existence check)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(cafe)]);
@@ -4504,7 +4419,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
   it("markCourseAway is idempotent (already-away untouched); bumpCourseReady no-ops on an unknown course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
 
       // bumpCourseReady on an UNKNOWN course is a no-op (no throw, no rows) — the bulk-bump convenience,
@@ -4589,7 +4503,6 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   it("voiding a PARENT dish removes its extras children too (no orphan FK 23503)", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child), line 3 = agua (plain).
@@ -4620,7 +4533,6 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   it("voiding a CHILD extras line removes only that line (its dish stays)", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child).
@@ -4649,7 +4561,6 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   it("REFUSES a product picked twice in one list rather than dropping or doubling it", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const bacon = await addMultiExtra(tx, catalogueId, cafeId, "Bacon");
       // The same product named twice in one list's picks — reachable via a crafted client. A count
       // belongs in `quantity`, so two entries for one product are a malformed answer and neither
@@ -4684,7 +4595,6 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   it("prices ONE child at the picked per-dish quantity", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const bacon = await addMultiExtra(tx, catalogueId, cafeId, "Bacon"); // maxPicks 2, item cap 2
       const id = randomUUID();
       await createOpenOrder(
@@ -4790,7 +4700,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   it("prices & persists a pick ×2 on a dish ×3 as a child of combined quantity 6, dish unchanged", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
         maxPicks: 5,
         maxQuantity: 5,
@@ -4843,7 +4752,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   it("rejects a pick quantity above the item's maxQuantity", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       // Item cap 2, but list maxPicks 5 so a tally of 3 does NOT trip the list cap first — the
       // per-item cap is what must reject it.
       const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
@@ -4876,7 +4784,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   it("rejects a pick quantity of 0, a fraction, or none at all", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
         maxPicks: 5,
         maxQuantity: 5,
@@ -4911,7 +4818,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   it("counts a pick's quantity toward maxPicks: one product ×3 in a maxPicks 2 list is refused", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       // Item cap 5 so the ×3 passes the per-item cap; the list's maxPicks 2 is what the summed tally
       // (3) must exceed — proving the tally is the SUM of quantities, not the distinct-product count.
       const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
@@ -4944,7 +4850,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   it("two distinct products ×1 each fit maxPicks 2, but one taken ×2 tips the summed tally over", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const list = await addTwoProductList(tx, catalogueId, cafeId, {
         maxPicks: 2,
         maxQuantity: 5,
@@ -5011,7 +4916,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   it("a pick of ×1 on a dish ×2 gives a child of 2", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const shot = await addQtyExtra(tx, catalogueId, cafeId, "Extra shot", {
         maxPicks: 1,
         maxQuantity: 1,
@@ -5061,7 +4965,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects a malformed (non-uuid) course override with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
@@ -5074,7 +4977,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects an unknown (well-formed but absent) course override with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
@@ -5088,7 +4990,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects a DIFFERENT venue's course of the same tenant with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
@@ -5115,7 +5016,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("rejects a DEACTIVATED course override with course.not_found", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
@@ -5130,7 +5030,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   it("accepts a valid active course override and resolves it (the override wins over the product default)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // The product DEFAULT differs from the override — proving the override WINS and is snapshotted,
       // and that a legitimate active override is not rejected by the new screen.
@@ -5154,7 +5053,6 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
 it("shows the dish's own allergens and diet beside a frozen options answer", async () => {
   const { cfg, catalogueId } = await setupVenue();
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const product = await createProduct(tx, {
       catalogueId,
@@ -5208,7 +5106,6 @@ describe("frozen answers through a fractional quantity edit", () => {
       // because it makes no child line — an extras pick on a dish sold by weight is refused, by the
       // test below this one.
       const taza = await withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
         return addOptionList(tx, cafeId, "Taza", ["Grande"]);
       });
@@ -5279,7 +5176,6 @@ describe("frozen answers through a fractional quantity edit", () => {
   it("refuses an extras pick on a menu offer whose dish is sold by weight", async () => {
     const { cfg, cafeId, catalogueId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
     const bacon = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
       const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
       await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
@@ -5319,7 +5215,6 @@ describe("frozen answers through a fractional quantity edit", () => {
 it("does not let an omitted payload waive a required extras list the menu offer has emptied", async () => {
   const { cfg, cafeId, catalogueId, cafeOfferId, zoneId } = await setupVenue();
   const bacon = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     // The list REQUIRES one pick, and the offer withdraws its only product — so the offer publishes a
     // list nothing can satisfy. Sending no answer at all must not waive it.
     const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { minPicks: 1 });
@@ -5365,7 +5260,6 @@ describe("order path — extras and options", () => {
   async function seedDish(maxPicks: number | null = 1): Promise<Seeded> {
     const { cfg, catalogueId } = await setupVenue();
     return withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { defaultLanguage } = await catalogue.readContentLanguages(tx, cfg.locale);
       const dish = await createProduct(tx, {
         catalogueId,
@@ -5587,7 +5481,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps the line's id and locked price when two options lists change places", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const punto = await addOptionList(tx, cafeId, "Punto", ["Solo"]);
       const taza = await addOptionList(tx, cafeId, "Taza", ["Grande"]);
       return { punto, taza };
@@ -5614,7 +5507,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
     // set is the point here, so this goes straight to `writeProductModifiers` rather than through
     // `attachModifierList`, which exists to ADD one without disturbing the rest.
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await catalogue.writeProductModifiers(tx, cafeId, [
         { kind: "options", id: seeded.taza.listId },
         { kind: "options", id: seeded.punto.listId },
@@ -5655,7 +5547,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("keeps each extras child on its own row when two extras lists change places", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const bacon = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
       const leche = await addExtraList(tx, catalogueId, cafeId, "Leche", {
         price: "0.30",
@@ -5683,7 +5574,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
 
     // Replacing the whole set, as above.
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await catalogue.writeProductModifiers(tx, cafeId, [
         { kind: "extras", id: seeded.leche.listId },
         { kind: "extras", id: seeded.bacon.listId },
@@ -5719,7 +5609,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
     // One wine, offered by two of the dish's lists at two prices. A child line records the product
     // it is, its quantity and the price it was sold at — never the list that offered it.
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cheap = await addExtraList(tx, catalogueId, cafeId, "Vino", {
         price: "1.00",
         maxQuantity: 3,
@@ -5789,7 +5678,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("replaces the line when a pick moves to another list offering the same product", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cheap = await addExtraList(tx, catalogueId, cafeId, "Vino", { price: "1.00" });
       const dear = await catalogue.createExtraList(
         tx,
@@ -5859,7 +5747,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return addOptionList(tx, cafeId, "Punto", ["Solo", "Cortado"]);
     });
     const id = randomUUID();
@@ -5910,7 +5797,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("refuses an edit whose new answer breaks the list's own rules", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const bacon = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
     });
     const id = randomUUID();
@@ -5966,7 +5852,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("re-prices a held line when the options list it answered was renamed between the two sends", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return addOptionList(tx, cafeId, "Punto", ["Solo"]);
     });
     const options = [{ listId: punto.listId, labelId: punto.labelIds[0]! }];
@@ -6027,7 +5912,6 @@ describe("what a held-order edit preserves and what it replaces", () => {
   it("refuses a quantity-only edit that names no answer for an active options list", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return addOptionList(tx, cafeId, "Punto", ["Solo"]);
     });
     const id = randomUUID();

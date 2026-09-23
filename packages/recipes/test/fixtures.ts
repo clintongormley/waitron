@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, ingredients, locations, recipeLines } from "@waitron/d
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -39,7 +39,6 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
 /** Seed a catalogue + one product; returns the product id, for recipe tests. */
 export async function seedProduct(db: Database): Promise<string> {
   return withTransaction(db, async (tx: Transaction) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Deli" });
     const unit = await createUnit(
       tx,

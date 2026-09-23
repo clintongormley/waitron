@@ -1,14 +1,12 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, newId, withTransaction, type Database } from "@waitron/db";
+import { newId, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
-// `asAppUser(tx)` still stands before every read, and on this engine it does nothing at all:
-// SQLite has no roles and no grants, so the reads run with whatever the one open handle can do
-// (`packages/db/src/testing/roles.ts`, which keeps the call sites compiling until they are swept).
+// SQLite has no roles and no grants, so the reads run with whatever the one open handle can do.
 // What these cases prove is therefore the source's own arithmetic over the two tables, not that it
 // works under a narrower set of privileges — there is no narrower set here.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -101,7 +99,6 @@ describe("fiscalSubmissionSource", () => {
     const id = await seedIdentity(pg.db);
     await seedWaiting(pg.db, id, hoursAgo(3), "pendiente");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       expect(await fiscalSubmissionSource.read({ tx, now: NOW })).toEqual([]);
     });
   });
@@ -110,7 +107,6 @@ describe("fiscalSubmissionSource", () => {
     const id = await seedIdentity(pg.db);
     await seedWaiting(pg.db, id, hoursAgo(5), "enviando");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -125,7 +121,6 @@ describe("fiscalSubmissionSource", () => {
 
     await seedWaiting(pg.db, id, hoursAgo(25), "pendiente");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -143,7 +138,6 @@ describe("fiscalSubmissionSource", () => {
     const id = await seedIdentity(pg.db);
     await seedWaiting(pg.db, id, hoursAgo(1), "detenido");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const alerts = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -163,7 +157,6 @@ describe("fiscalSubmissionSource", () => {
     const warn = await seedIdentity(pg.db);
     await seedWaiting(pg.db, warn, hoursAgo(4), "pendiente");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,
@@ -178,7 +171,6 @@ describe("fiscalSubmissionSource", () => {
     // A second, older record: the oldest is now exactly 24 hours, so the alert becomes an error.
     await seedWaiting(pg.db, warn, hoursAgo(24), "pendiente");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
         now: NOW,

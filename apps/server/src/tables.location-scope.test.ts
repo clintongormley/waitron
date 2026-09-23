@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, locations, tills, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -20,21 +20,10 @@ const LOCALE = "es-ES";
 /**
  * The placement verbs' location predicate, on the engine the box now runs.
  *
- * ## The half this file used to carry and does not any more
- *
- * It ran against a real PostgreSQL cluster as `app_user`, a non-superuser LOGIN role, because the
- * subject is a security fix and the old header argued a security claim wants the production role.
- * **That role is gone and is replaced by nothing**: SQLite has no roles, `RealPostgres.connectAs`
- * has no counterpart, and `asAppUser` is an empty function body
- * (`packages/db/src/testing/roles.ts:25`). Every call below now runs on the one connection the
- * venue file admits. The `asAppUser(tx)` calls are kept rather than picked out one file at a time,
- * because the branch sweeps them together; they separate nothing today.
- *
- * **Nothing in the four cases below depended on the role.** What each one asserts is that a verb's
- * own `location_id` predicate refuses a row belonging to another location of the SAME tenant, and
- * that predicate is a `where` clause in `./tables.ts` that runs identically whoever is connected.
- * Measured 2026-09-22: all four pass here, and the negative control in the fourth case (a
- * same-location place and clear, which must NOT be refused) still passes too.
+ * What each of the four cases below asserts is that a verb's own `location_id` predicate refuses a
+ * row belonging to another location of the SAME tenant, and that predicate is a `where` clause in
+ * `./tables.ts`. Measured 2026-09-22: all four pass here, and the negative control in the fourth
+ * case (a same-location place and clear, which must NOT be refused) still passes too.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
@@ -45,7 +34,6 @@ beforeAll(() => {
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

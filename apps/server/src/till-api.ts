@@ -4,7 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
-import { asAppUser, locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
+import { locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -203,7 +203,6 @@ async function resolveHttpOrderZone(
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     if ((await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).length === 0) return undefined;
     return (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId;
   });
@@ -227,11 +226,12 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
 }
 
 /**
- * The `card_readers` row a `/api/pay` charge routes to (Task 12), resolved as the app role under the
- * till's tenant. The reader is `body.readerId` when the caller named one (Task 17's picker), else the
- * paying DEVICE's default (`device_card_readers`). A device with neither → `reader.not_found`. The
- * chosen reader is loaded BY ID — one tenant per database, so the id alone identifies it; an unknown
- * reader id is `reader.not_found`, never chargeable — and must still be `active` (a disabled reader cannot take a payment).
+ * The `card_readers` row a `/api/pay` charge routes to (Task 12). The reader is `body.readerId`
+ * when the caller named one (Task 17's picker), else the paying DEVICE's default
+ * (`device_card_readers`). A device with neither → `reader.not_found`. The chosen reader is loaded
+ * BY ID — one tenant per database, so the id alone identifies it; an unknown reader id is
+ * `reader.not_found`, never chargeable — and must still be `active` (a disabled reader cannot take
+ * a payment).
  */
 async function resolvePayReader(
   deps: TillApiDeps,
@@ -239,7 +239,6 @@ async function resolvePayReader(
   requestedReaderId: string | undefined,
 ): Promise<{ id: string; provider: string; providerRef: string }> {
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     let readerId = requestedReaderId;
     if (readerId === undefined && deviceId !== undefined) {
       const [row] = await tx
@@ -647,7 +646,6 @@ function mountCourseVerb(
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await verb(tx, deps.cfg, orderId, courseId);
       });
       return c.body(null, 200);
@@ -670,10 +668,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 
   // The deployment holds one tenant per database. Log in: verify the operator's PIN and set the
-  // httpOnly session cookie. The login runs as the app role under the till's tenant —
-  // `withTransaction` + `asAppUser`, exactly as the sale path does — in this database; a wrong PIN,
-  // unknown or suspended person surfaces as the identity credential codes `STATUS` maps to
-  // 401/403.
+  // httpOnly session cookie. The login runs under the till's tenant — `withTransaction`, exactly as
+  // the sale path does — in this database; a wrong PIN, unknown or suspended person surfaces as the
+  // identity credential codes `STATUS` maps to 401/403.
   //
   // DEVICE-GATED (§5/§6). The login resolves the calling device up front and fails closed without one
   // (`device.unauthorized`), the same gate the sale routes apply (`requireSaleTillId`): the throttle
@@ -709,7 +706,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       let session;
       try {
         session = await withTransaction(deps.db, async (tx) => {
-          await asAppUser(tx);
           return loginWithPin(tx, {
             // §6: the DEVICE's own register, not the box's env `cfg.tillId`.
             tillId: deviceTillId,
@@ -753,7 +749,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = readSessionId(c);
       if (id !== null && isUuid(id)) {
         await withTransaction(deps.db, async (tx) => {
-          await asAppUser(tx);
           await endSession(tx, id);
         });
       }
@@ -769,15 +764,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // opaque 500) and flows through the same `locale` coercion below, so a
   // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
   // `assertSupportedLocale` rejects as `locale.unsupported` (400) — the ONE rejection path, no
-  // separate request-invalid branch. Runs under `withTransaction` + `asAppUser` (the write selects the
-  // session person by id), and returns 204 on success (no body).
+  // separate request-invalid branch. Runs under `withTransaction` (the write selects the session
+  // person by id), and returns 204 on success (no body).
   app.put("/api/session/locale", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const body = await readJsonBody<{ locale?: unknown }>(c);
       const locale = typeof body.locale === "string" ? body.locale : "";
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await setPersonLocale(tx, { personId, locale });
       });
       return c.body(null, 204);
@@ -786,13 +780,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The deployment holds one tenant per database. Pre-login roster for the lock screen.
   // Deliberately UNAUTHENTICATED — it is what the operator picks their name from before any
-  // session exists — so it calls `listActiveStaff` under `withTransaction` + `asAppUser` rather than
+  // session exists — so it calls `listActiveStaff` under `withTransaction` rather than
   // `requireSession`. `listActiveStaff` returns `{ personId, displayName }` only: no PIN
   // material, role or status, so there is nothing here a bystander at the counter must not see.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
       const staff = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listActiveStaff(tx);
       });
       return c.json(staff);
@@ -808,7 +801,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // UI needs it BEFORE login to select which pay control to render (Place/Collect for Modes I/T
   // vs the unchanged Pay for Mode P), so it rides on this same unauthenticated boot-info route
   // rather than a session-guarded one. `venueName`/`nif` still come from the taxpayer row via
-  // `readTenant` (@waitron/db), under `withTransaction` + `asAppUser`, which reads
+  // `readTenant` (@waitron/db), under `withTransaction`, which reads
   // `tenants`.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
@@ -826,12 +819,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const held = await readNodeMembership(deps.db);
       // ONE transaction reads the issuer identity
       // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
-      // the resolved canvas below: all run inside the same `withTransaction` + `asAppUser` block,
+      // the resolved canvas below: all run inside the same `withTransaction` block,
       // never a second connection. `getReceipt` does not authorize — this boot read is
       // deliberately unauthenticated (the browser fetches it before login), and it carries no
       // secrets, only the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
       const boot = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const taxpayer = await readTenant(tx);
         // The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — read HERE
         // from the till's own location rather than off `deps.cfg` like `orderFlow`: `orderFlow`
@@ -1055,8 +1047,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs
   // FIRST, so an unauthenticated request 401s (`session.required`) before any catalogue is read —
-  // the operator must be logged in to see prices. The read itself runs as the app role under the
-  // till's tenant (`withTransaction` + `asAppUser`), in the database holding this tenant. `menus` (the
+  // the operator must be logged in to see prices. The read itself runs under the till's tenant
+  // (`withTransaction`), in the database holding this tenant. `menus` (the
   // location's accessible catalogues, default flagged, for the till's menu switcher) and
   // `products` (tagged with the catalogue each came from) are read in the SAME transaction so
   // they describe one consistent snapshot of the accessible set.
@@ -1064,7 +1056,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const { menus, products } = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return {
           menus: await listAccessibleCatalogues(tx, deps.cfg.locationId),
           products: (await listAvailableProducts(tx, deps.cfg.locationId)).products,
@@ -1079,7 +1070,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
           deviceId: device?.deviceId,
         });
@@ -1103,7 +1093,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
         return { context, ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)) };
       });
@@ -1114,7 +1103,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
   // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
   // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
-  // `withTransaction`/`asAppUser` transaction and re-prices the basket authoritatively (the request
+  // `withTransaction` transaction and re-prices the basket authoritatively (the request
   // carries no price), so it is called OUTSIDE any transaction here — nesting would deadlock the pool.
   // The sale route neither opens nor rotates the session, so it emits no Set-Cookie.
   app.post("/api/sales", (c) =>
@@ -1276,7 +1265,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
   // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
   // is no longer open re-throws the raw refusal). `parkOrder` re-reads the catalogue and prices
-  // authoritatively (the request carries no price), opening its OWN `withTransaction`/`asAppUser` transaction,
+  // authoritatively (the request carries no price), opening its OWN `withTransaction` transaction,
   // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
@@ -1467,7 +1456,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const stations = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listStations(tx, deps.cfg);
       });
       return c.json(stations);
@@ -1487,7 +1475,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
       const queue = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listStationQueue(tx, id);
       });
       return c.json(queue);
@@ -1514,7 +1501,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // value reach the enum column (a lookup miss is refused before the update runs, not after).
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await advanceTicketItem(tx, deps.cfg, id, to);
       });
       return c.body(null, 200);
@@ -1544,7 +1530,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const to = body.to;
       if (!isUuid(orderId) || !isUuid(stationId)) return c.body(null, 200);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await advanceTicket(tx, deps.cfg, orderId, stationId, to);
       });
       return c.body(null, 200);
@@ -1571,7 +1556,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const queue = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listExpoQueue(tx, deps.cfg);
       });
       return c.json(queue);
@@ -1628,7 +1612,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await reprintOrderTickets(tx, deps.cfg, id);
       });
       return c.body(null, 200);
@@ -1665,8 +1648,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // action — the active persons whose role holds `cash.drawer` (cash-drawer-authorization §5).
   // SESSION-GUARDED, not permission-gated: ANY logged-in operator may call it (they are about to
   // request a supervisor override and need the picker of who could authorize it), so
-  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTransaction` +
-  // `asAppUser`, returning the SAME no-secrets `{ personId, displayName }` shape as `GET
+  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTransaction`,
+  // returning the SAME no-secrets `{ personId, displayName }` shape as `GET
   // /api/staff` — no PIN material, role or status: the till shows this picker BEFORE the
   // supervisor has entered their credential. The client sends the chosen `{ personId, pin }` only
   // on the authenticated `POST /api/drawer/open` override request.
@@ -1674,7 +1657,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const authorizers = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listActivePersonsWithPermission(tx, "cash.drawer");
       });
       return c.json(authorizers);
@@ -1714,7 +1696,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const [loc] = await tx
           .select({ policy: locations.drawerOpenPolicy })
           .from(locations)
@@ -1834,7 +1815,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return createTable(tx, deps.cfg, body);
       });
       return c.json(result);
@@ -1846,7 +1826,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listTables(tx, deps.cfg);
       });
       return c.json(tables);
@@ -1860,7 +1839,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? []);
       });
       return c.json(state);
@@ -1876,7 +1854,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const zones = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listZones(tx, deps.cfg);
       });
       return c.json(zones);
@@ -1892,7 +1869,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const statuses = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listServiceStatuses(tx);
       });
       return c.json(statuses);
@@ -1916,7 +1892,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await updateTable(tx, deps.cfg, id, body);
       });
       return c.body(null, 200);
@@ -1931,7 +1906,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await deactivateTable(tx, deps.cfg, id);
       });
       return c.body(null, 200);
@@ -1949,7 +1923,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         lines?: { productId?: string; menuItemId?: string; quantity: string }[];
       }>(c);
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
       });
       return c.json(result);
@@ -1986,7 +1959,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         } & LineExtras)[];
       }>(c);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await addTabRound(tx, deps.cfg, id, body.lines);
       });
       return c.body(null, 200);
@@ -2006,7 +1978,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await voidTabLine(tx, deps.cfg, id, lineNo);
       });
       return c.body(null, 200);
@@ -2025,7 +1996,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const lines = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return readTabLines(tx, deps.cfg, id);
       });
       return c.json(lines);
@@ -2048,7 +2018,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await markLineServed(tx, deps.cfg, id, lineNo);
       });
       return c.body(null, 200);
@@ -2064,7 +2033,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await unmarkLineServed(tx, deps.cfg, id, lineNo);
       });
       return c.body(null, 200);
@@ -2096,7 +2064,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("course.not_found", { courseId });
       }
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await setLineCourse(tx, deps.cfg, id, lineNo, courseId);
       });
       return c.body(null, 200);
@@ -2118,7 +2085,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await sendLines(tx, deps.cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
@@ -2140,7 +2106,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await recallLines(tx, deps.cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
@@ -2161,7 +2126,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (statusId !== null && !isUuid(statusId))
         throw new AppError("status.not_found", { statusId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await setTableStatus(tx, deps.cfg, id, statusId);
       });
       return c.body(null, 200);
@@ -2223,7 +2187,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await setTablePlacement(tx, deps.cfg, id, { zoneId, posX, posY, shape, rotation });
       });
@@ -2243,7 +2206,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await clearPlacement(tx, deps.cfg, id);
       });
@@ -2254,7 +2216,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The deployment holds one tenant per database. Relocate a tab to a free table (TS-3, design
   // §3a). SESSION-GUARDED. The tab `:id` and the body `toTableId` are both isUuid-screened before
   // any query — a malformed tab id → `tab.not_open` (409), a malformed target → `table.not_found`
-  // (404), never a 500. The verb runs on a fresh withTransaction/asAppUser transaction. Returns 200
+  // (404), never a 500. The verb runs on a fresh withTransaction transaction. Returns 200
   // empty.
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
@@ -2264,7 +2226,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(body.toTableId))
         throw new AppError("table.not_found", { tableId: body.toTableId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await moveTab(tx, deps.cfg, tabId, body.toTableId);
       });
       return c.body(null, 200);
@@ -2280,7 +2241,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ tableId: string }>(c);
       if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await joinTable(tx, deps.cfg, tabId, body.tableId);
       });
       return c.body(null, 200);
@@ -2297,7 +2257,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ fromTabId: string; freeSourceTable: boolean }>(c);
       if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
           freeSourceTable: body.freeSourceTable,
         });
@@ -2311,7 +2270,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // GUARDED. Both ids are `isUuid`-screened BEFORE any query — a malformed one passed into
   // `eq(workingOrders.id, …)` would meet no refusal and match nothing, so it is refused as
   // `tab.not_open` (the SAME fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
-  // opens the `withTransaction`/`asAppUser` transaction around it. Returns 200 with an empty body; the till
+  // opens the `withTransaction` transaction around it. Returns 200 with an empty body; the till
   // re-reads the two tabs' state.
   app.post("/api/tabs/:id/transfer", (c) =>
     run(c, log, async () => {
@@ -2323,7 +2282,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
       });
       return c.body(null, 200);
@@ -2337,7 +2295,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `eq(workingOrders.id, …)` would meet no refusal and match nothing). The body is shape-screened (non-object/null/
   // array → `management.request_invalid` naming "body") before any field access — a literal JSON `null`
   // body used to reach `body.transfers` as a TypeError → opaque 500 (Copilot). `splitOffCheck` is
-  // tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around it. Returns 200
+  // tx-level, so this route opens the `withTransaction` transaction around it. Returns 200
   // `{ checkId }`; no fiscal write happens here (the check files only when it is later paid), so this
   // stays on the ALLOWED side of the order-only firewall like the other tab verbs.
   app.post("/api/tabs/:id/split", (c) =>
@@ -2366,7 +2324,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
       });
       return c.json(result);
@@ -2383,7 +2340,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // "body") BEFORE the `tableId` check — a literal JSON `null` body used to reach `body.tableId` as a
   // TypeError → opaque 500 (Copilot); screening it first also keeps a missing body out of the
   // domain-specific `table.not_joined`, since "no body" is a request-shape fault, not a claim about a
-  // table. The verb is tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around
+  // table. The verb is tx-level, so this route opens the `withTransaction` transaction around
   // it. Returns 200 `{ tabId }` (the new anchored tab, with items) or `{}` (freed). No fiscal write.
   app.post("/api/tabs/:id/unjoin", (c) =>
     run(c, log, async () => {
@@ -2415,7 +2372,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
       });
       return c.json(result);

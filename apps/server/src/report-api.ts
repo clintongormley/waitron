@@ -7,13 +7,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { sql } from "drizzle-orm";
 import { AppError, nodeId as brandNodeId, type NodeId } from "@waitron/shared";
-import {
-  asAppUser,
-  readTenant,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   computeDailyClose,
   computeOverdueOrders,
@@ -166,7 +160,6 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });

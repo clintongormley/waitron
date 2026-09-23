@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -21,9 +21,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  *
  * TWO THINGS LOST when this file moved off PostgreSQL, neither replaceable here:
  *
- * - **The deployment ROLE.** Every write below used to run as `app_user`. `asAppUser` is an inert
- *   function on this engine (`packages/db/src/testing/roles.ts`) and SQLite has no roles, so the
- *   calls left in place — T1 removes them — switch nothing. What still refuses a REWRITE of a
+ * - **The deployment ROLE.** SQLite has no roles. What still refuses a REWRITE of a
  *   stored fiscal record is the append-only trigger `TEST_MIGRATIONS` installs
  *   (`packages/migrations/src/manifest.ts:163`); that refusal was MEASURED on this engine, and the
  *   probe and its output are in `chain.concurrency.test.ts`'s header. The role half is covered by
@@ -124,7 +122,6 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
 async function recordTicket(invoiceNumber: number): Promise<string> {
   const ticketId = await seedSale(suite.db, till, invoiceNumber);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.recordSale(tx, ticketSaleFor(ticketId, invoiceNumber));
   });
   return ticketId;
@@ -171,7 +168,6 @@ async function substitute(
   const substitutionId = await seedSubstitutionRow(invoiceNumber);
   const sale = substitutionSaleFor(substitutionId, invoiceNumber, overrides);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.recordSubstitution(tx, sale, {
       substitutedSaleIds: substitutedSaleIds.map((id) => brandSaleId(id)),
     });

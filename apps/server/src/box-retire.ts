@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
@@ -11,7 +11,7 @@ import type { Logger } from "./logger.js";
 // `retireSelf` each carry their own registry import for the codes they raise (matching box-status.ts).
 
 export type BoxRetireDeps = {
-  /** The app pool retireSelf reads/writes `node_membership` and the identity key through (app-role). */
+  /** The app pool retireSelf reads/writes `node_membership` and the identity key through. */
   appDb: Database;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
@@ -43,10 +43,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 /**
  * Registers `POST /api/box/retire` on the shared trading app — the management action a fenced node
  * self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
- * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
- * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it), then
- * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the ordered refusals,
- * idempotency, the abort-before-write mint; this route is only the auth + status-mapping glue.
+ * `requireManagementSession` → 401 before any DB work, then `withTransaction` +
+ * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it).
+ * `retireSelf` owns all retire SEMANTICS — the ordered refusals, idempotency, the
+ * abort-before-write mint; this route is only the auth + status-mapping glue.
  *
  * `"box-retire.failed"` is a LOG TAG only (the boundary's `tag`), NOT a registered error code — matching
  * box-status's `"box-status.failed"`. On a FENCED node this write verb is let through the read-only gate
@@ -58,7 +58,6 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
       await withTransaction(deps.appDb, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "system.manage",

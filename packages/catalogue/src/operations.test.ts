@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { asAppUser, products, withTransaction } from "@waitron/db";
+import { products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct, PricingUnit } from "./pricing.js";
@@ -199,7 +199,6 @@ describe("catalogue operations", () => {
     const venue = await seedVenue(fx.db);
     locationId = venue.locationId;
     await withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       eachUnitId = (
         await createUnit(
           tx,
@@ -222,7 +221,6 @@ describe("catalogue operations", () => {
   // Every test body runs on its own transaction.
   const asTenant = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       return fn(tx);
     });
 
@@ -794,7 +792,6 @@ describe("catalogue operations", () => {
   // A product with no recipe still publishes exactly the manual value (today's behavior).
   it("createProduct publishes the manual allergen map when there is no recipe", async () => {
     const result = await withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "C" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
@@ -813,7 +810,6 @@ describe("catalogue operations", () => {
   // applyRecipeDerivation unions the floor over the manual overlay (add-only).
   it("applyRecipeDerivation republishes allergens as floor ∪ manual", async () => {
     const seen = await withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "C" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
@@ -838,7 +834,6 @@ describe("catalogue operations", () => {
   // can seed the allergen picker from `manualAllergens` without double-counting the recipe floor.
   it("exposes manual_allergens distinctly from the published union", async () => {
     const seen = await withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "C" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
@@ -869,7 +864,6 @@ describe("catalogue operations", () => {
   // the diet twin of `manualAllergens` above. A product with no override reads `dietOverride: null`.
   it("exposes diet_override on the management product read", async () => {
     const [withOverride, without] = await withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "C" });
       const forced = await createProduct(tx, {
         catalogueId: cat.id,
@@ -898,7 +892,6 @@ describe("catalogue operations", () => {
   // A pending derivation forces PENDING (null), even with a manual overlay present.
   it("applyRecipeDerivation with pending=true publishes PENDING (null)", async () => {
     const seen = await withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "C" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,

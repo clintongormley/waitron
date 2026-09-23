@@ -1,15 +1,12 @@
 /**
  * The device cookie and the three guards that read it, on the engine the box now runs.
  *
- * ## What went with PostgreSQL, and is replaced by nothing
+ * ## What this file does not check
  *
- * The old header argued that real PostgreSQL was needed here rather than PGlite, because
- * `requireDevice`'s read and its `last_seen_at` write run as `app_user` and a superuser session
- * would hide a missing grant. SQLite has no roles and no grants: one process opens one file and
- * `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). The grant half of
- * every database-backed case below is now checked by nothing, here or elsewhere. What each case
- * still proves is the guard's own logic — the cookie parse, the token verify, the `active` filter,
- * the profile capability set — which lives in `device-session.ts`, not in the database.
+ * SQLite has no roles and no grants: one process opens one file. The grant half of every
+ * database-backed case below is checked by nothing, here or elsewhere. What each case proves is the
+ * guard's own logic — the cookie parse, the token verify, the `active` filter, the profile
+ * capability set — which lives in `device-session.ts`, not in the database.
  *
  * Every fixture below writes through its TABLE DEFINITION rather than as raw SQL, the change
  * `apps/server/src/testing/fiscal-fixtures.ts` took. Two reasons, both fatal to the raw form on
@@ -28,7 +25,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
-  asAppUser,
   canvases,
   deviceProfiles,
   devices,
@@ -75,7 +71,6 @@ const suite = useVenueDb({
 
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

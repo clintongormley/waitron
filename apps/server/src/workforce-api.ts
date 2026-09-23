@@ -7,13 +7,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import {
-  asAppUser,
-  withTransaction,
-  locations,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { withTransaction, locations, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   WorkforceBackend,
@@ -118,7 +112,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
@@ -231,7 +224,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       // `authorizedBy` for `publishedByPersonId` — the same reason management-api.ts's GET
       // /management-api/receipt composes authorizeManager inline.
       const breaches = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: SCHEDULE_PERMISSION,
@@ -270,7 +262,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const body = await readJsonBody<{ decision?: unknown }>(c);
       const decision = requireDecision(body.decision);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: SWAP_APPROVE_PERMISSION,
@@ -303,7 +294,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const body = await readJsonBody<{ decision?: unknown }>(c);
       const decision = requireDecision(body.decision);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: ABSENCE_DECIDE_PERMISSION,

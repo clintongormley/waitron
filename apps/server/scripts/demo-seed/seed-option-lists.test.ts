@@ -21,12 +21,11 @@
 // rather than a hand-built fixture. Matching the siblings is the point; a lighter target would
 // prove the seed against a database no venue ever has.
 //
-// The grant question is gone rather than answered: SQLite has no roles, `asAppUser` is an inert
-// function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
-// Nothing here checks who may write an option list.
+// SQLite has no roles, and every call below runs on the one connection. Nothing here checks who
+// may write an option list.
 
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -98,7 +97,6 @@ describe("seedOptionLists", () => {
     const { lists, steakId, coffeeId, attachments, available } = await withTransaction(
       suite.db,
       async (tx) => {
-        await asAppUser(tx);
         const { productsByImage } = await seedCatalogues(tx, {
           locationId,
           locale: LOCALE,

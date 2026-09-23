@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   invoiceSeries,
   locations,
   nodes,
@@ -170,11 +169,10 @@ const suite = useVenueDb({
     await seedSale(db, Q1_SALE);
     await seedPurchase(db);
 
-    // A MANAGER (role `manager`, holds `report.export`) and a STAFF person (holds nothing) as the app
-    // role, then a live management session for each so the route tests drive the gate through a real
-    // cookie. `pin_hash` is NOT NULL, so a value is supplied though these sessions are minted directly.
+    // A MANAGER (role `manager`, holds `report.export`) and a STAFF person (holds nothing), then a
+    // live management session for each so the route tests drive the gate through a real cookie.
+    // `pin_hash` is NOT NULL, so a value is supplied though these sessions are minted directly.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

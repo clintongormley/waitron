@@ -26,11 +26,6 @@ import { racePair, seedLegacySellingUnits } from "../test/fixtures.js";
  * transaction runs on the venue file at a time now; `racePair` (`test/fixtures.ts`) carries the
  * mechanism, the measurement and the control, and it is the receipt for the
  * `pg_advisory_xact_lock` and the `select … for update` that `categories.ts` used to take.
- *
- * ONE CASE WENT: "authors hierarchy and membership with the non-superuser deployment role"
- * asserted `current_user` was `app_user` with `rolsuper = false` and then walked membership
- * replacement, reparenting and deletion while holding that role. There are no roles. Every
- * behaviour it walked is asserted by the cases below or by `categories.test.ts`.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
@@ -289,8 +284,7 @@ it("reports a category's dependants for the delete preview", async () => {
   expect(deps.products.find((p) => p.id === p2Id)!.reporting).toBe(false);
 });
 // The bulk add's write is one multi-row `insert … on conflict do nothing` plus one set-based
-// update. It sat in this file because only real PostgreSQL ran those under the non-superuser role;
-// there is one engine and no role now, and it stays here with the fixture it shares.
+// update. It stays here with the fixture it shares.
 async function bulkAddFixture() {
   const { a: c, b: d } = await fixture();
   const p1Id = await seedProduct();

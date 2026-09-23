@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -87,7 +87,6 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid, supervisorSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Seeded through the table definition rather than raw SQL: `persons.id` and `created_at` are
     // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns
     // are NOT NULL — the change `apps/server/src/alerts-api.test.ts:103` took.

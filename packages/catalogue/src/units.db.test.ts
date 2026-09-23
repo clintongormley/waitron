@@ -25,17 +25,11 @@ import { racePair } from "../test/fixtures.js";
  * `pg_blocking_pids`. `racePair` (`test/fixtures.ts`) carries what observes serialisation now, and
  * the measurement behind it.
  *
- * TWO CASES WENT, and each is named here because neither has anything left to run:
- *
- *  - "changes a product's unit even while product_units is in a publication" created a PostgreSQL
- *    logical-replication PUBLICATION over `product_units` and proved the table's primary key
- *    doubled as its REPLICA IDENTITY, without which the reassignment upsert's UPDATE was refused.
- *    SQLite has no publications and no replica identity, so there is no statement to make and no
- *    refusal to provoke. Nothing else covers it, and nothing can.
- *  - "grants app_user the exact unit-table operations and enforces them as a non-superuser"
- *    asserted the privilege set on `units`, `unit_seed_states` and `product_units`. There are no
- *    roles and no grants. The create/edit/read/delete it walked while holding them is
- *    `units.operations.test.ts`'s "creates, reads, updates, assigns and deletes within a tenant".
+ * WHAT WENT, and why: "changes a product's unit even while product_units is in a publication"
+ * created a PostgreSQL logical-replication PUBLICATION over `product_units` and proved the table's
+ * primary key doubled as its REPLICA IDENTITY, without which the reassignment upsert's UPDATE was
+ * refused. SQLite has no publications and no replica identity, so there is no statement to make and
+ * no refusal to provoke. Nothing else covers it, and nothing can.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 

@@ -14,18 +14,17 @@ import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-// LOSS, from the storage swap: the two columns' visibility to the non-owner `app_user` was half of
-// what this suite asserted, and SQLite has no roles and no grants
-// (`packages/db/src/testing/roles.ts`). What is left is the two mutual foreign keys.
+// What this suite proves is the two mutual foreign keys.
 //
-// SECOND LOSS, at the two proofs-by-deletion. On PostgreSQL each dropped ITS OWN named constraint
-// (`dining_tables_tab_fk`, `working_orders_delivery_table_fk`) inside a rolled-back transaction, so
-// the proof was about that one key. SQLite has no `ALTER TABLE … DROP CONSTRAINT` and stores no
-// name for a foreign key at all, so the deletion available here is `pragma foreign_keys = off`,
-// which switches off EVERY foreign key at once. That still separates "a foreign key refused this"
-// from "a CHECK or a trigger did", which is the discrimination the proof was for; it no longer
-// separates one foreign key from another. `pragma foreign_key_list` is read alongside it to pin
-// WHICH key covers the column, which is the half the pragma cannot show.
+// LOSS, from the storage swap, at the two proofs-by-deletion. On PostgreSQL each dropped ITS OWN
+// named constraint (`dining_tables_tab_fk`, `working_orders_delivery_table_fk`) inside a
+// rolled-back transaction, so the proof was about that one key. SQLite has no
+// `ALTER TABLE … DROP CONSTRAINT` and stores no name for a foreign key at all, so the deletion
+// available here is `pragma foreign_keys = off`, which switches off EVERY foreign key at once.
+// That still separates "a foreign key refused this" from "a CHECK or a trigger did", which is the
+// discrimination the proof was for; it no longer separates one foreign key from another.
+// `pragma foreign_key_list` is read alongside it to pin WHICH key covers the column, which is the
+// half the pragma cannot show.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-1111-4000-8000-000000000001";
 

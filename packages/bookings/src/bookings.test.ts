@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
+import { newId, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,9 +32,8 @@ type VenueCfg = BookingConfig;
 // runs through `withTransaction`, the shape production uses, so the `party_size > 0` CHECK is
 // exercised rather than bypassed.
 //
-// WHAT IT DOES NOT SHOW, in two parts. There are no roles and no grants on this engine
-// (`packages/db/src/testing/roles.ts`), so nothing here is a claim about a privilege. And the CAS
-// race is not proven anywhere: the two-backend case `bookings-cas.test.ts` used to stage was
+// WHAT IT DOES NOT SHOW, in two parts. There are no roles and no grants on this engine, so nothing
+// here is a claim about a privilege. And the CAS race is not proven anywhere: the two-backend case `bookings-cas.test.ts` used to stage was
 // DELETED rather than moved, because one write transaction runs on the venue file at a time — that
 // file's header carries the reasoning and the pointer to recover the deleted case.
 //
@@ -131,13 +130,10 @@ async function makeTableInOtherLocation(): Promise<string> {
   return insertDiningTable(otherLocationId, "B-1");
 }
 
-/** Run `fn` in one transaction, the shape production routes use. The `asAppUser` call inside is an
- * empty body on this engine (`packages/db/src/testing/roles.ts`) and asserts nothing; it is still
- * made so the suite keeps the production call shape. */
+/** Run `fn` in one transaction, the shape production routes use. */
 function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

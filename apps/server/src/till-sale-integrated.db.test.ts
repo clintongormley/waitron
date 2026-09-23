@@ -21,7 +21,7 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, drawerOpens, printJobs, withTransaction } from "@waitron/db";
+import { drawerOpens, printJobs, withTransaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
@@ -54,20 +54,8 @@ import "./errors.js";
 // and nothing else, while every case here drives `payWorkingOrderIntegrated` itself against a
 // provisioned venue.
 //
-// ## What this file was built around, and what is left of it
-//
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template, with every `payWorkingOrderIntegrated` call driven over `rls_probe` — a
-// non-superuser LOGIN role inheriting `app_user`'s grants, opened with `suite.pg.connectAs`. Being
-// non-superuser was the point: the provider's own `collect` does NOT `set role app_user`, so it ran
-// as whatever role held the handle, and a missing grant on `payments`, `sales`, `tenders` or
-// `registros_facturacion` failed rather than passed.
-//
-// SQLite has no roles, `connectAs` has no counterpart, and `asAppUser` is an empty function body
-// (`packages/db/src/testing/roles.ts:25`). Every call now runs on the one venue handle, kept under
-// the name `app` at each call site so it still reads as "the handle the provider and the
-// orchestrator share". NOT CHECKED BY ANYTHING ANY MORE: that the deployment role holds the grants
-// the split flow's P3 writes need.
+// Every call runs on the one venue handle, kept under the name `app` at each call site so it still
+// reads as "the handle the provider and the orchestrator share".
 //
 // What the engine change does NOT narrow, because each belongs to the three-transaction SPLIT
 // rather than to the number of connections staging it:
@@ -139,9 +127,8 @@ interface SeededVenue {
   cafe: AvailableProduct;
 }
 
-/** A fresh chained venue + registered SIF (as the owner), with one "Café" (each, 1.50 gross,
- * general 21%) product seeded as the app role. Each test gets its OWN tenant so counts are
- * order-independent (CLAUDE.md §4). */
+/** A fresh chained venue + registered SIF, with one "Café" (each, 1.50 gross, general 21%) product
+ * seeded. Each test gets its OWN tenant so counts are order-independent (CLAUDE.md §4). */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
     planVenue(
@@ -179,7 +166,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -197,8 +183,8 @@ async function setupVenue(): Promise<SeededVenue> {
   return { cfg, cafe };
 }
 
-/** Flip the location's `order_flow` (as the owner) AND the in-memory cfg to `mode`, the way boot wires
- * them — so `placeOrder`/`payWorkingOrderIntegrated` dispatch on the same value the DB carries. */
+/** Flip the location's `order_flow` AND the in-memory cfg to `mode`, the way boot wires them — so
+ * `placeOrder`/`payWorkingOrderIntegrated` dispatch on the same value the DB carries. */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
   suite.db.run(sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`);
@@ -256,7 +242,7 @@ function cannedProvider(
   };
 }
 
-// --- owner reads (privileged verification reads, not part of the behaviour under test) -------------
+// --- verification reads (not part of the behaviour under test) -----------------------------------
 
 async function saleCount(workingOrderId: string): Promise<number> {
   const rows = suite.db.all<{ count: string }>(
@@ -286,7 +272,6 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
  *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
 async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
       { locationId: cfg.locationId },
@@ -301,7 +286,6 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
 async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uint8Array[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ payload: printJobs.payload })
       .from(printJobs)
@@ -314,7 +298,6 @@ async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uin
 async function drawerOpenCount(cfg: TillConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx.select().from(drawerOpens);
     return rows.length;
   });
@@ -330,10 +313,10 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled === 1 };
 }
 
-/** Whether this order's `collected_at` customer-handover marker is set — owner read. The witness that an
+/** Whether this order's `collected_at` customer-handover marker is set. The witness that an
  *  integrated CARD collect at the collect stage stamped the ORDER-level marker `listStationQueue`
- *  excludes on (KDS-1 §3e): a placed order fired to a station leaves that station's queue once collected;
- *  a walk-up (open→settle, never fired) leaves it NULL. */
+ *  excludes on (KDS-1 §3e): a placed order fired to a station leaves that station's queue once
+ *  collected; a walk-up (open→settle, never fired) leaves it NULL. */
 async function collectedAtSet(id: string): Promise<boolean> {
   const rows = suite.db.all<{ collected: number }>(sql`
     select (collected_at is not null) as collected from working_orders where id = ${id}
@@ -341,8 +324,9 @@ async function collectedAtSet(id: string): Promise<boolean> {
   return rows[0]!.collected === 1; // 0/1, not a boolean — see `orderState`
 }
 
-/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location) — owner read.
- *  Every fixture line here carries no product/category route, so `placeOrder` fires it to this station. */
+/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location). Every
+ *  fixture line here carries no product/category route, so `placeOrder` fires it to this
+ *  station. */
 async function defaultStationId(cfg: TillConfig): Promise<string> {
   const rows = suite.db.all<{ id: string }>(sql`
     select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active
@@ -354,7 +338,6 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
  *  order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
 async function stationQueueOrderIds(stationId: string): Promise<string[]> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const groups = await listStationQueue(tx, stationId);
     return groups.map((g) => g.orderId);
   });
@@ -437,11 +420,10 @@ async function saleIdFor(workingOrderId: string): Promise<string> {
   return rows[0]!.id;
 }
 
-/** This tenant's outstanding (issued-but-unsettled) sales, read as the app role — the "what is owed?"
- *  list a decline must leave intact. Each test owns its tenant, so it lists only this test's sales. */
+/** This tenant's outstanding (issued-but-unsettled) sales — the "what is owed?" list a decline must
+ *  leave intact. Each test owns its tenant, so it lists only this test's sales. */
 async function outstandingSalesFor(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: String(r.saleId), amountDue: String(r.amountDue) }));
   });
@@ -838,7 +820,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     await FakeFiscalBackend.install(suite.db);
     const fake = new FakeFiscalBackend(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await fake.registerNode(tx, cfg.nodeId);
     });
     const app = suite.db;
@@ -871,8 +852,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 // (T2) but P3 never ran (the sale was never filed) must NOT re-charge. The lost-T2 state is seeded
 // directly (`createOpenOrder` + `insertCapturedPayment` with `sale_id` NULL), exactly the row
 // `provider.collect`'s T2 leaves behind before P3. The two concurrency cases below used to race TWO
-// DISTINCT app-role connections; there is one writer now, and what each still stages — and what it
-// no longer does — is stated at the case itself.
+// DISTINCT connections; there is one writer now, and what each still stages — and what it no longer
+// does — is stated at the case itself.
 describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
   /** Seed the lost-T2 state: an OPEN order with a locked café line, plus a captured stripe payment for
    *  it whose `sale_id` is still NULL (collect committed, P3 never ran). `amount` is the GROSS the card
@@ -890,7 +871,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // Kept per seed for the same reason as `nextNif`.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
       await insertCapturedPayment(tx, {
         workingOrderId: id,
@@ -951,7 +931,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await insertCapturedPayment(tx, {
         workingOrderId: id,
         provider: "stripe",
@@ -1027,8 +1006,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
 
     // Two orchestrations, each with its OWN reader, drive the SAME parked order id, interleaved by
-    // `Promise.allSettled`. On PostgreSQL they were two distinct app-role connections; here there is
-    // one handle and one writer, so what serialises them is `withWriteLock` rather than a row lock.
+    // `Promise.allSettled`. On PostgreSQL they were two distinct connections; here there is one
+    // handle and one writer, so what serialises them is `withWriteLock` rather than a row lock.
     // The property under test survives that, because it belongs to the three-transaction SPLIT and
     // not to the connection count: P1 COMMITS before the network `collect`, so both reach `collect`
     // and capture, and P3's duplicate backstop makes exactly one file — the loser replays the
@@ -1104,7 +1083,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 // NOT a double-file (`sales_working_order_id_key` UNIQUE refuses a second file for one order) — it
 // is an ORPHANED captured payment beside an UNSETTLED issued invoice (money taken, invoice left
 // outstanding). A decline files/voids nothing: the issued invoice stays outstanding, retryable
-// (§5). The double-settle replay and the concurrent recovery below used to need distinct app-role
+// (§5). The double-settle replay and the concurrent recovery below used to need distinct
 // connections; on one writer they stage less, and each case says what.
 describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)", () => {
   /** Arrange an OUTSTANDING invoice-first sale: park, then `placeOrder` issues the DEFERRED invoice at
@@ -1271,7 +1250,6 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
       await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await insertCapturedPayment(tx, {
           workingOrderId: id,
           provider: "stripe",

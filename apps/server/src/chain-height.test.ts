@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -76,7 +76,6 @@ describe("readChainHeight", () => {
     // selecting `cadenas` here: one row, the provisioned node id, `secuencia` 0, a non-null
     // `actualizado_en`.
     const result = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return readChainHeight(tx, randomUUID());
     });
     expect(result).toEqual({ height: 0, lastAt: null });
@@ -92,7 +91,6 @@ describe("readChainHeight", () => {
       on conflict (node_id) do update set secuencia = 7, actualizado_en = '2026-08-29T10:00:00Z'`);
 
     const result = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return readChainHeight(tx, nodeId);
     });
     expect(result.height).toBe(7);

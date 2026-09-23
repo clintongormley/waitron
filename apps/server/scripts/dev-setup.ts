@@ -27,7 +27,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
-import { asAppUser, openVenueDatabase, tills, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, tills, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -373,7 +373,6 @@ async function seedDemoDevices(
   // The profiles + stations the devices bind to — provisioning seeds one profile per form factor
   // (till/kds/phone-portrait) and one default preparation station.
   const { profiles, stations } = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return {
       profiles: await listDeviceProfiles(tx),
       stations: await listStations(tx, cfg),
@@ -398,7 +397,6 @@ async function seedDemoDevices(
   // device, not its register, and the counter's register is the one the handheld rings into.
   const counter = (
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return tx
         .select({ id: tills.id })
         .from(tills)

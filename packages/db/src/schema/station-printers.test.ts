@@ -12,10 +12,7 @@ import { printers } from "./printers.js";
 import { stationPrinters } from "./station-printers.js";
 import { locations, tenants } from "./tenants.js";
 
-// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
-// PostgreSQL, so the suite also established that role's INSERT and DELETE grants on the mapping
-// table. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`); what is left is
-// the column mapping and the composite primary key.
+// What this suite proves is the column mapping and the composite primary key.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {

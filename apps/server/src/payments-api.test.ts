@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  asAppUser,
   deviceProfiles,
   devices,
   locations,
@@ -36,17 +35,15 @@ import "./errors.js";
  *
  * ## The two properties this file was placed here for, and what is left of them
  *
- * Its old header said real PostgreSQL was MANDATORY rather than PGlite, for the table grants the
- * routes need and for the `payments.manage` gate. **The grant half is gone and is replaced by
- * nothing**: SQLite has no roles, one process opens one file, and `asAppUser` is an empty function
- * body (`packages/db/src/testing/roles.ts:25`). The gate half is application logic in the route
- * layer and is unaffected — `gates every new route before reaching the provider` still proves it.
+ * The two properties are the table grants the routes need and the `payments.manage` gate. **The
+ * grant half is gone and is replaced by nothing**: SQLite has no roles and one process opens one
+ * file. The gate half is application logic in the route layer and is unaffected — `gates every new
+ * route before reaching the provider` still proves it.
  *
  * Two cases changed with the engine, each recorded where it sits:
  *
- * - `runs as non-superuser app_user` is **DELETED**. It read `current_user` and `rolsuper` out of
- *   `pg_roles` to show the suite itself was not a superuser. There is no catalogue to ask and no
- *   role to ask about, and nothing replaces what it checked.
+ * - `runs as non-superuser app_user` is **DELETED**: there is no role to ask about, and nothing
+ *   replaces what it checked.
  * - `does not enable across a concurrent committed unpair` no longer stages a race; see the comment
  *   on the case for what it proves now.
  *
@@ -115,7 +112,6 @@ async function seedVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = loc!.id;
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -286,7 +282,6 @@ async function addReader(
 
 async function sealedStripe(): Promise<Record<string, string> | null> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tryGetCredential(tx, RING, {
       purpose: "payments.stripe",
     });
@@ -306,7 +301,6 @@ describe("connect", () => {
     expect(evicted.slice(before)).toEqual(["stripe"]);
     // The sealed payload exists and is exactly the four declared fields.
     const stored = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return getCredential(tx, RING, {
         purpose: "payments.stripe",
       });
@@ -913,7 +907,6 @@ describe("reader adoption and local management", () => {
       updated = resolve;
     });
     const unpairWrite = withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       // ONE clock reading bound to BOTH stamps, so the two columns take the same value. Both are
       // text columns, and `nowIso()` is their canonical spelling.
       const unpaired = nowIso();

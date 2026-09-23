@@ -17,14 +17,9 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: publishRoster is LOGIC over mutable planning rows (flip status, stamp,
-// attach shifts) — there is no privilege decision to prove here. The app role's exact grants on
-// shifts/roster_versions (that they CAN be UPDATEd/DELETEd, the inverse of time_entries' append-only
-// floor) are `shifts`/`roster_versions: "SIUD"` in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the append-only
-// floor itself is `packages/migrations/src/apply-append-only.test.ts`, which proves `time_entries`
-// refuses an update and a delete after the product's own migrate. (It was this package's
-// `immutability.test.ts` until task F1 deleted that file on 2026-09-22; the privileges half of it
-// has no counterpart on this engine.)
+// publishRoster is LOGIC over mutable planning rows (flip status, stamp, attach shifts). The
+// append-only floor is `packages/migrations/src/apply-append-only.test.ts`, which proves
+// `time_entries` refuses an update and a delete after the product's own migrate.
 const backend = new WorkforceBackend();
 
 let locationId: string;

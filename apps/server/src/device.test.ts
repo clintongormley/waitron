@@ -1,13 +1,10 @@
 /**
  * Device join-and-accept binding, on the engine the box now runs.
  *
- * ## The role this file was written around is gone, and is replaced by nothing
+ * ## What this file does not check
  *
- * Its old header argued that real PostgreSQL was MANDATORY here rather than PGlite, because the
- * `till` branch mints a NEW `tills` row and only a real cluster would refuse a missing
- * `INSERT ON tills` grant. **SQLite has no roles and no grants**: one process opens one file and
- * `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). So the
- * grant half of every case below is no longer checked by anything, here or elsewhere.
+ * **SQLite has no roles and no grants**: one process opens one file. The grant half of every case
+ * below is checked by nothing, here or elsewhere.
  *
  * What survives is the binding RULE, which is what the seven case names describe:
  * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
@@ -28,7 +25,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -90,7 +87,6 @@ async function setupVenue(): Promise<SeededVenue> {
     orderFlow: "prepay",
   };
   const st = await withTransaction(admin, async (tx) => {
-    await asAppUser(tx);
     return createStation(tx, cfg, { name: "Cocina", isDefault: true });
   });
   return { cfg, stationId: st.id };

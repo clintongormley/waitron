@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
+import { locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -69,7 +69,6 @@ async function setupVenue(): Promise<Seeded> {
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
     // Through the table definition for the same reason as the venue rows above:
     // `table_service_statuses.id` and `.created_at` are `$defaultFn` generators and both columns are
@@ -90,7 +89,6 @@ async function setupVenue(): Promise<Seeded> {
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

@@ -18,10 +18,7 @@ import { ALL_MODULES } from "./modules.js";
  *
  * ## What went with PostgreSQL
  *
- * The file's stated reason was the deployment ROLE: every verb authorized and then read or wrote
- * `canvases` / `tenant_themes` as `app_user`, and a PGlite superuser would have held those grants
- * unconditionally. SQLite has no roles and no grants; `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection. Nothing
+ * SQLite has no roles and no grants, and every call below runs on the one connection. Nothing
  * here now says anything about which identity the routes reach the database as. The 403 and 401
  * gates are `authorizeManager` and `requireManagementSession` rather than privileges, so they are
  * unaffected — and still pass.

@@ -1,4 +1,4 @@
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
@@ -32,7 +32,6 @@ describe("the shared fixtures seed a real migrated venue", () => {
   it("seeds the two legacy selling units with their names and precisions", async () => {
     await seedLegacySellingUnits(db);
     const { rows } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return tx.execute<{ seed_key: string; precision: number; hardware_unit: string | null }>(
         sql`select seed_key, precision, hardware_unit from units order by seed_key`,
       );

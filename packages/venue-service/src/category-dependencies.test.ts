@@ -11,7 +11,6 @@ import {
   readCategory,
 } from "@waitron/catalogue";
 import {
-  asAppUser,
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
@@ -49,7 +48,6 @@ async function venue() {
 it("deleting a category removes its preparation routes and the category", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const category = await createCategory(tx, { name: { en: "Drinks" } });
     await createPreparationRoute(
       tx,
@@ -70,7 +68,6 @@ it("deleting a category removes its preparation routes and the category", async 
 it("an open order keeps its copied category label after the category is deleted", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [till] = await tx
       .insert(tills)
       .values({ locationId, name: "Till" })
@@ -131,7 +128,6 @@ it("an open order keeps its copied category label after the category is deleted"
 it("dependants lists a category's preparation routes with station and zone names", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const category = await createCategory(tx, { name: { en: "Grill" } });
     const [zone] = await tx
       .insert(floorZones)
@@ -165,7 +161,6 @@ it("dependants lists a category's preparation routes with station and zone names
 it("dependants reports a no-preparation route with a null station", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const category = await createCategory(tx, { name: { en: "Drinks" } });
     const routeId = await createPreparationRoute(
       tx,

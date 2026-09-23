@@ -52,8 +52,8 @@ function minutesSince(stamp: string, nowMs: number): number {
  * the links alone are exact here — never two tables satisfy the OR for the SAME order under the
  * one-tab-per-table / one-delivery-target invariants those columns carry.
  *
- * Runs on the caller's transaction as `app_user`. The query scopes its rows with an explicit `nodeId`
- * WHERE predicate; one tenant per database, so it carries no tenant predicate.
+ * Runs on the caller's transaction. The query scopes its rows with an explicit `nodeId` WHERE
+ * predicate; one tenant per database, so it carries no tenant predicate.
  */
 export async function computeOverdueOrders(
   tx: Transaction,

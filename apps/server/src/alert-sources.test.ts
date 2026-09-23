@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  asAppUser,
   CORE_MIGRATIONS,
   locations,
   printAgents,
@@ -111,9 +110,8 @@ describe("awaitingCertAlertSource", () => {
   });
 });
 
-// The printing source reads three real tables (printers, print_agents, print_jobs), so it runs on
-// PGlite as the app role — a grant assertion that forgot `asAppUser(tx)` would silently pass as the
-// owner (CLAUDE.md §4). PGlite fits: these are plain SELECTs with no contention to prove.
+// The printing source reads three real tables (printers, print_agents, print_jobs). These are plain
+// SELECTs with no contention to prove.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** Minutes before NOW as an ISO string — the shape `last_seen_at` / `created_at` compare against. */
@@ -193,10 +191,9 @@ async function seedJob(t: {
   });
 }
 
-/** Run the source as the app role in one transaction, exactly as the registry does. */
+/** Run the source in one transaction, exactly as the registry does. */
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return printingAlertSource().read({ tx, now });
   });
 }
@@ -330,8 +327,8 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
 });
 
 // The battery source reads `card_readers` (a payments-module table) and calls the card-provider seat,
-// so this suite migrates the payments set on top of core and runs as the app role, like the printing
-// block. The provider is a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
+// so this suite migrates the payments set on top of core, like the printing block. The provider is
+// a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
 const batterySuite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 async function seedReader(t: {
@@ -395,7 +392,6 @@ const stubRuntimeDeps = (db: Database) => (): CardProviderRuntimeDeps => ({
 
 async function readBattery(source: AlertSource, now = NOW) {
   return withTransaction(batterySuite.db, async (tx) => {
-    await asAppUser(tx);
     return source.read({ tx, now });
   });
 }

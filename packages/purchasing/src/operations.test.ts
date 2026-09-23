@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
+import { purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
@@ -16,10 +16,8 @@ import type { CreatePurchaseInvoiceInput, PurchaseRegime } from "./types.js";
 
 // A real SQLite venue database in a temporary directory, opened by the product's own opener
 // (`packages/db/src/testing/venue-db.ts`) — not an in-memory one, so a suite gets the storage a box
-// gets. The note here used to weigh PGlite against real PostgreSQL on whether these cases needed
-// the non-superuser deployment role; that question is gone with the roles. `asAppUser` below is an
-// empty body kept so its call sites still compile (`packages/db/src/testing/roles.ts`), and what
-// these cases cover is the CRUD and validation logic.
+// gets. There are no roles on this engine, and what these cases cover is the CRUD and validation
+// logic.
 const fx = usePurchasingDb();
 
 const d = (s: string): Decimal => s as Decimal;
@@ -45,7 +43,6 @@ describe("purchase-invoice operations", () => {
 
   async function asApp<T>(fn: Parameters<typeof withTransaction<T>>[1]): Promise<T> {
     return withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       return fn(tx);
     });
   }

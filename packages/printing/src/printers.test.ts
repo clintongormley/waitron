@@ -24,8 +24,8 @@ import "./errors.js";
 // refusals are mapped onto, the partial-edit and deactivation paths, the listing, and the layout
 // settings.
 //
-// This engine has no roles and no grants, so no case below is a claim about a privilege
-// (`packages/db/src/testing/roles.ts`), and no suite this branch left behind replaces that half.
+// This engine has no roles and no grants, so no case below is a claim about a privilege, and no
+// suite this branch left behind replaces that half.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /**

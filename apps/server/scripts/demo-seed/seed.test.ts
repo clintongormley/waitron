@@ -7,10 +7,8 @@
  * Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
  * `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
  *
- * **What went with PostgreSQL.** The sub-seeds used to run as `app_user` on a real server, so a
- * grant they do not hold would have failed this file. SQLite has no roles, `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
- * Nothing now checks who may write any of the seeded tables.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write any of the seeded tables.
  *
  * Three read-back shapes moved with the engine, none of them changing what is asserted:
  * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is
@@ -22,7 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -107,7 +105,6 @@ describe("seedDemoRestaurant", () => {
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 });
 
     const read = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
@@ -331,7 +328,6 @@ describe("seedDemoRestaurant", () => {
     // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.png` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
     const { rows: imageRows } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,
       );

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   purchaseInvoiceVat,
   purchaseInvoices,
   withTransaction,
@@ -20,7 +19,6 @@ beforeEach(async () => {
 
 function run(opts: { year: number; month: number }): Promise<InputVatReturn> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return computeInputVat(tx, {
       year: opts.year,
       period: { kind: "month", month: opts.month },

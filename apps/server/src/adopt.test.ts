@@ -22,17 +22,11 @@ import { verifyBreakGlass } from "./break-glass.js";
 // One migrated venue database for the whole file; `useVenueDb` empties the data after every case, so
 // each one starts from an unstamped `deployment` and an empty `tenants`.
 //
-// It reached this engine as a per-case clone of a shared PostgreSQL template, opened TWICE: an owner
-// connection for the stamp/`mirror_config`/verifier writes, and a second connection logged in as
-// `app_login` → `app_user` that the break-glass read-back was taken on. That second connection is
-// gone with the roles and the grants (`packages/db/src/testing/roles.ts`), and one file has one
-// writer here, so every case runs on the single handle.
+// One file has one writer here, so every case runs on the single handle.
 //
-// LOST with it, and covered by nothing: that the application role may READ the break-glass verifier
-// while holding none of the writes adopt makes — the split `adopt.ts:40` still describes. The round
-// trip itself survives below and is not vacuous: with `+ "x"` appended to the secret the assertion
-// reads `expected false to be true`, so the stored scrypt verifier is genuinely being checked. It is
-// only the "on a connection that is NOT the owner" half that no longer has a subject.
+// The break-glass round trip below is not vacuous: with `+ "x"` appended to the secret the
+// assertion reads `expected false to be true`, so the stored scrypt verifier is genuinely being
+// checked.
 //
 // Per-case independence now rests on `useVenueDb`'s default `resetPerTest`, not on a fresh clone.
 // Measured with `resetPerTest: false` as the control: five cases go red. Three read

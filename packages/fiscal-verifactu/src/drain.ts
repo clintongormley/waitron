@@ -600,9 +600,7 @@ async function claimBatch(
   // a lock clause — SQLite has none, and one writer holds the file at a time — so what keeps a
   // second drain off these rows is that this selection and the stamps that follow it commit
   // together inside one `withTransaction`. The helper's own paragraph in `@waitron/db` carries the
-  // reasoning. The `of: "e"` that narrowed the lock is gone with the lock: it existed because
-  // `app_user` may read `registros_facturacion` and never write it, so an unnarrowed `FOR UPDATE`
-  // over this join was refused `42501`.
+  // reasoning.
   const claimed = await claimLockedRows<Record<string, unknown>>(tx, {
     selection: sql`
       select r.*, e.intentos from envios e

@@ -1,9 +1,3 @@
-// LOSS, from the storage swap: the "allocates as the app role" case below used to run the
-// allocation as the non-owner `app_user` on a real PostgreSQL, and its whole point was the
-// COLUMN-SCOPED `grant update (next_number)` — without that grant, allocation worked in every test
-// that skipped the role switch and failed only in production. SQLite has no roles and no grants
-// (`packages/db/src/testing/roles.ts`), so that case now duplicates the first one and is deleted.
-// Nothing states which privileges this allocation needed.
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { allocateInvoiceNumber } from "./allocate-number.js";

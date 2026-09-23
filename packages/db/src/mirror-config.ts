@@ -59,11 +59,10 @@ export async function readMirrorConfig(db: Database): Promise<MirrorConnection |
  * is no immutability rule here (unlike `deployment.environment`), because a box can legitimately
  * move relays or rotate its CA.
  *
- * **Nothing in the database refuses another writer this table.** On PostgreSQL `app_user` held no
- * INSERT or UPDATE on `mirror_config`, so only the provisioning connection could write it. This
- * engine has no roles and no grants (`./testing/roles.ts`), and `mirror_config` carries no trigger:
- * an ordinary insert succeeds, measured 2026-09-23 on Node v26.7.0 against the core migration set.
- * That the adopt path is the only writer is now a convention, not something the database holds.
+ * **Nothing in the database refuses another writer this table.** `mirror_config` carries no
+ * trigger: an ordinary insert succeeds, measured 2026-09-23 on Node v26.7.0 against the core
+ * migration set. That the adopt path is the only writer is a convention, not something the database
+ * holds.
  */
 export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Promise<void> {
   // Uses the Drizzle table object (not raw SQL) — the same split `deployment.ts` uses, where

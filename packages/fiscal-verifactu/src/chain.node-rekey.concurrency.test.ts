@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { asAppUser, captureError, locations, nodes, withTransaction } from "@waitron/db";
+import { captureError, locations, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -25,22 +25,13 @@ const WRITERS = 20;
  * Node-keyed chain and series allocation, with the appends started together rather than awaited in
  * turn.
  *
- * TWO THINGS LOST when this file moved off PostgreSQL:
- *
- * - **Twenty independent connections.** There is one connection per venue file, so the twenty
- *   appends below are twenty transactions started together and serialised by the file's write
- *   queue (`packages/store/src/write-queue.ts`). What they still prove is the chain's own
- *   guarantee — twenty distinct, contiguous positions, each linked to its predecessor — which a
- *   queue that failed to serialise would break. The serialisation itself is observed, with its
- *   control, in `chain.concurrency.test.ts` ("holds a second appender on the same chain until the
- *   first commits"); it is not re-observed here.
- * - **`lets the app role append` is DELETED.** Its subject was the deployment ROLE: it ran
- *   `appendToChain` under `asAppUser` to show the app role held the grants for a node-keyed
- *   insert. `asAppUser` is an inert function on this engine
- *   (`packages/db/src/testing/roles.ts`) and SQLite has no roles, so the case would have asserted
- *   only that an append returns `secuencia: 1` — which the first case here and
- *   `chain.concurrency.test.ts` both already assert. The ROLE half is covered by nothing; see the
- *   note on the deleted `privileges.test.ts`.
+ * LOST when this file moved off PostgreSQL: **twenty independent connections.** There is one
+ * connection per venue file, so the twenty appends below are twenty transactions started together
+ * and serialised by the file's write queue (`packages/store/src/write-queue.ts`). What they still
+ * prove is the chain's own guarantee — twenty distinct, contiguous positions, each linked to its
+ * predecessor — which a queue that failed to serialise would break. The serialisation itself is
+ * observed, with its control, in `chain.concurrency.test.ts` ("holds a second appender on the same
+ * chain until the first commits"); it is not re-observed here.
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -188,8 +179,8 @@ describe("currentSif resolves per node", () => {
 
 describe("the series↔node guard (record-sale)", () => {
   // Property 3 (design §9.2): a sale whose input.nodeId ≠ the series' node throws
-  // sale.series_wrong_node; the matching case succeeds. Driven through @waitron/core's recordSale —
-  // the guard's real home — under the non-superuser app role.
+  // sale.series_wrong_node; the matching case succeeds. Driven through @waitron/core's recordSale,
+  // the guard's real home.
   function backendFor(): VerifactuBackend {
     return new VerifactuBackend({
       deploymentEnvironment: "production",
@@ -204,7 +195,6 @@ describe("the series↔node guard (record-sale)", () => {
     const backend = backendFor();
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         // node.seriesId belongs to node.nodeId, but we claim to process on `other.nodeId`.
         return recordSale(
           tx,
@@ -223,7 +213,6 @@ describe("the series↔node guard (record-sale)", () => {
   it("accepts a sale whose node owns the series", async () => {
     const backend = backendFor();
     const result = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(
         tx,
         backend,

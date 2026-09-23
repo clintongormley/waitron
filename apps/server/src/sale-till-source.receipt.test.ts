@@ -1,14 +1,12 @@
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
 // migrated venue database.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template; the `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep, so nothing here says
-// anything about what the deployment role, which no longer exists, may read or write.
+// Nothing here says anything about what the deployment role, which no longer exists, may read or
+// write.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, sales, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, sales, tills, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -148,7 +146,6 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const created = await createProduct(tx, {
@@ -208,8 +205,8 @@ async function setupVenue(): Promise<{
 }
 
 /** A SECOND `tills` row in the SAME tenant and location as the venue's own till — the register a
- *  re-homed / second device would ring against. Inserted on the owner connection directly (fixture
- *  setup, not the code under test), returning its id. */
+ *  re-homed / second device would ring against. Inserted directly (fixture setup, not the code
+ *  under test), returning its id. */
 async function insertTill(locationId: string, name: string): Promise<string> {
   // Through the table definition: `tills.id` and `tills.created_at` are `$defaultFn` generators
   // (`packages/db/src/schema/tenants.ts:232,:246`), which a raw statement never reaches.
@@ -236,11 +233,11 @@ async function seedHandheldProfile(): Promise<string> {
 }
 
 /** Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`), and return the
- *  `waitron_device=<id>.<token>` cookie a booting device carries — join-and-accept runs on the app role
- *  under the tenant (the production accept path), so the scrypt hash verifies and `tryReadDevice`
- *  resolves a genuine binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a
- *  SPECIFIC existing register is the handheld leg (`registerId`); the sale route resolves `till_id`
- *  from THIS device (`requireSaleTillId`) either way. */
+ *  `waitron_device=<id>.<token>` cookie a booting device carries — join-and-accept runs the
+ *  production accept path, so the scrypt hash verifies and `tryReadDevice` resolves a genuine
+ *  binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a SPECIFIC
+ *  existing register is the handheld leg (`registerId`); the sale route resolves `till_id` from
+ *  THIS device (`requireSaleTillId`) either way. */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -323,7 +320,6 @@ interface Registro {
 async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({
         tillId: registrosFacturacion.tillId,
@@ -344,7 +340,6 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
 async function saleTillIds(cfg: TillConfig): Promise<string[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
       .from(sales);

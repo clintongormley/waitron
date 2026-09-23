@@ -25,12 +25,8 @@ import { BOOKINGS_ROUTES } from "./routes.js";
 // authorization.not_permitted — the deletion proof for the descriptor's permissions seat.
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
-// WHAT THIS SUITE NO LONGER SHOWS. Its header used to say that every database touch below goes
-// through `BOOKINGS_ROUTES`' `gated` helper (withTransaction + asAppUser + authorizeManager), so
-// the routes ran as the non-superuser `app_user` and the table GRANTS were enforced rather than
-// bypassed. This engine has no roles and `asAppUser` is an empty body
-// (`packages/db/src/testing/roles.ts`), so the grant half is gone and nothing replaces it. The
-// `booking.manage` gate is the module's own code and is still proven by deletion, on the block
+// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so the GRANT half is gone and nothing
+// replaces it. The `booking.manage` gate is the module's own code and is still proven by deletion, on the block
 // below. `core.openTab` is `fakeCore` (the real verb lives in apps/server, which a module cannot
 // import); the seat still opens a real working_orders row, so the seat happy-path and read-back are
 // exercised end to end.

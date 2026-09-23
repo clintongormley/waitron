@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -15,8 +15,7 @@ import "./errors.js";
 // CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, so those two sets are
 // what this suite migrates rather than the whole manifest.
 //
-// There are no roles on this engine: `asAppUser` is an inert function
-// (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection, so the
+// There are no roles on this engine, and every call below runs on the one connection, so the
 // refusals here are the route gate alone and nothing checks that a deployment role's grants back
 // them up. The wider five-route sweep is `purchasing-api.gate-sweep.test.ts`, which says the same.
 const noopLog: Logger = () => {};
@@ -39,7 +38,6 @@ const suite = useVenueDb({
     // on a NOT NULL column (`packages/identity/src/schema/persons.ts`), which a raw insert never
     // reaches — the refusal is `NOT NULL constraint failed: persons.id`.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

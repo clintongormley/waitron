@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
-  asAppUser,
   diningTables,
   drawerOpens,
   locations,
@@ -50,13 +49,6 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
 /**
  * The auto-print hook, on the engine the box now runs: a `print_jobs` outbox row and a `drawer_opens`
  * audit row written atomically with a genuine chained fiscal sale.
- *
- * ## The role half of the old header is gone and is replaced by nothing
- *
- * It argued real PostgreSQL was mandatory rather than PGlite because the hook wrote through the
- * deployment role while provisioning ran as the owner. SQLite has no roles: one process opens one
- * file, and `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). The
- * `asAppUser(tx)` calls below are where the product path puts them, and they check nothing.
  *
  * ## What is unchanged, and must stay that way — CLAUDE.md §5
  *
@@ -170,7 +162,6 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -200,7 +191,6 @@ async function makePrinter(
   { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
       printCfg(cfg),
@@ -213,14 +203,13 @@ async function makePrinter(
   });
 }
 
-/** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id` (both settable by the
- *  app role — `drawer-opens.test.ts`). Pass `printerId: null` to leave the till with no printer. */
+/** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id`. Pass
+ *  `printerId: null` to leave the till with no printer. */
 async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
         .update(locations)
@@ -241,7 +230,6 @@ async function printJobsFor(
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx
       .select({
         printerId: printJobs.printerId,
@@ -257,7 +245,6 @@ async function drawerOpensFor(
 ): Promise<{ reason: string; saleId: string | null; personId: string; tillId: string }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx
       .select({
         reason: drawerOpens.reason,
@@ -272,7 +259,6 @@ async function drawerOpensFor(
 async function registroCount(cfg: TillConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx.select().from(registrosFacturacion);
     return rows.length;
   });
@@ -283,7 +269,6 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 async function onlySaleId(cfg: TillConfig): Promise<string> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
   });
@@ -325,7 +310,6 @@ describe("receipt grouping after table changes", () => {
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
       const { tableId, tabId } = await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         const table = await createTable(tx, cfg, { label: "Terrace 6" });
         const tab = await openTab(tx, cfg, {
           tableId: table.id,
@@ -363,7 +347,6 @@ describe("receipt grouping after table changes", () => {
         "Terrace 6",
       );
       await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await tx
           .update(diningTables)
           .set({ label: "Renamed table" })
@@ -384,7 +367,6 @@ describe("receipt grouping after table changes", () => {
         expect(collected.orderLabel).toBe("Terrace 6");
       }
       await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await openTab(tx, cfg, { tableId });
       });
       await reprintSale({ db: suite.db, backend }, cfg, tabId);
@@ -439,7 +421,6 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
         characterSet: "pc858",
@@ -517,7 +498,6 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       // Through the table definition: `receipt` is a JSON column whose own write mapping encodes
       // the object, and `updated_at` is a JavaScript generator a raw insert never reaches. The
       // `::jsonb` cast this replaces is a syntax error on this engine.
@@ -698,7 +678,6 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const base = await setupVenue();
       const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
       const deviceTillId = await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         const [till] = await tx
           .insert(tills)
           .values({
@@ -729,7 +708,6 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const base = await setupVenue();
       // Placement issues the invoice before any payment; collection retains its separate drawer action.
       await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await tx
           .update(locations)
           .set({ orderFlow: "invoice_first" })

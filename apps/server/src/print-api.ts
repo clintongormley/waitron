@@ -7,7 +7,6 @@ import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { AppError, resolveActiveLocale } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import {
-  asAppUser,
   drawerOpenPolicy,
   locations,
   printAgents,
@@ -338,7 +337,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     permission: Permission = PRINTER_MANAGE_PERMISSION,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
@@ -361,7 +359,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
       const made = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
       });
       // The token is `${joinId}.${secret}`: the joinId becomes the agent id (accept carries it onto the
@@ -389,7 +386,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // comparison that would neither refuse it nor match it, the device sibling's guard.
       if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
       const status = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return readAgentJoinStatus(tx, deps.cfg, joinId, secret);
       });
       return c.json({ status });
@@ -441,7 +437,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // under one-location-per-DB. A future multi-location tenant reads the agent's own
       // `print_agents.location_id` instead of the server's.
       const claimed = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         if (host !== undefined) {
           await tx
             .update(printAgents)
@@ -503,7 +498,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // row matched — an idempotent status sink (a job that is not this agent's, already terminal, or
       // unknown is a no-op), never disclosing which job ids exist. The agent-scope is proven by deletion.
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return reportPrintJob(tx, { agentId, jobId, outcome });
       });
       return c.body(null, 204);
@@ -1072,7 +1066,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // persisted value across a reload. Lives beside the sibling `PATCH
   // …/tills/:id/receipt-printer`, funnelled through the SAME `gated` helper so `printer.manage`
   // is enforced identically (the by-deletion proof on that helper covers this route too). Runs in
-  // `gated`'s `withTransaction` + `asAppUser` transaction. Ordered by name for a stable list.
+  // `gated`'s `withTransaction`. Ordered by name for a stable list.
   app.get("/management-api/tills", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

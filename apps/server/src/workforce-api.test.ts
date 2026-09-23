@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -24,7 +24,6 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       // Through the table definitions, not raw SQL: every `id` here is a JavaScript `$defaultFn`
       // generator on this engine (`id text PRIMARY KEY NOT NULL`), which a raw insert never reaches,
       // and `invoice_locales` is encoded by the column's own write mapping — the `array[...]`
@@ -305,7 +304,6 @@ describe("mountWorkforceApi — shift routes", () => {
 describe("mountWorkforceApi — publish", () => {
   async function seedConvenio(): Promise<void> {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx
         .insert(convenioConfig)
         .values({ locationId })
@@ -374,7 +372,6 @@ describe("mountWorkforceApi — publish", () => {
     const app = mountApp();
     // A DIFFERENT location with no convenio row.
     const otherLoc = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [r] = await tx
         .insert(locations)
         .values({
@@ -409,7 +406,6 @@ describe("mountWorkforceApi — publish", () => {
 describe("mountWorkforceApi — swap + absence approvals", () => {
   async function seedAcceptedSwap(): Promise<string> {
     return withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [shift] = await tx
         .insert(shifts)
         .values({
@@ -435,7 +431,6 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
   }
   async function seedRequestedAbsence(): Promise<string> {
     return withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [r] = await tx
         .insert(absences)
         .values({

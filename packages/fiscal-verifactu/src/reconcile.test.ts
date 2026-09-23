@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
+import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -432,7 +432,6 @@ describe("reconcile — the three audit cases", () => {
     });
 
     const sale = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
     // `recordSale`'s own envío row takes `proximo_intento_en`'s column DEFAULT (real wall-clock
@@ -441,14 +440,12 @@ describe("reconcile — the three audit cases", () => {
     // Pin it to `DRAIN_AT` so the drain below is deterministic rather than wall-clock-relative (a
     // Copilot review point — clock skew / slow CI could otherwise flake a `Date.now()`-based due time).
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
     });
     await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcta
 
     const alta = await altaIdentityFor(sale.saleId);
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
     // The void appends a sibling anulación registro (same sale_id) with its own pendiente envío —

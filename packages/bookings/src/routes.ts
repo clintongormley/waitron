@@ -7,7 +7,7 @@
 import "./errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
@@ -153,7 +153,7 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
  * The bookings module's `routes` seat. The deployment holds one tenant per database. Mounts the
  * dashboard's gated booking write group on the shared Hono app boot passes — every route wraps its
  * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
- * `withTransaction` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
+ * `withTransaction`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
  * this database. The `booking.manage` gate runs on every route through one constant. No fiscal path
  * is touched: `seatBooking` opens a pre-fiscal working order only, via `ctx.core.openTab` (boot
  * bound the venue's `TillConfig` into `core`). The seven route paths are byte-identical to the
@@ -163,17 +163,16 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const { db, cfg, core } = ctx;
 
-    // Open a transaction as the app role, confirm the caller's management session carries
-    // BOOKING_WRITE, then run `fn` with the tx AND the authorization result. Every route funnels its DB
-    // work through here so the gate is applied identically and in exactly one place. `fn` receives
-    // `{ authorizedBy }` (the person id the session resolved to) so the create route can stamp
-    // `bookings.created_by` from the authorized manager rather than trusting the request body.
+    // Open a transaction, confirm the caller's management session carries BOOKING_WRITE, then run
+    // `fn` with the tx AND the authorization result. Every route funnels its DB work through here
+    // so the gate is applied identically and in exactly one place. `fn` receives `{ authorizedBy }`
+    // (the person id the session resolved to) so the create route can stamp `bookings.created_by`
+    // from the authorized manager rather than trusting the request body.
     const gated = <T>(
       sessionId: string,
       fn: (tx: Transaction, auth: { authorizedBy: string }) => Promise<T>,
     ): Promise<T> =>
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         const auth = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: BOOKING_WRITE,

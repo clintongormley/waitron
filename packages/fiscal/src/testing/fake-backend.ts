@@ -62,7 +62,7 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   /**
    * Creates this fake's two bookkeeping tables, and nothing else — no grants, because the engine
-   * has no roles to grant to (`packages/db/src/testing/roles.ts`).
+   * has no roles to grant to.
    *
    * The DDL stays hand-written rather than moving to `@waitron/db`'s column vocabulary. These are
    * not product tables: they belong to no migration set, carry no `ledger`/`state`/`local`

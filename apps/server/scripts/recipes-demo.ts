@@ -10,14 +10,7 @@
 // with its `manual_allergens`/`recipe_derivation` overlays, and `core` the `ingredients` and
 // `recipe_lines` tables read and written here.
 //
-// LOST with the storage swap: the story used to run inside an `asAppUser` transaction, to show the
-// POS publishing allergens as `app_user` rather than as the owner. SQLite has no roles and no
-// grants, and `asAppUser` is now an empty function (`packages/db/src/testing/roles.ts`), so that
-// part of the demonstration is gone; the one call is deleted rather than left as a no-op that
-// still reads like a claim. Deleted with it, and worth naming because it was never true: the
-// header also said the demo "seeds a tenant + location as the PGlite superuser", which no code in
-// this file ever did — the version before the storage swap seeded neither row, and the story below
-// still needs neither (`git log -p -- apps/server/scripts/recipes-demo.ts`).
+// SQLite has no roles and no grants: nothing below demonstrates who may write.
 //
 // It:
 // 1. makes a throwaway venue directory under the OS temp dir, applies the `core` and `catalogue`

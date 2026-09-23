@@ -6,12 +6,8 @@
 // carry everything it touches — `core` the `tenants` and `locations` rows it seeds, `catalogue`
 // the catalogue tables and the `products.allergens` column it reads back.
 //
-// LOST with the storage swap: this demo used to seed the tenant as the PGlite superuser and then
-// author the catalogue through `asAppUser`, to show that a running POS writes as `app_user` — a
-// role holding no INSERT on `tenants`. SQLite has no roles and no grants, and `asAppUser` is now
-// an empty function (`packages/db/src/testing/roles.ts`), so that half of the demonstration is
-// gone; the calls are deleted rather than left standing as no-ops that still read like a claim.
-// What the demo still shows is the allergen seam itself, which is what its name says.
+// SQLite has no roles and no grants: nothing below demonstrates who may write. What this demo
+// does show is the allergen seam itself, which is what its name says.
 //
 // It:
 // 1. makes a throwaway venue directory under the OS temp dir, applies the `core` and `catalogue`

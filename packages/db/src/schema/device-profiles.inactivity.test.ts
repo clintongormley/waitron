@@ -6,10 +6,8 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { tenants } from "./tenants.js";
 
-// The core migration chain (0011_device_profile_inactivity_timeout_sql) adds a nullable
-// `inactivity_timeout_seconds` integer to `device_profiles`. This is about column shape and
-// nullability, not grants or triggers (CLAUDE.md §4). The real-PG grant path is covered by the
-// app-role suites in packages/layouts.
+// The core migration chain adds a nullable `inactivity_timeout_seconds` integer to
+// `device_profiles`. This is about column shape and nullability, not triggers (CLAUDE.md §4).
 
 describe("device_profiles.inactivity_timeout_seconds", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });

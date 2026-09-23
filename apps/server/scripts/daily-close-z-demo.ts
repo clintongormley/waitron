@@ -14,11 +14,7 @@
 // closers run at once; that is `packages/reporting/src/record-daily-close.concurrency.test.ts`, whose own
 // header records which of its cases survived the move off PostgreSQL and which did not.
 //
-// LOST with the storage swap: every write below used to run through `asAppUser`, to show the POS
-// closing the day as `app_user` rather than as the owner. SQLite has no roles and no grants, and
-// `asAppUser` is now an empty function (`packages/db/src/testing/roles.ts`), so that part of the
-// demonstration is gone; the calls are deleted rather than left as no-ops that still read like a
-// claim. The same sentence in the suite named above records what nothing buys any more.
+// SQLite has no roles and no grants: nothing below demonstrates who may write.
 //
 // The day it rings up — business day 2026-08-04, Europe/Madrid, across TWO tills at one node:
 //   Caja 1: base 100.00 @ 21% → 121.00 CASH  ;  base 40.00 @ 10% → 44.00 CARD

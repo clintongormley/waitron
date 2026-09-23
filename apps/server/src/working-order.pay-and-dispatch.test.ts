@@ -18,7 +18,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
-  asAppUser,
   diningTables,
   nodes,
   nowIso,
@@ -88,9 +87,8 @@ import "./errors.js";
 // clone of a shared PostgreSQL template, with `suite.pg.connect()` handing out extra backends. Both
 // are gone. There is ONE venue file and ONE handle, and `withTransaction` IS the write lock
 // (`packages/db/src/tenancy.ts:20-22` → `withWriteLock`, `packages/store/src/write-queue.ts`), so
-// two overlapping transactions on this handle queue rather than contend. The `asAppUser(tx)` calls
-// below are inert (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing
-// here establishes what any database role may read or write, because there are no roles.
+// two overlapping transactions on this handle queue rather than contend. Nothing here establishes
+// what any database role may read or write, because there are no roles.
 //
 // WHAT THE NINE "two backend" CASES NOW SHOW, AND WHAT THEY DO NOT. Each of them now starts both
 // halves on one handle. Every BEHAVIOURAL assertion each case made is unchanged; three assertions
@@ -195,9 +193,9 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app
- * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its sale /
- * registro counts are order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * `each`/general(21%) products. Each test gets its OWN tenant so its sale / registro counts are
+ * order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -236,7 +234,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -266,9 +263,9 @@ async function setupVenue(): Promise<SeededVenue> {
 /**
  * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT
  * `prepay` (planVenue has no mode input), then this flips the location's `order_flow` column to
- * `mode` (as the owner) AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow`
- * reads) and the in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly
- * as boot wires them in production.
+ * `mode` AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow` reads) and the
+ * in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly as boot wires them
+ * in production.
  */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
@@ -278,11 +275,10 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
 
-/** The OUTSTANDING (issued-but-unsettled) sales, read as the app role — the surface an
- *  invoice-first order shows on between placing and collect. */
+/** The OUTSTANDING (issued-but-unsettled) sales — the surface an invoice-first order shows on
+ *  between placing and collect. */
 async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
   });
@@ -297,8 +293,8 @@ async function saleCount(workingOrderId: string): Promise<number> {
 }
 
 /**
- * The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner. The
- * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
+ * The IMMUTABLE filed `sales.total` for this working order's sale. The witness that a retrieved
+ * order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
   // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
@@ -310,10 +306,10 @@ async function filedSaleTotal(workingOrderId: string): Promise<string> {
 }
 
 /**
- * The frozen printed unit label on this order's filed line, read straight from the persisted tables
- * as the owner: the working-order line where the add-time freeze writes it, and the sale line the
- * filing copies it onto. The witness that the freeze puts the unit's ABBREVIATION (its short form),
- * not the unit's full name, onto a filed line.
+ * The frozen printed unit label on this order's filed line, read straight from the persisted
+ * tables: the working-order line where the add-time freeze writes it, and the sale line the filing
+ * copies it onto. The witness that the freeze puts the unit's ABBREVIATION (its short form), not
+ * the unit's full name, onto a filed line.
  */
 async function frozenUnitLabels(
   workingOrderId: string,
@@ -348,8 +344,8 @@ async function registroCount(workingOrderId: string): Promise<number> {
 }
 
 /**
- * The tenders filed against this working order's sale — method + amount, read as the owner.
- * Ordered by method so a multi-tender assertion is stable.
+ * The tenders filed against this working order's sale — method + amount. Ordered by method so a
+ * multi-tender assertion is stable.
  */
 async function tendersFor(workingOrderId: string): Promise<{ method: string; amount: string }[]> {
   // `tenders.amount` counts whole cents, read raw and converted by `rawCentsToDecimal`; the
@@ -366,9 +362,9 @@ async function tendersFor(workingOrderId: string): Promise<{ method: string; amo
 
 /**
  * The `payments` rows for this working order — provider/state/amount, plus whether `sale_id`
- * actually points at the filed sale (the association witness) — read as the owner. The inner join
- * to `sales` on `working_order_id` (unique per sale) is how `linkedToSale` compares the payment's
- * `sale_id` against the ONE sale filed from this order.
+ * actually points at the filed sale (the association witness). The inner join to `sales` on
+ * `working_order_id` (unique per sale) is how `linkedToSale` compares the payment's `sale_id`
+ * against the ONE sale filed from this order.
  */
 async function paymentsFor(
   workingOrderId: string,
@@ -420,8 +416,8 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settledAt !== null };
 }
 
-/** Whether this order's `collected_at` (customer-handover) marker is set — owner read. The witness that
- *  the collect flow stamped the ORDER-level marker `listStationQueue` excludes on (§3e): a placed order
+/** Whether this order's `collected_at` (customer-handover) marker is set. The witness that the
+ *  collect flow stamped the ORDER-level marker `listStationQueue` excludes on (§3e): a placed order
  *  fired to a station leaves that station's queue once `collectOrder` sets it. Kept separate from
  *  {@link orderState} (whose `toEqual` assertions pin exactly `{status, settledAtSet}`). */
 async function collectedAtSet(id: string): Promise<boolean> {
@@ -467,10 +463,11 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
     .orderBy(asc(orderAmendments.sequenceNo));
 }
 
-/** The kitchen state of the ticket item fired for this SINGLE-line order, or null when none was fired —
- *  owner read. Placing (Modes I/T, inside `placeOrder`) and send-to-prep (Mode P) fire one `ticket_items`
- *  row per line (KDS-1); a walk-up never fires. The callers here fire SINGLE-line orders, so at most one
- *  row exists — the per-line `ticket_items` successor to the dropped-`order_prep` `prepStateOf`. */
+/** The kitchen state of the ticket item fired for this SINGLE-line order, or null when none was
+ *  fired. Placing (Modes I/T, inside `placeOrder`) and send-to-prep (Mode P) fire one
+ *  `ticket_items` row per line (KDS-1); a walk-up never fires. The callers here fire SINGLE-line
+ *  orders, so at most one row exists — the per-line `ticket_items` successor to the
+ *  dropped-`order_prep` `prepStateOf`. */
 async function ticketStateOf(id: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ state: string }>(sql`
     select state from ticket_items where working_order_id = ${id}
@@ -478,9 +475,9 @@ async function ticketStateOf(id: string): Promise<string | null> {
   return rows[0]?.state ?? null;
 }
 
-/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location — venue-apply.ts)
- *  — owner read. Every fixture line here carries no product/category route, so it fires to this station;
- *  it is the id the whole-ticket bump and the per-station queue address. */
+/** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location —
+ *  venue-apply.ts). Every fixture line here carries no product/category route, so it fires to this
+ *  station; it is the id the whole-ticket bump and the per-station queue address. */
 async function defaultStationId(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
@@ -489,8 +486,8 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** The ticket item ids fired for an order, in `line_no` order — owner read. The per-line bump targets
- *  for {@link advanceTicketItem}, addressed by index the way the display taps a specific line. */
+/** The ticket item ids fired for an order, in `line_no` order. The per-line bump targets for
+ *  {@link advanceTicketItem}, addressed by index the way the display taps a specific line. */
 async function ticketItemIdsFor(orderId: string): Promise<string[]> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select ti.id
@@ -511,17 +508,16 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
 async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }
 
 /**
  * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location and
- * differs only in `till_id`. The row is inserted as the OWNER under `withTransaction`, exactly as
- * `applyVenue` writes a till. Proving
- * cross-till retrieval needs a genuine second till row because both `working_orders.till_id` and
- * `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
+ * differs only in `till_id`. The row is inserted under `withTransaction`, exactly as `applyVenue`
+ * writes a till. Proving cross-till retrieval needs a genuine second till row because both
+ * `working_orders.till_id` and `sales.till_id` FK onto `tills` — a fabricated uuid would fail
+ * those.
  */
 async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
@@ -539,8 +535,8 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
  * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
  * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
- * `node_id` they carry. Inserted as the owner under `withTransaction`, the way `applyVenue`'s create-node
- * does; `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
+ * `node_id` they carry. Inserted under `withTransaction`, the way `applyVenue`'s create-node does;
+ * `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
@@ -553,11 +549,11 @@ async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
 
 /**
  * A parked order's line count and summed `line_total` (the GROSS draft total the held list shows) —
- * read as the owner and summed in JS, NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total`
- * aggregate is validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, read
- * raw and converted per row by `rawCentsToDecimal`, then added exactly — giving the amount the
- * caller compares with the list's. The empty case is "0.00", the same literal `listHeldOrders`
- * renders for an order with no lines.
+ * read and summed in JS, NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total` aggregate is
+ * validated rather than restated (CLAUDE.md §1). `line_total` counts whole cents, read raw and
+ * converted per row by `rawCentsToDecimal`, then added exactly — giving the amount the caller
+ * compares with the list's. The empty case is "0.00", the same literal `listHeldOrders` renders for
+ * an order with no lines.
  */
 async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
   const { rows } = await suite.db.execute<{ line_total: string }>(sql`
@@ -572,7 +568,7 @@ async function draftAggregate(id: string): Promise<{ itemCount: number; total: s
 
 /**
  * The till the SALE was filed under vs the till the working order was PARKED under — the
- * cross-till witness (parked on A, sold on B). Read as the owner.
+ * cross-till witness (parked on A, sold on B).
  */
 async function saleAndOrderTill(
   workingOrderId: string,
@@ -756,7 +752,6 @@ describe("payWorkingOrder", () => {
     // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
     // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`update products set unit_price = 999 where id = ${cafe.id}`);
     });
 
@@ -769,7 +764,7 @@ describe("payWorkingOrder", () => {
 
     expect(res.total).toBe("1.50"); // the lock, not 9.99
     expect(res.tender).toEqual({ method: "cash", change: "3.50" });
-    // The IMMUTABLE fiscal record carries the locked price — read back as the owner.
+    // The IMMUTABLE fiscal record carries the locked price.
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -916,7 +911,6 @@ describe("payWorkingOrder", () => {
     });
     // Abandon it (open → abandoned), then try to pay.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
     });
 
@@ -1118,8 +1112,7 @@ describe("card tender (manual / datáfono)", () => {
 });
 
 // The park & retrieve headline (spec §7b): a parked order is HELD BY THE NODE, not by the register
-// that parked it, so any till on the node can list, retrieve and pay it. Nothing here establishes
-// which privileges a write needs: there is one handle and no database roles (file header).
+// that parked it, so any till on the node can list, retrieve and pay it.
 describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
     const { cfg: tillA, cafe, agua } = await setupVenue();
@@ -1153,7 +1146,7 @@ describe("cross-till end-to-end", () => {
     });
 
     // CROSS-TILL VISIBILITY: till B's held list shows the order parked on till A. The aggregate is
-    // validated against an owner read summed in JS (`draftAggregate`), not the SQL under test.
+    // validated against a read summed in JS (`draftAggregate`), not the SQL under test.
     const agg = await draftAggregate(orderId);
     expect(agg.itemCount).toBe(2);
     const heldOnB = await listHeldOrders({ db: suite.db }, tillB);
@@ -1269,9 +1262,9 @@ describe("cross-till end-to-end", () => {
 // freezes composition (for free — a placed order's lines are already frozen by require_open_parent);
 // cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment.
 // The append-only guarantee on `order_amendments` is a trigger this suite's database carries
-// (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`); the REVOKE that stood
-// beside it is gone with the roles, so a rewrite is refused by the trigger alone. This slice files
-// NO fiscal doc at placing (Mode T / generic); Mode-I's deferred file and the mode dispatch are Task 8.
+// (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused
+// by the trigger alone. This slice files NO fiscal doc at placing (Mode T / generic); Mode-I's
+// deferred file and the mode dispatch are Task 8.
 describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
     const { cfg, cafe } = await setupVenue();
@@ -1500,8 +1493,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // The unit-abbreviation freeze, end to end. The café sits on the legacy `each` unit, whose NAME
   // ("each"/"unidad"/…) and ABBREVIATION ("ea"/"ud"/…) differ (`seedLegacySellingUnits`), so a filed
   // line can only carry one of them — and the printed label is the abbreviation. Reads the persisted
-  // `working_order_lines` (where the add-time freeze writes it) and `sale_lines` (where filing copies
-  // it) directly, as the owner.
+  // `working_order_lines` (where the add-time freeze writes it) and `sale_lines` (where filing
+  // copies it) directly.
   it("freezes the unit's abbreviation, not its name, onto the filed line", async () => {
     const { cfg, cafe } = await modeVenue("prepay");
     const id = randomUUID();
@@ -1935,8 +1928,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 // per-line/per-station `ticket_items` that replaced #63's one-row-per-order `order_prep`.
 // `sendToPrep` (Mode P) and
 // `placeOrder` (Modes I/T) are the FIRES that put items on the queue; their settled-only guard is
-// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction` +
-// `asAppUser` scope, the latter inert here).
+// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction`
+// scope).
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
     const { cfg, cafe } = await modeVenue("prepay");
@@ -2146,7 +2139,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
 // node-scoped either. `working-order.test.ts` covers the join/grouping/exclusions; this case takes
 // the SAME venue-wide shape the `listStationQueue` test above uses, retargeted at `listExpoQueue`. The
-// reads run through {@link asTenant} (a `withTransaction` + `asAppUser` scope, the latter inert here).
+// reads run through {@link asTenant} (a `withTransaction` scope).
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
@@ -2307,9 +2300,9 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
 // below use `suite.db` directly, which is the SAME handle — there is no outside to witness from
 // any more, only a read taken after the write committed.
 
-/** Insert an active dining table under `cfg`'s location as the owner and return its id — the
- *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTransaction`, the
- *  same shape `addTill`/`addNode` above use. */
+/** Insert an active dining table under `cfg`'s location and return its id — the `openTab` →
+ *  `addTabRound` entry point. Written as an INSERT under `withTransaction`, the same shape
+ *  `addTill`/`addNode` above use. */
 async function addTable(tx: Transaction, cfg: TillConfig): Promise<string> {
   // Through the table, for the reason {@link addTill} gives — and here BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
@@ -2361,8 +2354,8 @@ async function tabSnapshot(tabId: string): Promise<
   }));
 }
 
-/** Every `print_jobs` id (owner read) — the before-set the race diffs against to find slips
- *  enqueued by the two racing verbs. */
+/** Every `print_jobs` id — the before-set the race diffs against to find slips enqueued by the two
+ *  racing verbs. */
 async function printJobIds(): Promise<Set<string>> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`select id from print_jobs `);
   return new Set(rows.map((r) => r.id));
@@ -2390,7 +2383,6 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
@@ -2403,7 +2395,6 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
     // default station. Nothing has printed yet.
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const tableId = await addTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
       await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
@@ -2425,11 +2416,9 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // other outcome being reached, so the assertion can no longer fail in that direction.
     const results = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await sendLines(tx, cfg, tabId, [1]);
       }),
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await recallLines(tx, cfg, tabId, [1]);
       }),
     ]);
@@ -2463,7 +2452,6 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // faithful racer.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
@@ -2477,7 +2465,6 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // `fireCourse(postres)` fires exactly that line, while `setLineCourse(line 1 → otros)` tries to move
     // it out from under the pass.
     const { postres, otros, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
@@ -2502,11 +2489,9 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // `ticket.already_fired` half can no longer fail.
     const [sc, fc] = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await setLineCourse(tx, cfg, tabId, 1, otros.id);
       }),
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await fireCourse(tx, cfg, tabId, postres.id);
       }),
     ]);
@@ -2552,7 +2537,6 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // fired line enqueues a RECALLED correction slip — the paper trail the invariant reads.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
@@ -2565,7 +2549,6 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
     // and `recallLines([1])` targets it. Nothing printed yet.
     const { postres, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
       const tableId = await addTable(tx, cfg);
@@ -2589,11 +2572,9 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // hold; what no longer happens is the other outcome being reached.
     const results = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await recallLines(tx, cfg, tabId, [1]);
       }),
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await fireCourse(tx, cfg, tabId, postres.id);
       }),
     ]);

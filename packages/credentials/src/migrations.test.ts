@@ -40,8 +40,7 @@ const OK = {
 const stamp = () => sql`${nowIso()}`;
 
 // This suite checks what the migration set DECLARES, and on this engine that is a table, its
-// primary key and its CHECK constraints — nothing about who may read the vault, because the set
-// grants nothing and defines no function. The loss note at the foot of this file says what went.
+// primary key and its CHECK constraints. The loss note at the foot of this file says what went.
 describe("the credentials migration set", () => {
   it("stores and returns a row round-trip", async () => {
     await suite.db.execute(sql`
@@ -148,19 +147,16 @@ describe("the credentials migration set", () => {
  * PostgreSQL catalogue about `credential_tenants(text)`, and both failed `no such table: pg_proc`
  * when this suite was run on this engine (measured 2026-09-22):
  *
- *  - `names EXECUTE to app_user only — PUBLIC's default grant was revoked` read
- *    `has_function_privilege` and `aclexplode(pg_proc.proacl)` to pin who could call the seam.
- *    SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so there is no
- *    privilege to read back and nothing to re-point the case at.
+ *  - `names EXECUTE to app_user only — PUBLIC's default grant was revoked` pinned who could call
+ *    the seam. There is nothing to re-point the case at.
  *  - `pins search_path to pg_catalog, public` read the same function's `proconfig`. There is one
  *    file and no schema here, so there is no path to pin.
  *
  * Both also lost their subject. `credential_tenants(text)` was created by
  * `drizzle/0001_credentials_baseline_sql.sql` (`git show
  * origin/main:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`), which this branch
- * deleted, and this engine defines no SQL functions of its own. That file also held the table's
- * own `REVOKE ALL` / `GRANT SELECT, INSERT, UPDATE, DELETE ... TO app_user`; the whole set is now
- * one `CREATE TABLE` (`packages/credentials/drizzle/0000_baseline.sql`).
+ * deleted, and this engine defines no SQL functions of its own. The whole set is now one
+ * `CREATE TABLE` (`packages/credentials/drizzle/0000_baseline.sql`).
  *
  * WHAT IS NO LONGER CHECKED, here or anywhere else in this package: that a caller other than the
  * application may not read or enumerate the vault. The database refuses nobody on the grounds of

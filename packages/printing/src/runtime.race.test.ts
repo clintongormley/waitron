@@ -49,10 +49,8 @@ import type { PrintConfig } from "./printers.js";
  *
  * ## What is LOST outright
  *
- * Two distinct backends, and the deployment role. Every write below used to run after
- * `set local role app_user` on a non-superuser connection, so the claim's and the report's grants
- * were exercised; this engine has no roles and `asAppUser` is an empty body
- * (`packages/db/src/testing/roles.ts`). Nothing replaces either.
+ * Two distinct backends, and the deployment role: this engine has no roles. Nothing replaces
+ * either.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 

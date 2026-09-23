@@ -1,13 +1,10 @@
 // The fiscal half of split-bill: paying a carved check files its own registro, the items partition
 // across the checks, and a repeated pay replays rather than files twice.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
-// what the deployment role, which no longer exists, may read or write.
+// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
+import { saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -106,9 +103,9 @@ interface Seeded {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed the two-product catalogue
- * and one dining table as the app role. Each test gets its OWN tenant so the `registros_facturacion`
- * count is that test's alone, order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed the two-product catalogue and one
+ * dining table. Each test gets its OWN tenant so the `registros_facturacion` count is that test's
+ * alone, order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<Seeded> {
   const venue = await applyVenue(
@@ -147,7 +144,6 @@ async function setupVenue(): Promise<Seeded> {
 
   const cfg = tillConfigFromVenue(venue);
   const seeded = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -175,12 +171,11 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /**
- * Run fn in one transaction as app_user.
+ * Run fn in one transaction.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

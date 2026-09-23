@@ -5,14 +5,13 @@ import { sales } from "./sales.js";
 /**
  * A sale is voided by APPENDING a row here, never by editing the sale.
  *
- * `sales` has UPDATE and DELETE revoked from the application role, so
- * void-ness cannot live on it as a mutable column even though spec §6 puts
- * `fiscal_state` there — that column is written once at insert and never moves.
- * This is the same split the design already makes twice: immutable fact, and a
- * separate row recording what later happened to it. Keeping the projection in
- * packages/db rather than deriving it from the module's annulment record is
- * what lets a Z-report answer "which sales were voided" without a
- * cross-boundary join per row.
+ * Void-ness cannot live on `sales` as a mutable column even though spec §6
+ * puts `fiscal_state` there — that column is written once at insert and never
+ * moves. This is the same split the design already makes twice: immutable
+ * fact, and a separate row recording what later happened to it. Keeping the
+ * projection in packages/db rather than deriving it from the module's
+ * annulment record is what lets a Z-report answer "which sales were voided"
+ * without a cross-boundary join per row.
  */
 export const saleVoids = table(
   "sale_voids",

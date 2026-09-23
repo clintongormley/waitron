@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, floorZones, kitchenStations, withTransaction } from "@waitron/db";
+import { floorZones, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -17,19 +17,15 @@ import "./errors.js";
 /**
  * The catalogue write group, on the engine the box now runs.
  *
- * ## What this file was, and the one thing that went with PostgreSQL
+ * ## What this file does not check
  *
- * Its header said the write group had to run as the non-superuser `app_user` so that role's table
- * grants were enforced, where a PGlite superuser holds them unconditionally. **There are no roles on
- * this engine**: `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), there is no
- * `connectAs`, and every call below runs on the one connection. Nothing now checks that the
- * deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
+ * **There are no roles on this engine**, and every call below runs on the one connection. Nothing
+ * checks that the deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
  * `preparation_routes`, `kitchen_stations`, `floor_zones`, `product_categories`, `products` or
- * `product_modifiers`. Each sentence saying so has been taken out of the cases below rather than
- * left standing.
+ * `product_modifiers`.
  *
- * What survives is the reason the file is worth keeping beside `catalogue-api.test.ts`: this suite
- * migrates the FULL manifest, so venue-service's `preparation_routes` exists and
+ * The file is worth keeping beside `catalogue-api.test.ts` because this suite migrates the FULL
+ * manifest, so venue-service's `preparation_routes` exists and
  * `categoryDependants` takes its optional-table branch. The sibling migrates core + catalogue +
  * identity only and covers the absent-table arm, asserting `routes: []`.
  *
@@ -100,7 +96,6 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are JavaScript
     // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
     // NOT NULL — the refusal is `NOT NULL constraint failed: persons.id`.
@@ -395,7 +390,6 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   });
   const menu = (await menuResponse.json()) as { id: string };
   const listIds = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const ids: string[] = [];
     for (const label of ["First", "Second"]) {
       const list = await createOptionList(

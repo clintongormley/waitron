@@ -16,12 +16,10 @@ import { ALL_MODULES } from "./modules.js";
  *
  * ## What went with PostgreSQL
  *
- * The file's stated reason was `SET ROLE app_user` — every query ran as the non-owner deployment
- * role so that a missing GRANT showed up. SQLite has no roles and no grants; `asAppUser` is an
- * inert function (`packages/db/src/testing/roles.ts`) and every call below runs on the one
- * connection. Nothing here now says anything about which identity the routes reach the database
- * as. The 403 and 401 gates are unaffected: both are `authorizeManager` and
- * `requireManagementSession`, never a privilege, and both cases still pass.
+ * SQLite has no roles and no grants, and every call below runs on the one connection. Nothing here
+ * now says anything about which identity the routes reach the database as. The 403 and 401 gates
+ * are unaffected: both are `authorizeManager` and `requireManagementSession`, never a privilege,
+ * and both cases still pass.
  *
  * **Two deletion receipts written into the cases below are retired by the column types, and are
  * flagged where they sit** (the int4-range screen at `parseDisplayOrder`, and the `isUuid` screen

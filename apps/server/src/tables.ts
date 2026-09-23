@@ -188,11 +188,9 @@ export async function updateTable(
  *
  * THIS VERB IS THE WHOLE GUARD, and this note says it once for the deactivate family across
  * `tables.ts`, `kitchen.ts`, `till-api.ts`, `management-api.ts`, `device-api.ts` and `print-api.ts`,
- * which point back here. The database used to refuse a hard delete on its own: the application role
- * held no `DELETE` on these tables, so even a wrong code path could not lose the history. This
- * engine has no roles and no grants at all — `asAppUser` is now an empty function
- * (`packages/db/src/index.ts` states that) — so a `delete from dining_tables` issued by any code in
- * this process would simply run. Nothing below the verb objects.
+ * which point back here. This engine has no roles and no grants at all, so a
+ * `delete from dining_tables` issued by any code in this process would simply run. Nothing below
+ * the verb objects.
  */
 export async function deactivateTable(
   tx: Transaction,

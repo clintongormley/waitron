@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, locations, tills, withTransaction, workingOrderLines } from "@waitron/db";
+import { locations, tills, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -37,8 +37,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
 // `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock — all plain
-// SQL a single backend proves. The concurrency race and the per-tab fiscal filing as the app role
-// (which PGlite's superuser single-backend connection CANNOT show) are `transfer-lines.filing.test.ts`'s job.
+// SQL a single backend proves. The concurrency race and the per-tab fiscal filing are
+// `transfer-lines.filing.test.ts`'s job.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -91,7 +91,6 @@ async function setupVenue(): Promise<Seeded> {
     orderFlow: "prepay",
   };
   const seeded = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
     const cafe = await createProduct(tx, {
@@ -141,11 +140,10 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-/** Run `fn` on a fresh app-scoped transaction (`app_user` role), like production. */
+/** Run `fn` on a fresh transaction, like production. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

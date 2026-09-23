@@ -13,18 +13,10 @@ import {
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 
-// Was `store.pg.test.ts`: the real-PostgreSQL companion to store.test.ts, which connected as a
-// non-superuser LOGIN inheriting `app_user`'s grants so that a missing SELECT/INSERT/UPDATE from
-// 0001_payments_baseline_sql.sql would fail here.
-//
-// **That reason is GONE and has no replacement.** This engine has no roles, so nothing anywhere
-// now checks that these store calls would be permitted to an ordinary application role rather than
-// to an owner. What survived the move is everything in this file that was never about the role:
+// Was `store.pg.test.ts`, the real-PostgreSQL companion to store.test.ts. What this file covers:
 // the REPLAY branch of `findCapturedPaymentForWorkingOrder`, the card columns and their two CHECK
 // constraints, and `findCapturedPaymentForWorkingOrderAnyProvider` — none of which store.test.ts
-// covers. One case did NOT survive: `hasPaymentWithExternalRef` "answers through app_user's SELECT
-// grant on payments, on a plain connection", whose whole subject was the grant, and whose
-// behaviour store.test.ts already pins in its own `hasPaymentWithExternalRef` describe.
+// covers.
 //
 // The file is renamed rather than kept as `store.pg.test.ts`, because the suffix marks the
 // real-PostgreSQL tier that this branch retires and would be a claim about a target that no longer

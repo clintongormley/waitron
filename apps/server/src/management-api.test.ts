@@ -27,12 +27,10 @@ import { mountManagementApi } from "./management-api.js";
  *
  * ## What went with PostgreSQL
  *
- * The file's stated reason was `SET ROLE app_user` — every management read and write ran as the
- * non-owner deployment role so that a missing GRANT showed up. SQLite has no roles and no grants;
- * `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) and every call below runs on
- * the one connection. Nothing here now says anything about which identity the routes reach the
- * database as. The 403 and 401 gates are unaffected: both are `authorizeManager` and
- * `requireManagementSession`, never a privilege, and every one of those cases still passes.
+ * SQLite has no roles and no grants, and every call below runs on the one connection. Nothing here
+ * now says anything about which identity the routes reach the database as. The 403 and 401 gates
+ * are unaffected: both are `authorizeManager` and `requireManagementSession`, never a privilege,
+ * and every one of those cases still passes.
  *
  * **Six deletion receipts written into the cases below are retired by the column types, and are
  * flagged where they sit** — each recorded an `isUuid`/`requireTableId` screen as forestalling a

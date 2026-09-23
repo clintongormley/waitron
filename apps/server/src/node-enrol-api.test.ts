@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, locations, tenants, withTransaction } from "@waitron/db";
+import { locations, tenants, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { authenticateAgent } from "@waitron/printing";
@@ -24,11 +24,8 @@ import "./errors.js";
  *
  * ## What the conversion took away, and nothing replaces it
  *
- * The old header argued real PostgreSQL rather than PGlite was required here, because the enrol
- * WRITES a `print_agents` row as `app_user` under `withTransaction`, and only a real cluster would
- * refuse a missing table GRANT. **SQLite has no roles and no grants**: one process opens one file
- * and `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). Whether the
- * deployment role may write `print_agents` is no longer a question this file, or any file, asks.
+ * **SQLite has no roles and no grants**: one process opens one file. Whether the deployment role
+ * may write `print_agents` is no longer a question this file, or any file, asks.
  *
  * The six cases below are unaffected, because none of them was about the grant: five are gates
  * that refuse BEFORE any database work (loopback, absent address, non-primary, rate limit) and the
@@ -145,7 +142,6 @@ async function errorCodeOf(res: Response): Promise<string> {
 /** Resolve a minted agent token to its row id under the tenant — the production auth path. */
 async function authenticate(token: string): Promise<{ agentId: string }> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return authenticateAgent(tx, token);
   });
 }
@@ -166,7 +162,7 @@ describe("POST /api/node/enrol-self", () => {
     expect(res.status).toBe(201);
     const { token } = (await res.json()) as { token: string };
     expect(typeof token).toBe("string");
-    // The token authenticates as a real agent — the row was truly written under `app_user`.
+    // The token authenticates as a real agent — the row was truly written.
     const auth = await authenticate(token);
     expect(auth.agentId).toBeDefined();
   });

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToLocation,
@@ -40,10 +40,8 @@ import "./errors.js";
 // own sale under its own working-order id (unique, so the `sales.working_order_id` unique index
 // never collides across cases).
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left in place for Task T1 to sweep, so nothing here
-// establishes that the deployment role — which no longer exists — may read `tenders` or `payments`.
+// Nothing here establishes that the deployment role — which no longer exists — may read `tenders`
+// or `payments`.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -149,7 +147,6 @@ beforeAll(async () => {
 
   cfg = tillConfigFromVenue(venue);
   productId = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     // A product priced at exactly 1.00 gross so the filed total is "1.00" — the figure every case
@@ -233,7 +230,6 @@ async function seedSale(
 describe("readTenderBlock", () => {
   it("returns a cash block with the passed change", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "cash",
         cashTendered: "2.00",
@@ -247,7 +243,6 @@ describe("readTenderBlock", () => {
 
   it("returns the card amounts without exposing payment identity", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
         { method: "card", amount: "1.00", tipAmount: "0.00" },
@@ -268,7 +263,6 @@ describe("readTenderBlock", () => {
 
   it("shows tip and charged when a tip rode on the card", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       // total 1.00 + tip 0.50 → tenders.amount 1.50, tip_amount 0.50.
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -285,7 +279,6 @@ describe("readTenderBlock", () => {
 
   it("a manual card tender carries the operator reference", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
         { method: "card", amount: "1.00", tipAmount: "0.00" },
@@ -303,7 +296,6 @@ describe("readTenderBlock", () => {
 
   it("keeps card amounts when the payment row has no card facts and is not manual", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
         { method: "card", amount: "1.00", tipAmount: "0.00" },
@@ -320,7 +312,6 @@ describe("readTenderBlock", () => {
     // which every other case misses. A filed, immutable sale must PRESENT, never throw (CLAUDE.md §5),
     // so this degrades to a bare card block rather than failing.
     const block = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "card",
         amount: "1.00",

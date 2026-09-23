@@ -27,12 +27,6 @@
  *    outright rather than reworded. It was one of this file's two proof-by-deletion targets (remove
  *    `.for("update")` and the second closer sails through); that control cannot be re-run, because
  *    the clause it deleted is already deleted.
- *
- * The suite also no longer switches to the application role: `asAppUser`
- * (`packages/db/src/testing/roles.ts`) is an empty body on this branch and there are no grants, so
- * a call to it here would read like a privilege check that is not happening. What that used to buy
- * — that a missing GRANT on `daily_closes`/`daily_close_chain` would show up — is not bought by
- * anything now.
  */
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";

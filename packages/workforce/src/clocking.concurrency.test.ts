@@ -34,9 +34,8 @@
  *    `persons` rows. The engine takes neither lock and there is one writer, so there is no question
  *    left to ask. It is retired by the engine, not moved.
  *
- * The suite also no longer runs as a non-superuser login, because there is no role to run as
- * (`asAppUser` is an empty body on this branch). Nothing here now shows that the clock path is
- * PERMITTED what it does — only that it does it.
+ * The suite also no longer runs as a non-superuser login, because there is no role to run as.
+ * Nothing here now shows that the clock path is PERMITTED what it does — only that it does it.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";

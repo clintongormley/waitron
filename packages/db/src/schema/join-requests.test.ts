@@ -9,11 +9,6 @@ import { withTransaction } from "../tenancy.js";
 import { joinRequests } from "./join-requests.js";
 import { locations, tenants } from "./tenants.js";
 
-// LOSS, from the storage swap: a third case used to read `has_table_privilege` and pin that
-// `app_user` held SELECT, INSERT and DELETE on this table and NOT UPDATE. SQLite has no roles and
-// no grants, so that question has no counterpart here and the case is deleted rather than kept in
-// a form that asserts nothing (`packages/db/src/testing/roles.ts`). Nothing in this package now
-// states which privileges this table was granted.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("join_requests", () => {

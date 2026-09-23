@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
-  asAppUser,
   deviceProfiles,
   drawerOpens,
   locations,
@@ -54,12 +53,6 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
 // back and paper enqueued for it. Setup mirrors `till-api.fiscal-sale-paths.test.ts` (a provisioned venue + a
 // seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
 // receipt-printer config helpers from `receipt-print.test.ts`.
-//
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template, and its header opened by claiming REAL Postgres over PGlite because these
-// routes write through the app role. That role no longer exists: every `asAppUser(tx)` call below is
-// inert (`packages/db/src/testing/roles.ts`) and is left for Task T1 to sweep, so nothing here
-// establishes what an application role may read or write.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -167,7 +160,6 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const product = await createProduct(tx, {
@@ -242,7 +234,6 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
  *  transport is ever touched on these routes) and return its id. */
 async function makePrinter(cfg: TillConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { id } = await createPrinter(tx, printCfg(cfg), {
       name: "Recibos",
       transport: "cloud_poll",
@@ -259,7 +250,6 @@ async function configureReceipt(
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
         .update(locations)
@@ -280,7 +270,6 @@ async function printJobsFor(
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx
       .select({
         printerId: printJobs.printerId,
@@ -303,7 +292,6 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
 > {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx
       .select({
         reason: drawerOpens.reason,
@@ -317,11 +305,10 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
   });
 }
 
-/** Set the location's `drawer_open_policy` ('gated' | 'open') directly (the app role holds UPDATE on
- *  locations). The column defaults to 'gated', so a test wanting the gate need not call this. */
+/** Set the location's `drawer_open_policy` ('gated' | 'open') directly. The column defaults to
+ *  'gated', so a test wanting the gate need not call this. */
 async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await tx
       .update(locations)
       .set({ drawerOpenPolicy: policy })
@@ -332,7 +319,6 @@ async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promi
 async function registroCount(cfg: TillConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return (await tx.select().from(registrosFacturacion)).length;
   });
 }
@@ -340,7 +326,6 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 async function saleCount(cfg: TillConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return (await tx.select({ id: sales.id }).from(sales)).length;
   });
 }
@@ -987,7 +972,6 @@ describe("payment slip persisted capture facts", () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
         characterSet: "plain",

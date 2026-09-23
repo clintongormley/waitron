@@ -26,12 +26,11 @@ import { createUnit } from "./units.js";
  * Variants against a real database, plus the pure selection core.
  *
  * This replaces a real-PostgreSQL suite. ONE CASE WENT: "creates, reads, edits and deletes
- * variants as the non-superuser app role" asserted `current_user` was `app_user` with
- * `rolsuper = false` and then walked list / edit / clear while holding that role. There are no
- * roles. Its list and edit steps are `variants.test.ts`'s "round-trips ordered translated names,
- * stable identities, absolute prices and availability"; its CLEAR step — `setProductVariants` with
- * an empty body returning `[]` — was in no other case, and is now covered only indirectly, by the
- * concurrent-removal case below issuing the same call.
+ * variants as the non-superuser app role" walked list / edit / clear. Its list and edit steps are
+ * `variants.test.ts`'s "round-trips ordered translated names, stable identities, absolute prices
+ * and availability"; its CLEAR step — `setProductVariants` with an empty body returning `[]` — was
+ * in no other case, and is now covered only indirectly, by the concurrent-removal case below
+ * issuing the same call.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);

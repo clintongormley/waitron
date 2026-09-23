@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, ne } from "drizzle-orm";
-import { asAppUser, readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
+import { readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -16,7 +16,6 @@ export async function printSalePaymentSlip(
   workingOrderId: string,
 ): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const [sale] = await tx
       .select({ id: sales.id })
       .from(sales)

@@ -18,12 +18,6 @@ import { ticketItems } from "./ticket-items.js";
 // What this suite proves is the schema's own behaviour — the produced Drizzle export's column
 // mapping, the additive away_at/note columns, the per-line UNIQUE that stops a concurrent
 // double-fire, and the working_order_lines ON DELETE CASCADE.
-//
-// LOSS, from the storage swap: the writes used to run as the non-owner `app_user` on a real
-// PostgreSQL, so each of the additive-column cases also established that the column fell inside the
-// existing table-wide grant — a write raising `42501` would have meant otherwise. SQLite has no
-// roles and no grants (`packages/db/src/testing/roles.ts`), so those cases now show only that the
-// column exists and round-trips.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";

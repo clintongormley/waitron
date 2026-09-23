@@ -38,9 +38,8 @@ export interface AdoptRequest {
 
 export interface AdoptDeps {
   /** The handle that stamps `deployment`, writes `mirror_config` and mints the break-glass
-   * verifier. It was a separate owner connection, and the application role held none of those
-   * writes; since the storage switch there is one handle and nothing in the engine refuses them —
-   * `scripts/write-path-tables.test.ts` is what keeps these writes in named files. */
+   * verifier. There is one handle and nothing in the engine refuses these writes —
+   * `scripts/write-path-tables.test.ts` is what keeps them in named files. */
   ownerDb: Database;
   /** Fetches the bundle from the primary, carrying the mirror's own `standby` identity so the primary
    * can reserve + endorse it (membership promotion R2). Injected so the HTTP call is stubbable and the

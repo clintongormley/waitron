@@ -17,17 +17,7 @@ export interface StripeHostedProviderOptions {
   client: StripeHostedClient;
   /** A plain `Database` handle. `initiate` opens its own transaction and scopes it with
    * `withTransaction(db, …)`, so nothing is required of the handle itself. The inbound
-   * webhook path settles through its own handle, not this one — see the wiring test.
-   *
-   * This option once demanded a "TENANT-SCOPED `Database` handle", which cannot be constructed —
-   * see `StripeOnDeviceProviderOptions.db` for the mechanism and
-   * `2026-07-26-provider-tenant-scoping-design.md` for the full account. Here it meant `initiate`
-   * threw `42501` on `insertInitiated` under any real role, AFTER the Checkout Session had been
-   * created: an orphaned session with no local row, on every hosted payment. The proof was
-   * `hosted.test.ts`, deleted with the real-PostgreSQL tier: it drove `initiate` through a
-   * non-superuser LOGIN, which is what made the `42501` visible, and this engine has no roles.
-   * `hosted-provider.test.ts` still drives `initiate` on the handle a host can build; what is no
-   * longer checked anywhere is that an ordinary application role may make that write. */
+   * webhook path settles through its own handle, not this one — see the wiring test. */
   db: Database;
 }
 

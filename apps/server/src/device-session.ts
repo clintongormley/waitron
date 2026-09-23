@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
-import { asAppUser, deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
@@ -230,7 +230,6 @@ export async function tryReadDevice(
     if (override !== undefined) {
       if (!isUuid(override)) return null;
       return withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const [row] = await tx
           // The form factor AND capabilities come from the device's profile (a device is DEFINED by its
           // profile) — the shared `device_profile_id` inner join, which always matches since
@@ -261,7 +260,6 @@ export async function tryReadDevice(
   if (!isUuid(deviceId)) return null;
 
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     const [row] = await tx
       // `tokenHash` (verified below) plus the shared binding projection: the profile's formFactor +
       // capabilities and the till/hardware bindings (SP-A.2 §16), read here so the boot reads echo them

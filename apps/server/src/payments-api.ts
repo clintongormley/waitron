@@ -10,14 +10,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import {
-  asAppUser,
-  devices,
-  nowIso,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { devices, nowIso, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
@@ -124,19 +117,18 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
 /**
  * Mounts the payments-management routes on an existing Hono app — the `mountPrintApi` convention.
  * Every route is `requireManagementSession`-gated then funnels its DB work through the local `gated`
- * helper, which opens an app-role transaction and `authorizeManager`s `payments.manage`
+ * helper, which opens a transaction and `authorizeManager`s `payments.manage`
  * before the op runs, in exactly one place. Provider `connect`/reader calls reach the network, so they
  * run OUTSIDE any transaction (a `withTransaction` is never held across a provider round-trip); the gate
  * runs first, in its own `gated` call, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // `payments.manage`, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place (print-api.ts's seam). Proven by deletion: removing
   // the `authorizeManager(...)` call makes a staff session succeed on every gated route.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: PAYMENTS_MANAGE,

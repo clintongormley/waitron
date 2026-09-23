@@ -2,14 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  asAppUser,
-  deviceProfiles,
-  locations,
-  printJobs,
-  tills,
-  withTransaction,
-} from "@waitron/db";
+import { deviceProfiles, locations, printJobs, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -40,10 +33,9 @@ import "./errors.js";
 // PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the
 // `requireSession` guard, the `requireUuidId` screen, and that `reprintOrderTickets` re-enqueues
 // through the SAME outbox path the fire uses. The reprint VERB's logic (re-query all fired items,
-// R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`; the
-// app_user privilege matrix in @waitron/fiscal-verifactu covers station_printers grants on real
-// PostgreSQL. Schema is CORE (kitchen_stations / ticket_items / printers / station_printers /
-// print_jobs all land in CORE) + IDENTITY (the sessions/persons the login path needs).
+// R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`. Schema is
+// CORE (kitchen_stations / ticket_items / printers / station_printers / print_jobs all land in
+// CORE) + IDENTITY (the sessions/persons the login path needs).
 const CAFE = "Cafe con leche";
 let cfg: TillConfig;
 let ana: { id: string };
@@ -88,7 +80,6 @@ const suite = useVenueDb({
 
     // One sellable product, routed to the default station by the fire fallback (no explicit station/course).
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const catalogue = await createCatalogue(tx, { name: "Carta" });
       const cafe = await createProduct(tx, {
         catalogueId: catalogue.id,
@@ -158,7 +149,6 @@ function printCfg(): PrintConfig {
 
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,
@@ -211,10 +201,9 @@ async function placeAndFire(): Promise<string> {
   return id;
 }
 
-/** Create a live cloud_poll printer and attach it to the default station (app role). */
+/** Create a live cloud_poll printer and attach it to the default station. */
 async function attachPrinterToDefaultStation(): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    await asAppUser(tx);
     const { id } = await createPrinter(tx, printCfg(), {
       name: `Cocina ${randomUUID()}`,
       transport: "cloud_poll",
@@ -228,7 +217,6 @@ async function attachPrinterToDefaultStation(): Promise<string> {
 /** The database's print-job outbox, each job's printer + decoded ESC/POS bytes. */
 async function printJobsFor(printerId: string): Promise<{ id: string; ticket: string }[]> {
   const rows = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx
       .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
       .from(printJobs)

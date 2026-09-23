@@ -14,7 +14,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { kindOfFormFactor, listDeviceProfiles } from "@waitron/layouts";
@@ -207,12 +207,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // `ENROL_RATE_WINDOW_MS`), throwing `device.join_rate_limited` (429).
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (purchasing-api's `gated`, permission baked in).
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: DEVICE_MANAGE_PERMISSION,
@@ -246,7 +245,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
       const made = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
         if (auto) {
           // Resolve the venue's default `till` profile and accept in the SAME transaction — the
@@ -293,7 +291,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // this screen is what turns a non-uuid into a clean refusal.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
       const status = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return readJoinStatus(tx, deps.cfg, joinId, token);
       });
       return c.json({ status }, 200);
@@ -343,7 +340,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
       const stationId = device.stationId;
       const queue = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listStationQueue(tx, stationId);
       });
       return c.json({ station: { id: stationId, queue } });
@@ -374,7 +370,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         // `advanceTicketItem` NEVER checks the station (KDS-1), so the station-ownership guard is
         // the route's job: fetch the item's own station and refuse a foreign one BEFORE the bump.
         // An item that reads back undefined (unknown) is left to the verb →
@@ -544,14 +539,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // Mounted ONLY in devMode, so outside dev this route DOES NOT EXIST (404) — the same fail-closed shape
   // as the override header. The chooser lists the venue's active devices so a browser can adopt one via
   // the dev-override header; the mint-and-adopt and reset routes it used to sit beside are gone. A
-  // browser with no device knocks like any other. The read runs under `withTransaction` + `asAppUser`;
-  // nothing here returns a token or reader credential.
+  // browser with no device knocks like any other. The read runs under `withTransaction`; nothing
+  // here returns a token or reader credential.
   if (deps.devMode) {
     app.get("/api/dev/devices", (c) =>
       run(c, log, async () =>
         c.json(
           await withTransaction(deps.db, async (tx) => {
-            await asAppUser(tx);
             // Active-only projection — the switcher chooses among devices a browser can BECOME, and a
             // revoked device is not one. NO token/tokenHash column is selected: the credential never
             // leaves the enrol Set-Cookie header (§device-session), so this list carries only bindings.

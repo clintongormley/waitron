@@ -12,9 +12,7 @@
  * property.** The clause is deleted rather than translated — SQLite has no row locks and drizzle's
  * SQLite query builder has no `.for()` — so there is no longer a clause to delete as a control. The
  * two distinct backends and the `pg_locks` catalogue have no counterpart either, and neither does
- * the deployment role: every write below used to run after `set local role app_user` on a
- * non-superuser connection, and `asAppUser` is now an empty body
- * (`packages/db/src/testing/roles.ts`).
+ * the deployment role.
  *
  * ## What replaced the lock observation, and the control behind it
  *
@@ -54,7 +52,6 @@ import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  asAppUser,
   locations,
   printJobs,
   printers,
@@ -168,7 +165,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       orderFlow: "prepay",
     };
     const { cocinaId, printerId, orderId, lineId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Carta" });
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -207,7 +203,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     let deactivateDone = false;
     await parkedThenRelease(
       async (txA) => {
-        await asAppUser(txA);
         await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
         readDone.open(); // job enqueued; tx deliberately NOT committed yet
         await releaseA.passed;
@@ -215,7 +210,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       readDone.passed,
       releaseA.open,
       async (txB) => {
-        await asAppUser(txB);
         await deactivatePrinter(txB, printCfg(cfg), printerId);
         deactivateDone = true;
       },

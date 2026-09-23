@@ -15,7 +15,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -52,10 +52,6 @@ import "./errors.js";
  * proof-by-deletion belongs to the shape of the code it was taken against, and that shape is gone
  * (CLAUDE.md §4). The `.sort()` in `transferLines` survives for a smaller effect stated on the
  * function itself.
- *
- * **Also lost, and not replaced:** the deployment role. The writes below used to run after
- * `set local role app_user` on a non-superuser connection, so the H2 record's grants were
- * exercised; `asAppUser` is an empty body now (`packages/db/src/testing/roles.ts`).
  *
  * ## Why the surviving case stays here rather than moving
  *
@@ -129,9 +125,9 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app role
- * and read back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
- * order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * `each`/general(21%) products. Each test gets its OWN tenant so its state is order-independent
+ * (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -170,7 +166,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -210,7 +205,6 @@ async function setupTwoTabs(): Promise<{
 }> {
   const { cfg, cafe } = await setupVenue();
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const a = await createTable(tx, cfg, { label: "A" });
     const b = await createTable(tx, cfg, { label: "B" });
     const ta = await openTab(tx, cfg, {
@@ -274,7 +268,6 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
   it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]); // A→B: 1 café (partial split)
     });
 

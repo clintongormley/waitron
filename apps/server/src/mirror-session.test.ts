@@ -19,18 +19,12 @@ import {
  *
  * ## What went with PostgreSQL, and is replaced by nothing
  *
- * Every case below used to run on a connection opened per test as `app_login` — a cluster LOGIN role
- * that is a MEMBER of `app_user`, created by the now-deleted `apps/server/src/testing/global-setup.ts`
- * — because `ensureMirrorViewer` and `mirrorSession` write `persons` and `management_sessions`, and
- * the mirror server hands them an app_user-authenticated pool. A superuser connection could not have
- * shown that those grants admit the writes.
- *
- * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
- * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). The
- * per-test `withAppUserDb` helper is deleted with it and every case now runs on the suite's one
- * handle. NO case was deleted: each one asserts what the middleware DOES, not what a role is
- * refused, so each survives the loss of the role with its assertions untouched. What is no longer
- * covered is the privilege claim itself — that the deployment role may make these writes at all.
+ * **The role is gone and nothing replaces it.** SQLite has no roles and `pg.connectAs` has no
+ * counterpart. The per-test `withAppUserDb` helper is deleted with it and every case now runs on
+ * the suite's one handle. NO case was deleted: each one asserts what the middleware DOES, not what
+ * a role is refused, so each survives the loss of the role with its assertions untouched. What is
+ * no longer covered is the privilege claim itself — that the deployment role may make these writes
+ * at all.
  *
  * ## One probe changed shape, and no assertion changed with it
  *

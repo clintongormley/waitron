@@ -2,10 +2,9 @@
  * The set of tables a migration SET leaves in existence, read as TEXT (never executed).
  *
  * Both classification guards — `scripts/classification-complete.test.ts` (tree-wide) and
- * `packages/db/src/classification.test.ts` (core) — must agree with the LIVE database, which
- * `packages/fiscal-verifactu/src/privileges.test.ts` compares against with `toEqual`. A scanner that
- * only counted `CREATE TABLE` would keep a dropped table forever and put the three in permanent
- * disagreement, so this subtracts on `DROP TABLE`.
+ * `packages/db/src/classification.test.ts` (core) — must agree. A scanner that only counted
+ * `CREATE TABLE` would keep a dropped table forever and put them in permanent disagreement, so this
+ * subtracts on `DROP TABLE`.
  *
  * ORDER IS THE CONTRACT: the caller passes one migration set's SQL in FILENAME order, because
  * create → drop → create must resolve to "present" and the reverse to "absent". `readdirSync` does

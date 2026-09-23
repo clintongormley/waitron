@@ -46,15 +46,11 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 // singleton_role live; and the running fiscal pass BEGINS draining on its next tick — with the
 // till surface answering 200 throughout (no restart).
 //
-// ## What the move off PostgreSQL took out of this file
+// ## Two things to know about this file
 //
-// **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
-// mandatory for the owner-role `setSingletonRole` write (app_user holding no UPDATE on
-// `deployment`) and for serving a till route as the non-superuser `app_login` pool. There are no
-// roles on this engine: `pg.connectAs` has no counterpart and `asAppUser` is an inert function
-// (`packages/db/src/testing/roles.ts`). Every statement below, and every statement each booted
-// server issues, runs on the one connection `openVenueStore` hands out. What the file still drives
-// for real is the wall-clock loop — which is why the polling below stays.
+// **There is no ROLE SPLIT on this engine.** Every statement below, and every statement each booted
+// server issues, runs on the one connection `openVenueStore` hands out. What the file drives for
+// real is the wall-clock loop — which is why the polling below stays.
 //
 // **The suite keeps a handle open on each venue directory while a server holds one, and only READS
 // through it while a server is up.** Write-ahead mode admits a reader beside the writer and both

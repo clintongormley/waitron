@@ -11,9 +11,7 @@ import { diningTables } from "./dining-tables.js";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations, tenants } from "./tenants.js";
 
-// LOSS, from the storage swap: this suite used to write and read as the non-owner `app_user` on a
-// real PostgreSQL, so it also established the deployment role's grants on these columns. SQLite has
-// no roles and no grants (`packages/db/src/testing/roles.ts`), so what is left is the FK itself.
+// What this suite proves is the `dining_tables.status_id` FK itself.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const ABSENT_STATUS = "99999999-9999-4999-8999-999999999999";
 

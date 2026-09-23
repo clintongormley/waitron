@@ -38,9 +38,7 @@ export const overtimeModel = enumType(["daily_accrual", "period_net"]);
  * may only tighten.
  *
  * MUTABLE: this is configuration an admin edits, not the immutable registro — it carries no
- * append-only trigger and no chain. It used to say which privileges `app_user` held on it; SQLite
- * has no roles and no grants, and this package's generated SQL contains no `GRANT` (checked with
- * `grep -i grant drizzle/*.sql`), so what may write here is decided above the database.
+ * append-only trigger and no chain.
  */
 export const convenioConfig = table(
   "convenio_config",

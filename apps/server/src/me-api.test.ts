@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, asAppUser, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -30,7 +30,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // The me routes are LOGIC (management session → verb → JSON) over mutable planning rows, the browser
-// twin of `schedule-api.ts`. Every DB touch runs through `withTransaction` + `asAppUser` exactly as
+// twin of `schedule-api.ts`. Every DB touch runs through `withTransaction` exactly as
 // production does. The crux — "the requester is the SESSION's personId, never the body's" — is
 // proven in `me-api.cross-person.test.ts`; here we prove the route mechanics: whoami, the happy paths, the
 // request-shape 400s and the not-logged-in 401.
@@ -131,11 +131,10 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
   return app;
 }
 
-/** Open a management session for `personId` (through the production `startManagementSession` path, on
- * the app role) and return the cookie header that carries it — the credential every me route gates on. */
+/** Open a management session for `personId` (through the production `startManagementSession` path)
+ * and return the cookie header that carries it — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;

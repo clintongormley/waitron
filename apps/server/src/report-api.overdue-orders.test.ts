@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   catalogues,
   diningTables,
   kitchenStations,
@@ -138,7 +137,6 @@ const suite = useVenueDb({
     // A MANAGER (role `manager`, holds report.view) and a STAFF person (holds nothing), each with a
     // live management session so the route tests drive the gate through a real cookie.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

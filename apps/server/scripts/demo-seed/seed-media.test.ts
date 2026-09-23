@@ -1,10 +1,8 @@
 /**
  * The demo's media step: committed tiles in the library, content-addressed references on products.
  *
- * **What went with PostgreSQL.** This file used to run the writes through `app_user` on a real
- * server, so a missing grant on `media_images` / `products` would have failed it. SQLite has no
- * roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below
- * runs on the one connection. Nothing now checks who may write the image library.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write the image library.
  */
 
 import { createHash } from "node:crypto";
@@ -13,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -86,7 +84,6 @@ describe("seedMedia", () => {
     const { locationId } = await provisionVenue();
 
     const { productsByImage, images } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
@@ -115,7 +112,6 @@ describe("seedMedia", () => {
       expect(stored).toBe(expectedName);
 
       const storedImage = await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         return readImageBytes(tx, stored!);
       });
       expect(storedImage?.contentType).toBe("image/png");
@@ -143,7 +139,6 @@ describe("seedMedia", () => {
   it("reuses existing image bytes when the media step runs twice", async () => {
     const { locationId } = await provisionVenue();
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,

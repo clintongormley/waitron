@@ -20,7 +20,6 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import {
-  asAppUser,
   persistNodeMembershipIfNewer,
   readNodeMembership,
   withTransaction,
@@ -40,7 +39,7 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (under
- * `withTransaction` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
+ * `withTransaction`, the dashboard-login shape) AND reads the venue's tenant +
  * designated-node identity inside `assembleMirrorBundle`. `designated` are the four ids the primary
  * till was provisioned with (`config.till.*`).
  * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own
@@ -162,7 +161,6 @@ export function mountMirrorBundleApi(
       // `loginManagerById` is the id sibling that shares all the same credential checks
       // (`packages/identity/src/manager-login.ts`) and resolves the admin by id regardless.
       await withTransaction(deps.appDb, async (tx) => {
-        await asAppUser(tx);
         const session = await loginManagerById(tx, {
           personId,
           password,

@@ -1,13 +1,7 @@
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import {
-  asAppUser,
-  readTenant,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -141,9 +135,8 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * ROLE-BLIND: it calls `resolveManagementSession` (which returns `personId` + `role` but gates
  * only on idle-timeout + suspension), NEVER `authorizeManager` — a `staff`-role person holds an
  * EMPTY permission set, so an `authorizeManager` gate would 403 every staff person, defeating the
- * whole surface. The verb then runs on the app role under this venue's tenant (`withTransaction` +
- * `asAppUser`), in the database holding this tenant. The explicit `person_id` predicate scopes
- * the operation to the requester.
+ * whole surface. The verb then runs under `withTransaction`, in the database holding this tenant.
+ * The explicit `person_id` predicate scopes the operation to the requester.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing ?? {
@@ -151,11 +144,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   };
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
-  /** Run `fn` on the app role under this venue's tenant — the one place the withTransaction/asAppUser pair
+  /** Run `fn` under this venue's tenant — the one place the `withTransaction` wrapper
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       return fn(tx);
     });
 
@@ -359,8 +351,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  /** Read the configured tenant's public display identity inside the same app-role
-   * transaction as its caller. A missing row means the boot configuration names no tenant. */
+  /** Read the configured tenant's public display identity inside the same transaction as its
+   * caller. A missing row means the boot configuration names no tenant. */
   const readVenueName = async (tx: Transaction): Promise<string> => {
     const venue = await readTenant(tx);
     if (venue === null) throw new Error("Configured tenant does not exist");

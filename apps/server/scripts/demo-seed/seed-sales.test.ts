@@ -2,15 +2,13 @@
  * Back-dated preproduction sales through `recordSale`: the stored environment, the chain, and the
  * reports they light up.
  *
- * **What went with PostgreSQL.** The seed used to run through `app_user`, so a grant the sale path
- * does not hold would have failed it. SQLite has no roles, `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection. Nothing
- * now checks who may write a sale, a tender or a fiscal record.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write a sale, a tender or a fiscal record.
  */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, sales, withTransaction } from "@waitron/db";
+import { sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -142,7 +140,6 @@ describe("seedSales", () => {
     expect(count).toBeGreaterThan(0);
 
     const read = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
         .from(sales);
@@ -222,7 +219,6 @@ describe("seedSales", () => {
     expect(count).toBe(0);
 
     const saleRows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select({ id: sales.id }).from(sales);
     });
     expect(saleRows.length).toBe(0);
