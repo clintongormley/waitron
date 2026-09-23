@@ -1,7 +1,7 @@
 // Side-effect only: keeps this host's `station.*`/`course.*` codes (errors.ts) reachable from the file
 // that throws them — the reachability convention tables.ts/till-sale.ts follow. See errors.ts.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   categories,
@@ -280,8 +280,8 @@ export async function setCategoryStation(
  * Set (or clear, with `null`) a product's OVERRIDE routing station (KDS-1 §2b) — the per-product
  * route that wins over its category default. Same shape as {@link setCategoryStation}: a non-null
  * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears it,
- * and the UPDATE names the product by id (an absent `productId` is a no-op — the route layer
- * resolves product ids, and KDS-1 mints no `product.not_found`).
+ * and the UPDATE names the product by id (an absent `productId`, or a variant's, is a no-op — the
+ * route layer resolves product ids, and KDS-1 mints no `product.not_found`).
  */
 export async function setProductStation(
   tx: Transaction,
@@ -292,7 +292,10 @@ export async function setProductStation(
   if (stationId !== null) {
     await requireLiveStation(tx, cfg, stationId);
   }
-  await tx.update(products).set({ stationId }).where(eq(products.id, productId));
+  await tx
+    .update(products)
+    .set({ stationId })
+    .where(and(eq(products.id, productId), isNull(products.parentId)));
 }
 
 /** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
@@ -556,8 +559,8 @@ export async function deactivateCourse(
  * course a line falls to at ring time when the line carries no override. Same shape as
  * {@link setProductStation}: a non-null `courseId` must be a LIVE course of this venue
  * ({@link requireLiveCourse}, `course.not_found` otherwise), null clears it, and the UPDATE names
- * the product by id (an absent `productId` is a no-op — the route layer resolves product ids, and
- * KDS-2 mints no `product.not_found`).
+ * the product by id (an absent `productId`, or a variant's, is a no-op — the route layer resolves
+ * product ids, and KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,
@@ -568,5 +571,8 @@ export async function setProductCourse(
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
-  await tx.update(products).set({ courseId }).where(eq(products.id, productId));
+  await tx
+    .update(products)
+    .set({ courseId })
+    .where(and(eq(products.id, productId), isNull(products.parentId)));
 }

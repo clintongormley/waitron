@@ -76,6 +76,57 @@ describe("site content languages", () => {
       expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("fr");
     });
   });
+  it("does not let a removed variant block a change of default, while an Active one still does", async () => {
+    await seedTenant(suite.db);
+    const { productId, kept } = await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
+      const catalogue = await createCatalogue(tx, { name: "Bar" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Coffee",
+        unitPrice: "9.00",
+        pricingUnit: "each",
+        vatClass: "reduced",
+      });
+      const variant = (name: string, customer: string, unitPrice: string) => ({
+        name,
+        customerName: { en: customer },
+        kitchenName: null,
+        image: null,
+        unitPrice,
+        available: true,
+      });
+      const [kept] = await setProductVariants(
+        tx,
+        product.id,
+        [variant("Small", "Small cup", "2.00"), variant("Large", "Large cup", "3.00")],
+        "en",
+      );
+      // Omitting Large makes it Inactive; its row and its English-only customer name stay.
+      await setProductVariants(tx, product.id, [kept!], "en");
+      return { productId: product.id, kept: kept! };
+    });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
+      ),
+    ).rejects.toMatchObject({
+      code: "content.default_missing",
+      params: { language: "fr", count: 1 },
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await setProductVariants(
+        tx,
+        productId,
+        [{ ...kept, customerName: { en: "Small cup", fr: "Petit" } }],
+        "en",
+      );
+      expect(await listContentTranslationGaps(tx, "fr")).toEqual([]);
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
+      expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("fr");
+    });
+  });
   it("counts a partial customer name as a gap but a blank one as none", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {

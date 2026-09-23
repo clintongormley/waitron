@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { catalogues, now, products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -57,7 +57,7 @@ const priceOrNull = (cents: number | null): string | null =>
   cents === null ? null : centsToDecimal(cents);
 
 /**
- * The product exists; returns the catalogue its variants are created in.
+ * The product exists and is not itself a variant; returns the catalogue its variants are created in.
  *
  * This took `select … for update` on the product's row, so that two variant saves of the same
  * product could not overlap. One write transaction runs on the venue file at a time, so there is
@@ -71,7 +71,7 @@ async function assertProductForWrite(
   const [product] = await tx
     .select({ catalogueId: products.catalogueId })
     .from(products)
-    .where(eq(products.id, productId));
+    .where(and(eq(products.id, productId), isNull(products.parentId)));
   if (!product) throw new AppError("product.not_found", { productId });
   return product;
 }

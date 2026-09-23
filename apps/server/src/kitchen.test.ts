@@ -306,6 +306,18 @@ async function seedProduct(): Promise<string> {
   return row!.id;
 }
 
+/** A variant of `parentId`: a `products` row with a parent, inheriting every routing column. */
+async function seedVariant(parentId: string): Promise<string> {
+  const { rows } = await db.execute<{ catalogue_id: string }>(
+    sql`select catalogue_id from products where id = ${parentId}`,
+  );
+  const [row] = await db
+    .insert(products)
+    .values({ catalogueId: rows[0]!.catalogue_id, parentId, name: "Routed variant" })
+    .returning({ id: products.id });
+  return row!.id;
+}
+
 describe("routing config", () => {
   it("setCategoryStation sets then clears the category's default station", async () => {
     const cfg = await setupVenue();
@@ -325,6 +337,17 @@ describe("routing config", () => {
     expect(await productStation(productId)).toBe(stationId);
     await asApp(cfg, (tx) => setProductStation(tx, cfg, productId, null));
     expect(await productStation(productId)).toBeNull();
+  });
+
+  it("setProductStation leaves a variant's id alone, as it does an id naming no product", async () => {
+    const cfg = await setupVenue();
+    const productId = await seedProduct();
+    const variantId = await seedVariant(productId);
+    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
+    await asApp(cfg, (tx) => setProductStation(tx, cfg, variantId, stationId));
+    expect(await productStation(variantId)).toBeNull();
+    await asApp(cfg, (tx) => setProductStation(tx, cfg, productId, stationId));
+    expect(await productStation(productId)).toBe(stationId);
   });
 
   it("setCategoryStation / setProductStation reject an inactive or absent station with station.not_found", async () => {
@@ -447,6 +470,17 @@ describe("product-course config", () => {
     expect(await productCourse(productId)).toBe(courseId);
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, null));
     expect(await productCourse(productId)).toBeNull();
+  });
+
+  it("setProductCourse leaves a variant's id alone, as it does an id naming no product", async () => {
+    const cfg = await setupVenue();
+    const productId = await seedProduct();
+    const variantId = await seedVariant(productId);
+    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId));
+    expect(await productCourse(variantId)).toBeNull();
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, courseId));
+    expect(await productCourse(productId)).toBe(courseId);
   });
 
   it("setProductCourse rejects an inactive or absent course with course.not_found", async () => {

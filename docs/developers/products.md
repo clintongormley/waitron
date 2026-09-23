@@ -177,7 +177,12 @@ The editor still keeps its own draft at **no variants, or at least two**, with a
   row.
 
 A variant shares the product's unit, tax rate, categories, modifiers and allergen and dietary
-declarations. It has its own name (all three of them), price, availability and image.
+declarations. It has its own name (all three of them) and availability, and its own price and image
+only where it sets them. On a menu it is charged the most specific price set
+(`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`): that menu's price for the variant,
+else its own price, else its parent's price on that menu. The storage and catalogue layer accept a
+variant with no price of its own; the product editor's route still refuses one (`price()` in
+`packages/catalogue/src/product-editor-input.ts`).
 
 A variant's own photo is `products.image` on its row. The image library lists it among a photo's
 uses as a `variant` of its parent and refuses to delete a photo one still uses (`listImageUsages`
@@ -254,5 +259,6 @@ it is both (`listMenuOffers`, `listAvailableProducts` and `readExtraProducts` in
 except that a held order's line kept at or below its quantity is still billed although its dish or
 an extra has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`.
 `listMenuOffers` keeps an Unavailable product's offer only when its caller passes
-`includeUnavailable`, as the menu management route and the venue readiness check do. Until
-variants become products (plan Task 3), a variant carries only its own `available`.
+`includeUnavailable`, as the menu management route and the venue readiness check do. A variant is
+listed only under its parent's offer, only while Active, and as available only while Available and
+offered on that menu.

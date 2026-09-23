@@ -25,9 +25,7 @@ import { productUnits } from "./schema/units.js";
  * non-null types they always did. The catalogue's reads keyed on CATEGORY MEMBERSHIP read each
  * product's OWN `product_categories` rows, so a variant that inherits its parent's categories is not
  * listed under them there — a category's product list and its delete preview (`categories.ts`) are
- * two. For `readProductCategories` (also served by `GET /management-api/products/:id/categories`)
- * that is on purpose: the category writers read it back and rewrite the product's OWN rows, so an
- * inherited list there would be copied onto the variant by its next save. Reads keyed on an ORDER
+ * two; `readProductCategories` refuses a variant's id (`product.not_found`). Reads keyed on an ORDER
  * LINE's product — the
  * kitchen's station routing, its allergen and dietary display, preparation routes — still read the
  * raw columns, and are correct only while no order line names a variant.

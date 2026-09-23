@@ -68,6 +68,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
   "diet.invalid_origin": 400,
+  "product.not_found": 404,
 };
 
 // The one error boundary every recipe route wraps its handler in — the shared `createErrorBoundary`

@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
 
+// Kept until Task 9 drops it: a variant is a `products` row, and no product code reads or
+// writes this table (the configuration transfer still copies it whole).
 export const productVariants = table(
   "product_variants",
   {
@@ -13,9 +15,6 @@ export const productVariants = table(
     customerName: json<Record<string, string>>("customer_name"),
     // Optional kitchen-ticket name for the variant.
     kitchenName: label("kitchen_name"),
-    // Path reference to the variant photo — a content-addressed filename, the same plain-text shape
-    // as products.image. There is no media FK: deletion protection is the application-level usage
-    // scan in packages/media/src/images.ts, which covers this column. Null = no picture.
     image: label("image"),
     unitPrice: money("unit_price").notNull(),
     available: flag("available").notNull().default(true),

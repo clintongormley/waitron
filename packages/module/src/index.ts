@@ -14,6 +14,7 @@ export type {
   OrderServiceContext,
   ServiceZoneSummary,
   ZoneMenuOffer,
+  ZoneMenuOfferVariant,
   PreparationRoute,
   ServiceMode,
   VenueServiceContribution,

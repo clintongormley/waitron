@@ -2,7 +2,7 @@ import { nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { AppError, FALLBACK_LOCALE, decimal, type Decimal } from "@waitron/shared";
 import { products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
@@ -638,14 +638,17 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   };
 
   /**
-   * Refuse a product patch naming no stored product. This read is what makes an unknown id a
+   * Refuse a product patch naming no stored product, or naming a variant. This read is what makes an unknown id a
    * refusal at all and cannot be folded into the write that follows it: `updateProduct`
    * (packages/catalogue/src/operations.ts) runs a bare `update products … where id = $1` and
    * reports nothing when no row matches. Measured by removing the call and re-running the file —
    * the unknown-id case answers 204 having written nothing, instead of 403.
    */
   const assertOwned = async (tx: Transaction, id: string): Promise<void> => {
-    const [row] = await tx.select({ id: products.id }).from(products).where(eq(products.id, id));
+    const [row] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.id, id), isNull(products.parentId)));
     if (row === undefined) {
       throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
     }

@@ -139,19 +139,32 @@ export interface ZoneMenuOffer {
   readonly dietOverride: unknown;
   readonly dietaryDeclarations: readonly string[];
   /** The product's Active variants, each with its RESOLVED `unitPrice`, this menu's stored
-   * `menuPrice` override, and `available` (Active, Available and offered on this menu). */
-  readonly variants: readonly {
-    readonly id: string;
-    readonly name: string;
-    readonly customerName: Readonly<Record<string, string>> | null;
-    readonly kitchenName: string | null;
-    readonly image: string | null;
-    readonly unitPrice: string;
-    readonly menuPrice: string | null;
-    readonly offered: boolean;
-    readonly available: boolean;
-  }[];
+   * `menuPrice` override, `available` (Active, Available and offered on this menu), and its
+   * EFFECTIVE inherited values — its own where set, else its parent's. */
+  readonly variants: readonly ZoneMenuOfferVariant[];
   readonly courseId: string | null;
+}
+
+export interface ZoneMenuOfferVariant {
+  readonly id: string;
+  readonly name: string;
+  readonly customerName: Readonly<Record<string, string>> | null;
+  readonly kitchenName: string | null;
+  readonly image: string | null;
+  readonly unitPrice: string;
+  readonly menuPrice: string | null;
+  readonly offered: boolean;
+  readonly available: boolean;
+  readonly unit: ZoneMenuOffer["unit"];
+  readonly pricingUnit: string;
+  readonly vatClass: string;
+  readonly category: string | null;
+  readonly courseId: string | null;
+  readonly allergens: ZoneMenuOffer["allergens"];
+  readonly diet: unknown;
+  readonly dietDerivation: unknown;
+  readonly dietOverride: unknown;
+  readonly dietaryDeclarations: readonly string[];
 }
 
 export type PreparationRoute =

@@ -1,6 +1,6 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { categoryDetails, productCategories } from "./schema/categories.js";
 import { validateContentTranslations } from "./content-languages.js";
@@ -238,7 +238,7 @@ export async function readProductCategories(
     })
     .from(products)
     .leftJoin(productCategories, eq(productCategories.productId, products.id))
-    .where(eq(products.id, productId))
+    .where(and(eq(products.id, productId), isNull(products.parentId)))
     .groupBy(products.id);
   if (!product) throw new AppError("product.not_found", { productId });
   return product;
@@ -299,13 +299,13 @@ export async function addProductsToCategory(
   if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
     throw new AppError("category.membership_invalid", {});
   if (productIds.length === 0) return;
-  // Resolve the whole selection in one read, so an unknown or repeated id is
+  // Resolve the whole selection in one read, so an unknown, repeated or variant's id is
   // refused before anything is written rather than part-way through a loop: a repeat leaves the
   // count short exactly as an absent id does.
   const found = await tx
     .select({ id: products.id, primaryCategoryId: products.categoryId })
     .from(products)
-    .where(inArray(products.id, productIds));
+    .where(and(inArray(products.id, productIds), isNull(products.parentId)));
   if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
   await tx
     .insert(productCategories)

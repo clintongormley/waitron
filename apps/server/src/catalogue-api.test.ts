@@ -962,6 +962,127 @@ describe("mountCatalogueApi — products", () => {
     };
   }
 
+  // A variant is a `products` row, but no management route reads or writes it by id as a product:
+  // each answers exactly what it answers for an id that names nothing.
+  it("refuses a variant's id on every product-by-id route, and accepts its parent's", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Variant ids");
+    const categoryId = await createCategoryVia(app, { es: `Vinos ${crypto.randomUUID()}` });
+    const variant = {
+      name: "Copa",
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: "3.25",
+      available: true,
+    };
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app, { name: "Vino", vatClass: "reduced", variants: [variant] }) },
+    );
+    expect(created.status).toBe(201);
+    const parent = (await created.json()) as { id: string; variants: { id: string }[] };
+    const variantId = parent.variants[0]!.id;
+    const variantRow = async () =>
+      (
+        await suite.db.execute<{ vat_class: string | null; category_id: string | null }>(
+          sql`select vat_class, category_id from products where id = ${variantId}`,
+        )
+      ).rows[0];
+    const notFound = { error: { code: "product.not_found", params: { productId: variantId } } };
+
+    const readVariant = await send(app, "GET", `/management-api/products/${variantId}/editor`);
+    expect(readVariant.status).toBe(404);
+    expect(await readVariant.json()).toMatchObject(notFound);
+    expect((await send(app, "GET", `/management-api/products/${parent.id}/editor`)).status).toBe(
+      200,
+    );
+
+    const saveVariant = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+      body: await editorBody(app, { name: "Copa", vatClass: "general", variants: [variant] }),
+    });
+    expect(saveVariant.status).toBe(404);
+    expect(await saveVariant.json()).toMatchObject(notFound);
+    expect(
+      (await suite.db.execute(sql`select id from products where parent_id = ${variantId}`)).rows,
+    ).toEqual([]);
+
+    const patchVariant = await send(app, "PATCH", `/management-api/products/${variantId}`, {
+      body: { vatClass: "general" },
+    });
+    expect(patchVariant.status).toBe(403);
+    expect(await patchVariant.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+    expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/products/${parent.id}`, {
+          body: { vatClass: "general" },
+        })
+      ).status,
+    ).toBe(204);
+
+    const readCategories = await send(
+      app,
+      "GET",
+      `/management-api/products/${variantId}/categories`,
+    );
+    expect(readCategories.status).toBe(404);
+    expect(await readCategories.json()).toMatchObject(notFound);
+    const membership = { categoryIds: [categoryId], primaryCategoryId: categoryId };
+    const writeCategories = await send(
+      app,
+      "PUT",
+      `/management-api/products/${variantId}/categories`,
+      { body: membership },
+    );
+    expect(writeCategories.status).toBe(404);
+    expect(await writeCategories.json()).toMatchObject(notFound);
+    const addToCategory = await send(
+      app,
+      "POST",
+      `/management-api/categories/${categoryId}/products`,
+      { body: { productIds: [variantId] } },
+    );
+    expect(addToCategory.status).toBe(400);
+    expect(await addToCategory.json()).toMatchObject({
+      error: { code: "category.membership_invalid" },
+    });
+    expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select product_id from product_categories where product_id = ${variantId}`,
+        )
+      ).rows,
+    ).toEqual([]);
+
+    expect(
+      (await send(app, "GET", `/management-api/products/${parent.id}/categories`)).status,
+    ).toBe(200);
+    expect(
+      (
+        await send(app, "POST", `/management-api/categories/${categoryId}/products`, {
+          body: { productIds: [parent.id] },
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(app, "PUT", `/management-api/products/${parent.id}/categories`, {
+          body: membership,
+        })
+      ).status,
+    ).toBe(200);
+    const saveParent = await send(app, "PUT", `/management-api/products/${parent.id}/editor`, {
+      body: await editorBody(app, { name: "Vino", vatClass: "reduced", variants: [variant] }),
+    });
+    expect(saveParent.status).toBe(200);
+  });
+
   // Spec §15.6: the editor writes Active and Available as two separate states. Each save sets the
   // two to DIFFERENT values, so a route that writes one flag into the other column fails.
   it("writes Active and Available as two states through the editor routes", async () => {

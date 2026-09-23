@@ -21,6 +21,12 @@ import {
 } from "./variants.js";
 import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
 import { createUnit } from "./units.js";
+import {
+  addProductsToCategory,
+  createCategory,
+  readProductCategories,
+  replaceProductCategories,
+} from "./categories.js";
 
 /**
  * Variants against a real database, plus the pure selection core. A variant is a `products` row
@@ -309,6 +315,79 @@ describe("the product editor", () => {
       { id: w125!.id, active: 1 },
       { id: w175!.id, active: 0 },
     ]);
+  });
+});
+
+describe("a variant's id is not a product's id to the product-by-id functions", () => {
+  async function variantOfParent() {
+    const f = await fixture();
+    const [w125] = await app((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", "4.75")], "en"),
+    );
+    const category = await app((tx) => createCategory(tx, { name: { en: "Wines" } }, "en"));
+    return { ...f, variantId: w125!.id, categoryId: category.id };
+  }
+  const notFound = (productId: string) => ({ code: "product.not_found", params: { productId } });
+
+  it("reads and saves a product's editor, never a variant's", async () => {
+    const f = await variantOfParent();
+    await expect(app((tx) => readProductEditor(tx, f.variantId))).rejects.toMatchObject(
+      notFound(f.variantId),
+    );
+    const parent = await app((tx) => readProductEditor(tx, f.parentId));
+    await expect(
+      app((tx) =>
+        saveProductEditor(
+          tx,
+          f.variantId,
+          f.catalogueId,
+          { ...parent, vatClass: "general", categoryIds: [], variants: [] },
+          "en",
+        ),
+      ),
+    ).rejects.toMatchObject(notFound(f.variantId));
+    expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
+    await expect(
+      app((tx) => saveProductEditor(tx, f.parentId, f.catalogueId, parent, "en")),
+    ).resolves.toMatchObject({ id: f.parentId });
+  });
+
+  it("gives variants to a product, never to a variant", async () => {
+    const f = await variantOfParent();
+    await expect(
+      app((tx) => setProductVariants(tx, f.variantId, [wine("Grandchild", "1.00")], "en")),
+    ).rejects.toMatchObject(notFound(f.variantId));
+    expect(await storedVariants(f.variantId)).toEqual([]);
+    await expect(
+      app((tx) => setProductVariants(tx, f.otherId, [wine("Cider pint", "4.00")], "en")),
+    ).resolves.toHaveLength(1);
+  });
+
+  it("reads and writes a product's category membership, never a variant's", async () => {
+    const f = await variantOfParent();
+    const membership = { categoryIds: [f.categoryId], primaryCategoryId: f.categoryId };
+    await expect(app((tx) => readProductCategories(tx, f.variantId))).rejects.toMatchObject(
+      notFound(f.variantId),
+    );
+    await expect(
+      app((tx) => replaceProductCategories(tx, f.variantId, membership)),
+    ).rejects.toMatchObject(notFound(f.variantId));
+    await expect(
+      app((tx) => addProductsToCategory(tx, f.categoryId, [f.variantId])),
+    ).rejects.toMatchObject({ code: "category.membership_invalid" });
+    expect(
+      await suite.db
+        .select()
+        .from(productCategories)
+        .where(eq(productCategories.productId, f.variantId)),
+    ).toEqual([]);
+    expect((await storedVariants(f.parentId))[0]).toMatchObject({ category_id: null });
+
+    await app((tx) => addProductsToCategory(tx, f.categoryId, [f.parentId]));
+    await expect(app((tx) => readProductCategories(tx, f.parentId))).resolves.toEqual(membership);
+    await expect(
+      app((tx) => replaceProductCategories(tx, f.parentId, membership)),
+    ).resolves.toEqual(membership);
   });
 });
 

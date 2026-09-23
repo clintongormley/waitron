@@ -845,7 +845,7 @@ async function validatePreparationRoute(
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.id, input.productId));
+      .where(and(eq(products.id, input.productId), isNull(products.parentId)));
     if (product === undefined) {
       throw new AppError("route.subject_not_found", { subject: "product", id: input.productId });
     }

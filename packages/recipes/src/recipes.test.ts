@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, ingredients, products, withTransaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CATALOGUE_MIGRATIONS, type DietaryOrigin } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, setProductVariants, type DietaryOrigin } from "@waitron/catalogue";
 import { createIngredient, updateIngredient } from "./ingredients.js";
 import { getProductRecipe, setProductRecipe } from "./recipes.js";
 import { seedProduct, seedVenue } from "../test/fixtures.js";
@@ -224,6 +224,37 @@ describe("recipe composition and allergen derivation", () => {
       return r!.diet;
     });
     expect(diet).toMatchObject({ vegan: "no", vegetarian: "no", contains: ["meat"] });
+  });
+
+  it("refuses a recipe for a variant, whose allergens and diet are its parent's", async () => {
+    const egg = await withTransaction(fx.db, (tx) =>
+      createIngredient(tx, { name: "egg", allergens: { eggs: { presence: "contains" } } }),
+    );
+    const variantId = await withTransaction(fx.db, async (tx) => {
+      const [variant] = await setProductVariants(
+        tx,
+        productId,
+        [
+          {
+            name: "bocadillo grande",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "5.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      return variant!.id;
+    });
+    await expect(
+      withTransaction(fx.db, (tx) => setProductRecipe(tx, variantId, [egg.id])),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
+    expect(await withTransaction(fx.db, (tx) => getProductRecipe(tx, variantId))).toEqual([]);
+    expect(await publishedAllergens(variantId)).toBeNull();
+    await withTransaction(fx.db, (tx) => setProductRecipe(tx, productId, [egg.id]));
+    expect(await publishedAllergens(productId)).toEqual({ eggs: { presence: "contains" } });
   });
 
   it("getProductRecipe returns the ingredient list", async () => {

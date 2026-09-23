@@ -67,7 +67,9 @@ export async function listContentTranslationGaps(
   // drizzle column mapping runs over the result, and `json()` columns are plain `text` here
   // (`packages/db/src/schema/columns.ts`). It is parsed below rather than compared as text.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
-  // rows and the variant branch to the rest; otherwise each variant would be counted twice.
+  // rows and the variant branch to the rest; otherwise each variant would be counted twice. An
+  // Inactive (removed) variant is shown on no screen, so it cannot be completed and must not block
+  // a change of default.
   const result = await tx.execute<{
     kind: string;
     id: string;
@@ -79,7 +81,8 @@ export async function listContentTranslationGaps(
     union all select 'category' as kind, id, null, name as translations from categories
     union all select 'unit' as kind, id, null, name as translations from units
     union all select 'variant' as kind, id, parent_id, customer_name as translations from products
-      where parent_id is not null and customer_name is not null and customer_name <> '{}'
+      where parent_id is not null and active = 1
+        and customer_name is not null and customer_name <> '{}'
     union all select 'section' as kind, id, null, name as translations from menu_sections
     union all select 'option_list' as kind, id, null, customer_name as translations
       from option_lists where customer_name is not null and customer_name <> '{}'
