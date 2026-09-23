@@ -535,6 +535,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts` and
   `inmutabilidad` — the first two because a regeneration is exactly what has dropped constraints and
   triggers declared outside the TypeScript schema before.
+- **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
+  deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows.**
+  Drizzle rebuilds a SQLite table to change a column's nullability, and the `PRAGMA foreign_keys=OFF`
+  it generates does nothing inside the migrator's transaction. Before shipping a rebuild, list the
+  foreign keys that point at the table. Cost: the variants plan's `products` rebuild emptied
+  `product_categories` on a scratch venue without the media triggers, and its `menu_items` rebuild
+  emptied three menu tables while reporting success or, once the venue had sold from a menu, refused
+  to run. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate
   time.** This engine creates a table naming a parent that does not exist yet, and a whole migration
   set applies clean; the first insert then fails `foreign key mismatch - "child" referencing

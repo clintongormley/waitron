@@ -79,7 +79,12 @@ A variant follows its product onto every menu the product is on, including a var
 In the menu offer you can optionally give a variant its own price on that menu, or clear its
 **Offered on this menu** box to stop offering it there. An order charges the first of these that is
 set: the variant's price on that menu, the variant's own price, then the product's price on that
-menu.
+menu, then the product's own price.
+
+You can leave a menu offer's price empty, with variants or without. The menu then charges the
+product's own price, and follows it when you change that price. The empty field shows the product's
+price greyed out as a hint. For a product without variants that hint is what the menu charges; for
+one with variants, each variant shows its own price hint.
 
 ## Declare allergens and dietary suitability directly
 
@@ -111,8 +116,9 @@ prices and modifier answers. Later catalogue edits apply to new selections. The 
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name and direct dietary declarations. Its menu sets no price of its
-own for either variant, so each sells at the variant's own price. The
-demo sirloin carries a seeded options list, **Punto**, asking how the steak should be cooked. The
-demo venue seeds no extras list, so nothing in it shows an extra being added to a dish.
+two variants, a separate kitchen name and direct dietary declarations. The demo menus set no price
+of their own for anything except the Negroni, at 9.00 on the Menú del Día, so everything else,
+including each coffee variant, sells at its own price. The demo sirloin carries a seeded options
+list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras list, so
+nothing in it shows an extra being added to a dish.
 
