@@ -257,6 +257,12 @@ PGlite (the adoption logic is pure SQL + the pure `@waitron/membership` fence; n
 > `grep -rn adoptMembership --include="*.test.ts" apps packages` returns nothing, so what became of
 > this step was not established here. **Only the helper name was re-checked; nothing else in this
 > sketch was.**
+>
+> **2026-09-23 — what became of it.** This task landed in #202, which created
+> `apps/server/src/membership-adopt.ts` and its test. #280 (2026-09-08) deleted both when adoption
+> moved to native replication; its commit message lists `membership-adopt` among the deleted
+> outbox runtime, and returned-box membership is now checked at boot by
+> `apps/server/src/membership-reconcile.ts`.
 
 ```ts
 import { describe, expect, it } from "vitest";

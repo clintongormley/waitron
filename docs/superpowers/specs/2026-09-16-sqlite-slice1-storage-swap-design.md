@@ -567,6 +567,10 @@ land non-fiscal work by itself and leaves anything touching the unrepairable fis
 
 P1 and P2 are large but mechanical, and both split per package into several pull requests.
 
+> 2026-09-23: "211" in P2's row is this document's original reading, which was never reproduced;
+> the dated note under **The test-database helper** in §2 says so and points at the
+> re-measurement.
+
 ### The flip — one pull request, and it cannot be smaller
 
 `packages/store`; the transaction helper and its write queue; the vocabulary bodies switched to
@@ -595,6 +599,11 @@ PostgreSQL-only tests converted or deleted. Depends on every prepare item. **Own
    parallel, and P1 touches 72 files while P2 touches 211. Each prepare item rebases immediately
    before it lands, and the plan sequences P1 and P2 per package so a conflict is confined to one
    package.
+
+   > 2026-09-23: "211" in risks 1 and 2 is this document's original reading, which was never
+   > reproduced; the dated note under **The test-database helper** in §2 says so and points at the
+   > re-measurement.
+
 3. **The `node:sqlite` adapter is a piece of this repository's own code sitting under Drizzle.** It is
    now proven across reads, writes, blobs, Drizzle's column modes, explicit transactions and the
    migration runner (§3.1), so the risk is no longer whether it works but whether it stays working
@@ -656,3 +665,7 @@ Node v26.7.0 and `drizzle-orm@0.45.2`.
 | 211 files choose a test database; 66 `*.pg.test.ts` | grep and `find` |
 | One server process per venue | `deploy/compose.yml` defines a single `app` service |
 | Fiscal and secret hashing are synchronous | `createHash` in `packages/verifactu/src/huella.ts`; `scryptSync` in `packages/identity/src/secret-hash.ts` — a spot check of two files |
+
+> 2026-09-23: "211" in this table's test-database row is this document's original reading, which
+> was never reproduced; the dated note under **The test-database helper** in §2 says so and points at
+> the re-measurement.

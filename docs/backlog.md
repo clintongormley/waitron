@@ -3789,15 +3789,13 @@ What the preparation tasks left, with F1's own answers where it found them:
     pin one worker. The hook has run no package tests since #338; its only test run is the root
     `pnpm vitest run --coverage`. #515 and the dashboard-kit coverage branch fixed the same words in
     server-kit, dashboard-kit and dashboard-modules.
-- **Dead code and doc sweeps owed to the rollout's final sweep** — the unused `seedTenantWithSumUpKey`
-  was deleted on 2026-09-23 (PR #516). The file's real-SumUp case
-  seals no credential and passes, because the seat reads its credential only on first use; that
-  case's name and the file header had said otherwise and now do not. Twelve plans hold a
-  `usePgliteDb` designating sketch with no `useVenueDb` pointer, and one twin
-  (`superpowers/plans/2026-07-26-tenant-credential-vault.md:139`) a stale hookTimeout claim; the
-  slice-1 spec carries a stale "211 files" in four more places; and
-  `superpowers/plans/2026-09-03-membership-slice-3-distribution.md` designates
-  `apps/server/src/membership-adopt.test.ts`, which does not exist.
+- **Dead code and doc sweeps owed to the rollout's final sweep** — **DONE** (2026-09-23). The unused
+  `seedTenantWithSumUpKey` was deleted by PR #516; the file's real-SumUp case seals no credential and
+  passes, because the seat reads its credential only on first use, and that case's name and the file
+  header had said otherwise and now do not. The twelve plans with a `usePgliteDb` sketch already carried a dated `useVenueDb`
+  pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
+  claim, the slice-1 spec's four unannotated "211" mentions, and what became of
+  `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
 - **Deferred cleanups, each with its reason in its PR** — P6's deferred codec, constant and
   optional-shape merges; P5's three declined review suggestions; and P7's three (assert
   `drizzle-kit generate` is a no-op; unify the three root-project schema readers into

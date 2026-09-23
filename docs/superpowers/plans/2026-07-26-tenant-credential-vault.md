@@ -129,6 +129,14 @@
 
 `packages/credentials/vitest.config.ts`:
 
+> **2026-09-23 — the `hookTimeout` comment in this sketch is wrong.** It says the setup paid in a
+> `beforeAll` is what `hookTimeout: 180_000` covers. The test-database helper passes its own hook
+> a 60-second budget (`packages/db/src/testing/venue-db.ts`, `DEFAULT_SETUP_TIMEOUT_MS`), and a
+> hook given its own budget ignores the config's. The real config,
+> `packages/credentials/vitest.config.ts`, states what `hookTimeout` does bound. Since #489 the
+> package runs on SQLite: no PGlite, and no container. **Only this comment was re-checked; nothing
+> else in this sketch was.**
+
 ```typescript
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 
