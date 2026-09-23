@@ -161,16 +161,18 @@ describe("seedDemoRestaurant", () => {
       const { rows: negroniRows } = await tx.execute<{
         product_id: string;
         menu_name: string;
-        gross_price: number;
+        gross_price: number | null;
+        unit_price: number;
       }>(sql`
-        -- gross_price counts whole cents, and the assertion below is on that COUNT, not on an
-        -- amount, so it is read as an integer rather than through rawCentsToDecimal.
-        select mi.product_id, c.name as menu_name, cast(mi.gross_price as integer) as gross_price
+        -- Both prices count whole cents, and the assertion below is on that COUNT, not on an
+        -- amount, so each is read as an integer rather than through rawCentsToDecimal.
+        select mi.product_id, c.name as menu_name, cast(mi.gross_price as integer) as gross_price,
+          cast(p.unit_price as integer) as unit_price
         from menu_items mi
         join products p on p.id = mi.product_id
         join catalogues c on c.id = mi.menu_id
         where p.name = 'Negroni'
-        order by mi.gross_price`);
+        order by c.name`);
       const { rows: optionListRaw } = await tx.execute<{
         product_name: string;
         list_name: string;
@@ -292,9 +294,21 @@ describe("seedDemoRestaurant", () => {
       { department_name: "Restaurant and bar", days: 7 },
     ]);
     expect(read.stations).toEqual(["Deli counter", "Downstairs bar", "Kitchen", "Upstairs bar"]);
+    // Casa Delgado sets no menu price, so it charges the product's own 11.00; Menú del Día sets
+    // its own 9.00.
     expect(read.negroniOffers).toEqual([
-      { product_id: expect.any(String), menu_name: "Menú del Día", gross_price: 900 },
-      { product_id: expect.any(String), menu_name: "Casa Delgado", gross_price: 1100 },
+      {
+        product_id: expect.any(String),
+        menu_name: "Casa Delgado",
+        gross_price: null,
+        unit_price: 1100,
+      },
+      {
+        product_id: expect.any(String),
+        menu_name: "Menú del Día",
+        gross_price: 900,
+        unit_price: 1100,
+      },
     ]);
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
     expect(read.cocktailRoutes).toEqual([

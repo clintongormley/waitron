@@ -911,12 +911,11 @@ describe("venue operations screen", () => {
     // Optional, so neither required nor marked as required.
     expect(field(el, "offer-price-i1").hasAttribute("required")).toBe(false);
     expect(field(el, "offer-price-i1").closest("label")!.querySelector(".required")).toBeNull();
-    // A placeholder reads like a value, so the form also says what an empty price means.
-    expect(el.shadowRoot!.querySelector('[data-hint="offer-price-i1"]')?.textContent).toContain(
+    // A placeholder reads like a value, so the form also says what an empty price means, and the
+    // input is described by that line: the id it names resolves to the hint itself.
+    const describedBy = field(el, "offer-price-i1").getAttribute("aria-describedby")!;
+    expect(el.shadowRoot!.getElementById(describedBy)?.textContent).toContain(
       "Leave the price empty to charge the product's own price.",
-    );
-    expect(field(el, "offer-price-i1").getAttribute("aria-describedby")).toBe(
-      "hint-offer-price-i1",
     );
     // A variant with no price of its own falls to the parent's RESOLVED price here.
     expect(input(el, "offer-variant-price-v1").placeholder).toBe("10.00");

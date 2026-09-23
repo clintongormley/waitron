@@ -176,7 +176,8 @@ export async function seedCatalogues(
           menuId: catalogue.id,
           productId: created.id,
           sectionId: section.id,
-          grossPrice: product.unitPrice,
+          // Blank: the menu charges the product's own price and follows it when it changes.
+          grossPrice: null,
           displayOrder: productIndex,
         });
         menuItemsByProduct.set(created.id, menuItem.id);
