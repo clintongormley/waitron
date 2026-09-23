@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardRequest } from "@waitron/dashboard-kit";
+import { codeMessage, registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
 import { SumUpConnectForm } from "./sumup-connect-form.js";
@@ -17,6 +17,14 @@ function q(el: SumUpConnectForm, sel: string): HTMLElement | null {
 
 function text(el: SumUpConnectForm, sel: string): string {
   return q(el, sel)?.textContent?.trim() ?? "";
+}
+
+async function summaryItems(el: SumUpConnectForm): Promise<string[]> {
+  const summary = q(el, "wt-form-error-summary") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await summary.updateComplete;
+  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
 }
 
 async function setInput(el: SumUpConnectForm, testId: string, value: string): Promise<void> {
@@ -137,5 +145,67 @@ describe("sumup-connect-form", () => {
       affiliateAppId: "app-1",
       affiliateKey: "aff-key",
     });
+  });
+
+  it("refuses to re-submit an ambiguous key until a merchant is picked", async () => {
+    const request = vi.fn(async () => {
+      throw {
+        code: "payment.provider_merchant_ambiguous",
+        params: { merchants: [{ code: "M1", name: "Deli One" }] },
+      };
+    }) as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "spans_two_merchants");
+    await connect(el);
+    expect(q(el, "[data-test=merchant]")).not.toBeNull();
+
+    await connect(el);
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(await summaryItems(el)).toEqual([t("payments.sumup.merchant_required")]);
+  });
+
+  it("sends one connect request when Connect is pressed again while the first is in flight", async () => {
+    let respond!: (value: { merchantName: string }) => void;
+    const request = vi.fn(
+      () =>
+        new Promise<{ merchantName: string }>((r) => {
+          respond = r;
+        }),
+    ) as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "sup_sk_live_key");
+    await connect(el);
+    await connect(el);
+    expect(request).toHaveBeenCalledTimes(1);
+
+    respond({ merchantName: "Deli Gormley" });
+    await el.updateComplete;
+    await el.updateComplete;
+    expect(text(el, "[data-test=connected]")).toBe(
+      t("payments.sumup.connected_as").replace("{name}", "Deli Gormley"),
+    );
+  });
+
+  it("shows the shared code copy for a rejection other than a refused key", async () => {
+    registerCodeMessages({
+      "payment.provider_unknown": {
+        en: "Provider copy for this test",
+        es: "Provider copy for this test (es)",
+      },
+    });
+    const request = vi.fn(async () => {
+      throw { code: "payment.provider_unknown" };
+    }) as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "k");
+    await connect(el);
+
+    expect(await summaryItems(el)).toEqual([codeMessage("payment.provider_unknown")]);
+    expect(codeMessage("payment.provider_unknown")).not.toBe(t("payments.sumup.connect_failed"));
+    expect(codeMessage("payment.provider_unknown")).not.toBe(codeMessage("server.internal"));
   });
 });

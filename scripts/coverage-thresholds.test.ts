@@ -43,6 +43,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/core",
   "@waitron/db",
   "@waitron/payments",
+  "@waitron/payments-sumup",
   "@waitron/store",
   "@waitron/bookings",
   "@waitron/composition",

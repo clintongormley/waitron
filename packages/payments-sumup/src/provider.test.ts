@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
-import { cardFromTransaction, mapEntryMode } from "./provider.js";
+import { SumUpCloudProvider, cardFromTransaction, mapEntryMode } from "./provider.js";
 
 describe("SumUp card details mapping", () => {
   it("maps SumUp entry modes to the four normalised values", () => {
@@ -185,6 +185,44 @@ describe("SumUpCloudProvider.collect", () => {
     expect(r.state).toBe("captured");
     expect(r.cardLast4).toBeNull();
     expect(r.cardScheme).toBeNull();
+  });
+});
+
+describe("SumUpCloudProvider default poll", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("waits one second between polls when no poll is injected", async () => {
+    const { fake, params, row } = await setup(suite, (f) => f.stallNext());
+    const provider = new SumUpCloudProvider({
+      client: fake,
+      db: suite.db,
+      nodeId: "11111111-1111-4111-8111-111111111111",
+      incidents: () => Promise.resolve(true),
+    });
+    const find = vi.spyOn(fake, "findTransaction");
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    let done = false;
+    const collecting = provider.collect(params).then((result) => {
+      done = true;
+      return result;
+    });
+    // Wait (on the real setImmediate) until the first poll has come back PENDING and its sleep is armed.
+    while (vi.getTimerCount() === 0 && !done) await new Promise<void>((r) => setImmediate(r));
+    expect(find).toHaveBeenCalledTimes(1);
+    const query = find.mock.calls[0]![0] as { clientTransactionId: string };
+    fake.settle(query.clientTransactionId);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(find).toHaveBeenCalledTimes(1);
+    expect(done).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(find).toHaveBeenCalledTimes(2);
+    const result = await collecting;
+    expect(result.state).toBe("captured");
+    expect((await row(result.paymentRef)).state).toBe("captured");
   });
 });
 
