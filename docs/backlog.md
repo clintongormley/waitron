@@ -457,7 +457,7 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 5 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 6 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
 the menus' extras publications, their per-item extras prices and the variant price overrides, or,
 once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
@@ -617,6 +617,27 @@ rows: **this task needs no venue reset of its own.** What it left open:
 - **`@waitron/fiscal-verifactu`'s tests now depend on `@waitron/catalogue`** (its VAT-per-variant
   test runs the real `selectMenuVariant`), so a catalogue change also runs fiscal-verifactu's test
   shard in CI. Kept deliberately; worth revisiting only if that shard's time becomes a problem.
+
+**Task 6 LANDED as #539 (2026-09-24): a variant has its own product page on the server.**
+`GET`/`PUT /management-api/products/:id/editor` now accept a variant's id. The editor value carries
+`parentId` and `inherited` (the parent's effective values, allergens as published); a variant's own
+fields come back as stored, so a blank reads blank and a cleared field goes back to following its
+parent. A variant may not change its parent, carry variants of its own, or carry extras or options
+lists. Its published allergens and diet stay blank unless it overrides them, so it reads its
+parent's; a parent's recipe or diet change republishes the variants that do override. The "is this
+a product in its own right" check that was written out at each product-by-id route is now one
+shared function, and every route other than the editor still refuses a variant's id as before. No
+migration: **no venue reset needed.** The dashboard screen for a variant's page is Task 7. What it
+left open, besides the bullets above that it updated:
+- **Reassigning a unit's products to another real unit (not Each) does not update their stored
+  pricing unit** — for top-level products as well as variants. Found by the review; I believe it
+  predates Task 6, not checked with `git blame`. **Next action:** check whether anything still reads
+  `products.pricing_unit` for a product with a unit row, and either update it on reassignment or
+  say why it does not matter.
+- **Review suggestions not taken, because they reshape the contract Task 7 consumes:** split the
+  editor's types into a product shape and a variant shape (removing the non-null workarounds in
+  `saveProductEditor` and the dashboard), derive `InheritedValues` from the product type, and write
+  a parent's variant republishes in one statement. **Next action:** reconsider once Task 7 lands.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
