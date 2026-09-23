@@ -886,9 +886,9 @@ describe("products_id_fixed_update", () => {
   // is now a variant, a second level no insert trigger saw.
   it("refuses renaming a variant onto the id a waiting child names", () => {
     expect(refusalFor(connection, product("p-waiting-child", "p-missing"))).toBeUndefined();
-    expect(
-      refusalFor(connection, `update products set id = 'p-missing' where id = 'p-var'`),
-    ).toBe(PRODUCT_ID_FIXED_REFUSAL);
+    expect(refusalFor(connection, `update products set id = 'p-missing' where id = 'p-var'`)).toBe(
+      PRODUCT_ID_FIXED_REFUSAL,
+    );
     expect(parentOf("p-var")).toBe("p-top");
   });
 

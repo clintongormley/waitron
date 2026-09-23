@@ -1177,6 +1177,8 @@ describe("ordering extras and options — parent + child lines", () => {
         .select({
           lineNo: saleLines.lineNo,
           name: saleLines.name,
+          descriptions: saleLines.descriptions,
+          kitchenName: saleLines.kitchenName,
           quantity: saleLines.quantity,
           unitPrice: saleLines.unitPrice,
           vatRate: saleLines.vatRate,
@@ -1193,10 +1195,13 @@ describe("ordering extras and options — parent + child lines", () => {
   /**
    * Sells a Tostada (4.00, super-reduced 4%) with one extra: a variant of Bacon (reduced 10%, 3.00)
    * holding the given price and VAT of its own, or blanks. Three different rates, so a child line
-   * taxed at the dish's, the parent's or the variant's own rate each reads differently.
+   * taxed at the dish's, the parent's or the variant's own rate each reads differently. The variant
+   * carries three names of its own — `<stem> staff`, `<stem> customer`, `<stem> kitchen` — each
+   * different from Bacon's and from each other, so a line that takes a name from the wrong product,
+   * or the wrong one of the three, fails.
    */
   async function sellVariantAsExtra(own: {
-    name: string;
+    stem: string;
     unitPrice: number | null;
     vatClass: "general" | null;
   }) {
@@ -1212,7 +1217,9 @@ describe("ordering extras and options — parent + child lines", () => {
         .values({
           catalogueId: bacon!.catalogueId,
           parentId: v.baconId,
-          name: own.name,
+          name: `${own.stem} staff`,
+          customerName: { [v.defaultLanguage]: `${own.stem} customer` },
+          kitchenName: `${own.stem} kitchen`,
           pricingUnit: null,
           unitPrice: own.unitPrice,
           vatClass: own.vatClass,
@@ -1261,24 +1268,31 @@ describe("ordering extras and options — parent + child lines", () => {
     return { total: result.total, child };
   }
 
-  // A variant may be an extras item like any product (Review Focus 1). One that leaves its VAT and
-  // price blank is taxed and priced at its PARENT's, and named by its OWN staff name, never Bacon's.
+  // A variant may be an extras item like any product (Review Focus 1 of the plan,
+  // `docs/superpowers/plans/2026-09-23-variants-as-products.md`). One that leaves its VAT and price
+  // blank is taxed and priced at its PARENT's, and carries its OWN three names, never Bacon's.
   it("a variant picked as an extra files its parent's VAT and price under its own name", async () => {
     const { total, child } = await sellVariantAsExtra({
-      name: "Bacon doble staff",
+      stem: "Bacon doble",
       unitPrice: null,
       vatClass: null,
     });
     // 4.00 dish + 3.00 borrowed from Bacon = 7.00 gross.
     expect(total).toBe("7.00");
     // 3.00 gross at 10% is 2.73 net: 273 in cents, and the rate 1000 in basis points.
-    expect(child).toMatchObject({ name: "Bacon doble staff", unitPrice: 273, vatRate: 1000 });
+    expect(child).toMatchObject({
+      name: "Bacon doble staff",
+      descriptions: { [LOCALE]: "Bacon doble customer" },
+      kitchenName: "Bacon doble kitchen",
+      unitPrice: 273,
+      vatRate: 1000,
+    });
   });
 
   // ...and one that sets its own keeps them: general 21% and 3.50, not Bacon's 10% and 3.00.
   it("a variant picked as an extra files its OWN VAT and price when it sets them", async () => {
     const { total, child } = await sellVariantAsExtra({
-      name: "Bacon triple staff",
+      stem: "Bacon triple",
       unitPrice: 350,
       vatClass: "general",
     });
