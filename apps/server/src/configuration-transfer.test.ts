@@ -13,7 +13,8 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { eq, sql } from "drizzle-orm";
-import { uploadImage, readImageBytes } from "@waitron/media";
+import { prepareImage, uploadImage, readImageBytes } from "@waitron/media";
+import { sampleImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -211,6 +212,9 @@ describe("configuration transfer database path", () => {
   });
 
   it("copies declared configuration into a fresh venue while scrubbing staff authenticators", async () => {
+    const photo = await prepareImage(await sampleImage({ width: 8, height: 6, format: "jpeg" }), {
+      maxUploadBytes: 64 * 1024,
+    });
     const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -219,12 +223,12 @@ describe("configuration transfer database path", () => {
       const uploaded = await uploadImage(
         tx,
         {
-          bytes: new Uint8Array([0xff, 0xd8, 0xff, 1]),
+          image: photo,
           names: { es: "Pan" },
           altText: { es: "Una hogaza" },
           labels: ["Food"],
         },
-        { maxUploadBytes: 100 },
+        {},
       );
       // Every row below is written through its table definition rather than as raw SQL, the change
       // `apps/server/src/testing/fiscal-fixtures.ts` took for the same reason: the timestamp
@@ -423,7 +427,7 @@ describe("configuration transfer database path", () => {
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, metadata!.filename as string);
-      expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
+      expect(bytes?.bytes).toEqual(photo.bytes);
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
       // The category's translated name is read through the TABLE, not the raw select below: `name`

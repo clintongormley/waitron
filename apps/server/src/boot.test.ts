@@ -1,4 +1,5 @@
-import { uploadImage } from "@waitron/media";
+import { prepareImage, uploadImage } from "@waitron/media";
+import { sampleImage } from "@waitron/media/testing/sample-image.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
@@ -2196,24 +2197,27 @@ describe("startServer, against a migrated venue directory", () => {
     });
 
     try {
-      const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const prepared = await prepareImage(
+        await sampleImage({ width: 8, height: 6, format: "png" }),
+        { maxUploadBytes: MAX_UPLOAD_BYTES },
+      );
       const imageName = await withTransaction(sharedDb, async (tx) => {
         const result = await uploadImage(
           tx,
           {
-            bytes: imageBytes,
+            image: prepared,
             names: { en: "Bread", es: "Pan" },
             altText: { en: "A loaf", es: "Una hogaza" },
             labels: [],
           },
-          { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
+          { fallbackLanguage: "es" },
         );
         return result.image.filename;
       });
       const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
       expect(image.status).toBe(200);
-      expect(image.headers.get("content-type")).toBe("image/png");
-      expect(new Uint8Array(await image.arrayBuffer())).toEqual(imageBytes);
+      expect(image.headers.get("content-type")).toBe("image/webp");
+      expect(new Uint8Array(await image.arrayBuffer())).toEqual(prepared.bytes);
 
       // A traversal attempt is refused by the mounted route's own regex guard — a bare 404, from a
       // real boot, not just the in-process suite.
@@ -2998,16 +3002,19 @@ describe("startServer — what a trading boot wires behind its management routes
     const current = (await (
       await fetch(`http://127.0.0.1:${port}/api/content-languages`)
     ).json()) as { defaultLanguage: string };
+    const image = await prepareImage(await sampleImage({ width: 9, height: 6, format: "png" }), {
+      maxUploadBytes: MAX_UPLOAD_BYTES,
+    });
     await withTransaction(db, (tx) =>
       uploadImage(
         tx,
         {
-          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]),
+          image,
           names: { [current.defaultLanguage]: "Pan" },
           altText: {},
           labels: [],
         },
-        { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: current.defaultLanguage },
+        { fallbackLanguage: current.defaultLanguage },
       ),
     );
 

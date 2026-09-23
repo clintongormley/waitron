@@ -5,7 +5,6 @@
  * may write the image library.
  */
 
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -18,7 +17,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { seedCatalogues } from "./seed-catalogue.js";
-import { readImageBytes } from "@waitron/media";
+import { prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia } from "./seed-media.js";
 // The exact regex the public `GET /media/:filename` route accepts — the produced names MUST pass it.
 import { MEDIA_FILENAME } from "@waitron/media";
@@ -99,41 +98,41 @@ describe("seedMedia", () => {
 
     expect(productsByImage.size).toBeGreaterThan(35);
 
-    // Each reference retains the source hash and resolves to the committed bytes.
+    // Each reference names the shrunk copy of its committed tile and resolves to exactly those bytes.
     for (const [basename, productId] of productsByImage) {
       const stored = images.get(productId);
-      expect(stored).toMatch(/^[0-9a-f]{64}\.png$/);
+      expect(stored).toMatch(/^[0-9a-f]{64}\.webp$/);
       // And it is exactly what the public /media route will serve.
       expect(MEDIA_FILENAME.test(stored!)).toBe(true);
       expect(stored).not.toBe(basename);
 
       const srcBytes = await readFile(join(SRC_DIR, basename));
-      const expectedName = `${createHash("sha256").update(srcBytes).digest("hex")}.png`;
-      expect(stored).toBe(expectedName);
+      const prepared = await prepareImage(srcBytes, { maxUploadBytes: 20 * 1024 * 1024 });
+      expect(stored).toBe(prepared.filename);
 
       const storedImage = await withTransaction(suite.db, async (tx) => {
         return readImageBytes(tx, stored!);
       });
-      expect(storedImage?.contentType).toBe("image/png");
-      const writtenBytes = storedImage!.bytes;
-      expect(createHash("sha256").update(writtenBytes).digest("hex")).toBe(
-        createHash("sha256").update(srcBytes).digest("hex"),
-      );
+      expect(storedImage?.contentType).toBe("image/webp");
+      expect(storedImage!.bytes).toEqual(prepared.bytes);
     }
 
     const written = await suite.db.execute<{ count: number }>(
       sql`select cast(count(*) as integer) as count from media_images`,
     );
-    const distinctHashes = new Set(
+    const distinctPhotos = new Set(
       await Promise.all(
-        [...productsByImage.keys()].map(async (basename) =>
-          createHash("sha256")
-            .update(await readFile(join(SRC_DIR, basename)))
-            .digest("hex"),
+        [...productsByImage.keys()].map(
+          async (basename) =>
+            (
+              await prepareImage(await readFile(join(SRC_DIR, basename)), {
+                maxUploadBytes: 20 * 1024 * 1024,
+              })
+            ).filename,
         ),
       ),
     );
-    expect(written.rows[0]!.count).toBe(distinctHashes.size);
+    expect(written.rows[0]!.count).toBe(distinctPhotos.size);
   });
 
   it("reuses existing image bytes when the media step runs twice", async () => {

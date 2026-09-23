@@ -154,16 +154,11 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
 }
 
 /**
- * The uploaded image, seeded through the table definitions rather than through `uploadImage`.
- *
- * `uploadImage` cannot run on this engine: it calls `listImageLabels`, whose statement is
- * `select distinct unnest(labels) …` (`packages/media/src/images.ts:263`), and `node:sqlite`
- * refuses that at PREPARE with `no such function: unnest` — measured here on 2026-09-22, Node
- * v26.7.0, before this helper replaced the call. `packages/media`'s query layer is not converted
- * yet. What this suite asserts about the image is that the RESTORE carries its metadata and its
- * bytes across, which is unchanged; the READ side below still goes through the real
- * `readImageBytes`. The filename is built the way `uploadImage` builds it — sha256 hex plus the
- * extension — because `media_images_filename_ck` refuses anything else.
+ * The uploaded image, written through the table definitions so the fixture's bytes are exactly
+ * `BASELINE_MEDIA`. What this suite asserts is that the RESTORE carries an image's metadata and
+ * bytes across, and the read side still goes through the real `readImageBytes`. The filename has
+ * the shape `media_images_filename_ck` requires, sha256 hex plus an extension; a `.jpg` row is one
+ * configuration transfer can still bring in.
  */
 async function seedImage(db: Database): Promise<void> {
   const filename = `${createHash("sha256").update(BASELINE_MEDIA).digest("hex")}.jpg`;
