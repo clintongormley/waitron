@@ -3462,6 +3462,13 @@ any of this code, so you can still read how something worked under PostgreSQL.
   process filing from the same database would have its claims undone. The slice-2 spec puts that
   lock first ([§6](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
   §9 step 3), and it is still to build.
+- **`apps/server/src/restore-fiscal-e2e.test.ts`'s header gives a reason that no longer holds — OPEN
+  (2026-09-23, found by review of PR #520).** It says `useVenueDb` is not used because it "never
+  reaches the trigger installer". Traced, not run: `useVenueDb` applies each set through
+  `applyMigrationSet` (`packages/db/src/testing/venue-db.ts:227`), which calls
+  `installAppendOnlyTriggers` (`:117`). The header also cites `venue-db.ts:169` and
+  `migrate.ts:37-40`. Whether the suite still has another reason to migrate through the product's own
+  `applyMigrations` is the open question; restate that reason, or delete the claim.
 - **Two suite headers in `apps/server` say their suite is RED, and both pass.**
   `apps/server/src/boot.promote.test.ts` ("One case below is RED") and
   `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") — run 2026-09-23, 3 of 3 and
