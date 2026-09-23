@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { LiveData } from "./live-data.js";
+import { LiveData, type ResourceIdentity } from "./live-data.js";
 import { LiveConnection } from "./live-connection.js";
 
 class Stream extends EventTarget {
@@ -213,7 +213,13 @@ describe("live connection lifecycle", () => {
 });
 
 describe("live connection events", () => {
-  async function connected() {
+  const printerP1 = { key: "printer/p1", dependencies: [{ type: "printers", id: "p1" }] };
+  const printerP2 = { key: "printer/p2", dependencies: [{ type: "printers", id: "p2" }] };
+  const tables = { key: "tables", dependencies: [{ type: "tables" }] };
+
+  async function connected(
+    queries: { key: string; dependencies: ResourceIdentity[] }[] = [printerP1],
+  ) {
     const data = new LiveData();
     const streams: Stream[] = [];
     const invalid = vi.fn();
@@ -225,35 +231,52 @@ describe("live connection events", () => {
       },
       onSessionInvalid: invalid,
     });
-    const read = vi.fn(async () => 1);
-    const observed = data.observe(
-      { key: "printer/p1", dependencies: [{ type: "printers", id: "p1" }], read },
-      () => {},
+    const reads = queries.map(() => vi.fn(async () => 1));
+    const observations = queries.map((query, index) =>
+      data.observe({ ...query, read: reads[index]! }, () => {}),
     );
     connection.start();
-    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+    await vi.waitFor(() => {
+      for (const read of reads) expect(read).toHaveBeenCalledOnce();
+    });
     expect(streams).toHaveLength(1);
-    return { data, streams, stream: streams[0]!, invalid, read, observed, connection };
+    const unsubscribe = () => {
+      for (const observed of observations) observed.unsubscribe();
+    };
+    return {
+      data,
+      streams,
+      stream: streams[0]!,
+      invalid,
+      read: reads[0]!,
+      reads,
+      observed: observations[0]!,
+      unsubscribe,
+      connection,
+    };
   }
   // Long enough for a scheduled read to have started, if one was scheduled.
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("refreshes every query when the server resets the stream", async () => {
-    const { stream, read, connection } = await connected();
+    const { stream, reads, unsubscribe, connection } = await connected([printerP1, tables]);
     stream.dispatchEvent(new Event("reset"));
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      for (const read of reads) expect(read).toHaveBeenCalledTimes(2);
+    });
+    unsubscribe();
     connection.stop();
   });
 
   it("refreshes without reopening when the stream reports an error it will retry itself", async () => {
     vi.useFakeTimers();
+    const data = new LiveData();
+    const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    data.observe({ key: "printers", dependencies: [{ type: "printers" }], read }, () => {});
+    connection.start();
     try {
-      const data = new LiveData();
-      const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
-      const connection = new LiveConnection(data, { open });
-      const read = vi.fn(async () => 1);
-      data.observe({ key: "printers", dependencies: [{ type: "printers" }], read }, () => {});
-      connection.start();
       await vi.advanceTimersByTimeAsync(0);
       open.mock.results[0]!.value.dispatchEvent(new Event("error"));
       await vi.advanceTimersByTimeAsync(0);
@@ -261,14 +284,14 @@ describe("live connection events", () => {
       await vi.advanceTimersByTimeAsync(30_000);
       expect(open).toHaveBeenCalledOnce();
       expect(open.mock.results[0]!.value.close).not.toHaveBeenCalled();
-      connection.stop();
     } finally {
+      connection.stop();
       vi.useRealTimers();
     }
   });
 
   it("ignores events from a stream it has already replaced", async () => {
-    const { data, streams, read, observed, connection } = await connected();
+    const { data, streams, read, unsubscribe, connection } = await connected();
     const other = data.observe(
       { key: "tables", dependencies: [{ type: "tables" }], read: async () => 1 },
       () => {},
@@ -279,14 +302,25 @@ describe("live connection events", () => {
     await settle();
     expect(read).toHaveBeenCalledOnce();
     other.unsubscribe();
-    observed.unsubscribe();
+    unsubscribe();
     connection.stop();
   });
 
   it("invalidates every query of a type when a change names no id", async () => {
-    const { stream, read, connection } = await connected();
+    const { stream, reads, unsubscribe, connection } = await connected([
+      printerP1,
+      printerP2,
+      tables,
+    ]);
+    const [p1, p2, unrelated] = reads;
     stream.send("change", [{ type: "printers" }]);
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      expect(p1).toHaveBeenCalledTimes(2);
+      expect(p2).toHaveBeenCalledTimes(2);
+    });
+    await settle();
+    expect(unrelated).toHaveBeenCalledOnce();
+    unsubscribe();
     connection.stop();
   });
 
@@ -302,37 +336,49 @@ describe("live connection events", () => {
       ],
     ],
   ])("ignores the whole change message for %s", async (_, payload) => {
-    const { stream, read, connection } = await connected();
+    const { stream, read, unsubscribe, connection } = await connected();
     stream.send("change", payload);
     await settle();
     expect(read).toHaveBeenCalledOnce();
+    unsubscribe();
     connection.stop();
   });
 
-  it("refreshes every query when a change message is not JSON", async () => {
-    const { stream, read, connection } = await connected();
+  it("refreshes every query and stays connected when a change message is not JSON", async () => {
+    const { stream, reads, unsubscribe, connection } = await connected([printerP1, tables]);
     stream.dispatchEvent(new MessageEvent("change", { data: "not json" }));
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      for (const read of reads) expect(read).toHaveBeenCalledTimes(2);
+    });
+    expect(stream.close).not.toHaveBeenCalled();
+    unsubscribe();
     connection.stop();
   });
 
   it("stays connected when a session-invalid message carries no code", async () => {
-    const { stream, read, invalid, observed, connection } = await connected();
+    const { stream, read, invalid, observed, unsubscribe, connection } = await connected();
     stream.send("session-invalid", { reason: "expired" });
     await settle();
     expect(invalid).not.toHaveBeenCalled();
     expect(stream.close).not.toHaveBeenCalled();
     expect(observed.snapshot.value).toBe(1);
     expect(read).toHaveBeenCalledOnce();
+    unsubscribe();
     connection.stop();
   });
 
   it("refreshes and stays connected when a session-invalid message is not JSON", async () => {
-    const { stream, read, invalid, connection } = await connected();
+    const { stream, reads, invalid, unsubscribe, connection } = await connected([
+      printerP1,
+      tables,
+    ]);
     stream.dispatchEvent(new MessageEvent("session-invalid", { data: "not json" }));
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      for (const read of reads) expect(read).toHaveBeenCalledTimes(2);
+    });
     expect(invalid).not.toHaveBeenCalled();
     expect(stream.close).not.toHaveBeenCalled();
+    unsubscribe();
     connection.stop();
   });
 });

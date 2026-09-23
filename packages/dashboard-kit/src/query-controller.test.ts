@@ -115,6 +115,19 @@ describe("query controller", () => {
     expect(apply).toHaveBeenCalledExactlyOnceWith(1);
     controller.hostDisconnected();
   });
+
+  it("reports and rejects when applying the initial value throws", async () => {
+    const error = vi.fn();
+    const controller = new QueryController(host(), () => new LiveData(), error);
+    const failure = new Error("render failed");
+    await expect(
+      controller.watch("jobs", { key: "jobs", dependencies: [], read: async () => 1 }, () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(error).toHaveBeenCalledExactlyOnceWith(failure);
+    controller.hostDisconnected();
+  });
 });
 
 it("releases a slot when its view has no selection", async () => {
@@ -142,7 +155,9 @@ describe("query controller without a live-data session", () => {
       () => undefined,
       () => {},
     );
-    await controller.watch("jobs", { key: "jobs", dependencies: [], read: async () => 3 }, apply);
+    const read = vi.fn(async () => 3);
+    await controller.watch("jobs", { key: "jobs", dependencies: [], read }, apply);
+    expect(read).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledExactlyOnceWith(3);
   });
 
@@ -185,17 +200,4 @@ describe("query controller without a live-data session", () => {
     expect(apply).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
   });
-});
-
-it("reports and rejects when applying the initial value throws", async () => {
-  const error = vi.fn();
-  const controller = new QueryController(host(), () => new LiveData(), error);
-  const failure = new Error("render failed");
-  await expect(
-    controller.watch("jobs", { key: "jobs", dependencies: [], read: async () => 1 }, () => {
-      throw failure;
-    }),
-  ).rejects.toBe(failure);
-  expect(error).toHaveBeenCalledExactlyOnceWith(failure);
-  controller.hostDisconnected();
 });
