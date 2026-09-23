@@ -2009,6 +2009,9 @@ image constraints under *Detail → Box image*.
   are still under it: `HIGH_BAR_PACKAGES` against the workspace; the starting figures
   are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first promotion — measured
   2026-09-23*.
+  Promoted since, one pull request each: `printing` (**PR #500**, 2026-09-23 —
+  tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
+  100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

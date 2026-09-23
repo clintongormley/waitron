@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { SUPPORTED_LOCALES } from "@waitron/shared";
+import { FALLBACK_LOCALE, SUPPORTED_LOCALES } from "@waitron/shared";
 import {
   characterCalibration,
+  characterEncodingName,
   characterFinderOptions,
   characterSetOptions,
   testCharsetSamples,
@@ -198,5 +199,28 @@ describe("prepareText / encodeText", () => {
       const bytes = encodeText("a\nb\tc\u{1b}@\u{7f}", cs);
       expect(bytes).toHaveLength(prepared.length);
     }
+  });
+});
+
+describe("calibration locale resolution", () => {
+  it("resolves a regional or bare language code to the supported locale sharing its language", () => {
+    const labels = (locale: string) => characterSetOptions(locale).map(({ label }) => label);
+    expect(labels("es-MX")).toEqual(labels("es-ES"));
+    expect(labels("es")).toEqual(labels("es-ES"));
+    expect(labels("es-MX")[0]).toContain("Latino occidental");
+  });
+
+  it("falls back to the fallback locale for a language no locale supports", () => {
+    const labels = (locale: string) => characterSetOptions(locale).map(({ label }) => label);
+    expect(labels("fr-FR")).toEqual(labels(FALLBACK_LOCALE));
+    expect(labels("fr-FR")[0]).toContain("Western Latin");
+  });
+});
+
+describe("characterEncodingName", () => {
+  it("names each character set by its technical encoding", () => {
+    expect(characterEncodingName("wpc1252")).toBe("Windows-1252");
+    expect(characterEncodingName("pc858")).toBe("PC858");
+    expect(characterEncodingName("plain")).toBe("Plain");
   });
 });
