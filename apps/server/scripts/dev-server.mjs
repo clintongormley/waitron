@@ -3,10 +3,10 @@
 // provisions a preproduction venue into it, and writes a TRADING `.env`) or `pnpm dev:onboard`
 // (migrates the same directory but provisions no venue, writing a venue-less SETUP-MODE `.env` so
 // the box boots into the slice-1b/2b setup surface). A venue is SQLite files in that directory;
-// neither script needs a database server. Both root scripts still run
-// `docker compose up -d --wait db mailpit`, which is how Mailpit starts — the `db` Postgres service
-// comes up alongside it and nothing in this repository reads it (docker-compose.yml says so at its
-// own head, and its removal is the storage switch's tidy-up item T2). This launcher only checks the file EXISTS — either shape passes — then:
+// neither script needs a database server. Both root scripts begin
+// `docker compose up -d --wait mailpit`, which is the only reason Compose is in the loop and the
+// reason a bare `pnpm dev` leaves practice email with nowhere to land. This launcher only checks
+// the file EXISTS — either shape passes — then:
 //
 //   1. refuses to start without a generated `.env` — a clearer failure than letting boot surface
 //      a raw `server.config_missing`;

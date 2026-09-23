@@ -10,7 +10,11 @@ describe("development account email", () => {
     scripts: Record<string, string>;
   };
 
-  it("pins Mailpit and exposes SMTP plus its inbox only on loopback", () => {
+  it("declares the mailpit service, pinned, with SMTP and its inbox only on loopback", () => {
+    // The service KEY, not just the image: every dev script names `mailpit` on the command line, so
+    // a renamed or removed key fails all four with "no such service" — a failure the image and port
+    // lines below would not catch, since they stay right under any key.
+    expect(compose).toMatch(/^ {2}mailpit:$/m);
     expect(compose).toContain("image: axllent/mailpit:v1.31.1");
     expect(compose).toContain('"127.0.0.1:1025:1025"');
     expect(compose).toContain('"127.0.0.1:8025:8025"');
@@ -27,7 +31,9 @@ describe("development account email", () => {
   it.each(["dev:setup", "dev:reset", "dev:onboard", "dev:reset:onboard"])(
     "starts Mailpit in %s",
     (script) => {
-      expect(manifest.scripts[script]).toContain("docker compose up -d --wait db mailpit");
+      // A failure means this entry point stopped bringing the inbox up, so every invitation and
+      // password reset it triggers goes to a refused SMTP port with nowhere to read it.
+      expect(manifest.scripts[script]).toContain("docker compose up -d --wait mailpit");
     },
   );
 
@@ -41,8 +47,15 @@ describe("development account email", () => {
     );
   });
 
-  it("starts Mailpit with the shared database, never from the worktree-specific app process", () => {
-    expect(compose).toContain("    depends_on:\n      - mailpit");
+  it("never starts Mailpit from the worktree-specific app process", () => {
+    // `dev` runs per worktree, and Compose names its project after the directory, so a compose call
+    // here would start a SECOND Mailpit per checkout, competing for the fixed 1025/8025 ports. The
+    // setup entry points above are the only ones that may touch Compose.
+    //
+    // The half of this case that pinned the mechanism keeping Mailpit ONE container — the `db`
+    // service's `depends_on: - mailpit` — went with that service; what enforces it now is
+    // `COMPOSE_PROJECT_NAME=waitron`, set by `wa-wt` outside this repository, so nothing here can
+    // assert it.
     expect(manifest.scripts.dev).not.toContain("docker compose");
   });
 });

@@ -101,15 +101,14 @@ opens the same files by construction rather than by two settings agreeing. `apps
 describes that venue (venue ids, credentials key); it is gitignored and absent from a fresh
 worktree, which is why `wa-wt` copies the newest copy any checkout holds.
 
-**The compose `db` service is not that database.** `docker-compose.yml`'s own header says so in as
-many words: `dev:setup` provisions into the host venue directory, `docker compose down -v` resets
-nothing any more, and nothing in this repository reads the service. It is still started, because
-`pnpm dev:setup` and `pnpm dev:reset` each begin `docker compose up -d --wait db mailpit` and
-mailpit is the part that is wanted; it is left there for the storage switch's tidy-up item to
-remove. Compose names its project after the directory, so an unqualified `docker compose up` from a
-worktree still starts a SECOND `db` on the same port, which is the reason the rule at the top of
-this paragraph exists — `wa-wt` brings the shared one up under `COMPOSE_PROJECT_NAME=waitron`,
-copies only the current target's `.env`, and follows the log.
+**Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
+`mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.
+It is started because `pnpm dev:setup` and `pnpm dev:reset` each begin
+`docker compose up -d --wait mailpit`. Compose names its project after the directory, so an
+unqualified `docker compose up` from a worktree starts a SECOND mailpit fighting for the fixed 1025
+and 8025 ports, which is the reason the rule at the top of this paragraph exists — `wa-wt` brings
+the shared one up under `COMPOSE_PROJECT_NAME=waitron`, copies only the current target's `.env`, and
+follows the log.
 
 Changing target REMOVES THE VENUE DIRECTORY, keeping the shared development CA. Two steps do it:
 `wa-wt`'s `reset_target` clears everything under `$HOME/workspace/.waitron-dev/box` except `tls`,
@@ -189,11 +188,6 @@ real venue's fiscal records cannot be re-created).
 Reproduced end to end before the line was written: the pre-#340 migration root migrated into a
 scratch database, one category row seeded, then this branch's root applied over it — the hint printed
 and the original error still arrived intact.
-
-The compose `db` service still passes `wal_level=logical`, `track_commit_timestamp=on` and
-`max_slot_wal_keep_size=4GB` on its `command:`. Those are leftovers of the PostgreSQL replication
-removed on 2026-09-19 and nothing reads them now; they go with the storage switch rather than in a
-separate change.
 
 `dev-setup` bootstraps no ownership of any kind. There is no migrator role and no owner to be:
 `grep -niE "waitron_migrator|migrator|psql|postgres|role" apps/server/scripts/dev-setup.ts` returned

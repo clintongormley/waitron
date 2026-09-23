@@ -392,9 +392,9 @@ As cents a four-byte column stopped at 21,474,836.47, which left a band of amoun
 accepted and the column refused with a bare `22003`. That band is what turned a catalogue projection
 test red while money was being moved into whole cents (#475); the test itself went with the old
 modifier model in Task 13, so the receipt was the two `psql` lines above rather than a file. No money
-column is stored in PostgreSQL any more, so nothing can raise that refusal; the `db` service in
-`docker-compose.yml` was still declared on 2026-09-22, which says nothing about whether anything
-still uses it.
+column is stored in PostgreSQL any more, so nothing can raise that refusal, and the band is enforced
+only by the converters — the point the paragraph above makes. The `psql` above will not run against
+anything the dev stack starts either: `docker-compose.yml` declares mailpit and nothing else.
 
 **HISTORICAL, PostgreSQL only, and the reason the raw-read rule below exists: an uncast `bigint`
 COLUMN read differently on the two test targets, and a `::text` cast made them agree.** Measured

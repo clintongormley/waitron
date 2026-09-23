@@ -1,47 +1,15 @@
 # Local development services for `pnpm dev:setup` / `pnpm dev`.
 #
-# The `db` service NO LONGER HOLDS THE DEV VENUE: `dev:setup` provisions into a venue DIRECTORY on
-# the host (two SQLite files), and `pnpm dev:reset` removes that directory — `docker compose down -v`
-# resets nothing any more. The service is left here for the storage switch's tidy-up item (T2) to
-# remove along with the rest of the PostgreSQL dev wiring; nothing in this repository reads it today.
+# Mailpit is the only one. A dev venue is a DIRECTORY of SQLite files on the host — no server and no
+# container — so nothing here holds data: `pnpm dev:reset` removes that directory itself
+# (`resetVenueDir`, `apps/server/scripts/dev-setup.ts`) and this file has no volume to reset.
+# Compose is still in the loop for one reason: the dev email flow needs somewhere to deliver to.
 services:
-  db:
-    # `wa-wt` starts this service under the fixed `waitron` Compose project. Keeping Mailpit as its
-    # dependency makes the email sink shared too, without letting each worktree's `pnpm dev` create
-    # a competing container on the fixed SMTP/UI ports.
-    depends_on:
-      - mailpit
-    image: postgres:18-alpine
-    # Unread — the replication that needed them is gone; kept in step with deploy/compose.yml's db
-    # stanza, and they go with the storage switch.
-    command:
-      [
-        "postgres",
-        "-c",
-        "wal_level=logical",
-        "-c",
-        "track_commit_timestamp=on",
-        "-c",
-        "max_slot_wal_keep_size=4GB",
-      ]
-    environment:
-      POSTGRES_PASSWORD: pg
-    ports:
-      - "5432:5432"
-    # Postgres 18+ places its data in a SUBDIRECTORY of /var/lib/postgresql (not directly in
-    # /var/lib/postgresql/data as ≤17 did) — mounting the volume at the old /data path makes the
-    # container detect "data in an unused mount" and exit(1). Mount the parent, per the image's own
-    # 18+ guidance (docker-library/postgres#37).
-    volumes:
-      - waitron-dev-db:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
-
   # Development-only SMTP capture. Waitron submits mail on 1025; open http://localhost:8025 to read
   # invitations and password resets without sending anything to the public internet.
+  #
+  # `wa-wt` starts this under the fixed `waitron` Compose project, because Compose otherwise names
+  # the project after the directory and each worktree would race for the fixed SMTP and UI ports.
   mailpit:
     image: axllent/mailpit:v1.31.1
     environment:
@@ -49,6 +17,3 @@ services:
     ports:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"
-
-volumes:
-  waitron-dev-db:
