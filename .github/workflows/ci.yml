@@ -405,6 +405,14 @@ jobs:
       # actually run.
       - run: pnpm --filter @waitron/server build
 
+      # sharp's native addon cannot be bundled and esbuild does not refuse to try: without
+      # `--external:sharp` the build passes and the bundle is a syntax error (bundled sharp declares
+      # `createRequire` a second time beside the banner's), so the boot check below would fail
+      # without naming why. The external form leaves one literal `import("sharp")` in the bundle; a
+      # bundled copy leaves none.
+      - name: Assert the built bundle leaves sharp external
+        run: grep -q 'import("sharp")' apps/server/dist/server.js
+
       # scripts/copy-migrations.mjs (invoked by the build script above) is the fix for the collapse:
       # it copies each package's drizzle/ folder in beside dist/server.js. This confirms it actually
       # ran rather than merely that `build` exited zero — a broken copy step would otherwise only

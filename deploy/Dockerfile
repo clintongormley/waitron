@@ -29,6 +29,31 @@ RUN pnpm --filter @waitron/server build \
   && pnpm --filter @waitron/setup build \
   && pnpm --filter @waitron/print-agent-app build
 
+# sharp stays out of every server bundle (`--external:sharp`): its native addon and the libvips
+# library the addon loads cannot be bundled. This gathers sharp and what it loads at run time into
+# one plain directory, following pnpm's links, for the runtime stage to put beside the bundle. pnpm
+# also installs the musl builds; node:26-slim is glibc, so they are dropped. The last line fails the
+# build when the addon or libvips for this machine's architecture is missing.
+RUN set -eux; \
+  [ "$(ls -d /src/node_modules/.pnpm/sharp@* | wc -l)" -eq 1 ]; \
+  mkdir -p /sharp-runtime/node_modules; \
+  cp -rL /src/node_modules/.pnpm/sharp@*/node_modules/. /sharp-runtime/node_modules/; \
+  rm -rf /sharp-runtime/node_modules/@img/*linuxmusl*; \
+  ls /sharp-runtime/node_modules/@img/sharp-linux-*/lib/*.node \
+    /sharp-runtime/node_modules/@img/sharp-libvips-linux-*/lib/libvips-cpp.so.*
+
+# libvips (LGPL-3.0-or-later) is loaded by sharp as its own shared library from
+# @img/sharp-libvips-linux-<arch>. That package's README is the notices list for every library
+# built into the file, and versions.json names each version; both ship in /app/third-party with
+# the licence texts and the written source offer (deploy/third-party/README.md).
+RUN set -eux; \
+  set -- /sharp-runtime/node_modules/@img/sharp-libvips-linux-*; \
+  [ "$#" -eq 1 ]; \
+  [ -d "$1" ]; \
+  mkdir -p /third-party/libvips; \
+  cp "$1/README.md" /third-party/libvips/NOTICES.md; \
+  cp "$1/versions.json" /third-party/libvips/versions.json
+
 # ---------------------------------------------------------------------------
 # Print-agent stage — the box-local bridge to USB/network/Bluetooth printers.
 # A SEPARATE image from the app (its own compose service), built with
@@ -109,6 +134,9 @@ COPY --from=build --chown=waitron:waitron /src/apps/till/dist/ /app/web/till/
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/ /app/web/dashboard/
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/ /app/web/setup/
 COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/media/ /app/demo-media/
+COPY --from=build --chown=waitron:waitron /sharp-runtime/node_modules/ /app/node_modules/
+COPY --from=build --chown=waitron:waitron /src/deploy/third-party/ /app/third-party/
+COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party/libvips/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
 # which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately

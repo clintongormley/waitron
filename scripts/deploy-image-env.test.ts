@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
@@ -306,4 +306,94 @@ it("stores image-library bytes in the database without a separate image volume",
   expect(DOCKERFILE).not.toContain("/var/lib/waitron/media");
   expect(COMPOSE).not.toContain("media:/var/lib/waitron/media");
   expect(COMPOSE).not.toMatch(/^ {2}media:$/m);
+});
+
+/**
+ * sharp is a native addon with a shared library beside it, and esbuild does not refuse to bundle
+ * it. Without `--external:sharp` the build exits 0 and the bundle cannot even be loaded: bundled
+ * sharp declares `createRequire` a second time beside the `--banner:js` these commands add, and
+ * `node --check dist/server.js` reports `SyntaxError: Identifier 'createRequire' has already been
+ * declared`. Measured 2026-09-23 on esbuild 0.28.2.
+ *
+ * Reads TEXT. It finds the esbuild bundles that can reach `@waitron/media` by following `dependencies`
+ * through workspace package.json files, so a reach through a devDependency or a relative import
+ * across packages is invisible to it. It counts flags, so it cannot tell which command a flag
+ * belongs to.
+ */
+describe("sharp stays outside every bundle and ships beside the server's", () => {
+  type Manifest = {
+    name: string;
+    dependencies?: Record<string, string>;
+    scripts?: Record<string, string>;
+  };
+  const manifests = new Map<string, Manifest>();
+  for (const root of ["apps", "packages"]) {
+    for (const dir of readdirSync(`${ROOT}${root}`)) {
+      const path = `${root}/${dir}/package.json`;
+      if (!existsSync(`${ROOT}${path}`)) continue;
+      const manifest = JSON.parse(read(path)) as Manifest;
+      manifests.set(manifest.name, manifest);
+    }
+  }
+  const reachesMedia = (name: string, seen = new Set<string>()): boolean => {
+    if (name === "@waitron/media") return true;
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return Object.keys(manifests.get(name)?.dependencies ?? {}).some(
+      (dependency) => manifests.has(dependency) && reachesMedia(dependency, seen),
+    );
+  };
+  const bundlers = [...manifests.values()].filter(
+    (manifest) =>
+      (manifest.scripts?.build ?? "").includes("esbuild ") && reachesMedia(manifest.name),
+  );
+
+  it("finds the bundles it is meant to check", () => {
+    expect(bundlers.map((manifest) => manifest.name)).toEqual(
+      expect.arrayContaining(["@waitron/server", "@waitron/provisioning"]),
+    );
+  });
+
+  it.each(bundlers.map((manifest) => [manifest.name, manifest.scripts!.build!]))(
+    "%s names --external:sharp on every esbuild command",
+    (_name, build) => {
+      const commands = build.split("esbuild ").length - 1;
+      expect(commands).toBeGreaterThan(0);
+      expect(build.split("--external:sharp").length - 1).toBe(commands);
+    },
+  );
+
+  it("copies sharp beside the bundle in the image, and both CI jobs check it", () => {
+    expect(DOCKERFILE).toContain("/sharp-runtime/node_modules/ /app/node_modules/");
+    expect(CI).toContain(`grep -q 'import("sharp")' apps/server/dist/server.js`);
+    expect(IMAGE_SMOKE).toContain("await import('sharp')");
+  });
+});
+
+/**
+ * libvips ships in the image as its own shared library, under LGPL-3.0-or-later. Reads TEXT: it
+ * proves the files exist and the Dockerfile names them, not that the built image holds them — the
+ * image-smoke step below is what looks inside the image.
+ */
+describe("the box image carries libvips's licence, its notices and a written source offer", () => {
+  it("copies the licence texts, the offer and the libvips package's notices into /app/third-party", () => {
+    expect(DOCKERFILE).toContain("/src/deploy/third-party/ /app/third-party/");
+    expect(DOCKERFILE).toContain("/third-party/libvips/ /app/third-party/libvips/");
+    expect(DOCKERFILE).toContain('cp "$1/README.md" /third-party/libvips/NOTICES.md');
+    expect(IMAGE_SMOKE).toContain("/app/third-party/libvips/NOTICES.md");
+  });
+
+  it("holds both licence texts, and an offer naming libvips's version and where to ask", () => {
+    const lgpl = read("deploy/third-party/licenses/LGPL-3.0.txt");
+    expect(lgpl).toContain("GNU LESSER GENERAL PUBLIC LICENSE");
+    expect(lgpl).toContain("Version 3, 29 June 2007");
+    expect(read("deploy/third-party/licenses/GPL-3.0.txt")).toContain("GNU GENERAL PUBLIC LICENSE");
+    const offer = read("deploy/third-party/README.md");
+    expect(offer).toContain("libvips 8.18.6");
+    expect(offer).toContain("info@waitron.io");
+    // GPL-3.0 §6(b)'s term for a physical product, and §6(d)'s directions for a download.
+    expect(offer).toMatch(/at least three years/);
+    expect(offer).toMatch(/spare parts or customer support/);
+    expect(offer).toMatch(/container registry/);
+  });
 });
