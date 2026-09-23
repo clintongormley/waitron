@@ -2007,14 +2007,50 @@ image constraints under *Detail → Box image*.
   which is the same care `scripts/column-vocabulary.test.ts` already documents for its own
   comment handling. Until then the hedge is in `CLAUDE.md` §3.
 
-- **No guard holds a MODULE migration set to its declared schema — still OPEN
-  (restated 2026-09-21, task P6).** `packages/db/src/schema/schema-conformance.test.ts` builds a
-  database from the CORE migrations and compares every check expression with the drizzle schema's;
-  it named both of P6's stale quantity checks immediately. The module sets have nothing equivalent,
-  which is why #475 had to find nine instances by hand. P6 got away with a one-off probe —
-  `workforce-es`'s only scaled column has no default and appears in none of its table's
-  constraints, established by applying the migrations and reading `pg_get_constraintdef` back — but
-  a probe is not a guard and the next type change will need the same by hand.
+- **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
+  (2026-09-23, branch `feat/module-schema-conformance-guard`).** The comparison the core set had —
+  build a database from the migrations, then check every table, column, key, index and check
+  constraint against what the drizzle declarations say — is now a reusable suite factory,
+  `packages/db/src/testing/schema-conformance.ts`, published from `@waitron/db`'s enumerated
+  `exports` map as `@waitron/db/testing/schema-conformance.js`. Five sets call it, each from its own
+  `packages/<pkg>/src/schema/schema-conformance.test.ts`: core, `catalogue`, `payments`, `workforce`
+  and `workforce-es`. **No drift was found in any of the four modules** — the guard went in over a
+  clean tree, which is worth writing down so the next reader does not assume it has already caught
+  something here. What it replaced: P6 got away with a one-off probe of `workforce-es` (its only
+  scaled column had no default and appeared in none of its table's constraints), and #475 found its
+  instances by hand.
+- **The migration sets that did NOT get a call site are still unguarded — OPEN (2026-09-23).** To
+  list them, take every set with
+  `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the packages
+  holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`,
+  `credentials`, `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and
+  `venue-service`. Four of those — `fiscal-verifactu`, `identity`, `credentials` and `scheduler` —
+  each carry a `src/schema/index.ts` barrel, their own migration set and a
+  `src/schema-ownership.test.ts` beside it, which is everything a call site needs to be written
+  from, so each is roughly ten lines now that the factory exists. (That is not a comparison with the
+  four that landed: `catalogue` has no `schema-ownership.test.ts` and did not need one — the barrel
+  and the set are what the factory reads.) They were left out deliberately, not overlooked: a set getting its first
+  guard may also turn up real drift, and fixing unrelated schema drift would have turned a guard
+  branch into a schema-repair branch. `fiscal-none` needs no suite at all — its `drizzle/` directory
+  holds `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds
+  nothing for a declaration to be compared against. **Next action:** add a call site per set, one
+  branch at a time, and treat any drift each one reports as its own piece of work.
+
+- **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
+  (2026-09-23).** A mutation run changes one line of a source file at a time and reruns the tests,
+  and `packages/db`'s run is split across ten parallel CI jobs by `scripts/mutation-shard.mjs`,
+  which packs whole files into jobs by file size in bytes. That file is now the largest file the run
+  mutates, about half as long again as `packages/db/src/schema/sales.ts` — recompute with
+  `find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -k2 -nr | head`
+  rather than trusting a figure written here. `sales.ts` is the single entry in that script's
+  `HEAVY_FILES`, the mechanism for splitting one file across several jobs, and the reason recorded
+  beside it is that it "alone ran 186min while every other N=10 shard finished <=90min". **The new
+  file's runtime was not measured and no `HEAVY_FILES` entry was added**, so whether it drags a job
+  out the way `sales.ts` did is simply unknown — and size alone does not settle it, since what
+  dominated `sales.ts` was that nearly the whole suite covers its mutants. Nothing on a pull request
+  will say either: `packages/db`'s mutation score and its job durations belong to the weekly
+  `mutation.yml` run (`CLAUDE.md` §2). **Next action:** read the job durations from the next weekly
+  run, and add a `HEAVY_FILES` entry if that file's job is the long one.
 
 - **The spawn-timeout guard reads `scripts/` alone — SUPERSEDED 2026-09-22.** It was extended to
   `packages/` and `apps/` on 2026-09-18, and that half is gone again: it went with the
@@ -3259,10 +3295,12 @@ What the preparation tasks left, with F1's own answers where it found them:
   `printers_character_table_ck`, SQLSTATE `23514`) to the operator as a `transport_fields` problem,
   because `printers.ts` translates by CLASS not by key; the fix is a per-constraint `refusalOn` target,
   now available (from the P10 review, #482).
-- **No guard holds a MODULE migration set to its declared schema** — the core set has
-  `packages/db/src/schema/schema-conformance.test.ts`; `catalogue`, `payments`, `workforce` and
-  `workforce-es` have nothing equivalent, so their drift had to be found by hand. Next action: read
-  what the core guard reflects over and whether it generalises to a module's own barrel (P5).
+- **No guard holds a MODULE migration set to its declared schema — LANDED 2026-09-23 for the four
+  named here.** `catalogue`, `payments`, `workforce` and `workforce-es` each have a
+  `src/schema/schema-conformance.test.ts` now, calling the shared suite factory
+  `@waitron/db/testing/schema-conformance.js`, and the core set calls the same factory. None of the
+  four turned out to have any drift. The sets with no call site yet are still unguarded, and the
+  full entry — which ones, and why they were left — is in **B9. CI and test infra** above.
 - **Two coverage gaps under a 5-second default bound** — `scripts/changed-packages.test.mjs` needs an
   explicit `testTimeout` above a loaded machine's worst case (P5); and no suite covers the
   deterministic middle of a chain refusal followed by a SUCCESSFUL retry, which

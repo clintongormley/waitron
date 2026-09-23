@@ -15,10 +15,10 @@ const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
  * A migration set a suite hands over: what drizzle needs, plus what the set's own module declared
  * append-only.
  *
- * `appendOnlyTables` is optional because a suite may hand over a folder no module owns — the two
- * suites in this file's own test that pass `migrations: []` and build their tables in `setup` are
- * that case. What a caller omitting it gets is a database where a ledger row can be rewritten,
- * which is why the field is stated here rather than inferred from anything.
+ * `appendOnlyTables` is optional because most migration sets declare no append-only table at all:
+ * run `grep -L appendOnlyTables` over every package's own `src/migrations.ts` and the files it
+ * lists are the majority. What a caller omitting it gets is a database where a ledger row can be
+ * rewritten, which is why the field is stated here rather than inferred from anything.
  */
 export type VenueMigrationSet = MigrationOptions & {
   readonly appendOnlyTables?: readonly string[];
@@ -76,13 +76,49 @@ interface ResetPlan {
 }
 
 /**
- * Reads the plan off the catalogue.
+ * Every table some migration created, in name order, the engine's own bookkeeping and the journals
+ * aside.
  *
  * `glob` rather than `like` for the two exclusions: GLOB treats `_` as an ordinary character where
  * LIKE treats it as a wildcard needing an `escape` clause, and a backslash written inside a
- * template literal is not the backslash that reaches SQLite. `sqlite_%` covers the engine's own
+ * template literal is not the backslash that reaches SQLite. `sqlite_*` covers the engine's own
  * tables, `__drizzle_migrations*` the per-package journals — the migration state has to outlive the
  * data, and every set names its own (`packages/db/src/migrations.ts`).
+ *
+ * Exported because the same two exclusions are the same question asked twice: the reset below needs
+ * the tables it may empty, and `./schema-conformance.ts` needs the tables a migration set built. A
+ * second copy of the query is a second place for one of the exclusions to be forgotten.
+ */
+export function migratedTableNames(db: Database): string[] {
+  return db
+    .all<{ name: string }>(
+      sql`
+        select name from sqlite_master
+        where type = 'table'
+          and name not glob 'sqlite_*'
+          and name not glob '__drizzle_migrations*'
+        order by name`,
+    )
+    .map((row) => row.name);
+}
+
+/**
+ * One migration set applied, then the append-only triggers that set declared.
+ *
+ * The two are paired in one place so their ORDER is stated once. Installing immediately after THIS
+ * set migrated, rather than once after every set, is what `packages/migrations/src/apply.ts` does
+ * and for its reason: `create trigger` needs the table to exist, so a single pass at the end would
+ * refuse the first set's tables if a later set threw. This pairing is what makes a suite's database
+ * refuse what the box refuses — the product installs the same triggers from the same list in
+ * `applyMigrations`, which a suite does not go through.
+ */
+export async function applyMigrationSet(db: Database, set: VenueMigrationSet): Promise<void> {
+  await runMigrations(db, set);
+  installAppendOnlyTriggers(db, set.appendOnlyTables ?? []);
+}
+
+/**
+ * Reads the plan off the catalogue.
  *
  * `sqlite_sequence` is `restart identity`'s only counterpart here: it holds the AUTOINCREMENT
  * counters, exists only once some table declares one, and is emptied with the rest. It is matched
@@ -93,15 +129,12 @@ interface ResetPlan {
  * carries the receipt. A trigger's stored text is replayed verbatim, never built.
  */
 function buildResetPlan(db: Database): ResetPlan {
-  const tables = db.all<{ name: string }>(sql`
-    select name from sqlite_master
-    where type = 'table'
-      and name not glob 'sqlite_*'
-      and name not glob '__drizzle_migrations*'
-    order by name`);
-  const counters = db.all<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name = 'sqlite_sequence'`,
-  );
+  const tables = migratedTableNames(db);
+  const counters = db
+    .all<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name = 'sqlite_sequence'`,
+    )
+    .map((row) => row.name);
   // `sql` is never null for a trigger — it is the text SQLite needs to rebuild it — so there is no
   // filter here. A null would fail the reset loudly rather than drop a trigger quietly.
   const triggers = db.all<{ name: string; sql: string }>(
@@ -110,7 +143,7 @@ function buildResetPlan(db: Database): ResetPlan {
   return {
     drops: triggers.map((row) => `drop trigger "${assertSafeIdentifier("trigger", row.name)}"`),
     deletes: [...tables, ...counters].map(
-      (row) => `delete from "${assertSafeIdentifier("table", row.name)}"`,
+      (name) => `delete from "${assertSafeIdentifier("table", name)}"`,
     ),
     creates: triggers.map((row) => row.sql),
   };
@@ -189,15 +222,9 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     directory = await mkdtemp(join(tmpdir(), "waitron-venue-db-"));
     store = await openVenueDatabase(directory);
     db = store.venue;
-    for (const migrations of options.migrations) {
-      await runMigrations(db, migrations);
-      // Inside the loop, immediately after this set migrated, for the reason
-      // `packages/migrations/src/apply.ts` states: `create trigger` needs the table to exist, so a
-      // single pass at the end would refuse the first set's tables if a later set threw. This is
-      // what makes a suite's database refuse what the box refuses — the product installs the same
-      // triggers from the same list in `applyMigrations`, which a suite does not go through.
-      installAppendOnlyTriggers(db, migrations.appendOnlyTables ?? []);
-    }
+    // One set at a time, triggers and all: the order is {@link applyMigrationSet}'s, and its reason
+    // is stated there.
+    for (const migrations of options.migrations) await applyMigrationSet(db, migrations);
     if (options.setup !== undefined) await options.setup(db);
     // After setup so a fake backend's tables are in the delete set; the plan records only names and
     // trigger text, so setup's own seeded rows do not affect it.

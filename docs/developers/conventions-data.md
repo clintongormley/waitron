@@ -123,8 +123,11 @@ declares).
 
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
 
-— `.`, `./testing/seed.js` and `./testing/venue-db.js`. A wildcard would publish the whole harness.
-Consequence: `apps/server` cannot deep-import `packages/db`'s `errors.ts`.
+Every entry is written out one by one in `packages/db/package.json` — the main entry, plus one per
+test helper this package deliberately publishes to other packages. Read that file for the current
+list rather than any copy of it kept here; a copy in prose is a thing to maintain, and this one had
+already gone stale once. A wildcard would publish the whole harness. Consequence: `apps/server`
+cannot deep-import `packages/db`'s `errors.ts`.
 
 ## A new product domain lands as a MODULE, not as new code in the core
 
@@ -601,11 +604,11 @@ have refused every rate above one percent. Changing their SQL text in the schema
 generate the DROP/ADD itself — unlike P5, where the checks' text did not change and drizzle
 therefore saw nothing. The two QUANTITY checks are P5's case exactly: `quantity <> 0` reads the
 same in either scale, so drizzle generated nothing and PostgreSQL kept
-`((quantity)::numeric <> (0)::numeric)`. Both were named by
-`packages/db/src/schema/schema-conformance.test.ts`, which builds a database from the migrations
-and compares every check expression with the schema's, and both were rebuilt by hand in the core
-set's hand-written migration 0048_scaled_integers_sql. That guard covers the CORE set only; the
-module sets have none, which is the same asymmetry P5 recorded.
+`((quantity)::numeric <> (0)::numeric)`. Both were named by the core set's schema-conformance
+suite, which builds a database from the migrations and compares every check expression with the
+schema's, and both were rebuilt by hand in the core set's hand-written migration
+0048_scaled_integers_sql. At that point the suite covered the CORE set only and the module sets had
+nothing equivalent, which is the same asymmetry P5 recorded.
 
 _Dated 2026-09-21, the SQLite flip (F1)._ That migration file no longer exists: the flip regenerated
 every set as ONE baseline, so the whole core history — the hand-written custom migrations included —
@@ -615,6 +618,14 @@ would fail on a deleted one. What survives the deletion is the measurement, not 
 MECHANISM behind it does not survive either: there is no `ALTER COLUMN ... SET DATA TYPE` in a single
 baseline, so a check constraint has nothing to be carried across and cast by. Read this paragraph as
 the reason the guard exists, not as a description of the tree.
+
+_Dated 2026-09-23._ Both facts about the guard in that paragraph have since changed, and it is left
+as the record of what was true when the work was done. The comparing machinery is no longer in
+`packages/db/src/schema/schema-conformance.test.ts` — that file is a short call site now — and it is
+no longer core-only. It lives in `packages/db/src/testing/schema-conformance.ts` as a suite factory
+that any migration set can call, and `catalogue`, `payments`, `workforce` and `workforce-es` do.
+Which sets have a call site is `ls packages/*/src/schema/schema-conformance.test.ts`; a set with
+none is still unguarded.
 
 **Three ways a raw-SQL site can be wrong, and NONE of them is loud any more.** Measured on
 PostgreSQL in 2026-09-21 only the first was loud; the storage switch took that one too. The readings
@@ -679,10 +690,11 @@ the `ALLOWED` list only shrinks. It still cannot cover a builder the vocabulary 
 `bigserial` is the standing example.
 
 **The module set was probed rather than grepped**, and the probe itself is dated PostgreSQL work.
-`schema-conformance.test.ts` covers the CORE set only, and P5's nine stale objects were all found by
-applying the migrations and reading the catalogue back. The one module set this task touched is
-`workforce-es`. Probed 2026-09-21 by applying `CORE_MIGRATIONS` then `WORKFORCE_ES_MIGRATIONS` and
-querying `information_schema.columns` and `pg_get_constraintdef` over `convenio_config`:
+The schema-conformance suite covered the CORE set only then, and P5's nine stale objects were all
+found by applying the migrations and reading the catalogue back. The one module set this task
+touched is `workforce-es`. Probed 2026-09-21 by applying `CORE_MIGRATIONS` then
+`WORKFORCE_ES_MIGRATIONS` and querying `information_schema.columns` and `pg_get_constraintdef` over
+`convenio_config`:
 `night_premium_pct` was `integer` with a null default, `split_shift_premium` was `bigint` from P5,
 and not one of the nineteen constraints on the table named either column. So there was nothing to
 re-derive there — established by running it, not by reading the migration.
@@ -692,6 +704,17 @@ re-derive there — established by running it, not by reading the migration.
 `packages/workforce-es/src/schema/convenio-config.ts` declares `nightPremiumPct` with `rate(…)` and
 `splitShiftPremium` with `money(…)`, both of which emit plain `integer`. What stands is the method:
 probe a module set, do not grep it.
+
+_Dated 2026-09-23._ Those two paragraphs are the record of a hand probe, and they stay as written.
+What has changed since is that four module sets no longer need one: `catalogue`, `payments`,
+`workforce` and `workforce-es` each call the shared schema-conformance suite factory
+(`packages/db/src/testing/schema-conformance.ts`) from a
+`packages/<pkg>/src/schema/schema-conformance.test.ts` of their own, so for those four the method is
+a suite that runs with the package's own tests rather than something to remember to do (which pushes
+run which packages is CI's scoping question, and is in ci-and-gates.md). For a set with no call
+site the paragraphs above still describe the only option, minus the two PostgreSQL readers: the
+SQLite equivalents are `pragma table_info` and the CREATE statement SQLite stores verbatim in
+`sqlite_master.sql`, which is what the factory reads.
 
 **What the conversion did NOT touch.** The pricer, `assertQuantityPrecision`, the purchasing
 validators, every receipt and ticket formatter, the HTTP contract, `apps/till` and `apps/dashboard`.
