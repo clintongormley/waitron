@@ -1857,11 +1857,12 @@ image constraints under *Detail → Box image*.
   only real repair is a squashed baseline — **an owner decision nobody has taken**. Until it is, the
   hazard stands: **do not run `pnpm --filter @waitron/db db:generate`** (it proposes dropping the
   bookings table, which left core's barrel but stayed in core's snapshot chain).
-- **Three paths migrate a live database with no ahead-of-image check** (`restore.ts`,
-  `rejoin-command.ts`, `dev-setup.ts`); only the boot path has one. (A fourth, `instance-apply.ts`,
-  went with `waitron-provision instance` when a venue became a directory of SQLite files, and with it
-  the question of gating a migrate that could lock a trading shop's tables — the reason is recorded
-  at `packages/provisioning/src/errors.ts`.)
+- **Every migrating path but boot runs with no ahead-of-image check.** Do not carry a count here:
+  `conventions-data.md` holds the current list, re-grepped 2026-09-22, and it is longer than the
+  three CLAUDE.md §3 names — a runner, and seven scripts under `apps/server/scripts`.
+  `instance-apply.ts` is no longer among them: it went with `waitron-provision instance` when a venue
+  became a directory of SQLite files, and with it the question of gating a migrate that could lock a
+  trading shop's tables (the reason is at `packages/provisioning/src/errors.ts`).
 - **Provisioning's migrate path still runs the linear full `manifestSets()`** — route it through the
   resolver once it gains per-module enablement.
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
@@ -3335,10 +3336,11 @@ in the slice-1 plan**, and with it slice 1 is done.
 **What T3 measured, and why no bar moved.** The whole workspace was run — 46 members green at their
 current bars, 1,065 test files and 13,784 tests, plus the root project's 54 files and 3,255 tests —
 and the answer is that **the storage switch did not shrink the workspace**: non-test source under
-`packages/*/src` and `apps/*/src` went 8,323 KB before the flip to 8,339 KB after it, so a bar that
-was meaningful in September still is. Only `packages/provisioning` shrank materially, by about a
-third, when `waitron-provision instance` went with the per-tenant PostgreSQL cluster, and it still
-clears the floor by 7.7 points on statements. The numbers, the two traps that were checked rather than assumed, and
+`packages/*/src` and `apps/*/src` went 8,323 KB at `320f1dc08`, the commit before the flip, to
+8,359 KB on the tree this change merges into, so a bar that was meaningful in September still is. Four packages shrank by more than a tenth, and
+`packages/provisioning` is the large one — by a third, when `waitron-provision instance` went with
+the per-tenant PostgreSQL cluster. It still clears the floor by 7.7 points on statements, and the
+other three (`recipes`, `purchasing`, `workforce-es`) are at 100% on all four metrics. The numbers, the two traps that were checked rather than assumed, and
 the one source file that turns out to be measured by no coverage table at all are in
 [ci-and-gates.md](developers/ci-and-gates.md) → *Coverage thresholds are split by package*.
 

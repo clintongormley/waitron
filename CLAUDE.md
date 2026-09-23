@@ -106,7 +106,7 @@ Unknown ranges keep the full local gate, including workspace typechecking. See
 
 **Coverage thresholds** are split (owner decision 2026-09-05): a high bar of `98/98/98/95` for the
 fiscal core and the data-layer foundations, the `90/90/85/85` floor everywhere else, browser packages
-included. **Which packages hold the high bar is written once**, as `HIGH_BAR_PACKAGES` in
+included. **One place holds the high-bar list authoritatively**: `HIGH_BAR_PACKAGES` in
 `scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it.
 Prose that re-enumerates the list drifts, and three places were wrong at once: two still named
 four packages after the flip made it five, and a third asserted six. More:
@@ -695,10 +695,10 @@ browser test** — most of these rules exist because a test passed while proving
 - **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated `lint`
   job and the hook run on every non-docs push. Two costs of living there: the root project does not
   typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
-  from its own package's. **The root `include` names FILE TYPES, so source of any other type that
-  lives at the root is measured by nothing, suite or no suite** — `scripts/dev-server-proxy.ts` is
-  imported by all three front-ends' `vite.config.ts` and exercised by
-  `scripts/dev-proxy-config.test.ts`, and appears in no coverage table in the repository. Left that
+  from its own package's. **That `include` is one file-type glob plus the explicit paths added to
+  it, so root-level source of another type is measured only when somebody names it** —
+  `scripts/dev-server-proxy.ts` is imported by all three front-ends' `vite.config.ts` and exercised
+  by `scripts/dev-proxy-config.test.ts`, and nobody named it, so it appears in no coverage table. Left that
   way deliberately, and the cost of the alternative is measured:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.

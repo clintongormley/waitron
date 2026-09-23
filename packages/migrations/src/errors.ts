@@ -20,8 +20,10 @@ import "@waitron/shared";
  * `server.` on the grounds that "`apps/server` is still the only thing that can actually hit it in
  * production" — true when written, and unsafe to keep relying on: this package was extracted
  * precisely so a second binary could run the migration sets, and `@waitron/provisioning` is the
- * consumer it was extracted for — and it IS a thrower today: it has depended on this package since
- * #11 (`86229c87`) and `instance-apply.ts` calls `migrationOptionsFor`. Renaming after that shipped
+ * consumer it was extracted for, and it has depended on this package since #11 (`86229c87`). The
+ * call that made it a thrower in production was `instance-apply.ts`, which went with
+ * `waitron-provision instance` in the storage switch; inside `packages/provisioning` only test files
+ * call `migrationOptionsFor` today. The rename argument does not rest on that call. Renaming after this package shipped
  * would have cost a permanent deprecate-and-add instead of a find-replace, which is why the
  * extraction was the free moment.
  *
