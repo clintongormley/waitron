@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { decimal, decimalToThousandths } from "@waitron/shared";
+import { stringToThousandths } from "@waitron/shared";
 import {
   catalogues,
   CORE_MIGRATIONS,
@@ -217,7 +217,7 @@ describe("unit operations", () => {
     // case to be checked against. A SQL-side control cannot exist here either — the engine has no
     // exact decimal type, so `round(1.2345, 3)` is 1.234 and `cast(1.2345 as numeric(12,3))` keeps
     // all four places (node:sqlite, Node v26.7.0; receipt in docs/developers/conventions-data.md).
-    expect(decimalToThousandths(decimal("1.2345"))).toBe(1235);
+    expect(stringToThousandths("1.2345")).toBe(1235);
     expect(() => assertQuantityPrecision("1.2345", 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
     );

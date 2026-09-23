@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, decimal, decimalToCents } from "@waitron/shared";
+import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
 import {
   extraListItems,
@@ -313,7 +313,7 @@ async function writeItems(
         productId: item.productId,
         maxQuantity: item.maxQuantity,
         preselected: item.preselected,
-        price: item.price === null ? null : decimalToCents(decimal(item.price)),
+        price: item.price === null ? null : stringToCents(item.price),
         sort,
       })
       .onConflictDoNothing({ target: extraListItems.id })
@@ -567,7 +567,7 @@ export async function setMenuItemExtraLists(
       menuItemId: offerId,
       listId: publication.listId,
       productId: item.productId,
-      price: item.price === null ? null : decimalToCents(decimal(item.price)),
+      price: item.price === null ? null : stringToCents(item.price),
       available: item.available,
     })),
   );

@@ -13,12 +13,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  decimal,
-  decimalToBasisPoints,
-  decimalToCents,
-  decimalToThousandths,
-} from "@waitron/shared";
+import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
@@ -111,9 +106,9 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   // the row. `vat_breakdown` is jsonb and keeps its decimal literals; `sale_lines.quantity` and
   // `sale_lines.vat_rate` are whole numbers too, at their own scales — a count of thousandths and a
   // count of basis points — so each gets its own converter here.
-  const cents = (value: string): number => decimalToCents(decimal(value));
-  const thousandths = (value: string): number => decimalToThousandths(decimal(value));
-  const basisPoints = (value: string): number => decimalToBasisPoints(decimal(value));
+  const cents = (value: string): number => stringToCents(value);
+  const thousandths = (value: string): number => stringToThousandths(value);
+  const basisPoints = (value: string): number => stringToBasisPoints(value);
   // Through the table definitions: every id is a `$defaultFn` generator here, and `vat_breakdown`,
   // `descriptions` and `invoice_locales` are encoded by their own write mappings — the `::jsonb`
   // casts and the `array[...]` constructor they replace are both refused by this engine. Every

@@ -4,10 +4,9 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   AppError,
   centsToDecimal,
-  decimal,
-  decimalToCents,
   resolveContentText,
   FALLBACK_LOCALE,
+  stringToCents,
 } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { productCategories } from "./schema/categories.js";
@@ -377,7 +376,7 @@ export async function createMenuItem(
       sectionId: input.sectionId,
     });
   }
-  const grossPrice = decimalToCents(decimal(input.grossPrice));
+  const grossPrice = stringToCents(input.grossPrice);
   const [written] = await tx
     .insert(menuItems)
     .values({ ...input, grossPrice })
@@ -413,7 +412,7 @@ export async function updateMenuItem(
     .update(menuItems)
     .set({
       ...rest,
-      ...(grossPrice === undefined ? {} : { grossPrice: decimalToCents(decimal(grossPrice)) }),
+      ...(grossPrice === undefined ? {} : { grossPrice: stringToCents(grossPrice) }),
     })
     .where(
       and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
@@ -844,7 +843,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       kitchenName: input.kitchenName?.trim() || null,
       dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
       pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
-      unitPrice: decimalToCents(decimal(input.unitPrice)),
+      unitPrice: stringToCents(input.unitPrice),
       vatClass: input.vatClass,
       active: input.active ?? true,
       available: input.available ?? true,
@@ -990,7 +989,7 @@ export async function updateProduct(
     .update(products)
     .set({
       ...rest,
-      ...(unitPrice === undefined ? {} : { unitPrice: decimalToCents(decimal(unitPrice)) }),
+      ...(unitPrice === undefined ? {} : { unitPrice: stringToCents(unitPrice) }),
       ...(unitAction.kind === "keep"
         ? {}
         : {

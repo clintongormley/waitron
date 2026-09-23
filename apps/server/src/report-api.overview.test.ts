@@ -17,12 +17,7 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  decimal,
-  decimalToBasisPoints,
-  decimalToCents,
-  decimalToThousandths,
-} from "@waitron/shared";
+import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -69,7 +64,7 @@ async function seedTodaySale(db: Database): Promise<void> {
   // way into the row. `vat_breakdown` is jsonb, not a scaled-integer column, and keeps its decimal
   // literals; `sale_lines.quantity` and `sale_lines.vat_rate` are whole numbers at their OWN
   // scales — thousandths and basis points — so each is converted by its own function.
-  const cents = (value: string): number => decimalToCents(decimal(value));
+  const cents = (value: string): number => stringToCents(value);
   // ONE clock reading, bound to BOTH stamps. `now()` has no equivalent here, and the two statements
   // were separate `execute` calls, so PostgreSQL gave each its own transaction-start time; a single
   // `nowIso()` keeps the sale and its tender on the same business day, which is what the fixture
@@ -109,9 +104,9 @@ async function seedTodaySale(db: Database): Promise<void> {
     lineNo: 1,
     name: SEED.name,
     descriptions: SEED.descriptions,
-    quantity: decimalToThousandths(decimal(SEED.lineQuantity)),
+    quantity: stringToThousandths(SEED.lineQuantity),
     unitPrice: cents("3.50"),
-    vatRate: decimalToBasisPoints(decimal("21.00")),
+    vatRate: stringToBasisPoints("21.00"),
     lineTotal: cents(SEED.lineTotal),
   });
 }
