@@ -382,7 +382,7 @@ describe("settleSale — error propagation", () => {
       select: () => ({
         from: () => ({
           // 1: the sale row — `total` as the typed column hands it back (a count of whole cents)
-          // and `corrections` as the raw `::text` subquery does (that count as a STRING);
+          // and `corrections` as the raw `cast(… as text)` subquery does (that count as a STRING);
           // 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;

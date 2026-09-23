@@ -73,12 +73,11 @@ export async function computeInputVat(
   // is the control in the other direction, and it is not a near miss: every answer carried a
   // decimal point the reader would have thrown on.
   //
-  // Each sum is a count of whole cents read raw, handed over as TEXT by `cast(… as text)` — what
-  // `::text` was — and converted by `rawCentsToDecimal`; see its doc comment.
+  // Each sum is a count of whole cents read raw, handed over as TEXT by `cast(… as text)` and
+  // converted by `rawCentsToDecimal`; see its doc comment.
   //
-  // The rate is grouped on the column itself. The `numeric(5,2)` cast this replaced was there so
-  // that two spellings of one rate could not split into two lines; a whole number of basis points
-  // has one spelling, so there is nothing left to normalise — the normalisation moved to
+  // The rate is grouped on the column itself: a whole number of basis points has one spelling, so
+  // two spellings of one rate cannot split into two lines — the normalisation happens in
   // `decimalToBasisPoints` on the way in. The output side still reads its rate out of a JSON
   // document, where two spellings ARE possible, so `aggregateVatByRate` keeps normalising.
   const { rows } = await tx.execute<{

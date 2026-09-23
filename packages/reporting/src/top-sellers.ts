@@ -44,11 +44,10 @@ export async function computeTopSellers(
   }
   const nodeClause = nodeScopeClause(input.nodeId);
   // Deterministic order: quantity desc, then the staff name/variant text as a stable tiebreak for ties.
-  // Both sums are counts read raw, handed over as TEXT (`cast(… as text)`, which is what `::text`
-  // was) and converted by the reader named after the scale: the total counts whole cents
-  // (`rawCentsToDecimal`) and the quantity counts whole thousandths (`rawThousandthsToDecimal`).
-  // The quantity's own cast used to be `::numeric(12, 3)::text`, which refused a sum past nine
-  // integer digits with a 22003; that bound is now the reader's and the refusal is an `AppError`.
+  // Both sums are counts read raw, handed over as TEXT (`cast(… as text)`) and converted by the
+  // reader named after the scale: the total counts whole cents (`rawCentsToDecimal`) and the
+  // quantity counts whole thousandths (`rawThousandthsToDecimal`). The quantity reader refuses a
+  // sum past nine integer digits (`shared.decimal_overflow`); no column type refuses it.
   const { rows } = await tx.execute<{
     name: string;
     variant_name: string | null;

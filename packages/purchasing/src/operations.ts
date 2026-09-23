@@ -206,11 +206,10 @@ export async function createPurchaseInvoice(
   validateProportion(input.header.deductibleProportion);
   validateLines(input.lines);
 
-  // RETURNING the STORED header + line tuples rather than re-reading them: the DB applies the same
-  // column defaults it would on a SELECT (`regime` → general, `deductible_proportion` → 10000 basis
-  // points, line `kind` → ordinary), so the returned shape is identical to the old
-  // insert-then-getPurchaseInvoice re-read — two fewer round-trips, mirroring the catalogue/recipes
-  // `.values(...).returning(COLUMNS)` house pattern this module follows.
+  // RETURNING the STORED header + line tuples, so the result is the row as stored, with the
+  // database's column defaults applied (`regime` → general, `deductible_proportion` → 10000 basis
+  // points, line `kind` → ordinary) — the catalogue/recipes `.values(...).returning(COLUMNS)`
+  // house pattern this module follows.
   let header: Omit<PurchaseInvoice, "lines">;
   try {
     const [row] = await tx

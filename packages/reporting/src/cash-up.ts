@@ -20,8 +20,8 @@ import type {
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
   // Both sums are counts of whole cents read raw, handed over as TEXT and converted by
-  // `rawCentsToDecimal` — see its doc comment. `cast(… as text)` is what `::text` was; `till_id`
-  // needs no cast at all now, because an id column is `text` on this engine (`columns.ts`).
+  // `rawCentsToDecimal` — see its doc comment. `till_id` needs no cast, because an id column is
+  // `text` on this engine (`columns.ts`).
   const { rows } = await tx.execute<{
     till_id: string;
     method: TenderMethod;
