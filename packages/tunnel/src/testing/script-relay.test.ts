@@ -46,11 +46,16 @@ describe("onceRegister", () => {
   it("waits for the rest of a register frame that arrives split across two writes", async () => {
     let got: (f: Frame) => void = () => {};
     const register = new Promise<Frame>((res) => (got = res));
-    scripted = await scriptRelay((box) => void onceRegister(box).then(got));
+    let prefixSeen: () => void = () => {};
+    const prefixRead = new Promise<void>((res) => (prefixSeen = res));
+    scripted = await scriptRelay((box) => {
+      void onceRegister(box).then(got);
+      box.once("data", () => prefixSeen()); // after onceRegister's listener has read the same chunk
+    });
     const box = connect(scripted.port, "127.0.0.1");
     const frame = encodeFrame({ t: "register", boxId: "b", token: "t" });
     box.write(frame.subarray(0, 6)); // partial — no complete frame yet
-    await wait(10);
+    await prefixRead; // the relay has read the prefix alone, so the two halves cannot coalesce
     box.write(frame.subarray(6));
     expect(await register).toEqual({ t: "register", boxId: "b", token: "t" });
     box.destroy();

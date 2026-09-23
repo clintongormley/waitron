@@ -177,9 +177,10 @@ describe("createRelayStandin", () => {
     good.destroy();
   });
 
-  it("survives a box that resets its connection, and keeps serving", async () => {
+  it("does not crash when a parked box resets its connection, and still acks the next box", async () => {
     // A hard reset (resetAndDestroy) reaches the relay's side as an 'error' (ECONNRESET). Unhandled,
-    // that error would crash the process; the relay must drop the socket and carry on.
+    // that error would crash the process. This checks only that the relay lives on: the dead box
+    // stays in the idle queue, so a client arriving next would still be paired with it.
     relay = await createRelayStandin({ verifyToken: () => true });
     const box = connect(relay.boxPort, "127.0.0.1");
     box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
@@ -192,7 +193,9 @@ describe("createRelayStandin", () => {
     good.destroy();
   });
 
-  it("survives a client that resets its connection while waiting for a box, and keeps serving", async () => {
+  it("does not crash when a waiting client resets its connection, and still acks the next box", async () => {
+    // As above, the relay lives on; the dead client stays in the waiter queue and is handed the
+    // next box to register.
     relay = await createRelayStandin({ verifyToken: () => true, waitForBoxMs: 5000 });
     const client = connect(relay.clientPort, "127.0.0.1");
     await sleep(20); // let the relay accept the client and park it as a waiter

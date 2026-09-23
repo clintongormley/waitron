@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // Single fork: @vitest/coverage-v8 under-merges branch coverage across forks under the
-    // whole-workspace `pnpm -r test:coverage` the pre-push hook runs. The suite is tiny, so one
+    // Single fork: @vitest/coverage-v8 under-merges branch coverage across forks under a
+    // whole-workspace `pnpm -r test:coverage`. The suite is tiny, so one
     // fork costs nothing and makes the gate deterministic (the packages/shared precedent).
     maxWorkers: 1,
     coverage: {
