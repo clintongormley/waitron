@@ -1574,6 +1574,92 @@ describe("menu offers nest a product's variants", () => {
     expect((await offers())[0]!.variants).toEqual([]);
   });
 
+  it("prices an offer with a blank menu price at the product's own price, and follows it", async () => {
+    // A second product on the same menu KEEPS the price this menu sets, whatever its own does.
+    const kept = await run(async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId: f.menuId,
+        categoryId: null,
+        name: "Cava",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      await createMenuItem(tx, {
+        menuId: f.menuId,
+        productId: product.id,
+        sectionId: f.sectionId,
+        grossPrice: "3.75",
+        displayOrder: 1,
+      });
+      return product.id;
+    });
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { grossPrice: null }));
+    const prices = async () =>
+      (await offers()).map(({ productId, grossPrice, unitPrice }) => ({
+        productId,
+        grossPrice,
+        unitPrice,
+      }));
+    expect(await prices()).toEqual([
+      { productId: f.parentId, grossPrice: null, unitPrice: "4.00" },
+      { productId: kept, grossPrice: "3.75", unitPrice: "3.75" },
+    ]);
+    await run(async (tx) => {
+      await updateProduct(tx, f.parentId, { unitPrice: "4.20" });
+      await updateProduct(tx, kept, { unitPrice: "3.10" });
+    });
+    expect(await prices()).toEqual([
+      { productId: f.parentId, grossPrice: null, unitPrice: "4.20" },
+      { productId: kept, grossPrice: "3.75", unitPrice: "3.75" },
+    ]);
+  });
+
+  it("creates an offer with a blank price, and blanks a re-activated offer's old one", async () => {
+    const created = await run(async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId: f.menuId,
+        categoryId: null,
+        name: "Vermut",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      return createMenuItem(tx, {
+        menuId: f.menuId,
+        productId: product.id,
+        sectionId: f.sectionId,
+        grossPrice: null,
+      });
+    });
+    expect(created).toMatchObject({ grossPrice: null, active: true });
+    await run((tx) => deactivateMenuItem(tx, f.menuId, f.offerId));
+    const restored = await run((tx) =>
+      createMenuItem(tx, {
+        menuId: f.menuId,
+        productId: f.parentId,
+        sectionId: f.sectionId,
+        grossPrice: null,
+      }),
+    );
+    expect(restored).toMatchObject({ id: f.offerId, active: true, grossPrice: null });
+    expect((await offers()).find((offer) => offer.id === f.offerId)).toMatchObject({
+      grossPrice: null,
+      unitPrice: "4.00",
+    });
+  });
+
+  it("prices a variant with nothing set below its parent at the parent's own price", async () => {
+    await run((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+    );
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { grossPrice: null }));
+    expect(await nested()).toEqual([
+      { name: "Wine 125", unitPrice: "4.00", menuPrice: null, offered: true, available: true },
+      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: true },
+    ]);
+  });
+
   it("offers a variant added after its parent went on the menu, at once", async () => {
     await run((tx) =>
       setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),

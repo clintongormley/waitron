@@ -72,7 +72,8 @@ export const menuSections = table(
   ],
 );
 
-/** A product offered on one menu. This row owns the selling price and presentation order. */
+/** A product offered on one menu, and its presentation order. A blank `gross_price` means the
+ * product's own price (`resolveOfferPrice`, `offer-price.ts`). */
 export const menuItems = table(
   "menu_items",
   {
@@ -80,7 +81,7 @@ export const menuItems = table(
     menuId: id("menu_id").notNull(),
     productId: id("product_id").notNull(),
     sectionId: id("section_id").notNull(),
-    grossPrice: money("gross_price").notNull(),
+    grossPrice: money("gross_price"),
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
   },

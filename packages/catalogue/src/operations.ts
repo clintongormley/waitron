@@ -31,7 +31,7 @@ import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { listProductVariantsForProducts, type ProductVariant } from "./variants.js";
-import { resolveOfferPrice } from "./offer-price.js";
+import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -353,7 +353,7 @@ export async function createMenuItem(
     menuId: string;
     productId: string;
     sectionId: string;
-    grossPrice: string;
+    grossPrice: string | null;
     displayOrder?: number;
   },
 ): Promise<MenuItem> {
@@ -376,7 +376,7 @@ export async function createMenuItem(
       sectionId: input.sectionId,
     });
   }
-  const grossPrice = stringToCents(input.grossPrice);
+  const grossPrice = input.grossPrice === null ? null : stringToCents(input.grossPrice);
   const [written] = await tx
     .insert(menuItems)
     .values({ ...input, grossPrice })
@@ -398,21 +398,23 @@ export async function createMenuItem(
       displayOrder: menuItems.displayOrder,
       active: menuItems.active,
     });
-  return { ...written!, grossPrice: centsToDecimal(written!.grossPrice) };
+  return { ...written!, grossPrice: priceOrNull(written!.grossPrice) };
 }
 
 export async function updateMenuItem(
   tx: Transaction,
   menuId: string,
   menuItemId: string,
-  patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
+  patch: { sectionId?: string; grossPrice?: string | null; displayOrder?: number },
 ): Promise<void> {
   const { grossPrice, ...rest } = patch;
   const [row] = await tx
     .update(menuItems)
     .set({
       ...rest,
-      ...(grossPrice === undefined ? {} : { grossPrice: stringToCents(grossPrice) }),
+      ...(grossPrice === undefined
+        ? {}
+        : { grossPrice: grossPrice === null ? null : stringToCents(grossPrice) }),
     })
     .where(
       and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
@@ -523,6 +525,7 @@ export async function listMenuOffers(
       productId: menuItems.productId,
       sectionId: menuItems.sectionId,
       grossPrice: menuItems.grossPrice,
+      productPrice: products.unitPrice,
       displayOrder: menuItems.displayOrder,
       active: menuItems.active,
       menuName: catalogues.name,
@@ -570,8 +573,14 @@ export async function listMenuOffers(
     menuId: row.menuId,
     productId: row.productId,
     sectionId: row.sectionId,
-    grossPrice: centsToDecimal(row.grossPrice),
-    unitPrice: centsToDecimal(row.grossPrice),
+    grossPrice: priceOrNull(row.grossPrice),
+    unitPrice: resolveOfferPrice({
+      variantMenuPrice: null,
+      variantPrice: null,
+      parentMenuPrice: priceOrNull(row.grossPrice),
+      // Only a top-level product is an offer, so `products_top_level_owns_ck` sets its price.
+      parentPrice: centsToDecimal(row.productPrice!),
+    }),
     displayOrder: row.displayOrder,
     active: row.active,
     menuName: row.menuName,
@@ -638,13 +647,13 @@ async function readOfferVariants(
       kitchenName: row.kitchenName,
       image: row.image,
       unitPrice: resolveOfferPrice({
-        variantMenuPrice: row.menuPrice === null ? null : centsToDecimal(row.menuPrice),
-        variantPrice: row.ownPrice === null ? null : centsToDecimal(row.ownPrice),
-        parentMenuPrice: centsToDecimal(row.parentMenuPrice),
+        variantMenuPrice: priceOrNull(row.menuPrice),
+        variantPrice: priceOrNull(row.ownPrice),
+        parentMenuPrice: priceOrNull(row.parentMenuPrice),
         // The parent of a variant is top-level, so `products_top_level_owns_ck` sets its price.
         parentPrice: centsToDecimal(row.parentPrice!),
       }),
-      menuPrice: row.menuPrice === null ? null : centsToDecimal(row.menuPrice),
+      menuPrice: priceOrNull(row.menuPrice),
       offered,
       available: row.available && offered,
       ...offerLineValues(row, defaultLanguage),

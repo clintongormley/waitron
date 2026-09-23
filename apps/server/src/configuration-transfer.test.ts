@@ -699,6 +699,22 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     await setMenuItemExtraLists(tx, offer.id, [
       { listId: extraList.id, items: [{ productId: shot.id, price: "0.90", available: true }] },
     ]);
+    // A menu that sets no price of its own: blank has to arrive blank, not as zero.
+    const tea = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Té",
+      pricingUnit: "each",
+      unitPrice: "1.80",
+      vatClass: "reduced",
+    });
+    await createMenuItem(tx, {
+      menuId: menu.id,
+      sectionId: section.id,
+      productId: tea.id,
+      grossPrice: null,
+      displayOrder: 1,
+    });
     return { optionList: withDefault, extraList, shotId: shot.id };
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -752,6 +768,10 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const offers = await listMenuOffers(tx, [menus.rows[0]!.id]);
     const coffee = offers.find((offer) => offer.name === "Café")!;
     expect(coffee.grossPrice).toBe("2.75");
+    expect(offers.find((offer) => offer.name === "Té")).toMatchObject({
+      grossPrice: null,
+      unitPrice: "1.80",
+    });
     // The product's own attachment ORDER, and the offer's republished price on the extra.
     expect(coffee.offeredModifiers.map((entry) => [entry.kind, entry.name])).toEqual([
       ["extras", "Extras"],

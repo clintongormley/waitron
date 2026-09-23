@@ -448,6 +448,19 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     );
   });
 
+  it("accepts an offer with a blank price, and still refuses a negative one", async () => {
+    const c = await catalogue();
+    const row = { menuId: c.menuId, productId: c.otherProductId, sectionId: c.sectionId };
+    const error = await captureError(() => db.insert(menuItems).values({ ...row, grossPrice: -1 }));
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("menu_items_gross_price_ck");
+    const [blank] = await db
+      .insert(menuItems)
+      .values({ ...row, grossPrice: null })
+      .returning({ grossPrice: menuItems.grossPrice });
+    expect(blank).toEqual({ grossPrice: null });
+  });
+
   it("refuses an offer placed in another menu's section", async () => {
     const c = await catalogue();
     await refusal(

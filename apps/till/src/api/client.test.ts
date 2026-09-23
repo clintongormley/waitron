@@ -2123,4 +2123,43 @@ describe("menuOfferToTillProduct", () => {
 
     expect(menuOfferToTillProduct(offer).offeredModifiers).toEqual([extras, options]);
   });
+
+  it("prices the product at the offer's RESOLVED price, never the stored menu price", () => {
+    // A blank menu price is the product's own, which only the server resolves; a set one that the
+    // server resolved differently is still the server's answer.
+    const offer = {
+      id: "offer-burger",
+      menuId: "menu-1",
+      productId: "burger",
+      sectionId: "section-1",
+      grossPrice: null,
+      unitPrice: "7.25",
+      displayOrder: 0,
+      active: true,
+      menuName: "Carta",
+      sectionName: { es: "Platos" },
+      name: "Burger",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general" as const,
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    expect(menuOfferToTillProduct(offer).unitPrice).toBe("7.25");
+    expect(menuOfferToTillProduct({ ...offer, grossPrice: "8.00" }).unitPrice).toBe("7.25");
+  });
 });

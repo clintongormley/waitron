@@ -22,15 +22,16 @@ export interface MenuItem {
   menuId: string;
   productId: string;
   sectionId: string;
-  grossPrice: string;
+  /** The price this menu sets, or null when it sets none and the product's own price applies. */
+  grossPrice: string | null;
   displayOrder: number;
   active: boolean;
 }
 
 /** One sellable identity. The menu-item id, rather than the product id, selects its price. */
 export interface MenuOffer extends MenuItem {
-  /** The price the server's order path charges for this offer; today it equals `grossPrice`, the
-   * STORED menu price. */
+  /** The price the server's order path charges for this offer, RESOLVED along spec §15.3's chain
+   * (`offer-price.ts`): `grossPrice` when set, else the product's own price. Never null. */
   unitPrice: string;
   menuName: string;
   sectionName: Record<string, string>;

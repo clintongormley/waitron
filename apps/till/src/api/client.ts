@@ -469,7 +469,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     // send a `pricingUnit` on the offer body (`listMenuOffers` projects `products.pricingUnit`), but
     // `MenuOffer` does not model it and this path does not need it, so the copy the old hand mirror made
     // here was redundant — dropping it changes no behaviour (the full unit wins).
-    unitPrice: offer.grossPrice,
+    unitPrice: offer.unitPrice,
     vatClass: offer.vatClass,
     category: offer.category,
     allergens: offer.allergens,
