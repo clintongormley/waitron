@@ -160,7 +160,6 @@ export class LiveData {
       if (!entry.active) return;
       entry.snapshot = { ...entry.snapshot, error, loading: false, status: "error" };
     }
-    if (!entry.active) return;
     for (const listener of entry.listeners) listener();
     this.#schedule(entry);
   }

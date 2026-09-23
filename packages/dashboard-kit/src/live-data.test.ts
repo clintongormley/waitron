@@ -162,6 +162,33 @@ describe("observed resources", () => {
     observed.unsubscribe();
   });
 
+  it("keeps a cleared snapshot empty when a read in flight at the clear fails", async () => {
+    const data = new LiveData();
+    let fail!: (error: unknown) => void;
+    const observed = data.observe(
+      {
+        key: "jobs",
+        dependencies: [{ type: "print-job" }],
+        read: () =>
+          new Promise<never>((_, reject) => {
+            fail = reject;
+          }),
+      },
+      () => {},
+    );
+    await vi.waitFor(() => expect(observed.snapshot.loading).toBe(true));
+    data.clear();
+    fail({ code: "server.internal" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(observed.snapshot).toEqual({
+      value: undefined,
+      error: undefined,
+      loading: false,
+      status: "pending",
+    });
+    observed.unsubscribe();
+  });
+
   it("can refresh a time-dependent query on a timer and stops when detached", async () => {
     vi.useFakeTimers();
     const data = new LiveData();

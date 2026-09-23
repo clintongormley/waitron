@@ -2062,7 +2062,11 @@ image constraints under *Detail → Box image*.
   2026-09-23 — tests for the mTLS test server recording the first of two CNs, serving a client
   certificate with no CN, and refusing a second close; 100/100/100/98); `sync-enrolment` (**PR
   #518**, 2026-09-23 — tests for a drop and re-create inside one migration file and for table names
-  read without regard to case; 100/100/100/100).
+  read without regard to case; 100/100/100/100); `dashboard-kit` (**PR #521**, 2026-09-23 — tests
+  for the live event stream's default credentialed open, a stream it has replaced, a reset, an
+  error the stream retries itself, malformed change and session-invalid messages, a stop before the
+  first open, and the query controller's reads without a live-data session and a throwing apply;
+  one unreachable guard in `live-data.ts` deleted; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3684,10 +3688,7 @@ What the preparation tasks left, with F1's own answers where it found them:
   --hookTimeout=2000` with `useVenueDb`'s default setup budget temporarily cut to 2s, on an
   18-core Mac with one package running at a time. No value changed. The review also dropped the
   `venue-db.ts` line pointers from sibling configs and test files, several of which were stale, and
-  a "(CLAUDE.md §4)" pointer that named no rule about worker pins. Follow-up: every other
-  `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`, which
-  carries its own measurement, still says the pin is needed without having measured it; the same
-  one-worker-against-several coverage comparison would settle each.
+  a "(CLAUDE.md §4)" pointer that named no rule about worker pins.
   - `purchasing`: 19 tests, slowest 6ms, database setup 14ms.
   - `fiscal-none`: 13 tests, slowest 2ms, setup 14ms; coverage at one and three workers wrote
     identical summaries, so its one-worker pin is recorded as a precaution, not a need.
@@ -3699,6 +3700,15 @@ What the preparation tasks left, with F1's own answers where it found them:
     and total counts per file at one worker (22.3s) and with `--maxWorkers=6` (6.2s), so its
     one-worker pin is recorded as a precaution, not a need. Its comment's `venue-db.ts:176`, `:183`
     and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
+  - Follow-up: every other `maxWorkers: 1` config whose comment gives the coverage reason, apart
+    from `payments`, which carries its own measurement, still says the pin is needed without having
+    measured it; the same one-worker-against-several coverage comparison would settle each. Two of
+    those comments, in `packages/shared/vitest.config.ts` and
+    `packages/diagnostics/vitest.config.ts`, also still say the pre-push hook runs a whole-workspace
+    `pnpm -r test:coverage`, and so does `apps/server/vitest.config.ts`'s comment on why it does not
+    pin one worker. The hook has run no package tests since #338; its only test run is the root
+    `pnpm vitest run --coverage`. #515 and the dashboard-kit coverage branch fixed the same words in
+    server-kit, dashboard-kit and dashboard-modules.
 - **Dead code and doc sweeps owed to the rollout's final sweep** — the unused `seedTenantWithSumUpKey`
   was deleted on 2026-09-23 (PR #516). The file's real-SumUp case
   seals no credential and passes, because the seat reads its credential only on first use; that
