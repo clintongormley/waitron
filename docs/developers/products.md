@@ -180,7 +180,9 @@ A variant shares the product's unit, tax rate, categories, modifiers and allerge
 declarations. It has its own name (all three of them) and availability, and its own price and image
 only where it sets them. On a menu it is charged the most specific price set
 (`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`): that menu's price for the variant,
-else its own price, else its parent's price on that menu. `setProductVariants`
+else its own price, else its parent's price on that menu, else its parent's own price. A menu may
+leave any product's price blank (`menu_items.gross_price` is nullable), which means the product's
+own price; the menu screen shows that price as the empty field's hint. `setProductVariants`
 (`packages/catalogue/src/variants.ts`) and the storage beneath it accept a variant with no price of
 its own; the product-editor save refuses one (`price()` in
 `packages/catalogue/src/product-editor-input.ts`).

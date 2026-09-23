@@ -524,6 +524,24 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   (`apps/dashboard/src/widgets/variant-form.ts`). Nothing reaches it today, because the product-editor
   save still refuses a variant with no price; Task 7 settles both ends.
 
+**Task 4 (`feat/variants-menu-price`): a blank menu price follows the product's own price.** A menu
+row's price (`menu_items.gross_price`) may be left empty, meaning the product's own price — the last
+step of the price chain, for every product on a menu, variant or not. The menu screen shows the
+product's price as the empty field's hint and saves an emptied field as blank. **It cannot upgrade a
+venue that holds data, and part of the damage is silent.** Making the column nullable rebuilds
+`menu_items` (`packages/catalogue/drizzle/0003_menu_price_nullable.sql`), and inside the migrator's
+transaction foreign keys stay on, so dropping the old table acts on every row pointing at it.
+Measured 2026-09-23 through `applyMigrations` on Node v26.7.0, on a venue migrated with `main`'s
+catalogue set and holding one menu offer with an extras publication, one per-item extras override
+and one variant price override, then migrated with this branch's sets: with no open order line the
+upgrade reports success and empties `menu_item_extra_lists`, `menu_item_extra_items` and
+`menu_item_variant_overrides` (1 → 0 each, no error); with one `working_line_contexts` row naming
+the offer it fails at `DROP TABLE menu_items` with `FOREIGN KEY constraint failed` and rolls back,
+so the box does not boot. The control — the same row naming a menu item that does not exist — let
+the upgrade through. A fresh database migrates cleanly. So **every dev venue needs
+`wa-wt reset demo <name>`, and any provisioned box must be wiped**, the owner's home box included,
+once this lands.
+
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
 dropdown), and the demo steak now carries a `Punto` cooking options list instead. The per-line
