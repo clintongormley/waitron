@@ -2043,8 +2043,10 @@ image constraints under *Detail → Box image*.
   `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
   packages holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`, `credentials`,
   `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and `venue-service`.
-  `credentials`, `scheduler` and `identity` have had one since, and none found drift; re-run the
-  command for the current list. `identity`'s is blind to one thing that matters there: three
+  `credentials`, `scheduler`, `identity` and `bookings` have had one since, and none found drift;
+  re-run the command for the current list. `bookings` has no `src/schema/index.ts` barrel, so its
+  call site hands the factory `src/schema/bookings.ts`, the one file its `drizzle.config.ts`
+  generates from. `identity`'s is blind to one thing that matters there: three
   `persons` unique indexes are over a folded-key expression, and the factory compares an expression
   index by name, uniqueness, filter and where the expression sits among its parts, never by what it
   says — measured by changing `foldedKey`'s `lower` to `upper` in `src/schema/persons.ts`, which
