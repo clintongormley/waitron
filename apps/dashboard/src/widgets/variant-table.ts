@@ -65,8 +65,20 @@ export class VariantTable extends LitElement {
       th {
         font-weight: var(--wt-font-weight-bold);
       }
+      /* The grip and the row menu are each a tap-target-wide button that already centres its icon,
+         so the outer cells need no padding of their own; at phone width that room is what keeps
+         the row menu on screen. */
+      th:first-child,
+      td:first-child {
+        padding-inline-start: 0;
+      }
+      th:last-child,
+      td:last-child {
+        padding-inline-end: 0;
+      }
       /* The name is the widest cell; capping it keeps the switch and the row menu on screen at
-         phone width instead of pushing the row into a horizontal scroll. */
+         phone width instead of pushing the row into a horizontal scroll. Guard: the phone-width
+         case in product-editor.test.ts. */
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
       }
@@ -97,9 +109,6 @@ export class VariantTable extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
-      .price-hint {
-        white-space: nowrap;
-      }
       .notice {
         margin: var(--wt-space-2) 0 0;
         color: var(--wt-color-text-muted);
@@ -122,6 +131,9 @@ export class VariantTable extends LitElement {
   @property({ attribute: false }) variants: ProductEditorVariant[] = [];
   /** The product's own price, which a variant with no price of its own sells at. */
   @property() basePrice = "";
+  /** True while the product has changes not yet saved: opening a variant's page would leave them
+   * behind, so Open is held until they are saved. */
+  @property({ type: Boolean }) openBlocked = false;
   /** The product's pricing unit, named once in the price column's header. */
   @property() unitLabel = "";
   @property({ attribute: false }) unitId: string | null = null;
@@ -219,14 +231,20 @@ export class VariantTable extends LitElement {
     this.#emit("wt-reorder", { from, to: at });
   }
 
-  #action(name: string, index: number, label: string, variant: "secondary" | "danger") {
+  #action(
+    name: string,
+    index: number,
+    label: string,
+    variant: "secondary" | "danger",
+    blocked = false,
+  ) {
     return html`<wt-button
       variant=${variant}
       data-test=${`${name}-${index}`}
-      .disabled=${this.busy}
+      .disabled=${this.busy || blocked}
       @click=${(event: Event) => {
         event.stopPropagation();
-        if (this.busy) return;
+        if (this.busy || blocked) return;
         this.#emit(`wt-${name}`, { index });
       }}
       >${label}</wt-button
@@ -253,9 +271,11 @@ export class VariantTable extends LitElement {
       <td>
         ${
           variant.unitPrice ??
-          html`<span class="muted price-hint"
-            >${t("editor.same_as").replace("{value}", this.basePrice)}</span
-          >`
+          (this.basePrice
+            ? html`<span class="muted"
+                >${t("editor.same_as").replace("{value}", this.basePrice)}</span
+              >`
+            : nothing)
         }
       </td>
       <td>
@@ -263,6 +283,7 @@ export class VariantTable extends LitElement {
           name=${`available-${index}`}
           data-test=${`available-${index}`}
           label=${t("editor.available")}
+          hide-label
           .checked=${row.variant.available}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
@@ -281,7 +302,7 @@ export class VariantTable extends LitElement {
           >${
             variant.id === undefined
               ? nothing
-              : this.#action("open", index, t("editor.open_variant"), "secondary")
+              : this.#action("open", index, t("editor.open_variant"), "secondary", this.openBlocked)
           }${this.#action("edit", index, t("action.edit"), "secondary")}${
             variant.active
               ? this.#action("remove", index, t("action.remove"), "danger")
@@ -375,6 +396,11 @@ export class VariantTable extends LitElement {
         visible.length
           ? nothing
           : html`<p class="notice" data-test="no-variants">${t("editor.no_variants_status")}</p>`
+      }
+      ${
+        this.openBlocked && visible.some(({ variant }) => variant.id !== undefined)
+          ? html`<p class="notice" data-test="open-blocked">${t("editor.open_variant_blocked")}</p>`
+          : nothing
       }
       ${this.#reorder.liveRegion()}`;
   }

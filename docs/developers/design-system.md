@@ -217,7 +217,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
-| `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
+| `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (names the switch for assistive technology with `label` but draws no text beside it — for a switch in a table column whose heading already says what it is) | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors` | — |
@@ -564,8 +564,9 @@ required.
   (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
   product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
   like every option built from an expression. A choice that means "none" on a record of its own
-  (the product editor's "Each" unit, "— none —" station) is left out where the empty value already
-  means "fall back": offering both would read as one thing and save as another.
+  (in the product editor: `editor.unit_each` for the unit, `product.no_station` for the kitchen
+  station, `product.no_course` for the course) is left out where the empty value already means
+  "fall back": offering both would read as one thing and save as another.
 - **Any other control** (a category picker, the allergen and dietary picker, an image): a muted
   hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
   goes away once the record sets its own. An image shows the fallback picture itself under the hint

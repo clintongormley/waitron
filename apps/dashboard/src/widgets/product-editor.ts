@@ -46,7 +46,12 @@ import type {
   DietaryLabel,
   ProductRoutingChoice,
 } from "./product-editor-model.js";
-import { modifierKey, modifierListName, modifierListNames } from "./product-editor-model.js";
+import {
+  modifierKey,
+  modifierListName,
+  modifierListNames,
+  sameValue,
+} from "./product-editor-model.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenName, vatClassName } from "../i18n/domain.js";
@@ -220,6 +225,12 @@ export class ProductEditor extends LitElement {
         padding: var(--wt-space-4);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
+      }
+      /* At phone width the group's own inset is room the variants table needs for its row menu. */
+      @media (max-width: 30rem) {
+        .bordered-group {
+          padding-inline: var(--wt-space-2);
+        }
       }
       .bordered-group legend {
         padding-inline: var(--wt-space-1);
@@ -1064,6 +1075,8 @@ export class ProductEditor extends LitElement {
   /** The parent's quick variants section: the common fields inline, each variant's full set of
    * overrides on its own page (spec §4.4). */
   private renderVariants(unitLabel: string) {
+    // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
+    const unsaved = this.value !== null && !sameValue(this.draft, this.value);
     return html`${
         this.draft.variants.length
           ? html`<dashboard-variant-table
@@ -1080,6 +1093,7 @@ export class ProductEditor extends LitElement {
               ]}
               addUnitLabel=${t("editor.add_unit")}
               .busy=${this.suspended}
+              .openBlocked=${unsaved}
               .errors=${this.variantErrors}
               @wt-unit-change=${(event: CustomEvent<{ unitId: string | null }>) => {
                 event.stopPropagation();
@@ -1112,7 +1126,7 @@ export class ProductEditor extends LitElement {
               @wt-open=${(event: CustomEvent<{ index: number }>) => {
                 event.stopPropagation();
                 const id = this.draft.variants[event.detail.index]?.id;
-                if (this.suspended || id === undefined) return;
+                if (this.suspended || unsaved || id === undefined) return;
                 this.dispatchEvent(
                   new CustomEvent("wt-open-product", {
                     detail: { productId: id },

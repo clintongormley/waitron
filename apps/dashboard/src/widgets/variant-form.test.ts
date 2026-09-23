@@ -371,3 +371,8 @@ it("hints the main product's photo while the variant has none of its own", async
   });
   expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.inheritedImage).toBe("whole.png");
 });
+
+it("shows no price hint while the product has no base price yet", async () => {
+  const el = await mountForm({ basePrice: "" });
+  expect((field(el, "unitPrice") as unknown as { placeholder: string }).placeholder).toBe("");
+});

@@ -73,6 +73,33 @@ export function modifierListName(
   return names.get(modifierKey(ref)) ?? t("editor.missing_choice");
 }
 
+/**
+ * Whether two draft values hold the same data, whatever order their keys are in: a variant edited in
+ * its window comes back as a new object with its keys in that window's order. A key holding
+ * `undefined` counts as absent, as it does on the wire. Array order counts — it is the variant order
+ * and the modifier order the product saves.
+ */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b))
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((item, index) => sameValue(item, b[index]))
+    );
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = (value: Record<string, unknown>) =>
+    Object.keys(value).filter((key) => value[key] !== undefined);
+  const leftKeys = keys(left);
+  return (
+    leftKeys.length === keys(right).length &&
+    leftKeys.every((key) => sameValue(left[key], right[key]))
+  );
+}
+
 export interface EditorChoice {
   id: string;
   name: LocalizedText;

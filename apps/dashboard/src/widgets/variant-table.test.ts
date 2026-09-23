@@ -398,3 +398,44 @@ it("shows every row when a variant is added while the filter shows only Inactive
   await showStatus(el, "inactive");
   expect(cells(el, 1)).toHaveLength(1);
 });
+
+it("shows no price hint at all while the product has no base price yet", async () => {
+  const el = await mountTable({
+    basePrice: "",
+    variants: threeVariants().map((variant, index) =>
+      index === 0 ? { ...variant, unitPrice: null } : variant,
+    ),
+  });
+  expect(cells(el, 2)).toEqual(["", "12.00", "20.00"]);
+});
+
+it("disables Open and says why while the product has changes not yet saved", async () => {
+  const el = await mountTable({ openBlocked: true });
+  const open = listen(el, "wt-open");
+  const button = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    '[data-test="open-0"]',
+  )!;
+  expect(button.disabled).toBe(true);
+  button.click();
+  expect(open).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector('[data-test="open-blocked"]')!.textContent!.trim()).toBe(
+    t("editor.open_variant_blocked"),
+  );
+  // Edit and Remove act on the draft itself, so they stay available.
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>('[data-test="edit-0"]')!
+      .disabled,
+  ).toBe(false);
+  el.openBlocked = false;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="open-blocked"]')).toBeNull();
+  await click(el, "open-0");
+  expect(open).toHaveBeenCalledOnce();
+});
+
+it("names each row's availability switch without repeating the column heading beside it", async () => {
+  const el = await mountTable();
+  const toggle = el.shadowRoot!.querySelector('[data-test="available-0"]')!;
+  expect(toggle.hasAttribute("hide-label")).toBe(true);
+  expect(toggle.getAttribute("label")).toBe(t("editor.available"));
+});

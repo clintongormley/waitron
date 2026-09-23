@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { commands } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -17,6 +18,12 @@ import { allergenName } from "../i18n/domain.js";
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
 // cannot catch a defect in it.
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    setViewportSize: (width: number, height: number) => Promise<void>;
+  }
+}
+
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 const unit = { id: "unit-each", name: { en: "Each" }, abbreviation: { en: "ea" } };
@@ -1835,4 +1842,98 @@ it("paints a variant's description hint from the muted-text token", async () => 
   el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   const description = control<HTMLTextAreaElement>(el, "description-en");
   expect(getComputedStyle(description, "::placeholder").color).toBe("rgb(7, 8, 9)");
+});
+
+it("keeps every variant row's menu on screen at phone width, with no sideways scroll", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await commands.setViewportSize(390, 844);
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: {
+        ...product,
+        variants: [
+          { ...small, name: "Vino 125 ml", unitPrice: null },
+          { ...large, name: "Vino 175 ml" },
+          { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "12.00" },
+        ],
+      },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+    const table = variantTable(el)!;
+    await table.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const wrap = table.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
+    // A table that fits never needs its own scroller; the row menu is then inside the visible box.
+    expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+    const edge = wrap.getBoundingClientRect().right;
+    for (const index of [0, 1, 2]) {
+      const menu = table.shadowRoot!.querySelector(`[data-test="actions-${index}"]`)!;
+      expect(menu.getBoundingClientRect().right, `row ${index}`).toBeLessThanOrEqual(edge);
+    }
+  } finally {
+    await commands.setViewportSize(width, height);
+  }
+});
+
+it("holds Open, saying why, while the product has changes not yet saved, and frees it once they match", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const table = () => variantTable(el) as unknown as { openBlocked: boolean };
+  const opened = vi.fn();
+  el.addEventListener("wt-open-product", opened);
+  expect(table().openBlocked).toBe(false);
+  await input(el, "name", "Coffee to go");
+  expect(table().openBlocked).toBe(true);
+  // The row's own guard is not the only one: an Open that reaches the editor anyway is ignored.
+  await tableEvent(el, "wt-open", { index: 0 });
+  expect(opened).not.toHaveBeenCalled();
+  await input(el, "name", "Coffee");
+  expect(table().openBlocked).toBe(false);
+  await tableEvent(el, "wt-open", { index: 0 });
+  expect(opened).toHaveBeenCalledOnce();
+});
+
+it("counts a variant edit that ends where it started as no change, whatever order its fields come in", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await tableEvent(el, "wt-remove", { index: 1 });
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(true);
+  await tableEvent(el, "wt-restore", { index: 1 });
+  // The window hands a variant back as a NEW object with its keys in its own order.
+  const reordered = Object.fromEntries(Object.entries(small).reverse()) as EditorVariant;
+  await tableEvent(el, "wt-edit", { index: 0 });
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", { detail: { value: reordered }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(false);
+});
+
+it("frees Open once a save hands the editor the saved product back", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await input(el, "name", "Coffee to go");
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(true);
+  el.value = { ...product, name: "Coffee to go", variants: [small, large] };
+  await el.updateComplete;
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(false);
 });
