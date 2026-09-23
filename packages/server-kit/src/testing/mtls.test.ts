@@ -1,6 +1,7 @@
 import { request } from "node:https";
 import forge from "node-forge";
 import { describe, expect, it } from "vitest";
+import { certificate } from "../certificate.js";
 import { mintMtlsMaterial, startMtlsServer, type MtlsMaterial } from "./mtls.js";
 
 // Three RSA-2048 keypairs in pure JavaScript: minted once for the file.
@@ -28,6 +29,48 @@ function get(
     req.end();
   });
 }
+
+// A CA of the test's own, whose client certificates carry a subject `certificate()` cannot build:
+// the server is started trusting only this CA for clients, and still presents the shared server
+// certificate, which `get` verifies against the shared CA.
+const oddCaKeys = forge.pki.rsa.generateKeyPair(2048);
+const oddCaCert = certificate(
+  "odd-subject-ca",
+  oddCaKeys,
+  { cn: "odd-subject-ca", key: oddCaKeys.privateKey },
+  "02",
+  { notBefore: new Date(2026, 0, 1), notAfter: new Date(2030, 0, 1) },
+  [
+    { name: "basicConstraints", cA: true },
+    { name: "keyUsage", keyCertSign: true, digitalSignature: true },
+  ],
+);
+const oddClientKeys = forge.pki.rsa.generateKeyPair(2048);
+
+function clientWithSubject(
+  subject: forge.pki.CertificateField[],
+): Pick<MtlsMaterial, "clientPfx" | "clientPassphrase"> {
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = oddClientKeys.publicKey;
+  cert.serialNumber = "03";
+  cert.validity.notBefore = new Date(2026, 0, 1);
+  cert.validity.notAfter = new Date(2030, 0, 1);
+  cert.setSubject(subject);
+  cert.setIssuer([{ name: "commonName", value: "odd-subject-ca" }]);
+  cert.setExtensions([
+    { name: "basicConstraints", cA: false },
+    { name: "keyUsage", digitalSignature: true },
+    { name: "extKeyUsage", clientAuth: true },
+  ]);
+  cert.sign(oddCaKeys.privateKey, forge.md.sha256.create());
+  const p12 = forge.pkcs12.toPkcs12Asn1(oddClientKeys.privateKey, [cert, oddCaCert], "odd");
+  return {
+    clientPfx: Buffer.from(forge.asn1.toDer(p12).getBytes(), "binary"),
+    clientPassphrase: "odd",
+  };
+}
+
+const oddCaMaterial: MtlsMaterial = { ...material, caPem: forge.pki.certificateToPem(oddCaCert) };
 
 describe("mintMtlsMaterial", () => {
   it("mints a CA-signed server certificate and a PKCS#12 client bundle chained to the same CA", () => {
@@ -74,5 +117,37 @@ describe("startMtlsServer", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("records the first CN when the client certificate's subject has two CNs", async () => {
+    const server = await startMtlsServer(oddCaMaterial, "<ok/>");
+    try {
+      const client = clientWithSubject([
+        { name: "commonName", value: "first-cn" },
+        { name: "commonName", value: "second-cn" },
+      ]);
+      await expect(get(server.origin, client)).resolves.toEqual({ status: 200, body: "<ok/>" });
+      expect(server.sawClientCn()).toBe("first-cn");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves a client certificate with no CN and records none", async () => {
+    const server = await startMtlsServer(oddCaMaterial, "<ok/>");
+    try {
+      const client = clientWithSubject([{ name: "organizationName", value: "no-cn-org" }]);
+      await expect(get(server.origin, client)).resolves.toEqual({ status: 200, body: "<ok/>" });
+      expect(server.requests()).toBe(1);
+      expect(server.sawClientCn()).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a second close with the error Node reports", async () => {
+    const server = await startMtlsServer(material, "<ok/>");
+    await server.close();
+    await expect(server.close()).rejects.toMatchObject({ code: "ERR_SERVER_NOT_RUNNING" });
   });
 });

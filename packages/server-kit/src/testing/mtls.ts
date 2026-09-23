@@ -79,7 +79,10 @@ export function mintMtlsMaterial(): MtlsMaterial {
 
 export interface MtlsServer {
   origin: string;
-  /** The CN the last accepted connection presented, or null if no request has arrived. */
+  /**
+   * The CN the last accepted connection presented, or null if no request has arrived or the last
+   * one presented no CN.
+   */
   sawClientCn: () => string | null;
   /**
    * How many requests the handler has run. Node runs it only after the TLS handshake, client
