@@ -3348,18 +3348,15 @@ other three (`recipes`, `purchasing`, `workforce-es`) are at 100% on all four me
 the one source file that turns out to be measured by no coverage table at all are in
 [ci-and-gates.md](developers/ci-and-gates.md) → *Coverage thresholds are split by package*.
 
-**Two coverage questions are open for the owner, both deliberately not decided by the runner**,
-because each would change the BASIS of the 2026-09-05 split — which is consequence, the fiscal core
-and the data layer, not how well a package happens to be covered this week:
-
-- **Promote the packages that now clear the high bar?** Roughly half the floor packages clear
-  `98/98/98/95` on all four metrics with at least a point of margin, `ui` and `workforce` among them.
-  Promoting them would ratchet real coverage; it would also gate future work in packages the owner
-  put at the floor on purpose.
-- **Raise the floor's functions bar?** It is 85 and no package in the workspace comes within six
-  points of it — the lowest is 91.46 — so as a gate it is currently doing nothing. The packages
-  nearest it are small ones where one function moves the figure two or three points, which is the
-  argument against.
+**The two coverage questions T3 left open are ANSWERED (owner, 2026-09-23): every package goes to
+the high bar, `98/98/98/95`.** T3 had asked whether to promote the packages that already cleared it,
+and whether to raise the floor's functions minimum of 85, which no package came within six points
+of. The owner chose the whole bar over raising only the functions minimum to 95 or to 90, which
+retires the 2026-09-05 split "by consequence". **The first promotion is done**: 21 packages that
+already cleared all four metrics were promoted together, making 26 of the 46 members that run
+coverage. The other 20 get tests one package per pull request, each promoted as it reaches the bar,
+and the floor is retired when none is left on it. Figures and the list of the 20 are in
+[ci-and-gates.md](developers/ci-and-gates.md) → *The first promotion — measured 2026-09-23*.
 
 **What T2's review wave found, and it is the reason the run-it seat keeps its seat — OPEN as a
 lesson, nothing left to fix.** `is_production` in `deploy/waitron.sh` **failed OPEN**. It read the

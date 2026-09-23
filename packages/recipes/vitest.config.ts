@@ -20,7 +20,7 @@ export default defineConfig({
       // the coverage thresholds below (the same barrel exclusion packages/catalogue's own
       // vitest.config.ts records).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "test/**"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

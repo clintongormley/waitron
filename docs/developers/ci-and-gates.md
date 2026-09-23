@@ -98,15 +98,42 @@ unfiltered `main` run, not a wrong hook.
 
 ## Coverage thresholds are split by package
 
-Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` for the fiscal
-core and the data-layer foundations, and the `90/90/85/85` floor in every other package, browser
-packages included. Which packages hold the high bar is the owner's list rather than a rule that
-derives it (`apps/server` holds the AEAT transport and sits at the floor), and one place holds it
-authoritatively: `HIGH_BAR_PACKAGES` in `scripts/coverage-thresholds.test.ts`, which is also the
-guard that pins every config against it. A hardcoded list is safe there only because the root
-project is the one gate never narrowed away. Moving a package is an edit to that list, with the
-reason in the commit. Historical plans and specs under `docs/superpowers/` still say there are six;
-they record what was true when they were written and are left alone.
+**The goal is every package at `statements 98 / lines 98 / functions 98 / branches 95`** (owner
+decision 2026-09-23). That retires the split of 2026-09-05, which reserved the high bar for the fiscal
+core and the data-layer foundations "by consequence" and put every other package, browser packages
+included, at the `90/90/85/85` floor. The owner chose the whole bar over two narrower answers to the
+questions task T3 left open — raising only the floor's functions minimum, to 95 or to 90. The split
+stays in the code only while it is being retired: a package sits at the floor until tests bring it
+to the bar, and is promoted in the same change; the floor itself goes once no package is left on it.
+
+One place holds the list of promoted packages authoritatively: `HIGH_BAR_PACKAGES` in
+`scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it. A
+hardcoded list is safe there only because the root project is the one gate never narrowed away.
+Promoting a package is an edit to that list and to the package's `vitest.config.ts`, in one commit.
+Historical plans and specs under `docs/superpowers/` still say there are six high-bar packages; they
+record what was true when they were written and are left alone.
+
+### The first promotion — measured 2026-09-23
+
+`pnpm -r --no-bail --workspace-concurrency=4 test:coverage` on `9cd2fda58`: green in all 46 members
+that run coverage, 1,066 test files and 13,811 tests. Every member's
+`coverage/coverage-summary.json` was read, and none holds a path outside its own package directory
+(the sibling-prefix leak described below). **21 packages cleared `98/98/98/95` on all four metrics
+and were promoted together**, joining the five already there: `composition`, `country`,
+`country-es`, `country-gb`, `country-packs`, `credentials`, `dashboard-modules`, `diagnostics`,
+`fiscal`, `layouts`, `membership`, `migrations`, `module`, `purchasing`, `recipes`, `reporting`,
+`scheduler`, `shared`, `ui`, `workforce` and `workforce-es`. The nearest to its new bar is
+`scheduler`, 1.22 points over on statements; eighteen of the 21 are at 100% on all four.
+
+The 20 still under it, with the metric furthest below its bar — `printing` (functions, 1.23 short),
+`catalogue` (statements, 1.64), `bookings` (branches, 1.99), `tunnel` (functions, 2.48),
+`apps/server` (branches, 2.95), `apps/till` (branches, 3.10), `apps/print-agent` (branches, 3.65),
+`provisioning` (functions, 3.77), `payments-sumup` (functions, 3.89), `payments-stripe`
+(functions, 4.67), `server-kit` (branches, 5.00), `sync-enrolment` (functions, 5.15),
+`apps/dashboard` (branches, 6.16), `dashboard-kit` (branches, 6.34), `fiscal-none` (functions,
+6.34), `apps/setup` (functions, 6.42), `print-agent` (functions, 6.54), `identity` (branches, 7.38),
+`media` (branches, 7.80) and `venue-service` (branches, 8.07). These are one day's figures, not a
+standing list: the package's own `test:coverage` table is the receipt for any of them.
 
 Three live places repeated the list and all three were wrong at once. This file and `CLAUDE.md`
 went on naming four packages after the flip (#489) added `@waitron/store` and made it five;

@@ -58,7 +58,7 @@ export default defineConfig({
         ...coverageConfigDefaults.exclude,
         "demo/**",
         // Without this the hand-run generator counts as 0%-covered source and drags the package
-        // under its 90% floor — measured at 88.87% against an earlier, shorter draft of it — which
+        // under its coverage bar — measured at 88.87% against an earlier, shorter draft of it — which
         // would buy a test of a tool whose whole job is shelling out to a binary that is not a
         // workspace dependency. What the exclude gives up is coverage pressure to test that tool;
         // the property worth holding instead, that the apps' icon links and publicDir still agree
@@ -68,7 +68,7 @@ export default defineConfig({
         "src/a11y-helpers.ts",
         "src/tokens/token-test-helpers.ts",
       ],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

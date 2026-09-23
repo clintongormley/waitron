@@ -45,7 +45,7 @@ export default defineConfig({
       // (deterministic across repeated runs; drop index.test.ts and it is 100%). The package gate
       // reads the merged total, which is unaffected — do not chase that per-file row.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });
