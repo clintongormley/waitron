@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index } from "drizzle-orm/sqlite-core";
-import { bigCount, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { bigCount, count, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
 
@@ -54,6 +54,13 @@ export const products = table(
       /* v8 ignore start */
       .references(() => catalogues.id),
     /* v8 ignore stop */
+    // Set only on a VARIANT (spec §1.2, §15): the product it is a variant of. One level only,
+    // fixed when the row is created, and the row's `id` never changes either — all enforced by
+    // triggers, which cannot be declared here (0004_variant_one_level.sql;
+    // scripts/behavioural-triggers.test.ts). Same catalogue as the parent: the composite key below.
+    parentId: id("parent_id"),
+    // A variant's position among its parent's variants (spec §15.5); unused with no parent.
+    variantOrder: count("variant_order").notNull().default(0),
     // The primary category; catalogue replaces it together with the complete membership set.
     /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
@@ -74,10 +81,10 @@ export const products = table(
     customerName: json<Record<string, string>>("customer_name"),
     description: json<Record<string, string>>("description"),
     kitchenName: label("kitchen_name"),
-    dietaryDeclarations: json<string[]>("dietary_declarations").notNull().default([]),
-    pricingUnit: label("pricing_unit").notNull(),
-    unitPrice: money("unit_price").notNull(),
-    vatClass: label("vat_class").notNull(),
+    dietaryDeclarations: json<string[]>("dietary_declarations").default([]),
+    pricingUnit: label("pricing_unit"),
+    unitPrice: money("unit_price"),
+    vatClass: label("vat_class"),
     active: flag("active").notNull().default(true),
     // Whether this product may be sold on its own. sold_alone = false marks a full product (price, VAT,
     // allergens, category, unit) intended only to be referenced from elsewhere rather than offered
@@ -131,8 +138,18 @@ export const products = table(
   },
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),
-    // Target for the foreign keys that name a product. Used
-    // by working_order_lines_product_fk (schema/orders.ts): a draft line cannot price against a
+    unique("products_id_catalogue_key").on(t.id, t.catalogueId),
+    // Target of variants-as-products Task 3's key `(product_id, variant_id) → (parent_id, id)`.
+    unique("products_parent_id_key").on(t.parentId, t.id),
+    foreignKey({
+      columns: [t.parentId, t.catalogueId],
+      foreignColumns: [t.id, t.catalogueId],
+    }).onDelete("restrict"),
+    // A product with no parent owns every value a variant may inherit (spec §1.2, §15.3).
+    check(
+      "products_top_level_owns_ck",
+      sql`${t.parentId} is not null or (${t.vatClass} is not null and ${t.pricingUnit} is not null and ${t.unitPrice} is not null and ${t.dietaryDeclarations} is not null)`,
+    ),
     check("products_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
     check(
       "products_vat_class_ck",

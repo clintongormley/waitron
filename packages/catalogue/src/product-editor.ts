@@ -1,12 +1,20 @@
 import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal } from "@waitron/shared";
-import { readProductCategories, replaceProductCategories } from "./categories.js";
+import { categoryIdArray, replaceProductCategories } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import { readProductUnitId } from "./units.js";
+import { productCategories } from "./schema/categories.js";
+import { productUnits } from "./schema/units.js";
+import {
+  categoryOwnerJoin,
+  effectiveProductColumns as effective,
+  parentJoin,
+  parentProducts,
+  unitOwnerJoin,
+} from "./variant-fallback.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
@@ -15,37 +23,45 @@ export type { ProductEditorValue } from "./product-types.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
 
+/** The product's own names and flags, and its EFFECTIVE inherited values (`variant-fallback.ts`). */
 const columns = {
   id: products.id,
   name: products.name,
   customerName: products.customerName,
   soldAlone: products.soldAlone,
-  description: products.description,
+  description: effective.description,
   kitchenName: products.kitchenName,
-  image: products.image,
-  unitPrice: products.unitPrice,
+  image: effective.image,
+  unitPrice: effective.unitPrice,
   available: products.active,
-  vatClass: products.vatClass,
-  allergens: products.manualAllergens,
-  dietaryDeclarations: products.dietaryDeclarations,
-  stationId: products.stationId,
-  courseId: products.courseId,
+  vatClass: effective.vatClass,
+  allergens: effective.manualAllergens,
+  dietaryDeclarations: effective.dietaryDeclarations,
+  stationId: effective.stationId,
+  courseId: effective.courseId,
+  unitId: productUnits.unitId,
+  primaryCategoryId: effective.categoryId,
+  categoryIds: categoryIdArray,
 };
 
 export async function readProductEditor(
   tx: Transaction,
   productId: string,
 ): Promise<ProductEditorValue> {
-  const [row] = await tx.select(columns).from(products).where(eq(products.id, productId));
+  const [row] = await tx
+    .select(columns)
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(productCategories, categoryOwnerJoin)
+    .where(eq(products.id, productId))
+    .groupBy(products.id);
   if (!row) throw new AppError("product.not_found", { productId });
-  const categories = await readProductCategories(tx, productId);
   return {
     ...row,
     unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-    unitId: await readProductUnitId(tx, productId),
-    ...categories,
     // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
     // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],

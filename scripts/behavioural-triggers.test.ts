@@ -15,9 +15,12 @@ import {
   MISSING_PROFILE_REFUSAL,
   OPEN_PARENT_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
+  PRODUCT_ID_FIXED_REFUSAL,
   REGISTER_BINDING_REFUSAL,
   TRANSITION_REFUSAL,
   VARIANT_LOCALES_REFUSAL,
+  VARIANT_ONE_LEVEL_REFUSAL,
+  VARIANT_PARENT_FIXED_REFUSAL,
 } from "../packages/db/src/trigger-refusals.js";
 
 /**
@@ -33,6 +36,9 @@ import {
  * `--custom` SQL, a trigger has never been declarable in TypeScript, and regenerating every
  * migration set from the schema for the storage switch dropped all of them. They are restored by
  * `packages/db/drizzle/0001_behavioural_triggers.sql`.
+ *
+ * It also holds `packages/db/drizzle/0004_variant_one_level.sql`'s three triggers on `products`: a
+ * variant is one level deep, keeps the parent it was created with, and no product's id changes.
  *
  * **It migrates through `applyMigrations`, like `scripts/append-only-triggers.test.ts` beside it,
  * and for the same reason**: a guard that installs the thing under test cannot see the product
@@ -54,20 +60,25 @@ import {
  * rules through the product's write paths; they are a different claim — that the CALLER is refused
  * — and they do not establish that the database refuses a caller that goes around them.)
  *
- * WHAT IT DOES NOT COVER. `INSERT OR REPLACE` and `INSERT … ON CONFLICT DO UPDATE` are not tried
- * against these triggers; a `BEFORE INSERT` trigger fires on both, and a `BEFORE UPDATE` one fires
- * on the conflict path, but neither shape is exercised below. Nor is any concurrency claim: one
- * connection, one process.
+ * WHAT IT DOES NOT COVER. `INSERT … ON CONFLICT DO UPDATE` is not tried against any of these
+ * triggers, though a `BEFORE INSERT` trigger fires on it and a `BEFORE UPDATE` one on its conflict
+ * path. `INSERT OR REPLACE` is tried only against `products_variant_one_level_insert` and
+ * `UPDATE OR REPLACE` only against `products_id_fixed_update`, both of
+ * `0004_variant_one_level.sql`; no other trigger here, media's triggers on `products` included, is
+ * tried with either. Nor is any concurrency claim: one connection, one process.
  */
 
 /**
  * Every behavioural trigger the migration creates, pinned by name.
  *
- * FOURTEEN names for NINE rules. SQLite has no `BEFORE INSERT OR UPDATE` — one trigger takes
- * exactly one event — so the three that covered more than one event are split, and the suffix names
- * the event. That split is the engine's; the rules are unchanged. The binding rule's two names are
- * PostgreSQL's own: it split that one itself, so that an UPDATE touching no binding column never
- * pays for the profile lookup.
+ * FOURTEEN names for the NINE rules of `0001_behavioural_triggers.sql`. SQLite has no `BEFORE
+ * INSERT OR UPDATE` — one trigger takes exactly one event — so the three that covered more than one
+ * event are split, and the suffix names the event. That split is the engine's; the rules are
+ * unchanged. The binding rule's two names are PostgreSQL's own: it split that one itself, so that an
+ * UPDATE touching no binding column never pays for the profile lookup.
+ *
+ * Plus the three `products_*` names of `0004_variant_one_level.sql`. They live on `products`, so a
+ * later migration that RECREATES that table drops them silently — this list is what notices.
  */
 /**
  * The other triggers a fully migrated venue carries, and why they are named here.
@@ -94,6 +105,9 @@ const EXPECTED_TRIGGERS = [
   "device_binding_rule_insert",
   "device_binding_rule_update",
   "device_profile_form_factor_locked",
+  "products_id_fixed_update",
+  "products_variant_one_level_insert",
+  "products_variant_parent_fixed_update",
   "sale_settlements_check_coverage",
   "tenders_reject_post_settlement",
   "working_order_lines_check_locales_insert",
@@ -753,6 +767,157 @@ describe("device_profile_form_factor_locked", () => {
     connection.exec(`update devices set active = 0 where id = 'dev-active'`);
     expect(
       refusalFor(connection, `update device_profiles set form_factor = 'kds' where id = 'dp-used'`),
+    ).toBeUndefined();
+  });
+});
+
+/**
+ * A product row. Foreign keys and checks are off in this file (see `seed`), so a variant needs no
+ * catalogue row and may leave every inherited column null.
+ */
+function product(id, parentId = null) {
+  const parent = parentId === null ? "null" : `'${parentId}'`;
+  return (
+    `insert into products (id, catalogue_id, parent_id, name, created_at, updated_at) ` +
+    `values ('${id}', 'cat', ${parent}, '${id}', '${STAMP}', '${STAMP}')`
+  );
+}
+
+/** The same row written with `INSERT OR REPLACE`. */
+function replaceProduct(id, parentId = null) {
+  return product(id, parentId).replace("insert into", "insert or replace into");
+}
+
+/** The stored `parent_id` of a product, or `undefined` when no row has that id. */
+function parentOf(id) {
+  return connection.prepare(`select parent_id from products where id = ?`).get(id)?.parent_id;
+}
+
+describe("products_variant_one_level_insert", () => {
+  // Order matters: the rows these cases name are written by the first cases, and the blocks after
+  // this one use them too, as the file's other blocks share one seeded connection.
+  it("accepts a variant naming a parent that has no parent", () => {
+    expect(refusalFor(connection, product("p-top"))).toBeUndefined();
+    expect(refusalFor(connection, product("p-other-top"))).toBeUndefined();
+    expect(refusalFor(connection, product("p-lonely"))).toBeUndefined();
+    expect(refusalFor(connection, product("p-var", "p-top"))).toBeUndefined();
+  });
+
+  it("accepts a second variant under the same parent", () => {
+    expect(refusalFor(connection, product("p-var-2", "p-top"))).toBeUndefined();
+  });
+
+  it("refuses a product whose parent is itself a variant", () => {
+    expect(refusalFor(connection, product("p-grand", "p-var"))).toBe(VARIANT_ONE_LEVEL_REFUSAL);
+  });
+
+  it("raises through the trigger class, not through a foreign key", () => {
+    expect(errcodeFor(connection, product("p-grand-2", "p-var"))).toBe(1811);
+  });
+
+  it("refuses a product naming itself as its parent", () => {
+    expect(refusalFor(connection, product("p-self", "p-self"))).toBe(VARIANT_ONE_LEVEL_REFUSAL);
+  });
+
+  // With foreign keys off here — or deferred, as configuration transfer runs them — a variant can be
+  // written before the parent it names. The parent then arrives with a child already in place.
+  it("refuses a product naming a parent when it already has a variant of its own", () => {
+    expect(refusalFor(connection, product("p-early-child", "p-late"))).toBeUndefined();
+    expect(refusalFor(connection, product("p-late", "p-top"))).toBe(VARIANT_ONE_LEVEL_REFUSAL);
+  });
+
+  it("accepts a top-level product whose variant was written before it", () => {
+    expect(refusalFor(connection, product("p-early-child-2", "p-late-top"))).toBeUndefined();
+    expect(refusalFor(connection, product("p-late-top"))).toBeUndefined();
+  });
+
+  // `INSERT OR REPLACE` runs this insert trigger while the row it replaces is still in the table,
+  // and never runs the update trigger, so the fixed parent is this trigger's to hold here.
+  it("refuses an INSERT OR REPLACE moving a variant to another parent", () => {
+    expect(refusalFor(connection, replaceProduct("p-var-2", "p-other-top"))).toBe(
+      VARIANT_PARENT_FIXED_REFUSAL,
+    );
+  });
+
+  it("refuses an INSERT OR REPLACE making a variant a top-level product", () => {
+    expect(refusalFor(connection, replaceProduct("p-var-2"))).toBe(VARIANT_PARENT_FIXED_REFUSAL);
+  });
+
+  it("accepts an INSERT OR REPLACE of a variant under the parent it already has", () => {
+    expect(refusalFor(connection, replaceProduct("p-var-2", "p-top"))).toBeUndefined();
+    expect(parentOf("p-var-2")).toBe("p-top");
+  });
+});
+
+describe("products_variant_parent_fixed_update", () => {
+  it("refuses giving a top-level product a parent", () => {
+    expect(
+      refusalFor(connection, `update products set parent_id = 'p-top' where id = 'p-lonely'`),
+    ).toBe(VARIANT_PARENT_FIXED_REFUSAL);
+  });
+
+  // A product that already HAS variants being made a variant of something else would be a second
+  // level the insert trigger never saw.
+  it("refuses giving a parent that has variants a parent of its own", () => {
+    expect(
+      refusalFor(connection, `update products set parent_id = 'p-other-top' where id = 'p-top'`),
+    ).toBe(VARIANT_PARENT_FIXED_REFUSAL);
+  });
+
+  it("refuses moving a variant to another parent", () => {
+    expect(
+      refusalFor(connection, `update products set parent_id = 'p-other-top' where id = 'p-var'`),
+    ).toBe(VARIANT_PARENT_FIXED_REFUSAL);
+  });
+
+  it("refuses clearing a variant's parent", () => {
+    expect(refusalFor(connection, `update products set parent_id = null where id = 'p-var'`)).toBe(
+      VARIANT_PARENT_FIXED_REFUSAL,
+    );
+  });
+
+  it("accepts any other change to a variant", () => {
+    expect(
+      refusalFor(connection, `update products set name = 'Renamed', active = 0 where id = 'p-var'`),
+    ).toBeUndefined();
+  });
+});
+
+describe("products_id_fixed_update", () => {
+  // A child naming an id nobody holds yet, then a variant renamed to that id: the child's parent
+  // is now a variant, a second level no insert trigger saw.
+  it("refuses renaming a variant onto the id a waiting child names", () => {
+    expect(refusalFor(connection, product("p-waiting-child", "p-missing"))).toBeUndefined();
+    expect(refusalFor(connection, `update products set id = 'p-missing' where id = 'p-var'`)).toBe(
+      PRODUCT_ID_FIXED_REFUSAL,
+    );
+    expect(parentOf("p-var")).toBe("p-top");
+  });
+
+  it("refuses changing the id of a product that has variants", () => {
+    expect(
+      refusalFor(connection, `update products set id = 'p-top-renamed' where id = 'p-top'`),
+    ).toBe(PRODUCT_ID_FIXED_REFUSAL);
+  });
+
+  it("refuses changing the id of a top-level product with no variants", () => {
+    expect(
+      refusalFor(connection, `update products set id = 'p-lonely-renamed' where id = 'p-lonely'`),
+    ).toBe(PRODUCT_ID_FIXED_REFUSAL);
+  });
+
+  // The replace deletes the variant and leaves a top-level row under its id: its parent cleared by
+  // a statement that never names `parent_id`.
+  it("refuses an UPDATE OR REPLACE moving a top-level product onto a variant's id", () => {
+    expect(
+      refusalFor(connection, `update or replace products set id = 'p-var-2' where id = 'p-lonely'`),
+    ).toBe(PRODUCT_ID_FIXED_REFUSAL);
+    expect(parentOf("p-var-2")).toBe("p-top");
+  });
+
+  it("accepts an update that writes a product's id back unchanged", () => {
+    expect(
+      refusalFor(connection, `update products set id = id, name = 'Same id' where id = 'p-var'`),
     ).toBeUndefined();
   });
 });

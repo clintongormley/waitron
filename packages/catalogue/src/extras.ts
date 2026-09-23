@@ -29,7 +29,8 @@ import "./errors.js";
  *
  * Only null and undefined fall through — `"0.00"` is a price a venue chose and is kept, which is
  * what makes a free bread expressible. VAT does not resolve this way at all: an extra always carries
- * its product's own rate.
+ * its product's rate — the product's own, or its parent's where a variant leaves it blank — never
+ * the dish's.
  *
  * `undefined` back means the chain ran out: no menu price, no price on the item, and no product row
  * to borrow one from. The caller decides what that means — `readMenuExtras` (extra-projection.ts)
@@ -57,7 +58,7 @@ const listColumns = {
   active: extraLists.active,
 };
 // No name of any kind: an item's three names, VAT class, allergens, dietary labels and photo all
-// come from the `products` row it names (spec §3.1).
+// come from the product it names (spec §3.1).
 const itemColumns = {
   id: extraListItems.id,
   productId: extraListItems.productId,

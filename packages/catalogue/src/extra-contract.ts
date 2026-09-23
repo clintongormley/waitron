@@ -237,9 +237,10 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
  * counts as TWO towards the list's own bounds, so "choose one bread" is `minPicks = maxPicks = 1`
  * whatever an item's `maxQuantity` allows.
  *
- * VAT is untouched here: an extra always carries its product's own rate (spec
+ * VAT is untouched here: an extra always carries its product's rate — the product's own, or its
+ * parent's where a variant leaves it blank — never the dish's (spec
  * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.3), which the order path
- * resolves from the `products` row.
+ * resolves from the product's `products` row and, for a variant, its parent's.
  */
 export function validateExtraSelections(
   lists: readonly ExtraList[],

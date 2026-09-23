@@ -999,6 +999,7 @@ async function resolvePreparationRouteOutcomes(
   const outcomes = new Map<string, PreparationRouteOutcome>();
   if (ids.length === 0) return outcomes;
   await resolveZoneContext(tx, cfg, zoneId);
+  // Until variants-as-products Task 5 a variant misses its parent's routes: own id, RAW category.
   const productRows = await tx
     .select({ id: products.id, categoryId: products.categoryId })
     .from(products)

@@ -65,7 +65,10 @@ import {
   readContentLanguages,
   selectMenuVariant,
   customerPresentationText,
+  effectiveProductColumns,
   kitchenPresentationName,
+  parentJoin,
+  parentProducts,
   staffPresentationName,
 } from "@waitron/catalogue";
 import type {
@@ -188,9 +191,11 @@ async function resolveBasketModifiers(
         name: products.name,
         customerName: products.customerName,
         kitchenName: products.kitchenName,
-        vatClass: products.vatClass,
+        // A variant that leaves its VAT blank is taxed at its parent's rate.
+        vatClass: effectiveProductColumns.vatClass,
       })
       .from(products)
+      .leftJoin(parentProducts, parentJoin)
       .where(inArray(products.id, offeredProductIds));
     for (const row of rows) {
       extraProducts.set(row.id, {
@@ -233,9 +238,10 @@ async function priceOrderLines(
   // Extras and options (spec §2.3, §3.4): a line MAY carry `options` — one answer per ACTIVE options
   // list its dish attaches, frozen onto the dish row as `option_snapshots` — and `extras`, whose picks
   // each become a CHILD row carrying the picked PRODUCT, its three frozen names, the offer's resolved
-  // price and that product's OWN vat class. Both are validated against the definitions resolved for the
-  // whole basket above. Absent/empty = a plain single line, except that an ACTIVE options list must
-  // still be answered.
+  // price and that product's vat class — its own, or its parent's where a variant leaves it blank,
+  // never the dish's. Both are validated against the definitions resolved for the whole basket
+  // above. Absent/empty = a plain single line, except that an ACTIVE options list must still be
+  // answered.
   //
   // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note`, which is
   // NON-FISCAL. It is trimmed and length-capped (`working_order.note_too_long`), and attaches to the
@@ -1160,6 +1166,7 @@ export async function fireLines(
 
   // Read the legacy product and category station overrides in one batch. A missing category yields a
   // null route; modifier children have already been removed from this list.
+  // RAW columns until variants-as-products Task 5: an inheriting variant gets the default station.
   const productIds = [
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
@@ -3963,6 +3970,7 @@ async function readQueueSubItems(
   // dietary labels, taken from the PRODUCT the child line names (LEFT join, so a child whose product
   // row has gone still renders its frozen text). Shown beside the dish's own; no fold, because the
   // dish's figures and each extra's are independent.
+  // RAW columns until variants-as-products Task 5: an inheriting variant extra SILENTLY shows none.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
@@ -3989,6 +3997,7 @@ async function readQueueSubItems(
   // Each parent line's OWN allergens and diet — the PARENT line's product (LEFT join: a null base is
   // allowed and yields `pending: true`). No modifier contribution: each dish shows its own
   // recipe-derived figures, and each extra's own list is shown separately.
+  // RAW columns, as above: an inheriting variant dish reads allergens unreviewed and no labels.
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,

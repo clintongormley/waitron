@@ -65,7 +65,7 @@ An **extras list** bounds how many picks it takes — `minPicks` 0 makes it opti
 it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with
 `maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
-or photo, which all come from the `products` row (spec §3.1). A product may appear at most once in
+or photo, which all come from the product (spec §3.1). A product may appear at most once in
 one list (`extra_list_items_list_product_uq`).
 
 ### Attaching a list to a dish
@@ -106,12 +106,14 @@ lists and NONE of its extras lists, because an extras list reaches an offer only
 
 Three rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`, spec §3.3):
 the menu offer's `menu_item_extra_items.price`, then the list item's own `price`, then the product's
-`unit_price`. A null at a rung means "ask the next one". Every price on the wire is a GROSS
-(VAT-inclusive) two-place decimal string; the column underneath holds a count of whole cents and the
-row converts (`decimalToCents` / `centsToDecimal`, `packages/shared/src/cents.ts`).
+`unit_price` (its own, or its parent's where a variant leaves it blank). A null at a rung means "ask
+the next one". Every price on the wire is a GROSS (VAT-inclusive) two-place decimal string; the
+column underneath holds a count of whole cents and the row converts (`decimalToCents` /
+`centsToDecimal`, `packages/shared/src/cents.ts`).
 
-The VAT class is never resolved that way — an extra always carries the picked PRODUCT's own VAT
-class, because it is sold as that product.
+The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT class,
+because it is sold as that product: the product's own, or its parent's where a variant leaves it
+blank, and never the dish's.
 
 ### The dashboard
 
@@ -163,7 +165,8 @@ the basket resolved, and decides what is stored:
   list's three and the chosen label's three — and no ids at all, so renaming or deleting a list
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
-  that product's three frozen names, the price the offer resolved and the product's OWN VAT class.
+  that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class (its
+  own, or its parent's where a variant leaves it blank — never the dish's).
   The child's stored quantity is dish quantity × pick quantity.
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than its `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
@@ -287,8 +290,8 @@ Five things it is worth knowing about that payload:
   `menu_item_extra_items` (spec §3.2) — and a list the offer does not publish is left out of the
   walk entirely.
 - **Every price is settled**: the menu's price, then the list item's, then the product's
-  `unit_price` (spec §3.3). A till has no way to walk that chain itself, because the last rung is
-  not on the list item.
+  `unit_price` — its own, or its parent's where a variant leaves it blank (spec §3.3). A till has
+  no way to walk that chain itself, because the last rung is not on the list item.
 - **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
   is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
   (`option-contract.ts`) will accept an answer from. That agreement is the reason the order path
@@ -296,12 +299,16 @@ Five things it is worth knowing about that payload:
   file: a required list the picker never drew would refuse the order with `options.label_required`
   or `extras.limit_exceeded`, and an offered list the server does not know about would be refused
   as `options.invalid`.
-- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its own VAT class,
-  its allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
-  them (spec §3.1). The two declaration fields take the names a CHILD LINE uses on the kitchen and
-  expo screens — `addAllergens` and `suitableFor`, the same two values `readQueueSubItems`
-  (`apps/server/src/working-order.ts`) hands those screens — because a pick is what becomes such a
-  line. Shown beside the dish's own, never folded into them (spec §3.4).
+- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
+  allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
+  them (spec §3.1). Each is the product's own or, where a variant leaves it blank, its parent's —
+  except the names, which are always the variant's own. The two declaration fields take the names
+  a CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`, the field
+  names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens — because a
+  pick is what becomes such a line. That kitchen read takes the product's RAW columns until Task 5
+  of `docs/superpowers/plans/2026-09-23-variants-as-products.md`, so an extra that is a variant
+  inheriting its parent's declarations shows none there. Shown beside the dish's own, never folded
+  into them (spec §3.4).
 
 ## On the filed sale
 

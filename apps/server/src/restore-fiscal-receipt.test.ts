@@ -164,9 +164,9 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
       const sourceTriggers = triggersOf(suite.db);
       // The ledger's own pair is PRESENT — a containment check, not an exhaustive list of every
       // trigger in the database. The exhaustive form was only ever true because nothing else
-      // created one; the core set's twelve behavioural triggers
-      // (`packages/db/drizzle/0001_behavioural_triggers.sql`) are legitimately here too, and a
-      // list that grows with them says nothing about this ledger. What this case is for is
+      // created one; the triggers the migration files write — core's behavioural rules
+      // (`packages/db/drizzle/0001_behavioural_triggers.sql`) among them — are legitimately here
+      // too, and a list that grows with them says nothing about this ledger. What this case is for is
       // unchanged, and step 4 below still compares the WHOLE set across the restore.
       expect(sourceTriggers.map((t) => t.name)).toEqual(
         expect.arrayContaining([

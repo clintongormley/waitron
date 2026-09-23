@@ -54,9 +54,10 @@
 // while no declaration holds it. A hand-written foreign key, index or named check on a table the
 // subject set builds therefore fails this suite. Three things are outside it: a check with no name
 // (`checksInDdl` says why), anything the set creates on a prerequisite's table, and every trigger —
-// core's `drizzle/0001_behavioural_triggers.sql` and media's `drizzle/0001_image_references.sql`
-// are both live cases. Why the three lists the core caller used to carry went, and the measurement that said
-// nothing was given up with them, are recorded at that caller.
+// core's `drizzle/0001_behavioural_triggers.sql` and `drizzle/0004_variant_one_level.sql`, and
+// media's `drizzle/0001_image_references.sql`, are live cases. Why the three lists the core caller
+// used to carry went, and the measurement that said nothing was given up with them, are recorded at
+// that caller.
 import { is, SQL, sql } from "drizzle-orm";
 import {
   getTableConfig,

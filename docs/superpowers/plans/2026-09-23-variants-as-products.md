@@ -56,7 +56,7 @@ Measured on `main` on 2026-09-23:
   (`packages/catalogue/src/variants.ts:263-264`).
 - **Variants are sellable only on the menu-offer path** (an order with a service zone). The plain
   `productId` path refuses a `variantId` with `management.request_invalid`
-  (`apps/server/src/working-order.ts:381-383`). This plan keeps that.
+  (`priceOrderLines`, `apps/server/src/working-order.ts`). This plan keeps that.
 - **`working_order_lines.product_id` is always the PARENT today**; the chosen variant sits in a
   separate `variant_id` column with no foreign key. **`sale_lines` carries `variant_id` too.**
 - **No variant data reaches the fiscal hash.** `backend.recordSale` receives header fields only
@@ -161,15 +161,16 @@ improvised around.
 - **V15 (plan) — `listProductVariantsForProducts` is deleted in Task 5** (spec §4.5, §8) once the
   order path decides from the offer; `listProductVariants` stays for the editor.
 - **V16 (plan) — Extras obey Active and Available too.** Spec §15.6 says the till offers an item
-  only when it is both; the extras read (`offered-modifiers.ts:128-143`) and the order path's extras
-  read (`working-order.ts:185-193`) filter on neither today. Task 2 adds the filter. A variant may be
-  an extras item like any product; its child line freezes the variant's own names (V2) and its
-  effective VAT and price.
+  only when it is both; the extras read (`readExtraProducts`, `offered-modifiers.ts`) and the order
+  path's extras read (`resolveBasketModifiers`, `working-order.ts`) filter on neither today. Task 2
+  adds the filter. A variant may be an extras item like any product; its child line freezes the
+  variant's own names (V2) and its effective VAT and price.
 - **Stored and resolved prices are different fields (plan).** `MenuItem.grossPrice` is the STORED
   menu price (`string` until Task 4, then `string | null`); `MenuOffer.unitPrice` is the RESOLVED
-  price the till and the order path charge (added in Task 3, and what `working-order.ts:299` reads
-  from then on instead of `grossPrice`); nested variants are `MenuOfferVariant` (Task 3), carrying
-  both the resolved `unitPrice` and the stored `menuPrice` and `offered` the menu screen needs.
+  price the till and the order path charge (added in Task 3, and what `priceOrderLines` in
+  `working-order.ts` reads from then on instead of `grossPrice`); nested variants are
+  `MenuOfferVariant` (Task 3), carrying both the resolved `unitPrice` and the stored `menuPrice` and
+  `offered` the menu screen needs.
 
 ## Global Constraints
 
@@ -302,19 +303,31 @@ and the `product_units` unit row — a variant with NO row of its own reads its 
 `customer_name`, `kitchen_name`, `active`, `sold_alone`, `parent_id`, `variant_order`, timestamps (and
 Task 2's `available`).
 
-- [ ] **Step 1: Write the failing trigger cases.** In `scripts/behavioural-triggers.test.ts`, add a
-  `describe("a variant has exactly one level")` block migrated through `applyMigrations` like the
-  file's other blocks, each case asserting the exact refusal text, each with an accepting control:
+- [ ] **Step 1: Write the failing trigger cases.** In `scripts/behavioural-triggers.test.ts`, add one
+  `describe` block per trigger, named after it, migrated through `applyMigrations` like the file's
+  other blocks, each case asserting the exact refusal text, each with an accepting control:
   - inserting a product whose `parent_id` names a product that itself has a `parent_id` →
     `VARIANT_ONE_LEVEL_REFUSAL`; control: naming a parent with no parent is accepted.
   - updating `parent_id` on an existing row — setting it on a top-level product (including one that
-    HAS variants, the only way a second level could otherwise arise), changing it, or clearing it →
+    HAS variants), changing it, or clearing it →
     `VARIANT_PARENT_FIXED_REFUSAL`; control: updating any other column of a variant is accepted, and
     inserting a second variant under the same parent is accepted.
   - a product naming itself as parent → `VARIANT_ONE_LEVEL_REFUSAL`.
-  Two triggers make the whole rule: a new row has no children yet, so the insert trigger only checks
-  the parent it names, and every later way to a second level is an update of `parent_id`, which the
-  fixed-parent trigger refuses outright. Add both names to the file's name pin.
+  - a new row naming a parent when a variant naming IT was already written (foreign keys deferred) →
+    `VARIANT_ONE_LEVEL_REFUSAL`; control: the same order with the new row top-level is accepted.
+  - `INSERT OR REPLACE` of a variant naming another top-level parent, or none →
+    `VARIANT_PARENT_FIXED_REFUSAL` (naming a variant as the parent is refused first, with
+    `VARIANT_ONE_LEVEL_REFUSAL`);
+    control: the same replace naming the parent it already has is accepted.
+  - changing a product's `id` → `PRODUCT_ID_FIXED_REFUSAL`, including a variant renamed onto an id a
+    waiting child names, and `UPDATE OR REPLACE` onto a variant's id; control: an update writing the
+    same id back is accepted.
+  Three triggers make the whole rule. The insert trigger checks the parent a new row names, and also
+  that the new row has no variants already, because deferred foreign keys let a variant be written
+  before its parent; it also refuses an `INSERT OR REPLACE` that names a different parent from the
+  row it replaces, which the update triggers never see. Every UPDATE route to a second level changes
+  `parent_id` or `id`, and the other two triggers refuse each outright. Add all three names to the
+  file's name pin.
 
 - [ ] **Step 2: Write the failing schema-constraint entries.** In `scripts/schema-constraints.test.ts`
   add the foreign-key entry `["products", ["parent_id", "catalogue_id"], "products"]` (this guard's
@@ -334,10 +347,10 @@ Task 2's `available`).
   `packages/db/src/schema/catalogue.ts`:
 
 ```ts
-    // Set only on a VARIANT (spec §1.2, §15): the product it is a variant of. One level only, and
-    // fixed once set — both enforced by triggers, which cannot be declared here
-    // (0004_variant_one_level.sql; scripts/behavioural-triggers.test.ts). Same catalogue as the
-    // parent: the composite key below.
+    // Set only on a VARIANT (spec §1.2, §15): the product it is a variant of. One level only,
+    // fixed when the row is created, and the row's `id` never changes either — all enforced by
+    // triggers, which cannot be declared here (0004_variant_one_level.sql;
+    // scripts/behavioural-triggers.test.ts). Same catalogue as the parent: the composite key below.
     parentId: id("parent_id"),
     // A variant's position among its parent's variants (spec §15.5); unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),
@@ -379,35 +392,73 @@ Task 2's `available`).
      must carry the composite key and the check.
   3. Run `pnpm --filter @waitron/db db:generate:custom --name=variant_one_level` and write
      `0004_variant_one_level.sql` in the style of `0001_behavioural_triggers.sql` (a body of
-     `select raise(abort, '…') where <refused case>;`, one trigger per event). Its header says the
+     `SELECT raise(abort, '…') WHERE <refused case>;`). Its header says the
      triggers live on `products` and that **any later migration that recreates `products` drops
      them** — the name pin in `scripts/behavioural-triggers.test.ts` is what notices.
 
+  The file below its header, verbatim:
+
 ```sql
-create trigger products_variant_one_level_insert before insert on products
-begin
-  select raise(abort, 'a variant''s parent must be a product with no parent')
-  where new.parent_id is not null
-    and (new.parent_id = new.id
-      or (select parent_id from products where id = new.parent_id) is not null);
-end;
+-- A new row naming a parent is refused when that parent is the row itself or is a variant, or when
+-- the new row already has variants of its own. The last case exists because foreign keys can be
+-- deferred, as configuration transfer defers them (`apps/server/src/configuration-transfer.ts`),
+-- so a variant can be written before the parent it names.
+--
+-- The second statement holds the fixed parent on an insert that names a taken id. This trigger runs
+-- before the conflict is resolved, while the stored row is still in the table, so any such insert
+-- naming a different parent is refused whatever its conflict clause, when the one-level check has
+-- not already refused it — among them `INSERT OR REPLACE`, which never runs the update trigger
+-- below, and a plain insert, before the primary key sees it.
+CREATE TRIGGER products_variant_one_level_insert
+BEFORE INSERT ON products
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a variant''s parent must be a product with no parent, and a variant cannot have variants of its own')
+  WHERE new.parent_id IS NOT NULL
+    AND (new.parent_id = new.id
+      OR (SELECT parent_id FROM products WHERE id = new.parent_id) IS NOT NULL
+      OR exists (SELECT 1 FROM products WHERE parent_id = new.id));
+  SELECT raise(abort, 'a variant''s parent is fixed when it is created')
+  WHERE exists (SELECT 1 FROM products WHERE id = new.id AND parent_id IS NOT new.parent_id);
+END;
 --> statement-breakpoint
-create trigger products_variant_parent_fixed_update before update of parent_id on products
-begin
-  select raise(abort, 'a variant''s parent is fixed when it is created')
-  where new.parent_id is not old.parent_id;
-end;
+-- `parent_id` never changes after insert: not set on a top-level product, not moved, not cleared.
+CREATE TRIGGER products_variant_parent_fixed_update
+BEFORE UPDATE OF parent_id ON products
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a variant''s parent is fixed when it is created')
+  WHERE new.parent_id IS NOT old.parent_id;
+END;
+--> statement-breakpoint
+-- `id` never changes after insert. Without this an UPDATE reaches a second level, or clears a
+-- parent, without naming `parent_id`: a variant renamed onto an id a waiting child already names
+-- (foreign keys deferred) makes a second level, and `UPDATE OR REPLACE` moving a top-level row onto
+-- a variant's id deletes the variant and leaves a top-level row in its place.
+CREATE TRIGGER products_id_fixed_update
+BEFORE UPDATE OF id ON products
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a product''s id never changes')
+  WHERE new.id IS NOT old.id;
+END;
 ```
 
-  Put the two messages in `trigger-refusals.ts` as `VARIANT_ONE_LEVEL_REFUSAL` and
-  `VARIANT_PARENT_FIXED_REFUSAL`, exported from `packages/db/src/index.ts`.
+  The insert trigger also refuses a new row that names a parent and already has variants, because
+  deferred foreign keys (as configuration transfer runs them) let a variant be written before the
+  parent it names — `scripts/behavioural-triggers.test.ts`'s case "refuses a product naming a parent
+  when it already has a variant of its own".
+
+  Put the messages in `trigger-refusals.ts` as `VARIANT_ONE_LEVEL_REFUSAL`,
+  `VARIANT_PARENT_FIXED_REFUSAL` and `PRODUCT_ID_FIXED_REFUSAL`, the first two exported from
+  `packages/db/src/index.ts`.
 
 - [ ] **Step 6: Prove the migration APPLIES, and record the upgrade result.** Run
   `pnpm --filter @waitron/db exec vitest run` and `pnpm --filter @waitron/catalogue exec vitest run
   src/migrations.test.ts` — both migrate fresh databases inside the migrator's transaction, the case
   the schema guard cannot see. Add no test that the media triggers survive on a fresh database (media
-  migrates after core there, and the name pin at `scripts/behavioural-triggers.test.ts:322-331`
-  already asserts those names, so it could not fail). Re-run the upgrade once on the final migrations
+  migrates after core there, and the `IMAGE_REFERENCE_TRIGGERS` name pin in
+  `scripts/behavioural-triggers.test.ts` already asserts those names, so it could not fail). Re-run the upgrade once on the final migrations
   (migrate a venue directory on `main`, then again with this branch) and paste what it printed into
   the PR. Add one line to `docs/backlog.md`: after this lands every dev venue needs
   `wa-wt reset demo <name>`, and no provisioned box takes the image without a wipe.
@@ -522,7 +573,7 @@ Spec §15.6, V6. Products only — no variant is written yet. After it, "sold ou
 
 **Files:**
 - Modify: `packages/db/src/schema/catalogue.ts` (`products.available`); Create (generated): `packages/db/drizzle/0005_*.sql`
-- Modify: `packages/catalogue/src/product-types.ts`, `product-editor.ts`, `product-editor-input.ts`, `operations.ts` (`listMenuOffers`, `listAvailableProducts`, `toProduct`, create/update), `offered-modifiers.ts` (`:128-143`), `apps/server/src/catalogue-api.ts`, `apps/server/src/working-order.ts` (`:185-193`)
+- Modify: `packages/catalogue/src/product-types.ts`, `product-editor.ts`, `product-editor-input.ts`, `operations.ts` (`listMenuOffers`, `listAvailableProducts`, `toProduct`, create/update), `offered-modifiers.ts` (`readExtraProducts`), `apps/server/src/catalogue-api.ts`, `apps/server/src/working-order.ts` (`resolveBasketModifiers`)
 - Modify: `apps/dashboard/src/widgets/product-list.ts`, `product-editor.ts`, `screens/catalogue-screen.ts`, `api/client.ts`, `i18n/strings.ts`
 - Test: the matching `*.test.ts`, `*.a11y.test.ts`; `apps/server/src/catalogue-api.test.ts`, `till-sale.test.ts`
 
@@ -765,7 +816,7 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
 **Files:**
 - Modify: `packages/db/src/schema/orders.ts`, `sales.ts` (drop `variantId`; fix the stale `0031` pointer at `sales.ts:230`); Create (generated): `packages/db/drizzle/0006_*.sql`
 - Modify: `packages/core/src/sale-line.ts`, `sale-line-rows.ts`; `packages/catalogue/src/pricing.ts`, `variants.ts` (delete `listProductVariantsForProducts`), `product-presentation.ts`, `menu-types.ts`, `operations.ts`, `index.ts`
-- Modify: `apps/server/src/working-order.ts` (offer-line build `:292-312`, kitchen routing `:1166-1174`, kitchen-screen allergens `:3990-4000`, held-order fast path `:3150-3252`, the variant text re-keying `:519-533`); `packages/venue-service/src/operations.ts` (preparation routes, `:1003`)
+- Modify: `apps/server/src/working-order.ts` (the offer-line build and the variant text re-keying in `priceOrderLines`, kitchen routing in `fireLines`, kitchen-screen allergens in `readQueueSubItems` — the dish's, and each extra's allergens and dietary declarations — the held-order fast path in `updateHeldOrder`); `packages/venue-service/src/operations.ts` (preparation routes, `resolvePreparationRouteOutcomes`)
 - Modify: `apps/till/src/api/client.ts`, `state/order-line.ts`, `widgets/modifier-picker.ts`, `widgets/product-grid.ts`, `widgets/product-name.ts`, `menu-filter.ts`, `till-app.ts` (retrieval)
 - Test: `packages/db/src/schema/variant-snapshot-columns.test.ts`, `sales.test.ts` (`:516-525`: `["variant_id"]` → `[]`), `orders.test.ts` (`:500-517`: `["product_id","variant_id"]` → `["product_id"]`), `packages/core/src/sale-line-rows.test.ts`, `packages/catalogue/src/pricing.test.ts`, `product-presentation.test.ts`, `variants.db.test.ts`; `apps/server/src/till-sale.test.ts`, `working-order.test.ts`, `kitchen-print.test.ts`, `receipt-ticket.test.ts`, `tabs.test.ts`; `apps/till/src/widgets/modifier-picker.test.ts`, `product-grid.test.ts`, `product-name.test.ts`, `basket.test.ts`, `state/order-line.test.ts`; `packages/fiscal-verifactu/src/write-path.e2e.test.ts`
   (Tighten pinned column lists rather than deleting those cases. The name-join assertions that change are listed in Step 2 and named in the PR.)
@@ -798,9 +849,13 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
     variants (all Inactive) sells as itself.
   - an Inactive, Unavailable, not-offered or other-parent `variantId` → `product.variant_unavailable`.
   - Review Focus 3: a Wine 125 line fires to the station its PARENT resolves to (product route,
-    then category route), carries the parent's course, shows the PARENT's allergens on the kitchen
-    screen, and takes a preparation route keyed on the parent's product id — each with a Wine 175
+    then category route), carries the parent's course, shows the PARENT's allergens and dietary
+    labels on the kitchen screen, and takes a preparation route keyed on the parent's product id — each with a Wine 175
     control that overrides the field and gets its own value.
+  - Review Focus 3, extras: an extras line whose product is a variant inheriting its allergens and
+    dietary declarations shows its PARENT's allergens and dietary labels on the kitchen screen
+    (`addAllergens` and `suitableFor` in `readQueueSubItems`), with a control variant that overrides
+    both and shows its own.
   - Review Focus 5 / V2: a Wine 125 line with NO customer or kitchen name prints "Wine 125" on the
     receipt in every invoice locale, on the kitchen ticket, in the basket, on the tab and in the expo
     queue; its stored `variant_descriptions` carries exactly the venue's invoice locales, filled with
@@ -810,10 +865,11 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
     `kitchen-print.test.ts` (`:997`, `:1007`), `receipt-ticket.test.ts`, `basket.test.ts` — list each
     in the PR.
   - held orders: a change of variant alone on a kept line re-prices it (closes the gap at
-    `working-order.ts:3150-3211`); a quantity-only edit of a variant line with an options answer
-    keeps its line id and locked price (the fast path looks lists up by the PARENT's id, since a
-    variant carries none of its own — `:3237-3252`); a retrieved held order returns each line's
-    `variantId` (the line's `product_id` when that product has a parent).
+    `updateHeldOrder`'s kept-line check in `working-order.ts`); a quantity-only edit of a variant
+    line with an options answer keeps its line id and locked price (the fast path looks lists up by
+    the PARENT's id, since a variant carries none of its own — `updateHeldOrder`'s fast path); a
+    retrieved held order returns each line's `variantId` (the line's `product_id` when that product
+    has a parent).
   - the filed `sale_lines` row has no `variant_id` column (`pragma table_info(sale_lines)`).
 - [ ] **Step 3: Write the failing till tests** (V4). `product-grid.test.ts`: an Active, Available
   offer gets a button whether or not `soldAlone`; a parent whose variants are all unavailable gets
@@ -833,18 +889,20 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
   `variant-snapshot-columns.test.ts` and tighten `sales.test.ts` / `orders.test.ts`.
 
 - [ ] **Step 6: Implement.** `selectMenuVariant` returns `productId` and the chosen row's effective
-  pricing values, and raises `variant_required` when `offer.variants` is non-empty. `working-order.ts`'s
-  offer-line build takes `vatClass`, `pricingUnit`, `unit`, `courseId`, `category` and price from the
-  selection. Kitchen routing, the kitchen-screen allergen read and preparation-route resolution join
-  the parent through `parentProducts` / `effectiveProductColumns` and match product-level routes on
-  `coalesce(products.parent_id, products.id)`. The variant-text re-keying (`:519-533`) fills a blank
-  locale with the VARIANT's staff name. `product-presentation.ts` implements V2 in its one join
-  function. Delete `listProductVariantsForProducts` (V15). Remove every `variantId` from the row
-  writes, `readLockedLines`, `carveOffLines`, `getHeldOrder` (which derives it from the product's
-  parent), the pricing types and `RecordSaleLine` / `saleLineRows`; `updateHeldOrder`'s same-line
-  test compares the stored `product_id` with the resolved one. Till: `menuOfferToTillProduct` maps
-  the price difference; `visibleProducts` / `product-grid` applies V4; the picker
-  lists variants only and preselects the first available.
+  pricing values, and raises `variant_required` when `offer.variants` is non-empty.
+  `working-order.ts`'s offer-line build takes `vatClass`, `pricingUnit`, `unit`, `courseId`,
+  `category` and price from the selection. Kitchen routing, the kitchen-screen allergen read (the
+  dish's, in `readQueueSubItems`), the same function's child read of each extra's allergens and
+  dietary declarations, and preparation-route resolution join the parent through `parentProducts` /
+  `effectiveProductColumns` and match product-level routes on
+  `coalesce(products.parent_id, products.id)`. The variant-text re-keying (in `priceOrderLines`)
+  fills a blank locale with the VARIANT's staff name. `product-presentation.ts` implements V2 in its
+  one join function. Delete `listProductVariantsForProducts` (V15). Remove every `variantId` from
+  the row writes, `readLockedLines`, `carveOffLines`, `getHeldOrder` (which derives it from the
+  product's parent), the pricing types and `RecordSaleLine` / `saleLineRows`; `updateHeldOrder`'s
+  same-line test compares the stored `product_id` with the resolved one. Till:
+  `menuOfferToTillProduct` maps the price difference; `visibleProducts` / `product-grid` applies V4;
+  the picker lists variants only and preselects the first available.
 
 - [ ] **Step 7: Run to verify they pass**, then `pnpm --filter @waitron/server exec vitest run
   src/kitchen-print.test.ts src/receipt-ticket.test.ts src/split-bill.test.ts src/tabs.test.ts
@@ -897,8 +955,9 @@ export interface InheritedValues {
     one join-table field (categories) and one JSON field (allergens).
   - allergen and diet publishing for a variant (the first review found both ways it goes wrong:
     `createProduct`/`updateProduct`'s republish always writes a non-null `diet`,
-    `operations.ts:643-668, 740`, and a published allergen value built from the variant's own recipe
-    overlay, which is null, drops the parent's recipe-derived allergens):
+    `republishProductOverlays` and `createProduct`'s insert in `operations.ts`, and a published
+    allergen value built from the variant's own recipe overlay, which is null, drops the parent's
+    recipe-derived allergens):
     - ALL FOUR overlays null (`manual_allergens`, `recipe_derivation`, `diet_derivation`,
       `diet_override`) → `allergens` AND `diet` stay NULL, so the parent's published values are read;
     - `manual_allergens` alone overridden → the union of it and the PARENT's recipe derivation;

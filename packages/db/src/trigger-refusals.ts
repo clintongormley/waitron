@@ -7,13 +7,14 @@
  * caller translating one of these into a domain error matches the WORDS, and the words have to come
  * from somewhere both it and the migration answer to.
  *
- * The migration is `packages/db/drizzle/0001_behavioural_triggers.sql`, and it cannot import this
- * file: it is SQL, so it spells each string out. What binds the two is
- * `scripts/behavioural-triggers.test.ts`, which reads the constants below and asserts them against
- * the refusals a database the PRODUCT migrated actually raises. Reword the SQL alone and that guard
- * goes red; change a constant alone and it goes red the same way. Without it, a reworded trigger
- * would stop being translated SILENTLY — `triggerRaised` compares by equality, so the caller would
- * simply never recognise the refusal again.
+ * The migrations are `packages/db/drizzle/0001_behavioural_triggers.sql` and
+ * `0004_variant_one_level.sql` beside it, and they cannot import this file: they are SQL, so they
+ * spell each string out. What binds the two is `scripts/behavioural-triggers.test.ts`, which reads
+ * the constants below and asserts them against the refusals a database the PRODUCT migrated
+ * actually raises. Reword the SQL alone and that guard goes red; change a constant alone and it goes
+ * red the same way. Without it, a reworded trigger would stop being translated SILENTLY —
+ * `triggerRaised` compares by equality, so the caller would simply never recognise the refusal
+ * again.
  *
  * Every REFUSING trigger is here. `working_orders_clear_table_status` acts instead of refusing and
  * raises nothing, so it has no wording to pin.
@@ -61,3 +62,21 @@ export const KDS_BINDING_REFUSAL = "a kds device binds a station and no register
  * the words say `non-kds` instead of the value.
  */
 export const REGISTER_BINDING_REFUSAL = "a non-kds device binds a register and no station";
+
+/**
+ * `products_variant_one_level_insert`: the named parent is itself a variant, or is the row itself,
+ * or the row already has a variant of its own.
+ */
+export const VARIANT_ONE_LEVEL_REFUSAL =
+  "a variant's parent must be a product with no parent, and a variant cannot have variants of its own";
+
+/**
+ * `products_variant_parent_fixed_update`: `parent_id` changed — set, moved or cleared — after
+ * insert. Also `products_variant_one_level_insert`, for any insert naming a taken id with a
+ * different parent, whatever its conflict clause, when the one-level check has not already refused
+ * it: that trigger refuses it before the conflict is resolved.
+ */
+export const VARIANT_PARENT_FIXED_REFUSAL = "a variant's parent is fixed when it is created";
+
+/** `products_id_fixed_update`: a product's `id` changed after insert. */
+export const PRODUCT_ID_FIXED_REFUSAL = "a product's id never changes";

@@ -459,6 +459,12 @@ states). **Planned the same day** as nine pull requests, branches `feat/variants
 menus' extras attachments and variant price overrides. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
 
+**Task 1 (`feat/variants-parent-id`): once it lands, every dev venue needs `wa-wt reset demo <name>`,
+and no provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
+venue `main` had already migrated aborts at the rebuild of `products` with
+`error in trigger products_media_image_fk_parent_delete: no such table: main.products` and rolls
+back, so the box does not boot until it is wiped (re-run 2026-09-23 through `applyMigrations`).
+
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
 dropdown), and the demo steak now carries a `Punto` cooking options list instead. The per-line
@@ -2648,7 +2654,7 @@ request boundary on the four catalogue writes, refusing one as `management.reque
 the field, so the product writes store nothing and the menu-item writes answer a 400 rather than a
 500. Still open: `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`)
 still accept and store a negative when called directly — a seed, a script or a future caller — and
-`products.unit_price` still carries no check constraint. The SQLite flip has landed (#489), so this
+`products.unit_price` still carries no `>= 0` check. The SQLite flip has landed (#489), so this
 is now actionable: decide whether the screen belongs in the ops or as a `products.unit_price >= 0`
 check beside the sibling price checks the other catalogue tables carry. **One thing the flip
 changes about the choice:** a check constraint is now the only thing that would refuse it at the

@@ -8,6 +8,7 @@ import { expandDietaryDeclarations, validateDietaryDeclarations } from "./dietar
 import type { OptionList } from "./modifier-list-types.js";
 import type { ProductModifierRef } from "./product-types.js";
 import type { VatClass } from "./pricing.js";
+import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { OfferedExtraItem, OfferedModifier } from "./menu-types.js";
 
 /**
@@ -137,11 +138,12 @@ async function readExtraProducts(
       name: products.name,
       customerName: products.customerName,
       kitchenName: products.kitchenName,
-      vatClass: products.vatClass,
-      allergens: products.allergens,
-      dietaryDeclarations: products.dietaryDeclarations,
+      vatClass: effectiveProductColumns.vatClass,
+      allergens: effectiveProductColumns.allergens,
+      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
     .from(products)
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, productIds));
   return new Map(
     rows.map((row) => [

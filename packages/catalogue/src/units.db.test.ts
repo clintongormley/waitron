@@ -11,11 +11,10 @@ import {
   getUnit,
   listUnits,
   productsUsingUnit,
-  readProductUnitId,
   reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
-import { racePair } from "../test/fixtures.js";
+import { racePair, storedUnitId } from "../test/fixtures.js";
 
 /**
  * Units against a real database: rollback, two transactions started together, and the bulk
@@ -148,7 +147,7 @@ it("skips a product another manager moved off the source unit while the selectio
   await app((tx) => assignProductUnit(tx, productId, other!.id));
   await app((tx) => reassignProductsToUnit(tx, source!.id, [productId], target!.id));
 
-  expect(await app((tx) => readProductUnitId(tx, productId))).toBe(other!.id);
+  expect(await app((tx) => storedUnitId(tx, productId))).toBe(other!.id);
 });
 
 it("two bulk reassignments listing the same products in opposite orders both complete", async () => {
@@ -180,8 +179,8 @@ it("two bulk reassignments listing the same products in opposite orders both com
     results.map((outcome) => (outcome.status === "fulfilled" ? "ok" : outcome.reason)),
   ).toEqual(["ok", "ok"]);
 
-  expect(await app((tx) => readProductUnitId(tx, first))).toBe(target!.id);
-  expect(await app((tx) => readProductUnitId(tx, second))).toBe(target!.id);
+  expect(await app((tx) => storedUnitId(tx, first))).toBe(target!.id);
+  expect(await app((tx) => storedUnitId(tx, second))).toBe(target!.id);
 });
 
 it("reassigning to null clears the products' unit (they become Each)", async () => {
@@ -199,7 +198,7 @@ it("reassigning to null clears the products' unit (they become Each)", async () 
   await app((tx) => reassignProductsToUnit(tx, sourceUnit.id, [p1, p2], null));
 
   expect(await app((tx) => productsUsingUnit(tx, sourceUnit.id))).toHaveLength(0);
-  expect(await app((tx) => readProductUnitId(tx, p1))).toBeNull();
+  expect(await app((tx) => storedUnitId(tx, p1))).toBeNull();
 });
 
 it("reassigning to null returns the products to each-priced and leaves products on other units alone", async () => {
@@ -232,9 +231,9 @@ it("reassigning to null returns the products to each-priced and leaves products 
     .where(inArray(products.id, [onSource, onOther]));
   const pricingById = Object.fromEntries(pricing.map((row) => [row.id, row.pricingUnit]));
   // The reassigned product loses its unit row AND returns to each-priced (the no-unit ⟺ each invariant).
-  expect(await app((tx) => readProductUnitId(tx, onSource))).toBeNull();
+  expect(await app((tx) => storedUnitId(tx, onSource))).toBeNull();
   expect(pricingById[onSource]).toBe("each");
   // The product on another unit keeps both its unit row and its weight pricing.
-  expect(await app((tx) => readProductUnitId(tx, onOther))).toBe(otherUnit.id);
+  expect(await app((tx) => storedUnitId(tx, onOther))).toBe(otherUnit.id);
   expect(pricingById[onOther]).toBe("weight");
 });
