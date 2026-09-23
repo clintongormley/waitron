@@ -2312,7 +2312,7 @@ Each fits one sitting, and none needs a spec. Correctness first, then by area. A
 turns out to need a design moves to its track.
 
 **On SQLite a read taken while a write transaction is open could see uncommitted rows — CLOSED
-(found 2026-09-21, task F1; fixed 2026-09-23).** The flip opened ONE connection per database file,
+(found 2026-09-21, task F1; fixed 2026-09-23 by PR #493).** The flip opened ONE connection per database file,
 following its own plan rather than the slice-1 spec's §3.3 "small set of connections for reading",
 so a read issued while the write lock held a transaction open ran on the writer's own connection and
 returned that transaction's rows — including a row a rollback then removed. A second connection to
@@ -2328,7 +2328,7 @@ and its measurements are in `packages/store/src/connections.ts`, and the cases i
 replaced by `return write;` the case `serves a read routed to the reader on a file with no tables in
 it` still passes, so it is a smoke test rather than a control, and it says so at its own site.
 
-**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3).** A
+**Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3, PR #493).** A
 transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
 Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
 A write issued from outside a running body while one is open is re-run on the writer, where it joins
@@ -2355,6 +2355,15 @@ a handler registered on the body's own promise read the writer's still-uncommitt
 asynchronous context used to carry a plain "inside a body" mark, which never expires, so a callback
 detached inside one transaction and settling during a LATER one was read as being inside that later
 one and saw its uncommitted rows.
+
+Two more things #493's review left behind rather than fixed. The routing cases are a weaker set than
+their name suggests: with the routing replaced by a plain return of the write connection, some of
+them pass whichever connection serves the read, and each of those says so at its own site — which is
+why CLAUDE.md's rule carries the hedge instead of the phrase "each proven by deletion" it first
+carried. And the case pinning the adapter half of the window fix lives in
+`packages/store/src/index.test.ts`, not beside the file it reverts
+(`packages/store/src/node-sqlite-adapter.ts`), so a reader looking for it in the adapter's own suite
+will not find it.
 
 **The media library reads the whole `media_images` table on every page load, inside the venue write
 lock — OPEN (found 2026-09-23, task F1's review wave).** `packages/media/src/images.ts` selects
