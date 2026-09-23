@@ -382,6 +382,40 @@ describe("openVenueStore under contention", () => {
    * catching the retry loop at a particular moment: whenever the deadline was computed, the mocked
    * clock overtakes it within a few real ticks.
    */
+  /**
+   * A failed open must not leave a connection behind.
+   *
+   * `new DatabaseSync(path)` and `pragma busy_timeout` both SUCCEED on a file whose bytes are not a
+   * database — measured on Node v26.7.0, the refusal comes from the switch into write-ahead mode,
+   * with the handle still open. So the throw arrives with a live connection on the file, and in
+   * `openVenueStore` the VENUE connection is live as well by the time the node file fails.
+   *
+   * **The measurement is the process's open file descriptors, and the reason is that the obvious
+   * observable does not discriminate.** A leaked connection was first looked for in the `-wal` and
+   * `-shm` sidecars, on the grounds that SQLite keeps them while a connection is open. It does —
+   * but only once something has been WRITTEN: measured on Node v26.7.0, a freshly opened,
+   * never-written database in write-ahead mode has no sidecars whether its connection is open or
+   * closed, so that test passed with the leak still there. Descriptor count separates the two, in
+   * both directions: opening one connection takes the count from 12 to 13 and closing it returns it
+   * to 12, and the leak shape above leaves it at 13.
+   *
+   * What the leak costs is a descriptor per failed open, which a boot that retries repeats. It is
+   * NOT contention: an idle SQLite connection holds no lock, so a later attempt is not blocked by
+   * an earlier one's leftover.
+   */
+  it("leaves no connection behind when the NODE file cannot be opened", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
+    // The venue file opens normally; the node file is what fails, so the venue connection is
+    // already live and in write-ahead mode when the failure arrives.
+    writeFileSync(join(directory, "node.db"), "these bytes are not a database".repeat(100));
+
+    const before = readdirSync("/dev/fd").length;
+    await expect(openVenueStore({ directory, venueSchema, nodeSchema })).rejects.toThrow(
+      "file is not a database",
+    );
+    expect(readdirSync("/dev/fd").length).toBe(before);
+  });
+
   it("gives up when the holder never releases", async () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
     const holder = new DatabaseSync(join(directory, "venue.db"));

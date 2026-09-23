@@ -127,11 +127,24 @@ async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
  */
 async function openConnection(path: string): Promise<DatabaseSync> {
   const connection = new DatabaseSync(path);
-  connection.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
-  await enterWriteAheadMode(connection);
-  // Connection settings rather than file operations, so no lock stands between these and success.
-  connection.exec("pragma foreign_keys = on");
-  connection.exec("pragma recursive_triggers = on");
+  try {
+    connection.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
+    await enterWriteAheadMode(connection);
+    // Connection settings rather than file operations, so no lock stands between these and success.
+    connection.exec("pragma foreign_keys = on");
+    connection.exec("pragma recursive_triggers = on");
+  } catch (error) {
+    // The constructor and `busy_timeout` both succeed on a file whose bytes are not a database —
+    // the refusal comes later, from the switch into write-ahead mode, with the handle still open.
+    // Without this the caller's failure keeps a descriptor, and a boot that retries keeps one per
+    // attempt. The close's own failure must not replace the refusal the caller has to see.
+    try {
+      connection.close();
+    } catch {
+      // Already closed, or closing is what failed; either way the original error is the useful one.
+    }
+    throw error;
+  }
   return connection;
 }
 
@@ -164,7 +177,20 @@ export async function openVenueStore<
 ): Promise<VenueStore<TVenueSchema, TNodeSchema>> {
   await mkdir(config.directory, { recursive: true });
   const venueConnection = await openConnection(join(config.directory, VENUE_FILE));
-  const nodeConnection = await openConnection(join(config.directory, NODE_FILE));
+  // The venue file is open by now, so a node file that refuses to open must not strand it. Pinned
+  // by the descriptor-count case in ./index.test.ts, which records why the sidecar files — the
+  // obvious thing to look at — cannot tell an open connection from a closed one here.
+  let nodeConnection: DatabaseSync;
+  try {
+    nodeConnection = await openConnection(join(config.directory, NODE_FILE));
+  } catch (error) {
+    try {
+      venueConnection.close();
+    } catch {
+      // As above: the node file's refusal is what the caller needs to see.
+    }
+    throw error;
+  }
   const handle = <TSchema extends Record<string, unknown>>(
     connection: DatabaseSync,
     schema: TSchema,

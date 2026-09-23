@@ -18,8 +18,13 @@ const suffix = "is append-only";
 /**
  * Makes every named table refuse an update and a delete, for good.
  *
- * `RAISE(ABORT, …)` in a `BEFORE` trigger stops the statement and rolls back to the enclosing
- * savepoint, so the row the caller tried to change is still the row that was written. The pair of
+ * `RAISE(ABORT, …)` in a `BEFORE` trigger backs out the STATEMENT it refused and nothing else, so
+ * the row the caller tried to change is still the row that was written, and the enclosing
+ * transaction stays open and usable. It does NOT roll back to a savepoint — measured on Node
+ * v26.7.0: a marker row written inside a savepoint, before an update that this trigger refuses,
+ * is still there afterwards. Confining a losing attempt's earlier writes is the savepoint's job,
+ * not this trigger's (`appendToChain` in `packages/fiscal-verifactu/src/chain.ts` is the caller
+ * that needs it). The pair of
  * triggers covers four shapes between them, measured on Node v26.7.0 against `node:sqlite`, one
  * real refusal per shape: a plain `UPDATE`, a plain `DELETE`, `INSERT OR REPLACE` (whose internal
  * delete fires the delete trigger) and `INSERT … ON CONFLICT DO UPDATE` (the update trigger).

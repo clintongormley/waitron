@@ -398,6 +398,51 @@ describe("the node:sqlite adapter", () => {
     expect((raw.prepare("select count(*) as n from child").get() as { n: number }).n).toBe(0);
   });
 
+  /**
+   * A savepoint opened on a TRANSACTION object, with a body that awaits.
+   *
+   * This is the level the client's own `transaction` shim never sees: Drizzle's
+   * `SQLiteTransaction.transaction` emits its savepoint on the session rather than calling the
+   * client, and it is written for a synchronous driver, so it releases the moment the body RETURNS
+   * — which for an `async` body is its first `await`, with the throw still ahead of it.
+   *
+   * Reached by the product: `appendToChain` (`packages/fiscal-verifactu/src/chain.ts`,
+   * `packages/workforce/src/chain.ts`) retries inside `tx.transaction(...)`, and a caller that had
+   * already opened one would put that retry here.
+   */
+  it("undoes an awaiting body's earlier writes when a transaction opened ON A TRANSACTION throws", async () => {
+    const { db, raw } = open();
+    await db.transaction(async (tx) => {
+      await expect(
+        tx.transaction(async (inner) => {
+          inner.execute(sql`insert into t (id, name) values (1, 'before')`);
+          await Promise.resolve();
+          inner.execute(sql`insert into t (id, name) values (2, 'after')`);
+          throw new Error("the attempt lost");
+        }),
+      ).rejects.toThrow("the attempt lost");
+    });
+    // Both writes belong to the attempt that lost. Neither survives it, and the enclosing
+    // transaction still committed.
+    expect(rowCount(raw)).toBe(0);
+    expect(raw.isTransaction).toBe(false);
+  });
+
+  it("keeps an awaiting body's writes when a transaction opened ON A TRANSACTION returns", async () => {
+    // The control in the other direction: the same shape, without the throw. If the fix undid work
+    // indiscriminately this case would read 0.
+    const { db, raw } = open();
+    await db.transaction(async (tx) => {
+      await tx.transaction(async (inner) => {
+        inner.execute(sql`insert into t (id, name) values (1, 'kept')`);
+        await Promise.resolve();
+        inner.execute(sql`insert into t (id, name) values (2, 'kept too')`);
+      });
+    });
+    expect(rowCount(raw)).toBe(2);
+    expect(raw.isTransaction).toBe(false);
+  });
+
   it("closes the database it was handed", () => {
     const { raw } = open();
     adaptNodeSqlite(raw).close();

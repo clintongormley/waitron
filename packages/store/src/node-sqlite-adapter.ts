@@ -40,9 +40,14 @@ const nextSavepoint = () => `wt_sp_${(savepointsTaken += 1)}`;
  * The engine is synchronous and Drizzle's session is built for a synchronous driver, so its
  * transaction wrapper is written as though a body finishes when it returns. An `async` body returns
  * at its FIRST `await`, with its remaining work and its throw still ahead of it, so a wrapper that
- * believes the return commits early and never sees the throw at all. Checked at the six places that
- * open a transaction on a transaction-typed value — `tx.transaction(`, `grep`ped over `packages`
- * and `apps` — every one of them hands in a body that returns a promise.
+ * believes the return commits early and never sees the throw at all.
+ *
+ * Every place in `packages` and `apps` that opens a transaction on a transaction-typed value hands
+ * in a body that returns a promise (`tx.transaction(`, grepped). That is why this check exists —
+ * but being reached is not the same as being COVERED: Drizzle emits a nested transaction itself,
+ * without calling this client, so for a while the deeper level released its savepoint on return
+ * whatever this function said. {@link addExecute} now routes that level back through here, which is
+ * what makes the answer the same at every depth.
  */
 const isPending = (value: unknown): value is PromiseLike<unknown> =>
   typeof (value as PromiseLike<unknown> | undefined)?.then === "function";
@@ -258,11 +263,15 @@ export function drizzleNodeSqlite<TSchema extends Record<string, unknown>>(
     schema: tables.tables,
     tableNamesMap: tables.tableNamesMap,
   };
-  const session = new BetterSQLiteSession(adaptNodeSqlite(db), dialect, schema);
+  const client = adaptNodeSqlite(db);
+  const session = new BetterSQLiteSession(client, dialect, schema);
   const handle = new BaseSQLiteDatabase("sync", dialect, session, schema);
   // Through `unknown`: `Executable` names only the two members the decoration touches, so it does
   // not overlap the full database type enough for a direct assertion.
-  return addExecute(handle as unknown as Executable) as unknown as NodeSqliteDatabase<TSchema>;
+  return addExecute(
+    handle as unknown as Executable,
+    client.transaction,
+  ) as unknown as NodeSqliteDatabase<TSchema>;
 }
 
 /**
@@ -293,18 +302,38 @@ type Executable = {
  * `src/testing/seed.ts`, and `appendToChain` retries inside `tx.transaction(...)`, so the savepoint
  * level is reached by the product and not only by a test.
  *
- * The wrapped `transaction` is bound before the assignment, so the decoration cannot call itself.
+ * **A transaction opened ON A TRANSACTION does not go through Drizzle at all**, and that is the
+ * point of `openNested`. Drizzle reaches the client's `transaction` shim only for the OUTERMOST
+ * call; a nested one is emitted by `SQLiteTransaction.transaction` straight onto the session, in
+ * code written for a synchronous driver, so it releases its savepoint the moment the body RETURNS.
+ * An `async` body returns at its first `await` with its throw still ahead of it, so the losing
+ * attempt's earlier writes were released rather than rolled back — measured, and pinned by the two
+ * `ON A TRANSACTION` cases in `./node-sqlite-adapter.test.ts`. Routing this level through the same
+ * client shim the outermost level uses makes the depth stop mattering: one savepoint discipline,
+ * `isPending`-aware, at every level.
+ *
+ * The body is handed the object it was called on rather than a fresh one. At savepoint level there
+ * is nothing a fresh object would carry that this one does not — a savepoint has no session, no
+ * mode and no state of its own — and it keeps the recursion finite.
  */
-function addExecute<T extends Executable>(target: T): T {
+function addExecute<T extends Executable>(target: T, openNested: NestedOpener, nested = false): T {
   const openTransaction = target.transaction.bind(target);
-  return Object.assign(target, {
+  const decorated = Object.assign(target, {
     execute<TRow extends Record<string, unknown> = Record<string, unknown>>(
       query: SQLWrapper | string,
     ): RawResult<TRow> {
       return { rows: target.all(query) as TRow[] };
     },
     transaction(body: (tx: unknown) => unknown, config?: unknown) {
-      return openTransaction((inner) => body(addExecute(inner as Executable)), config);
+      if (nested) return openNested(() => body(decorated))();
+      return openTransaction(
+        (inner) => body(addExecute(inner as Executable, openNested, true)),
+        config,
+      );
     },
   });
+  return decorated;
 }
+
+/** The client's own savepoint-aware transaction wrapper, as {@link addExecute} needs it. */
+type NestedOpener = <R>(fn: () => R) => (() => R) & Record<Behaviour, () => R>;
