@@ -3,7 +3,8 @@ import { decimal, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 
 // The sanctioned crossings between a SCALED-INTEGER column and the exact decimal type, for the
-// two scales that are not money.
+// two scales that are not money. It also supplies money's literal renderer and raw pattern to
+// `./cents.ts`.
 //
 // A quantity column stores a count of whole thousandths and a rate column a count of whole basis
 // points, while every arithmetic and every printed literal above the storage boundary is an exact
@@ -19,22 +20,18 @@ import type { Decimal } from "./money.js";
 // cases in `scales.test.ts`). The names are separate anyway, because a rate and an amount sharing
 // a scale today is a coincidence of this tax regime, not a property to build on.
 //
-// `./money.ts` is where the rounding happens — `toScale`, in BigInt, half away from zero, which
-// is the rule the decimal columns applied on the way in. Nothing here rounds a float;
-// `conventions.test.ts` reads this file's text and fails on any float-shaped operation but the
-// number constructor these conversions exist for.
+// `./money.ts` is where the rounding happens — `toScale`, in BigInt, half away from zero. Nothing
+// here rounds a float; `conventions.test.ts` reads this file's text and fails on any float-shaped
+// operation but the number constructor these conversions exist for.
 
 /** Three decimal places, so five grams is a quantity and not a rounding error. */
 export const QUANTITY_SCALE = 3;
 
 /**
- * Nine, which is what `numeric(12, 3)` admitted before the column became an integer.
- *
- * The bound moves here rather than disappearing: the decimal column refused a wider quantity
- * with a `22003`, and an eight-byte integer would take it silently. Eight bytes and not four,
- * because the widest quantity the old column accepted is 999999999.999, which is 999999999999
- * thousandths — past `integer`'s 2147483647 (the measurement is in `columns.ts`'s `money`
- * docstring) and well inside the 9007199254740991 a JavaScript number counts exactly.
+ * Nine integer digits. The column is an eight-byte integer and takes a wider count silently, so
+ * this bound is the only width limit (see the header of `packages/db/src/schema/columns.ts`). The
+ * widest quantity it admits, 999999999.999, is 999999999999 thousandths — well inside the
+ * 9007199254740991 a JavaScript number counts exactly.
  */
 export const MAX_QUANTITY_INTEGER_DIGITS = 9;
 
@@ -42,14 +39,18 @@ export const MAX_QUANTITY_INTEGER_DIGITS = 9;
 export const RATE_SCALE = 2;
 
 /**
- * Three, which is what `numeric(5, 2)` admitted. 999.99 is 99999 basis points, so unlike a
- * quantity a rate fits a four-byte `integer` with room to spare.
+ * Three integer digits: 999.99 is 99999 basis points. The column is an eight-byte integer, so this
+ * bound is the only digit limit; the VAT-rate and deductible-proportion columns also carry a CHECK
+ * capping the count at 10000.
  */
 export const MAX_RATE_INTEGER_DIGITS = 3;
 
 function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
-  return Number(
-    boundedCount(BigInt(toScale(value, scale).replace(".", "")), value, scale, maxIntegerDigits),
+  return boundedCount(
+    BigInt(toScale(value, scale).replace(".", "")),
+    value,
+    scale,
+    maxIntegerDigits,
   );
 }
 
@@ -58,14 +59,19 @@ function boundedCount(
   value: string,
   scale: number,
   maxIntegerDigits: number,
-): bigint {
+): number {
   if ((count < 0n ? -count : count) >= 10n ** BigInt(maxIntegerDigits + scale)) {
     throw new AppError("shared.decimal_overflow", { value, maxIntegerDigits });
   }
-  return count;
+  return Number(count);
 }
 
-/** The literal for a count at `scale`, always with every place: 1234 at scale 2 is "12.34". */
+/**
+ * The literal for a count at `scale`, always with every place: 1234 at scale 2 is "12.34".
+ *
+ * Package-internal — not re-exported from `index.ts`. Callers check `Number.isInteger` first, as
+ * `centsToDecimal`, `thousandthsToDecimal` and `basisPointsToDecimal` do.
+ */
 export function scaledLiteral(count: number, scale: number): Decimal {
   const negative = count < 0;
   const digits = String(negative ? -count : count).padStart(scale + 1, "0");
@@ -82,8 +88,7 @@ export function decimalToThousandths(value: Decimal): number {
  * The decimal literal for a stored count of thousandths: 1500 is "1.500".
  *
  * Always three places, because the literal is what a receipt prints and the scale is part of the
- * value — it is also what the `numeric(12, 3)` column rendered, so a line's printed quantity does
- * not change with the storage.
+ * value.
  */
 export function thousandthsToDecimal(count: number): Decimal {
   if (!Number.isInteger(count)) {
@@ -134,7 +139,7 @@ function rawCount(
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
     throw new AppError(malformed, { value: String(value) });
   }
-  return Number(boundedCount(BigInt(value), value, scale, maxIntegerDigits));
+  return boundedCount(BigInt(value), value, scale, maxIntegerDigits);
 }
 
 /**

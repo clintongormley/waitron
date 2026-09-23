@@ -28,8 +28,8 @@ import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 // Every direction is exact. A count of cents is an integer, and the widest amount this system
 // admits — 12 integer digits, guarded by `assertMoney` — is 99999999999999 cents against a safe
 // integer of 9007199254740991, so no amount in range can lose a cent to the number type. Nothing
-// here rounds a float: the rounding that does happen is `toScale`'s, in BigInt, and it is the same
-// half-away-from-zero rule the decimal column applied on the way in.
+// here rounds a float: the rounding that does happen is `toScale`'s, in BigInt, half away from
+// zero.
 
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
@@ -76,10 +76,6 @@ export function centsToDecimal(cents: number): Decimal {
  * site: `cast(x as integer)` would hand back a number this function refuses, and a fixed-scale
  * rendering would be worse — a count of 7734 cents written as "7734.00" is a plausible string a
  * hundred times the amount, which `RAW_COUNT_PATTERN` refuses for exactly that reason.
- *
- * The four-byte overflow that first argued for text — PostgreSQL's `::int` topping out at
- * 2147483647 cents while a money column carries twelve integer digits — belonged to the previous
- * engine and is not the reason any more. The rule it produced is unchanged.
  *
  * None of this applies to a typed drizzle `.select()` over a schema column — the column's own
  * mapping converts the value, so those call sites use `centsToDecimal` directly and need no cast.

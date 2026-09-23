@@ -20,16 +20,6 @@ declare global {
   }
 }
 
-/** The code an AppError-throwing call refuses with, so a refusal is checked by name. */
-function codeOf(call: () => unknown): string {
-  try {
-    call();
-  } catch (error) {
-    return (error as AppError).code;
-  }
-  return expect.unreachable("the call was expected to throw");
-}
-
 /** The code and params an AppError-throwing call refuses with, so a refusal is checked in full. */
 function refusalOf(call: () => unknown): { code: string; params: unknown } {
   try {
@@ -61,7 +51,7 @@ describe("decimalToThousandths", () => {
   });
 
   it("rounds a fourth decimal place half away from zero", () => {
-    // The rule the numeric(12, 3) column applied on the way in, kept unchanged.
+    // Half away from zero, as `toScale` rounds.
     expect(decimalToThousandths(decimal("0.0005"))).toBe(1);
     expect(decimalToThousandths(decimal("-0.0005"))).toBe(-1);
     expect(decimalToThousandths(decimal("0.0004"))).toBe(0);
@@ -72,9 +62,10 @@ describe("decimalToThousandths", () => {
   });
 
   it("refuses a quantity wider than the column's nine integer digits", () => {
-    // numeric(12, 3) refused this with a 22003 before the column became an integer; the
-    // refusal moves here rather than disappearing.
-    expect(() => decimalToThousandths(decimal("1000000000"))).toThrow(AppError);
+    expect(refusalOf(() => decimalToThousandths(decimal("1000000000")))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "1000000000", maxIntegerDigits: 9 },
+    });
     expect(decimalToThousandths(decimal("999999999.999"))).toBe(999999999999);
     expect(refusalOf(() => decimalToThousandths(decimal("-1000000000")))).toEqual({
       code: "shared.decimal_overflow",
@@ -109,7 +100,10 @@ describe("thousandthsToDecimal", () => {
   });
 
   it("refuses a value that is not finite", () => {
-    expect(() => thousandthsToDecimal(Number.NaN)).toThrow(AppError);
+    expect(refusalOf(() => thousandthsToDecimal(Number.NaN))).toEqual({
+      code: "shared.invalid_thousandths",
+      params: { value: "NaN" },
+    });
   });
 });
 
@@ -133,7 +127,10 @@ describe("decimalToBasisPoints", () => {
   });
 
   it("refuses a rate wider than the column's three integer digits", () => {
-    expect(() => decimalToBasisPoints(decimal("1000"))).toThrow(AppError);
+    expect(refusalOf(() => decimalToBasisPoints(decimal("1000")))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "1000", maxIntegerDigits: 3 },
+    });
     expect(decimalToBasisPoints(decimal("999.99"))).toBe(99999);
   });
 });
@@ -175,18 +172,19 @@ describe("rawThousandthsToDecimal", () => {
   });
 
   it("refuses text carrying a decimal point, in the quantity scale's own words", () => {
-    // What a missing `::text` cast, or a cast to a scaled numeric, would hand over: a plausible
-    // string a thousand times the quantity. Refusing is the only safe answer.
+    // What a raw read that renders the count as a decimal would hand over: a plausible string a
+    // thousand times the quantity. Refusing is the only safe answer.
     //
     // The CODE is the scale's own, as `rawCentsToDecimal` uses money's own: a caller holding a
     // refusal from a query that reads a quantity and a rate in one row can tell which of the two
     // was malformed. A generic `shared.invalid_decimal` here cannot say that.
-    expect(() => rawThousandthsToDecimal("1.500")).toThrow(AppError);
-    expect(codeOf(() => rawThousandthsToDecimal("1.500"))).toBe("shared.invalid_thousandths");
+    expect(refusalOf(() => rawThousandthsToDecimal("1.500"))).toEqual({
+      code: "shared.invalid_thousandths",
+      params: { value: "1.500" },
+    });
   });
 
   it("refuses a value that is not text at all", () => {
-    expect(() => rawThousandthsToDecimal(1500 as unknown as string)).toThrow(AppError);
     expect(refusalOf(() => rawThousandthsToDecimal(1500 as unknown as string))).toEqual({
       code: "shared.invalid_thousandths",
       params: { value: "1500" },
@@ -206,16 +204,14 @@ describe("rawThousandthsToDecimal", () => {
   });
 
   it("refuses a sum wider than a quantity's nine integer digits", () => {
-    // The `::numeric(12, 3)` cast this replaced refused the same sum with a 22003.
-    expect(() => rawThousandthsToDecimal("1000000000000")).toThrow(AppError);
+    // No column type on this engine refuses this sum; the reader is the only refusal. A MALFORMED
+    // value is refused in the scale's own words, an out-of-range one in the words every scale
+    // shares, which is what `decimalToThousandths` throws for the same condition on the typed path.
+    expect(refusalOf(() => rawThousandthsToDecimal("1000000000000"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "1000000000000", maxIntegerDigits: 9 },
+    });
     expect(rawThousandthsToDecimal("999999999999")).toBe("999999999.999");
-  });
-
-  it("names the overflow concept, not the scale, when the count is too wide", () => {
-    // The other half of the pair above: a MALFORMED value is refused in the scale's own words,
-    // an out-of-range one in the words every scale shares, which is what `decimalToThousandths`
-    // already throws for the same condition on the typed path.
-    expect(codeOf(() => rawThousandthsToDecimal("1000000000000"))).toBe("shared.decimal_overflow");
   });
 });
 
@@ -226,8 +222,10 @@ describe("rawBasisPointsToDecimal", () => {
   });
 
   it("refuses text carrying a decimal point, in the rate scale's own words", () => {
-    expect(() => rawBasisPointsToDecimal("21.00")).toThrow(AppError);
-    expect(codeOf(() => rawBasisPointsToDecimal("21.00"))).toBe("shared.invalid_basis_points");
+    expect(refusalOf(() => rawBasisPointsToDecimal("21.00"))).toEqual({
+      code: "shared.invalid_basis_points",
+      params: { value: "21.00" },
+    });
   });
 
   it("keeps a negative rate negative", () => {
@@ -235,9 +233,11 @@ describe("rawBasisPointsToDecimal", () => {
   });
 
   it("refuses a rate wider than three integer digits", () => {
-    expect(() => rawBasisPointsToDecimal("100000")).toThrow(AppError);
+    expect(refusalOf(() => rawBasisPointsToDecimal("100000"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "100000", maxIntegerDigits: 3 },
+    });
     expect(rawBasisPointsToDecimal("99999")).toBe("999.99");
-    expect(codeOf(() => rawBasisPointsToDecimal("100000"))).toBe("shared.decimal_overflow");
   });
 });
 
