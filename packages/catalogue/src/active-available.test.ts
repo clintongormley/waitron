@@ -87,16 +87,6 @@ async function reads() {
   });
 }
 
-// Spec §15.4: every Active, Available product on a menu is offered to the till, sold alone or not —
-// `sold_alone` now governs only a future customer menu, so it must not filter the till's offers.
-it("offers an Active, Available product the till whether or not it is sold alone", async () => {
-  for (const soldAlone of [true, false]) {
-    await run((tx) => saveProductEditor(tx, productId, catalogueId, { ...body, soldAlone }, "en"));
-    const offers = await run((tx) => listMenuOffers(tx, [catalogueId]));
-    expect(offers.map((offer) => offer.productId)).toEqual([productId]);
-  }
-});
-
 describe("Active and Available", () => {
   it("an Unavailable product stays Active, leaves both reads the till sells from and stays managed", async () => {
     await save({ active: true, available: false });
@@ -157,5 +147,17 @@ describe("Active and Available", () => {
       active: true,
       available: false,
     });
+  });
+
+  // Spec §15.4: every Active, Available product on a menu is offered to the till, sold alone or not —
+  // `sold_alone` now governs only a future customer menu, so it must not filter the till's offers.
+  it("offers an Active, Available product the till whether or not it is sold alone", async () => {
+    for (const soldAlone of [true, false]) {
+      await run((tx) =>
+        saveProductEditor(tx, productId, catalogueId, { ...body, soldAlone }, "en"),
+      );
+      const offers = await run((tx) => listMenuOffers(tx, [catalogueId]));
+      expect(offers.map((offer) => offer.productId)).toEqual([productId]);
+    }
   });
 });

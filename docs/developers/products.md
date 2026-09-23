@@ -59,14 +59,13 @@ rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
 - `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
   then narrowed to exactly the venue's invoice languages by `toInvoiceLineDescriptions`.
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
-  variant's own three names as the variant row holds them, plus the product's (the parent's)
-  kitchen name. A locale the variant's customer text leaves blank is filled with the variant's staff
-  name when the line is priced (`priceOrderLines`, `apps/server/src/working-order.ts`). Keeping both
-  sets is what lets a report group variant lines under their parent.
-
-The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
-or the product itself when it has no Active variant. The filed `sale_lines` row keeps the frozen
-names and no catalogue id at all (spec decision 11); neither table has a `variant_id` column.
+  variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
+  them, `variant_descriptions` resolved and narrowed like `descriptions` above), plus the product's
+  (the parent's) kitchen name. An invoice locale that neither its own text nor the default
+  language's text resolves is filled with the variant's staff name, by
+  `fillBlankLocalesWithStaffName` (`packages/catalogue/src/product-presentation.ts`), when the line
+  is priced (`priceOrderLines`, `apps/server/src/working-order.ts`).
+  Keeping both sets is what lets a report group variant lines under their parent.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
   as the list's three names and the chosen label's three names, and no ids at all
   (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries
@@ -74,9 +73,16 @@ names and no catalogue id at all (spec decision 11); neither table has a `varian
   not in here: it becomes its own priced child line, which carries the picked product's names in the
   columns above like any other line.
 
-Because both halves had their fallback applied *before* being frozen, nothing falls back again at
-render time, except that `joinCustomerPresentationText` falls back to the variant's frozen staff
-name for a variant map with no text at all.
+The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
+or the product itself when it has no Active variant — when rung up from a menu offer; the
+bare-`productId` path does not check this. The filed `sale_lines` row keeps the frozen names and no
+catalogue id at all (spec decision 11); neither table has a `variant_id` column.
+
+Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied
+*before* being frozen, neither falls back again at render time, except that
+`joinCustomerPresentationText` falls back to the variant's frozen staff name for a variant map with
+no text at all. The kitchen names are frozen raw and fall back when drawn, through
+`kitchenPresentationName`.
 
 **An options answer is the exception to that, deliberately.** `buildLineExtras`
 (`apps/server/src/modifier-selection.ts`) freezes the list's and the label's customer-facing map
@@ -199,15 +205,20 @@ own price; the menu screen shows that price as the empty field's hint. `setProdu
 its own; the product-editor save refuses one (`price()` in
 `packages/catalogue/src/product-editor-input.ts`).
 
-A variant is sold as the product it is. A product with an Active variant is never rung up as itself
-(`product.variant_required`); on the till it is one button, and tapping it opens its variants with
-the first available one chosen, each labelled with its difference from the parent's price ("+€1.50")
-where it has one; a product none of whose variants is available here gets no button. The line's
-`product_id` is the variant, and it is priced and taxed at the variant's effective values above. It
-reaches the kitchen as its parent would unless the variant sets its own value: the parent's
-product-level preparation route, and the effective station, course, category, allergens and dietary
-labels. The till splits a tab line by the unit precision the line froze (`TabLine.unitPrecision`),
-since a variant is not one of the till's products.
+A variant is sold as the product it is. A product with an Active variant is never sold as itself
+when rung up from a menu offer (`product.variant_required`); the bare-`productId` path does not
+check this. On the till it is one button, and tapping it opens its variants with the first
+available one chosen, each labelled with its difference from the parent's price ("+€1.50") where it
+has one; a product none of whose variants is available here gets no button. The line's
+`product_id` is the variant, and it is priced and taxed at the variant's effective values above. In
+the kitchen it takes its parent's product-level preparation routes (a route can name only a
+top-level product, so a variant has none of its own) and the category routes of its effective
+category; its station, course, category, allergens and dietary labels are its effective values
+(`effectiveProductColumns`; for category, the `categoryOwnerJoin` rule above;
+`resolvePreparationRouteOutcomes`, `packages/venue-service/src/operations.ts`; `priceOrderLines`,
+`fireLines` and `readQueueSubItems`, `apps/server/src/working-order.ts`). The till splits a tab
+line by the unit precision the line froze (`TabLine.unitPrecision`), since a variant is not one of
+the till's products.
 
 A variant's own photo is `products.image` on its row. The image library lists it among a photo's
 uses as a `variant` of its parent and refuses to delete a photo one still uses (`listImageUsages`

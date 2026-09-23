@@ -19,7 +19,8 @@ function hasSomethingToSell(product: TillProduct): boolean {
 
 /**
  * The wall of tappable product tiles — the till's primary input surface. One `<wt-button>` per
- * product (44px tap target + focus ring for free), showing the product's name in the current locale
+ * product with something to sell — a product whose variants are all unavailable gets none — with a
+ * 44px tap target and focus ring for free, showing the product's name in the current locale
  * and its price. Tiles coordinate only through the store (spec §3): they never reference the basket
  * or total widgets.
  *

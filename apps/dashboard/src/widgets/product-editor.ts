@@ -53,8 +53,7 @@ import { allergenName, vatClassName } from "../i18n/domain.js";
 
 const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
 
-/** Separates the parts of a collapsed section's summary. This is NOT the product·variant name join,
- * which belongs to `packages/catalogue/src/product-presentation.ts` and is never re-implemented. */
+/** Separates the parts of a collapsed section's summary. */
 const SUMMARY_SEPARATOR = " · ";
 
 /** The two combobox rows that open a nested form instead of attaching a list that exists. Neither
@@ -171,10 +170,10 @@ function emptyDraft(): ProductEditorDraft {
  * sections, over a draft nothing writes to the server until Save.
  *
  * The product's own name is the plain STAFF name. The translated customer-facing name and the
- * kitchen name are separate optional fields that fall back to it, and both the fallback and the
- * product·variant join belong to `packages/catalogue/src/product-presentation.ts`, never to a
- * screen. The kitchen routing (station and course) travels in this form's own submitted value, so
- * a station this venue does not have rolls the product back instead of leaving it half saved.
+ * kitchen name are separate optional fields that fall back to it, and the fallback belongs to
+ * `packages/catalogue/src/product-presentation.ts`, never to a screen. The kitchen routing (station
+ * and course) travels in this form's own submitted value, so a station this venue does not have
+ * rolls the product back instead of leaving it half saved.
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {

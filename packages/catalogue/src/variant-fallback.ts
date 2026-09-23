@@ -30,8 +30,9 @@ import { productUnits } from "./schema/units.js";
  * listed under them there — a category's product list and its delete preview (`categories.ts`) are
  * two; `readProductCategories` refuses a variant's id (`product.not_found`). Reads keyed on an ORDER
  * LINE's product, which is the variant on a variant line — the kitchen's station routing and its
- * allergen and dietary display (`apps/server/src/working-order.ts`), and preparation routes
- * (`packages/venue-service/src/operations.ts`) — read their values from here too.
+ * allergen and dietary display (`apps/server/src/working-order.ts`) — read their values from here
+ * too, and preparation routes (`packages/venue-service/src/operations.ts`) read their CATEGORY from
+ * here.
  */
 
 /** The parent row of a variant, joined as `parent`. A LEFT join: a top-level product has none. */

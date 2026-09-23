@@ -52,7 +52,7 @@ describe("productName", () => {
     expect(productName(product({ customerName: null }))).toBe("Coffee");
   });
 
-  it("names the product alone — a chosen variant is joined only onto a line", () => {
+  it("names the product alone — a chosen variant names only a line", () => {
     expect(productName(product({ variantId: "v1", variantName: "Large" }))).toBe("Coffee");
   });
 });
