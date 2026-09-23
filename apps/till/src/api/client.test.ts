@@ -2162,4 +2162,164 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer).unitPrice).toBe("7.25");
     expect(menuOfferToTillProduct({ ...offer, grossPrice: "8.00" }).unitPrice).toBe("7.25");
   });
+
+  it("gives each variant the difference between its resolved price and its parent's, null when equal", () => {
+    const base = {
+      id: "offer-wine",
+      menuId: "menu-1",
+      productId: "wine",
+      sectionId: "section-1",
+      grossPrice: null,
+      unitPrice: "4.00",
+      displayOrder: 0,
+      active: true,
+      menuName: "Carta",
+      sectionName: { es: "Vinos" },
+      name: "Wine by the glass",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "reduced" as const,
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+    };
+    const variant = (id: string, unitPrice: string) => ({
+      id,
+      name: id,
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice,
+      menuPrice: null,
+      offered: true,
+      available: true,
+      unit: base.unit,
+      pricingUnit: "each" as const,
+      vatClass: base.vatClass,
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+    });
+    const product = menuOfferToTillProduct({
+      ...base,
+      variants: [variant("dearer", "5.50"), variant("cheaper", "3.50"), variant("same", "4.00")],
+    });
+    expect(product.variants!.map((v) => [v.id, v.unitPriceDifference])).toEqual([
+      ["dearer", "1.50"],
+      ["cheaper", "-0.50"],
+      ["same", null],
+    ]);
+  });
+
+  it("carries each variant's own effective selling values, never its parent's", () => {
+    // Every value the variant sells under differs from the parent's, so a mapping that read the
+    // parent's for any of them fails here.
+    const parentUnit = {
+      id: "unit-each",
+      name: { es: "unidad" },
+      abbreviation: { es: "ud" },
+      precision: 0,
+      hardwareUnit: null,
+    };
+    const litre = {
+      id: "unit-litre",
+      name: { es: "litro" },
+      abbreviation: { es: "l" },
+      precision: 3,
+      hardwareUnit: null,
+    };
+    const product = menuOfferToTillProduct({
+      id: "offer-wine",
+      menuId: "menu-1",
+      productId: "wine",
+      sectionId: "section-1",
+      grossPrice: null,
+      unitPrice: "4.00",
+      displayOrder: 0,
+      active: true,
+      menuName: "Carta",
+      sectionName: { es: "Vinos" },
+      name: "Vino",
+      customerName: null,
+      kitchenName: null,
+      unit: parentUnit,
+      vatClass: "general",
+      category: "Vinos",
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [
+        {
+          id: "wine-carafe",
+          name: "Jarra",
+          customerName: { es: "Jarra carta" },
+          kitchenName: "Jarra KDS",
+          image: "carafe.webp",
+          unitPrice: "9.00",
+          menuPrice: "9.00",
+          offered: true,
+          available: true,
+          unit: litre,
+          pricingUnit: "weight",
+          vatClass: "reduced",
+          category: "Jarras",
+          allergens: { sulphites: { presence: "contains" } },
+          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          dietDerivation: { origins: ["plant"], pending: false },
+          dietOverride: { vegan: "yes" },
+          dietaryDeclarations: ["vegan"],
+          courseId: "course-drinks",
+        },
+      ],
+    });
+    expect(product.variants).toEqual([
+      {
+        id: "wine-carafe",
+        name: "Jarra",
+        customerName: { es: "Jarra carta" },
+        kitchenName: "Jarra KDS",
+        image: "carafe.webp",
+        unitPrice: "9.00",
+        unitPriceDifference: "5.00",
+        available: true,
+        unit: litre,
+        pricingUnit: "weight",
+        vatClass: "reduced",
+        category: "Jarras",
+        allergens: { sulphites: { presence: "contains" } },
+        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        dietDerivation: { origins: ["plant"], pending: false },
+        dietOverride: { vegan: "yes" },
+        dietaryDeclarations: ["vegan"],
+        courseId: "course-drinks",
+      },
+    ]);
+    expect(product).toMatchObject({
+      unit: parentUnit,
+      vatClass: "general",
+      category: "Vinos",
+      allergens: null,
+      courseId: null,
+    });
+  });
 });

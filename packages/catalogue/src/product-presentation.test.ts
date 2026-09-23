@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   staffPresentationName,
   customerPresentationText,
+  fillBlankLocalesWithStaffName,
   joinCustomerPresentationText,
   kitchenPresentationName,
   type ProductPresentation,
@@ -17,8 +18,8 @@ const full: ProductPresentation = {
 };
 
 describe("staffPresentationName", () => {
-  test("joins product and variant staff names", () => {
-    expect(staffPresentationName(full)).toBe("Coffee · Large");
+  test("names a variant line by the variant's staff name alone", () => {
+    expect(staffPresentationName(full)).toBe("Large");
   });
   test("product only when no variant", () => {
     expect(staffPresentationName({ ...full, variantName: null })).toBe("Coffee");
@@ -43,46 +44,73 @@ describe("customerPresentationText", () => {
 });
 
 describe("joinCustomerPresentationText", () => {
-  test("joins the two frozen maps per locale", () => {
+  test("names a variant line by the variant's frozen customer text in each locale", () => {
     const { product, variant } = customerPresentationText(full, "en");
-    expect(joinCustomerPresentationText(product, variant)).toEqual({
-      en: "Fresh Coffee · Large cup",
-      es: "Café recién hecho · Taza grande",
+    expect(joinCustomerPresentationText(product, variant, full.variantName)).toEqual({
+      en: "Large cup",
+      es: "Taza grande",
     });
   });
   test("a line naming no variant keeps the product map unchanged", () => {
     const { product, variant } = customerPresentationText({ ...full, variantName: null }, "en");
     expect(variant).toBeNull();
-    expect(joinCustomerPresentationText(product, variant)).toEqual({
+    expect(joinCustomerPresentationText(product, variant, null)).toEqual({
       en: "Fresh Coffee",
       es: "Café recién hecho",
     });
   });
-  test("carries each side's own frozen fallback through", () => {
+  test("carries the variant's own frozen fallback through, never the product's", () => {
     const { product, variant } = customerPresentationText(
       { ...full, customerName: null, variantCustomerName: null },
       "en",
     );
-    expect(joinCustomerPresentationText(product, variant)).toEqual({ en: "Coffee · Large" });
-  });
-  test("a locale on one side only takes the other side's stored language rather than a blank half", () => {
-    expect(joinCustomerPresentationText({ en: "Coffee", es: "Café" }, { en: "Large" })).toEqual({
-      en: "Coffee · Large",
-      es: "Café · Large",
+    expect(joinCustomerPresentationText(product, variant, full.variantName)).toEqual({
+      en: "Large",
     });
   });
-  test("a variant map with nothing in it leaves the product text alone", () => {
-    expect(joinCustomerPresentationText({ en: "Coffee" }, { en: "  " })).toEqual({ en: "Coffee" });
+  test("a locale the variant map lacks takes the variant's stored language, not the product's text", () => {
+    expect(
+      joinCustomerPresentationText({ en: "Coffee", es: "Café" }, { en: "Large cup" }, "Large"),
+    ).toEqual({
+      en: "Large cup",
+      es: "Large cup",
+    });
+  });
+  test("a variant map with nothing in it falls back to the variant's staff name", () => {
+    expect(joinCustomerPresentationText({ en: "Coffee" }, { en: "  " }, "Large")).toEqual({
+      en: "Large",
+    });
+  });
+  test("a variant map with nothing in it and no variant name leaves the product text alone", () => {
+    expect(joinCustomerPresentationText({ en: "Coffee" }, { en: "  " }, null)).toEqual({
+      en: "Coffee",
+    });
   });
 });
 
 describe("kitchenPresentationName", () => {
-  test("uses kitchen names, joined", () => {
-    expect(kitchenPresentationName(full)).toBe("COF · LG");
+  test("names a variant line by the variant's kitchen name alone", () => {
+    expect(kitchenPresentationName(full)).toBe("LG");
   });
-  test("falls back to staff names when kitchen names are blank", () => {
+  test("falls back to the variant's staff name, never the product's kitchen name", () => {
+    expect(kitchenPresentationName({ ...full, variantKitchenName: null })).toBe("Large");
     expect(kitchenPresentationName({ ...full, kitchenName: null, variantKitchenName: null })).toBe(
-      "Coffee · Large",
+      "Large",
     );
+  });
+  test("names a line with no variant by the product's kitchen name, else its staff name", () => {
+    const plain = { ...full, variantName: null, variantKitchenName: null };
+    expect(kitchenPresentationName(plain)).toBe("COF");
+    expect(kitchenPresentationName({ ...plain, kitchenName: " " })).toBe("Coffee");
+  });
+});
+
+describe("fillBlankLocalesWithStaffName", () => {
+  test("gives each blank locale the staff name and keeps every stored text as it is", () => {
+    expect(fillBlankLocalesWithStaffName({ en: "Large cup", es: "  ", fr: "" }, "Large")).toEqual({
+      en: "Large cup",
+      es: "Large",
+      fr: "Large",
+    });
   });
 });

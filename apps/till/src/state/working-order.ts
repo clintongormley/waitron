@@ -134,9 +134,9 @@ type Priced = ReturnType<typeof priceBasket>;
  * Resolve one basket line into the shape the pricer takes. The till carries the three names the way
  * the catalogue stores them — a staff `name`, an optional per-language `customerName`, an optional
  * `kitchenName`, each with the variant's own alongside — while a priced line wants the CUSTOMER text
- * already resolved, so `customerPresentationText` (the one home for the blank-falls-back-to-the-staff-name
- * rule) does that here. The product and the variant stay SEPARATE fields: the pricer freezes them into
- * separate columns and joins nothing.
+ * already resolved, so `product-presentation.ts` (the one home for the blank-falls-back-to-the-staff-name
+ * rule) does that here, through `customerPresentationText`. The product and the variant stay SEPARATE
+ * fields: the pricer freezes them into separate columns and joins nothing.
  */
 function toPriceable(line: OrderLine): BasketItem {
   const p = line.product;

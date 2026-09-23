@@ -5,7 +5,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -77,6 +77,36 @@ describe("till-product-grid", () => {
     } finally {
       setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
     }
+  });
+
+  // Spec §15.4: every Active, Available offer gets a tile, sold alone or not — neither the offer
+  // nor the till product carries `sold_alone`, so nothing here can filter on it. A parent whose
+  // variants are all unavailable has nothing to sell and gets none.
+  it("gives a tile to a product with no variants and to one with an available variant, never to one whose variants are all unavailable", async () => {
+    const variant = (id: string, available: boolean) => ({
+      ...sellingValuesOf(cafe),
+      id,
+      name: id,
+      unitPrice: "4.50",
+      unitPriceDifference: null,
+      available,
+    });
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [
+        cafe,
+        {
+          ...cafe,
+          id: "wine",
+          name: "Vino",
+          variants: [variant("125", false), variant("175", true)],
+        },
+        { ...cafe, id: "cava", name: "Cava", variants: [variant("copa", false)] },
+      ],
+      store: new WorkingOrderStore(),
+    });
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-button .name")].map((name) => name.textContent),
+    ).toEqual(["Café", "Vino"]);
   });
 
   it("registers as a custom element", () => {

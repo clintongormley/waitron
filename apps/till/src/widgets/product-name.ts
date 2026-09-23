@@ -34,11 +34,10 @@ export function productName(product: TillProduct): string {
 }
 
 /**
- * The staff name for a product AS CHOSEN onto a line — the product's name with the selected variant
- * joined onto it, or the product's name alone when no variant was chosen. The join itself is
- * `staffPresentationName`'s, reached by the same deep import the basket's pricer uses
- * (`product-presentation.ts` depends only on `@waitron/shared`, so no catalogue barrel reaches the
- * browser bundle).
+ * The staff name for a product AS CHOSEN onto a line — the selected variant's own name, or the
+ * product's name when no variant was chosen. The rule is `staffPresentationName`'s, reached by the
+ * same deep import the basket's pricer uses (`product-presentation.ts` depends only on
+ * `@waitron/shared`, so no catalogue barrel reaches the browser bundle).
  */
 export function lineProductName(product: TillProduct): string {
   return staffPresentationName({ name: product.name, variantName: product.variantName ?? null });

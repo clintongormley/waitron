@@ -137,7 +137,8 @@ export const workingOrderLines = table(
     lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
     name: label("name").notNull(),
-    // The priced product this draft line was built from — the pricing input described above. A
+    // The priced product this draft line was built from — the pricing input described above: on a
+    // top-level line the chosen variant when one was chosen, else the product itself. A
     // CHILD EXTRA line (parent_line_id set) carries the PICKED product here, which is what the
     // kitchen cooks and the diner is charged for; its price and its three names are still
     // snapshotted onto the line by value, so deleting the list that offered it cannot rewrite the
@@ -148,7 +149,6 @@ export const workingOrderLines = table(
     // extraConfig below (null-permissive under MATCH SIMPLE), so this column carries no
     // `.references()` of its own.
     productId: id("product_id"),
-    variantId: id("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.
     variantName: label("variant_name"),
     // Variant customer text holding EXACTLY the venue's configured invoice locales (spec §9), checked

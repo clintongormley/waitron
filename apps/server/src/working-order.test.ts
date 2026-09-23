@@ -7,6 +7,7 @@ import {
   locations,
   nowIso,
   printJobs,
+  products,
   ticketItems,
   tills,
   withTransaction,
@@ -62,6 +63,7 @@ import {
   openTab,
   parkOrder,
   placeOrder,
+  priceStoredOrder,
   readTabLines,
   recallLines,
   sendLines,
@@ -71,6 +73,7 @@ import {
   voidTabLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
+import { ticketLinesFrom } from "./receipt-lines.js";
 import {
   createCourse,
   createStation,
@@ -408,8 +411,8 @@ async function addOptionList(
  * Publish one "Coffee" product with a "Large" variant on `catalogueId`, both carrying a
  * customer-facing name of their own that DIFFERS from their staff name, and return the offer and
  * variant ids. The two customer names differ from the staff names on purpose: a label built from the
- * staff names, or from the product's customer name alone, reads differently from the joined one, so a
- * reader that drops the variant is tellable apart from one that keeps it.
+ * staff names, or from the product's customer name alone, reads differently from the variant's own,
+ * so a reader that drops the variant is tellable apart from one that keeps it.
  */
 async function seedVariantOffer(
   tx: Transaction,
@@ -467,25 +470,26 @@ async function seedVariantOffer(
 
 /**
  * Every screen that shows a sold line shows ONE label, and a line that named a variant froze its
- * product text and its variant text in separate columns. Without the variant a large coffee and a
- * small one are indistinguishable on the tab, on the kitchen queue, on the pass and on the retrieve
- * screen, at prices that only make sense with the size.
+ * product text and its variant text in separate columns. A variant is named in full, so the label is
+ * the variant's own name (spec §15.2): without it a large coffee and a small one are
+ * indistinguishable on the tab, on the kitchen queue, on the pass and on the retrieve screen, at
+ * prices that only make sense with the size.
  *
  * Which of the three names each reader shows is the other half of what this pins. A table tab's line
- * list is read by a waiter, so it carries the STAFF pair. The station queue and the pass are read by
- * cooks, so they carry the KITCHEN pair, exactly as the printed ticket does. The retrieve screen is
- * the till's own and joins the staff halves itself (`lineProductName`,
- * `apps/till/src/widgets/product-name.ts`), so it receives both halves unjoined.
+ * list is read by a waiter, so it carries the variant's STAFF name. The station queue and the pass
+ * are read by cooks, so they carry its KITCHEN name, exactly as the printed ticket does. The retrieve
+ * screen is the till's own and resolves the name itself (`lineProductName`,
+ * `apps/till/src/widgets/product-name.ts`), so it receives both halves.
  *
  * The fixture's three pairs are three different strings, so a reader that shows the wrong name fails
  * here rather than passing. All four readers run over the SAME fired order, so one revert on any
  * single reader fails this.
  */
-describe("a sold line's label carries its variant", () => {
-  const STAFF = "Coffee · Large";
-  const KITCHEN = "COF · LG";
+describe("a sold line naming a variant is labelled by the variant's own name", () => {
+  const STAFF = "Large";
+  const KITCHEN = "LG";
 
-  it("carries product and variant onto the tab, the station queue, the pass and the retrieve screen", async () => {
+  it("shows the variant's name alone on the tab, the station queue and the pass, and hands the retrieve screen both names", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
     const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
@@ -6146,5 +6150,703 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(after).toHaveLength(1);
     // Two units, as a count of thousandths off the column.
     expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: 2000 });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------
+// Variants as products (plan `docs/superpowers/plans/2026-09-23-variants-as-products.md`, Task 5): a
+// variant is sold as the product it is. The line's `product_id` names the variant; the parent's three
+// frozen names sit beside the variant's own; the price and VAT are the variant's EFFECTIVE values; and
+// the kitchen treats the line as its parent would (Review Focus 3), unless the variant overrides the
+// field.
+// ---------------------------------------------------------------------------------------------------
+
+/**
+ * "Wine by the glass" (reduced, category "Vinos", course Primero, sulphites, vegan) on the venue's
+ * zone menu, with two variants: "Wine 125" sets nothing but its staff name and price, so every other
+ * field reads its parent's; "Wine 175" sets its own customer and kitchen names, VAT, category, course,
+ * allergens and dietary declarations, so a reader of the parent's value gets it wrong.
+ */
+async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
+  const vinos = await createCategory(tx, { name: { en: "Vinos" } });
+  const copas = await createCategory(tx, { name: { en: "Copas" } });
+  const primero = await createCourse(tx, cfg, { name: "Primero", displayOrder: 1 });
+  const segundo = await createCourse(tx, cfg, { name: "Segundo", displayOrder: 2 });
+  const parent = await createProduct(tx, {
+    catalogueId,
+    categoryId: vinos.id,
+    name: "Wine by the glass",
+    customerName: { [LOCALE]: "Vino de la casa" },
+    kitchenName: "VINO",
+    pricingUnit: "each",
+    unitPrice: "4.00",
+    vatClass: "reduced",
+    allergens: { sulphites: { presence: "contains" } },
+    dietaryDeclarations: ["vegan"],
+  });
+  await setProductCourse(tx, cfg, parent.id, primero.id);
+  const section = await createMenuSection(tx, {
+    menuId: catalogueId,
+    name: { [LOCALE]: "Vinos" },
+  });
+  const offer = await createMenuItem(tx, {
+    menuId: catalogueId,
+    productId: parent.id,
+    sectionId: section.id,
+    grossPrice: null,
+  });
+  const [wine125, wine175] = await setProductVariants(
+    tx,
+    parent.id,
+    [
+      {
+        name: "Wine 125",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "4.50",
+        available: true,
+      },
+      {
+        name: "Wine 175",
+        customerName: { [LOCALE]: "Copa grande" },
+        kitchenName: "V175",
+        image: null,
+        unitPrice: "5.50",
+        available: true,
+      },
+    ],
+    LOCALE,
+  );
+  await tx
+    .update(products)
+    .set({
+      vatClass: "general",
+      categoryId: copas.id,
+      courseId: segundo.id,
+      allergens: { gluten: { presence: "contains" } },
+      dietaryDeclarations: ["halal"],
+    })
+    .where(eq(products.id, wine175!.id));
+  await tx
+    .insert(catalogue.productCategories)
+    .values({ productId: wine175!.id, categoryId: copas.id });
+  return {
+    parentId: parent.id,
+    offerId: offer.id,
+    wine125: wine125!.id,
+    wine175: wine175!.id,
+    vinosId: vinos.id,
+    copasId: copas.id,
+    primeroId: primero.id,
+    segundoId: segundo.id,
+  };
+}
+
+/** The lines of `orderId` as `fireLines` takes them, in line order. */
+async function fireableLines(tx: Transaction, orderId: string) {
+  return tx
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      courseId: workingOrderLines.courseId,
+      parentLineId: workingOrderLines.parentLineId,
+      note: workingOrderLines.note,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+async function insertRoute(
+  tx: Transaction,
+  cfg: TillConfig,
+  route: { zoneId?: string; productId?: string; categoryId?: string; stationId: string },
+): Promise<void> {
+  await tx.execute(sql`
+    insert into preparation_routes (id, location_id, zone_id, product_id, category_id, station_id)
+    values (${randomUUID()}, ${cfg.locationId}, ${route.zoneId ?? null}, ${route.productId ?? null},
+      ${route.categoryId ?? null}, ${route.stationId})`);
+}
+
+describe("a variant is sold as the product it is", () => {
+  it("writes the variant as the line's product beside the parent's names, priced and taxed from its effective values", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const id = randomUUID();
+    const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
+        { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+      ],
+    });
+    const rows = await db
+      .select({
+        productId: workingOrderLines.productId,
+        name: workingOrderLines.name,
+        descriptions: workingOrderLines.descriptions,
+        kitchenName: workingOrderLines.kitchenName,
+        variantName: workingOrderLines.variantName,
+        variantDescriptions: workingOrderLines.variantDescriptions,
+        variantKitchenName: workingOrderLines.variantKitchenName,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        vatRate: workingOrderLines.vatRate,
+        courseId: workingOrderLines.courseId,
+        category: workingOrderLines.category,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    const parentNames = {
+      name: "Wine by the glass",
+      descriptions: { [LOCALE]: "Vino de la casa" },
+      kitchenName: "VINO",
+    };
+    expect(rows).toEqual([
+      {
+        productId: wine.wine125,
+        ...parentNames,
+        // The variant's OWN raw names: no kitchen name of its own is stored as none, and its
+        // customer text falls back to its own staff name, never to the parent's.
+        variantName: "Wine 125",
+        variantDescriptions: { [LOCALE]: "Wine 125" },
+        variantKitchenName: null,
+        unitPriceGross: 450,
+        vatRate: 1000,
+        courseId: wine.primeroId,
+        category: "Vinos",
+      },
+      {
+        productId: wine.wine175,
+        ...parentNames,
+        variantName: "Wine 175",
+        variantDescriptions: { [LOCALE]: "Copa grande" },
+        variantKitchenName: "V175",
+        unitPriceGross: 550,
+        vatRate: 2100,
+        courseId: wine.segundoId,
+        category: "Copas",
+      },
+    ]);
+  });
+
+  it("refuses a parent with Active variants rung up alone, and sells one whose variants are all Inactive as itself", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [{ menuItemId: wine.offerId, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "product.variant_required",
+      params: { productId: wine.parentId },
+    });
+
+    await withTransaction(db, (tx) => setProductVariants(tx, wine.parentId, [], LOCALE));
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: wine.offerId, quantity: "1" }],
+    });
+    const rows = await db
+      .select({
+        productId: workingOrderLines.productId,
+        variantName: workingOrderLines.variantName,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        vatRate: workingOrderLines.vatRate,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(rows).toEqual([
+      { productId: wine.parentId, variantName: null, unitPriceGross: 400, vatRate: 1000 },
+    ]);
+  });
+
+  it("refuses an Inactive, Unavailable, not-offered or other parent's variant", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const refused = await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      const kept = (id: string, name: string, unitPrice: string) => ({
+        id,
+        name,
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice,
+        available: true,
+      });
+      const fresh = (name: string, available = true) => ({
+        name,
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "6.00",
+        available,
+      });
+      const [, , inactive, unavailable, notOffered] = await setProductVariants(
+        tx,
+        wine.parentId,
+        [
+          kept(wine.wine125, "Wine 125", "4.50"),
+          kept(wine.wine175, "Wine 175", "5.50"),
+          fresh("Wine 250"),
+          fresh("Wine 500", false),
+          fresh("Wine 750"),
+        ],
+        LOCALE,
+      );
+      await tx.update(products).set({ active: false }).where(eq(products.id, inactive!.id));
+      await setMenuVariants(tx, wine.offerId, [
+        { variantId: notOffered!.id, price: null, offered: false },
+      ]);
+      const cider = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Cider",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      const [pint] = await setProductVariants(tx, cider.id, [fresh("Cider pint")], LOCALE);
+      return {
+        offerId: wine.offerId,
+        ids: [inactive!.id, unavailable!.id, notOffered!.id, pint!.id],
+      };
+    });
+    for (const variantId of refused.ids) {
+      await expect(
+        parkOrder({ db }, cfg, {
+          id: randomUUID(),
+          zoneId,
+          lines: [{ menuItemId: refused.offerId, variantId, quantity: "1" }],
+        }),
+      ).rejects.toMatchObject({ code: "product.variant_unavailable", params: { variantId } });
+    }
+  });
+
+  it("fires a variant line to its parent's product station, and one overriding the station to its own", async () => {
+    const { cfg, catalogueId, cafeId, aguaId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra" });
+      const copas = await createStation(tx, cfg, { name: "Copas" });
+      await setProductStation(tx, cfg, wine.parentId, barra.id);
+      await tx.update(products).set({ stationId: copas.id }).where(eq(products.id, wine.wine175));
+      // An order with no service context, so the station comes from the product and category
+      // routes. Its lines are handed to `fireLines` naming the two variants, which is what an order
+      // line for each would carry.
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [line(cafeId), line(aguaId)], null);
+      const [first, second] = await fireableLines(tx, orderId);
+      await fireLines(tx, cfg, orderId, [
+        { ...first!, productId: wine.wine125 },
+        { ...second!, productId: wine.wine175 },
+      ]);
+      const stations = await tx
+        .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(new Map(stations.map((s) => [s.lineId, s.stationId]))).toEqual(
+        new Map([
+          [first!.id, barra.id],
+          [second!.id, copas.id],
+        ]),
+      );
+    });
+  });
+
+  it("fires a variant line to its parent's category station, and one in its own category to that one's", async () => {
+    const { cfg, catalogueId, cafeId, aguaId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const bodega = await createStation(tx, cfg, { name: "Bodega" });
+      const terraza = await createStation(tx, cfg, { name: "Terraza" });
+      await setCategoryStation(tx, cfg, wine.vinosId, bodega.id);
+      await setCategoryStation(tx, cfg, wine.copasId, terraza.id);
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [line(cafeId), line(aguaId)], null);
+      const [first, second] = await fireableLines(tx, orderId);
+      await fireLines(tx, cfg, orderId, [
+        { ...first!, productId: wine.wine125 },
+        { ...second!, productId: wine.wine175 },
+      ]);
+      const stations = await tx
+        .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(new Map(stations.map((s) => [s.lineId, s.stationId]))).toEqual(
+        new Map([
+          [first!.id, bodega.id],
+          [second!.id, terraza.id],
+        ]),
+      );
+    });
+  });
+
+  it("takes the preparation route keyed on the parent's product id, and a variant's own category route where it outranks it", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
+      const terraza = await createStation(tx, cfg, { name: "Terraza" });
+      // Venue-wide product route on the PARENT (rank 2), and a zone route on Wine 175's own
+      // category (rank 3), which outranks it for Wine 175 alone.
+      await insertRoute(tx, cfg, { productId: wine.parentId, stationId: barra.id });
+      await insertRoute(tx, cfg, { zoneId, categoryId: wine.copasId, stationId: terraza.id });
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [
+          { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
+          { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+        ],
+        null,
+        { zoneId },
+      );
+      await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
+      const items = await ticketItemsFor(tx, orderId);
+      expect(byProduct(items, wine.wine125).stationId).toBe(barra.id);
+      expect(byProduct(items, wine.wine175).stationId).toBe(terraza.id);
+    });
+  });
+
+  it("takes the preparation route of the parent's category, and one in its own category that one's", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      const bodega = await createStation(tx, cfg, { name: "Bodega", isDefault: true });
+      const terraza = await createStation(tx, cfg, { name: "Terraza" });
+      await insertRoute(tx, cfg, { zoneId, categoryId: wine.vinosId, stationId: bodega.id });
+      await insertRoute(tx, cfg, { zoneId, categoryId: wine.copasId, stationId: terraza.id });
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [
+          { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
+          { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+        ],
+        null,
+        { zoneId },
+      );
+      await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
+      const items = await ticketItemsFor(tx, orderId);
+      expect(byProduct(items, wine.wine125).stationId).toBe(bodega.id);
+      expect(byProduct(items, wine.wine175).stationId).toBe(terraza.id);
+    });
+  });
+
+  it("shows the parent's allergens and dietary labels on the kitchen screen, and a variant's own where it sets them", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    const { items, wine } = await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
+      await insertRoute(tx, cfg, { zoneId, productId: wine.parentId, stationId: barra.id });
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [
+          { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
+          { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+        ],
+        null,
+        { zoneId },
+      );
+      await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
+      const queue = await listStationQueue(tx, barra.id);
+      return { wine, items: queue.flatMap((group) => group.items) };
+    });
+    const lines = await db
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, orderId));
+    const itemFor = (productId: string) =>
+      items.find((i) => i.workingOrderLineId === lines.find((l) => l.productId === productId)!.id)!;
+    expect(itemFor(wine.wine125).asServed).toEqual({
+      allergens: { sulphites: { presence: "contains" } },
+      pending: false,
+    });
+    expect(itemFor(wine.wine125).asServedDiet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
+    expect(itemFor(wine.wine175).asServed).toEqual({
+      allergens: { gluten: { presence: "contains" } },
+      pending: false,
+    });
+    expect(itemFor(wine.wine175).asServedDiet).toMatchObject({
+      vegan: "unknown",
+      vegetarian: "unknown",
+      halal: "yes",
+    });
+  });
+
+  it("shows an extra that is a variant with its parent's allergens and dietary labels, and one setting its own with those", async () => {
+    const { cfg, zoneId, catalogueId, cafeId, cafeOfferId } = await setupVenue();
+    const orderId = randomUUID();
+    const modifiers = await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      const list = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Copa",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [
+            { productId: wine.wine125, maxQuantity: 1, preselected: false, price: "1.00" },
+            { productId: wine.wine175, maxQuantity: 1, preselected: false, price: "2.00" },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+      await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
+        {
+          listId: list.id,
+          items: [
+            { productId: wine.wine125, price: "1.00", available: true },
+            { productId: wine.wine175, price: "2.00", available: true },
+          ],
+        },
+      ]);
+      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
+      await insertRoute(tx, cfg, { zoneId, productId: cafeId, stationId: barra.id });
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [
+          {
+            menuItemId: cafeOfferId,
+            quantity: "1",
+            extras: [
+              {
+                listId: list.id,
+                picks: [
+                  { productId: wine.wine125, quantity: 1 },
+                  { productId: wine.wine175, quantity: 1 },
+                ],
+              },
+            ],
+          },
+        ],
+        null,
+        { zoneId },
+      );
+      await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
+      return (await listStationQueue(tx, barra.id))[0]!.items[0]!.modifiers;
+    });
+    expect(
+      modifiers.map(({ addAllergens, suitableFor }) => ({ addAllergens, suitableFor })),
+    ).toEqual([
+      {
+        addAllergens: { sulphites: { presence: "contains" } },
+        suitableFor: catalogue.expandDietaryDeclarations(["vegan"]),
+      },
+      {
+        addAllergens: { gluten: { presence: "contains" } },
+        suitableFor: catalogue.expandDietaryDeclarations(["halal"]),
+      },
+    ]);
+  });
+
+  it("names a variant line with no customer or kitchen name by its own name on the tab, the kitchen screens and the receipt, in every invoice locale", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const locales = [LOCALE, "en-GB"];
+    await db
+      .update(locations)
+      .set({ invoiceLocales: locales })
+      .where(eq(locations.id, cfg.locationId));
+    const twoLocales = { ...cfg, invoiceLocales: locales };
+    const orderId = randomUUID();
+    const seen = await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, twoLocales, catalogueId);
+      const barra = await createStation(tx, twoLocales, { name: "Barra", isDefault: true });
+      await insertRoute(tx, twoLocales, { zoneId, productId: wine.parentId, stationId: barra.id });
+      await createOpenOrder(
+        tx,
+        twoLocales,
+        orderId,
+        [{ menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      await fireLines(tx, twoLocales, orderId, await fireableLines(tx, orderId));
+      const [stored] = await tx
+        .select({ variantDescriptions: workingOrderLines.variantDescriptions })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      return {
+        stored: stored!.variantDescriptions,
+        tab: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.name),
+        tabUnitPrecision: (await readTabLines(tx, twoLocales, orderId)).map((l) => l.unitPrecision),
+        station: (await listStationQueue(tx, barra.id))[0]!.items.map((i) => i.name),
+        expo: (await listExpoQueue(tx, twoLocales))[0]!.courses.flatMap((c) =>
+          c.items.map((i) => i.name),
+        ),
+        receipt: ticketLinesFrom(await priceStoredOrder(tx, orderId)).map((l) => l.descriptions),
+      };
+    });
+    expect(seen).toEqual({
+      stored: { [LOCALE]: "Wine 125", "en-GB": "Wine 125" },
+      tab: ["Wine 125"],
+      // The line's own frozen precision: the till splits by it, since a variant is never one of the
+      // till's products (it lists the offers' parents).
+      tabUnitPrecision: [0],
+      station: ["Wine 125"],
+      expo: ["Wine 125"],
+      receipt: [{ [LOCALE]: "Wine 125", "en-GB": "Wine 125" }],
+    });
+  });
+
+  it("stores a variant's own staff name in each invoice locale its customer text leaves blank", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const locales = [LOCALE, "en-GB"];
+    await db
+      .update(locations)
+      .set({ invoiceLocales: locales })
+      .where(eq(locations.id, cfg.locationId));
+    const twoLocales = { ...cfg, invoiceLocales: locales };
+    const id = randomUUID();
+    const wine = await withTransaction(db, async (tx) => {
+      const seeded = await seedWine(tx, twoLocales, catalogueId);
+      // Text in a language neither invoice locale nor the default resolves to, so both come out
+      // blank and each takes the variant's staff name, not the parent's "Vino de la casa".
+      await tx
+        .update(products)
+        .set({ customerName: { "fr-FR": "Grand verre" } })
+        .where(eq(products.id, seeded.wine175));
+      return seeded;
+    });
+    await parkOrder({ db }, twoLocales, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" }],
+    });
+    const [stored] = await db
+      .select({ variantDescriptions: workingOrderLines.variantDescriptions })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(stored!.variantDescriptions).toEqual({ [LOCALE]: "Wine 175", "en-GB": "Wine 175" });
+  });
+
+  it("re-prices a kept line whose variant alone changed", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" }],
+    });
+    const [before] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before!.id,
+          menuItemId: wine.offerId,
+          variantId: wine.wine175,
+          quantity: "1",
+        },
+      ],
+    });
+    const after = await db
+      .select({
+        productId: workingOrderLines.productId,
+        variantName: workingOrderLines.variantName,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        vatRate: workingOrderLines.vatRate,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(after).toEqual([
+      { productId: wine.wine175, variantName: "Wine 175", unitPriceGross: 550, vatRate: 2100 },
+    ]);
+  });
+
+  it("keeps a quantity-only edit of a variant line with an options answer on its line id and locked price", async () => {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const { wine, options } = await withTransaction(db, async (tx) => {
+      const wine = await seedWine(tx, cfg, catalogueId);
+      // The list is attached to the PARENT: a variant offers its parent's lists (spec §4.4).
+      const options = await addOptionList(tx, wine.parentId, "Temperatura", ["Fría", "Natural"]);
+      return { wine, options };
+    });
+    const answer = [{ listId: options.listId, labelId: options.labelIds[0]! }];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1", options: answer },
+      ],
+    });
+    const [before] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await db.update(products).set({ unitPrice: 900 }).where(eq(products.id, wine.wine125));
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before!.id,
+          menuItemId: wine.offerId,
+          variantId: wine.wine125,
+          quantity: "2",
+          options: answer,
+        },
+      ],
+    });
+    const after = await db
+      .select({
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        lineTotal: workingOrderLines.lineTotal,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(after).toEqual([
+      { id: before!.id, productId: wine.wine125, unitPriceGross: 450, lineTotal: 900 },
+    ]);
+  });
+
+  it("returns a retrieved variant line's variant id, and none for a line without one", async () => {
+    const { cfg, zoneId, catalogueId, cafeId, cafeOfferId } = await setupVenue();
+    const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+        { menuItemId: cafeOfferId, quantity: "1" },
+      ],
+    });
+    const held = await getHeldOrder({ db }, cfg, id);
+    expect(held.lines.map((l) => [l.menuItemId, l.variantId, l.product?.variantId])).toEqual([
+      [wine.offerId, wine.wine175, wine.wine175],
+      [cafeOfferId, undefined, undefined],
+    ]);
+    // The dish is the variant's PARENT, as the till built it from the offer at add time.
+    expect(held.lines.map((l) => [l.productId, l.product?.id, l.product?.productId])).toEqual([
+      [wine.parentId, wine.parentId, wine.parentId],
+      [cafeId, cafeId, cafeId],
+    ]);
   });
 });

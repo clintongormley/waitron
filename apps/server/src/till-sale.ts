@@ -135,8 +135,8 @@ export interface TillSaleRequest {
  * an edit is the operator's own change, not silent price drift.)
  */
 export interface TillSaleLine {
-  /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim, with
-   *  the selected variant's own snapshot joined on (`joinCustomerPresentationText`). The receipt
+  /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim — the
+   *  selected variant's own on a variant line (`joinCustomerPresentationText`). The receipt
    *  resolves the invoice locale from this map (art. 7.1.e), so a two-size product's ticket says
    *  which size was sold. */
   descriptions: Record<string, string>;

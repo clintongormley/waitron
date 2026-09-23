@@ -52,7 +52,7 @@ describe("productName", () => {
     expect(productName(product({ customerName: null }))).toBe("Coffee");
   });
 
-  it("names the product alone — a chosen variant is joined only onto a line", () => {
+  it("names the product alone — a chosen variant names only a line", () => {
     expect(productName(product({ variantId: "v1", variantName: "Large" }))).toBe("Coffee");
   });
 });
@@ -82,24 +82,22 @@ describe("customerProductName", () => {
 });
 
 describe("lineProductName", () => {
-  it("joins the variant's STAFF name onto the product's staff name", () => {
+  it("names the line by the variant's STAFF name alone", () => {
     setLocale("es-ES");
     const line = product({
       variantId: "v1",
       variantName: "Large",
       variantCustomerName: { es: "Taza grande", en: "Large cup" },
     });
-    expect(lineProductName(line)).toBe("Coffee · Large");
+    expect(lineProductName(line)).toBe("Large");
   });
 
   it("names the product alone when no variant was chosen", () => {
     expect(lineProductName(product())).toBe("Coffee");
   });
 
-  it("joins the variant's staff name even when the variant has no customer name", () => {
-    expect(lineProductName(product({ variantId: "v1", variantName: "Small" }))).toBe(
-      "Coffee · Small",
-    );
+  it("names the line by the variant's staff name even when the variant has no customer name", () => {
+    expect(lineProductName(product({ variantId: "v1", variantName: "Small" }))).toBe("Small");
   });
 });
 

@@ -3,12 +3,13 @@ import {
   dishGross,
   extraGross,
   lineGross,
+  needsModifierPicker,
   quantityLabel,
   toWireLineExtras,
   toWireModifiers,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 // A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
 const cafe: TillProduct = {
@@ -183,4 +184,25 @@ it("rounds each extras pick before summing, so a fractional dish quantity matche
   };
   // dish 10.00 × 0.125 = 1.25; extra 0.50 × (0.125 × 2) = 0.125 → 0.13 rounded on its own row.
   expect(lineGross(line)).toBe("1.38");
+});
+
+describe("needsModifierPicker", () => {
+  const wine = (available: boolean) => ({
+    ...sellingValuesOf(cafe),
+    id: "wine-125",
+    name: "Wine 125",
+    unitPrice: "4.50",
+    unitPriceDifference: "0.50",
+    available,
+  });
+
+  // A product with variants is never rung up as itself (spec §15.1): tapping it always asks which.
+  it("is true for a product with variants, whether or not one is available", () => {
+    expect(needsModifierPicker({ ...cafe, variants: [wine(true)] })).toBe(true);
+    expect(needsModifierPicker({ ...cafe, variants: [wine(false)] })).toBe(true);
+  });
+
+  it("is false for a product offering neither a variant nor a list", () => {
+    expect(needsModifierPicker({ ...cafe, variants: [], offeredModifiers: [] })).toBe(false);
+  });
 });

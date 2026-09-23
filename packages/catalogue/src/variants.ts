@@ -8,6 +8,7 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
+import type { MenuOffer } from "./menu-types.js";
 import {
   effectiveProductColumns as effective,
   INHERITED_KEYS,
@@ -84,11 +85,16 @@ export async function listProductVariants(
   tx: Transaction,
   productId: string,
 ): Promise<ProductVariant[]> {
-  return (await listProductVariantsForProducts(tx, [productId])).get(productId) ?? [];
+  return (await variantsOfProducts(tx, [productId])).get(productId) ?? [];
 }
 
-/** Read variants for several products in one query. */
-export async function listProductVariantsForProducts(
+/**
+ * Every variant of each product in `productIds`, Inactive ones included, in ONE query — the product
+ * list reads its variants through this rather than once per product (CLAUDE.md §3). Left out of the
+ * package's exports (`index.ts`): what a menu SELLS is decided from the offer
+ * (`MenuOffer.variants`), never from this read.
+ */
+export async function variantsOfProducts(
   tx: Transaction,
   productIds: readonly string[],
 ): Promise<Map<string, ProductVariant[]>> {
@@ -287,61 +293,95 @@ export async function setMenuVariants(
   return listMenuVariants(tx, menuItemId);
 }
 
-// Extends ProductPresentation so the compiler keeps the six name pieces in step: a resolved
-// selection goes straight to that module's staff/customer/kitchen resolvers, and the " · " join and
-// the customerName-to-name fallback stay in ONE place.
-export interface SelectedVariant extends ProductPresentation {
-  variantId: string | null;
+/**
+ * The line an offer sells, as `resolveMenuVariant` resolves it: the three names of the offer's
+ * product beside the chosen variant's own three, and the price charged.
+ */
+export interface SelectedName extends ProductPresentation {
+  /** The product sold: the chosen variant, or the offer's product when it has no Active variant. */
+  productId: string;
   unitPrice: string;
 }
 
+/** The selling values the order path prices, taxes and routes a line by, typed as the caller's
+ * offer types them (the module contract's offer carries `vatClass` as a plain string). */
+export interface SellingValues<
+  Unit = MenuOffer["unit"],
+  Vat extends string = MenuOffer["vatClass"],
+> {
+  unit: Unit;
+  vatClass: Vat;
+  category: string | null;
+  courseId: string | null;
+}
+
 /**
- * The line an offer sells: the chosen variant, or the product itself when it has no Active
- * variant (spec §15.1). `offer.variants` carries each variant's resolved price and whether it may
- * be sold on this menu now.
+ * {@link SelectedName} plus the chosen row's EFFECTIVE selling values — a variant's own, or its
+ * parent's where it leaves one blank (`variant-fallback.ts`), as the offer carries them.
  */
-export function selectMenuVariant(
-  offer: {
+export type SelectedVariant<
+  Unit = MenuOffer["unit"],
+  Vat extends string = MenuOffer["vatClass"],
+> = SelectedName & SellingValues<Unit, Vat>;
+
+/**
+ * The line an offer sells (spec §4.5): the chosen variant, or the offer's product itself when it
+ * lists no variant (spec §15.1). Decided from the offer alone: `offer.variants` holds only Active
+ * variants, each flagged `available` when it may be sold on this menu now.
+ */
+export function selectMenuVariant<Unit, Vat extends string>(
+  offer: SellingValues<Unit, Vat> & {
     productId: string;
     name: string;
-    customerName: Record<string, string> | null;
+    customerName: Readonly<Record<string, string>> | null;
     kitchenName: string | null;
     unitPrice: string;
-    variants: readonly { id: string; unitPrice: string; available: boolean }[];
+    variants: readonly (SellingValues<Unit, Vat> & {
+      id: string;
+      name: string;
+      customerName: Readonly<Record<string, string>> | null;
+      kitchenName: string | null;
+      unitPrice: string;
+      available: boolean;
+    })[];
   },
-  productVariants: readonly ProductVariant[],
   variantId: string | null,
-): SelectedVariant {
-  const active = productVariants.filter((variant) => variant.active);
-  if (active.length > 0 && variantId === null) {
-    throw new AppError("product.variant_required", { productId: offer.productId });
-  }
+): SelectedVariant<Unit, Vat> {
+  const parentNames = {
+    name: offer.name,
+    customerName: offer.customerName,
+    kitchenName: offer.kitchenName,
+  };
   if (variantId === null) {
+    if (offer.variants.length > 0) {
+      throw new AppError("product.variant_required", { productId: offer.productId });
+    }
     return {
-      variantId: null,
-      name: offer.name,
-      customerName: offer.customerName,
-      kitchenName: offer.kitchenName,
+      productId: offer.productId,
+      ...parentNames,
       variantName: null,
       variantCustomerName: null,
       variantKitchenName: null,
       unitPrice: offer.unitPrice,
+      unit: offer.unit,
+      vatClass: offer.vatClass,
+      category: offer.category,
+      courseId: offer.courseId,
     };
   }
-  const variant = active.find((candidate) => candidate.id === variantId);
-  const offered = offer.variants.find((candidate) => candidate.id === variantId);
-  if (!variant?.available || !offered?.available) {
-    throw new AppError("product.variant_unavailable", { variantId });
-  }
+  const variant = offer.variants.find((candidate) => candidate.id === variantId);
+  if (!variant?.available) throw new AppError("product.variant_unavailable", { variantId });
   return {
-    variantId,
-    name: offer.name,
-    customerName: offer.customerName,
-    kitchenName: offer.kitchenName,
+    productId: variant.id,
+    ...parentNames,
     variantName: variant.name,
     variantCustomerName: variant.customerName,
     variantKitchenName: variant.kitchenName,
-    unitPrice: offered.unitPrice,
+    unitPrice: variant.unitPrice,
+    unit: variant.unit,
+    vatClass: variant.vatClass,
+    category: variant.category,
+    courseId: variant.courseId,
   };
 }
 
@@ -349,7 +389,7 @@ export async function resolveMenuVariant(
   tx: Transaction,
   menuItemId: string,
   variantId: string | null,
-): Promise<SelectedVariant> {
+): Promise<SelectedName> {
   const [offer] = await tx
     .select({
       productId: products.id,
@@ -385,7 +425,7 @@ export async function resolveMenuVariant(
     throw new AppError("product.variant_required", { productId: offer.productId });
   if (variantId === null)
     return {
-      variantId: null,
+      productId: offer.productId,
       name: offer.name,
       customerName: offer.customerName,
       kitchenName: offer.kitchenName,
@@ -413,7 +453,7 @@ export async function resolveMenuVariant(
   if (!variant?.available || override?.offered === false)
     throw new AppError("product.variant_unavailable", { variantId });
   return {
-    variantId,
+    productId: variantId,
     name: offer.name,
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,

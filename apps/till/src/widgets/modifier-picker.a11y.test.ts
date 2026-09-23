@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
+import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
 
 /** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
 function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {
@@ -77,6 +77,39 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
     const { host } = await mountWidget<TillModifierPicker>(
       "till-modifier-picker",
       { product: burger },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with variants listed, one unavailable and two with a price difference", async () => {
+    setLocale("es-ES");
+    const variant = (
+      id: string,
+      unitPrice: string,
+      unitPriceDifference: string | null,
+      available: boolean,
+    ) => ({
+      ...sellingValuesOf(burger),
+      id,
+      name: `Vino ${id}`,
+      unitPrice,
+      unitPriceDifference,
+      available,
+    });
+    const { host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: {
+          ...burger,
+          offeredModifiers: [],
+          variants: [
+            variant("100", "7.50", "-0.50", false),
+            variant("125", "9.50", "1.50", true),
+            variant("150", "8.00", null, true),
+          ],
+        },
+      },
       theme,
     );
     await expectNoA11yViolations(host);

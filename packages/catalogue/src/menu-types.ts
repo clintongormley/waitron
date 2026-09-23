@@ -158,9 +158,8 @@ export interface AccessibleCatalogue {
  * `addAllergens` and `suitableFor` take the vocabulary of a CHILD line rather than of a product,
  * because that is what a pick becomes: the same two field names as `QueueModifier`
  * (`readQueueSubItems`, apps/server/src/working-order.ts) — the product's effective `allergens`, and
- * its effective `dietaryDeclarations` expanded the way a dish's own row is expanded. The kitchen read
- * takes the raw columns until plan Task 5, so an extra that is an inheriting variant shows none
- * there. Shown BESIDE the dish's own declarations, never folded into them (spec §3.4).
+ * its effective `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown BESIDE the
+ * dish's own declarations, never folded into them (spec §3.4).
  */
 export interface OfferedExtraItem {
   productId: string;

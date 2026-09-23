@@ -50,9 +50,8 @@ export interface SellableUnit extends Unit {
  * One product variant as the editor sends and receives it — a `products` row with a `parent_id`.
  * The three names fall back INDEPENDENTLY: `name` is the plain staff-facing text, `customerName` the
  * translated text a guest reads, and `kitchenName` what a kitchen ticket prints; a blank customer or
- * kitchen name falls back to `name`. `product-presentation.ts` owns that fallback and the " · " join
- * onto the product's own name. `unitPrice` and `image` are the variant's OWN values, null where it
- * takes its parent's.
+ * kitchen name falls back to `name`, never to the parent's names. `product-presentation.ts` owns that
+ * fallback. `unitPrice` and `image` are the variant's OWN values, null where it takes its parent's.
  */
 export interface ProductVariant {
   id: string;

@@ -24,7 +24,24 @@ export * from "./extra-projection.js";
 export * from "./product-modifiers.js";
 export * from "./offered-modifiers.js";
 
-export * from "./variants.js";
+// Listed rather than `export *`: `variantsOfProducts` is the product list's batched read, and what a
+// menu sells is decided from the offer (`MenuOffer.variants`), never from it.
+export {
+  listMenuVariants,
+  listProductVariants,
+  resolveMenuVariant,
+  selectMenuVariant,
+  setMenuVariants,
+  setProductVariants,
+} from "./variants.js";
+export type {
+  MenuVariant,
+  ProductVariant,
+  ProductVariantInput,
+  SelectedName,
+  SelectedVariant,
+  SellingValues,
+} from "./variants.js";
 export * from "./variant-fallback.js";
 export * from "./dietary-declarations.js";
 export * from "./product-editor.js";

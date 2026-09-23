@@ -49,7 +49,6 @@ describe("priceBasket — difference method", () => {
       ...each("4.10", "general"),
       name: "Coffee",
       descriptions: { en: "Our coffee" },
-      variantId: "11111111-1111-4111-8111-111111111111",
       variantName: "Double",
       variantDescriptions: { en: "Double shot" },
       variantKitchenName: "DBL",
@@ -58,7 +57,6 @@ describe("priceBasket — difference method", () => {
     const expected = {
       name: "Coffee",
       descriptions: { en: "Our coffee" },
-      variantId: product.variantId,
       variantName: "Double",
       variantDescriptions: { en: "Double shot" },
       variantKitchenName: "DBL",
@@ -66,6 +64,8 @@ describe("priceBasket — difference method", () => {
     };
     const live = priceBasket([{ product, quantity: "1" }]);
     expect(live.lines[0]).toMatchObject(expected);
+    // A filed line keeps frozen names and no catalogue reference (spec decision 11).
+    expect(live.lines[0]).not.toHaveProperty("variantId");
     const locked = priceLockedLines([
       {
         grossUnitPrice: "4.10",
@@ -74,7 +74,6 @@ describe("priceBasket — difference method", () => {
         name: product.name,
         descriptions: product.descriptions,
         category: "Drinks",
-        variantId: product.variantId,
         variantName: product.variantName,
         variantDescriptions: product.variantDescriptions,
         variantKitchenName: product.variantKitchenName,
@@ -82,6 +81,7 @@ describe("priceBasket — difference method", () => {
       },
     ]);
     expect(locked.lines[0]).toMatchObject(expected);
+    expect(locked.lines[0]).not.toHaveProperty("variantId");
   });
   it("prices a fractional quantity for a custom two-decimal unit", () => {
     const r = priceBasket([

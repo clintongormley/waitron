@@ -360,14 +360,14 @@ it("links a blocking variant use to the editor of the product that owns it", asy
         id: "variant-1",
         productId: "product-1",
         catalogueId: "menu",
-        name: "Bread · Large",
+        name: "Large",
         active: true,
       },
     ],
   });
   await mount(client);
   click("[data-test=delete-one]");
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Bread · Large"));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Large"));
   // A variant has no page of its own, so the link goes to its PRODUCT's editor, not to its own id.
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
     "/manage/catalogue/product/product-1",

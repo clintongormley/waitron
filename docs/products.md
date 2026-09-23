@@ -66,12 +66,14 @@ Variants appear as a table under the price. Drag a row by the handle at its star
 focus the handle and use the up and down arrow keys. The row menu offers **Edit** and **Remove**, and
 each row's **Available** switch takes effect as you flip it. Editing a variant opens a small window
 where it gets its own price, image and its own three names — staff, customer-facing and kitchen —
-each falling back to the variant's staff name exactly as the product's do. On a receipt or a kitchen
-ticket the variant's name is added to the product's after a middot: **Coffee · Large**.
+each falling back to the variant's staff name exactly as the product's do. On the till, a receipt,
+a kitchen ticket and the sales report, a variant is shown under its own name alone, so name it in
+full: **Large coffee**, not **Large**.
 
 A product has either no variants or at least two — never exactly one. The first time you choose **Add
 variant**, the price you already entered becomes a variant called **Regular** and the window opens for
-the second one, so you always end up with a pair. Cancel that window and the Regular variant folds
+the second one, so you always end up with a pair. Regular prints alone too, so rename it to the full
+name, for example **Regular coffee**. Cancel that window and the Regular variant folds
 back into the plain price, undoing the whole thing. Remove variants until one is left and its price
 folds back the same way.
 

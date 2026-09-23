@@ -222,13 +222,11 @@ export const saleLines = table(
     // Frozen staff-facing product name (products.name at sale time) — snapshotted, never read live.
     name: label("name").notNull(),
     descriptions: json<Record<string, string>>("descriptions").notNull(),
-    variantId: id("variant_id"),
     // Frozen variant staff name — plain text; null when the line names no variant.
     variantName: label("variant_name"),
     // Variant customer text, snapshotted under the venue's invoice locales like `descriptions`. No
     // locales trigger guards it HERE, and nothing else in the database does either: the check lives
-    // on `working_order_lines` only (`packages/db/drizzle/0031_variant_descriptions_locales_sql.sql`,
-    // which carries the probe). The till reaches a sale through a persisted working order, so its
+    // on `working_order_lines` only (`packages/db/drizzle/0001_behavioural_triggers.sql`). The till reaches a sale through a persisted working order, so its
     // lines were checked there before `recordSale` copied them across; a caller that builds its own
     // lines instead keeps the invoice locales right by itself.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),

@@ -9,11 +9,12 @@ import { lineGross } from "../state/order-line.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
-import type {
-  OfferedExtraItem,
-  OfferedExtrasList,
-  OfferedOptionsList,
-  TillProduct,
+import {
+  sellingValuesOf,
+  type OfferedExtraItem,
+  type OfferedExtrasList,
+  type OfferedOptionsList,
+  type TillProduct,
 } from "../api/client.js";
 
 /** What a confirmed pick carries: the dish as chosen, plus everything `LineSelection` holds — the
@@ -30,6 +31,13 @@ export interface ModifierConfirmDetail extends LineSelection {
  */
 function pickKey(listId: string, productId: string): string {
   return `${listId}\u0000${productId}`;
+}
+
+/** "+€1.50" for a variant dearer than its parent, "−€0.50" (a minus sign) for a cheaper one. */
+function priceDifference(difference: string): string {
+  return difference.startsWith("-")
+    ? `\u2212${formatMoney(difference.slice(1))}`
+    : `+${formatMoney(difference)}`;
 }
 
 /**
@@ -91,6 +99,11 @@ export class TillModifierPicker extends LitElement {
         cursor: not-allowed;
       }
 
+      /* An unavailable variant stays listed so the operator sees it is sold out, not missing. */
+      .option:has(input[name="product-variant"]:disabled) .option-name {
+        color: var(--wt-color-text-muted);
+      }
+
       /* A stepper row is a plain container, not a single-control label, so it is not pointer-cued. */
       .stepper-option {
         cursor: default;
@@ -100,7 +113,8 @@ export class TillModifierPicker extends LitElement {
         flex: 1;
       }
 
-      .option-delta {
+      .option-delta,
+      .price-difference {
         color: var(--wt-color-text-muted);
         font-variant-numeric: tabular-nums;
       }
@@ -173,6 +187,8 @@ export class TillModifierPicker extends LitElement {
         this.answers[answer.listId] = answer.labelId;
       return;
     }
+    // The first available variant in the one variant order (spec §15.4).
+    this.variantId = this.#variants.find((variant) => variant.available)?.id ?? "";
     for (const entry of this.#offered) {
       if (entry.kind === "options") {
         if (entry.defaultLabelId !== null) this.answers[entry.id] = entry.defaultLabelId;
@@ -190,21 +206,28 @@ export class TillModifierPicker extends LitElement {
     return this.product.offeredModifiers ?? [];
   }
 
+  /** Every variant the offer lists, in variant order; an unavailable one is drawn disabled. The
+   * parent itself is never offered: a product with variants is sold as one of them. */
   get #variants() {
-    return (this.product.variants ?? []).filter((variant) => variant.available);
+    return this.product.variants ?? [];
+  }
+
+  get #chosenVariant() {
+    return this.#variants.find((variant) => variant.id === this.variantId && variant.available);
   }
 
   /**
-   * The product as chosen: the variant's price and its three names carried ALONGSIDE the product's,
-   * never folded into them. Each name falls back and joins independently for the surface that shows
-   * it (`product-presentation.ts`), so the basket can render the staff join while a receipt renders
-   * the customer one — a single pre-joined string here would deny both.
+   * The product as chosen: sold under the variant's price and selling values, with the variant's
+   * three names carried ALONGSIDE the product's, never folded into them. Each surface resolves the
+   * name it shows (`product-presentation.ts`), so the basket can render the staff name while a
+   * receipt renders the customer one.
    */
   get #selectedProduct(): TillProduct {
-    const variant = this.#variants.find((candidate) => candidate.id === this.variantId);
+    const variant = this.#chosenVariant;
     if (variant === undefined) return this.product;
     return {
       ...this.product,
+      ...sellingValuesOf(variant),
       unitPrice: variant.unitPrice,
       variantId: variant.id,
       variantName: variant.name,
@@ -253,7 +276,7 @@ export class TillModifierPicker extends LitElement {
    * them, so one render computes each once and shares it with {@link #renderExtras}.
    */
   #satisfied(stale: readonly SelectedExtra[], totals: ReadonlyMap<string, number>): boolean {
-    if (this.#variants.length > 0 && this.variantId === "") return false;
+    if (this.#variants.length > 0 && this.#chosenVariant === undefined) return false;
     if (stale.length > 0) return false;
     return this.#offered.every((entry) => {
       if (entry.kind === "options")
@@ -420,12 +443,20 @@ export class TillModifierPicker extends LitElement {
                       name="product-variant"
                       value=${variant.id}
                       .checked=${this.variantId === variant.id}
+                      ?disabled=${!variant.available}
                       @change=${(event: Event) => {
                         event.stopPropagation();
                         this.variantId = variant.id;
                       }}
                     />
                     <span class="option-name">${variant.name}</span>
+                    ${
+                      variant.unitPriceDifference === null
+                        ? nothing
+                        : html`<span class="price-difference"
+                            >${priceDifference(variant.unitPriceDifference)}</span
+                          >`
+                    }
                     <span class="option-delta">${formatMoney(variant.unitPrice)}</span>
                   </label>`,
               )}

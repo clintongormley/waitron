@@ -43,8 +43,8 @@ export interface TopSellersInput extends PeriodVatInput {
  * shows the staff name, never the customer-facing text (which a receipt or customer display shows
  * instead); see `packages/catalogue/src/product-presentation.ts`. */
 export interface TopSeller {
-  /** The frozen `sale_lines.name`/`variant_name` staff names, joined via `staffPresentationName` —
-   * the same label a till button or the dashboard shows for this line. */
+  /** The frozen `sale_lines.name`/`variant_name` staff names, resolved by `staffPresentationName` —
+   * the variant's own name on a variant line, the label the till's basket shows for it. */
   name: string;
   /** Σ line quantity over the range, at three decimal places; corrections net in, so it can
    * fall. The column counts whole thousandths and the sum is converted once, on the way out. */

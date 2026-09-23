@@ -25,6 +25,7 @@ const lines: TabLine[] = [
     lineNo: 1,
     productId: "cafe",
     quantity: "2.000",
+    unitPrecision: 0,
     unitPriceGross: "1.50",
     servedAt: null,
     // A HELD course (fired_at null) so the waiter-fire section is in the a11y scan under `waiter`. Held
@@ -38,6 +39,7 @@ const lines: TabLine[] = [
     lineNo: 2,
     productId: "cafe",
     quantity: "1.000",
+    unitPrecision: 0,
     unitPriceGross: "1.50",
     servedAt: "2026-08-20T10:00:00.000Z",
     courseId: "c1",
@@ -115,7 +117,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   it("has no violations in the split quantity picker", async () => {
     const splitLines: TabLine[] = [
       { ...lines[0]!, quantity: "4.000" },
-      { ...lines[1]!, lineNo: 2, productId: "jamon", quantity: "0.750" },
+      { ...lines[1]!, lineNo: 2, productId: "jamon", quantity: "0.750", unitPrecision: 3 },
     ];
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",

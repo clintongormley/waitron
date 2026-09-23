@@ -26,7 +26,7 @@ export interface UnitSnapshot {
 export interface PriceableProduct {
   /** The product's staff-facing name, frozen onto the sale line's `name`. A row read from the
    * catalogue is resolved into this shape first — see `product-presentation.ts`, which owns the
-   * blank-falls-back-to-the-staff-name rule and the " · " product/variant join. */
+   * blank-falls-back-to-the-staff-name rule. */
   name: string;
   /** locale -> customer-facing text, already resolved by `customerPresentationText`. */
   descriptions: Record<string, string>;
@@ -36,7 +36,6 @@ export interface PriceableProduct {
   vatClass: VatClass;
   /** Snapshotted analytics label, copied onto the sale line. */
   category: string | null;
-  variantId?: string | null;
   /** The variant's staff-facing name; `null` when no variant is selected. */
   variantName?: string | null;
   /** The variant's customer-facing text, locale -> text; `null` when no variant is selected. */
@@ -84,7 +83,6 @@ export interface LockedLine {
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
   optionSnapshots?: OptionSnapshot[];
-  variantId?: string | null;
   variantName?: string | null;
   variantDescriptions?: Record<string, string> | null;
   variantKitchenName?: string | null;
@@ -157,7 +155,6 @@ interface PricingRow {
    * emitted `RecordSaleLine.parentLineNo` verbatim — presentation metadata, never part of the hash. */
   parentLineNo?: number | null;
   optionSnapshots?: OptionSnapshot[];
-  variantId?: string | null;
   variantName?: string | null;
   variantDescriptions?: Record<string, string> | null;
   variantKitchenName?: string | null;
@@ -200,7 +197,6 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       // (`priceBasket`/`priceLockedLines`, which never set it) emitting exactly `null` here, so a
       // basket priced with empty options stays line-for-line identical to `priceBasket`.
       parentLineNo: row.parentLineNo ?? null,
-      variantId: row.variantId ?? null,
       variantName: row.variantName ?? null,
       variantDescriptions: row.variantDescriptions ?? null,
       variantKitchenName: row.variantKitchenName ?? null,
@@ -244,7 +240,6 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
         // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
         unitName: item.product.unit.abbreviation,
         unitPrecision: item.product.unit.precision,
-        variantId: item.product.variantId ?? null,
         variantName: item.product.variantName ?? null,
         variantDescriptions: item.product.variantDescriptions ?? null,
         variantKitchenName: item.product.variantKitchenName ?? null,
@@ -278,7 +273,6 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       // walk-up does. `?? null` keeps a no-modifier locked line (which never sets it) emitting `null`,
       // so a plain basket stays line-for-line identical.
       parentLineNo: line.parentLineNo ?? null,
-      variantId: line.variantId ?? null,
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
       variantKitchenName: line.variantKitchenName ?? null,
@@ -352,7 +346,6 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       unitPrecision: item.product.unit.precision,
       parentLineNo: null,
       optionSnapshots: item.optionSnapshots,
-      variantId: item.product.variantId ?? null,
       variantName: item.product.variantName ?? null,
       variantDescriptions: item.product.variantDescriptions ?? null,
       variantKitchenName: item.product.variantKitchenName ?? null,

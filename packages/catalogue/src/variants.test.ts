@@ -14,8 +14,8 @@ import {
 } from "./operations.js";
 import {
   listProductVariants,
-  listProductVariantsForProducts,
   setProductVariants,
+  variantsOfProducts,
   listMenuVariants,
   setMenuVariants,
   resolveMenuVariant,
@@ -299,7 +299,7 @@ it("prices a required variant at its menu price, falling back to its own", async
   // A variant follows its parent onto the menu (spec §15.5), at its own price until the menu
   // sets one.
   expect(await run((tx) => resolveMenuVariant(tx, offerId, small!.id))).toMatchObject({
-    variantId: small!.id,
+    productId: small!.id,
     unitPrice: "2.00",
   });
   await run((tx) =>
@@ -307,7 +307,7 @@ it("prices a required variant at its menu price, falling back to its own", async
   );
   const selected = await run((tx) => resolveMenuVariant(tx, offerId, small!.id));
   expect(selected).toEqual({
-    variantId: small!.id,
+    productId: small!.id,
     name: "Coffee",
     customerName: null,
     kitchenName: null,
@@ -324,7 +324,6 @@ it("prices a required variant at its menu price, falling back to its own", async
       product: {
         name: selected.name,
         descriptions: customer.product,
-        variantId: selected.variantId,
         variantName: selected.variantName,
         variantDescriptions: customer.variant,
         variantKitchenName: selected.variantKitchenName,
@@ -406,7 +405,7 @@ describe("resolving a menu offer's line", () => {
 
   it("sells a product with no variant as itself, at the menu's price", async () => {
     expect(await run((tx) => resolveMenuVariant(tx, offerId, null))).toEqual({
-      variantId: null,
+      productId,
       name: "Coffee",
       customerName: null,
       kitchenName: null,
@@ -444,7 +443,7 @@ describe("resolving a menu offer's line", () => {
     );
 
     expect(await run((tx) => resolveMenuVariant(tx, offerId, small!.id))).toMatchObject({
-      variantId: small!.id,
+      productId: small!.id,
       unitPrice: "8.00",
     });
   });
@@ -456,10 +455,10 @@ describe("reading the variants of no products", () => {
     // would also answer an empty map.
     const refuses = {
       select: () => {
-        throw new Error("listProductVariantsForProducts queried the database for no products");
+        throw new Error("variantsOfProducts queried the database for no products");
       },
     } as unknown as Transaction;
 
-    expect(await listProductVariantsForProducts(refuses, [])).toEqual(new Map());
+    expect(await variantsOfProducts(refuses, [])).toEqual(new Map());
   });
 });

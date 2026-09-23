@@ -43,6 +43,7 @@ const pendingLine: TabLine = {
   lineNo: 1,
   productId: "cafe",
   quantity: "2.000",
+  unitPrecision: 0,
   unitPriceGross: "1.50",
   servedAt: null,
   courseId: null,
@@ -53,6 +54,7 @@ const servedLine: TabLine = {
   lineNo: 2,
   productId: "cafe",
   quantity: "1.000",
+  unitPrecision: 0,
   unitPriceGross: "1.50",
   servedAt: "2026-08-20T10:00:00.000Z",
   courseId: null,
@@ -979,6 +981,7 @@ describe("till-table-order-screen", () => {
         ...pendingLine,
         lineNo: 2,
         productId: "jamon",
+        unitPrecision: 3,
         quantity: "0.750",
         unitPriceGross: "20.00",
       };
@@ -1017,6 +1020,7 @@ describe("till-table-order-screen", () => {
         const weight = {
           ...pendingLine,
           productId: "jamon",
+          unitPrecision: 3,
           quantity: "0.750",
           unitPriceGross: "20.00",
         };
@@ -1045,6 +1049,30 @@ describe("till-table-order-screen", () => {
         expect(summary.errors).toEqual([t("table.split_quantity_decimal_error")]);
       },
     );
+
+    // A line sold as a variant names the VARIANT as its product, and a variant is never a till
+    // product of its own (the till's products are the offers' parents), so the split has to read the
+    // unit precision the line froze rather than look the product up.
+    it("splits a variant line sold by the unit with the whole-number stepper", async () => {
+      const variantLine: TabLine = {
+        ...pendingLine,
+        productId: "wine-125",
+        name: "Wine 125",
+        quantity: "2.000",
+        unitPrecision: 0,
+      };
+      const { el } = await mount({ lines: [variantLine], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector('[data-split-quantity="1"]')).toBeNull();
+      click(el, '[data-split-dec="1"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent).toBe("1");
+    });
 
     it("Back resets split quantities so a reselected dish defaults to its full quantity", async () => {
       const each = { ...pendingLine, quantity: "4.000" };

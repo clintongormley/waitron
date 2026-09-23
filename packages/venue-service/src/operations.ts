@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   catalogues,
   categories,
@@ -10,7 +10,13 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
+import {
+  effectiveProductColumns,
+  listMenuOffers,
+  parentJoin,
+  parentProducts,
+  type MenuOffer,
+} from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
 import { AppError, type LocationId, normaliseUuid } from "@waitron/shared";
 import {
@@ -1002,12 +1008,23 @@ async function resolvePreparationRouteOutcomes(
   const outcomes = new Map<string, PreparationRouteOutcome>();
   if (ids.length === 0) return outcomes;
   await resolveZoneContext(tx, cfg, zoneId);
-  // Until variants-as-products Task 5 a variant misses its parent's routes: own id, RAW category.
+  // A variant takes the product-level routes of its PARENT, which is the product a route can name
+  // (`createPreparationRoute` refuses a variant), and the category routes of its EFFECTIVE
+  // category — its own where it sets one, else its parent's.
   const productRows = await tx
-    .select({ id: products.id, categoryId: products.categoryId })
+    .select({
+      id: products.id,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+    })
     .from(products)
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, ids));
   const categoryById = new Map(productRows.map((row) => [storedUuid(row.id), row.categoryId]));
+  const routedIdById = new Map(
+    productRows.map((row) => [storedUuid(row.id), storedUuid(row.routedId)]),
+  );
+  const routedIds = [...new Set(routedIdById.values())];
   const categoryIds = [
     ...new Set(productRows.flatMap((row) => (row.categoryId === null ? [] : [row.categoryId]))),
   ];
@@ -1033,9 +1050,9 @@ async function resolvePreparationRouteOutcomes(
         eq(preparationRoutes.locationId, cfg.locationId),
         or(eq(preparationRoutes.zoneId, zoneId), isNull(preparationRoutes.zoneId)),
         categoryIds.length === 0
-          ? inArray(preparationRoutes.productId, ids)
+          ? inArray(preparationRoutes.productId, routedIds)
           : or(
-              inArray(preparationRoutes.productId, ids),
+              inArray(preparationRoutes.productId, routedIds),
               inArray(preparationRoutes.categoryId, categoryIds),
             ),
       ),
@@ -1059,7 +1076,7 @@ async function resolvePreparationRouteOutcomes(
     if (!categoryById.has(uuid)) continue;
     const categoryId = categoryById.get(uuid) ?? null;
     const candidates = [
-      ...(routesByProduct.get(uuid) ?? []),
+      ...(routesByProduct.get(routedIdById.get(uuid)!) ?? []),
       ...(categoryId === null ? [] : (routesByCategory.get(categoryId) ?? [])),
     ];
     const winner = candidates.reduce<RouteRow | undefined>(
