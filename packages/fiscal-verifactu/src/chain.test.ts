@@ -253,9 +253,10 @@ describe("appendToChain", () => {
     //
     // THE CONTROL HAS NOW BEEN RUN, and it says this case does NOT discriminate the savepoint on
     // this engine: replacing `tx.transaction((nested) => attemptAppend(nested, …))` with a plain
-    // `attemptAppend(tx, …)` leaves this case PASSING. Two other cases go red under that deletion
-    // and neither is evidence either — both stub `tx` with a `transaction` method and nothing
-    // else, so they fail because the stub has no other method, not because the savepoint matters.
+    // `attemptAppend(tx, …)` leaves this case PASSING. The cases that stub `tx` go red under that
+    // deletion and none of them is evidence either — each stub has a `transaction` method and
+    // nothing else, so they fail because the stub has no other method, not because the savepoint
+    // matters.
     //
     // So this is a case about exhaustion surfacing as a structured error, and the savepoint is
     // held by nothing here. Its remaining job (undoing what a losing attempt wrote before the
@@ -263,6 +264,10 @@ describe("appendToChain", () => {
     // write an attempt makes, and the only earlier write is `readChainHead` creating a missing
     // head row, which is idempotent. CLAUDE.md §4, "a proof-by-deletion belongs to the SHAPE of
     // the code it was taken against" — the shape changed and the proof did not survive it.
+    // "lands the record on the retry after a refused first attempt" shows a rollback to the
+    // attempt's savepoint removing a write, but its wrapper, like the stubs, has only a
+    // `transaction` method, so deleting appendToChain's savepoint fails it for that reason alone
+    // and the savepoint is still held by no case.
     const occupied = await seedSale(pg.db, till, 1);
     await pg.db.insert(registrosFacturacion).values({
       tillId: till.tillId,
@@ -310,8 +315,9 @@ describe("appendToChain", () => {
       transaction: () =>
         Promise.reject(
           // The `errcode` + `message` pair this engine reports for a unique-index collision, not
-          // the PostgreSQL SQLSTATE this used to carry. Copied from the real refusal the case
-          // above now asserts on, so the stub and the database agree.
+          // the PostgreSQL SQLSTATE this used to carry. Copied from the real refusal
+          // "rejects a second record claiming an occupied chain position" asserts on, so the stub
+          // and the database agree.
           Object.assign(new Error("UNIQUE constraint failed: registros_facturacion.node_id"), {
             cause: {
               errcode: 2067,
@@ -334,6 +340,84 @@ describe("appendToChain", () => {
       nodeId: till.nodeId,
       attempts: 3,
     });
+  });
+
+  it("lands the record on the retry after a refused first attempt, and the refused attempt leaves nothing behind", async () => {
+    // The middle of the loop, between the first-attempt cases at the top of this block and the
+    // exhaustion cases above: one refusal the database really issued, then a clean second attempt.
+    // The first attempt's savepoint plants a record at the position the attempt is about to compute
+    // (the chain head still says 0), so the attempt's own insert is refused by the position's
+    // unique index; rolling back to the savepoint takes the planted record with it, and the second
+    // attempt passes straight through. The only thing wrapped is `transaction`, the one method
+    // appendToChain calls on `tx`.
+    // The controls that fail it are in the pull request that added it.
+    const decoy = await seedSale(pg.db, till, 1);
+    const saleId = await seedSale(pg.db, till, 2);
+    let calls = 0;
+    let firstRefusal: unknown;
+
+    const result = await pg.db.transaction((tx) => {
+      const refusedOnce = {
+        transaction: <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
+          calls += 1;
+          if (calls > 1) return tx.transaction(body);
+          return tx
+            .transaction(async (nested) => {
+              await nested.insert(registrosFacturacion).values({
+                tillId: till.tillId,
+                nodeId: till.nodeId,
+                sifId: till.sifId,
+                saleId: decoy,
+                secuencia: 1,
+                tipoRegistro: "alta",
+                idEmisorFactura: "89890001K",
+                numSerieFactura: "A/999",
+                fechaExpedicionFactura: "2026-07-20",
+                nombreRazonEmisor: "Waitron SL",
+                primerRegistro: true,
+                sistemaInformatico: {},
+                fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:31+02:00"),
+                offsetMinutos: 120,
+                tipoHuella: "01",
+                huella: "1".repeat(64),
+              });
+              return body(nested);
+            })
+            .catch((error: unknown) => {
+              firstRefusal = error;
+              throw error;
+            });
+        },
+      } as never;
+      return appendToChain(refusedOnce, till.nodeId, altaFor(till.tillId, saleId, 2, 2));
+    });
+
+    expect(calls).toBe(2);
+    expect(constraintTarget(firstRefusal)).toEqual({
+      table: "registros_facturacion",
+      columns: ["node_id", "secuencia"],
+    });
+    const rows = await pg.db
+      .select({
+        id: registrosFacturacion.id,
+        saleId: registrosFacturacion.saleId,
+        secuencia: registrosFacturacion.secuencia,
+        huella: registrosFacturacion.huella,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.nodeId, till.nodeId));
+    expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
+    expect(result.secuencia).toBe(1);
+    const { rows: head } = await pg.db.execute<{
+      secuencia: number;
+      ultimo_registro_id: string;
+      ultima_huella: string;
+    }>(sql`
+      select secuencia, ultimo_registro_id, ultima_huella from cadenas where node_id = ${till.nodeId}
+    `);
+    expect(head).toEqual([
+      { secuencia: 1, ultimo_registro_id: result.id, ultima_huella: result.huella },
+    ]);
   });
 
   it("does not retry an error that is not a chain collision", async () => {
