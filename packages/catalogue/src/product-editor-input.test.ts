@@ -262,6 +262,12 @@ it("parses a variant listed with a blank price as blank, so it follows the produ
     available: true,
   };
   expect(parse({ ...input, variants: [blank] }).variants).toEqual([blank]);
+  // Only an explicit null is a blank: a variant that omits its price is refused, not defaulted.
+  const noPrice: Record<string, unknown> = { ...blank };
+  delete noPrice.unitPrice;
+  expect(() => parse({ ...input, variants: [blank, noPrice] })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "variants.1.unitPrice" } }),
+  );
 });
 it("accepts none, one or two variants, and parses each variant's own names", () => {
   const one = {

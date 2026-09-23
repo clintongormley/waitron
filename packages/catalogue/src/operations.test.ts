@@ -1157,8 +1157,8 @@ describe("catalogue operations", () => {
     expect(row!.diet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
   });
 
-  // A caller-supplied id that names no product is a SILENT no-op — republishOverlays' SELECT
-  // returns no row, so nothing is written. Mirrors applyRecipeDerivation's nonexistent-id test.
+  // A caller-supplied id that names no product is a SILENT no-op: the derivation UPDATE matches
+  // nothing and nothing is republished. Mirrors applyRecipeDerivation's nonexistent-id test.
   it("applyDietDerivation on a nonexistent id does not throw", async () => {
     await asTenant(async (tx) => {
       const missing = "00000000-0000-0000-0000-0000000000fd";
