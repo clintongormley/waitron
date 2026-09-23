@@ -51,10 +51,8 @@ describe("the bookings Drizzle table config", () => {
         ["table_id", "status", "booking_date", "booking_time"],
       ],
     ]);
-    // Two, where this list held one: `status` was a PostgreSQL ENUM TYPE the engine enforced (main's
-    // baseline opens `CREATE TYPE "public"."booking_status" AS ENUM(...)`), and `enumType` enforces
-    // the same five values with a CHECK here. A name is not a vocabulary, so the case below drives
-    // a real refusal through the constraint that replaced the type.
+    // `bookings_status_ck` holds `status` to its five values. A name is not a vocabulary, so the
+    // case below drives a real refusal through it.
     expect(config.checks.map((c) => c.name)).toEqual([
       "bookings_party_size_ck",
       "bookings_status_ck",
@@ -62,8 +60,9 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// WHAT THIS SUITE SHOWS: every column and the status default, the two CHECKs and the three
-// foreign keys. This engine has no roles, so nothing here is a claim about a privilege.
+// WHAT THIS SUITE SHOWS: a row read back through the Drizzle export, the status default, the two
+// CHECKs and the three foreign keys. This engine has no roles, so nothing here is a claim about a
+// privilege.
 //
 // `driverErrorCode` answers `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the
 // refusal CLASS comes off `errcode` (`packages/db/src/sql-state.ts`: 275 for a CHECK, 787 for a
@@ -171,8 +170,8 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     expect(engineErrorMessage(e)).toMatch(/bookings_party_size_ck/);
   });
 
-  // `status` is held to the five values by an ordinary CHECK that `enumType` builds from the
-  // list; this drives a real refusal through it.
+  // `status` is held to the five values by an ordinary CHECK that `enumCheck` builds from the
+  // `enumType` list (`./bookings.ts`); this drives a real refusal through it.
   it("rejects a status outside the five (CHECK bookings_status_ck)", async () => {
     await seedParents();
     const e = await captureError(() => seedBooking("21:00", { status: "pencilled_in" }));

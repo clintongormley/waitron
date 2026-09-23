@@ -54,7 +54,8 @@ const SIF_PARAMS = {
  * below ask `refusalOn`, which matches the class AND the table and columns the engine's own
  * message named, on one layer of the cause chain.
  *
- * Matching the columns is narrower than the class alone, which says only "some unique index".
+ * Matching the columns is narrower than the class alone, which says only "some unique index or
+ * primary key".
  * Control: with the key's `numero_instalacion` entry removed, the same run reports
  * `2 failed | 14 passed` and the two failures are exactly the two cases below, so the columns are
  * being matched rather than ignored.

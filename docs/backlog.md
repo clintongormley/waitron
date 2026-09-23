@@ -3596,10 +3596,11 @@ it; and a correction must not decrement a count where it should drop it.
   `packages/core/src/record-sale.test.ts`, `packages/db/src/schema/series.test.ts`,
   `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
   `packages/shared/src/cause-chain.ts` and `packages/shared/src/engine-failure.ts` carry the
-  sentence this branch corrected in `packages/db/src/unique-violation.ts`. Some sites —
-  `packages/credentials/src/bin.ts`, `packages/provisioning/src/bin.ts`,
-  `packages/provisioning/src/errors.ts` — only say the wrapper puts the failing SQL in its message,
-  which `DrizzleError` also does, so there the class name may be all that is wrong. The thrown text
+  sentence this branch corrected in `packages/db/src/unique-violation.ts`.
+  `packages/provisioning/src/bin.ts` and `packages/provisioning/src/errors.ts` only say the wrapper
+  puts the failing SQL in its message, which `DrizzleError` also does, so there the class name may
+  be all that is wrong. `packages/credentials/src/bin.ts` also says the message carries the bind
+  parameters, which `DrizzleError`'s `Failed to run the query '<sql>'` does not. The thrown text
   in `packages/db/src/testing/errors.ts`'s `engineErrorMessage` names the old wrapper on purpose
   and is pinned verbatim by its test.
 - **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
