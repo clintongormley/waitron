@@ -222,12 +222,21 @@ is_production() {
   # measured both directions: the entrypoint case in scripts/waitron-sh.test.mjs. The state directory
   # comes from the image's own WAITRON_STATE_DIR, and `:?` REFUSES an unset one rather than reading
   # `/trading.env`, finding nothing and calling a live box unprovisioned. The __ABSENT__ sentinel
-  # separates an absent file (an unprovisioned box — the read SUCCEEDED and found nothing) from a read
-  # that failed (container/volume error — a non-zero exit): only the latter counts as "cannot
-  # establish".
+  # separates an absent file (an unprovisioned box — the read SUCCEEDED and found nothing) from a
+  # read that failed, which exits non-zero and counts as "cannot establish". Two tests stand between
+  # them, because a `cat` and a `[ -e ]` both answer "absent" when they are merely BLIND: the
+  # `if`/`else` keeps a file that exists but cannot be read from falling into an `||` and reporting
+  # absence with exit 0, and the `-d`/`-r`/`-x` test ahead of it does the same one level up, where
+  # `[ -e "$d/trading.env" ]` cannot tell a missing file from a directory it cannot look inside. Both
+  # otherwise wipe a production box without --force-production, and this image runs as a non-root
+  # USER (deploy/Dockerfile), so neither is theoretical. A fresh box still resets: the image
+  # pre-creates and chowns the mount path, so its state volume comes up owned by that user (measured
+  # 2026-09-23, a fresh named volume over the chowned path: mode 0700, uid 10001, all three tests
+  # pass). Receipts, run in both directions: the unreadable-trading.env and unreadable-state-directory
+  # cases in scripts/waitron-sh.test.mjs.
   if env_out="$(docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
     --entrypoint sh app \
-    -c 'd="${WAITRON_STATE_DIR:?}"; [ -e "$d/trading.env" ] && cat "$d/trading.env" || echo __ABSENT__' 2>/dev/null)"; then
+    -c 'd="${WAITRON_STATE_DIR:?}"; [ -d "$d" ] && [ -r "$d" ] && [ -x "$d" ] || exit 1; if [ -e "$d/trading.env" ]; then cat "$d/trading.env"; else echo __ABSENT__; fi' 2>/dev/null)"; then
     env_rc=0
   else
     env_rc=$?

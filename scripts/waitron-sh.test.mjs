@@ -46,9 +46,12 @@ afterEach(() => {
 //     pointed at the wrong file reads empty and its test fails. The reset's `find` names neither and
 //     prints nothing.
 //   - `compose exec … psql …` -> exits non-zero. No cluster on a box carries a database named
-//     waitron any more. Nothing in the script reaches this arm — it is kept as a trap, so
-//     reintroducing a Postgres client fails a test instead of reading an empty stamp as "nothing
-//     there" and letting a production box be wiped.
+//     waitron any more. Nothing in the script reaches this arm — it is kept as a trap for the ONE
+//     route back it can see: a stamp read rewritten as `docker compose exec … psql`, which fails a
+//     test here instead of reading an empty stamp as "nothing there". A Postgres client
+//     reintroduced any other way is invisible to it — `docker run postgres…` matches neither outer
+//     arm, and `compose run --entrypoint psql` is taken by the `run` arm above — and both fall
+//     through to the stub's closing exit 0.
 //   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless $WT_RM_FAIL names a
 //     volume ("logs" makes `docker volume rm waitron_logs` fail, to test the abort-on-failure path).
 // Failure knobs model the read/write faults the install and production-safety fixes must survive:
@@ -127,9 +130,11 @@ case "$1" in
         esac ;;
       *" exec "*)
         # Nothing on a box answers psql any more — the storage is a file, and no cluster on it
-        # carries a database named waitron. No shipped command reaches this arm; it is kept as a trap,
-        # so a stamp read that went back to shelling out to psql ERRORS here rather than reading an
-        # empty stamp as "nothing there" and letting a production box be wiped.
+        # carries a database named waitron. No shipped command reaches this arm; it is kept as a trap
+        # for the one route back it can see: a stamp read rewritten as docker compose exec ... psql,
+        # which ERRORS here rather than reading an empty stamp as "nothing there". That is ALL it
+        # catches — a client reintroduced as docker run postgres, or as compose run --entrypoint
+        # psql, is taken by another arm or by none, and reads as a clean empty stamp.
         case "$args" in *psql*) exit 1 ;; esac ;;
     esac ;;
   volume)
@@ -550,6 +555,74 @@ describe("waitron.sh reset", () => {
     expect(calls).toMatch(/docker volume rm .*waitron_logs\b/);
     expect(calls).not.toMatch(/docker volume rm .*waitron_backups\b/);
     expect(calls).not.toMatch(/! -name tls/);
+  });
+});
+
+// The trading.env read is a shell one-liner that SHIPS inside deploy/waitron.sh and runs in the app
+// image, beside the state volume. No case above can see what it does — the docker stub answers any
+// *trading.env* `compose run` with $WT_TRADING_ENV and never executes the one-liner's text — so
+// these extract the shipped text and RUN it under a real `sh` against real directories. The three
+// states are the three `is_production` distinguishes: a value, a clean "nothing there", and a read
+// that failed.
+describe("the trading.env reader inside waitron.sh", () => {
+  const READER = (() => {
+    const m = /-c '([^']*trading\.env[^']*)'/.exec(readFileSync(SCRIPT, "utf8"));
+    if (!m)
+      throw new Error("deploy/waitron.sh no longer reads trading.env from a single-quoted -c");
+    return m[1];
+  })();
+
+  function stateDir() {
+    const d = mkdtempSync(join(tmpdir(), "waitron-state-"));
+    dirs.push(d);
+    return d;
+  }
+
+  const readTradingEnv = (state) =>
+    spawnSync("sh", ["-c", READER], {
+      encoding: "utf8",
+      env: { ...process.env, WAITRON_STATE_DIR: state },
+    });
+
+  it("prints the file a provisioned box carries", () => {
+    const state = stateDir();
+    writeFileSync(join(state, "trading.env"), "WAITRON_ENV=production\n");
+    const r = readTradingEnv(state);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/^WAITRON_ENV=production$/m);
+  });
+
+  it("prints the sentinel and succeeds when the box has no trading.env", () => {
+    const r = readTradingEnv(stateDir());
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("__ABSENT__");
+  });
+
+  // A trading.env that EXISTS but cannot be read is a read that failed, and is_production fails
+  // closed only if it sees a non-zero exit: answering __ABSENT__ here would report an unprovisioned
+  // box and let a production box be wiped without --force-production. The unreadable file is a
+  // DIRECTORY rather than a mode-000 file because mode bits do not stop root, so on a root CI runner
+  // a mode-000 case would pass while proving nothing (CLAUDE.md §1); `cat` fails on a directory for
+  // every user.
+  it("fails, and does not claim absence, when trading.env exists but cannot be read", () => {
+    const state = stateDir();
+    mkdirSync(join(state, "trading.env"));
+    const r = readTradingEnv(state);
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).not.toMatch(/__ABSENT__/);
+  });
+
+  // The same distinction one level UP: `[ -e "$d/trading.env" ]` answers "no such file" for a
+  // directory it cannot look inside, so a state volume the container cannot traverse read as an
+  // unprovisioned box and the irreversible reset proceeded. The state directory here is MISSING
+  // rather than mode 000 because mode bits do not stop root, so on a root CI runner a mode-000 case
+  // is green whether the code is fixed or broken (CLAUDE.md §1). A genuinely fresh box is a
+  // different state and stays resettable: deploy/Dockerfile:85 pre-creates the mount path and chowns
+  // it to the container's user, so its state volume comes up readable and traversable.
+  it("fails, and does not claim absence, when the state directory cannot be read", () => {
+    const r = readTradingEnv(join(stateDir(), "never-created"));
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).not.toMatch(/__ABSENT__/);
   });
 });
 
