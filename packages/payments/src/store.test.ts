@@ -862,11 +862,11 @@ describe("Mode 3 initiated lifecycle", () => {
     const seeded = await seedTenant();
     await initiate(seeded, HOSTED, "pay-1");
     // Whether the engine's text is the error's own `.message` or sits on `.cause` depends on the
-    // path (`driverErrorCode` in `packages/db/src/testing/errors.ts` records both shapes);
-    // `@waitron/db`'s `engineErrorMessage` returns the engine's words either way.
+    // path; `@waitron/db`'s `engineErrorMessage` returns the engine's words either way (its header
+    // in `packages/db/src/testing/errors.ts` records both shapes).
     //
-    // This engine names the COLUMNS, never the index: the PostgreSQL text this replaced carried
-    // `payments_provider_external_ref_key`, so what an assertion can still see is the column PAIR.
+    // For an index over plain columns this engine names the COLUMNS, not the index
+    // (`packages/db/src/constraint-target.ts`), so what an assertion can see is the column PAIR.
     // That is enough to tell this index's refusal from the other unique on the same table —
     // `payments_provider_ref_key` on (provider, payment_ref) prints `payments.provider,
     // payments.payment_ref` — which is the discrimination the case needs, and the reason this is

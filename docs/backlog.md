@@ -3584,16 +3584,24 @@ it; and a correction must not decrement a count where it should drop it.
   `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and `storeF3AsAppUser` in
   `packages/fiscal-verifactu/src/canje-path.e2e.test.ts` is `storeF3`. Historical plans and specs
   under `docs/superpowers/` keep the old names, as written.
-- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce.** They
-  say drizzle wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined. On
-  `node:sqlite` only `db.run` wraps (as `DrizzleError`), while an awaited query builder rejects
-  with the engine's own error (`packages/db/src/testing/errors.ts` records both shapes). Each site
-  needs checking against the path it actually takes, then rewording:
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce**
+  (found 2026-09-23 on `chore/rename-pg-helpers`). Several say drizzle wraps every failed query in
+  a `DrizzleQueryError` whose own `.code` is undefined. On `node:sqlite` only `db.run` wraps (as
+  `DrizzleError`, message `Failed to run the query '<sql>'`), while `db.all`, `db.get`,
+  `db.execute` and an awaited query builder reject with the engine's own error
+  (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against the
+  path it actually takes, then rewording. The candidates are what
+  `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
+  also includes test fixtures that build a wrapped error by hand; among the comments are
   `packages/core/src/record-sale.test.ts`, `packages/db/src/schema/series.test.ts`,
-  `packages/db/src/deployment.test.ts`, `packages/db/src/unique-violation.test.ts`,
-  `apps/server/src/restore-fiscal-receipt.test.ts`, `packages/credentials/src/bin.ts`,
-  `packages/provisioning/src/bin.ts`, `packages/provisioning/src/errors.ts` and
-  `packages/db/src/testing/errors.test.ts`.
+  `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
+  `packages/shared/src/cause-chain.ts` and `packages/shared/src/engine-failure.ts` carry the
+  sentence this branch corrected in `packages/db/src/unique-violation.ts`. Some sites —
+  `packages/credentials/src/bin.ts`, `packages/provisioning/src/bin.ts`,
+  `packages/provisioning/src/errors.ts` — only say the wrapper puts the failing SQL in its message,
+  which `DrizzleError` also does, so there the class name may be all that is wrong. The thrown text
+  in `packages/db/src/testing/errors.ts`'s `engineErrorMessage` names the old wrapper on purpose
+  and is pinned verbatim by its test.
 - **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
   `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
   `apps/server/src/management-api.ts` no longer take one. Every route still calls

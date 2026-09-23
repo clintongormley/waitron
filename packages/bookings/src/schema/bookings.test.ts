@@ -5,9 +5,9 @@ import {
   captureError,
   CHECK_VIOLATION,
   diningTables,
+  engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   locations,
-  engineErrorMessage,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -62,8 +62,8 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// WHAT THIS SUITE SHOWS: the CHECK and the three foreign keys. This engine has no roles, so
-// nothing here is a claim about a privilege.
+// WHAT THIS SUITE SHOWS: every column and the status default, the two CHECKs and the three
+// foreign keys. This engine has no roles, so nothing here is a claim about a privilege.
 //
 // `driverErrorCode` answers `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the
 // refusal CLASS comes off `errcode` (`packages/db/src/sql-state.ts`: 275 for a CHECK, 787 for a
@@ -165,15 +165,14 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   it("rejects a non-positive party_size (CHECK party_size > 0)", async () => {
     await seedParents();
     const e = await captureError(() => seedBooking("22:00", { party_size: 0 }));
-    expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] }); // 275, was 23514
+    expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] }); // 275
     // The CHECK's message DOES carry its name here, unlike the foreign keys' — so this one case
     // can still say which constraint refused it.
     expect(engineErrorMessage(e)).toMatch(/bookings_party_size_ck/);
   });
 
-  // The refusal that changed HANDS at the flip: `status` was a PostgreSQL ENUM TYPE, so the engine
-  // itself refused a value outside the five; here it is an ordinary CHECK that `enumType` builds
-  // from the same list. Nothing asserted the replacement refuses anything, so this drives one.
+  // `status` is held to the five values by an ordinary CHECK that `enumType` builds from the
+  // list; this drives a real refusal through it.
   it("rejects a status outside the five (CHECK bookings_status_ck)", async () => {
     await seedParents();
     const e = await captureError(() => seedBooking("21:00", { status: "pencilled_in" }));
@@ -186,7 +185,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     const e = await captureError(() =>
       seedBooking("19:00", { table_id: "bbbbbbbb-0000-4000-8000-000000000009" }),
     );
-    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] }); // 787, was 23503
+    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] }); // 787
     expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 

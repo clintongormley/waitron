@@ -923,11 +923,9 @@ describe("parkOrder", () => {
     await abandonHeldOrder({ db }, cfg, id);
 
     // The re-park collides on the committed (now abandoned) row. Not being `open`, it is NOT a replayable
-    // held order, so the ORIGINAL driver refusal is re-thrown rather than a result fabricated. Read
-    // through `isUniqueViolation` (not `.rejects.toMatchObject({ code })`) because the engine's
-    // result code sits at the top level or one wrapper down depending on the path
-    // (`driverErrorCode` in `packages/db/src/testing/errors.ts` records both shapes), and the
-    // predicate reads it either way.
+    // held order, so the ORIGINAL driver refusal is re-thrown rather than a result fabricated. Not
+    // `.rejects.toMatchObject({ code })`: `code` is the same string for every failure (below);
+    // `isUniqueViolation` reads `errcode` wherever it sits in the cause chain.
     //
     // `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the
     // discriminating value on `errcode`, so no string code separates a duplicate key from anything

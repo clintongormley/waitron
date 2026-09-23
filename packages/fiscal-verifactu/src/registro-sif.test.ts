@@ -54,10 +54,10 @@ const SIF_PARAMS = {
  * below ask `refusalOn`, which matches the class AND the table and columns the engine's own
  * message named, on one layer of the cause chain.
  *
- * Narrower than what it replaces, not wider: `23505` said only "some unique index", where this
- * names the index's own columns. Control: with the key's `numero_instalacion` entry removed, the
- * same run reports `2 failed | 14 passed` and the two failures are exactly the two cases below, so
- * the columns are being matched rather than ignored.
+ * Matching the columns is narrower than the class alone, which says only "some unique index".
+ * Control: with the key's `numero_instalacion` entry removed, the same run reports
+ * `2 failed | 14 passed` and the two failures are exactly the two cases below, so the columns are
+ * being matched rather than ignored.
  */
 const INSTALACION_KEY = {
   table: "registro_sif",
@@ -310,10 +310,9 @@ describe("the database, not the application, is what forbids a duplicate", () =>
     // guarantee is application discipline wearing a constraint's clothes — and every future
     // caller, migration script and manual fix-up is outside it.
     //
-    // `captureError` + `refusalOn`, not `.rejects.toMatchObject({ ... })`: drizzle wraps every
-    // failed query, so the refusal's own fields are on a `cause` layer rather than on the error a
-    // caller catches, and a bare `.rejects.toMatchObject` assertion never sees them. That was true
-    // of PostgreSQL's SQLSTATE and is true of SQLite's `errcode`; `refusalOn` owns the walk
+    // `captureError` + `refusalOn`, not `.rejects.toMatchObject({ ... })`: `refusalOn` checks the
+    // refusal class (`errcode`) and the table and columns the engine's message named together, on
+    // one layer of the error, and compares the columns as a key rather than as message text
     // (packages/db/src/constraint-target.ts).
     //
     // Written through the table definition rather than as raw SQL. It still bypasses the allocator,
