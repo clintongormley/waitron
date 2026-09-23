@@ -157,4 +157,11 @@ describe("isPermittedLeafIpv4", () => {
       expect(isPermittedLeafIpv4(s)).toBe(false);
     }
   });
+
+  it("rejects an octet that is not plain decimal digits, even where it would read as a permitted number", () => {
+    // Each would land inside a permitted range if the octet were read as a JavaScript number.
+    for (const s of ["10.0.0.0x1", "192.168.1.1e1", "10.0.0. 5", "127.0.0.+1"]) {
+      expect(isPermittedLeafIpv4(s)).toBe(false);
+    }
+  });
 });

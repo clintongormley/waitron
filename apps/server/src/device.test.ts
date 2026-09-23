@@ -1,12 +1,13 @@
 /**
- * Device join-and-accept binding, on the engine the box now runs.
+ * Device join-and-accept binding, on the engine the box now runs, plus direct cases over
+ * `resolveDeviceBinding` and `requireDeviceBinding`.
  *
  * ## What this file does not check
  *
- * **SQLite has no roles and no grants**: one process opens one file. The grant half of every case
- * below is checked by nothing, here or elsewhere.
+ * **SQLite has no roles and no grants**: one process opens one file. The grant half of every
+ * join-and-accept case below is checked by nothing, here or elsewhere.
  *
- * What survives is the binding RULE, which is what the seven case names describe:
+ * What survives is the binding RULE, which is what the join-and-accept case names describe:
  * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
  * shape through `device_binding_rule_insert` / `_update`, created by
  * `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
@@ -17,8 +18,8 @@
  * `docs/handoffs/2026-09-21-f1-step25-disposition.md` records this file as "convert 6, BLOCKER 1",
  * on the ground that `tills_tenant_location_name_key` was absent from the SQLite baseline, so a
  * duplicate register name would insert cleanly and the refusal would never come. That is no longer
- * true of this tree: the index is at `packages/db/drizzle/0000_baseline.sql:49`, and all SEVEN
- * cases pass. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
+ * true of this tree: the index is at `packages/db/drizzle/0000_baseline.sql:49`, and the
+ * register-name collision case passes. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
  * giving the colliding device a name that does NOT collide ("Caja 2") fails the case with
  * `promise resolved "{ …(2) }" instead of rejecting`, and the name restored, it passes again.
  */
@@ -39,6 +40,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { requireDeviceBinding, resolveDeviceBinding } from "./device.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -250,5 +252,59 @@ describe("device join-and-accept binds the device by its profile's form factor",
       enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId }),
     ).rejects.toMatchObject({ code: "device.register_name_taken" });
     expect(await tillCount()).toBe(before); // the colliding register did not land
+  });
+});
+
+describe("resolveDeviceBinding and requireDeviceBinding, called directly", () => {
+  it("refuses a profile id that names no profile as device_profile.not_found", async () => {
+    const { cfg } = await setupVenue();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        resolveDeviceBinding(tx, cfg, cfg.locationId, { profileId: randomUUID(), name: "Caja 9" }),
+      ),
+    ).rejects.toMatchObject({ code: "device_profile.not_found" });
+  });
+
+  it("rethrows a register insert that fails for a reason other than a duplicate name, untranslated", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    // A location id no `locations` row carries, so the register insert breaks its foreign key.
+    const refusal = await withTransaction(suite.db, (tx) =>
+      resolveDeviceBinding(tx, cfg, randomUUID(), { profileId, name: "Caja 9" }),
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(refusal).toBeInstanceOf(Error);
+    expect(refusal).not.toHaveProperty("code", "device.register_name_taken");
+    expect(String(refusal)).toMatch(/FOREIGN KEY constraint failed/);
+  });
+
+  it("rethrows a duplicate on a unique index other than the venue's register name, untranslated", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    // setupVenue's 'Caja 1' already holds this location, so a one-register-per-location index makes
+    // a differently named register collide on a key that is not the name key.
+    await suite.db.execute(sql`create unique index tills_one_per_location on tills (location_id)`);
+    try {
+      const refusal = await withTransaction(suite.db, (tx) =>
+        resolveDeviceBinding(tx, cfg, cfg.locationId, { profileId, name: "Caja 2" }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(Error);
+      expect(refusal).not.toHaveProperty("code", "device.register_name_taken");
+      expect(String(refusal)).toMatch(/UNIQUE constraint failed: tills\.location_id/);
+    } finally {
+      await suite.db.execute(sql`drop index tills_one_per_location`);
+    }
+  });
+
+  it("accepts clearing a receipt-printer binding without looking for a printer", async () => {
+    await setupVenue();
+    await expect(
+      withTransaction(suite.db, (tx) => requireDeviceBinding(tx, { receiptPrinterId: null })),
+    ).resolves.toBeUndefined();
   });
 });

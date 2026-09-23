@@ -348,3 +348,35 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
   });
 });
+
+describe("recoverProvisionedVenue — refusals", () => {
+  it("refuses with setup.already_provisioned when no committed venue matches the request", async () => {
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+
+    await expect(recoverProvisionedVenue(ownerDb(), request)).rejects.toMatchObject({
+      code: "setup.already_provisioned",
+    });
+  });
+
+  it("refuses with setup.already_provisioned when the committed series codes differ from the request's", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
+
+    await expect(
+      recoverProvisionedVenue(db, {
+        ...request,
+        venue: { ...request.venue, seriesCode: "B" },
+      }),
+    ).rejects.toMatchObject({ code: "setup.already_provisioned" });
+    await expect(
+      recoverProvisionedVenue(db, {
+        ...request,
+        venue: { ...request.venue, rectificativeSeriesCode: "S" },
+      }),
+    ).rejects.toMatchObject({ code: "setup.already_provisioned" });
+  });
+});

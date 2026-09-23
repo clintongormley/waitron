@@ -1,11 +1,23 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { assertStorableKey } from "./backup-api.js";
 import { assertStorableRecord, backupEnvRecord, writeBackupEnv } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+
+const tempDirs: string[] = [];
+
+function tempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe("assertStorableKey", () => {
   it.each(["needs a space ", "has\nnewline", "tab\tthere", " leading"])("rejects %j", (k) => {
@@ -23,7 +35,7 @@ describe("assertStorableKey", () => {
 
 describe("writeBackupEnv", () => {
   it("writes only per-venue config (never the DB url) and round-trips", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
+    const dir = tempDir();
     await writeBackupEnv(dir, {
       destinationDir: "/srv/backups",
       recoveryKey: "abcDEF-_1234567890",
@@ -48,7 +60,7 @@ describe("writeBackupEnv", () => {
   });
 
   it("writes an interval schedule and omits the wall-clock keys", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
+    const dir = tempDir();
     await writeBackupEnv(dir, {
       destinationDir: "/srv/backups",
       recoveryKey: "abcDEF-_1234567890",
@@ -70,7 +82,7 @@ describe("writeBackupEnv", () => {
     // written that does not round-trip. The payload below is the variable the original fault
     // planted; it names no live setting any more, which does not weaken the case — what is asserted
     // is that NO file is written at all.
-    const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
+    const dir = tempDir();
     await expect(
       writeBackupEnv(dir, {
         destinationDir: "/mnt/usb\nWAITRON_BACKUP_DATABASE_URL=postgresql://wrong-host/wrong-db",
@@ -103,5 +115,49 @@ describe("assertStorableRecord", () => {
     expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_DIR: "/srv\rx" })).toThrow(
       /destinations_invalid/,
     );
+  });
+});
+
+describe("assertStorableRecord — values the env file would read back differently", () => {
+  function refusal(record: Record<string, string>): unknown {
+    try {
+      assertStorableRecord(record);
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected assertStorableRecord to refuse the record");
+  }
+
+  it("refuses a directory with a trailing space, which reading the file back would drop", () => {
+    expect(refusal({ WAITRON_BACKUP_DIR: "/srv/backups " })).toMatchObject({
+      code: "backup.destinations_invalid",
+      params: { reason: "round_trip" },
+    });
+  });
+
+  it("refuses a record whose key carries an equals sign, which would read back as another key", () => {
+    expect(refusal({ "WAITRON_BACKUP=DIR": "/srv/backups" })).toMatchObject({
+      code: "backup.destinations_invalid",
+      params: { reason: "round_trip" },
+    });
+  });
+
+  it("does not write backup.env for a directory that would not read back unchanged", async () => {
+    const dir = tempDir();
+    await expect(
+      writeBackupEnv(dir, {
+        destinationDir: "/mnt/usb ",
+        recoveryKey: "abcDEF-_1234567890",
+        schedule: { kind: "interval", ms: 3_600_000 },
+        retention: { count: 7, days: 30 },
+        keyRotatedAt: undefined,
+      }),
+    ).rejects.toMatchObject({
+      code: "backup.destinations_invalid",
+      params: { reason: "round_trip" },
+    });
+    await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

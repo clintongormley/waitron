@@ -153,6 +153,16 @@ describe("mountSpa", () => {
     expect(res.status).toBe(404);
   });
 
+  it("treats a navigation path as a page only for a request that accepts HTML", async () => {
+    const app = new Hono();
+    mountSpa(app, { root: root!, basePath: "", navigationPath: "/tabs" }, noopLog);
+    const page = await app.request("/tabs/42", { headers: { Accept: "text/html" } });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("id=app");
+    const noAccept = await app.request("/tabs/42");
+    expect(noAccept.status).toBe(404);
+  });
+
   it("answers 404 and logs when a read fails for a reason other than ENOENT", async () => {
     // `assets` is a directory, so `readFile` throws EISDIR — the misconfiguration branch. It is still a
     // bare 404 to the caller (this route never 500s or leaks fs detail), but it logs, unlike the

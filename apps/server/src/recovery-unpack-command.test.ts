@@ -75,4 +75,36 @@ describe("waitron-recovery unpack", () => {
     expect(code).toBe(2);
     expect(out).toEqual([expect.stringMatching(/usage/i)]);
   });
+
+  it("returns 1 with the same one message when the bundle file is not a bundle", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "recovery-unpack-corrupt-"));
+    const envPath = join(dir, "bundle.wrb");
+    await writeFile(envPath, "this is not an envelope");
+    const out: string[] = [];
+    const code = await runRecoveryUnpack({
+      argv: ["unpack", envPath, join(dir, "out")],
+      env: { WAITRON_RECOVERY_PASSPHRASE: PASS },
+      out: (line) => out.push(line),
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual(["recovery failed: wrong passphrase or corrupt bundle"]);
+  });
+
+  it("lets an unexpected failure propagate rather than report it as a bad bundle", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "recovery-unpack-blocked-"));
+    const envPath = join(dir, "bundle.wrb");
+    await writeFile(envPath, encryptBundle(FILES, PASS));
+    // The destination's parent is a FILE, so the destination cannot be created.
+    const blocker = join(dir, "blocker");
+    await writeFile(blocker, "");
+    const out: string[] = [];
+    await expect(
+      runRecoveryUnpack({
+        argv: ["unpack", envPath, join(blocker, "out")],
+        env: { WAITRON_RECOVERY_PASSPHRASE: PASS },
+        out: (line) => out.push(line),
+      }),
+    ).rejects.toMatchObject({ code: "ENOTDIR" });
+    expect(out).toEqual([]);
+  });
 });

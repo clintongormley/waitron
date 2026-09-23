@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLogReader, createRotatingFileSink, tee } from "./log-file.js";
 
 describe("rotating file sink", () => {
@@ -49,6 +49,27 @@ describe("rotating file sink", () => {
       sink("y\n");
     }).not.toThrow();
     expect(errors.length).toBeGreaterThanOrEqual(1); // reported once
+  });
+
+  it("degrades silently, printing nothing, when no error reporter is given", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const sink = createRotatingFileSink({
+        dir: "/nonexistent/definitely/not/writable",
+        maxBytes: 10,
+        maxFiles: 2,
+      });
+      expect(() => {
+        sink("x\n");
+        sink("y\n");
+      }).not.toThrow();
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(stderrWrite).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+      stderrWrite.mockRestore();
+    }
   });
 
   it("never throws even when onError itself throws", () => {

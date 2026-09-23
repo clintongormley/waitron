@@ -441,14 +441,8 @@ describe("kitchen-course config", () => {
     // `isUniqueViolation` is false and `createCourse` rethrows raw (the false branch of its catch).
     // It replaced an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer
     // refuses.
-    //
-    // HALF A LOSS, from the storage swap: the `updateCourse` half of this case is deleted. Its
-    // overflow is gone the same way, and unlike the sibling `updateStation` — which still has the
-    // `kitchen_stations_thresholds_ordered` CHECK to trip — `kitchen_courses` declares no CHECK at
-    // all, and none of `updateCourse`'s three inputs (`name`, `displayOrder`, `active`) can make
-    // the UPDATE refuse for any reason but the name unique. What is no longer checked: that a
-    // refusal which is NOT a unique violation comes back raw from `updateCourse` instead of being
-    // relabelled `course.name_taken`.
+    // The `updateCourse` half is the "refusal that is not the name unique" case at the end of this
+    // file: none of its inputs can make the UPDATE refuse otherwise, so it plants a trigger.
     const cfg = await setupVenue();
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const createErr = await asApp(cfg, (tx) => createCourse(tx, badCfg, { name: "Big" })).catch(
@@ -496,5 +490,26 @@ describe("product-course config", () => {
     await expect(
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, dead)),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead } });
+  });
+});
+
+describe("updateCourse with a refusal that is not the name unique", () => {
+  it("rethrows it raw rather than relabelling it course.name_taken", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
+    // `kitchen_courses` declares no CHECK, so a temporary trigger supplies the non-unique refusal.
+    await db.execute(sql`
+      create trigger kitchen_courses_refuse_update before update on kitchen_courses
+      begin select raise(abort, 'course update refused'); end`);
+    try {
+      const refusal = await asApp(cfg, (tx) =>
+        updateCourse(tx, cfg, id, { name: "Primeros" }),
+      ).catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(Error);
+      expect(refusal).not.toBeInstanceOf(AppError);
+      expect(String(refusal)).toMatch(/course update refused/);
+    } finally {
+      await db.execute(sql`drop trigger kitchen_courses_refuse_update`);
+    }
   });
 });

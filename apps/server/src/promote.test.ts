@@ -551,4 +551,39 @@ describe("promoteMirrorToPrimary", () => {
     expect(await readDeploymentMode(db)).toBe("mirror");
     expect(await readSingletonRole(db)).toBe("secondary");
   });
+
+  it("mints a first chart naming only itself, with no endorsement, when the mirror holds neither", async () => {
+    const { db, deps, nodeId } = await mirror(); // NB: no writeNodeMembership seed
+    await db.execute(sql`update nodes set endorsement = null where id = ${nodeId}`);
+
+    const result = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
+
+    expect(result.alreadyPrimary).toBe(false);
+    const held = await readNodeMembership(db);
+    expect(held?.body).toEqual({
+      term: 0,
+      nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
+    });
+    expect(held?.signerNodeId).toBe(nodeId);
+    expect(held?.endorsements).toEqual([]);
+  });
+
+  it("reports a held term of -1 when the refused membership write leaves no chart held at all", async () => {
+    const { db, nodeId } = await mirror();
+    // Stands in for the held row vanishing under the write: the engine skips the insert.
+    await db.execute(
+      sql`create trigger promote_skip_membership before insert on node_membership begin select raise(ignore); end`,
+    );
+    let err: unknown;
+    try {
+      err = await captureError(() =>
+        withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
+      );
+    } finally {
+      await db.execute(sql`drop trigger promote_skip_membership`);
+    }
+    expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
+    expect(isAppError(err) && err.params).toEqual({ heldTerm: -1, mintedTerm: 4 });
+    expect(await readDeploymentMode(db)).toBe("mirror");
+  });
 });

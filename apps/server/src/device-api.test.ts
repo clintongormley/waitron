@@ -14,8 +14,8 @@
  * that a device write naming a missing binding is refused as `device.binding_invalid` rather than
  * as a 500.
  *
- * A LOSS, from the storage swap: `apps/server/src/device.test.ts` is deleted. It held six
- * crafted-error unit tests over `bindingFkField`, which read the TABLE and COLUMN a foreign-key
+ * A LOSS, from the storage swap: the crafted-error unit tests over `bindingFkField` went with that
+ * function. It read the TABLE and COLUMN a foreign-key
  * refusal named to decide which of the two bindings was at fault, and pinned the deliberate
  * near-misses — another FK column of `devices`, the same column name on another table, a different
  * SQLSTATE, a refusal naming no key. This engine's foreign-key refusal is the whole message
@@ -1000,6 +1000,29 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     ).toMatchObject({
       error: { code: "device.binding_invalid", params: { field: "receiptPrinterId" } },
     });
+  });
+
+  it("refuses a non-boolean hasCashDrawer, and a body naming no hardware field, leaving the row as it was", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja screens");
+    const before = await deviceBindings(deviceId);
+
+    for (const [body, field] of [
+      [{ hasCashDrawer: "yes" }, "hasCashDrawer"],
+      [{}, "hardware"],
+      [{ somethingElse: true }, "hardware"],
+    ] as const) {
+      const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
+        cookie: venue.managerCookie,
+        body,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await deviceBindings(deviceId)).toEqual(before);
   });
 });
 

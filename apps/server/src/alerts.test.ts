@@ -1,7 +1,14 @@
 // Reads on one transaction.
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { locations, tills, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  incidents,
+  locations,
+  tills,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -408,6 +415,23 @@ describe("readOpenAlerts", () => {
     );
     expect(alerts.filter((x) => x.code === "alert.source_unavailable")).toHaveLength(1);
   });
+
+  it("keeps alerts that tie on severity, since and key in the order their source gave them", async () => {
+    const at = "2026-09-14T11:00:00.000Z";
+    const source: AlertSource = {
+      area: "printing",
+      permission: "diagnostics.view",
+      read: async () => [
+        { key: "same", code: "printing.x", params: { n: 1 }, severity: "warning", since: at },
+        { key: "same", code: "printing.x", params: { n: 2 }, severity: "warning", since: at },
+      ],
+    };
+    const r = createAlertRegistry({ claims: [], sources: [source] });
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["diagnostics.view"])),
+    );
+    expect(alerts.map((a) => a.params)).toEqual([{ n: 1 }, { n: 2 }]);
+  });
 });
 
 describe("readHandledAlerts", () => {
@@ -452,5 +476,21 @@ describe("readHandledAlerts", () => {
       readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["payments.manage"])),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
+  });
+
+  it("shows a handled event with no recorded handler as handled by nobody", async () => {
+    const v = await seedVenue();
+    await raise(v, "payment.offline_forward_declined", "error", NOW);
+    const handledAt = new Date(NOW.getTime() - 60_000).toISOString();
+    await db
+      .update(incidents)
+      .set({ acknowledgedAt: handledAt, acknowledgedBy: null })
+      .where(eq(incidents.code, "payment.offline_forward_declined"));
+    const handled = await asApp((tx) =>
+      readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
+    );
+    expect(handled.map((a) => [a.code, a.handledAt, a.handledBy])).toEqual([
+      ["payment.offline_forward_declined", handledAt, null],
+    ]);
   });
 });

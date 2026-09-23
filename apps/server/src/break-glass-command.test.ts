@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { nowIso, type Database } from "@waitron/db";
+import { nowIso, openVenueDatabase, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   hashPassword,
   hashPin,
@@ -338,5 +341,120 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     expect(code).toBe(2);
     const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
+  });
+});
+
+describe("runBreakGlassReset — refusals inside the reset", () => {
+  it("returns 1 and leaves the admin suspended when reactivating them would duplicate a live display name", async () => {
+    const { adminId } = await setupTenant();
+    await suite.db.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
+    // The suspended admin's name is outside the live-name index, so another person may take it.
+    await suite.db.insert(persons).values({
+      displayName: "Administradora",
+      pinHash: hashPin("5678"),
+      role: "staff",
+    });
+
+    const { code, out, closes } = await run(baseEnv());
+
+    expect(code).toBe(1);
+    expect(out).toEqual(["break-glass: that display name is already used by an active account"]);
+    const after = await readPerson(adminId);
+    expect(after!.status).toBe("suspended");
+    expect(verifyPassword(OLD_PASSWORD, after!.passwordHash!)).toBe(true);
+    expect(closes).toBe(1);
+  });
+
+  it("returns 1 and removes no login factor when the update touches no row", async () => {
+    const { adminId } = await setupTenant();
+    await suite.db
+      .insert(webauthnCredentials)
+      .values({ personId: adminId, credentialId: "credential", publicKey: "key" });
+    // Stands in for the row vanishing between the read and the write: the engine skips the update.
+    await suite.db.execute(
+      sql`create trigger break_glass_skip_update before update on persons begin select raise(ignore); end`,
+    );
+    try {
+      const { code, out, closes } = await run(baseEnv());
+
+      expect(code).toBe(1);
+      expect(out).toEqual(["break-glass: expected to reset one admin, affected 0"]);
+      expect(closes).toBe(1);
+    } finally {
+      await suite.db.execute(sql`drop trigger break_glass_skip_update`);
+    }
+    const passkeys = await suite.db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from webauthn_credentials where person_id = ${adminId}`,
+    );
+    expect(passkeys.rows[0]!.n).toBe(1);
+    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+  });
+
+  it("rethrows a refusal that is not a duplicate name, and still closes the venue", async () => {
+    const { adminId } = await setupTenant();
+    await suite.db.execute(
+      sql`create trigger break_glass_refuse_update before update on persons begin select raise(abort, 'refused by test trigger'); end`,
+    );
+    let closes = 0;
+    try {
+      await expect(
+        runBreakGlassReset({
+          argv: [],
+          env: baseEnv(),
+          out: () => {},
+          openDb: () =>
+            Promise.resolve({
+              db: suite.db as Database,
+              close: () => {
+                closes += 1;
+                return Promise.resolve();
+              },
+            }),
+        }),
+      ).rejects.toThrow("refused by test trigger");
+    } finally {
+      await suite.db.execute(sql`drop trigger break_glass_refuse_update`);
+    }
+    expect(closes).toBe(1);
+    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+  });
+
+  it("with no injected opener, resets the admin in the real venue directory WAITRON_VENUE_DIR names", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "break-glass-live-"));
+    try {
+      await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+      const seeded = await openVenueDatabase(directory);
+      const [admin] = await seeded.venue
+        .insert(persons)
+        .values({
+          displayName: "Live Admin",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(OLD_PASSWORD),
+          role: "admin",
+        })
+        .returning({ id: persons.id });
+      await seeded.close();
+
+      const out: string[] = [];
+      const code = await runBreakGlassReset({
+        argv: [],
+        env: { WAITRON_VENUE_DIR: directory, WAITRON_BREAKGLASS_PASSWORD: NEW_PASSWORD },
+        out: (line) => out.push(line),
+      });
+
+      expect(code).toBe(0);
+      expect(out).toEqual([`break-glass: reset admin ${admin!.id} (password, reactivated)`]);
+      const reread = await openVenueDatabase(directory);
+      try {
+        const rows = await reread.venue.execute<{ password_hash: string }>(
+          sql`select password_hash from persons where id = ${admin!.id}`,
+        );
+        expect(verifyPassword(NEW_PASSWORD, rows.rows[0]!.password_hash)).toBe(true);
+      } finally {
+        await reread.close();
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

@@ -1252,6 +1252,27 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
   });
 
+  it("PATCH body screens: array → body; non-string name; non-boolean active — the station is left as it was", async () => {
+    const name = unique("Screened");
+    const id = await createStation(name, { displayOrder: 3 });
+    for (const [body, field] of [
+      ["[]", "body"],
+      [JSON.stringify({ name: 5 }), "name"],
+      [JSON.stringify({ active: "no" }), "active"],
+    ] as const) {
+      const res = await req(`/stations/${id}`, { method: "PATCH", body }, managerCookie);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect((await listStations()).find((s) => s.id === id)).toMatchObject({
+      name,
+      displayOrder: 3,
+      active: true,
+    });
+  });
+
   it("PATCH edits the warm/overdue/forgotten thresholds together; a non-positive value, an out-of-order set, or a partial trio → 400 management.request_invalid", async () => {
     const id = await createStation(unique("Thresh"));
     const ok = await req(
@@ -1647,6 +1668,30 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     );
     expect(malformed.status).toBe(404);
     expect(await malformed.json()).toMatchObject({ error: { code: "course.not_found" } });
+  });
+
+  it("PATCH refuses a non-string name or a non-boolean active, leaving the course as it was", async () => {
+    const name = unique("Screened");
+    const id = await createCourse(name);
+    for (const [body, field] of [
+      [{ name: 5 }, "name"],
+      [{ active: "no" }, "active"],
+    ] as const) {
+      const res = await req(
+        `/courses/${id}`,
+        { method: "PATCH", body: JSON.stringify(body) },
+        managerCookie,
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const [row] = await suite.db
+      .select({ name: kitchenCourses.name, active: kitchenCourses.active })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, id));
+    expect(row).toEqual({ name, active: true });
   });
 
   it("DELETE deactivates a course (drops off the active list); unknown/malformed :id → 404", async () => {

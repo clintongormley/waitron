@@ -600,6 +600,36 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     expect(clockCalls).toBeGreaterThanOrEqual(2);
   });
 
+  it("ends quietly when a clock read fails because the sweep is being stopped", async () => {
+    const controller = new AbortController();
+    const backend = new FakeBackend("only");
+    const logged: Array<[string, string]> = [];
+    let sleeps = 0;
+
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
+        log: (level, event) => logged.push([level, event]),
+        now: () => new Date("2026-09-05T00:00:00Z"),
+        readClock: async () => {
+          controller.abort();
+          throw new Error("clock read interrupted by shutdown");
+        },
+        archive: async (outFile) => {
+          await writeFile(outFile, "DUMP-BYTES");
+        },
+        sleep: async () => {
+          sleeps += 1;
+        },
+      }),
+    );
+
+    expect(backend.objects.size).toBe(1);
+    expect(logged.filter(([, event]) => event === "backup.schedule_failed")).toEqual([]);
+    expect(sleeps).toBe(0);
+  });
+
   it("waits to a wall-clock schedule's nextFireMs, reading the clock each cycle", async () => {
     const controller = new AbortController();
     const backend = new FakeBackend("only");

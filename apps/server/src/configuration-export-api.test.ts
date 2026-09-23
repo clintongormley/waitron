@@ -64,7 +64,7 @@ const suite = useVenueDb({
   },
 });
 
-function app(): Hono {
+function app(options: { clock?: boolean } = {}): Hono {
   const app = new Hono();
   mountConfigurationExportApi(
     app,
@@ -73,7 +73,7 @@ function app(): Hono {
       cfg: venue,
       modules: ALL_MODULES,
       moduleVersions,
-      now: () => new Date("2026-09-09T00:00:00.000Z"),
+      ...(options.clock === false ? {} : { now: () => new Date("2026-09-09T00:00:00.000Z") }),
     },
     noopLog,
   );
@@ -104,5 +104,48 @@ describe("configuration export API", () => {
     );
     expect(decoded.venue.legalName).toBe("Prepared Export SL");
     expect(decoded.tables).not.toHaveProperty("sales");
+  });
+
+  it.each([
+    ["missing", {}],
+    ["not a string", { passphrase: 123456789012 }],
+    ["shorter than twelve characters", { passphrase: "elevenchars" }],
+  ])("refuses a passphrase that is %s", async (_label, body) => {
+    const response = await app().request("/management-api/configuration-export", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "passphrase" } },
+    });
+  });
+
+  it("accepts a passphrase of exactly twelve characters", async () => {
+    const response = await app().request("/management-api/configuration-export", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ passphrase: "twelve chars" }),
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("stamps the artifact with the current time when no clock is supplied", async () => {
+    const before = Date.now();
+    const response = await app({ clock: false }).request("/management-api/configuration-export", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ passphrase: "a strong passphrase" }),
+    });
+    const after = Date.now();
+    expect(response.status).toBe(200);
+    const decoded = decodeConfigurationBundle(
+      new Uint8Array(await response.arrayBuffer()),
+      "a strong passphrase",
+    );
+    const stamped = Date.parse(decoded.createdAt);
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(stamped).toBeLessThanOrEqual(after);
   });
 });

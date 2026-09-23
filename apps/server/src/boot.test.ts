@@ -1,5 +1,5 @@
 import { uploadImage } from "@waitron/media";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
 import { createConnection, createServer } from "node:net";
@@ -43,7 +43,8 @@ import {
   manifestSets,
   migrationOptionsFor,
 } from "@waitron/migrations";
-import { orderedMigrationSets } from "@waitron/module";
+import { enabledModules, orderedMigrationSets, parseModuleConfig } from "@waitron/module";
+import { readContentLanguages, writeContentLanguages } from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
 import {
   DEFAULT_MIGRATIONS_ROOT,
@@ -53,6 +54,11 @@ import {
 } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
+import { packArchive } from "./backup-archive.js";
+import { encryptArtifact } from "./artifact-cipher.js";
+import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
+import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
@@ -398,23 +404,14 @@ async function freePort(): Promise<number> {
 /**
  * Waits until `port` accepts a TCP connection — the listener is actually up.
  *
- * `startServer` resolves BEFORE its listener has bound. `startListening` calls `serve()`, which
- * returns synchronously while the socket binds asynchronously (`boot.ts`'s own comment on the
- * `listeningListener` argument says so), and nothing in `startServer` waits for Node's `listening`
- * callback. A test that closes WITHOUT first dialling therefore reaches `server.close()` while the
- * socket is still unbound, and Node rejects it with `ERR_SERVER_NOT_RUNNING` — "Server is not
- * running." — which `close()` propagates.
- *
- * This was invisible on PostgreSQL, where the boot's remaining round trips gave the bind a turn of
- * the event loop; it is the same class as the `promote-endpoint-e2e` spy the ledger records.
- * Measured 2026-09-22 with three variants of one trading boot in this package, printing the error
- * `close()` rejected with: closing immediately → `Server is not running.`; a 50ms delay first →
- * none; a single `fetch` first → none. So the wait is what the three tests below were getting for
- * free from PostgreSQL, not a workaround for a flaky assertion.
- *
- * Only the three tests that never dial their server call this. Every other boot below fetches
- * something first, which is why they are unaffected. A TCP connect rather than a `fetch`, so this
- * observes the BIND and nothing about what the app answers.
+ * `startServer` resolves before its listener has bound: `serve()` returns while the socket binds
+ * asynchronously, and nothing in `startServer` waits for Node's `listening` callback. Closing a
+ * server whose socket is still unbound rejects with `ERR_SERVER_NOT_RUNNING` ("Server is not
+ * running."), which `close()` propagates — measured 2026-09-22 on one trading boot: closing at
+ * once rejected with it, closing after a 50ms delay or after one `fetch` did not. A test calls
+ * this after `startServer` so that its next step, whether a close or a dial, meets a bound
+ * listener. A TCP connect rather than a `fetch`, so it observes the bind and nothing about what
+ * the app answers.
  */
 async function awaitListening(port: number): Promise<void> {
   for (let i = 0; i < POLL_TRIES; i += 1) {
@@ -1265,7 +1262,7 @@ describe("startServer, against a migrated venue directory", () => {
         return [s, found] as const;
       });
       server = started;
-      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
       // Names the soft-disabled module — the operator-visible signal that scheduler's schema is in the
       // DB but no longer enabled. `toMigrate` is empty: every ENABLED set was already migrated in the
@@ -2107,7 +2104,7 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_ENV: "production",
     });
     try {
-      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
       expect(runTunnelClient).not.toHaveBeenCalled();
     } finally {
@@ -2136,7 +2133,7 @@ describe("startServer, against a migrated venue directory", () => {
       return [started, event] as const;
     });
     try {
-      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
       expect(disabled.event).toBe("backup.disabled");
     } finally {
@@ -2791,4 +2788,578 @@ describe("DEFAULT_MIGRATIONS_ROOT", () => {
     expect(isAbsolute(DEFAULT_MIGRATIONS_ROOT)).toBe(true);
     expect(basename(DEFAULT_MIGRATIONS_ROOT)).toBe("drizzle");
   });
+});
+
+/**
+ * A minimal SMTP receiver on loopback: enough of the dialogue for one message per connection, and
+ * every message's raw text kept in arrival order.
+ */
+async function startFakeSmtp(): Promise<{
+  port: number;
+  messages: string[];
+  close: () => Promise<void>;
+}> {
+  const messages: string[] = [];
+  const server = createServer((socket) => {
+    socket.setEncoding("utf8");
+    let pending = "";
+    let data: string | undefined;
+    socket.write("220 fake ESMTP\r\n");
+    socket.on("data", (chunk: string) => {
+      pending += chunk;
+      for (let end = pending.indexOf("\r\n"); end !== -1; end = pending.indexOf("\r\n")) {
+        const line = pending.slice(0, end);
+        pending = pending.slice(end + 2);
+        if (data !== undefined) {
+          if (line === ".") {
+            messages.push(data);
+            data = undefined;
+            socket.write("250 queued\r\n");
+          } else {
+            data += `${line}\n`;
+          }
+          continue;
+        }
+        const verb = line.slice(0, 4).toUpperCase();
+        if (verb === "DATA") {
+          data = "";
+          socket.write("354 go ahead\r\n");
+        } else if (verb === "QUIT") {
+          socket.end("221 bye\r\n");
+        } else {
+          socket.write("250 ok\r\n");
+        }
+      }
+    });
+    socket.on("error", () => {});
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    port: (server.address() as AddressInfo).port,
+    messages,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+/** The tenant, location, node and till `KEY_ENV`'s ids name, seeded into `db` the way this file's
+ * `beforeAll` seeds the shared directory. */
+async function seedTradingVenue(db: Database): Promise<void> {
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });
+  await db.insert(locations).values({
+    id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  await db.insert(nodes).values({
+    id: TILL_ENV.WAITRON_TILL_NODE_ID,
+    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Route Wiring Till",
+    filingModule: "verifactu",
+  });
+  await db.insert(tills).values({
+    id: TILL_ENV.WAITRON_TILL_TILL_ID,
+    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Route Wiring Till",
+  });
+}
+
+describe("startServer — what a trading boot wires behind its management routes", () => {
+  const ADMIN_PASSWORD = "dashPass123";
+  const ORIGIN = "https://dashboard.example.com";
+  let venue: { directory: string; store: VenueDatabase };
+  let db: Database;
+  let port: number;
+  let server: StartedServer;
+  let cookie: string;
+
+  beforeAll(async () => {
+    venue = await freshVenue();
+    db = venue.store.venue;
+    await seedTradingVenue(db);
+    const [admin] = await db
+      .insert(persons)
+      .values({
+        displayName: "Route Admin",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(ADMIN_PASSWORD),
+        email: "route-admin@example.test",
+        role: "admin",
+      })
+      .returning({ id: persons.id });
+    const session = await withTransaction(db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
+    port = await freePort();
+    server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venue.directory,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    });
+    await awaitListening(port);
+  }, 120_000);
+
+  afterAll(async () => {
+    if (server !== undefined) await server.close();
+    const store = venue?.store;
+    if (store !== undefined) await store.close();
+    if (venue !== undefined) await rm(venue.directory, { recursive: true, force: true });
+  });
+
+  async function invite(email: string): Promise<unknown> {
+    const [invitee] = await db
+      .insert(persons)
+      .values({
+        displayName: `Invitee ${email}`,
+        pinHash: hashPin("1234"),
+        email,
+        role: "staff",
+        status: "pending",
+      })
+      .returning({ id: persons.id });
+    const response = await fetch(
+      `http://127.0.0.1:${port}/management-api/staff/${invitee!.id}/invitation`,
+      { method: "POST", headers: { cookie, origin: ORIGIN } },
+    );
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+
+  async function changeOwnEmail(email: string): Promise<unknown> {
+    const response = await fetch(`http://127.0.0.1:${port}/management-api/session/me/profile`, {
+      method: "PUT",
+      headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({
+        displayName: "Route Admin",
+        firstNames: "Route",
+        lastNames: "Admin",
+        telephone: null,
+        email,
+        locale: "en-GB",
+        currentPassword: ADMIN_PASSWORD,
+      }),
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+
+  it("sends account email through the SMTP gateway the vault holds, and sends none while it holds none", async () => {
+    const inbox = await fetch(`http://127.0.0.1:${port}/management-api/email`, {
+      headers: { cookie },
+    });
+    expect(inbox.status).toBe(200);
+    expect(await inbox.json()).toEqual({ mode: "unconfigured", count: 0, messages: [] });
+    expect(await invite("first-invitee@example.test")).toEqual({ invitationSent: false });
+    expect(await changeOwnEmail("first-change@example.test")).toEqual({
+      emailVerificationSent: false,
+    });
+
+    const smtp = await startFakeSmtp();
+    try {
+      // Resolved on every send, so a gateway configured while the box runs is used at once.
+      await withTransaction(db, (tx) =>
+        putCredential(tx, loadKeyRing(KEY_ENV), {
+          purpose: "email.smtp",
+          value: {
+            url: `smtp://127.0.0.1:${smtp.port}`,
+            from: "Waitron <no-reply@example.test>",
+          },
+        }),
+      );
+      const configured = await fetch(`http://127.0.0.1:${port}/management-api/email`, {
+        headers: { cookie },
+      });
+      expect(await configured.json()).toEqual({ mode: "smtp", count: 0, messages: [] });
+
+      expect(await invite("second-invitee@example.test")).toEqual({ invitationSent: true });
+      expect(await changeOwnEmail("second-change@example.test")).toEqual({
+        emailVerificationSent: true,
+      });
+      expect(smtp.messages).toHaveLength(2);
+      expect(smtp.messages[0]).toMatch(/^To: second-invitee@example\.test$/m);
+      expect(smtp.messages[1]).toMatch(/^To: second-change@example\.test$/m);
+    } finally {
+      await smtp.close();
+    }
+  }, 60_000);
+
+  it("counts a library image with no name in the new default language as a gap, refusing the change", async () => {
+    const current = (await (
+      await fetch(`http://127.0.0.1:${port}/api/content-languages`)
+    ).json()) as { defaultLanguage: string };
+    await withTransaction(db, (tx) =>
+      uploadImage(
+        tx,
+        {
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]),
+          names: { [current.defaultLanguage]: "Pan" },
+          altText: {},
+          labels: [],
+        },
+        { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: current.defaultLanguage },
+      ),
+    );
+
+    const response = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
+      method: "PUT",
+      headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ defaultLanguage: "fr", languages: ["fr"] }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "content.default_missing", params: { language: "fr", count: 1 } },
+    });
+  }, 60_000);
+
+  it("raises the backup-disabled alert from the backup supervisor's live status", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/management-api/alerts`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { alerts: { code: string }[] };
+    expect(body.alerts.map((alert) => alert.code)).toContain("backup.disabled");
+  }, 60_000);
+});
+
+describe("startServer — background listeners and sinks that fail or close", () => {
+  it("logs a tunnel client that rejects, and still closes cleanly", async () => {
+    vi.mocked(runTunnelClient).mockImplementationOnce(() =>
+      Promise.reject(new Error("tunnel client gave up")),
+    );
+    await withCapturedStdout(async (lines) => {
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+        WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
+        WAITRON_TUNNEL_BOX_ID: "box-rejecting",
+        WAITRON_TUNNEL_TOKEN: "tunnel-secret",
+      });
+      try {
+        await awaitListening(port);
+        expect(await waitForEvent(lines, "tunnel.worker_rejected")).toMatchObject({
+          errorCode: "unknown",
+          level: "error",
+        });
+      } finally {
+        await expect(server.close()).resolves.toBeUndefined();
+      }
+    });
+  }, 60_000);
+
+  it("serves the plain-HTTP landing page beside a trading boot that holds a minted leaf, and closes it with the server", async () => {
+    const port = await freePort();
+    const landingPort = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-landing-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: sharedVenueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_LANDING_PORT: String(landingPort),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    });
+    try {
+      await awaitListening(landingPort);
+      const page = await fetch(`http://127.0.0.1:${landingPort}/`);
+      expect(page.status).toBe(200);
+      expect(page.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(await page.text()).toContain("/ca.crt");
+      // The listener reads the boot's own state directory: it hands out the CA minted above.
+      const ca = await fetch(`http://127.0.0.1:${landingPort}/ca.crt`);
+      expect(ca.status).toBe(200);
+      expect(await ca.text()).toBe(await readFile(join(stateDir, "tls", "ca.crt"), "utf8"));
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+    await expect(fetch(`http://127.0.0.1:${landingPort}/`)).rejects.toThrow();
+  }, 60_000);
+
+  it("warns once on stdout when the log directory cannot be written, and keeps serving", async () => {
+    await withCapturedStdout(async (lines) => {
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+        // Under a non-directory, so the sink's directory can never be created.
+        WAITRON_LOG_DIR: "/dev/null/waitron-logs",
+      });
+      try {
+        await awaitListening(port);
+        expect(await waitForEvent(lines, "log.file_unavailable")).toMatchObject({
+          level: "warn",
+        });
+        expect((await fetch(`http://127.0.0.1:${port}/api/node`)).status).toBe(200);
+        expect(
+          lines.filter((line) => line.includes('"event":"log.file_unavailable"')),
+        ).toHaveLength(1);
+      } finally {
+        await server.close();
+      }
+    });
+  }, 60_000);
+});
+
+describe("startServer — setup-mode routes that hand work to the boot's own wiring", () => {
+  const ES_MODULE_CONFIG = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "ES-common");
+
+  /** The same venue `provisionVenueBody` describes, with the admin secrets already hashed — the
+   * shape `provisionVenue` takes behind the endpoint. */
+  function hashedVenueRequest(taxId: string) {
+    const { admin, ...venue } = provisionVenueBody(taxId);
+    return {
+      ...venue,
+      admin: {
+        displayName: admin.displayName,
+        pinHash: hashPin(admin.pin),
+        passwordHash: hashPassword(admin.password),
+        email: admin.email,
+      },
+    };
+  }
+
+  /** A setup-mode boot over a venue directory, with the restart intercepted and the minted CA
+   * trusted; `use` runs while it serves. */
+  async function withSetupBoot(
+    directory: string,
+    env: Record<string, string>,
+    use: (ctx: {
+      post: (path: string, init: RequestInit) => Promise<Response>;
+      kills: { pid: number; signal: string | number | undefined }[];
+      stateDir: string;
+    }) => Promise<void>,
+  ): Promise<void> {
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
+    try {
+      await withMockedKill(async (kills) => {
+        const server = await startServer({
+          WAITRON_VENUE_DIR: directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0",
+          ...env,
+        });
+        const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+        try {
+          await use({
+            post: (path, init) =>
+              fetch(`https://127.0.0.1:${port}${path}`, { ...via, method: "POST", ...init }),
+            kills,
+            stateDir,
+          });
+        } finally {
+          await close();
+          await server.close();
+        }
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }
+
+  it("finishes a provision whose venue had already committed, re-using that venue rather than minting another", async () => {
+    const venue = await freshVenue();
+    const precommittedStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-precommitted-"));
+    try {
+      const committed = await provisionVenue(
+        {
+          ownerDb: venue.store.venue,
+          moduleConfig: ES_MODULE_CONFIG,
+          database: venue.directory,
+          stateDir: precommittedStateDir,
+        },
+        { environment: "preproduction", venue: hashedVenueRequest("60000010W") },
+      );
+
+      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+        const response = await post("/setup-api/provision", {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000010W") }),
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+        const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
+        expect(trading.WAITRON_TILL_NODE_ID).toBe(committed.nodeId);
+        expect(trading.WAITRON_TILL_TILL_ID).toBe(committed.tillId);
+        await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+      });
+      const nodeCount = await venue.store.venue.execute<{ n: number }>(
+        sql`select cast(count(*) as int) as n from nodes`,
+      );
+      expect(nodeCount.rows[0]!.n).toBe(1);
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(precommittedStateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("validates a restore artifact before staging it, refusing one the recovery key cannot open", async () => {
+    const venue = await freshVenue();
+    try {
+      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+        const response = await post("/setup-api/restore", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-waitron-recovery-key": "not-the-key-that-sealed-it",
+            "x-waitron-restore-environment": "preproduction",
+          },
+          body: new Uint8Array(
+            encryptArtifact(
+              packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
+              "the key that really sealed it",
+            ),
+          ),
+        });
+        const body = (await response.json()) as { error?: { code: string } };
+        expect(response.status).toBe(400);
+        expect(body.error?.code).toBe("recovery.passphrase_invalid");
+        await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        expect(kills).toEqual([]);
+      });
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses to adopt from a primary it cannot reach", async () => {
+    const venue = await freshVenue();
+    const unreachable = await freePort();
+    try {
+      await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {
+        const response = await post("/setup-api/adopt", {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            primaryUrl: `http://127.0.0.1:${unreachable}`,
+            credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
+          }),
+        });
+        const body = (await response.json()) as { error?: { code: string } };
+        expect(response.status).toBe(502);
+        expect(body.error?.code).toBe("mirror.bundle_fetch_failed");
+        expect(kills).toEqual([]);
+      });
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("stages a prepared configuration and imports it into the venue a live provision mints", async () => {
+    const TAX_ID = "60000011A";
+    const PASSPHRASE = "a long enough export passphrase";
+    const modules = enabledModules(ALL_MODULES, ES_MODULE_CONFIG);
+    const source = await freshVenue();
+    const target = await freshVenue();
+    const sourceStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-config-source-"));
+    try {
+      const sourceIds = await provisionVenue(
+        {
+          ownerDb: source.store.venue,
+          moduleConfig: ES_MODULE_CONFIG,
+          database: source.directory,
+          stateDir: sourceStateDir,
+        },
+        { environment: "preproduction", venue: hashedVenueRequest(TAX_ID) },
+      );
+      await withTransaction(source.store.venue, (tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] }),
+      );
+      const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
+      const artifact = encodeConfigurationBundle(
+        await buildConfigurationBundle(
+          source.store.venue,
+          { ...sourceIds, sourceOperatorId: exporter!.id },
+          modules,
+          new Date(),
+          await schemaVersionsByModule(source.store.venue, modules),
+        ),
+        PASSPHRASE,
+      );
+      const live = (taxId: string) =>
+        JSON.stringify({
+          mode: "live",
+          configurationImport: true,
+          venue: provisionVenueBody(taxId),
+        });
+
+      await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post, kills }) => {
+        const json = { "content-type": "application/json" };
+        const unstaged = await post("/setup-api/provision", { headers: json, body: live(TAX_ID) });
+        expect(unstaged.status).toBe(400);
+        expect(await unstaged.json()).toEqual({
+          error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
+        });
+
+        const staged = await post("/setup-api/configuration", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-waitron-export-passphrase": PASSPHRASE,
+          },
+          body: new Uint8Array(artifact),
+        });
+        expect(staged.status).toBe(200);
+        expect(((await staged.json()) as { venue: { taxId: string } }).venue.taxId).toBe(TAX_ID);
+
+        const otherBusiness = await post("/setup-api/provision", {
+          headers: json,
+          body: live("60000012G"),
+        });
+        expect(otherBusiness.status).toBe(400);
+        expect(await otherBusiness.json()).toEqual({
+          error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
+        });
+
+        const provisioned = await post("/setup-api/provision", {
+          headers: json,
+          body: live(TAX_ID),
+        });
+        expect(await provisioned.json()).toEqual({ provisioned: true, restarting: true });
+        await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+      });
+
+      const imported = await withTransaction(target.store.venue, (tx) =>
+        readContentLanguages(tx, "es"),
+      );
+      expect(imported).toEqual({ defaultLanguage: "es", languages: ["es", "fr"] });
+    } finally {
+      await source.store.close();
+      await target.store.close();
+      await rm(source.directory, { recursive: true, force: true });
+      await rm(target.directory, { recursive: true, force: true });
+      await rm(sourceStateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

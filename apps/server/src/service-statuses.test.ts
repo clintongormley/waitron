@@ -5,6 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createStatus, deactivateStatus, listStatuses, updateStatus } from "./tables.js";
 import "./errors.js";
@@ -181,5 +182,56 @@ describe("service-status config CRUD (venue.configure)", () => {
     expect(
       await codeOf(() => asApp((tx) => listStatuses(tx, { managementSessionId: staffSession }))),
     ).toBe("authorization.not_permitted");
+  });
+
+  it("reactivates a deactivated status through updateStatus's active patch", async () => {
+    const { id } = await asApp((tx) =>
+      createStatus(tx, { managementSessionId: managerSession, label: "Waiting", color: "#6b7280" }),
+    );
+    await asApp((tx) => deactivateStatus(tx, { managementSessionId: managerSession, id }));
+    await asApp((tx) =>
+      updateStatus(tx, { managementSessionId: managerSession, id, active: true }),
+    );
+    const list = await asApp((tx) => listStatuses(tx, { managementSessionId: managerSession }));
+    expect(list.find((status) => status.id === id)).toMatchObject({
+      label: "Waiting",
+      active: true,
+    });
+  });
+
+  it("rethrows a refusal that is not the label unique raw, on create and on update", async () => {
+    const { id } = await asApp((tx) =>
+      createStatus(tx, { managementSessionId: managerSession, label: "Dessert", color: "#a855f7" }),
+    );
+    // `table_service_statuses` declares no CHECK, so temporary triggers supply the refusal.
+    await suite.db.execute(sql`
+      create trigger statuses_refuse_insert before insert on table_service_statuses
+      begin select raise(abort, 'status insert refused'); end`);
+    await suite.db.execute(sql`
+      create trigger statuses_refuse_update before update on table_service_statuses
+      begin select raise(abort, 'status update refused'); end`);
+    try {
+      expect(
+        await codeOf(() =>
+          asApp((tx) =>
+            createStatus(tx, {
+              managementSessionId: managerSession,
+              label: "Coffee",
+              color: "#000",
+            }),
+          ),
+        ),
+      ).toMatch(/^NON-APP-ERROR: .*status insert refused/);
+      expect(
+        await codeOf(() =>
+          asApp((tx) =>
+            updateStatus(tx, { managementSessionId: managerSession, id, label: "Postre" }),
+          ),
+        ),
+      ).toMatch(/^NON-APP-ERROR: .*status update refused/);
+    } finally {
+      await suite.db.execute(sql`drop trigger statuses_refuse_insert`);
+      await suite.db.execute(sql`drop trigger statuses_refuse_update`);
+    }
   });
 });

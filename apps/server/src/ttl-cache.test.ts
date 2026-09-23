@@ -40,4 +40,18 @@ describe("createTtlCache", () => {
     await Promise.all([cache.get("r", compute), cache.get("r", compute)]);
     expect(compute).toHaveBeenCalledTimes(1);
   });
+
+  it("does not let an older compute's failure drop a newer cached value", async () => {
+    let clock = new Date("2026-09-15T00:00:00Z");
+    const cache = createTtlCache<number>({ ttlMs: 60_000, now: () => clock });
+    let failOld!: (e: Error) => void;
+    const old = cache.get("r", () => new Promise<number>((_, reject) => (failOld = reject)));
+    clock = new Date("2026-09-15T00:02:00Z");
+    expect(await cache.get("r", async () => 2)).toBe(2);
+    failOld(new Error("old compute failed"));
+    await expect(old).rejects.toThrow("old compute failed");
+    const recompute = vi.fn(async () => 3);
+    expect(await cache.get("r", recompute)).toBe(2);
+    expect(recompute).not.toHaveBeenCalled();
+  });
 });

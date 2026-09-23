@@ -123,6 +123,37 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     expect(run).not.toHaveBeenCalled();
   });
 
+  it("a login credential whose totp is not a string is refused 401 without trying the login", async () => {
+    const { app, run } = appWith();
+    const res = await post(app, {
+      oldNodeNeutralised: true,
+      personId: PERSON,
+      password: "pw",
+      totp: 123456,
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("password.invalid");
+    expect(loginManagerById).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("passes a string totp through to the login", async () => {
+    const { app, run } = appWith();
+    const res = await post(app, {
+      oldNodeNeutralised: false,
+      personId: PERSON,
+      password: "pw",
+      totp: "123456",
+    });
+    expect(res.status).toBe(200);
+    expect(loginManagerById).toHaveBeenCalledWith(expect.anything(), {
+      personId: PERSON,
+      password: "pw",
+      totp: "123456",
+    });
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
+  });
+
   it("a non-admin credential (authorization.not_permitted) is refused 403 and never calls run", async () => {
     authorizeManager.mockRejectedValueOnce(
       new AppError("authorization.not_permitted", { permission: "node.promote" }),

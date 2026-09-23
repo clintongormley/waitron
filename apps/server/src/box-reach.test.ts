@@ -149,6 +149,26 @@ describe("listBoxIpv4", () => {
       listBoxIpv4({ interfaces: () => withBridges, defaultRouteIface: () => undefined }),
     ).toEqual(["192.168.10.10"]);
   });
+
+  it("falls back to non-virtual interfaces when the default-route interface is not present", () => {
+    expect(
+      listBoxIpv4({ interfaces: () => withBridges, defaultRouteIface: () => "wlan0" }),
+    ).toEqual(["192.168.10.10"]);
+  });
+
+  it("falls back to non-virtual interfaces when the default-route interface has no LAN IPv4", () => {
+    const ipv6Uplink = asIfaces({
+      eth0: [
+        { address: "fe80::1", family: "IPv6", internal: false },
+        { address: "127.0.0.2", family: "IPv4", internal: true },
+      ],
+      wlan0: [{ address: "192.168.20.4", family: "IPv4", internal: false }],
+      docker0: [{ address: "172.17.0.1", family: "IPv4", internal: false }],
+    });
+    expect(listBoxIpv4({ interfaces: () => ipv6Uplink, defaultRouteIface: () => "eth0" })).toEqual([
+      "192.168.20.4",
+    ]);
+  });
 });
 
 describe("defaultRouteIface", () => {
@@ -189,5 +209,20 @@ describe("defaultRouteIface", () => {
       "wlan0\t00000000\t0102A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0\n" +
       "eth0\t00000000\t0102A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n";
     expect(defaultRouteIface(() => route)).toBe("eth0");
+  });
+
+  it("ranks a default route with an unreadable metric below any numbered one", () => {
+    const route =
+      "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+      "wlan0\t00000000\t0102A8C0\t0003\t0\t0\tx\t00000000\t0\t0\t0\n" +
+      "eth0\t00000000\t0102A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0\n";
+    expect(defaultRouteIface(() => route)).toBe("eth0");
+  });
+
+  it("still takes a default route whose metric is unreadable when it is the only one", () => {
+    const route =
+      "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+      "wlan0\t00000000\t0102A8C0\t0003\t0\t0\tx\t00000000\t0\t0\t0\n";
+    expect(defaultRouteIface(() => route)).toBe("wlan0");
   });
 });

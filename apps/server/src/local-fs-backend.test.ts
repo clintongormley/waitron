@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,5 +91,23 @@ describe("LocalFsBackend", () => {
     await be.put("waitron-stays.dump.enc", Buffer.from("here"));
     const listed = await be.list("waitron-");
     expect(listed.map((o) => o.key)).toEqual(["waitron-stays.dump.enc"]);
+  });
+  it("list surfaces a directory it cannot read, other than a missing one", async () => {
+    await writeFile(join(dir, "not-a-dir"), "x");
+    const be = new LocalFsBackend("d1", join(dir, "not-a-dir"));
+    await expect(be.list("waitron-")).rejects.toMatchObject({ code: "ENOTDIR" });
+  });
+
+  it("list surfaces an entry it cannot stat, other than one that vanished", async () => {
+    await symlink(join(dir, "waitron-loop.dump.enc"), join(dir, "waitron-loop.dump.enc"));
+    const be = new LocalFsBackend("d1", dir);
+    await expect(be.list("waitron-")).rejects.toMatchObject({ code: "ELOOP" });
+  });
+
+  it("list leaves out a directory whose name looks like a backup", async () => {
+    const be = new LocalFsBackend("d1", dir);
+    await mkdir(join(dir, "waitron-folder.dump.enc"));
+    await be.put("waitron-real.dump.enc", Buffer.from("here"));
+    expect((await be.list("waitron-")).map((o) => o.key)).toEqual(["waitron-real.dump.enc"]);
   });
 });

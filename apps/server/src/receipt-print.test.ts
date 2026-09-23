@@ -7,6 +7,7 @@ import {
   drawerOpens,
   locations,
   printJobs,
+  readTenant,
   sales,
   tenantReceipts,
   tills,
@@ -43,7 +44,7 @@ import type { TillConfig } from "./till-config.js";
 import { collectOrder, recordTillSale, reprintSale } from "./till-sale.js";
 import { openTab, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
-import { DRAWER_KICK } from "./receipt-print.js";
+import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 /**
@@ -758,4 +759,38 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
     },
   );
+});
+
+describe("receipt issuer", () => {
+  it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
+    const { cfg, each } = await setupVenue();
+    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    const filed = await recordTillSale(deps(), cfg, {
+      lines: [{ productId: each.id, quantity: "1" }],
+      tender: { method: "card", amount: "1.50" },
+    });
+    const withoutIssuer = { ...filed, issuer: undefined };
+    const taxpayer = (await withTransaction(suite.db, (tx) => readTenant(tx)))!;
+
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, withoutIssuer));
+    const [fallback] = (await printJobsFor(cfg)).map((job) =>
+      decodeTicket(new Uint8Array(job.payload)),
+    );
+    expect(fallback).toContain(taxpayer.legalName);
+    expect(fallback).toContain(taxpayer.taxId);
+
+    // The control: a ticket that does carry a filed issuer prints that one instead.
+    await withTransaction(suite.db, (tx) => tx.delete(printJobs));
+    await withTransaction(suite.db, (tx) =>
+      enqueueReceiptReprint(tx, cfg, {
+        ...filed,
+        issuer: { venueName: "Emisor Registrado SL", nif: "B99999999" },
+      }),
+    );
+    const [recorded] = (await printJobsFor(cfg)).map((job) =>
+      decodeTicket(new Uint8Array(job.payload)),
+    );
+    expect(recorded).toContain("Emisor Registrado SL");
+    expect(recorded).not.toContain(taxpayer.legalName);
+  });
 });

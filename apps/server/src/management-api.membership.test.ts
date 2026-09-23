@@ -230,4 +230,29 @@ describe("GET /management-api/membership", () => {
     expect(badShape.status).toBe(401);
     expect((await badShape.json()).error.code).toBe("password.invalid");
   });
+
+  it("refuses a credential header whose JSON is not an object with 401", async () => {
+    const { designated } = await setupVenue();
+    const app = mountApp(designated);
+    for (const raw of ["null", "[]", "42", '"text"']) {
+      const res = await app.request("/management-api/membership", {
+        method: "GET",
+        headers: { "x-waitron-peer-credential": raw },
+      });
+      expect(res.status).toBe(401);
+      expect((await res.json()).error.code).toBe("password.invalid");
+    }
+  });
+
+  it("refuses an otherwise correct credential whose totp is not a string with 401", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated);
+    const res = await getMembership(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      totp: 123456,
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("password.invalid");
+  });
 });

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -127,5 +127,41 @@ describe("staged restore requests", () => {
     await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("rejects with the read error, running no restore, when the request marker cannot be read", async () => {
+    const stateDir = await fresh();
+    await mkdir(join(stateDir, "restore-request.json"));
+    const restore = vi.fn(async () => {});
+
+    await expect(
+      runStagedRestore(
+        { stateDir, venueDir: "/var/lib/waitron/venue", migrationsRoot: null, log: vi.fn() },
+        restore,
+      ),
+    ).rejects.toMatchObject({ code: "EISDIR" });
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an unknown version", { version: 2, environment: "production" }],
+    ["an environment that is not a deployment", { version: 1, environment: "dev" }],
+  ])("refuses a marker with %s and runs no restore", async (_label, marker) => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([7]),
+      recoveryKey: "recovery",
+      environment: "production",
+    });
+    await writeFile(join(stateDir, "restore-request.json"), JSON.stringify(marker));
+    const restore = vi.fn(async () => {});
+
+    await expect(
+      runStagedRestore(
+        { stateDir, venueDir: "/var/lib/waitron/venue", migrationsRoot: null, log: vi.fn() },
+        restore,
+      ),
+    ).rejects.toThrow("invalid staged restore request");
+    expect(restore).not.toHaveBeenCalled();
   });
 });

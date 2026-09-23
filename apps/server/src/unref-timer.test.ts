@@ -20,4 +20,24 @@ describe("unrefTimer", () => {
     vi.advanceTimersByTime(5000);
     expect(fn).not.toHaveBeenCalled();
   });
+
+  it("works under a timer host that hands back a plain number", () => {
+    const pending: Array<() => void> = [];
+    const cleared: unknown[] = [];
+    vi.stubGlobal("setTimeout", (fn: () => void) => {
+      pending.push(fn);
+      return 7;
+    });
+    vi.stubGlobal("clearTimeout", (t: unknown) => void cleared.push(t));
+    try {
+      const fn = vi.fn();
+      const timer = unrefTimer(1000, fn);
+      pending[0]!();
+      expect(fn).toHaveBeenCalledOnce();
+      timer.cancel();
+      expect(cleared).toEqual([7]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

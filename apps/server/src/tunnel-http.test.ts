@@ -58,6 +58,18 @@ describe("tunnelHttpClient", () => {
     }
   });
 
+  it("checks the certificate against the relay's address when no box hostname is given, and refuses it", async () => {
+    const { port, ca, close } = await startBoxServer();
+    try {
+      const http = tunnelHttpClient({ ca });
+      await expect(http(`https://127.0.0.1:${port}/`, { headers: {} })).rejects.toMatchObject({
+        cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID" },
+      });
+    } finally {
+      await close();
+    }
+  });
+
   it("fails the TLS handshake with a cert-trust error when the box CA is not trusted", async () => {
     const { port, close } = await startBoxServer();
     try {

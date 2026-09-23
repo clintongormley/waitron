@@ -1,10 +1,11 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { generateSync } from "otplib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
@@ -576,5 +577,67 @@ describe("the sign-in passkey offer", () => {
     expect((await again.json()) as { offerPasskey: boolean }).toMatchObject({
       offerPasskey: false,
     });
+  });
+});
+
+describe("passkey registration's own-credential check", () => {
+  const TOTP_KEY = Buffer.alloc(32, 5);
+  const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+
+  function mountWithKeyRing(): Hono {
+    const app = new Hono();
+    mountManagementApi(
+      app,
+      {
+        db: suite.db,
+        cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
+        secureCookies: false,
+        rpId: "localhost",
+        origin: "http://localhost",
+        credentialKeyRing: { current: { version: 1, key: TOTP_KEY } },
+      },
+      noopLog,
+    );
+    return app;
+  }
+
+  it("refuses options without a current password, naming the field", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/management-api/passkey/register/options", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ currentPassword: 1234 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "currentPassword" } },
+    });
+  });
+
+  it("passes the authenticator code through for a person with two-factor sign-in", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountWithKeyRing();
+    const cookie = await login(app, MANAGER_EMAIL);
+    await suite.db
+      .update(persons)
+      .set({ totpSecret: encryptTotpSecret(SECRET, { version: 1, key: TOTP_KEY }) })
+      .where(eq(persons.id, managerId));
+    const options = (body: Record<string, unknown>) =>
+      app.request("/management-api/passkey/register/options", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const withoutCode = await options({ currentPassword: PASSWORD });
+    expect(withoutCode.status).toBe(401);
+    expect(await withoutCode.json()).toEqual({ error: { code: "totp.invalid", params: {} } });
+    const withCode = await options({
+      currentPassword: PASSWORD,
+      totp: generateSync({ secret: SECRET }),
+    });
+    expect(withCode.status).toBe(200);
+    expect(((await withCode.json()) as { challengeHandle: string }).challengeHandle).toBeTruthy();
   });
 });

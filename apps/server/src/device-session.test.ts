@@ -58,6 +58,7 @@ import {
   cookieDomainFor,
   readDeviceCookie,
   requireDevice,
+  requireSaleTillId,
   setDeviceCookie,
   tryReadDevice,
 } from "./device-session.js";
@@ -811,5 +812,35 @@ describe("tryReadDevice dev override resolves a seeded device (real Postgres)", 
     );
     expect(binding?.deviceId).toBe(deviceId);
     expect(binding?.formFactor).toBe("kds");
+  });
+});
+
+describe("requireSaleTillId reading the device cookie itself", () => {
+  async function probeSaleTill(
+    cookieValue: string | null,
+  ): Promise<{ ok: true; tillId: string } | { ok: false; code: string }> {
+    const { res, thrown } = await runProbe(cookieValue, async (deps, c) =>
+      c.json({ tillId: await requireSaleTillId(deps, c) }),
+    );
+    if (res.status === 200)
+      return { ok: true, tillId: ((await res.json()) as { tillId: string }).tillId };
+    return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
+  }
+
+  it("returns the till an enrolled till device's cookie is bound to", async () => {
+    const { deviceId, token, tillId } = await enrolTillDeviceFixture();
+    expect(await probeSaleTill(`${deviceId}.${token}`)).toEqual({ ok: true, tillId });
+  });
+
+  it("refuses a request with no device cookie as device.unauthorized", async () => {
+    expect(await probeSaleTill(null)).toEqual({ ok: false, code: "device.unauthorized" });
+  });
+
+  it("refuses a kitchen display, which rings no sale, as device.till_required", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    expect(await probeSaleTill(`${deviceId}.${token}`)).toEqual({
+      ok: false,
+      code: "device.till_required",
+    });
   });
 });

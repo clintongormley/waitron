@@ -297,3 +297,40 @@ it("consumes single-byte mode selection without hiding the following accented te
   expect(result.text).toBe("é");
   expect(result.unsupported).toBe(false);
 });
+
+it.each([
+  ["a character-table selection", [0x1b, 0x74]],
+  ["a cut", [0x1d, 0x56]],
+  ["a QR command header", [0x1d, 0x28, 0x6b]],
+  ["a raster image header", [0x1d, 0x76, 0x30]],
+])("stops at %s cut off by the end of the payload", (_command, bytes) => {
+  const result = previewPrintJob(Uint8Array.from([65, ...bytes]));
+  expect(result.text).toBe("A");
+  expect(result.truncated).toBe(true);
+  expect(result.unsupported).toBe(false);
+});
+
+describe("once the block limit is reached", () => {
+  const fullOfCuts = () => {
+    const builder = esc();
+    for (let i = 0; i < 2048; i++) builder.cut();
+    return builder;
+  };
+  const tinyRaster = [0x1d, 0x76, 0x30, 0, 1, 0, 1, 0, 0xff];
+
+  it.each([
+    ["a feed", (builder: ReturnType<typeof esc>) => builder.feed(1).bytes()],
+    ["a cut", (builder: ReturnType<typeof esc>) => builder.cut().bytes()],
+    [
+      "a raster image",
+      (builder: ReturnType<typeof esc>) => Uint8Array.from([...builder.bytes(), ...tinyRaster]),
+    ],
+  ])("stops at %s, reading nothing after it", (_command, finish) => {
+    const payload = finish(fullOfCuts());
+    const qrAfter = esc().qr("after the limit").bytes();
+    const result = previewPrintJob(Uint8Array.from([...payload, ...qrAfter]));
+    expect(result.blocks).toHaveLength(2048);
+    expect(result.truncated).toBe(true);
+    expect(result.qrData).toEqual([]);
+  });
+});

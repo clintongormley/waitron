@@ -564,4 +564,42 @@ describe("matchExtraChildren", () => {
       ),
     ).not.toBeNull();
   });
+
+  it("pairs when the only other list offering the picked product is inactive", () => {
+    const retiredDrinks: ResolvedExtraList = {
+      ...drinks,
+      id: "list-drinks-retired",
+      active: false,
+      items: [{ ...drinks.items[0]!, id: "item-wine-retired", price: "9.00" }],
+    };
+    const { extraChildren } = freeze(
+      { extras: [drinks] },
+      { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
+    );
+
+    expect(
+      matchExtraChildren(
+        [drinks, retiredDrinks],
+        extraChildren,
+        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        "1",
+      )?.map(({ pick, child }) => [pick.productId, child.unitPriceGross]),
+    ).toEqual([["product-wine", "4.50"]]);
+  });
+
+  it("pairs a pick whose product no list offers any more", () => {
+    const { extraChildren } = freeze(
+      { extras: [drinks] },
+      { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
+    );
+
+    expect(
+      matchExtraChildren(
+        [breads],
+        extraChildren,
+        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        "1",
+      )?.map(({ pick, child }) => [pick.productId, child.unitPriceGross]),
+    ).toEqual([["product-wine", "4.50"]]);
+  });
 });

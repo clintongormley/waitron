@@ -44,4 +44,24 @@ describe("password login backoff", () => {
     throttle.begin("one-more@example.com")("success");
     throttle.begin("person0@example.com")("success");
   });
+
+  it("passes a failure other than a throttle refusal through unchanged, holding no attempt open", () => {
+    const clockFault = new Error("clock unavailable");
+    let reads = 0;
+    let failSecondRead = true;
+    const throttle = createPasswordThrottle(() => {
+      reads += 1;
+      if (failSecondRead && reads === 2) throw clockFault;
+      return 0;
+    });
+    let thrown: unknown;
+    try {
+      throttle.begin("owner@example.com");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBe(clockFault);
+    failSecondRead = false;
+    expect(() => throttle.begin("owner@example.com")("success")).not.toThrow();
+  });
 });

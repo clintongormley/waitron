@@ -193,4 +193,27 @@ describe("establishReservedStandbyIdentity", () => {
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]); // the one transaction rolled back
   });
+  it("establishes the node with no reserved series when the bundle carries no `series` key and no module reserves", async () => {
+    const standby = generateStandbyIdentity();
+    await establishReservedStandbyIdentity(
+      { ownerDb: suite.db, ring: RING },
+      {
+        locationId,
+        standby,
+        nodeName: "cloud",
+        filingModule: null,
+        taxModule: null,
+        modules: [],
+        reserved: { modules: {}, endorsement: ENDORSEMENT } as unknown as ReservedIdentity,
+      },
+    );
+    const node = await suite.db.execute<{ name: string }>(
+      sql`select name from nodes where id = ${standby.nodeId}`,
+    );
+    expect(node.rows).toEqual([{ name: "cloud" }]);
+    const series = await suite.db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from invoice_series where node_id = ${standby.nodeId}`,
+    );
+    expect(series.rows[0]!.n).toBe(0);
+  });
 });

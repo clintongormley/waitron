@@ -588,6 +588,19 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     });
   });
 
+  it("a body naming no lines recalls nothing (200) — the fired line stays fired", async () => {
+    const tabId = await tabWithSopaAndFilete();
+    const station = await cocinaId();
+
+    const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
+  });
+
   it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {
     const res = await app.request(`/api/working-orders/not-a-uuid/lines/recall`, {
       method: "POST",

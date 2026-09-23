@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   joinRequests,
@@ -1906,5 +1906,175 @@ describe("mountPrintApi — the printer.manage gate", () => {
         error: { code: "authorization.not_permitted" },
       });
     }
+  });
+});
+
+describe("agent inventory screening and the discovered-printer list", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function discoveredRows(app: Hono): Promise<Record<string, unknown>[]> {
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Record<string, unknown>[];
+  }
+
+  it("drops malformed inventory entries and keeps the well-formed ones", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app, "Screening agent");
+    const btKey = `BT-${randomUUID()}`;
+    await pull(app, token, {
+      visible: [
+        null,
+        "usb",
+        { transport: "wifi", localKey: "wifi-1" },
+        { transport: "usb", localKey: 42 },
+        { transport: "bluetooth", localKey: btKey, name: "Bolsillo" },
+      ],
+      scanned: [
+        null,
+        7,
+        { transport: "carrier_pigeon", host: "10.9.253.9" },
+        { transport: "network_tcp", host: "10.9.253.1", port: 91.5 },
+      ],
+    });
+
+    const rows = await discoveredRows(app);
+    expect(rows.map((row) => ({ ...row, lastSeenAt: undefined }))).toEqual([
+      {
+        agentId,
+        agentName: "Screening agent",
+        transport: "bluetooth",
+        localKey: btKey,
+        name: "Bolsillo",
+        alreadyRegistered: false,
+        printerId: null,
+        lastSeenAt: undefined,
+      },
+      {
+        agentId,
+        agentName: "Screening agent",
+        transport: "network_tcp",
+        host: "10.9.253.1",
+        alreadyRegistered: false,
+        printerId: null,
+        lastSeenAt: undefined,
+      },
+    ]);
+  });
+
+  it("claims a bluetooth printer's job once the pulling box sees its key", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const btKey = `BT-${randomUUID()}`;
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: btKey },
+    });
+    expect(created.status).toBe(201);
+    const { id: printerId } = (await created.json()) as { id: string };
+    const jobId = await enqueue(printerId, esc().text("Mesa 2").cut().bytes());
+
+    const blind = await pull(app, token, { visible: [], scanned: [] });
+    expect(blind.jobs.filter((job) => job.printerId === printerId)).toEqual([]);
+    const seen = await pull(app, token, {
+      visible: [{ transport: "bluetooth", localKey: btKey }],
+      scanned: [],
+    });
+    expect(seen.jobs.filter((job) => job.printerId === printerId).map((job) => job.id)).toEqual([
+      jobId,
+    ]);
+  });
+
+  it("marks a port-less office-printer report as the same address as port 9100", async () => {
+    const app = mountApp();
+    const first = await joinAndAccept(app, "Kitchen agent");
+    const second = await joinAndAccept(app, "Bar agent");
+    const host = "10.9.254.1";
+    await pull(app, first.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, pagePrinter: true }],
+    });
+    await pull(app, second.token, {
+      visible: [],
+      scanned: [{ transport: "network_tcp", host, port: 9100 }],
+    });
+
+    const rows = await discoveredRows(app);
+    expect(rows.find((r) => r.agentId === second.agentId && r.host === host)).toMatchObject({
+      port: 9100,
+      pagePrinter: true,
+    });
+    const portless = rows.find((r) => r.agentId === first.agentId && r.host === host);
+    expect(portless).not.toHaveProperty("port");
+    expect(portless).toMatchObject({ pagePrinter: true });
+  });
+
+  it("drops a reported device once its last report is older than fifteen seconds", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const serial = `SN-${randomUUID()}`;
+    await pull(app, token, { visible: [{ transport: "usb", localKey: serial }], scanned: [] });
+    const [row] = (await discoveredRows(app)).filter((r) => r.localKey === serial);
+    const reportedAt = Date.parse(row!.lastSeenAt as string);
+
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_000);
+    expect((await discoveredRows(app)).filter((r) => r.localKey === serial)).toHaveLength(1);
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
+    expect((await discoveredRows(app)).filter((r) => r.localKey === serial)).toEqual([]);
+  });
+
+  it("answers not_approved to a join-status poll with no Bearer, or a pending join's id with no secret", async () => {
+    const app = mountApp();
+    const bare = await app.request("/print-api/agent/join/status");
+    expect(bare.status).toBe(200);
+    expect(await bare.json()).toEqual({ status: "not_approved" });
+    // The selector of a real pending join, sent without its secret, must not read as pending.
+    const { joinId } = await knock(app);
+    const dotless = await send(app, "GET", "/print-api/agent/join/status", { bearer: joinId });
+    expect(dotless.status).toBe(200);
+    expect(await dotless.json()).toEqual({ status: "not_approved" });
+  });
+});
+
+describe("printer layout and calibration requests", () => {
+  it("patches a printer's paper width", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.46", 9100, "Ancho");
+    const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { paperWidth: "58mm" },
+    });
+    expect(patched.status).toBe(204);
+    const listed = (await (
+      await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
+    ).json()) as { id: string; paperWidth: string }[];
+    expect(listed.find((p) => p.id === id)).toMatchObject({ paperWidth: "58mm" });
+  });
+
+  it("refuses a sample receipt with no character table, and a table finder with no start table", async () => {
+    const app = mountApp();
+    const printerId = await createNetworkPrinter(app, "10.0.0.47", 9100, "Sin tabla");
+    const sample = await send(app, "POST", `/management-api/printers/${printerId}/sample-receipt`, {
+      cookie: managerCookie,
+      body: { paperWidth: "80mm", resolution: "180dpi", characterSet: "wpc1252" },
+    });
+    expect(sample.status).toBe(400);
+    expect(await sample.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "characterTable" } },
+    });
+    const finder = await send(
+      app,
+      "POST",
+      `/management-api/printers/${printerId}/character-table-test`,
+      { cookie: managerCookie, body: {} },
+    );
+    expect(finder.status).toBe(400);
+    expect(await finder.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "startTable" } },
+    });
   });
 });

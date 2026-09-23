@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -129,5 +129,84 @@ describe("staged configuration import", () => {
     await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  async function stagedDir(sealWith = ring): Promise<string> {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+    dirs.push(stateDir);
+    const artifact = encodeConfigurationBundle(bundle, "a strong passphrase");
+    await stageConfigurationImport(stateDir, sealWith, artifact, "a strong passphrase", validate);
+    return stateDir;
+  }
+
+  it("reports nothing staged when no import has been staged", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+    dirs.push(stateDir);
+    await expect(readStagedConfigurationImport(stateDir, ring)).resolves.toBeNull();
+  });
+
+  it("refuses a staging marker written in another format version", async () => {
+    const stateDir = await stagedDir();
+    await writeFile(join(stateDir, "configuration-import.json"), JSON.stringify({ version: 2 }));
+    await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
+      "invalid staged configuration import",
+    );
+  });
+
+  it("surfaces an unreadable staging marker rather than treating it as nothing staged", async () => {
+    const stateDir = await stagedDir();
+    await writeFile(join(stateDir, "configuration-import.json"), "not json");
+    await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(SyntaxError);
+  });
+
+  it("reads an import staged under the previous credentials key after a rotation", async () => {
+    const stateDir = await stagedDir();
+    const rotated = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 29).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "2",
+      WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 17).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+    });
+    await expect(readStagedConfigurationImport(stateDir, rotated)).resolves.toEqual(
+      expect.objectContaining({ bundle, passphrase: "a strong passphrase" }),
+    );
+  });
+
+  it("refuses an import staged under a credentials key the ring no longer holds", async () => {
+    const stateDir = await stagedDir();
+    const replaced = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 29).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "2",
+    });
+    await expect(readStagedConfigurationImport(stateDir, replaced)).rejects.toThrow(
+      "invalid staged configuration import key",
+    );
+  });
+
+  it.each([
+    ["another wrapping version", { version: 2 }],
+    ["no nonce", { iv: undefined }],
+    ["no authentication tag", { tag: 7 }],
+    ["no ciphertext", { ciphertext: undefined }],
+  ])("refuses a wrapped passphrase with %s", async (_label, change) => {
+    const stateDir = await stagedDir();
+    const keyPath = join(stateDir, "configuration-import.key");
+    const wrapped = JSON.parse(await readFile(keyPath, "utf8")) as Record<string, unknown>;
+    await writeFile(keyPath, JSON.stringify({ ...wrapped, ...change }));
+    await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
+      "invalid staged configuration import key",
+    );
+  });
+
+  it("refuses a wrapped passphrase whose authentication tag does not match", async () => {
+    const stateDir = await stagedDir();
+    const keyPath = join(stateDir, "configuration-import.key");
+    const wrapped = JSON.parse(await readFile(keyPath, "utf8")) as { tag: string };
+    const tag = Buffer.from(wrapped.tag, "base64");
+    tag[0] = tag[0]! ^ 0xff;
+    await writeFile(keyPath, JSON.stringify({ ...wrapped, tag: tag.toString("base64") }));
+    await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
+      "invalid staged configuration import key",
+    );
   });
 });

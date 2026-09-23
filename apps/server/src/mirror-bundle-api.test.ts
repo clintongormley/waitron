@@ -365,6 +365,46 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     }
   });
 
+  it("gives up with 503 membership.write_contended when every chart write loses its term guard", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+      }),
+    );
+    // Every update of the held chart is silently skipped, so each round's guarded write reports
+    // that a concurrent writer already holds an equal or higher term.
+    await db.execute(
+      sql.raw(
+        "create trigger test_node_membership_contended before update on node_membership begin select raise(ignore); end",
+      ),
+    );
+    try {
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.write_contended", params: { attempts: 8 } },
+      });
+    } finally {
+      await db.execute(sql.raw("drop trigger test_node_membership_contended"));
+    }
+    expect((await readNodeMembership(db))?.body.term).toBe(seedTerm);
+  });
+
   it("refuses a non-admin (staff) credential with 403", async () => {
     const { designated } = await setupVenue();
     const staffPersonId = await seedStaff();

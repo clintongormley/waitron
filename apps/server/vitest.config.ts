@@ -15,9 +15,8 @@ export default defineConfig({
     // (many packages' forks starving one runner — payments' branches fell to 82% that way), and it
     // cannot reach apps/server, because apps/server NEVER runs multi-fork under contention. Two facts
     // pin that, both a grep to re-check: apps/server is TERMINAL in the workspace graph (`pnpm ls -r`
-    // shows nothing depends on @waitron/server), so a topo-sorted `pnpm -r test:coverage` — the
-    // pre-push hook (.husky/pre-push runs `pnpm -r … test:coverage`) and the root script — runs it
-    // last, essentially alone; and the ONLY `--no-sort` (unordered, high-concurrency) runs are
+    // shows nothing depends on @waitron/server), so the root script's topo-sorted
+    // `pnpm -r test:coverage` runs it last, essentially alone; and the ONLY `--no-sort` (unordered, high-concurrency) runs are
     // ci.yml's two light shards, which both `--filter "!@waitron/server"`. So it runs alone on the
     // dedicated test-server runner, alone at the tail of `pnpm -r`, and nowhere else. That it merges
     // correctly WHEN alone was measured 2026-08-20 (Docker up, nothing else running): single-fork and
@@ -45,7 +44,7 @@ export default defineConfig({
       // `startServer`'s public surface carries its own `v8 ignore` comment in place, never a
       // file-level exclusion.
       exclude: [...coverageConfigDefaults.exclude, "scripts/**", "src/testing/**", "src/bin.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

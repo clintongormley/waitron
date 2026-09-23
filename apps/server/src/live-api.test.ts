@@ -1,7 +1,7 @@
 // This suite checks route authorization and stream lifecycle; what the database itself delivers is
 // `packages/db/src/change-feed.test.ts`.
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
@@ -17,6 +17,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
+  managementSessions,
   persons,
   startManagementSession,
   resolveManagementSession,
@@ -188,6 +189,75 @@ it("revalidates idle streams on the heartbeat without extending their session", 
   } finally {
     await reader.cancel();
     vi.useRealTimers();
+  }
+});
+
+it("closes the stream with session-invalid when the person is suspended while it is open", async () => {
+  const { app, path, cookie, bus, session } = await fixture();
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    const [row] = await suite.db
+      .select({ personId: managementSessions.personId })
+      .from(managementSessions)
+      .where(eq(managementSessions.id, session.id));
+    await suite.db
+      .update(persons)
+      .set({ status: "suspended" })
+      .where(eq(persons.id, row!.personId));
+    bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+      'event: session-invalid\ndata: {"code":"person.suspended"}\n\n',
+    );
+    expect((await reader.read()).done).toBe(true);
+  } finally {
+    await reader.cancel();
+  }
+});
+
+it("logs and ends the stream, without a session-invalid event, when revalidation fails for another reason", async () => {
+  const { cookie, path } = await fixture();
+  const bus = new LiveEvents();
+  const log = vi.fn<Logger>();
+  const app = new Hono();
+  mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers"] }, log);
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  await suite.db.execute(sql`alter table management_sessions rename to management_sessions_away`);
+  try {
+    await reader.read();
+    bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+    expect((await reader.read()).done).toBe(true);
+    expect(log).toHaveBeenCalledWith("warn", "live.stream_failed", { errorCode: "unknown" });
+    expect(bus.subscriberCount).toBe(0);
+  } finally {
+    await suite.db.execute(sql`alter table management_sessions_away rename to management_sessions`);
+    await reader.cancel();
+  }
+});
+
+it("ends without sending a change that was pending when the server shut down mid-revalidation", async () => {
+  const { app, path, cookie, bus } = await fixture();
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    await reader.read();
+    // Holding the one write transaction keeps the stream's revalidation queued behind it.
+    const holding = withTransaction(suite.db, () => held);
+    bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+    await new Promise((resolve) => setImmediate(resolve));
+    bus.close();
+    release();
+    await holding;
+    expect((await reader.read()).done).toBe(true);
+  } finally {
+    release();
+    await reader.cancel();
   }
 });
 

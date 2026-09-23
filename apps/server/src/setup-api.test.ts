@@ -1961,3 +1961,474 @@ it("serves fiscal-owned venue defaults without exposing provider secrets", async
     verifactu: { operationDescription: "Venta en establecimiento" },
   });
 });
+
+describe("setup routes — remaining refusals and resumption paths", () => {
+  /** Starts a provision whose `provision` step waits until `release` is called, so the shared latch
+   * stays set while another route is tried. */
+  async function provisionInFlight(overrides: Partial<SetupDeps> = {}) {
+    let release!: (v: VenueResult) => void;
+    const pending = new Promise<VenueResult>((resolve) => {
+      release = resolve;
+    });
+    const app = new Hono();
+    const made = makeDeps({ provision: vi.fn(() => pending), ...overrides });
+    mountSetup(app, made.deps, noopLog);
+    const first = postProvision(app, demoBody());
+    await tick();
+    const finish = async () => {
+      release(makeVenueResult());
+      expect((await first).status).toBe(200);
+      await tick();
+    };
+    return { app, finish, ...made };
+  }
+
+  const busy = { error: { code: "setup.already_provisioning", params: {} } };
+  const notReady = { error: { code: "setup.not_ready", params: {} } };
+  const invalid = (field: string) => ({
+    error: { code: "setup.request_invalid", params: { field } },
+  });
+
+  it("marks the status of a development-mode box", async () => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", devMode: true }, noopLog);
+    expect(await (await app.request("/setup-api/status")).json()).toEqual({
+      provisioned: false,
+      environment: "preproduction",
+      developmentMode: true,
+      needs: ["venue"],
+    });
+  });
+
+  it.each([
+    ["an unexpected failure", new Error("disk unavailable")],
+    [
+      "a refusal other than a conflicting operation",
+      new AppError("setup.already_provisioning", {}),
+    ],
+  ])("does not report a status when reading setup progress hits %s", async (_label, failure) => {
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        operations: { read: () => Promise.reject(failure), run: vi.fn() },
+      },
+      noopLog,
+    );
+    expect((await app.request("/setup-api/status")).status).toBe(500);
+  });
+
+  it.each(["admin.firstNames", "admin.lastNames"] as const)(
+    "refuses a %s that is not text",
+    async (field) => {
+      const app = new Hono();
+      const { deps, provision } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body = demoBody();
+      asRec(asRec(body.venue).admin)[field.slice("admin.".length)] = 42;
+
+      const res = await postProvision(app, body);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(invalid(field));
+      expect(provision).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a province the country does not have", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    asRec(asRec(body.venue).location).province = "Atlantis";
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(invalid("location.province"));
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("refuses an invoice language the country does not offer", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const body = demoBody();
+    asRec(asRec(body.venue).location).invoiceLocales = ["es-ES", "fr-FR"];
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(invalid("location.invoiceLocales"));
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    [
+      "a configuration-import flag that is not true or false",
+      { ...demoBody(), configurationImport: "yes" },
+    ],
+    ["a configuration import on a demo venue", { ...demoBody(), configurationImport: true }],
+    ["a configuration import on a prepared venue", { ...prepareBody(), configurationImport: true }],
+  ])("refuses %s", async (_label, body) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(invalid("configurationImport"));
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("carries a live venue's configuration import through and clears the staged archive once published", async () => {
+    const app = new Hono();
+    const clearConfiguration = vi.fn(async () => {});
+    const { deps, provisionRequests, persistTrading } = makeDeps({ clearConfiguration });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, {
+      ...liveBody(),
+      aeatCert: CERT,
+      configurationImport: true,
+    });
+
+    expect(res.status).toBe(200);
+    expect(provisionRequests[0]!.configurationImport).toBe(true);
+    expect(clearConfiguration).toHaveBeenCalledOnce();
+    expect(clearConfiguration.mock.invocationCallOrder[0]).toBeGreaterThan(
+      persistTrading.mock.invocationCallOrder[0]!,
+    );
+    await tick();
+  });
+
+  it("refuses to activate a production venue when this box cannot check fiscal readiness", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps({ assertFiscalReady: undefined });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, { ...liveBody(), aeatCert: CERT });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.fiscal_test_required", params: { module: "verifactu" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("does not publish the trading configuration again when resuming after publishing began", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-publish-resume-"));
+    const body = demoBody();
+    const requestHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+    try {
+      const operations = createSetupOperationStore(dir);
+      await expect(
+        operations.run("provision", requestHash, async (operation) => {
+          await operation.advance("publishing", { result: makeVenueResult() });
+          throw new Error("process stopped before the restart");
+        }),
+      ).rejects.toThrow("process stopped");
+
+      const app = new Hono();
+      const resumed = makeDeps({ operations });
+      mountSetup(app, resumed.deps, noopLog);
+
+      const res = await postProvision(app, body);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ provisioned: true, restarting: true });
+      expect(resumed.provision).not.toHaveBeenCalled();
+      expect(resumed.persistTrading).not.toHaveBeenCalled();
+      expect((await operations.read())?.phase).toBe("complete");
+      await tick();
+      expect(resumed.requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  describe("POST /setup-api/fiscal-test", () => {
+    const postFiscalTest = (app: Hono, body: unknown) =>
+      app.request("/setup-api/fiscal-test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    it("answers not ready when this box cannot run a fiscal test", async () => {
+      const app = new Hono();
+      mountSetup(app, makeDeps({ runFiscalTest: undefined }).deps, noopLog);
+
+      const res = await postFiscalTest(app, { ...liveBody(), aeatCert: CERT });
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual(notReady);
+    });
+
+    it.each<[string, boolean, Record<string, unknown>]>([
+      ["a demo venue", false, demoBody()],
+      ["a live venue on a development box", true, liveBody()],
+    ])(
+      "refuses a fiscal test for %s, which would not file for real",
+      async (_label, devMode, body) => {
+        const runFiscalTest = vi.fn();
+        const app = new Hono();
+        mountSetup(app, makeDeps({ runFiscalTest, devMode }).deps, noopLog);
+
+        const res = await postFiscalTest(app, body);
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toEqual(invalid("mode"));
+        expect(runFiscalTest).not.toHaveBeenCalled();
+      },
+    );
+
+    it("refuses a fiscal test while a provision is in flight", async () => {
+      const runFiscalTest = vi.fn();
+      const { app, finish } = await provisionInFlight({ runFiscalTest });
+
+      const res = await postFiscalTest(app, { ...liveBody(), aeatCert: CERT });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual(busy);
+      expect(runFiscalTest).not.toHaveBeenCalled();
+      await finish();
+    });
+
+    it("allows another fiscal test once the previous one has finished", async () => {
+      const runFiscalTest = vi.fn().mockResolvedValue({ status: "rejected" });
+      const app = new Hono();
+      mountSetup(app, makeDeps({ runFiscalTest }).deps, noopLog);
+      const body = { ...liveBody(), aeatCert: CERT };
+
+      expect((await postFiscalTest(app, body)).status).toBe(200);
+      const again = await postFiscalTest(app, body);
+
+      expect(again.status).toBe(200);
+      expect(await again.json()).toEqual({ status: "rejected" });
+      expect(runFiscalTest).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("leaves a failed adoption unfinished so the same request can be retried", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-retry-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const failing = new Hono();
+      mountSetup(
+        failing,
+        makeAdoptDeps({
+          operations,
+          adopt: vi.fn(async () => {
+            throw new AppError("mirror.bundle_fetch_failed", {});
+          }),
+        }).deps,
+        noopLog,
+      );
+      expect((await postAdopt(failing, adoptBody())).status).toBe(502);
+      expect((await operations.read())?.phase).toBe("started");
+
+      const retry = new Hono();
+      const next = makeAdoptDeps({ operations });
+      mountSetup(retry, next.deps, noopLog);
+      expect((await postAdopt(retry, adoptBody())).status).toBe(200);
+      expect(next.adopt).toHaveBeenCalledOnce();
+      expect((await operations.read())?.phase).toBe("complete");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  describe("POST /setup-api/restore", () => {
+    const restoreDeps = () => ({
+      environment: "preproduction" as const,
+      stageRestore: vi.fn(async () => {}),
+      requestRestart: vi.fn(),
+    });
+
+    it.each(["stageRestore", "requestRestart"] as const)(
+      "answers not ready when %s is not wired",
+      async (missing) => {
+        const deps = { ...restoreDeps(), [missing]: undefined };
+        const app = new Hono();
+        mountSetup(app, deps, noopLog);
+
+        const res = await postRestore(app, Uint8Array.from([1]));
+
+        expect(res.status).toBe(503);
+        expect(await res.json()).toEqual(notReady);
+      },
+    );
+
+    it("refuses a restore while a provision is in flight", async () => {
+      const stageRestore = vi.fn(async () => {});
+      const { app, finish } = await provisionInFlight({ stageRestore });
+
+      const res = await postRestore(app, Uint8Array.from([1]));
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual(busy);
+      expect(stageRestore).not.toHaveBeenCalled();
+      await finish();
+    });
+
+    it.each<[string, Record<string, string>, Uint8Array]>([
+      [
+        "a body that is not a binary upload",
+        { "content-type": "application/json" },
+        Uint8Array.from([1]),
+      ],
+      ["no content type", { "content-type": "" }, Uint8Array.from([1])],
+      [
+        "a declared size over the upload limit",
+        { "content-length": String(256 * 1024 * 1024 + 1) },
+        Uint8Array.from([1]),
+      ],
+      ["an empty upload", {}, new Uint8Array(0)],
+    ])("refuses %s without staging", async (_label, headers, body) => {
+      const deps = restoreDeps();
+      const app = new Hono();
+      mountSetup(app, deps, noopLog);
+
+      const res = await app.request("/setup-api/restore", {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-recovery-key": "recovery-secret",
+          "x-waitron-restore-environment": "production",
+          ...headers,
+        },
+        body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(invalid("artifact"));
+      expect(deps.stageRestore).not.toHaveBeenCalled();
+      // A refused upload releases the latch, so a corrected one is accepted.
+      expect((await postRestore(app, Uint8Array.from([1]))).status).toBe(202);
+    });
+
+    it("blocks provisioning while a restore is being staged", async () => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      const app = new Hono();
+      const { deps, provision } = makeDeps({ stageRestore: vi.fn(() => held) });
+      mountSetup(app, deps, noopLog);
+
+      const restoring = postRestore(app, Uint8Array.from([1]));
+      await tick();
+      const provisionResponse = await postProvision(app, demoBody());
+
+      expect(provisionResponse.status).toBe(409);
+      expect(await provisionResponse.json()).toEqual(busy);
+      expect(provision).not.toHaveBeenCalled();
+      release();
+      expect((await restoring).status).toBe(202);
+      await tick();
+    });
+
+    it("stages a restore directly when this box keeps no setup progress", async () => {
+      const deps = restoreDeps();
+      const app = new Hono();
+      mountSetup(app, deps, noopLog);
+
+      const res = await postRestore(app, Uint8Array.from([4, 5]), "preproduction");
+
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ restoreStaged: true, restarting: true });
+      expect(deps.stageRestore).toHaveBeenCalledWith({
+        artifact: Uint8Array.from([4, 5]),
+        recoveryKey: "recovery-secret",
+        environment: "preproduction",
+      });
+      await tick();
+      expect(deps.requestRestart).toHaveBeenCalledOnce();
+    });
+
+    it("answers a repeated restore after a restart without staging it again", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-replay-"));
+      try {
+        const first = new Hono();
+        mountSetup(
+          first,
+          { ...restoreDeps(), operations: createSetupOperationStore(dir) },
+          noopLog,
+        );
+        expect((await postRestore(first, Uint8Array.from([1, 2, 3]))).status).toBe(202);
+
+        const next = restoreDeps();
+        const restarted = new Hono();
+        mountSetup(restarted, { ...next, operations: createSetupOperationStore(dir) }, noopLog);
+        const replay = await postRestore(restarted, Uint8Array.from([1, 2, 3]));
+
+        expect(replay.status).toBe(202);
+        expect(await replay.json()).toEqual({ restoreStaged: true, restarting: true });
+        expect(next.stageRestore).not.toHaveBeenCalled();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("POST /setup-api/configuration", () => {
+    it("answers not ready when this box cannot stage a configuration archive", async () => {
+      const app = new Hono();
+      mountSetup(app, { environment: "preproduction" }, noopLog);
+
+      const res = await postConfiguration(app, Uint8Array.from([1]));
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual(notReady);
+    });
+
+    it("refuses to stage a configuration archive while a provision is in flight", async () => {
+      const stageConfiguration = vi.fn();
+      const { app, finish } = await provisionInFlight({ stageConfiguration });
+
+      const res = await postConfiguration(app, Uint8Array.from([1]));
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual(busy);
+      expect(stageConfiguration).not.toHaveBeenCalled();
+      await finish();
+    });
+
+    it.each<[string, Record<string, string>, Uint8Array]>([
+      [
+        "a body that is not a binary upload",
+        { "content-type": "text/plain" },
+        Uint8Array.from([1]),
+      ],
+      [
+        "a declared size over the upload limit",
+        { "content-length": String(64 * 1024 * 1024 + 1) },
+        Uint8Array.from([1]),
+      ],
+      ["an empty upload", {}, new Uint8Array(0)],
+    ])("refuses %s without staging", async (_label, headers, body) => {
+      const stageConfiguration = vi.fn(async () => ({
+        venue: {} as never,
+        counts: {},
+        reconnect: [],
+      }));
+      const app = new Hono();
+      mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+
+      const res = await app.request("/setup-api/configuration", {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-export-passphrase": "a strong passphrase",
+          ...headers,
+        },
+        body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual(invalid("artifact"));
+      expect(stageConfiguration).not.toHaveBeenCalled();
+    });
+  });
+});
