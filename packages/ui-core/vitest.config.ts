@@ -65,6 +65,7 @@ export default defineConfig({
         // with this directory, is pinned from the root project by scripts/brand-icons.test.ts.
         "brand/**",
         "src/test-helpers.ts",
+        "src/vitest-park-pointer.ts",
         "src/a11y-helpers.ts",
         "src/tokens/token-test-helpers.ts",
       ],

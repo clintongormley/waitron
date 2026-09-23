@@ -260,21 +260,10 @@ separator. So for a package whose directory were called `packages/sync`, a file 
 with the `packages/sync` root — and the include would then match it on its `src/…/*.ts` segment, so
 it would land in that package's report.
 
-**No pair in this tree is exposed today**, so the mechanism above is what to carry, not a reading.
-The worked example it was written from was a `packages/sync` whose barrel re-exported
-`@waitron/sync-enrolment` and whose own test imported that barrel, which pulled the sibling's files
-into `packages/sync`'s report until `"**/sync-enrolment/**"` went into that package's
-`coverage.exclude`. That package is not in this repository and is not on `origin/main` either
-(`git ls-tree origin/main packages/`, taken 2026-09-22, lists `sync-enrolment` and no `sync`), so
-the numbers that went with it are not repeatable here and are dropped rather than carried. What the
-example also had was a control in the other direction: `packages/membership` imports
-`@waitron/shared` in its source, `shared` is not a prefix of `membership`, and its files never
-entered the report.
-
-Vitest 5 fixes this: it matches the include against the path RELATIVE to the matching root and
-requires `${root}/`. Until then a `coverage.exclude` naming the sibling is what a 4.x tree needs.
-No package carries such a line today, because no pair needs one; a later Vitest 5 upgrade should
-re-measure rather than assume.
+`packages/ui` imports `packages/ui-core`, so its coverage config explicitly excludes
+`**/ui-core/**`. Each package's CI job measures its own implementation. When changing
+that exclusion, inspect both `coverage-summary.json` file lists as well as their totals.
+Vitest's directory-prefix check makes the exclusion necessary with this installed version.
 
 The pairs to watch when adding a package, since the hazard is a NAME prefix and not a dependency:
 `country`/`country-es`/`country-gb`/`country-packs`,
@@ -683,7 +672,7 @@ reset, measured over the package's 1,827 tests: about 0.5s of a 6s run.
 `apps/till` gained the same reset, in its own `apps/till/src/widgets/test-helpers.ts`. `packages/ui`
 has one too, but only in `packages/ui/src/a11y-helpers.ts` — so the `*.a11y.test.ts` files get it and
 the behavioural suites, which import `packages/ui/src/test-helpers.ts` instead, do not. Two of
-`packages/ui/src/components/wt-button.test.ts`'s hover tests end with the cursor still on the button,
+`packages/ui-core/src/components/wt-button.test.ts`'s hover tests end with the cursor still on the button,
 and those suites drive the real cursor a lot, so the same latent failure lives there, unpaid for so
 far. `packages/media` and `packages/venue-service` register `parkPointerCommands` in their vitest
 configs and DO get the reset, through `packages/ui`: their a11y suites
@@ -698,7 +687,7 @@ with the storage switch.
 
 An undispatched `KeyboardEvent` has an empty path, so a missing-action test can pass at the
 input-type guard without reaching the branch it claims to check. Exercise the event from the real
-input and prove the target guard by deletion. Receipt: `packages/ui/src/submit-on-enter.test.ts`
+input and prove the target guard by deletion. Receipt: `packages/ui-core/src/submit-on-enter.test.ts`
 (UI keyboard review, 2026-09-06).
 
 ## Position a native popover before its first paint.

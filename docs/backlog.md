@@ -3397,6 +3397,17 @@ uncommitted diff is wanted.
 
 ### Cloud integration and SQLite work
 
+**Shared account controls (2026-09-23):** `@waitron/ui-core` now owns the seven account
+controls, tokens and common helpers inside this repository. Existing `@waitron/ui`
+imports re-export the same implementations. The standalone tarball fixture checks
+browser behaviour, accessibility and declarations without workspace source aliases;
+CI covers both packages and the weekly mutation matrix retains both. See the
+[extraction design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md).
+Next, configure private package distribution and pin a release in Cloud before
+building its account screens. Cloud owns those follow-ups; no registry publication
+or Cloud screen delivery is included in this extraction.
+
+
 Cloud product and infrastructure work moved to the
 [Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)
 on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provider integration

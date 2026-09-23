@@ -26,6 +26,10 @@ concurrency:
 
 jobs:
   mutation:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ui, ui-core]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,7 +47,7 @@ jobs:
 
       - name: Resolve installed Playwright version
         id: playwright-version
-        run: echo "version=$(pnpm --filter @waitron/ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(pnpm --filter @waitron/${{ matrix.package }} exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -58,19 +62,19 @@ jobs:
       # the browser. Proven on dispatch run 32304224136, where this step took 1s and the `mutation` job
       # then ran the real-Chromium suite green. Restore `--with-deps` (here and in ci.yml) if a
       # runner-image or Playwright bump ever drops one.
-      - run: pnpm --filter @waitron/ui exec playwright install chromium
+      - run: pnpm --filter @waitron/${{ matrix.package }} exec playwright install chromium
 
       # stryker.config.json sets thresholds.break to 90, so this step FAILS the
       # job if the score drops below it. The report is still published below
       # either way, which is what a human reads to find the new survivors.
-      - run: pnpm --filter @waitron/ui mutation
+      - run: pnpm --filter @waitron/${{ matrix.package }} mutation
 
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mutation-report
-          path: packages/ui/reports/mutation/
+          name: mutation-report-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/reports/mutation/
           retention-days: 30
 
   # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of

@@ -115,10 +115,10 @@ four packages after the flip made it five, and a third asserted six. More:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`,
-`shared`, `fiscal` and `db`** (`shared` since July 2026; `fiscal`, `ui` and `db`
+`ui-core`, `shared`, `fiscal` and `db`** (`shared` since July 2026; `fiscal`, `ui` and `db`
 under the owner's 90-everywhere decision of 2026-09-19). WHERE it bites differs:
 `shared` fails a pull request whose resolved scope contains it (on `main` the scope
-is `global`, so it always runs); `ui` and `db` fail only the weekly
+is `global`, so it always runs); `ui`, `ui-core` and `db` fail only the weekly
 `.github/workflows/mutation.yml` run, so thinning one of their tests goes green and reddens on
 Monday; and `fiscal` has no CI job at all, so only a local `pnpm --filter @waitron/fiscal mutation`
 sees it — and its `mutate` list covers two named files, not the package. **`db`'s bar is not in its

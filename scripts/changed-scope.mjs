@@ -160,6 +160,7 @@ export const HEAVY_PACKAGE = "@waitron/db";
  * demonstrates. docs/backlog.md carries it as such.
  */
 export const UI_PACKAGE = "@waitron/ui";
+export const UI_CORE_PACKAGE = "@waitron/ui-core";
 
 /**
  * The `test-till` shard's package: the Counter POS browser app, the workspace's SECOND Chromium
@@ -277,6 +278,7 @@ export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
 export const OWN_SHARD_PACKAGES = [
   HEAVY_PACKAGE,
   UI_PACKAGE,
+  UI_CORE_PACKAGE,
   TILL_PACKAGE,
   DASHBOARD_PACKAGE,
   SETUP_PACKAGE,
@@ -410,7 +412,7 @@ const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin))
  */
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
-  { output: "ui", covers: membership(UI_PACKAGE) },
+  { output: "ui", covers: (scope) => scope.has(UI_PACKAGE) || scope.has(UI_CORE_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "setup", covers: membership(SETUP_PACKAGE) },

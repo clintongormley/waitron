@@ -49,14 +49,14 @@ Approved for inline execution by the owner on 2026-09-23. Source inspection used
 
 ## Preparation
 
-- [ ] Read Waitron's `CLAUDE.md` and developer guides for UI conventions, design
+- [x] Read Waitron's `CLAUDE.md` and developer guides for UI conventions, design
   system, testing, workflow, CI gates and writing claims. Recheck the current diff
   against the inspected commit before applying this file map.
-- [ ] Create `refactor/shared-ui-core` with
+- [x] Create `refactor/shared-ui-core` with
   `python3 ~/workspace/tools/worktree.py new waitron refactor/shared-ui-core`.
   Leave the main checkout's untracked `docs/compliance/asesor-screening-brief.md`
   untouched. Use the worktree's managed environment if a development server is needed.
-- [ ] Copy this approved plan and its spec into the same paths in the Waitron
+- [x] Copy this approved plan and its spec into the same paths in the Waitron
   worktree, recording the Cloud source commit, so the reviewer receives both.
 
 ## Task 1: Extract controls and preserve Waitron imports
@@ -96,7 +96,7 @@ event: Event, detail: T): void`, `delegatesFocusShadowRootOptions`, `baseStyles`
 and `disabledStyles`. Expose `.` plus `/components/<stem>`, `/tokens`,
 `/interactive`, `/base-styles` and `/submit-on-enter` through package exports.
 
-- [ ] Add compatibility assertions before moving implementation. For example:
+- [x] Add compatibility assertions before moving implementation. For example:
 
   ```ts
   import { WtInput as CoreInput } from "@waitron/ui-core/components/wt-input";
@@ -112,9 +112,9 @@ and `disabledStyles`. Expose `.` plus `/components/<stem>`, `/tokens`,
 
   Extend this to all seven constructors. Register an icon through core and render it
   through the facade; alternate calls to old/new `uniqueId` and require distinct IDs.
-- [ ] Run `pnpm --filter @waitron/ui test src/core-compatibility.test.ts`.
+- [x] Run `pnpm --filter @waitron/ui test src/core-compatibility.test.ts`.
   Expect failure resolving the absent core package. Save the failing output.
-- [ ] Move the source and tests, keeping assertions intact. Give core the same Lit,
+- [x] Move the source and tests, keeping assertions intact. Give core the same Lit,
   browser-test and TypeScript settings as UI; use source entries in workspace exports.
   Add `"@waitron/ui-core": "workspace:*"` to UI. Each moved facade is a re-export:
 
@@ -125,14 +125,14 @@ and `disabledStyles`. Expose `.` plus `/components/<stem>`, `/tokens`,
   Core's test config registers its own pointer-parking and colour-scheme commands.
   It must not import UI to obtain test support. Split mixed style assertions so
   each remains over the implementation it originally tested.
-- [ ] Run the compatibility test again and the moved core suite:
+- [x] Run the compatibility test again and the moved core suite:
   `pnpm --filter @waitron/ui-core test`. Run UI's retained style/source guards and
   `pnpm --filter @waitron/layouts test src/theme-registry.test.ts`.
   Require passing assertions for shadow-root events, input names/autocomplete,
   password-reveal slots, disabled controls, Enter modifiers/composition, error
   summaries and repeated token installation. Existing component tests supply these;
   add a failing behavioural test first for any uncovered case.
-- [ ] Run focused typechecks for `@waitron/ui-core`, `@waitron/ui`, `@waitron/till`,
+- [x] Run focused typechecks for `@waitron/ui-core`, `@waitron/ui`, `@waitron/till`,
   `@waitron/dashboard` and `@waitron/setup`. Inspect the renamed-test diff to ensure
   no assertions disappeared. Commit with `git commit -s`.
 
@@ -166,7 +166,7 @@ as `/tokens/colors.css` and `/tokens/structure.css`. The installed pnpm 9.15.0
 was probed with a temporary private package: `pnpm pack` replaced its source exports
 with `publishConfig.exports`. The real package test must verify its own manifest.
 
-- [ ] Write `test/package-consumer.test.mjs` using Node's test runner and Playwright.
+- [x] Write `test/package-consumer.test.mjs` using Node's test runner and Playwright.
   It packs core, copies the fixture into a fresh OS temporary directory outside the
   workspace, installs only that tarball and Lit, typechecks it, bundles it and serves
   it on a loopback ephemeral port. Use exact Lit versions resolved from the workspace
@@ -175,10 +175,10 @@ with `publishConfig.exports`. The real package test must verify its own manifest
   executables, but resolve consumer imports only from the temporary fixture, with no
   aliases or extra module search paths. Close browser/server and remove the fixture
   in `finally`; bound child commands and the test with timeouts.
-- [ ] Run `pnpm --filter @waitron/ui-core test:package`. Expect failure because the
+- [x] Run `pnpm --filter @waitron/ui-core test:package`. Expect failure because the
   tarball still exposes source or lacks built exports. Do not accept a failure caused
   by unavailable Chromium or package-registry access as the intended red test.
-- [ ] Build all entry points together using esbuild ESM splitting, `bundle: true`,
+- [x] Build all entry points together using esbuild ESM splitting, `bundle: true`,
   `platform: "browser"`, `external: ["lit", "lit/*"]` and the existing decorator
   settings. Compile inline CSS with an esbuild plugin:
 
@@ -195,13 +195,13 @@ with `publishConfig.exports`. The real package test must verify its own manifest
   Copy both token CSS files and root `LICENSE`/`LICENSE-GRANTS.md` into `dist/`.
   Restrict packed files to `dist/` and README; keep element-registration side effects.
   Assert packed notice bytes match the root originals.
-- [ ] Make `main.ts` render a named email input (`autocomplete="email"`), password
+- [x] Make `main.ts` render a named email input (`autocomplete="email"`), password
   input (`autocomplete="current-password"`) with its reveal slot, submit button,
   card, spinner, icon, form actions and error summary. Use `submitOnEnter` for keyboard
   submission. An invalid submit sets `errors` on the summary and focuses the first
   invalid field; a valid submit increments a visible counter. This is fixture logic,
   not a new shared form controller or Cloud authentication implementation.
-- [ ] Assert in real Chromium: Enter submits once; modifiers/composition do not;
+- [x] Assert in real Chromium: Enter submits once; modifiers/composition do not;
   invalid data exposes readable errors; native input names/autocomplete survive;
   reveal works; light/dark computed colours change; document and shadow roots receive
   tokens without duplicate sheets. Run axe for both themes. Import root plus explicit
@@ -214,7 +214,7 @@ with `publishConfig.exports`. The real package test must verify its own manifest
   ```
 
   In the Node runner use `node:assert/strict` equivalents of these assertions.
-- [ ] Rerun `test:package`; require success from the installed artifact, including
+- [x] Rerun `test:package`; require success from the installed artifact, including
   TypeScript declaration checking with `skipLibCheck: false`. Assert no runtime
   `@waitron/shared` dependency and no shipped tests/source aliases. As a negative
   control, remove an exported JS file from the temporary installed copy and require

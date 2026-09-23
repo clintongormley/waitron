@@ -3,6 +3,19 @@
 Every screen in this project is built from `wt-*` primitives styled by `--wt-*` tokens.
 This document is the contract. If you are building a view, read this first.
 
+## Shared package boundary
+
+`@waitron/ui-core` owns account-form controls: button, input, card, icon, spinner,
+form actions and error summary, plus theme tokens, common styles and keyboard helpers.
+Waitron's `@waitron/ui` keeps its existing root and deep component imports as re-exports.
+Venue controls and brand asset delivery stay in `packages/ui`.
+
+Develop against workspace source; use the built tarball for another repository.
+`pnpm --filter @waitron/ui-core test:package` installs that tarball outside the workspace
+and checks its declarations and real Chromium rendering. See
+[the package guide](../../packages/ui-core/README.md). Private registry publication
+and Cloud screens remain separate release work.
+
 ## The rule
 
 **No hardcoded chrome.** No hex colours, no `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/

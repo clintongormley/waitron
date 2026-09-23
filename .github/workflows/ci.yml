@@ -901,6 +901,7 @@ jobs:
       # or Playwright bump does drop a library Chromium needs, these shards fail to launch it and go red
       # loudly; the fix is to restore `--with-deps` here, or apt-get the one missing library.
       - run: pnpm --filter @waitron/ui exec playwright install chromium
+      - run: pnpm --filter @waitron/ui-core exec playwright install chromium
 
       # The guard first, for the same reason as the other two shards: pnpm answers "nothing to do"
       # with exit 0 and a line on stdout, so a shard whose filter selects nothing reports success
@@ -908,9 +909,11 @@ jobs:
       - name: Run the ui shard
         run: |
           set -euo pipefail
-          pnpm --filter "@waitron/ui" ls --depth -1 --json \
+          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
-          pnpm --filter "@waitron/ui" test:coverage
+          pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage
+
+      - run: pnpm --filter @waitron/ui-core test:package
 
   # apps/till alone: the Counter POS browser app, the workspace's SECOND Chromium consumer after
   # packages/ui. It has a shard of its own for the same reason test-ui does — a browser-mode
@@ -1330,6 +1333,7 @@ jobs:
           # OWN_SHARD_PACKAGES — subtracted by both light shards.
           set -- "$@" --filter "!@waitron/db"
           set -- "$@" --filter "!@waitron/ui"
+          set -- "$@" --filter "!@waitron/ui-core"
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/setup"
@@ -1402,6 +1406,7 @@ jobs:
           # OWN_SHARD_PACKAGES — subtracted by both light shards.
           set -- "$@" --filter "!@waitron/db"
           set -- "$@" --filter "!@waitron/ui"
+          set -- "$@" --filter "!@waitron/ui-core"
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/setup"

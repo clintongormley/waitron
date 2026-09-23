@@ -278,7 +278,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
 | `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
-| `ui` | the `mutation` job in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
+| `ui` and `ui-core` | the `mutation` matrix in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
