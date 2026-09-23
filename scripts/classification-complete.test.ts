@@ -3,10 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { packageDirOf } from "../packages/module/src/module.js";
-import {
-  migrationSqlFiles,
-  tablesCreatedBy,
-} from "../packages/sync-enrolment/src/migration-tables.js";
+import { tablesCreatedBy } from "../packages/sync-enrolment/src/migration-tables.js";
+import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * Every table a module's migrations CREATE is classified `ledger`/`state`/`local` (swap spec §2.1)
@@ -58,8 +56,8 @@ function discoverDrizzlePackages(): DrizzlePackage[] {
 }
 
 /** Every table a module's migrations leave in existence (lowercased), by module name — CREATEs minus
- * later DROPs, a RENAME counting as a drop of the old name and a create of the new, in filename
- * order. A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`) contributes an empty set. */
+ * later DROPs, a RENAME counting as a drop of the old name and a create of the new, in the order
+ * `migrationSqlFiles` returns (sorted by repo-relative path). A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`) contributes an empty set. */
 function createdTablesByModule(discovered: DrizzlePackage[]): Map<string, Set<string>> {
   const byModule = new Map<string, Set<string>>();
   for (const { moduleName, sqls } of discovered) {

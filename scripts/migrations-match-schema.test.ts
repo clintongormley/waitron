@@ -1,19 +1,14 @@
 import { spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { headSnapshot, migrationSets } from "../packages/sync-enrolment/src/migration-tables.js";
+import {
+  filesUnder,
+  headSnapshot,
+  migrationSets,
+} from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * Every migration set is what `drizzle-kit generate` would produce from its package's TypeScript
@@ -66,16 +61,6 @@ beforeAll(() => {
 afterAll(() => {
   if (scratch !== "") rmSync(scratch, { recursive: true, force: true });
 });
-
-/** Every file under `dir`, relative to it and sorted. */
-function filesUnder(dir: string): string[] {
-  const walk = (at: string): string[] =>
-    readdirSync(at).flatMap((entry) => {
-      const full = join(at, entry);
-      return statSync(full).isDirectory() ? walk(full) : [relative(dir, full)];
-    });
-  return walk(dir).sort();
-}
 
 /** What differs between two directory trees, file by file. Empty when they are byte-identical. */
 function differences(before: string, after: string): string[] {

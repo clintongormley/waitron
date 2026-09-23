@@ -1,6 +1,3 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
-
 /**
  * The set of tables a migration SET leaves in existence, read as TEXT (never executed).
  *
@@ -9,9 +6,13 @@ import { join, relative } from "node:path";
  * `CREATE TABLE` would keep a dropped table forever and put them in permanent disagreement, so this
  * subtracts on `DROP TABLE`, and follows `ALTER TABLE … RENAME TO` from the old name to the new.
  *
- * ORDER IS THE CONTRACT: the caller passes one migration set's SQL in FILENAME order, because
- * create → drop → create must resolve to "present" and the reverse to "absent". `readdirSync` does
- * not sort, so both callers sort.
+ * ORDER IS THE CONTRACT: the caller passes one migration set's SQL in the order the migrations
+ * apply, because create → drop → create must resolve to "present" and the reverse to "absent". Both
+ * callers approximate that order by sorting paths: `packages/db/src/classification.test.ts` sorts
+ * the file names at the top of core's set, and `migrationSqlFiles` (`./testing/migration-sets.ts`)
+ * sorts every `.sql` path in a set by the whole path. drizzle names each migration after its
+ * zero-padded number, so on 2026-09-23 the sorted `.sql` names of every set matched its journal's
+ * order.
  */
 
 /** `CREATE TABLE ["public".]"<name>"` — the name backtick-quoted (what every `CREATE TABLE` under
@@ -89,57 +90,4 @@ export function tablesCreatedBy(files: readonly string[]): Set<string> {
     }
   }
   return tables;
-}
-
-/** The two workspace roots a migration set can sit under, one package deep. */
-const WORKSPACE_ROOTS = ["packages", "apps"];
-
-/** Every `drizzle/` migration set directly under a package or app, repo-relative and sorted. */
-export function migrationSets(repoRoot: string): string[] {
-  const sets: string[] = [];
-  for (const root of WORKSPACE_ROOTS) {
-    for (const entry of readdirSync(join(repoRoot, root))) {
-      const dir = join(repoRoot, root, entry, "drizzle");
-      if (existsSync(dir) && statSync(dir).isDirectory()) sets.push(relative(repoRoot, dir));
-    }
-  }
-  return sets.sort();
-}
-
-/**
- * The snapshot drizzle holds for a set's HEAD — the schema as it stands, rather than the history
- * that built it. The journal's highest `idx` names it, which is the pointer drizzle itself follows.
- *
- * `"empty"` is a set that declares no migrations at all: a real state, not a hole
- * (`packages/fiscal-none` owns no tables). `"missing"` is a set with no journal, or whose journal
- * names a head whose snapshot is not on disk — which would drop that set out of any check reading
- * snapshots without saying so, so callers refuse it rather than skip it.
- */
-export type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
-
-export function headSnapshot(repoRoot: string, set: string): HeadSnapshot {
-  const journal = join(repoRoot, set, "meta", "_journal.json");
-  if (!existsSync(journal)) return { kind: "missing" };
-  const entries = JSON.parse(readFileSync(journal, "utf8")).entries as { idx: number }[];
-  if (entries.length === 0) return { kind: "empty" };
-  const head = Math.max(...entries.map((entry) => entry.idx));
-  const snapshot = join(repoRoot, set, "meta", `${String(head).padStart(4, "0")}_snapshot.json`);
-  return existsSync(snapshot)
-    ? { kind: "file", path: relative(repoRoot, snapshot) }
-    : { kind: "missing" };
-}
-
-/**
- * Every `.sql` file in a migration set, repo-relative and sorted — the order `tablesCreatedBy`
- * needs. Walks the whole set rather than its top level, so a set that starts nesting its
- * migrations is still read.
- */
-export function migrationSqlFiles(repoRoot: string, set: string): string[] {
-  const walk = (dir: string): string[] =>
-    readdirSync(dir).flatMap((entry) => {
-      const full = join(dir, entry);
-      if (statSync(full).isDirectory()) return walk(full);
-      return full.endsWith(".sql") ? [relative(repoRoot, full)] : [];
-    });
-  return walk(join(repoRoot, set)).sort();
 }

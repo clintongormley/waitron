@@ -5,7 +5,7 @@ import {
   headSnapshot,
   migrationSets,
   migrationSqlFiles,
-} from "../packages/sync-enrolment/src/migration-tables.js";
+} from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * Contract: the schema carries no tenant column and no code carries a tenant id. One taxpayer lives
@@ -48,6 +48,7 @@ import {
  */
 
 const repoRoot = join(import.meta.dirname, "..");
+const sets = migrationSets(repoRoot);
 const ROOTS = ["packages", "apps"];
 
 /**
@@ -123,18 +124,16 @@ describe("no tenant column", () => {
     // numbers are the only thing separating this suite from a guard that reports on a typo in a
     // path. They are lower bounds, not counts: a number is a receipt that goes stale.
     expect(nonTestSources().length).toBeGreaterThan(500);
-    expect(migrationSets(repoRoot).length).toBeGreaterThan(5);
+    expect(sets.length).toBeGreaterThan(5);
     // The SQL floor came down from 20 to 8 when the sets were regenerated as one SQLite baseline
     // each. Measured 2026-09-21: 1139 non-test sources, 13 sets, and 12 `.sql` files — one per set,
     // `packages/fiscal-none` shipping none. Still a lower bound strictly under the tree, so it
     // catches an empty or mis-pathed selection without failing the day a set is retired.
-    expect(
-      migrationSets(repoRoot).flatMap((set) => migrationSqlFiles(repoRoot, set)).length,
-    ).toBeGreaterThan(8);
+    expect(sets.flatMap((set) => migrationSqlFiles(repoRoot, set)).length).toBeGreaterThan(8);
   });
 
   it("declares no tenant column in any migration set's head schema", () => {
-    const offenders = migrationSets(repoRoot)
+    const offenders = sets
       .map((set) => headSnapshot(repoRoot, set))
       .filter((head) => head.kind === "file")
       .map((head) => head.path)
@@ -146,21 +145,17 @@ describe("no tenant column", () => {
   it("reads a head snapshot for every migration set that declares one", () => {
     // A set whose journal names a head with no snapshot on disk would drop out of the check above
     // without saying so, and an absence assertion cannot notice its own missing input.
-    const unreadable = migrationSets(repoRoot).filter(
-      (set) => headSnapshot(repoRoot, set).kind === "missing",
-    );
+    const unreadable = sets.filter((set) => headSnapshot(repoRoot, set).kind === "missing");
     expect(unreadable).toEqual([]);
 
     // …and most sets really do declare one, so the check above is reading real schemas rather than
     // skipping every set as empty.
-    const read = migrationSets(repoRoot).filter(
-      (set) => headSnapshot(repoRoot, set).kind === "file",
-    );
+    const read = sets.filter((set) => headSnapshot(repoRoot, set).kind === "file");
     expect(read.length).toBeGreaterThan(5);
   });
 
   it("names no tenant column in any migration SQL outside the recorded history", () => {
-    const offenders = migrationSets(repoRoot)
+    const offenders = sets
       .flatMap((set) => migrationSqlFiles(repoRoot, set))
       .filter((file) => !HISTORICAL_TENANT_SQL.has(file))
       .filter((file) => SQL_COLUMN.test(readFileSync(join(repoRoot, file), "utf8")));
