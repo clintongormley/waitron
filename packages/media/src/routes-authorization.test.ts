@@ -17,6 +17,7 @@ import { locationId } from "@waitron/shared";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
+import { sampleImage } from "./testing/sample-image.js";
 
 /**
  * Every image route refuses a caller without `image.manage`, and refusing leaves the library
@@ -47,12 +48,9 @@ const changed = {
   labels: ["Bakery"],
 };
 
-function uploadBody(): FormData {
+function uploadBody(bytes: Uint8Array<ArrayBuffer>): FormData {
   const form = new FormData();
-  form.set(
-    "file",
-    new File([new Uint8Array([0xff, 0xd8, 0xff, 1])], "photo.jpg", { type: "image/jpeg" }),
-  );
+  form.set("file", new File([bytes], "photo.jpg", { type: "image/jpeg" }));
   for (const [key, value] of Object.entries(original)) form.set(key, JSON.stringify(value));
   return form;
 }
@@ -84,7 +82,7 @@ async function fixture() {
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
         contentDefaultLanguage: "en",
       },
-      maxUploadBytes: 100,
+      maxUploadBytes: 1000,
       core: {
         openTab: async () => {
           throw new Error("unused");
@@ -96,7 +94,7 @@ async function fixture() {
   const created = await app.request("/management-api/images", {
     method: "POST",
     headers,
-    body: uploadBody(),
+    body: uploadBody(await sampleImage({ width: 8, height: 6, format: "jpeg" })),
   });
   expect(created.status).toBe(201);
   const { image } = (await created.json()) as { image: { id: string; filename: string } };
@@ -110,7 +108,12 @@ it("denies every library operation to a staff caller and preserves existing imag
     ["/management-api/images", { headers }],
     ["/management-api/image-labels", { headers }],
     [`/management-api/images/${image.id}`, { headers }],
-    ["/management-api/images", { method: "POST", headers, body: uploadBody() }],
+    // Deliberately NOT a decodable picture: authorisation comes before any image work, so a staff
+    // caller gets 403 here, never the 422 these bytes would earn from the decoder.
+    [
+      "/management-api/images",
+      { method: "POST", headers, body: uploadBody(new Uint8Array([0xff, 0xd8, 0xff, 1])) },
+    ],
     [
       `/management-api/images/${image.id}`,
       {

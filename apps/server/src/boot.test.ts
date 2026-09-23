@@ -2658,10 +2658,10 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
 });
 
 describe("MAX_UPLOAD_BYTES", () => {
-  it("is 5 MiB — the image-library upload ceiling", () => {
-    // A settled config constant (design §5e, proposal 5 MiB), pinned here so a later edit to the
-    // upload route cannot silently change the ceiling without this failing.
-    expect(MAX_UPLOAD_BYTES).toBe(5 * 1024 * 1024);
+  it("is 20 MiB — the image-library upload ceiling", () => {
+    // What is stored is the shrunk copy (prepareImage), so this bounds only what one upload may
+    // make the server decode. Pinned so a later edit cannot move the ceiling without this failing.
+    expect(MAX_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
   });
 });
 

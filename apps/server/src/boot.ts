@@ -290,13 +290,16 @@ const BACKUP_ENV_KEYS = [
 export const BOX_HOSTNAME = "waitron.local";
 
 /**
- * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
- * than config: it is a DoS ceiling on an unauthenticated-adjacent write path, not an operator knob.
- * The upload route (a later slice) enforces it both coarsely (a `bodyLimit` middleware) and
- * precisely (a `file.size` check → `media.too_large`); exported here so that route and this boot
- * agree on one value rather than two literals that could drift.
+ * The upper bound on a single product-image upload, 20 MiB (owner decision 2026-09-23; the image
+ * library design's §5e proposed 5 MiB). What is stored is the shrunk copy `prepareImage` makes, so
+ * this bounds only what one upload may make the server decode: a 100-megapixel PNG raised memory by
+ * about 29 MiB when decoded (slice-2 plan, Task 0), and `MAX_INPUT_PIXELS` refuses anything larger.
+ * A settled constant rather than config: it is a DoS ceiling on an unauthenticated-adjacent write
+ * path, not an operator knob. The media upload route (`packages/media/src/routes.ts`) enforces it
+ * coarsely (a `bodyLimit` middleware) and precisely (`prepareImage`'s size check,
+ * `image.too_large`); exported so that route and this boot agree on one value.
  */
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 /** What `reconcile` reports when the Stripe credential is not provisioned: no runs, nothing
  * deferred, nothing dropped by the horizon, nothing skipped, and no next due time — the same shape

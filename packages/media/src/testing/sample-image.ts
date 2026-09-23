@@ -12,7 +12,7 @@ export async function sampleImage(options: {
   width: number;
   height: number;
   format: "jpeg" | "png" | "webp";
-}): Promise<Uint8Array> {
+}): Promise<Uint8Array<ArrayBuffer>> {
   const image = sharp({
     create: {
       width: options.width,

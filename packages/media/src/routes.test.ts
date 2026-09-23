@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -15,13 +16,16 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { locationId } from "@waitron/shared";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
+import { prepareImage } from "./prepare.js";
+import { sampleImage } from "./testing/sample-image.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
 });
-const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
-async function fixture(role = "manager") {
+const photo = await sampleImage({ width: 8, height: 6, format: "jpeg" });
+/** `maxUploadBytes: null` names no limit, leaving the route to its own fallback. */
+async function fixture(role = "manager", maxUploadBytes: number | null = 1000) {
   const id = await seedTenant(suite.db);
   // Through the table definition, not raw SQL: `id` and the timestamps are JavaScript generators
   // now (`$defaultFn`), never column DEFAULTs, so a raw insert naming none of them is refused with
@@ -49,7 +53,7 @@ async function fixture(role = "manager") {
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
         contentDefaultLanguage: "fr",
       },
-      maxUploadBytes: 100,
+      ...(maxUploadBytes === null ? {} : { maxUploadBytes }),
       core: {
         openTab: async () => {
           throw new Error("unused");
@@ -104,8 +108,10 @@ describe("image routes", () => {
     expect(image.names).toEqual({ fr: "Pain" });
     const publicImage = await app.request(`/media/${image.filename}`);
     expect(publicImage.status).toBe(200);
-    expect(new Uint8Array(await publicImage.arrayBuffer())).toEqual(photo);
-    expect(publicImage.headers.get("content-type")).toBe("image/jpeg");
+    const stored = await prepareImage(photo, { maxUploadBytes: 1000 });
+    expect(image.filename).toBe(stored.filename);
+    expect(new Uint8Array(await publicImage.arrayBuffer())).toEqual(stored.bytes);
+    expect(publicImage.headers.get("content-type")).toBe("image/webp");
     const list = await app.request("/management-api/images?search=Pain&sort=relevance", {
       headers,
     });
@@ -154,14 +160,14 @@ describe("image routes", () => {
   });
 });
 
-it("serves supported content types with immutable caching and rejects malformed public names", async () => {
+it("stores a PNG or a WebP upload as WebP, serves it immutable, and rejects malformed public names", async () => {
   const { app, headers } = await fixture();
-  for (const [bytes, contentType] of [
-    [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png"],
-    [new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]), "image/webp"],
-  ] as const) {
+  for (const upload of [
+    await sampleImage({ width: 20, height: 6, format: "png" }),
+    await sampleImage({ width: 21, height: 6, format: "webp" }),
+  ]) {
     const form = body();
-    form.set("file", new File([bytes], "ignored.gif", { type: "image/gif" }));
+    form.set("file", new File([upload], "ignored.gif", { type: "image/gif" }));
     const created = await app.request("/management-api/images", {
       method: "POST",
       headers,
@@ -169,12 +175,14 @@ it("serves supported content types with immutable caching and rejects malformed 
     });
     expect(created.status).toBe(201);
     const { image } = (await created.json()) as { image: { filename: string } };
+    const stored = await prepareImage(upload, { maxUploadBytes: 1000 });
+    expect(image.filename).toBe(stored.filename);
     for (let repeat = 0; repeat < 2; repeat++) {
       const response = await app.request(`/media/${image.filename}`);
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe(contentType);
+      expect(response.headers.get("content-type")).toBe("image/webp");
       expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
-      expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(stored.bytes);
     }
   }
   for (const name of [
@@ -196,7 +204,7 @@ it("serves supported content types with immutable caching and rejects malformed 
 it("enforces file and raw request limits and rejects unsupported bytes or malformed metadata", async () => {
   const { app, headers } = await fixture();
   for (const [size, status] of [
-    [101, 413],
+    [1001, 413],
     [70 * 1024, 413],
     [3, 415],
   ]) {
@@ -206,6 +214,15 @@ it("enforces file and raw request limits and rejects unsupported bytes or malfor
       (await app.request("/management-api/images", { method: "POST", headers, body: form })).status,
     ).toBe(status);
   }
+  const damaged = body();
+  damaged.set("file", new File([photo.subarray(0, 134)], "cut.jpg"));
+  const refused = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: damaged,
+  });
+  expect(refused.status).toBe(422);
+  expect(await refused.json()).toEqual({ error: { code: "image.invalid_file", params: {} } });
   for (const value of ["not-json", "null", "[]", JSON.stringify({ fr: 42 })]) {
     const form = body();
     form.set("names", value);
@@ -213,4 +230,51 @@ it("enforces file and raw request limits and rejects unsupported bytes or malfor
       (await app.request("/management-api/images", { method: "POST", headers, body: form })).status,
     ).toBe(400);
   }
+});
+
+it("refuses a picture declaring too many pixels as 413", async () => {
+  const { app, headers } = await fixture("manager", 1024 * 1024);
+  const bomb = await sharp({
+    create: { width: 10_001, height: 10_000, channels: 3, background: "white" },
+  })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const form = body();
+  form.set("file", new File([new Uint8Array(bomb)], "huge.png"));
+  const response = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  expect(response.status).toBe(413);
+  expect(await response.json()).toMatchObject({ error: { code: "image.too_many_pixels" } });
+});
+
+it("falls back to a 20 MiB upload limit when the host names none", async () => {
+  const { app, headers } = await fixture("manager", null);
+  // Over the old 5 MiB limit and under the new one: the size check passes, and the bytes (a JPEG
+  // start and nothing a decoder can read) are refused by the decoder instead.
+  const between = new Uint8Array(6 * 1024 * 1024);
+  between.set([0xff, 0xd8, 0xff], 0);
+  const accepted = body();
+  accepted.set("file", new File([between], "big.jpg"));
+  const decoded = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: accepted,
+  });
+  expect(decoded.status).toBe(422);
+  expect(await decoded.json()).toEqual({ error: { code: "image.invalid_file", params: {} } });
+  // One byte over 20 MiB: refused by size, naming the limit.
+  const over = body();
+  over.set("file", new File([new Uint8Array(20 * 1024 * 1024 + 1)], "huge.jpg"));
+  const refused = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: over,
+  });
+  expect(refused.status).toBe(413);
+  expect(await refused.json()).toEqual({
+    error: { code: "image.too_large", params: { maxBytes: 20 * 1024 * 1024 } },
+  });
 });
