@@ -557,8 +557,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   rather than serving a half-migrated schema.
 - **The box's BOOT path carries an ahead-of-image check; no other migrating path does, and
   `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
-  `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: the cold restore,
-  `rejoin-command` and `dev-setup` each migrate a live database with no ahead check. (A fourth,
+  `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: every other migrating
+  path runs without the check — the cold restore, `rejoin-command` and `dev-setup` among them, and
+  [conventions-data.md](docs/developers/conventions-data.md) holds the full list. (A fourth,
   `waitron-provision instance`, went when a venue became a directory of SQLite files — the reason
   is recorded at `packages/provisioning/src/errors.ts`.) Cost: without it an ahead database re-migrates CLEANLY and surfaces later as an
   unclassified driver error.
@@ -694,8 +695,8 @@ browser test** — most of these rules exist because a test passed while proving
   `EISDIR`. `sourceFilesIn` checks `isFile()`, with a fixture preserving a real nested source file.
 - **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated `lint`
   job and the hook run on every non-docs push. Two costs of living there: the root project does not
-  typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
-  from its own package's. **That `include` is one file-type glob plus the explicit paths added to
+  typecheck, and a module tested only from there must be in the root `coverage.include` IF IT IS TO BE
+  MEASURED AT ALL, and excluded from its own package's. **That `include` is one file-type glob plus the explicit paths added to
   it, so root-level source of another type is measured only when somebody names it** —
   `scripts/dev-server-proxy.ts` is imported by all three front-ends' `vite.config.ts` and exercised
   by `scripts/dev-proxy-config.test.ts`, and nobody named it, so it appears in no coverage table. Left that

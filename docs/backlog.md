@@ -1857,9 +1857,9 @@ image constraints under *Detail → Box image*.
   only real repair is a squashed baseline — **an owner decision nobody has taken**. Until it is, the
   hazard stands: **do not run `pnpm --filter @waitron/db db:generate`** (it proposes dropping the
   bookings table, which left core's barrel but stayed in core's snapshot chain).
-- **Every migrating path but boot runs with no ahead-of-image check.** Do not carry a count here:
-  `conventions-data.md` holds the current list, re-grepped 2026-09-22, and it is longer than the
-  three CLAUDE.md §3 names — a runner, and seven scripts under `apps/server/scripts`.
+- **Every migrating path but boot runs with no ahead-of-image check.** No count belongs here:
+  `conventions-data.md` holds the list, re-grepped 2026-09-22, and it is longer than what CLAUDE.md
+  §3 names — it adds a readiness runner and the dev and demo scripts under `apps/server/scripts`.
   `instance-apply.ts` is no longer among them: it went with `waitron-provision instance` when a venue
   became a directory of SQLite files, and with it the question of gating a migrate that could lock a
   trading shop's tables (the reason is at `packages/provisioning/src/errors.ts`).

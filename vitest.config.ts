@@ -107,11 +107,11 @@ export default defineConfig({
       // `scripts/**/*.ts` is deliberately NOT here, and not for the reason this comment used to
       // give. Nearly every `.ts` under `scripts/` is a guard SUITE, which vitest leaves out of its
       // own table whatever this says — but `scripts/dev-server-proxy.ts` is real source, imported by
-      // the three front-ends' `vite.config.ts`. Naming it would gate this project on two branches
-      // worth 0.18 of branch margin, one of which no test can assert at all and one of which needs a
-      // TLS leaf in the box's real state directory (measured 2026-09-23; ci-and-gates.md ->
-      // "Coverage thresholds are split by package"), so it is measured by no coverage table in the
-      // repository. There is
+      // the three front-ends' `vite.config.ts`. Naming it drops this project's branch margin from
+      // 1.07 to 0.18, for two branches: one no test can assert at all, and one assertable only by
+      // writing a TLS leaf into the box's real state directory or by exercising a copy of this file
+      // (measured 2026-09-23; ci-and-gates.md -> "Coverage thresholds are split by package"). So it
+      // is measured by no coverage table in the repository. There is
       // deliberately no `exclude` (a suite is never measured, so naming one changes nothing).
       include: ["scripts/**/*.mjs", "packages/db/src/english-only.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
