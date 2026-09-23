@@ -244,10 +244,10 @@ every repo shares; it is not its own source of truth.
 
 **Model selection (owner decision 2026-09-06; the Claude seats by owner decision 2026-09-23):**
 the rule lives in the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and
-Codex are separated. Every Claude seat — the driver, every dispatched subagent, every review, and
-the unattended campaign runners — runs on the default model, Opus 5.5 at high effort, with no
-per-task model pin; Fable 5.1 is opt-in for the brainstorm only, does no reviews, and never drives
-execution — a hook denies it. The runners' `claude` has to accept that model. Measured 2026-09-23:
+Codex are separated. Every Claude seat — brainstorming, the driver, every dispatched subagent,
+every review, and the unattended campaign runners — runs on the default model, Opus 5.5 at high
+effort (switched to `xhigh` only when a task needs it), with no per-task model pin; Fable is not
+used at all. The runners' `claude` has to accept that model. Measured 2026-09-23:
 on 2.1.278, `claude -p --model 'claude-opus-5-5[1m]'` failed with "API Error: 400 Claude Code
 2.1.278 does not support this model; version 2.1.280 or newer is required"; after `claude update`
 to 2.1.280, `claude -p` with no `--model` under the runners' `~/.claude` profile reported

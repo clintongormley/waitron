@@ -9,7 +9,7 @@ cold). That read produced nine findings, all folded in; the ones that changed th
 inline "Fable review finding N" marker, and the tail shipper still owes its own Fable read before it
 is built (§5.2, risk 2).
 
-> **Pointer, 2026-09-23.** Fable does no reviews any more (owner decision 2026-09-23). The tail
+> **Pointer, 2026-09-23.** Fable is not used any more (owner decision 2026-09-23). The tail
 > shipper's fresh-context read — here and in the two later places this spec asks for "a Fable read"
 > — runs on the default model, Opus 5.5, like every other review.
 

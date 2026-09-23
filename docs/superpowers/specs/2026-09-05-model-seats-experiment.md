@@ -76,7 +76,7 @@ families: Opus 4.8 drives, Opus 5 takes the dispatched seats, Fable is opt-in fo
 two short reads, and Codex keeps only the run-it reviewer. Current rule: `~/.claude/CLAUDE.md`,
 `CLAUDE.md` §6, and the backlog's design-review row. The results table above stands as data.
 
-**Superseded again 2026-09-23 (the Claude seats).** Every Claude seat — the driver, dispatched
-seats, reviews and the campaign runners — runs on the default model, Opus 5.5 at high effort, with
-no per-task model pin; Fable is for brainstorming only and does no reviews. Codex keeps the run-it
-reviewer. Current rule: `~/.claude/CLAUDE.md`.
+**Superseded again 2026-09-23 (the Claude seats).** Every Claude seat — brainstorming, the
+driver, dispatched seats, reviews and the campaign runners — runs on the default model, Opus 5.5 at
+high effort, with no per-task model pin; Fable is not used at all. Codex keeps the run-it reviewer.
+Current rule: `~/.claude/CLAUDE.md`.

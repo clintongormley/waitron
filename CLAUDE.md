@@ -828,11 +828,11 @@ there is no container to share and no knobs to set.
 The commands, the dev stack and the receipts are in
 [workflow-guide.md](docs/developers/workflow-guide.md). **Model selection is not a waitron rule** —
 it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. In short: every Claude
-seat — driver, dispatched seats, reviews and the campaign runners — runs on the default model, Opus
-5.5 with the 1M window at high effort, with no per-task model pin (owner decision 2026-09-23); Fable
-is opt-in for brainstorming only; and Codex holds one seat when Claude drives. When CODEX drives,
-the roles reverse and Codex implements — so establish who is driving before treating an
-implementation as a rule violation.
+seat — brainstorming, driver, dispatched seats, reviews and the campaign runners — runs on the
+default model, Opus 5.5 with the 1M window at high effort (`xhigh` only when a task needs it), with
+no per-task model pin and no Fable (owner decision 2026-09-23); and Codex holds one seat when Claude
+drives. When CODEX drives, the roles reverse and Codex implements — so establish who is driving
+before treating an implementation as a rule violation.
 
 - **Never commit directly to `main`.** Feature work happens in a worktree
   (`python3 ~/workspace/tools/worktree.py new waitron <branch>` — not a plain `git worktree add`,
