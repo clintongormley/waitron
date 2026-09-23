@@ -278,3 +278,51 @@ it("falls back to a 20 MiB upload limit when the host names none", async () => {
     error: { code: "image.too_large", params: { maxBytes: 20 * 1024 * 1024 } },
   });
 });
+
+it("reads labels and a limited page, and refuses an unknown id and malformed bodies", async () => {
+  const { app, headers } = await fixture();
+  expect(
+    (await app.request("/management-api/images", { method: "POST", headers, body: body() })).status,
+  ).toBe(201);
+  const labels = await app.request("/management-api/image-labels", { headers });
+  expect(labels.status).toBe(200);
+  expect(await labels.json()).toEqual({ labels: ["Food"] });
+  const page = await app.request("/management-api/images?limit=1", { headers });
+  expect(page.status).toBe(200);
+  expect(((await page.json()) as { images: unknown[] }).images).toHaveLength(1);
+
+  const unknownId = crypto.randomUUID();
+  const unknown = await app.request(`/management-api/images/${unknownId}`, { headers });
+  expect(unknown.status).toBe(404);
+  expect(await unknown.json()).toEqual({
+    error: { code: "image.not_found", params: { imageId: unknownId } },
+  });
+
+  const invalid = { error: { code: "image.invalid_metadata", params: {} } };
+  // A metadata field sent as a file rather than as JSON text.
+  const fileField = body();
+  fileField.set("names", new File(["{}"], "names.json"));
+  const refusedField = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: fileField,
+  });
+  expect(refusedField.status).toBe(400);
+  expect(await refusedField.json()).toEqual(invalid);
+  // A multipart body the parser cannot read.
+  const unreadable = await app.request("/management-api/images", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "multipart/form-data; boundary=missing" },
+    body: "not multipart at all",
+  });
+  expect(unreadable.status).toBe(400);
+  expect(await unreadable.json()).toEqual(invalid);
+  // An edit whose body is JSON but not an object.
+  const edit = await app.request(`/management-api/images/${unknownId}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: "[]",
+  });
+  expect(edit.status).toBe(400);
+  expect(await edit.json()).toEqual(invalid);
+});

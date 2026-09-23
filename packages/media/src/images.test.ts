@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { withTransaction, CORE_MIGRATIONS, catalogues, products } from "@waitron/db";
+import {
+  withTransaction,
+  CORE_MIGRATIONS,
+  catalogues,
+  products,
+  type Transaction,
+} from "@waitron/db";
 import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -99,6 +105,33 @@ describe("image library", () => {
       expect(stored?.bytes).toEqual(photo.bytes);
       expect(stored?.contentType).toBe("image/webp");
     });
+  });
+});
+
+describe("unknown images and other refusals", () => {
+  it("refuses an id that names no image when reading it, listing its uses or deleting it", async () => {
+    const imageId = crypto.randomUUID();
+    for (const call of [
+      (tx: Transaction): Promise<unknown> => readImage(tx, imageId),
+      (tx: Transaction) => listImageUsages(tx, imageId),
+      (tx: Transaction) => deleteImage(tx, imageId),
+    ]) {
+      await expect(withTransaction(suite.db, call)).rejects.toMatchObject({
+        code: "image.not_found",
+        params: { imageId },
+      });
+    }
+  });
+
+  it("passes a database failure during the translation check through unchanged", async () => {
+    // Every malformed map is refused before the translation check, so a database failure is what
+    // reaches its re-throw. The table is dropped inside the transaction, which rolls it back.
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        await tx.execute(sql`drop table content_languages`);
+        return uploadImage(tx, { image: photo, names: { en: "Bread" }, altText: {}, labels: [] });
+      }),
+    ).rejects.toThrow("no such table: content_languages");
   });
 });
 
