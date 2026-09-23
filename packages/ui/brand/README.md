@@ -28,7 +28,7 @@ if an app links to a file this directory does not hold, or points its `publicDir
 
 Four token values are inlined and **kept in step by hand**: `#1f6feb` and `#4c8dff` are
 `--wt-color-primary` light and dark, and `#16181d` / `#eceef2` are `--wt-color-text` light and dark,
-all declared in `packages/ui/src/tokens/colors.css`. A standalone SVG cannot read a CSS custom
+all declared in `packages/ui-core/src/tokens/colors.css`. A standalone SVG cannot read a CSS custom
 property, so the usual rule against inlining a token value does not reach here; change a token and
 change these with it.
 

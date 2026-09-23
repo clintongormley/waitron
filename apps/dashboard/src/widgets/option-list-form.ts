@@ -87,7 +87,7 @@ export class OptionListForm extends LitElement {
       /* The preselect dot is drawn by the user agent, not by this form, so the brand colour reaches
          it through accent-color — the declaration wt-data-table and the printers screen give their
          own native controls. What the UNCHECKED fill looks like is a separate matter, settled by
-         color-scheme (packages/ui/src/tokens/colors.test.ts). */
+         color-scheme (packages/ui-core/src/tokens/colors.test.ts). */
       input[type="radio"] {
         accent-color: var(--wt-color-primary);
       }

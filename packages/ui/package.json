@@ -5,7 +5,6 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -15,7 +14,8 @@
   },
   "dependencies": {
     "@waitron/shared": "workspace:*",
-    "lit": "^3.2.0"
+    "lit": "^3.2.0",
+    "@waitron/ui-core": "workspace:*"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",

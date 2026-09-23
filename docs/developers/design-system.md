@@ -34,7 +34,7 @@ them is `:where()`-wrapped), so what a given theme root resolves depends only on
 attributes. That means two elements on the same page can both be theme roots — one
 `data-theme="light"`, one `data-theme="dark"` — and each resolves `--wt-*` independently and
 simultaneously. That's what the workbench demonstrates, and what
-`packages/ui/src/tokens/multi-root.test.ts` pins down with an assertion: two roots mounted at once,
+`packages/ui-core/src/tokens/multi-root.test.ts` pins down with an assertion: two roots mounted at once,
 each still reporting its own resolved `--wt-color-bg`.
 
 ## Themes
@@ -51,7 +51,7 @@ the browser draws those from `color-scheme` and never from `data-theme`. Without
 got the light drawing, and an unchecked radio came out as a solid white dot heavier than the checked
 one's ring. `color-scheme` is an inherited property, so the base block's `color-scheme: light` also
 stops a theme root nested inside a dark one from being drawn dark while its colour tokens resolve
-light. Both are pinned in `packages/ui/src/tokens/colors.test.ts`; nothing nests a theme root today,
+light. Both are pinned in `packages/ui-core/src/tokens/colors.test.ts`; nothing nests a theme root today,
 so the second is a constructed case rather than an observed one.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
@@ -67,7 +67,7 @@ blocks as plain attribute selectors (specificity 0,2,0). That made a deployment 
 `.brand { --wt-color-primary: purple }` (specificity 0,1,0) lose to the `data-theme` block whenever
 `data-theme` was set — silently breaking retheming on exactly the configuration the shipped
 workbench itself uses (each panel sets `data-theme` directly). See
-`packages/ui/src/tokens/structure.test.ts`'s `deployment rules override the token layer's defaults
+`packages/ui-core/src/tokens/structure.test.ts`'s `deployment rules override the token layer's defaults
 even when data-theme is set` for the regression test.
 
 ## Retheming a deployment
@@ -150,7 +150,7 @@ sideways scroll. There was a third, the old modifier form's choices table, until
 extras-and-options plan deleted that form. That deleted table was the ONLY one that ever spelled the
 literal out for itself: `git log -S140px --oneline --all -- apps packages` returns two commits, and
 between them the only files they write the number into are `modifier-form.ts` (added, then removed
-by the change that created this token) and `packages/ui/src/tokens/structure.css` (the token's own
+by the change that created this token) and `packages/ui-core/src/tokens/structure.css` (the token's own
 value). So neither the variants table nor the attached-lists table has ever carried the number. The
 no-hardcoded-chrome guard (`packages/ui/src/no-hardcoded-chrome.test.ts`) would not have caught the
 literal in `modifier-form.ts` either way, because it scans the primitives under

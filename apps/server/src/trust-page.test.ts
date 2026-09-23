@@ -133,7 +133,7 @@ it("shows the browser's own warning words when telling the operator to start aga
 });
 
 // Every hand-copied token pair in the page's stylesheet, light then dark, against
-// packages/ui/src/tokens/colors.css. The page cannot import the tokens — `apps/server` has no
+// packages/ui-core/src/tokens/colors.css. The page cannot import the tokens — `apps/server` has no
 // `@waitron/ui` dependency and the page must stay one self-contained string — so these literals are
 // the only copy, and the incident behind CLAUDE.md §4's render rule was a colour value nothing
 // checked. Guarding one pair and calling the comment satisfied is how that happens twice.

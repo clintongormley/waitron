@@ -192,7 +192,7 @@ no `px` above `1`, no `rem`/`em` at all (including inside `min()`/`max()`/`clamp
 This is enforced automatically by `packages/ui/src/no-hardcoded-chrome.test.ts`, which discovers
 every component via `import.meta.glob("./components/*.ts", ...)` — a new component is covered the
 moment the file exists, with nothing to register. If a needed token doesn't exist, it belongs in
-`packages/ui/src/tokens/`, not inlined.
+`packages/ui-core/src/tokens/`, not inlined.
 
 ## Real Chromium only — never jsdom
 
