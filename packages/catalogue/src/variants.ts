@@ -421,7 +421,7 @@ export async function resolveMenuVariant(
     variantCustomerName: variant.customerName,
     variantKitchenName: variant.kitchenName,
     unitPrice: resolveOfferPrice({
-      variantMenuPrice: override?.price == null ? null : centsToDecimal(override.price),
+      variantMenuPrice: priceOrNull(override?.price ?? null),
       variantPrice: variant.unitPrice === null ? null : decimal(variant.unitPrice),
       parentMenuPrice: priceOrNull(offer.menuPrice),
       parentPrice: centsToDecimal(offer.productPrice),

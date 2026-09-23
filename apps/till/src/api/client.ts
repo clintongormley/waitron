@@ -463,12 +463,8 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,
     unit: offer.unit,
-    // No `pricingUnit`: a `MenuOffer` carries its full `unit` (with `hardwareUnit`/`precision`), which
-    // is what the till weighs from — `productUnit()` only consults `pricingUnit` as a synthetic-unit
-    // fallback when `unit` is absent, and an offer-derived product always has a unit. The server DOES
-    // send a `pricingUnit` on the offer body (`listMenuOffers` projects `products.pricingUnit`), but
-    // `MenuOffer` does not model it and this path does not need it, so the copy the old hand mirror made
-    // here was redundant — dropping it changes no behaviour (the full unit wins).
+    // No `pricingUnit`: an offer-derived product always carries its full `unit`, which is what the
+    // till weighs from; `productUnit()` consults `pricingUnit` only when `unit` is absent.
     unitPrice: offer.unitPrice,
     vatClass: offer.vatClass,
     category: offer.category,

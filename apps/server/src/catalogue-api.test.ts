@@ -2997,6 +2997,21 @@ describe("a negative price is refused at the catalogue request boundary", () => 
       error: { code: "management.request_invalid", params: { field: "grossPrice" } },
     });
     expect(await offer()).toMatchObject({ grossPrice: null, unitPrice: "1.00" });
+
+    // Only an explicit null means blank: a create that leaves the field out is refused, and adds
+    // no offer. A product not yet on the menu, so nothing but the missing field can refuse it.
+    const otherProductId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const absentCreate = await send(app, "POST", items, {
+      body: { productId: otherProductId, sectionId, displayOrder: 1 },
+    });
+    expect(absentCreate.status).toBe(400);
+    expect(await absentCreate.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    });
+    const offers = (await (
+      await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
+    ).json()) as { id: string }[];
+    expect(offers.map((row) => row.id)).toEqual([itemId]);
   });
 
   it("leaves a malformed price to the refusal it already had, so no shipped code changes meaning", async () => {
