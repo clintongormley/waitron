@@ -61,19 +61,23 @@ async function main(): Promise<number> {
       readTenants: readTenantIdentities,
     });
   } catch (error) {
-    // `runCli` (cli.ts) resolves with a number for every EXPECTED failure — a bad database name, an
-    // unknown environment, a refused role, a failed grant — and only ever rejects for something
-    // none of this package's own code recognizes: a database fault, a connectivity failure, a bug.
-    // This is the ONE place allowed to catch that, so it never reaches the operator as a raw,
-    // unformatted dump. That matters more here than in most CLIs: a Drizzle `DrizzleQueryError`
-    // embeds the failed query in its own `.message`, and one of this package's queries is
-    // `CREATE ROLE … PASSWORD '<generated>'`. `error.name` is printed instead — a class name cannot
-    // carry a password; a message can.
+    // `runCli` (cli.ts) resolves with a number for every failure this package's own code
+    // recognizes, and only ever rejects for one it does not: a database fault, or a bug. This is the
+    // ONE place allowed to catch that, so it never reaches the operator as a raw, unformatted dump.
+    // That matters more here than in most CLIs: a Drizzle `DrizzleQueryError` embeds the failed
+    // query in its own `.message`, so anything a statement carried in its own text rather than as a
+    // bound parameter travels with the error. `error.name` is printed instead — a class name carries
+    // no value; a message can.
     if (isAppError(error)) {
       // Code and structured params only, through `cli.ts`'s own formatter rather than a second copy
       // of the template — this file is excluded from coverage, so a copy here is the one that could
-      // drift without a test noticing. `src/errors.ts`'s header is the constraint that makes the
-      // line safe: no param declared there carries key material, a password or a connection string.
+      // drift without a test noticing. `src/errors.ts` is the constraint that makes the line safe:
+      // its header forbids a generated password, a key or a connection string as a param anywhere
+      // in the registry, and each code then says what its OWN params do not carry. Most of them say
+      // some form of "never a secret"; a few instead name the specific thing withheld, such as
+      // `provisioning.key_generation_failed`'s "a size, never material". So read the param's own
+      // sentence — grepping for a form of words both misses those and undercounts the rest, whose
+      // wording wraps across comment lines.
       process.stderr.write(`${formatAppError(error)}\n`);
       return 1;
     }

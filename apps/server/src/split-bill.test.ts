@@ -47,9 +47,9 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// PGlite is enough HERE: the check being table-less and the line partition are plain row state a single
-// backend proves. The FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the
-// real-Postgres job of the split-bill fiscal suite (CLAUDE.md §4).
+// What this suite proves: the check being table-less, and the line partition — plain row state. The
+// FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the split-bill fiscal
+// suite's.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

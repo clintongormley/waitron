@@ -332,7 +332,7 @@ describe("decideSwap", () => {
 
 describe("listPendingSwaps", () => {
   it("returns only accepted swaps, ordered by created_at", async () => {
-    // The shared PGlite DB persists across the file, and `acceptSwap`'s "moving the swap to accepted"
+    // The shared database persists across the file, and `acceptSwap`'s "moving the swap to accepted"
     // test leaves an `accepted` swap behind. The queue reads every swap in the database (one tenant per
     // database), so clear the earlier tests' swaps to keep this order-independent (CLAUDE.md §4).
     await suite.db.execute(sql`delete from shift_swaps`);

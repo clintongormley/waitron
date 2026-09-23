@@ -32,8 +32,8 @@ import "./errors.js";
 // bind a `fakeCore`. Here the generic mount receives the EXACT `core` closure boot builds
 // (`{ openTab: (tx, req) => openTab(tx, till, req) }`, boot.ts), and the seat route drives it end to end:
 // the real verb opens a real `working_orders` row and the booking is marked seated with that tab id.
-// PGlite is enough — this pins a wiring edge, not a grant/concurrency property (routes.test.ts covers
-// grants against real Postgres).
+// What this pins is the wiring edge itself, never a grant: `@waitron/bookings`'s own
+// `routes.test.ts:28` records that its GRANT half went with the roles.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,

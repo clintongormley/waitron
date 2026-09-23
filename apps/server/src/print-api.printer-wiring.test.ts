@@ -49,8 +49,8 @@ import "./errors.js";
  *
  * ## Two things this file argued for that no longer exist
  *
- * Its old header said real PostgreSQL was MANDATORY here rather than PGlite, for two properties
- * that a single-superuser-connection engine cannot show. Both are gone and neither is replaced.
+ * Its old header said a real PostgreSQL server was MANDATORY here, for two properties a single
+ * file opened by a single process cannot show. Both are gone and neither is replaced.
  *
  * 1. **The GRANT half.** SQLite has no roles and no grants: one process opens one file, so nothing
  *    below checks the table grants those routes need.
@@ -312,7 +312,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     // currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job stays
     // queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
     // cross-agent claim of a network printer is expected; key visibility is the isolation.) The
-    // positive key-claim path is proven under PGlite; here the point is the negative branch.
+    // positive key-claim path is proven above; here the point is the negative branch.
     const app = mountApp(tenantA);
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;

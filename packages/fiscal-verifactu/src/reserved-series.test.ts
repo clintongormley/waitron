@@ -40,7 +40,7 @@ describe("stripOwnSuffixes", () => {
 });
 
 describe("liveSeriesBases", () => {
-  // PGlite exercises the derivation over stored series; no privileges or contention are asserted.
+  // The cases below exercise the derivation over stored series; nothing here asserts contention.
   const suite = useVenueDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
   it("keeps one base per (code, purpose) pair in first-seen order", async () => {

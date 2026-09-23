@@ -35,9 +35,9 @@ import {
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
-// `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock — all plain
-// SQL a single backend proves. The concurrency race and the per-tab fiscal filing are
+// This suite proves the WRITE behaviour of `transferLines` and
+// `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock. The
+// concurrency race and the per-tab fiscal filing are
 // `transfer-lines.filing.test.ts`'s job.
 const LOCALE = "es-ES";
 const suite = useVenueDb({

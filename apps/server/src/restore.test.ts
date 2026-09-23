@@ -994,8 +994,7 @@ describe("restore hooks (identity phase)", () => {
 // needs NO change (it writes back every `secrets/*` entry via `restoreSecrets`/`unpackBundleToDir`).
 // These pin that round-trip and the two exceptions that matter: `skipSecrets` (rejoin) restores
 // neither, and a restore that MISSES `modules.json` makes the box REFUSE TO BOOT rather than silently
-// flip regime. PGlite is the right target here (CLAUDE.md §4): the two files are disk-only config —
-// this suite makes no privilege, trigger or concurrency claim, and never opens what the restore
+// flip regime. The two files are disk-only config, so this suite never opens what the restore
 // placed — `migrate` and `openDb` are both injected.
 describe("optional state (backup.env + modules.json) round-trip", () => {
   useTempDirs("waitron-optstate-");

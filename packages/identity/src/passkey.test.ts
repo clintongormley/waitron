@@ -15,10 +15,8 @@ import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: this suite tests the registration AND authentication LOGIC — options
-// issued, challenge stored then consumed, credential persisted, counter bumped, person resolved. A
-// PGlite connection is superuser holding every grant, so a privilege or trigger assertion would be a
-// false pass here (CLAUDE.md §4); nothing below makes one.
+// This suite tests the registration AND authentication LOGIC — options issued, challenge stored
+// then consumed, credential persisted, counter bumped, person resolved.
 //
 // `generateRegistrationOptions` and `generateAuthenticationOptions` run FOR REAL (they just mint a
 // random challenge); only the two VERIFY calls are mocked, because a genuine authenticator response
@@ -132,7 +130,7 @@ beforeEach(() => {
   mockVerifyAuth.mockReset();
 });
 
-// One PGlite database is shared across the suite (useVenueDb registers beforeAll, not beforeEach),
+// One database is shared across the suite (useVenueDb registers beforeAll, not beforeEach),
 // so clear the passkey rows between tests to keep them order-independent (CLAUDE.md §4). The credential
 // id the mock returns is fixed, and `credential_id` is unique — without this a second test
 // registering the same id would hit the unique constraint rather than exercise its own path.

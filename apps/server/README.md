@@ -272,7 +272,7 @@ the box loopback only.
 worktree launcher also start Mailpit. During local development you can inspect its own UI at
 `http://127.0.0.1:8025`. The development venue is a directory of SQLite files under the same state
 directory the server resolves, and `dev:reset` removes that directory so the next run provisions
-from scratch — what `docker compose down -v` used to do.
+from scratch. Nothing in Compose holds venue data, so no `docker compose` command resets anything.
 
 For a production or on-prem venue, put its SMTP relay in the encrypted credential vault. Write the
 payload to a permission-restricted file rather than putting its password in a shell argument:

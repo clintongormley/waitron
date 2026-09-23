@@ -11,14 +11,19 @@ import * as schema from "./schema/index.js";
 import { withTransaction } from "./tenancy.js";
 
 /**
- * `withTransaction` against a real SQLite store, built here rather than through the shared test
- * helper: `useVenueDb` still opens PGlite, and converting it is the storage swap's step 24
- * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step group 7). The cases in
- * `tenancy.test.ts` beside this file are PostgreSQL-shaped — a server GUC and an array CHECK
- * constraint's name — and belong to that same step; fold these in when it runs.
+ * `withTransaction` against a real SQLite store, built here rather than through `useVenueDb`.
  *
- * Two hand-written tables rather than the migration set, because what is under test is the helper
- * and not the schema: `change_log` as `withTransaction` reads it, and one table to write.
+ * That is a deliberate shape, not a leftover: `useVenueDb`'s job is to APPLY MIGRATION SETS — the
+ * option is required — and publish one database for the whole file, and this suite wants neither. It
+ * wants a bare store with two hand-written tables, because what is under test is the helper and not
+ * the schema, and a fresh store per case so the queue it exercises starts with nothing in flight.
+ * `change_log` here happens to have the same two columns the core set declares
+ * (`packages/db/drizzle/0000_baseline.sql:686-689`); `probe` is this suite's own. `tenancy.test.ts`
+ * beside this file went the other way — its cases are about the real schema's constraints, so it is
+ * on `useVenueDb`.
+ *
+ * Its teardown closes every store it opened and guards the pop, which is what CLAUDE.md §4 and
+ * `scripts/guarded-teardowns.test.ts` ask of a suite that builds its own resource.
  */
 const open = async () => {
   const directory = mkdtempSync(join(tmpdir(), "waitron-tenancy-"));

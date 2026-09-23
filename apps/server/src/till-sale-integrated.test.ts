@@ -4,10 +4,9 @@ import type { PaymentResult } from "@waitron/payments";
 import { toPayOutcome } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-// `toPayOutcome` is a PURE mapper over a provider result — no database, no container. It is unit-tested
-// here rather than in `till-sale-integrated.db.test.ts` (CLAUDE.md §4: "pick the lighter target when
-// the heavier one's justification does not apply") because none of its behaviour touches the app
-// role's grants, the split transactions, or the FK-before-attempting ordering that suite exists to prove. The
+// `toPayOutcome` is a PURE mapper over a provider result — no database at all. It is unit-tested
+// here rather than in `till-sale-integrated.db.test.ts` because none of its behaviour touches the
+// split transactions or the FK-before-attempting ordering that suite exists to prove. The
 // orchestrator only ever calls it for the NON-captured states, so its `captured`/`accepted_offline`
 // arms are exercised here — the one place every arm is covered.
 

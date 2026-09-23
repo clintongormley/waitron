@@ -314,8 +314,8 @@ const NOTHING_TO_RECONCILE: TickResult = {
  * (`paymentTestProviders`) also returns `undefined` and uses real readers.
  *
  * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
- * against a real container in a non-demo mode, so it exercises only the `undefined` branch —
- * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite) is what reaches the
+ * a real migrated venue directory in a non-demo mode, so it exercises only the `undefined` branch —
+ * unit-testing THIS function directly (`boot-card-provider.test.ts`) is what reaches the
  * simulator branch, the same "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT`
  * below carries.
  */
@@ -348,7 +348,7 @@ export async function buildCardProvider(
  * runs is therefore swept on the next pass, no restart. An empty set is a no-op (no card configured).
  *
  * Exported for a direct unit test (`boot-pending-sweep.test.ts`) — a stubbed `inner` + a fake
- * enumerator, no container — the same "exported for a direct test subject" reasoning `buildCardProvider`
+ * enumerator, no database — the same "exported for a direct test subject" reasoning `buildCardProvider`
  * carries; the full loop wiring is exercised only through a real boot. */
 export function withPendingSweep(
   inner: (now: Date) => Promise<PassReport>,
@@ -398,8 +398,8 @@ export function withPendingSweep(
  * with no sealed credential is NOT swept (its `resolvePending` would only fail on a missing
  * credential), which is the negative control the test pins.
  *
- * Exported for a direct test (`boot-pending-sweep.test.ts`, PGlite + a seeded credential + a fake
- * pool). */
+ * Exported for a direct test (`boot-pending-sweep.test.ts`, a venue file with a seeded credential
+ * plus a fake pool). */
 export function connectedCardProviderSweep(deps: {
   db: Database;
   pool: CardProviderPool;

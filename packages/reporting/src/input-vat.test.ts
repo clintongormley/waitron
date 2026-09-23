@@ -10,7 +10,6 @@ import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
 import type { InputVatReturn } from "./types.js";
 
-// PGlite exercises deterministic arithmetic under the owner connection.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 beforeEach(async () => {

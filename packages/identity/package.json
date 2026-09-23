@@ -22,8 +22,6 @@
     "otplib": "^13.5.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.8",
-    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",

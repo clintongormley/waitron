@@ -7,11 +7,11 @@ import {
 } from "./enrol-rate-limit.js";
 import "./errors.js";
 
-// Pure unit test — no DB, no container. The limiter is a plain counter over an INJECTED clock, so the
+// Pure unit test — no database at all. The limiter is a plain counter over an INJECTED clock, so the
 // window-reset behaviour is proven deterministically here without a flaky real sleep (CLAUDE.md §4: a
 // contention/time test on a real clock is a false pass). The route-level proof that the guard
 // short-circuits BEFORE the pairing-code DELETE (so a rejected attempt consumes no row) lives in
-// device-api.test.ts against real Postgres; this file proves only the counter's arithmetic.
+// device-api.test.ts; this file proves only the counter's arithmetic.
 
 /** Run `fn`, returning whatever it threw (or `undefined` if it did not). */
 function caught(fn: () => void): unknown {

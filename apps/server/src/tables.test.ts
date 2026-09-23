@@ -386,8 +386,8 @@ describe("zone CRUD", () => {
 // refusal on the location FK or the status FK cannot be mistaken for a zone fault. Those two FKs
 // still refuse, and their refusals are now rethrown raw because nothing inspects them at all.
 
-// FP-2 spatial placement (Task 2). PGlite is enough here — the verb logic is validation + a by-id
-// UPDATE with no privilege/concurrency dimension (the real-PG gate lives on the ROUTE in a later task).
+// FP-2 spatial placement (Task 2). The verb logic is validation plus a by-id UPDATE; the
+// `venue.configure` gate lives on the ROUTE and is proven there.
 // A distinct case proves EACH validation branch: table.not_found, zone.not_found, and one per field.
 describe("table placement", () => {
   it("places a table, reads the placement back via listTablesWithState, then clears the four columns (zoneId kept)", async () => {
@@ -507,8 +507,7 @@ describe("table placement", () => {
 
 // KDS-1 §3d ready→floor. Unlike the CRUD describes above, this exercises the full
 // tab→fire→bump→serve path, so the venue also needs sellable products and a default kitchen
-// station (fireLines' fallback). Seeded as the superuser, the shape tabs.test.ts's setupVenue
-// uses.
+// station (fireLines' fallback). The same fixture shape tabs.test.ts's setupVenue uses.
 async function setupTabVenue(): Promise<{
   cfg: TillConfig;
   cafeId: string;
@@ -574,8 +573,7 @@ async function setupTabVenue(): Promise<{
   return { cfg, cafeId, aguaId, tableId };
 }
 
-// PGlite is the right target: a read-model shape test with no privilege or concurrency dimension.
-// The read-model shape is what this pins.
+// A read-model shape test: the shape is what this pins.
 describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
   it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
     const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
@@ -635,8 +633,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
 // KDS-3 §3c "en camino": the floor's most-advanced hint. `enRoute` counts the tab's lines whose
 // ticket item has been DISPATCHED by the pass (`away_at IS NOT NULL`) but the waiter has not yet
 // acknowledged (`served_at IS NULL`) — the window between the expediter sending a course away and
-// the floor carrying it out. PGlite is the right target (the same read-model shape test as
-// readyToServe above; no privilege or concurrency dimension).
+// the floor carrying it out. The same read-model shape test as readyToServe above.
 describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
   it("counts away-not-served lines, reports enRoute + readyToServe together, and clears enRoute on serve", async () => {
     const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
@@ -707,9 +704,8 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
 
 // KDS order-timing alerts (design §3/§6) — the floor's flash-red signal: the worst age band
 // across the open tab's UNSERVED lines, classified against each line's OWN station thresholds on
-// the DB clock. PGlite is the right target (the same read-model shape test as
-// readyToServe/enRoute above; no privilege or concurrency dimension; the schema suite covers the
-// threshold columns/CHECK).
+// the DB clock. The same read-model shape test as readyToServe/enRoute above; the schema suite
+// covers the threshold columns and their CHECK.
 describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   it("bands a line by its station thresholds and clears once served (design §3 — ages until it reaches the guest)", async () => {
     const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();

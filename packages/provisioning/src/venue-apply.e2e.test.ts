@@ -183,14 +183,15 @@ describe("the provisioned admin authenticates by id with its password", () => {
   it("loginManagerById succeeds with the provisioned password and rejects a wrong one", async () => {
     // The mirror-bundle path authenticates the admin by id via `loginManagerById`, independently of
     // the email the venue also requires.
-    // A distinct tenant (B33333333) so this test's admin is its own (the PGlite suite shares one
-    // database).
+    // A distinct tax id (B33333333), which is not what keeps this test's admin its own:
+    // `useVenueDb` empties every migrated table after each test
+    // (`packages/db/src/testing/venue-db.ts`).
     await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
-    // The admin's id is generated at seed time, so fetch it by tenant + role rather than assume one.
+    // The admin's id is generated at seed time, so fetch it by role rather than assume one.
     const admin = await suite.db.execute<{ id: string }>(sql`
       select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
@@ -223,8 +224,8 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // (captured by the onboarding UI, validated + normalized at the setup-api boundary, written by
     // `applyVenue`'s seed-admin insert) can sign in to the dashboard by EMAIL via `loginManager` —
     // not only by id via `loginManagerById`. A valid, already-normalized lowercase address, as the
-    // setup-api boundary produces. A distinct tenant (B44444444) so this admin is its own in the
-    // shared PGlite database.
+    // setup-api boundary produces. A distinct tax id (B44444444) again, and again it is the
+    // per-test reset rather than the tax id that keeps this admin its own.
     const adminEmail = "owner@venue.example";
     await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
       db: suite.db,

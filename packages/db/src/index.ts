@@ -3,10 +3,11 @@ export { openVenueDatabase } from "./client.js";
 export type { Database, Schema, Transaction, VenueDatabase } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
-// Each shape a job claim takes, and the one file holding the engine-specific SQL they all rest on
-// (`job-claim.ts`).
-export { claimLock, claimLockedRows, claimRows } from "./job-claim.js";
-export type { ClaimSpec, LockedClaimSpec } from "./job-claim.js";
+// Claiming a batch of job rows by stamping them, in one statement (`job-claim.ts`). A caller that
+// claims by SELECTING and stamps nothing writes its own selection, because on this engine the
+// claim is its transaction boundary rather than a clause.
+export { claimRows } from "./job-claim.js";
+export type { ClaimSpec } from "./job-claim.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and
 // its names are listed by hand rather than starred. Guards: `schema/columns.test.ts` for what each
 // helper emits, `scripts/column-vocabulary.test.ts` for nobody else naming the engine's types.

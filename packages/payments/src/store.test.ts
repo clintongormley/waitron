@@ -17,6 +17,7 @@ import {
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
+  claimAcceptedOffline,
   existingReferences,
   expireInitiated,
   failAttempting,
@@ -739,6 +740,44 @@ describe("listAcceptedOffline", () => {
     const listed = await pg.db.transaction((tx) => listAcceptedOffline(tx, "fake"));
     expect(listed.map((r) => r.paymentRef)).toContain("lst-1");
     expect(listed.find((r) => r.paymentRef === "lst-1")?.saleId).toBeNull();
+  });
+});
+
+describe("claimAcceptedOffline", () => {
+  it("returns this provider's accepted_offline rows and writes nothing to any payment row", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const order = { workingOrderId: s.workingOrderId };
+    await pg.db.transaction(async (tx) => {
+      await insertAcceptedOffline(tx, {
+        ...order,
+        provider: "fake",
+        paymentRef: "clm-mine",
+        amount: decimal("10.00"),
+        settledAt: new Date("2026-07-24T10:00:00Z"),
+      });
+      await insertAcceptedOffline(tx, {
+        ...order,
+        provider: "other",
+        paymentRef: "clm-other-provider",
+        amount: decimal("11.00"),
+        settledAt: new Date("2026-07-24T10:00:00Z"),
+      });
+      await insertFailedPayment(tx, {
+        ...order,
+        provider: "fake",
+        paymentRef: "clm-other-state",
+        amount: decimal("12.00"),
+      });
+    });
+    const allRows = () => pg.db.select().from(payments).orderBy(payments.paymentRef);
+    const before = await allRows();
+
+    const claimed = await pg.db.transaction((tx) => claimAcceptedOffline(tx, "fake"));
+
+    expect(claimed.map((r) => r.paymentRef)).toEqual(["clm-mine"]);
+    // Every column, not just `state`: the forward pass reads these rows and advances them through
+    // its own state-guarded updates, so the selection itself must leave them byte-for-byte alone.
+    expect(await allRows()).toEqual(before);
   });
 });
 

@@ -14,8 +14,7 @@ import { locationId as brandLocationId, type NodeId } from "@waitron/shared";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 
-// PGlite exercises the crypto/read/write round-trip of the term-0 document: mint, persist and
-// verify. These assertions need neither a non-superuser role nor concurrent backends (§4).
+// The crypto/read/write round-trip of the term-0 document: mint, persist and verify.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

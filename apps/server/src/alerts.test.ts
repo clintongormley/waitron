@@ -1,4 +1,4 @@
-// PGlite: reads on one transaction, no concurrency and no connection-role question.
+// Reads on one transaction.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { locations, tills, withTransaction, type Database, type Transaction } from "@waitron/db";

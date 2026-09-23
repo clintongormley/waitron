@@ -22,7 +22,8 @@ const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
-// PGlite exercises append ordering and error handling; concurrency lives in the real-PG suite.
+// This file covers append ordering and error handling; the simultaneously-started cases live in
+// chain.concurrency.test.ts.
 beforeEach(async () => {
   till = await seedTill(pg.db);
 });
@@ -298,11 +299,13 @@ describe("appendToChain", () => {
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
     const saleId = await seedSale(pg.db, till, 1);
     // Every savepoint attempt loses its race. Stubbing tx.transaction is the only way to reach
-    // exhaustion deterministically: PGlite cannot generate three real collisions (see the file
-    // that proves it), and a test that waited for one on real Postgres would be a flake by
-    // construction. appendToChain touches only tx.transaction on this path, so the stub is
-    // exactly that one method and nothing else — a wider fake would let the test keep passing if
-    // the retry loop started doing something else.
+    // exhaustion deterministically: contention cannot produce three collisions here, because one
+    // write transaction runs on the venue file at a time (chain.concurrency.test.ts's `holds a
+    // second appender on the same chain until the first commits` watches the second body fail to
+    // START), and the case above reaches three real refusals only by occupying the position first,
+    // with no concurrency at all. appendToChain touches only tx.transaction on this path, so the
+    // stub is exactly that one method and nothing else — a wider fake would let the test keep
+    // passing if the retry loop started doing something else.
     const alwaysCollides = {
       transaction: () =>
         Promise.reject(

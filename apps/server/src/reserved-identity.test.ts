@@ -13,10 +13,9 @@ import type { ReservedIdentity } from "./mirror-bundle.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 
-// PGlite, not real Postgres: `establishReservedStandbyIdentity` seals a credential, inserts the
-// standby's own node (public_key + endorsement), and persists a reserved SIF + series, all under
-// one `withTransaction`. PGlite exercises this round-trip and its behavioural assertions on a
-// superuser connection; it does not check grants. CLAUDE.md §4.
+// `establishReservedStandbyIdentity` seals a credential, inserts the standby's own node
+// (public_key + endorsement), and persists a reserved SIF + series, all under one
+// `withTransaction`. This suite exercises that round-trip and its behavioural assertions.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

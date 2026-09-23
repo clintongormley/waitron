@@ -32,8 +32,8 @@ function heldDoc(
   };
 }
 
-// The held document is THREADED IN (read once by the CLI), so these tests need no PGlite/Postgres at
-// all (CLAUDE.md §4). Both seams — `closePreWipe` and `wipeDatabase` — are injected. `wipeDatabase` is
+// The held document is THREADED IN (read once by the CLI), so these tests need no database at all.
+// Both seams — `closePreWipe` and `wipeDatabase` — are injected. `wipeDatabase` is
 // the whole wipe (drop + recreate + re-migrate + clear trading.env); there is no artifact
 // validate/write phase (Ruling I3).
 function makeDeps(

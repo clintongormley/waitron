@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 
-// PGlite exercises the read and its location predicate; no concurrency or privilege claim is made.
+// What this suite exercises: the read and its location predicate.
 let locationId: string;
 const suite = useVenueDb({
   resetPerTest: false,

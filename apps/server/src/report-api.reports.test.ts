@@ -32,7 +32,7 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the `/reports/daily-close` and `/reports/period`
+// This suite proves the `/reports/daily-close` and `/reports/period`
 // ROUTES — their request/response boundary, the `businessDay`/`from`/`to` screens
 // (missing/malformed → 400), the `report.view` gate + STATUS map, and the value mapping from
 // `computeDailyClose` / `computeVatSummaryForPeriod` / `computeTopSellers` onto the JSON — end to

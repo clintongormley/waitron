@@ -7,10 +7,9 @@ import { buildCardProvider } from "./boot.js";
 
 // Since the Task 12 cutover `buildCardProvider` builds only the DEMO/PREPARE local simulator; every
 // other card sale routes to its reader's own provider through the pool at collect time, so a
-// live/integration till returns `undefined` here. The simulator needs only `db`, so PGlite
-// (superuser, one backend) is the right target — nothing on this path depends on the deployment role
-// or on concurrency. `boot.test.ts` boots against a real container in a non-demo mode, exercising
-// only the `undefined` branch; this file reaches the simulator branch directly.
+// live/integration till returns `undefined` here. The simulator needs only `db`. `boot.test.ts`
+// boots a real migrated venue directory in a non-demo mode, exercising only the `undefined` branch;
+// this file reaches the simulator branch directly.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,

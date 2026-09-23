@@ -18,11 +18,6 @@ RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
 # One copy of boot.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
 # compose's defaults and the QR the restaurant scans.
 BOX_URL="https://waitron.local"
-# The image for the throwaway containers that read and edit the state volume (cat trading.env, find,
-# rm) — none of which cares about the Postgres version. It reuses the db image only so it is ALREADY
-# PRESENT on an installed box and needs no network pull; any pre-pulled image would do. The literal
-# postgres major is coupled across three files (see deploy/Dockerfile's PG_MAJOR note).
-HELPER_IMAGE="postgres:18-alpine"
 
 die() { echo "waitron.sh: $1" >&2; exit "${2:-1}"; }
 
@@ -79,22 +74,14 @@ ensure_docker() {
   if command -v systemctl >/dev/null 2>&1; then as_root systemctl enable --now docker; fi
 }
 
-# 2. The box's one pre-boot secret, generated once and never overwritten or printed. Checked BEFORE
-#    the write so a failed generator cannot leave an empty password the guard then skips for ever.
-ensure_env_password() {
-  [ -f "$WAITRON_DIR/.env" ] && grep -q '^POSTGRES_PASSWORD=' "$WAITRON_DIR/.env" && return 0
-  local secret; secret="$(openssl rand -hex 32 2>/dev/null || true)"
-  [ -n "$secret" ] || die "could not generate POSTGRES_PASSWORD — is openssl installed?"
-  ( umask 077; printf 'POSTGRES_PASSWORD=%s\n' "$secret" >> "$WAITRON_DIR/.env" )
-  unset secret
-}
-
-# .env line editing: set/replace or remove a KEY, preserving 0600 and never touching other lines.
+# .env line editing: set/replace or remove a KEY, preserving 0600 and never touching other lines. It
+# CREATES .env when there is none, which is now the normal first install — the box has no pre-boot
+# secret, so a plain `install` writes nothing here and a branch install writes only the image pins.
 # The rewrite is ATOMIC — the new content is built in a temp file BESIDE .env and renamed onto it only
 # after the write fully succeeds. It never truncates .env in place: a write that failed mid-way there
-# would empty the file and lose POSTGRES_PASSWORD, and the next install would mint a different one,
-# locking the app out of its own cluster. `grep -v` exits 1 when it drops every line, which `set -e`
-# would abort on — hence `|| true`.
+# would empty the file and lose whichever image the box is pinned to, after which a bare
+# `docker compose up -d` moves it onto the published :main with nothing reported anywhere.
+# `grep -v` exits 1 when it drops every line, which `set -e` would abort on — hence `|| true`.
 #
 # Shared by env_set and env_unset: drop every `KEY=` line from .env, then (env_set only, when a value
 # is passed) append `KEY=value`. env_unset passes no value, so nothing is appended.
@@ -112,7 +99,7 @@ env_unset() {
   _env_rewrite "$1"
 }
 
-# 3. compose.yml + .env.example always from the INSTALLED ref, so compose and the image share a
+# 2. compose.yml + .env.example always from the INSTALLED ref, so compose and the image share a
 #    commit. Overwrites an operator's compose edits (rare); the choice is stated aloud.
 fetch_box_files() {
   local ref="$1"
@@ -121,7 +108,7 @@ fetch_box_files() {
   echo "waitron.sh: wrote compose.yml from ${ref} (any local compose.yml edits were overwritten)"
 }
 
-# 4. main pulls every image in compose.yml and records no override; a branch/commit builds both
+# 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
 #    Waitron images on the box from the git context and records the tags in .env so the box stays
 #    on them.
 select_image() {
@@ -226,11 +213,30 @@ if (row && row.environment) process.stdout.write(String(row.environment));
 # refusal with --force-production.
 is_production() {
   local env_out env_rc stamp_out stamp_rc env_value="" stamp_value="" errored=0
-  # trading.env from the state volume via a throwaway container. The __ABSENT__ sentinel separates an
-  # absent file (an unprovisioned box — the read SUCCEEDED and found nothing) from a read that failed
-  # (container/volume error — a non-zero exit): only the latter counts as "cannot establish".
-  if env_out="$(docker run --rm -v waitron_state:/s "$HELPER_IMAGE" \
-    sh -c '[ -e /s/trading.env ] && cat /s/trading.env || echo __ABSENT__' 2>/dev/null)"; then
+  # trading.env from the state volume, read by a throwaway container built from the APP image — the
+  # same shape as the stamp read below: `docker compose run`, so the image is whichever one .env
+  # selects and the volume arrives where compose mounts it. `--entrypoint sh` is not decoration. This
+  # image's ENTRYPOINT is `node /app/node-entry.js`, and `run` APPENDS its arguments to an entrypoint
+  # it was not told to replace, so without the override the container boots a server and exits
+  # non-zero, which lands here as "cannot establish" and refuses every reset as production. Receipt,
+  # measured both directions: the entrypoint case in scripts/waitron-sh.test.mjs. The state directory
+  # comes from the image's own WAITRON_STATE_DIR, and `:?` REFUSES an unset one rather than reading
+  # `/trading.env`, finding nothing and calling a live box unprovisioned. The __ABSENT__ sentinel
+  # separates an absent file (an unprovisioned box — the read SUCCEEDED and found nothing) from a
+  # read that failed, which exits non-zero and counts as "cannot establish". Two tests stand between
+  # them, because a `cat` and a `[ -e ]` both answer "absent" when they are merely BLIND: the
+  # `if`/`else` keeps a file that exists but cannot be read from falling into an `||` and reporting
+  # absence with exit 0, and the `-d`/`-r`/`-x` test ahead of it does the same one level up, where
+  # `[ -e "$d/trading.env" ]` cannot tell a missing file from a directory it cannot look inside. Both
+  # otherwise wipe a production box without --force-production, and this image runs as a non-root
+  # USER (deploy/Dockerfile), so neither is theoretical. A fresh box still resets: the image
+  # pre-creates and chowns the mount path, so its state volume comes up owned by that user (measured
+  # 2026-09-23, a fresh named volume over the chowned path: mode 0700, uid 10001, all three tests
+  # pass). Receipts, run in both directions: the unreadable-trading.env and unreadable-state-directory
+  # cases in scripts/waitron-sh.test.mjs.
+  if env_out="$(docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
+    --entrypoint sh app \
+    -c 'd="${WAITRON_STATE_DIR:?}"; [ -d "$d" ] && [ -r "$d" ] && [ -x "$d" ] || exit 1; if [ -e "$d/trading.env" ]; then cat "$d/trading.env"; else echo __ABSENT__; fi' 2>/dev/null)"; then
     env_rc=0
   else
     env_rc=$?
@@ -312,11 +318,10 @@ cmd_install() {
   local ref="${1:-main}"
   ensure_docker
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
-  ensure_env_password
   fetch_box_files "$ref"
   select_image "$ref"
   cd "$WAITRON_DIR"
-  docker compose up -d
+  docker compose up -d --remove-orphans
   if wait_healthy; then announce_ready; else report_unhealthy; fi
 }
 
@@ -354,22 +359,27 @@ cmd_reset() {
   fi
 
   cd "$WAITRON_DIR"
-  docker compose down
-  # db is removed FIRST and a failed removal ABORTS the reset before backups or state are touched, so
-  # a box whose database cannot be wiped is never left half-wiped and restarted against surviving data
-  # with its secrets already gone. A volume that is already absent is not a failure.
+  docker compose down --remove-orphans
+  # A failed removal ABORTS the reset before the volumes further down this loop or state are touched,
+  # so a box whose wipe half-failed is never restarted against surviving data with its settings
+  # already gone. logs is simply first; nothing depends on the order beyond that. A volume that is
+  # already absent is not a failure. `waitron_db` is deliberately absent from the list: the box runs
+  # no database server, and the volume one used to fill is left on disk rather than removed here (no
+  # backwards-compatibility code before production, CLAUDE.md §3).
   local v
-  for v in db logs backups mailpit print_agent; do
+  for v in logs backups mailpit print_agent; do
     rm_volume "waitron_${v}"
   done
   if [ "$all" -eq 1 ]; then
     rm_volume waitron_state
   else
     # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step.
-    docker run --rm -v waitron_state:/s "$HELPER_IMAGE" \
-      find /s -mindepth 1 -maxdepth 1 ! -name tls -exec rm -rf {} +
+    # Same container shape as the trading.env read above, and `--entrypoint` for the same reason.
+    docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
+      --entrypoint sh app \
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls -exec rm -rf {} +'
   fi
-  docker compose up -d
+  docker compose up -d --remove-orphans
   if wait_healthy; then announce_ready; else report_unhealthy; fi
 }
 

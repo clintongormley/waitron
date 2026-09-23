@@ -5,7 +5,7 @@ import { isAppError } from "@waitron/shared";
 
 // A minimal fiscal-slot contribution: the slot check reads only that the seat is present and
 // selects among the enabled members. The backend/drain seats are never invoked — the slot check
-// throws before any DB write, so this suite needs no Postgres.
+// throws before any DB write, so this suite needs no database.
 const contribution = (id: string): FiscalContribution => ({
   id,
   activationReadiness: "not-applicable",

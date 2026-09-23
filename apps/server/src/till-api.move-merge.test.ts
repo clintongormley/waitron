@@ -25,7 +25,7 @@ import { createTable } from "./tables.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: the move/join/merge verbs are table-service LOGIC (re-point
+// The move/join/merge verbs are table-service LOGIC (re-point
 // `dining_tables` rows, move lines, abandon a tab) whose concurrency behaviour is proven in
 // `working-order.pay-and-dispatch.test.ts`; here we prove only the HTTP surface — the session
 // guard, the malformed-`:id` screen, and the verb's status mapping — which fires at the boundary

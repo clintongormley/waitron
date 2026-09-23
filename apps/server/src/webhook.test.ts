@@ -59,8 +59,8 @@ interface SeededPayment {
 
 /**
  * Seeds a tenant with an open working order, one `initiated` stripe payment (external_ref =
- * sessionId), and a `payments.stripe` credential carrying `webhookSecret`. Run as the PGlite
- * superuser for fixture setup.
+ * sessionId), and a `payments.stripe` credential carrying `webhookSecret`. Written straight to the
+ * venue file for fixture setup.
  */
 async function seedInitiated(
   db: Database,

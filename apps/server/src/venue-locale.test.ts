@@ -6,9 +6,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueLocale } from "./venue-locale.js";
 
-// PGlite, not real Postgres: `readVenueLocale` is a plain two-row read (tenant country + location
-// province) feeding the installed country-pack locale chain, the same LOGIC shape the till/me route
-// mechanics prove on PGlite. It reads under `withTransaction` exactly as production does.
+// `readVenueLocale` is a plain two-row read (tenant country + location province) feeding the
+// installed country-pack locale chain. It reads under `withTransaction` exactly as production does.
 // CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core, so
 // no identity/workforce schema is needed.
 let locationId: string;

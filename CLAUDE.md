@@ -578,9 +578,12 @@ browser test** — most of these rules exist because a test passed while proving
   `scripts/guarded-teardowns.test.ts`.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with Ryuk off an INTERRUPTED run
   leaks containers; `pnpm reap` removes them by label and age. Never a blanket `docker volume prune`, and
-  `docker volume inspect` before any manual `rm`. **Only `bench/sqlite-failover` starts a container
-  now** — it is the one place stamping `com.waitron.reapable` (`bench/sqlite-failover/src/store.ts`),
-  so a package suite that seems to hang is not waiting on Docker.
+  `docker volume inspect` before any manual `rm`. **No suite under `packages/` or `apps/` starts a
+  container — the rigs under `bench/` are the only starters, and not all stamp the label**, so an
+  interrupted run of an unstamped one leaves a container `pnpm reap` will not remove. Which
+  rig is which, and how to clear the unstamped one:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md). A package suite that seems to hang is not
+  waiting on Docker.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
   Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.
@@ -593,10 +596,10 @@ browser test** — most of these rules exist because a test passed while proving
   the same package end in `ENOENT`; and a leftover directory inside the package under a non-dot name
   is measured as SOURCE by the next package run, sinking the ratio for reasons unrelated to the code.
   Inspect the resolved selection first. See [testing-guide.md](docs/developers/testing-guide.md).
-- **Reuse a supplied test container before probing Docker again.** A failing `docker info` is not
-  evidence that a container global setup already started is absent.
-- **A container port-binding timeout needs Docker state as well as database logs.** Save
-  `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the fixture.
+- **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
+  `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
+  fixture. No fixture under `packages/` or `apps/` starts a container any more, so the live subject
+  is under `bench/`. See [testing-guide.md](docs/developers/testing-guide.md).
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline, and
   never a retry as proof of repair.
@@ -836,10 +839,12 @@ before treating an implementation as a rule violation.
   `apps/server/src/mdns.test.ts`; receipt in [workflow-guide.md](docs/developers/workflow-guide.md).
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*` — compose names its project after the
-  directory, so an unqualified `docker compose up` starts a SECOND `db` on the same port.
-- **That dev database is shared and seeded, and moving between worktrees on the same target does
-  not wipe it — so a branch's migrations can fail on the rows already in it.** Migrations carry no
-  data-preservation code (§3); `wa-wt reset demo <name>` rebuilds it, and boot points at that conditionally
+  directory, so an unqualified `docker compose up` starts a SECOND `mailpit` fighting for the fixed
+  1025 and 8025 ports.
+- **The dev venue is a directory of SQLite files on the host, shared by every checkout and seeded,
+  and moving between worktrees on the same target does not wipe it — so a branch's migrations can
+  fail on the rows already in it.** Migrations carry no data-preservation code (§3);
+  `wa-wt reset demo <name>` rebuilds it, and boot points at that conditionally
   (`migrations.dev_constraint_violation`, `WAITRON_ENV=dev` only). Detail, including what that line
   may NOT claim: [workflow-guide.md](docs/developers/workflow-guide.md). Cost: repeated dead boots
   with only a driver stack trace to read.

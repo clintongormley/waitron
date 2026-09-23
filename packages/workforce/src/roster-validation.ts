@@ -2,9 +2,8 @@ import type { WorkTimeRuleset } from "./ruleset.js";
 
 /**
  * The generic roster-guardrail validation engine (plan §6 Slice D2.3, design §3.2). Pure logic over
- * planned shifts, DB-free on purpose: there is no privilege set, no concurrency here, so
- * CLAUDE.md §4's "pick the lighter target" makes this direct/PGlite-free unit-tested, never against a
- * real-role Postgres.
+ * planned shifts, DB-free on purpose, so ./roster-validation.test.ts drives it with hand-built
+ * shift arrays and no database at all.
  *
  * Every threshold is READ FROM the caller-supplied `WorkTimeRuleset` — NO collective-agreement number is
  * hard-coded (the `no-hardcoded-margin` discipline, proved by roster-validation.no-hardcoded-limits

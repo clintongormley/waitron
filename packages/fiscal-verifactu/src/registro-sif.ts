@@ -57,13 +57,13 @@ export interface SifRegistration {
 /**
  * Allocates the next installation number for (NIF, IdSIF) — the upstream node's counter.
  *
- * `insert … on conflict … do update … returning` is a single statement, so the row lock is taken
- * and released by Postgres without a read-then-write window for a second registration to slip
- * into. Reproduces `allocateInvoiceNumber`'s locking approach (packages/db/src/allocate-number.ts,
- * Task 6) for the same reason: at READ COMMITTED, a second concurrent allocator blocks on the row
- * lock and, once the first commits, re-evaluates `proximo_numero + 1` against the FIRST
- * allocator's committed value rather than proceeding from its own stale snapshot — which is
- * exactly the guarantee a read-then-write cannot make.
+ * `insert … on conflict … do update … returning` is a single statement, so the read of
+ * `proximo_numero` and the write of its successor cannot be separated. There is no second
+ * allocator to overlap with either: one write transaction runs on the venue file at a time
+ * (`packages/db/src/tenancy.ts:44`), and the pattern — including the row lock this used to take on
+ * PostgreSQL, its measurement and its control — is stated once, on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`). `allocateInvoiceNumber` (packages/db/src/allocate-number.ts),
+ * which this mirrors, records the same change.
  *
  * The UNIQUE index `registro_sif_instalacion_uq` on `registro_sif` (nif, id_sistema_informatico,
  * numero_instalacion) remains the actual never-reused guarantee — this is the allocator, not the
@@ -71,14 +71,12 @@ export interface SifRegistration {
  * differently-written implementation of this function all bypass the allocator, and none of them
  * bypass the index.
  *
- * PGlite cannot exercise the concurrent-contention case at all: every query against one PGlite
- * instance serialises onto a single backend, so a naive read-then-write implementation would pass
- * there by accident (see allocate-number.test.ts's identical `it.runIf(target.name ===
- * "postgres")` gate). It is covered on real PostgreSQL instead, and directly:
- * `chain.concurrency.test.ts`'s "registerSif's installation-number counter under real contention"
- * fires 20 concurrent registrations across 20 distinct nodes of one obligado and asserts they mint
- * 1..20 exactly once each. Which engine that suite runs on is being changed by the storage switch,
- * so this comment no longer names one.
+ * What exercises the allocator from many callers is `chain.concurrency.test.ts`'s
+ * "registerSif's installation-number counter, from many callers started together": it starts one
+ * registration per node across distinct nodes of one obligado and asserts the numbers minted are
+ * distinct and contiguous from 1. What it does NOT establish is behaviour under a true overlap
+ * inside the statement — the write queue serialises the callers, and that suite's own comment says
+ * so.
  */
 async function mintNumeroInstalacion(
   tx: Transaction,

@@ -65,7 +65,7 @@ export function safeResolve(root: string, relPath: string): string | null {
  * value (this file's no-leak discipline, the same the rest of that code's throwers follow).
  *
  * Exported and split out of `boot.ts` deliberately: reaching a throw inside the full-boot path needs
- * a real container and a mis-built dir, so the guard lives here where `spa-api.test.ts` unit-tests
+ * a whole boot and a mis-built dir, so the guard lives here where `spa-api.test.ts` unit-tests
  * both branches directly and proves the throw by construction (the task brief's Step 7).
  */
 export function assertBuiltApp(dir: string, variable: string): void {

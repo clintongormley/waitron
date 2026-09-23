@@ -313,8 +313,8 @@ describe("mountCatalogueApi — catalogues", () => {
 });
 
 describe("mountCatalogueApi — location menus", () => {
-  // The location's default + member rows are the ONLY state shared across these tests (PGlite is shared
-  // for the file); every catalogue a test creates gets a fresh id. Reset both as the owner so the tests
+  // The location's default + member rows are the ONLY state shared across these tests (one venue
+  // file for the whole file); every catalogue a test creates gets a fresh id. Reset both so the tests
   // are order-independent. `locationId` is set by the shared setup, which runs before this beforeEach.
   beforeEach(async () => {
     await suite.db.execute(sql`delete from location_catalogues where location_id = ${locationId}`);

@@ -6,10 +6,21 @@ import "./errors.js";
  * On LENGTH this agrees with Postgres exactly and narrows nothing: one leading character plus
  * `{0,62}` is 63, which is the `NAMEDATALEN`-derived maximum an identifier can be.
  *
- * The narrowing is the CHARACTER SET. Every name this tool creates is one it also has to embed in a
- * connection string, a SQL DDL statement and a README example, and the intersection of "legal
- * everywhere" is lower-case-and-underscores. A name outside it is refused rather than quoted into
- * working, because a database called `Waitron Prod` is a permanent papercut for whoever operates it.
+ * The narrowing is the CHARACTER SET, and the reason is historical: every database name this tool
+ * created had to be embeddable in a connection string, a SQL DDL statement and a README example, and
+ * the intersection of "legal everywhere" is lower-case-and-underscores. A name outside it was
+ * refused rather than quoted into working, because a database called `Waitron Prod` is a permanent
+ * papercut for whoever operates it.
+ *
+ * This engine has no database name — a venue is a DIRECTORY, resolved by `resolveVenueDir`
+ * (`./cli.ts`) — so no product code calls `assertIdentifier` any more. Checked with
+ * `grep -rn assertIdentifier --include='*.ts' packages apps`: outside `./identifiers.test.ts`
+ * every hit is this file, the barrel re-export in `./index.ts`, or a sentence about it.
+ * Deferred rather than overlooked: removing it is a deletion, not a comment fix, and it reaches
+ * past this file — the suite goes with it, and `provisioning.invalid_identifier` loses its only
+ * thrower while three sibling codes still anchor their "format-check family" wording to it
+ * (`./errors.ts:96`, `:222`, `:239`). That is its own pass; `docs/backlog.md` carries it, under
+ * "Small renames and dead exports the sweep found and could not make".
  */
 const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/;
 
@@ -38,10 +49,11 @@ export function quoteIdent(value: string): string {
 export { quoteLiteral } from "@waitron/shared";
 
 /**
- * A generated role password. Never operator-supplied — base64url's alphabet is `[A-Za-z0-9_-]`,
- * which contains no quote, no backslash and nothing a URL would re-encode, so the same string is
- * safe in a `CREATE ROLE … PASSWORD '…'` literal (which `quoteLiteral` now escapes regardless) and
- * in the `DATABASE_URL` this tool prints.
+ * A generated secret, never operator-supplied — base64url's alphabet is `[A-Za-z0-9_-]`, which
+ * contains no quote, no backslash and nothing a URL would re-encode, so it needs no escaping
+ * wherever it is embedded. It was sized for a `CREATE ROLE … PASSWORD '…'` literal and the
+ * `DATABASE_URL` this tool printed beside it, and this tool has neither now; its one caller in the
+ * tree is the break-glass secret (`apps/server/src/break-glass.ts`).
  *
  * 24 bytes → 32 characters, 192 bits. Sized from the encoding rather than the other way round:
  * base64url of a multiple of 3 bytes carries no `=` padding.

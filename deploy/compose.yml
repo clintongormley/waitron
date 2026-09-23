@@ -1,5 +1,5 @@
-# A Waitron node: the app, its Postgres, its practice email inbox, and the print agent. Everything the
-# node keeps lives in the named volumes below, so `docker volume` is the whole of a box's life.
+# A Waitron node: the app, its practice email inbox, and the print agent. Everything the node keeps
+# lives in the named volumes below, so `docker volume` is the whole of a box's life.
 #
 # Operating this file — including which CLI invocation bypasses the entrypoint and which does not —
 # is deploy/README.md. `deploy/waitron.sh install` installs this once per box; the restaurant never runs it.
@@ -66,50 +66,6 @@ services:
       retries: 3
     # The server's JSON lines go to stdout, so `docker compose logs` works; the cap stops a chatty
     # box filling the disk with a second copy of what the logs volume already rotates.
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: "5"
-
-  db:
-    image: postgres:18-alpine
-    restart: unless-stopped
-    # This stanza IS the box image's postgresql.conf. These three are unread — the replication that
-    # needed them is gone — and they go with the storage switch, NOT on their own. Removing them is
-    # not free: a cluster that still holds a logical replication slot refuses to start once
-    # `wal_level` drops below logical (`FATAL: logical replication slot "x" exists, but "wal_level" <
-    # "logical"`), measured on a throwaway volume 2026-09-19, with the control in the other direction
-    # — a cluster holding publications but no slots restarts clean. A box that ever had a standby
-    # adopted against it carries such a slot, and `deploy/waitron.sh` overwrites this file from the
-    # ref on every install. See `docs/backlog.md` -> "Box image constraints (B3)".
-    command:
-      [
-        "postgres",
-        "-c",
-        "wal_level=logical",
-        "-c",
-        "track_commit_timestamp=on",
-        "-c",
-        "max_slot_wal_keep_size=4GB",
-      ]
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?deploy/.env must set POSTGRES_PASSWORD — waitron.sh install generates it}
-    networks:
-      - internal
-    # Loopback only. The cluster is never LAN-reachable, which is what lets pg_hba stay the image's
-    # default; the app reaches it over the host's loopback because it runs in the host namespace.
-    ports:
-      - "127.0.0.1:5432:5432"
-    # Postgres 18+ keeps its data in a SUBDIRECTORY of /var/lib/postgresql; mounting the volume at
-    # the pre-18 /data path makes the container detect "data in an unused mount" and exit 1.
-    volumes:
-      - db:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 2s
-      timeout: 3s
-      retries: 30
     logging:
       driver: json-file
       options:
@@ -203,7 +159,6 @@ networks:
   internal:
 
 volumes:
-  db:
   state:
   logs:
   backups:

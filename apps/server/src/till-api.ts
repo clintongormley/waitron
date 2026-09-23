@@ -888,10 +888,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           }
           // The `?.definition` (getCanvas's return is optional) then `??` is belt-and-braces: a
           // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
-          // is intentionally untested. The FK `device_profiles(canvas_id) →
-          // canvases(id)` is ON DELETE RESTRICT (device_profiles migration), enforced even on
-          // PGlite: a profile can neither reference a non-existent canvas id (FK violation at insert) nor
-          // keep a reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??`
+          // is intentionally untested. `device_profiles.canvas_id` is declared
+          // `onDelete: "restrict"` (`packages/db/src/schema/device-profiles.ts:46`), the baseline
+          // carries that clause (`packages/db/drizzle/0000_baseline.sql:497`), and every connection
+          // opens with `pragma foreign_keys = on` (`packages/store/src/index.ts:134`) — without that
+          // pragma this engine records a foreign key and never enforces it. So a profile can neither
+          // reference a non-existent canvas id nor keep a reference to a canvas deleted out from
+          // under it. Both halves are measured WITH a control: deleting a referenced canvas is
+          // refused errcode 1811 while an otherwise identical unreferenced one deletes cleanly
+          // (`packages/db/src/schema/device-profiles.fk.test.ts:69`), and an insert naming a canvas
+          // id that does not exist is refused `FOREIGN KEY constraint failed`, errcode 787, where
+          // the same insert with the pragma OFF is accepted (probe on a two-table copy of this key,
+          // `node:sqlite`, Node v26.7.0, 2026-09-23). The `??`
           // still yields a valid form-factor default should that invariant ever be relaxed, and covers a
           // profile whose `canvasId` is NULL (a "default canvas + these capabilities" profile, §5.2).
           canvas = assigned ?? (await getCanvasForFormFactor(tx, device.formFactor));

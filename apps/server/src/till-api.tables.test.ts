@@ -28,10 +28,9 @@ import type { TillConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
-// over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (the FKs, and the concurrency properties
-// that predate the venue file's write queue)
+// These routes are wiring — session guard + isUuid screen + STATUS mapping
+// over the commercial table/tab verbs, which are LOGIC. The table/tab verbs' own proofs (the FKs,
+// and the concurrency properties that predate the venue file's write queue)
 // live in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites; they are not
 // re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
 // into core, so the shared ordered set is the fixture.
@@ -68,7 +67,7 @@ const suite = useVenueDb({
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
     // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
-    // as the PGlite superuser here, as the surrounding venue rows are.
+    // directly here, as the surrounding venue rows are.
     await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
     const [till] = await db
       .insert(tills)
@@ -180,7 +179,7 @@ async function openSession(db: Database): Promise<string> {
   return session.id;
 }
 
-// One app + one logged-in session shared across the table/tab tests. The suite's PGlite db persists,
+// One app + one logged-in session shared across the table/tab tests. The suite's venue file persists,
 // so tables accumulate across tests — which is why every list assertion below is a membership check
 // (`.toContainEqual` / `.find`), never an exact-list assertion that would depend on execution order (§4).
 // `request` attaches the JSON content-type and the session cookie, so each test drives the real
@@ -210,7 +209,7 @@ describe("table + tab routes", () => {
     expect(create.status).toBe(200);
     const { id } = (await create.json()) as { id: string };
     const list = (await (await request("/api/tables")).json()) as unknown[];
-    // Membership, not an exact one-element array: the suite's PGlite db persists across tests, so an
+    // Membership, not an exact one-element array: the suite's venue file persists across tests, so an
     // exact-list assertion would be order-reliant (§4). `.toContainEqual` holds no matter what other
     // table-creating tests have run.
     expect(list).toContainEqual(

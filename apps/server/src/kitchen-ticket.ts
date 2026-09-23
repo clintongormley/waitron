@@ -4,7 +4,7 @@
  * the `print_jobs.payload` the printing outbox moves verbatim. The fire path (Task 4) builds the
  * `KitchenTicket` from the freshly-fired `ticket_items` and hands these bytes to `enqueuePrintJob`;
  * the HTTP layer (Task 5) is elsewhere again. Keeping this a pure function is what lets the whole
- * layout be pinned in a unit test with no PGlite and no container.
+ * layout be pinned in a unit test with no database at all.
  *
  * `scope` is a DISCRIMINATED UNION (controller ruling R-B, which supersedes the spec §3c `courses`
  * sketch):

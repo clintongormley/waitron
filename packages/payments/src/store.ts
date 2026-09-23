@@ -10,7 +10,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { claimLock, nowIso, workingOrders } from "@waitron/db";
+import { nowIso, workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { CardDetails, PaymentState } from "./provider.js";
@@ -443,10 +443,18 @@ const FORWARDABLE_COLUMNS = {
   amount: payments.amount,
 };
 
-/** The predicate both forward-queue reads share — kept as one function so the twins below cannot
- * drift. */
-function forwardableWhere(provider: string) {
-  return and(eq(payments.provider, provider), eq(payments.state, "accepted_offline"));
+/** The forward queue's one read, shared by the two exported entry points below. They differ only
+ * in what the CALLER does with the transaction afterwards — which is the whole of the difference
+ * between a claim and a list here — so the statement itself lives in one place and a column added
+ * to `FORWARDABLE_COLUMNS` or a change of ordering is made once. The `where` IS the queue's
+ * membership test: this provider's payments still in `accepted_offline`. */
+async function selectForwardable(tx: Transaction, provider: string): Promise<ForwardablePayment[]> {
+  const rows = await tx
+    .select(FORWARDABLE_COLUMNS)
+    .from(payments)
+    .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
+    .orderBy(payments.createdAt);
+  return rows.map(withDecimalAmount);
 }
 
 /**
@@ -454,29 +462,30 @@ function forwardableWhere(provider: string) {
  * passes partition the queue and never double-advance a row. State IS the queue (no outbox table).
  * Ordered by `created_at` for a stable pass.
  *
- * The claim is the transaction and stamps nothing: there is no claim column on `payments`, and the
- * caller advances each row through its own state-guarded update before the transaction ends. It
- * was the row lock `claimLock` added; on SQLite that clause does not exist and one writer holds
- * the file at a time, so what partitions the queue is that the selection and the advances commit
- * together. `claimLock` still names the selection a claim, and carries the reasoning in one place
- * (`packages/db/src/job-claim.ts`).
+ * **What makes this a claim is the CALLER's transaction, not anything in the statement.** So what
+ * partitions the queue is that this selection and the state-guarded advances after it commit
+ * together; the same selection taken outside a transaction carries no claim at all. Serialising two
+ * such passes needs the caller's transaction to be a `withTransaction` one, which runs its body
+ * inside `db.withWriteLock` (`packages/db/src/tenancy.ts:44`) and so through the queue that issues
+ * `begin immediate` (`packages/store/src/write-queue.ts:51`). **No caller does that today**:
+ * `FakePaymentProvider.forward` opens a bare `db.transaction`, which is not queued, and nothing in
+ * production calls `forward` at all — so a second concurrent pass is a shape nothing here has been
+ * run against.
  *
- * Shares its predicate with its unlocked twin through `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
- * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so
- * it never holds a row lock across the processor round-trip.
+ * **It must stamp nothing.** There is no claim column on `payments` — state IS the queue — so a
+ * claim built as an UPDATE would have to write a no-op over every row a forward pass merely looked
+ * at. Pinned by `claimAcceptedOffline`'s case in `store.test.ts`, which compares every column
+ * before and after.
+ *
+ * Shares the whole statement with `listAcceptedOffline` through `selectForwardable`. A REAL adapter
+ * uses `listAcceptedOffline` instead, so nothing of its transaction is held across the processor
+ * round-trip; the fake's single-transaction drain has no network call to split around.
  */
 export async function claimAcceptedOffline(
   tx: Transaction,
   provider: string,
 ): Promise<ForwardablePayment[]> {
-  const rows = await claimLock(
-    tx
-      .select(FORWARDABLE_COLUMNS)
-      .from(payments)
-      .where(forwardableWhere(provider))
-      .orderBy(payments.createdAt),
-  );
-  return rows.map(withDecimalAmount);
+  return await selectForwardable(tx, provider);
 }
 
 /** Like `claimAcceptedOffline` but NOT called a claim — the T1 read a real adapter's `forward` uses
@@ -485,18 +494,13 @@ export async function claimAcceptedOffline(
  * state-guarded `settleForwarded`/`declineForwarded` advances in T2 (each matches only a row still
  * `accepted_offline`) plus the race-safe incident dedup — two concurrent forwards listing the same
  * refs is harmless. The fake's single-transaction `forward` keeps using `claimAcceptedOffline`.
- * On this engine the two statements are identical; what differs is which one's transaction the
- * caller goes on to write in — see `claimAcceptedOffline`. */
+ * On this engine it is literally the same statement — `selectForwardable` — and what differs is
+ * which one's transaction the caller goes on to write in; see `claimAcceptedOffline`. */
 export async function listAcceptedOffline(
   tx: Transaction,
   provider: string,
 ): Promise<ForwardablePayment[]> {
-  const rows = await tx
-    .select(FORWARDABLE_COLUMNS)
-    .from(payments)
-    .where(forwardableWhere(provider))
-    .orderBy(payments.createdAt);
-  return rows.map(withDecimalAmount);
+  return await selectForwardable(tx, provider);
 }
 
 /** One in-flight payment as `resolvePending` reads it. `externalRef` is the processor's POLL key

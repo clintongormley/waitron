@@ -59,9 +59,6 @@ describe("computeDailyClose", () => {
     expect(day5.cash.tenderTotal).toBe("121.00");
   });
 
-  // PGlite suffices here, same as the rest of this suite: the anchors are deterministic
-  // arithmetic over immutable rows (businessDayClause's `AT TIME ZONE` computation), with no
-  // deployment-role or concurrency behaviour to exercise — no Testcontainers needed.
   it("Mode-I straddling the day_cutover: VAT on the placing day, cash on the settlement day", async () => {
     // Both instants fall on the SAME UTC (and Madrid-local) calendar date, 2026-08-05, only an
     // hour apart — chosen so a wrong anchor (e.g. cash landing on D1, or VAT on D2) would visibly

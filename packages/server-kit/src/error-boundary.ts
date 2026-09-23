@@ -29,8 +29,8 @@ declare module "hono" {
  *    `status` assigns the code, or 400 when the map omits it, logged at `warn`.
  *  - `fn()` throws anything else → treated as a server fault: logged at `error` under `tag` with only
  *    `codeOf`'s structured classification of the caught value (never its `.message`, which a driver
- *    can load with a connection string), and answered with an opaque `server.internal` 500 that
- *    carries no params and leaks nothing about the cause.
+ *    can load with the failing statement's own text), and answered with an opaque `server.internal`
+ *    500 that carries no params and leaks nothing about the cause.
  *
  * The `warn`-vs-`error` split reflects a caller convention rather than anything this factory checks:
  * an `AppError` reaching the boundary is logged at `warn` and re-emitted at the status its map assigns.

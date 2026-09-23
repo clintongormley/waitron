@@ -38,14 +38,22 @@ afterEach(() => {
 //     try), after $WT_DOCKER_PS_PENDING probes that answer empty — a container with no health
 //     verdict yet, which is what the script's retry loop exists for.
 //   - `compose logs` -> prints the database_ahead line when $WT_AHEAD_LOGS is 1.
-//   - `compose run … --entrypoint node app …` -> prints $WT_DB_STAMP, but ONLY when the command
-//     names a `venue.db`, so a stamp read pointed at the wrong file reads empty and its test fails.
+//   - `compose run` -> the app image, and the stub MODELS ITS ENTRYPOINT: an invocation carrying no
+//     `--entrypoint` prints the boot_failed line and exits 1, the way the real image does (measured;
+//     see the entrypoint case in the reset block). Given the override it answers by what the command
+//     NAMES — $WT_DB_STAMP for a `venue.db`, $WT_TRADING_ENV for a `trading.env` (set that to
+//     "__ABSENT__" to model an unprovisioned box whose state volume has no trading.env) — so a read
+//     pointed at the wrong file reads empty and its test fails. The reset's `find` names neither and
+//     prints nothing.
 //   - `compose exec … psql …` -> exits non-zero. No cluster on a box carries a database named
-//     waitron any more, so a stamp read that still shells out to psql cannot succeed.
-//   - `run … <trading.env read>` -> prints $WT_TRADING_ENV (set it to "__ABSENT__" to model an
-//     unprovisioned box whose state volume has no trading.env); `run … find …` (reset) prints nothing.
+//     waitron any more. Nothing in the script reaches this arm — it is kept as a trap for the ONE
+//     route back it can see: a stamp read rewritten as `docker compose exec … psql`, which fails a
+//     test here instead of reading an empty stamp as "nothing there". A Postgres client
+//     reintroduced any other way is invisible to it — `docker run postgres…` matches neither outer
+//     arm, and `compose run --entrypoint psql` is taken by the `run` arm above — and both fall
+//     through to the stub's closing exit 0.
 //   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless $WT_RM_FAIL names a
-//     volume ("db" makes `docker volume rm waitron_db` fail, to test the abort-on-failure path).
+//     volume ("logs" makes `docker volume rm waitron_logs` fail, to test the abort-on-failure path).
 // Failure knobs model the read/write faults the install and production-safety fixes must survive:
 //   - WT_READ_ERROR: BOTH is_production reads (trading.env cat and the venue stamp) exit non-zero,
 //     so the environment cannot be established — reset must then fail CLOSED.
@@ -103,15 +111,30 @@ case "$1" in
       *" logs "*)
         [ "\${WT_AHEAD_LOGS}" = "1" ] && echo "provisioning.database_ahead: the database is newer" ;;
       *" run "*)
-        # The deployment stamp read: the app image's own node against the venue file on the state
-        # volume. The stamp comes back ONLY when the command names a venue.db, so a reader pointed
-        # at the wrong file reads empty and the production-stamp case fails.
+        # Every throwaway container the script runs against the state volume is built from the APP
+        # image, whose ENTRYPOINT is node /app/node-entry.js. An invocation that does not override it
+        # has its arguments APPENDED to that entrypoint, so the container boots a server instead of
+        # reading the volume: measured 2026-09-23, the server.boot_failed line below on stdout and
+        # exit 1. Modelling that here is what makes a missing --entrypoint fail a test — this arm
+        # used to answer a trading.env read whatever the entrypoint was, so every case stayed green
+        # either way.
+        case "$args" in
+          *--entrypoint*) ;;
+          *) echo '{"errorCode":"server.config_missing","event":"server.boot_failed"}'; exit 1 ;;
+        esac
         [ "\${WT_READ_ERROR}" = "1" ] && exit 1
-        case "$args" in *venue.db*) echo "\${WT_DB_STAMP}" ;; esac ;;
+        # Answered by what the command NAMES, so a read pointed at the wrong file reads empty.
+        case "$args" in
+          *venue.db*) echo "\${WT_DB_STAMP}" ;;
+          *trading.env*) echo "\${WT_TRADING_ENV}" ;;
+        esac ;;
       *" exec "*)
         # Nothing on a box answers psql any more — the storage is a file, and no cluster on it
-        # carries a database named waitron. A stamp read that still shells out to psql therefore
-        # ERRORS, which is what the unprovisioned-box case below fails on.
+        # carries a database named waitron. No shipped command reaches this arm; it is kept as a trap
+        # for the one route back it can see: a stamp read rewritten as docker compose exec ... psql,
+        # which ERRORS here rather than reading an empty stamp as "nothing there". That is ALL it
+        # catches — a client reintroduced as docker run postgres, or as compose run --entrypoint
+        # psql, is taken by another arm or by none, and reads as a clean empty stamp.
         case "$args" in *psql*) exit 1 ;; esac ;;
     esac ;;
   volume)
@@ -122,12 +145,6 @@ case "$1" in
           case "$args" in *"waitron_\${WT_RM_FAIL}"*) exit 1 ;; esac
         fi
         exit 0 ;;
-    esac ;;
-  run)
-    case "$args" in
-      *trading.env*)
-        [ "\${WT_READ_ERROR}" = "1" ] && exit 1
-        echo "\${WT_TRADING_ENV}" ;;
     esac ;;
 esac
 exit 0
@@ -246,10 +263,13 @@ describe("waitron.sh install (published main)", () => {
     expect(r.status).toBe(0);
     const calls = readFileSync(sb.log, "utf8");
     expect(calls).toMatch(/docker compose .*pull/);
-    expect(calls).toMatch(/docker compose .*up -d/);
-    const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
-    expect(env).toMatch(/^POSTGRES_PASSWORD=.+/m);
-    expect(env).not.toMatch(/WAITRON_IMAGE=/);
+    expect(calls).toMatch(/docker compose .*up -d --remove-orphans/);
+    // No .env AT ALL. The box has no pre-boot secret left to mint, and this path records no image
+    // override either, so nothing asks install to write the file. Nothing needs it to exist:
+    // measured 2026-09-23 with `docker compose -f deploy/compose.yml config`, no .env present and
+    // POSTGRES_PASSWORD unset — exit 0 on this file, against exit 1 on the previous one with
+    // `required variable POSTGRES_PASSWORD is missing a value`.
+    expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
     expect(r.stdout).toContain("https://waitron.local/manage/email");
     expect(r.stdout).toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");
@@ -324,19 +344,21 @@ describe("waitron.sh health check", () => {
 });
 
 describe("waitron.sh install preserves .env on a failed write", () => {
-  // The .env rewrite truncated the file in place, so a failed write left it empty and lost
-  // POSTGRES_PASSWORD — the next install would mint a different one and lock the app out of its
-  // cluster. The rewrite must be atomic: write beside .env, rename only on success.
-  it("leaves .env unchanged (password kept) when the atomic rename fails", () => {
+  // The .env rewrite truncated the file in place, so a failed write left it empty. The MECHANISM
+  // under test is unchanged — write beside .env, rename only on success — but what an emptied .env
+  // costs has moved: there is no password in it any more, and what is lost instead is the image the
+  // box is pinned to, after which a bare `docker compose up -d` moves the box onto the published
+  // `:main` with no error anywhere.
+  it("leaves .env unchanged (the pinned image kept) when the atomic rename fails", () => {
     const sb = sandbox({ envWriteFail: true });
-    // A box whose password was minted by an earlier install.
-    writeFileSync(join(sb.boxDir, ".env"), "POSTGRES_PASSWORD=original-secret\n");
+    // A box pinned to a branch image by an earlier install.
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_IMAGE=waitron:previous\n");
     // A branch install rewrites .env (env_set WAITRON_IMAGE); the rename fails.
     const r = run(sb, ["install", "my-branch"]);
     expect(r.status).not.toBe(0);
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
-    // The password survives, so a retry (ensure_env_password returns early) reuses the same one.
-    expect(env).toContain("POSTGRES_PASSWORD=original-secret");
+    // The old pin survives rather than the file being emptied.
+    expect(env).toContain("WAITRON_IMAGE=waitron:previous");
     expect(env.length).toBeGreaterThan(0);
   });
 });
@@ -370,7 +392,7 @@ describe("waitron.sh reset", () => {
   const installedBox = (sb) => {
     // A box that looks installed: compose.yml + .env present.
     writeFileSync(join(sb.boxDir, "compose.yml"), "name: waitron\n");
-    writeFileSync(join(sb.boxDir, ".env"), "POSTGRES_PASSWORD=keepme\n");
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_IMAGE=waitron:pinned\n");
   };
 
   it("refuses when the box was never installed", () => {
@@ -380,20 +402,76 @@ describe("waitron.sh reset", () => {
     expect(r.stderr).toMatch(/no box at/);
   });
 
+  // `fetch_box_files` overwrites the installed compose.yml from the ref on EVERY install, so a box
+  // upgrading past a change that retires a service meets a running container the new file no longer
+  // declares. Measured 2026-09-23 on a throwaway two-service compose project, with the control in
+  // the other direction: after deleting one service, a bare `docker compose up -d` printed
+  // `warning msg="Found orphan containers ([wtorphan-retiree-1]) for this project…"`, exited 0 and
+  // left that container RUNNING; a bare `docker compose down` removed the kept service and left the
+  // orphan up, and could not even remove the network ("Resource is still in use"); the same
+  // `up -d --remove-orphans` stopped and removed it. Without the flag a box that upgrades past the
+  // retirement of the `db` service runs a Postgres container for ever on one warning line nobody
+  // reads. It is asked for on every lifecycle call rather than once, so the NEXT retired service
+  // needs no new code.
+  it("asks compose to remove orphans on every up and down it runs", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).toBe(0);
+    const lifecycle = readFileSync(sb.log, "utf8")
+      .split("\n")
+      .filter((line) => /^docker compose .*\b(up -d|down)\b/.test(line));
+    // A reset runs both verbs, or the filter has gone blind and the loop below checks nothing.
+    expect(lifecycle).toHaveLength(2);
+    for (const call of lifecycle) expect(call).toContain("--remove-orphans");
+  });
+
+  // Every throwaway container this script runs against the state volume runs the APP image, whose
+  // ENTRYPOINT is `node /app/node-entry.js` (deploy/Dockerfile) — so an invocation that does not
+  // override it has its arguments APPENDED to that entrypoint and boots a server instead of reading
+  // the volume. Measured 2026-09-23 against `waitron:dev` (same ENTRYPOINT, same `USER waitron`) on
+  // a throwaway compose project mirroring the app service, both directions: with `--entrypoint sh`
+  // the trading.env read printed `WAITRON_ENV=production` and exited 0 and the state-emptying find
+  // left `tls/` standing and exited 0; WITHOUT it both printed
+  // `{"errorCode":"server.config_missing",...,"event":"server.boot_failed"}` on stdout and exited 1.
+  // What that costs is silence: a failed trading.env read makes `is_production` fail CLOSED, so a
+  // demo box would refuse every reset as production.
+  it("overrides the image entrypoint on every container it runs against the state volume", () => {
+    const sb = sandbox({ tradingEnv: "__ABSENT__" });
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status).toBe(0);
+    const reads = readFileSync(sb.log, "utf8")
+      .split("\n")
+      .filter((line) => /trading\.env|-name tls/.test(line));
+    // Both reads, or the filter has gone blind and the loop below would check nothing.
+    expect(reads).toHaveLength(2);
+    // `docker compose run`, not a bare `docker run`: compose resolves the image from the box's own
+    // .env, so the helper is whichever image the box is actually running. A bare `docker run` would
+    // need an image name hardcoded here again, which is what pinned the retired `postgres:18-alpine`.
+    for (const read of reads) expect(read).toMatch(/^docker compose .* run .*--entrypoint /);
+  });
+
   it("removes the transient volumes, empties state except tls, keeps .env", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
     const calls = readFileSync(sb.log, "utf8");
-    for (const v of ["db", "logs", "backups", "mailpit", "print_agent"]) {
+    for (const v of ["logs", "backups", "mailpit", "print_agent"]) {
       expect(calls).toMatch(new RegExp(`docker volume rm .*waitron_${v}\\b`));
     }
     expect(calls).not.toMatch(/docker volume rm .*waitron_state\b/);
     expect(calls).not.toMatch(/docker volume rm .*waitron_media\b/);
-    // state emptied except tls, via a throwaway container.
-    expect(calls).toMatch(/docker run .*waitron_state.* find \/s .*! -name tls/);
-    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain("POSTGRES_PASSWORD=keepme");
+    // The retired cluster's volume is deliberately left on disk, not removed: no
+    // backwards-compatibility code before production (CLAUDE.md §3), and a stranded volume costs
+    // disk and nothing else. An upgraded box's `waitron_db` therefore survives a reset.
+    expect(calls).not.toMatch(/docker volume rm .*waitron_db\b/);
+    // state emptied except tls, by a throwaway container built from the app image.
+    expect(calls).toMatch(
+      /docker compose .* run .*--entrypoint sh app -c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls/,
+    );
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain("WAITRON_IMAGE=waitron:pinned");
     expect(calls).toMatch(/docker compose .*up -d/);
   });
 
@@ -435,7 +513,7 @@ describe("waitron.sh reset", () => {
     installedBox(sb);
     const r = run(sb, ["reset", "--force-production", "--yes"]);
     expect(r.status).toBe(0);
-    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_db\b/);
+    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_logs\b/);
   });
 
   // C1 (fiscal §5): when neither signal can be read (both error), the environment cannot be
@@ -459,21 +537,92 @@ describe("waitron.sh reset", () => {
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
-    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_db\b/);
+    expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_logs\b/);
   });
 
-  // I3: a failed removal of the db volume must abort the reset BEFORE it removes backups or empties
-  // state — otherwise the box restarts against the surviving database with its secrets already gone.
+  // I3: a failed removal must abort the reset BEFORE it reaches the volumes further down the loop or
+  // empties state — otherwise a box whose wipe half-failed is restarted against surviving data with
+  // its settings already gone. The volume made to fail is the one the loop reaches FIRST (`logs`,
+  // since the retired `db` left the front of it), and both negatives below name something strictly
+  // LATER than it: `backups` is the second entry and the state-emptying find runs after the whole
+  // loop. Fail a later entry instead and the case would prove nothing about aborting.
   it("aborts when a volume removal fails, before touching backups or state", () => {
-    const sb = sandbox({ rmFail: "db" });
+    const sb = sandbox({ rmFail: "logs" });
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).not.toBe(0);
     const calls = readFileSync(sb.log, "utf8");
-    // It tried the db volume (first) but never reached backups or the state-emptying find.
-    expect(calls).toMatch(/docker volume rm .*waitron_db\b/);
+    expect(calls).toMatch(/docker volume rm .*waitron_logs\b/);
     expect(calls).not.toMatch(/docker volume rm .*waitron_backups\b/);
-    expect(calls).not.toMatch(/find \/s .*! -name tls/);
+    expect(calls).not.toMatch(/! -name tls/);
+  });
+});
+
+// The trading.env read is a shell one-liner that SHIPS inside deploy/waitron.sh and runs in the app
+// image, beside the state volume. No case above can see what it does — the docker stub answers any
+// *trading.env* `compose run` with $WT_TRADING_ENV and never executes the one-liner's text — so
+// these extract the shipped text and RUN it under a real `sh` against real directories. The three
+// states are the three `is_production` distinguishes: a value, a clean "nothing there", and a read
+// that failed.
+describe("the trading.env reader inside waitron.sh", () => {
+  const READER = (() => {
+    const m = /-c '([^']*trading\.env[^']*)'/.exec(readFileSync(SCRIPT, "utf8"));
+    if (!m)
+      throw new Error("deploy/waitron.sh no longer reads trading.env from a single-quoted -c");
+    return m[1];
+  })();
+
+  function stateDir() {
+    const d = mkdtempSync(join(tmpdir(), "waitron-state-"));
+    dirs.push(d);
+    return d;
+  }
+
+  const readTradingEnv = (state) =>
+    spawnSync("sh", ["-c", READER], {
+      encoding: "utf8",
+      env: { ...process.env, WAITRON_STATE_DIR: state },
+    });
+
+  it("prints the file a provisioned box carries", () => {
+    const state = stateDir();
+    writeFileSync(join(state, "trading.env"), "WAITRON_ENV=production\n");
+    const r = readTradingEnv(state);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/^WAITRON_ENV=production$/m);
+  });
+
+  it("prints the sentinel and succeeds when the box has no trading.env", () => {
+    const r = readTradingEnv(stateDir());
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("__ABSENT__");
+  });
+
+  // A trading.env that EXISTS but cannot be read is a read that failed, and is_production fails
+  // closed only if it sees a non-zero exit: answering __ABSENT__ here would report an unprovisioned
+  // box and let a production box be wiped without --force-production. The unreadable file is a
+  // DIRECTORY rather than a mode-000 file because mode bits do not stop root, so on a root CI runner
+  // a mode-000 case would pass while proving nothing (CLAUDE.md §1); `cat` fails on a directory for
+  // every user.
+  it("fails, and does not claim absence, when trading.env exists but cannot be read", () => {
+    const state = stateDir();
+    mkdirSync(join(state, "trading.env"));
+    const r = readTradingEnv(state);
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).not.toMatch(/__ABSENT__/);
+  });
+
+  // The same distinction one level UP: `[ -e "$d/trading.env" ]` answers "no such file" for a
+  // directory it cannot look inside, so a state volume the container cannot traverse read as an
+  // unprovisioned box and the irreversible reset proceeded. The state directory here is MISSING
+  // rather than mode 000 because mode bits do not stop root, so on a root CI runner a mode-000 case
+  // is green whether the code is fixed or broken (CLAUDE.md §1). A genuinely fresh box is a
+  // different state and stays resettable: deploy/Dockerfile:85 pre-creates the mount path and chowns
+  // it to the container's user, so its state volume comes up readable and traversable.
+  it("fails, and does not claim absence, when the state directory cannot be read", () => {
+    const r = readTradingEnv(join(stateDir(), "never-created"));
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).not.toMatch(/__ABSENT__/);
   });
 });
 

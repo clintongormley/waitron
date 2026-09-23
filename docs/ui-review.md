@@ -23,11 +23,12 @@ a per-DATABASE artefact (venue ids + the credentials key), not a per-checkout on
 worktree has none and `worktree.py new` does not copy it; `wa-wt` copies the current target's `.env`
 to the other checkouts and follows the log.
 
-The compose `db` service in `docker-compose.yml` is still started (mailpit comes up with it) but it
-no longer holds the dev venue and nothing in the repository reads it — the file's own header says
-so. The reason to keep using `wa-wt` for it is unchanged: an unqualified `docker compose up` from a
-worktree names the compose project after the directory and starts a SECOND `db` on the same port,
-which is what left the stray `waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db`
+`docker-compose.yml` declares one service, `mailpit` — the practice email inbox. No container holds
+any part of the dev venue, so Compose has nothing a reset could clear. The reason to keep using
+`wa-wt` for it is unchanged: an unqualified `docker compose up` from a worktree names the compose
+project after the directory and starts a SECOND copy of that service, fighting for the fixed 1025
+and 8025 ports. The same collision, back when this file declared a Postgres service with a named
+volume, is what left the stray `waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db`
 volume behind. `wa-wt` brings it up under the fixed project `waitron`.
 
 Changing between demo and onboarding REMOVES the venue directory, preserves the shared development

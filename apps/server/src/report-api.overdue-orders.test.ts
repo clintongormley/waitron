@@ -23,7 +23,8 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite exercises the overdue-orders route, permission gate, status mapping and JSON response.
+// What this suite exercises: the overdue-orders route, permission gate, status mapping and JSON
+// response.
 // Its fixture is separate from the overview suite's current-day sales.
 const noopLog: Logger = () => {};
 

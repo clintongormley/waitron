@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { claimLockedRows, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
@@ -258,9 +258,10 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
 
 /**
  * T1/T2 split (spec §7.2): claim due rows in their own short transaction (T1), which commits
- * before the network call — so no row lock or connection is held across the AEAT round-trip while
- * `claimBatch`'s `FOR UPDATE SKIP LOCKED` (Task 8, applied by `claimLockedRows`) is in effect, and `recoverStaleClaims` (Task 8,
- * called at the top of this function) has real committed `enviando` rows to recover after a crash.
+ * before the network call — so the venue file's single writer slot is not held across the AEAT
+ * round-trip (the whole of what makes `claimBatch`'s selection a claim; see its own paragraph), and
+ * `recoverStaleClaims` (Task 8, called at the top of this function) has real committed `enviando`
+ * rows to recover after a crash.
  * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
  * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
  * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk the due
@@ -503,18 +504,16 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
  * attempt's wait from if the submit below fails.
  *
- * `FOR UPDATE OF e SKIP LOCKED` — applied by `claimLockedRows` (@waitron/db), which is where to
- * edit or delete it, not here: two concurrent drainers race over the same rows — e.g. two
- * scheduler instances, or a retried call overlapping a slow one. Without row locking here, both
- * transactions' plain `SELECT` would each see the same
- * `pendiente` rows (READ COMMITTED takes a fresh per-statement snapshot, but neither SELECT blocks
- * on the other), and both would go on to submit the SAME batch to AEAT — a genuine duplicate
- * submission, not merely a wasted query. `FOR UPDATE` alone would already prevent this (the second
- * transaction would block, then re-check its WHERE clause against the now-`enviando` row and
- * exclude it) but would serialise the two claims; `SKIP LOCKED` instead lets the second transaction
- * immediately move past whatever the first already has locked and claim only what remains — the
- * concurrency this drainer needs when scaled beyond one process. Proven under REAL contention (not
- * PGlite, which serialises everything onto one backend) by `drain.concurrency.test.ts`.
+ * **What keeps a second drainer off these rows is THIS TRANSACTION, not a clause in the statement.**
+ * `withTransaction` runs its body inside `db.withWriteLock` (`packages/db/src/tenancy.ts:44`), and
+ * the queue behind that issues `begin immediate` (`packages/store/src/write-queue.ts:51`), so one
+ * writer holds the venue file at a time: a second drainer — another scheduler instance, or a retried
+ * call overlapping a slow one — does not begin until the selection below and its `enviando` stamp
+ * have committed together, and it then matches none of those rows because they are no longer
+ * `pendiente`. What that arranges against is a genuine DUPLICATE SUBMISSION of the same batch to
+ * AEAT, not merely a wasted query. So the SELECT and the stamp must stay inside one
+ * `withTransaction`, and the SELECT must stamp nothing itself: the deployment-environment cases in
+ * `drain.test.ts` go red if it does.
  *
  * **The deployment-environment guard** (Task 6 of the deployment-environment plan; chain-order and
  * starvation properties added in that task's fix round after review). Every SELECTed row's OWN
@@ -523,18 +522,19 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * disagrees, or carries no `entorno` at all (written before migration 0009 added the column), is
  * EXCLUDED from that UPDATE's id list — never included, never flipped, never reverted — and
  * `raiseIncident` reports it on THIS SAME transaction instead. Because the row is simply never
- * touched, no explicit UPDATE is needed to leave it `pendiente`: the `FOR UPDATE` lock this SELECT
- * holds on it is released like any other when the transaction ends, and nothing else here or in
- * any caller ever sets its `estado`. Also never backed off via `backoffMs` like a transient submit
+ * touched, no explicit UPDATE is needed to leave it `pendiente`: the SELECT above stamps nothing,
+ * and nothing else here or in any caller ever sets its `estado`. Also never backed off via
+ * `backoffMs` like a transient submit
  * failure would be — neither refusal is a fact about AEAT's availability, so neither schedules a
  * timer. But the two refusals release differently, and only one of them releases at all:
  * `fiscal.environment_mismatch` is a configuration fact, and correcting `WAITRON_ENV` and
  * restarting is what releases the row. `fiscal.environment_unknown` is not — the row's `entorno`
  * is NULL, and no value of `WAITRON_ENV` ever makes NULL agree with it, so this guard leaves it
- * `pendiente` forever with no configuration change able to release it. The only honest remedies
- * are re-registering the node as a SIF (which starts a fresh chain and leaves this record
- * permanently unfiled) or superuser DDL — see `errors.ts`'s own `fiscal.environment_mismatch`/
- * `fiscal.environment_unknown` doc comments.
+ * `pendiente` forever with no configuration change able to release it. The only honest remedy is
+ * re-registering the node as a SIF (which starts a fresh chain and leaves this record permanently
+ * unfiled): the stored registro's own `entorno` cannot be corrected in place, because
+ * `registros_facturacion` is append-only (`CLAUDE.md` §5) — see `errors.ts`'s own
+ * `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
  *
  * `blockedSifIds` is the chain-order half of the guard, and is exactly as load-bearing as the
  * per-row check above. Rows arrive ordered `(sif_id, secuencia)`, so a refused row's SUCCESSORS on
@@ -556,26 +556,23 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * alone makes its own entorno agree again, and the very next pass reclaims the whole chain in
  * order with no database repair. For a predecessor whose `entorno` is NULL, no configuration
  * change ever makes it agree — the chain stays blocked, pass after pass, until a human
- * re-registers the node as a SIF (a fresh chain, leaving the blocked one permanently unfiled) or
- * runs superuser DDL.
+ * re-registers the node as a SIF (a fresh chain, leaving the blocked one permanently unfiled).
  *
  * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,
- * accepted limitation, not something this task closes. `blockedSifIds` is a plain in-memory `Set`,
- * process-local to this one `drainDue()` call; nothing about a block is written anywhere
- * another drainer's transaction can see, unlike the `rechazado`/`detenido` estados
- * `haltOpenChainClaims` reads (a real, committed fact any drainer's claim observes). So two
- * concurrent drainers CAN still submit a successor over an environment-refused predecessor: drainer
- * A claims and refuses row 1 of chain X, blocking it only in ITS OWN `blockedSifIds`; drainer B,
- * racing the same backlog, has its `SELECT ... SKIP LOCKED` skip A's locked row 1 (A's claim
- * transaction is still open) and successfully claim X's later, correctly-stamped rows instead —
- * B has no way to know A just found this chain's predecessor unsendable, and submits them carrying
- * `Encadenamiento.RegistroAnterior` pointing at a huella A never sent. Narrow (needs the claim
- * window to land exactly on this chain's boundary AND B to claim inside A's still-open T1) and NOT
- * a regression this task introduces — every topology of concurrent drainers had this exact gap
- * before this guard existed at all, for every successor, unconditionally. Closing it for real would
- * need the block to be PERSISTED (a real committed fact, like `haltOpenChainClaims`'s own bulk
- * `detenido` UPDATE) rather than held in one process's memory, which is a deliberate follow-up
- * design decision, not an oversight in this one.
+ * accepted limitation. `blockedSifIds` is a plain in-memory `Set`, process-local to this one
+ * `drainDue()` call; nothing about a block is written anywhere another drainer's transaction can
+ * see, unlike the `rechazado`/`detenido` estados `haltOpenChainClaims` reads (a real, committed
+ * fact any drainer's claim observes). The gap's shape: drainer A refuses row 1 of chain X, blocking
+ * it only in ITS OWN `blockedSifIds`, and a second drainer has no way to know that, so it can
+ * submit X's later rows carrying `Encadenamiento.RegistroAnterior` pointing at a huella nobody
+ * sent. **Whether it is still reachable on this engine is NOT established here.** The reading it
+ * was written against was PostgreSQL's: B's `SELECT ... SKIP LOCKED` stepped past A's locked row 1
+ * while A's T1 was still open. Neither half of that survives — no drainer's transaction overlaps
+ * another's now (see the write-queue paragraph above), and a refused row is left `pendiente` and
+ * sorts FIRST on its own chain, so the next claim re-reads it and refuses it again. Closing the gap
+ * for real would need the block to be PERSISTED (a real committed fact, like
+ * `haltOpenChainClaims`'s own bulk `detenido` UPDATE) rather than held in one process's memory,
+ * which is a deliberate follow-up design decision.
  *
  * The `sif_id not in (...)` exclusion in the WHERE clause exists for the OTHER property the review
  * found missing: without it, a claim window entirely filled by refused rows (`maxPorEnvio` of them
@@ -596,20 +593,16 @@ async function claimBatch(
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
-  // The claim is this transaction, not anything in the statement. `claimLockedRows` no longer adds
-  // a lock clause — SQLite has none, and one writer holds the file at a time — so what keeps a
-  // second drain off these rows is that this selection and the stamps that follow it commit
-  // together inside one `withTransaction`. The helper's own paragraph in `@waitron/db` carries the
-  // reasoning.
-  const claimed = await claimLockedRows<Record<string, unknown>>(tx, {
-    selection: sql`
-      select r.*, e.intentos from envios e
-      join registros_facturacion r on r.id = e.registro_id
-      where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
-        ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
-      order by r.sif_id, r.secuencia
-      limit ${maxPorEnvio}`,
-  });
+  // A plain SELECT that stamps nothing: the claim is this transaction, per the paragraph above.
+  const claimed = (
+    await tx.execute<Record<string, unknown>>(sql`
+    select r.*, e.intentos from envios e
+    join registros_facturacion r on r.id = e.registro_id
+    where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+      ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
+    order by r.sif_id, r.secuencia
+    limit ${maxPorEnvio}`)
+  ).rows;
   // `r.*` reaches no drizzle column mapper, so the registro's JSON columns arrive as text and
   // `primer_registro` as `0`/`1` — see `decodeRegistroRow`. `e.intentos` is not this table's
   // column and passes through untouched.
@@ -645,27 +638,24 @@ async function claimBatch(
   if (sendable.length > 0) {
     const ids = sendable.map((r) => r.id);
     // NOT `= any(${ids})`, and NOT `in (${ids})` either: drizzle-orm's `sql` tag expands a JS
-    // array parameter into an ALREADY-PARENTHESISED placeholder list — `($1, $2, $3)` — for
-    // exactly this `IN` shape, not a single Postgres array value. `any(${ids})` sends
-    // `any(($1, $2, $3))`, which Postgres rejects (42809, "op ANY/ALL (array) requires array on
-    // right side"); `in (${ids})` double-wraps into `in (($1, $2, $3))`, a one-element list
-    // containing a ROW, not three scalars, which fails with 42883 ("operator does not exist: uuid
-    // = record"). Both confirmed live against PGlite while implementing this task. `in ${ids}`,
-    // with no extra parens of our own, is the form drizzle's own expansion is already shaped for.
-    // The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment above relies
-    // on for its own array parameter.
+    // array parameter into an ALREADY-PARENTHESISED placeholder list for exactly this `IN` shape,
+    // so `in ${ids}`, with no extra parens of our own, is the form that expansion is already
+    // shaped for. The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment
+    // above relies on for its own array parameter. What the two other spellings do on THIS engine
+    // is not established here; the refusals recorded when this was written were PostgreSQL's,
+    // confirmed live against PGlite — `any(($1, $2, $3))` rejected 42809 ("op ANY/ALL (array)
+    // requires array on right side"), and `in (($1, $2, $3))` 42883 ("operator does not exist:
+    // uuid = record"), a one-element list holding a ROW rather than three scalars.
     // Named by id alone, with no `and estado = 'pendiente'` of its own — the SELECT above already
     // applied that, and these ids came from it. The distinction `claimRows`' doc comment draws
     // between a caller whose predicate excludes the state it stamps and one whose does not puts
     // this drainer in the first group: while these rows are `enviando` a second drainer's SELECT
     // does not match them at all. Only for as long as they stay that way, though — both
     // `recoverStaleClaims` above and `backoffBatch` below deliberately set them back to
-    // `pendiente`, which is how an abandoned claim becomes somebody else's work. What the lock
-    // covers is the window before this transaction commits, where READ COMMITTED would still show
-    // them as `pendiente` to somebody else. Task F1 removes the lock, and what would close that
-    // window instead is the write queue admitting one writer at a time — a reading of that plan
-    // rather than a line in it (`claimLock`'s own paragraph in @waitron/db says the same), so
-    // decide it deliberately when the step runs.
+    // `pendiente`, which is how an abandoned claim becomes somebody else's work. The window before
+    // this transaction commits, in which the rows are still `pendiente` on disk, is closed by the
+    // write queue admitting one writer at a time rather than by anything in these statements — the
+    // paragraph on `claimBatch` above names the mechanism and where to read it.
     await tx.execute(sql`
       update envios set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
       where registro_id in ${ids}
@@ -959,9 +949,9 @@ async function applyOutcome(
  *
  * `codigoError`/`mensajeError` are cast to `String(...)` explicitly rather than left as the raw
  * `number` `resolveEstadoEfectivo`'s caller reads off `RespuestaLinea.CodigoErrorRegistro` —
- * `codigo_error` (`./schema/envios.ts`) is a `text` column, and relying on whichever Postgres
- * driver happens to be underneath (PGlite here, `pg` in production) to stringify a bound numeric
- * parameter the same way for a `text` column is not a guarantee this file should lean on.
+ * `codigo_error` (`./schema/envios.ts`) is a text column (`label`, from the column vocabulary), so
+ * this file converts the value itself rather than leaving the conversion to the driver. What the
+ * driver would store for a bound numeric parameter against that column is not established here.
  */
 async function setEstado(
   tx: Transaction,

@@ -4,8 +4,8 @@ import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { PromoteRunResult } from "./promote-api.js";
 
-// A UNIT test: the two authorization paths and the delegation to `run` are doubled, not driven
-// against real Postgres. The admin-login path threads `withTransaction` → `loginManagerById` →
+// A UNIT test: the two authorization paths and the delegation to `run` are doubled, never driven
+// against a real database. The admin-login path threads `withTransaction` → `loginManagerById` →
 // `authorizeManager` → `endManagementSession`; each is mocked (the boot.test.ts `importOriginal`
 // idiom) so a test can wire login/authorize to SUCCEED for an admin, THROW for a bad credential, or
 // THROW `authorization.not_permitted` for a non-admin — without a database. `verifyBreakGlass` is

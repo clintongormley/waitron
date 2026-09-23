@@ -18,8 +18,10 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments } from "./schema/service.js";
 
-// PGlite applies the same migration files PostgreSQL does; these cases read the catalog and a few
-// foreign-key refusals, with no role or concurrency dimension.
+// What `useVenueDb` + this set's migrations leave behind, read back out of the pragmas and
+// `sqlite_master`: no tenant column on any table, each table's primary key and its links to each
+// parent's primary key, and every index. Then the other direction — writing through the foreign
+// keys to watch a missing target refused.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,

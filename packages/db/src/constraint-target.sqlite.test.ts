@@ -25,8 +25,8 @@ import { isPgError, isUniqueViolation } from "./unique-violation.js";
 /**
  * Every case here is a REAL refusal from the engine, never a hand-built error: what this file
  * parses is one driver's exact words, and a crafted message would only prove the parser reads
- * itself. `constraint-target.test.ts` beside it drives the same questions through PGlite and a
- * real PostgreSQL, and is the storage swap's step 25 (step group 7).
+ * itself. `constraint-target.test.ts` beside it holds the complement — the cause-chain shapes no
+ * engine emits, which have to be crafted — and its own header states that split.
  */
 const opened: { close: () => Promise<void> }[] = [];
 

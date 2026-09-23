@@ -37,11 +37,11 @@ const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
 
 /**
  * The `envios` rows of ONE seeded fixture's own chain, by that fixture's node. This file shares one
- * PGlite database across every describe block, and `seedPendingEnvios` mints a fresh NODE per call,
- * so scoping a read or a cleanup to the seeded node is what keeps a test's assertions about its own
- * rows rather than about everything any earlier test left behind. (It scoped by tenant until the
- * tenant column went; the node is the chain's owner and gives the same scope.) A query that already
- * joins `registros_facturacion` filters on `r.node_id` directly instead.
+ * database across every describe block, and `seedPendingEnvios` mints a fresh NODE per call, so
+ * scoping a read or a cleanup to the seeded node is what keeps a test's assertions about its own
+ * fixture's rows. (It scoped by tenant until the tenant column went; the node is the chain's owner
+ * and gives the same scope.) A query that already joins `registros_facturacion` filters on
+ * `r.node_id` directly instead.
  */
 const ownChain = (seeded: { nodeId: string }) =>
   sql`registro_id in (select id from registros_facturacion where node_id = ${seeded.nodeId})`;
@@ -1162,7 +1162,8 @@ describe("drain — the deployment-environment guard", () => {
       // secuencia 1 was seeded with entorno: null (`fiscal.environment_unknown`, not
       // `fiscal.environment_mismatch`), and no host configuration ever makes NULL agree. The only
       // way out is re-registering this till as a SIF (a fresh chain, leaving this one permanently
-      // unfiled) or superuser DDL — not a configuration change.
+      // unfiled): the stored registro's own entorno cannot be corrected in place, because
+      // registros_facturacion is append-only (CLAUDE.md §5).
       expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
       expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
 
@@ -1348,6 +1349,6 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
  * What keeps a second drain off these rows is that one writer holds the file at a time and the
  * claim commits with its stamps inside one `withTransaction`; that is
  * `packages/store/src/write-queue.ts`'s subject, and its own cases hold it. There is no
- * `FOR UPDATE`: `claimLockedRows` adds no lock clause — see `claimBatch`'s own paragraph in
- * `./drain.ts`, and `packages/db/src/job-claim.ts`'s doc comment for what replaced it.
+ * `FOR UPDATE` and no clause of any kind doing this: `claimBatch`'s selection is a plain SELECT —
+ * see its own paragraph in `./drain.ts`.
  */

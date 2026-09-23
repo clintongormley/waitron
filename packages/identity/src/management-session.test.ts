@@ -12,10 +12,8 @@ import {
 } from "./management-session.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: this suite tests the lifecycle LOGIC — start/resolve/end, the idle
-// timeout, and the mid-session status re-check. A PGlite connection is superuser holding every
-// grant, so a privilege or trigger assertion would be a false pass here (CLAUDE.md §4); nothing
-// below makes one.
+// This suite tests the lifecycle LOGIC — start/resolve/end, the idle timeout, and the mid-session
+// status re-check.
 
 const suite = useVenueDb({
   resetPerTest: false,

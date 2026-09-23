@@ -21,7 +21,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 // reach the cloud cannot have been superseded without a reachable cloud AND a human promotion).
 //
 // These are pure unit tests over the decoupled function: the peer fetch and the accept-and-persist are
-// injected, so the fence LOGIC is exercised here without a container. The accept dep wraps the REAL
+// injected, so the fence LOGIC is exercised here without a database. The accept dep wraps the REAL
 // `acceptMembershipDocument` (real signature + trust-chain + strictly-newer check over real signed
 // fixtures) with a persist recorder — so "verifies", "higher term" and "equal term" are genuinely
 // exercised, not faked; the real DB persist is proven at boot in `boot.reconcile.test.ts`.

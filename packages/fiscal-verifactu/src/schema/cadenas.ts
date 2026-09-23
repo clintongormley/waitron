@@ -4,15 +4,16 @@ import { count, id, label, nodes, now, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
- * The chain head — MUTABLE, unlike everything it points at. One row per node, row-locked with
- * FOR UPDATE during append (node-id rekey, 2026-08-03: the chain owner moved from till to node —
- * the SIF is the node, #33).
+ * The chain head — MUTABLE, unlike everything it points at. One row per node (node-id rekey,
+ * 2026-08-03: the chain owner moved from till to node — the SIF is the node, #33). It took a
+ * `FOR UPDATE` row lock during append until the engine change; `selectHead` (`../chain.ts`) is
+ * where that clause went, and why.
  *
  * The predecessor's serie/número/fecha are deliberately NOT denormalised here. Building the
- * four-part Encadenamiento pointer costs one join to `ultimo_registro_id` under a lock we are
- * already holding, whereas a copy on this mutable row would be a second source of truth for four
- * values that must match the immutable row exactly — and the mutable copy is the one that can
- * drift.
+ * four-part Encadenamiento pointer costs one read of `ultimo_registro_id`'s row inside the
+ * transaction the append already holds, whereas a copy on this mutable row would be a second
+ * source of truth for four values that must match the immutable row exactly — and the mutable copy
+ * is the one that can drift.
  */
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and

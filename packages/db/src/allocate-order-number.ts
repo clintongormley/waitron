@@ -13,16 +13,21 @@ import { workingOrderCounters } from "./schema/working-order-counters.js";
  * on. There is no read-then-write window: the increment and the read are the
  * same statement.
  *
- * Concurrency safety is the upsert's, extended from allocate-number.ts's
- * plain-UPDATE guarantee (see its doc comment). Two concurrent allocators for
- * the same node that both race to CREATE the row settle via the
- * speculative-insert path — exactly one insert wins with 1, the other blocks on
- * the winner's uncommitted index tuple, then sees the conflict and takes DO
- * UPDATE to 2; once the row exists, concurrent allocators serialise on its row
- * lock and each re-evaluates `next_number + 1` against the previous committed
- * value. Distinct numbers, never a duplicate. Proven against real PostgreSQL by
- * the "under concurrency" suite at the bottom of allocate-order-number.test.ts —
- * PGlite serialises onto one backend and so cannot observe this at all.
+ * Concurrency safety is the write queue's, the same as allocate-number.ts's
+ * (see its doc comment). On PostgreSQL two allocators racing to CREATE the row
+ * settled through the speculative-insert path, and once the row existed they
+ * serialised on its row lock. Neither happens here, because there is no overlap
+ * to settle: one write transaction runs on the venue file at a time —
+ * `withTransaction` runs its body inside `db.withWriteLock`
+ * (`packages/db/src/tenancy.ts:44`), and `packages/store/src/write-queue.ts`
+ * queues each body behind the previous one's `commit` — so the second
+ * allocator's statement does not run until the first's row is committed, and it
+ * re-evaluates `next_number + 1` against that committed value. Distinct numbers,
+ * never a duplicate. What overlapping callers therefore demonstrate is the queue
+ * serialising them, in `allocateOrderNumber under overlapping callers` at the
+ * bottom of allocate-order-number.test.ts; the receipt for the queue itself,
+ * with a control in the other direction, is `racePair` in
+ * `packages/catalogue/test/fixtures.ts`.
  *
  * Unlike allocate-number.ts, this returns `next_number` directly (1 on the
  * first call) rather than the pre-increment value: an order number is a plain

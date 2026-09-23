@@ -8,7 +8,7 @@ import { qrModules } from "./qr-matrix.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-// `formatReceipt` is a PURE byte producer (design §3b) — no DB, no container, no fiscal state — so
+// `formatReceipt` is a PURE byte producer (design §3b) — no database, no fiscal state — so
 // these are ordinary unit tests. The suite reads a payload's text two ways: `printedLines`
 // (`decode-ticket.ts`, via `previewPrintJob`) decodes each byte through the character-set TABLE the
 // job selects, so accented text and the € symbol come back as themselves — the printer-layout tests

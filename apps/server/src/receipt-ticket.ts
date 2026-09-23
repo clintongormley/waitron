@@ -5,7 +5,7 @@
  * printing outbox moves verbatim. The counter-print path (Task 5) reads the sale, supplies the issuer
  * identity and the receipt trim, and hands these bytes to `enqueuePrintJob`; the HTTP layer is
  * elsewhere again. Keeping this a pure function is what lets the whole layout be pinned in a unit test
- * with no PGlite and no container.
+ * with no database at all.
  *
  * FISCAL SAFETY (spec §4). This function READS a `TillSaleResult` and produces bytes ONLY. It touches
  * no fiscal table, calls no filing/alta code, and imports nothing from `@waitron/core` or the alta

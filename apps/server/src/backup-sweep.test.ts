@@ -28,7 +28,7 @@ import type { StorageBackend, StoredObject } from "./storage-backend.js";
 // builder, so the pure-DI fan-out/assembly tests hand in this inert stand-in.
 const NO_DB = {} as Database;
 
-// A fixed manifest, no journal read — keeps the fan-out/assembly tests off a real container.
+// A fixed manifest, no journal read — keeps the fan-out/assembly tests off a real database.
 const FIXED_MANIFEST: BackupManifest = {
   manifestVersion: 1,
   createdAt: "2026-09-05T00:00:00.000Z",

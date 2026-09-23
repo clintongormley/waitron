@@ -89,8 +89,8 @@ async function setupVenue(): Promise<Seeded> {
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
-  // superuser here, as the surrounding venue rows are (fixture setup).
+  // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
+  // directly here, as the surrounding venue rows are (fixture setup).
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const [till] = await db
     .insert(tills)
@@ -955,9 +955,8 @@ describe("listTablesWithState (occupancy)", () => {
   });
 });
 
-// KDS-2 ring-time course resolution (design §2b). PGlite, not real Postgres: this is resolver/CRUD logic
-// (a plain read-then-insert of a nullable column), no privilege or concurrency dimension — the lighter
-// target per CLAUDE.md §4, as the surrounding tab suite already uses.
+// KDS-2 ring-time course resolution (design §2b). Resolver/CRUD logic — a plain read-then-insert of
+// a nullable column.
 type RoundLine = { productId: string; quantity: string; courseId?: string | null };
 /** A round line for `addTabRoundWith`; `courseId` OPTIONAL — absent = no override (fall to the product
  *  default), present (incl. `null`) = the line-level override the resolver honours. */

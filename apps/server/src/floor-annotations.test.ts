@@ -22,7 +22,7 @@ import "./errors.js";
 // and the deletion proof (a descriptor with `floorAnnotations` omitted yields no badge) live in
 // apps/server — a module cannot import apps/server, so the SEAM they exercise (core's read-model calling
 // the module's annotator) can only be pinned here. The pure per-table annotator scenarios live in
-// `@waitron/bookings`'s `floor.test.ts`. PGlite is enough: a correlated read, no privilege/concurrency.
+// `@waitron/bookings`'s `floor.test.ts`. What is under test here is a correlated read.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,

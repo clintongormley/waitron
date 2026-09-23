@@ -600,9 +600,9 @@ jobs:
   # not at runtime); the shard's own threshold check fires on its partial coverage unless overridden;
   # and `--merge-reports` re-runs NOTHING, so the merge job below needs no Docker.
   #
-  # Each shard re-pays the install overhead, so the speed-up is sub-linear. maxWorkers: 4 and the
-  # REQUIRE_DOCKER / TESTCONTAINERS_RYUK_DISABLED pair are exactly as the un-sharded job had them; the
-  # `heavy` gate is unchanged and now feeds three jobs (these shards plus the merge) rather than one.
+  # Each shard re-pays the install overhead, so the speed-up is sub-linear. maxWorkers: 4 is exactly
+  # as the un-sharded job had it; the `heavy` gate is unchanged and now feeds three jobs (these shards
+  # plus the merge) rather than one.
   #
   # `ci` needs BOTH this matrix job AND test-heavy-merge: if a shard fails, the merge job's `needs` is
   # unsatisfied so it SKIPS, and `ci` counts a skip as a pass — so a shard failure is caught only
@@ -623,13 +623,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    env:
-      # NOTHING READS THIS ANY MORE. It was read by `packages/db/src/testing/harness.ts`, which this
-      # branch deleted along with the rest of the PostgreSQL test harness;
-      # `grep -rn REQUIRE_DOCKER packages apps scripts bench` on 2026-09-22 returns no line at all.
-      # Left set rather than removed here because retiring the real-Postgres shard layout is its own
-      # piece of work; see `docs/backlog.md`.
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -655,8 +648,6 @@ jobs:
       # both flags were silently dropped, each shard ran the FULL suite and wrote the default `blob.json`,
       # and `if-no-files-found: error` on the upload is what caught it (run 33906337559, all six shards).
       - name: Run the db shard
-        env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/db" test:shard \
@@ -679,9 +670,9 @@ jobs:
   # The coverage GATE for packages/db. The three test-heavy shards each emit a PARTIAL-coverage blob;
   # this job merges them and enforces the package's real thresholds on the TOTAL. It runs no tests and
   # boots no container — `vitest --merge-reports` (in `test:merge`) replays results and coverage from
-  # the blobs — so it carries neither REQUIRE_DOCKER nor a Docker env, only an install, the artifact
-  # download and the merge. It gates on the SAME `heavy` output as its shards, so it skips exactly when
-  # they do. See test-heavy above for why `ci` must name both this job and the matrix it depends on.
+  # the blobs — so it needs only an install, the artifact download and the merge. It gates on the SAME
+  # `heavy` output as its shards, so it skips exactly when they do. See test-heavy above for why `ci`
+  # must name both this job and the matrix it depends on.
   test-heavy-merge:
     timeout-minutes: 15
     needs: [changes, test-heavy]
@@ -725,13 +716,6 @@ jobs:
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
   # contention artifact a runner it has to itself does not have — and each shard has a runner to itself.
   #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy, and for the same reason as
-  # test-heavy: NEITHER IS READ ANY MORE. Nothing under apps/server starts a container — on
-  # 2026-09-23 `grep -rn 'from "testcontainers"' packages apps` and the same grep for
-  # `@testcontainers` return no line at all, and apps/server/scripts/dev-setup.test.ts, which used
-  # to be one of the two that did, opens two SQLite files under os.tmpdir() and says so at its own
-  # head. Left set rather than removed here for the same reason as on test-heavy: retiring the
-  # real-Postgres shard layout is its own piece of work; see `docs/backlog.md`.
   # `test-server-merge` below is the coverage gate.
   test-server:
     timeout-minutes: 15
@@ -742,8 +726,6 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -764,8 +746,6 @@ jobs:
       # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
       # (see test-heavy's shard step for why a bare `--` silently drops both flags).
       - name: Run the server shard
-        env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
@@ -826,17 +806,11 @@ jobs:
   # its bin-mates. Unlike apps/server this needed no config change: fiscal-verifactu already
   # multi-forks (packages/fiscal-verifactu/vitest.config.ts). See FISCAL_VERIFACTU_PACKAGE in
   # scripts/changed-scope.mjs.
-  #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the other shards carry them, and as unread here
-  # as they are there — this package's suites all reach a database through @waitron/db's useVenueDb,
-  # which opens SQLite files under os.tmpdir(). See the note on test-heavy's own REQUIRE_DOCKER.
   test-fiscal-verifactu:
     timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -856,8 +830,6 @@ jobs:
       # The guard first, same reason as every shard: pnpm answers "nothing to do" with exit 0 and a
       # line on stdout, so a shard whose filter selects nothing reports success having run no tests.
       - name: Run the fiscal-verifactu shard
-        env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
@@ -875,11 +847,6 @@ jobs:
   #
   # What isolating it does buy with certainty is that a wedged browser can no longer take twelve
   # other packages' results down with it — before this, the whole shard reported nothing.
-  #
-  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, unlike the other two shards: packages/ui
-  # drives Chromium through Playwright and touches no database. Its only runtime dependency is
-  # `lit`. (On 2026-09-22 `grep -rn REQUIRE_DOCKER packages apps scripts bench` answers nowhere at
-  # all — see the note on test-heavy's own REQUIRE_DOCKER.)
   test-ui:
     timeout-minutes: 15
     needs: changes
@@ -953,9 +920,6 @@ jobs:
   # here proves it would — see TILL_PACKAGE in scripts/changed-scope.mjs for the honest framing. What
   # it buys with certainty is that a second wedged browser can never take the other packages'
   # test-light results down with it.
-  #
-  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui: apps/till drives
-  # Chromium through Playwright and touches no database.
   test-till:
     timeout-minutes: 15
     needs: changes
@@ -1009,9 +973,6 @@ jobs:
   # and so has never hung it, and nothing here proves it would — see DASHBOARD_PACKAGE in
   # scripts/changed-scope.mjs for the honest framing. What it buys with certainty is that a third
   # wedged browser can never take the other packages' test-light results down with it.
-  #
-  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui and test-till:
-  # apps/dashboard drives Chromium through Playwright and touches no database.
   test-dashboard:
     timeout-minutes: 15
     needs: changes
@@ -1065,9 +1026,6 @@ jobs:
   # test-light and so has never hung it, and nothing here proves it would — see SETUP_PACKAGE in
   # scripts/changed-scope.mjs for the honest framing. What it buys with certainty is that a fourth
   # wedged browser can never take the other packages' test-light results down with it.
-  #
-  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui/till/dashboard:
-  # apps/setup drives Chromium through Playwright and touches no database.
   test-setup:
     timeout-minutes: 15
     needs: changes
@@ -1160,8 +1118,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1192,7 +1148,6 @@ jobs:
 
       - name: Run the bookings shard
         env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1201,15 +1156,12 @@ jobs:
           pnpm --filter "@waitron/bookings" test:coverage
 
   # Media splits into a database project and a Chromium one, so its runner installs both test
-  # prerequisites. The database half opens SQLite files through useVenueDb; the REQUIRE_DOCKER below
-  # is unread, as on test-heavy.
+  # prerequisites. The database half opens SQLite files through useVenueDb.
   test-media:
     timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1240,7 +1192,6 @@ jobs:
 
       - name: Run the media shard
         env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1250,15 +1201,12 @@ jobs:
 
   # The Stripe payment module, like bookings, owns both a database-backed node project and a Chromium
   # dashboard-panel project. Its own runner keeps Chromium out of the database bins and gives failures
-  # a package-specific job result. The node half opens SQLite files through useVenueDb; the
-  # REQUIRE_DOCKER below is unread, as on test-heavy.
+  # a package-specific job result. The node half opens SQLite files through useVenueDb.
   test-payments-stripe:
     timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1289,7 +1237,6 @@ jobs:
 
       - name: Run the payments-stripe shard
         env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1304,8 +1251,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1336,7 +1281,6 @@ jobs:
 
       - name: Run the payments-sumup shard
         env:
-          TESTCONTAINERS_RYUK_DISABLED: "true"
           DEBUG: "vitest:browser:pool"
         run: |
           set -euo pipefail
@@ -1353,8 +1297,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1375,7 +1317,6 @@ jobs:
         env:
           SCOPE: ${{ needs.changes.outputs.scope }}
           PACKAGES: ${{ needs.changes.outputs.packages }}
-          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
           # `set -f` for the same reason as the `changes` job's gates step: `$PACKAGES` is unquoted
@@ -1430,8 +1371,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true'
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1452,7 +1391,6 @@ jobs:
         env:
           SCOPE: ${{ needs.changes.outputs.scope }}
           PACKAGES: ${{ needs.changes.outputs.packages }}
-          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
           set -f

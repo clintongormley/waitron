@@ -22,9 +22,9 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: the `POST /api/tables/:id/status` route is wiring — session guard +
-// isUuid screen + STATUS mapping over the operator `setTableStatus` verb, which is LOGIC (no privilege
-// or concurrency behaviour to prove here). The verb's own real-PG proofs (the reset trigger) live in
+// The `POST /api/tables/:id/status` route is wiring — session guard +
+// isUuid screen + STATUS mapping over the operator `setTableStatus` verb, which is LOGIC. The verb's
+// own proofs (the reset trigger) live in
 // `set-table-status.test.ts` and `clear-table-status.test.ts`; they are not re-proven at the HTTP layer.
 let cfg: TillConfig;
 let ana: { id: string };

@@ -523,10 +523,9 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
 /**
  * Remove the dev venue directory, so the next run provisions from scratch.
  *
- * This is what `pnpm dev:reset` used to get from `docker compose down -v`: the throwaway
- * preproduction data lived in a Docker volume then and lives in this directory now, so the wipe had
- * to move with it — without it, `devSetup` meets its own "already holds a venue" refusal forever and
- * the developer has no sanctioned way to start over.
+ * This is the whole of `pnpm dev:reset`'s wipe: the throwaway preproduction data lives in this
+ * directory and nowhere else. Without it, `devSetup` meets its own "already holds a venue" refusal
+ * forever and the developer has no sanctioned way to start over.
  *
  * `rm -rf` of the whole directory rather than of `venue.db`: the engine keeps write-ahead sidecars
  * beside each file, and a venue file removed while its `-wal` stays behind is the shape

@@ -5,8 +5,7 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// PGlite, not real Postgres: the accessor round-trip is pure SQL logic (upsert/read of a
-// singleton), so it is the right, lighter target here.
+// The accessors are pure SQL logic — upsert and read of a singleton.
 
 // A fixed v4 UUID standing in for the primary's nodeId (the mirror's sync origin).
 const PRIMARY_NODE = "11111111-1111-4111-8111-111111111111";

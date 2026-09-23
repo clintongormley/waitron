@@ -178,7 +178,7 @@ describe("computeOverdueOrders", () => {
     // canonical spelling the column now holds.
     const tiedQueuedAt = new Date(Date.now() - 11 * 60_000).toISOString();
     // Fire line_no 2 (station "Barra") FIRST and line_no 1 (station "Cocina") SECOND — insertion order
-    // is the OPPOSITE of line_no order. If the reduction ever fell back to insertion/PGlite-scan order
+    // is the OPPOSITE of line_no order. If the reduction ever fell back to insertion or scan order
     // instead of the query's own `queued_at, line_no` ORDER BY, this would report "Barra"; the
     // correct, line_no-ordered answer is "Cocina" (line_no 1).
     await seedFiredLine(

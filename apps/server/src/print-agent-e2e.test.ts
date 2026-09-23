@@ -27,14 +27,14 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 // The whole print-agent path, in one process and with no real hardware: the REAL server routes
-// (mountPrintApi + mountJoinApi, on PGlite) driven by the REAL agent loop (createAgent) whose fetch is
+// (mountPrintApi + mountJoinApi, over a real venue file) driven by the REAL agent loop (createAgent) whose fetch is
 // routed into `app.request`, over a REAL RoutingTransport that dispatches by transport — a real
 // NetworkTcpTransport to a loopback TCP listener for the network_tcp printer, and a FakeSink standing
 // in for the local device node of the usb printer. The fake `Host` reports the usb serial in its
 // `visibleDevices` inventory (the eligibility key the server matches, §5) and `resolve`s a claimed
 // job's `localKey` to a device target. This lives in apps/server because packages never import apps —
 // the agent package cannot reach the routes it must be proven against, so the wiring that joins them
-// is proven here. PGlite (not real Postgres) is enough: this asserts the request/response flow and the
+// is proven here. What it asserts is the request/response flow and the
 // byte path (register → pull-with-inventory → deliver → done → revoke-halts); the derived
 // authorization boundary is proven in `print-api.printer-wiring.test.ts` and
 // `packages/printing`'s `runtime.eligibility.test.ts`.

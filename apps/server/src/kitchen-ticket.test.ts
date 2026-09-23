@@ -5,7 +5,7 @@ import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import type { KitchenLayout, KitchenTicket } from "./kitchen-ticket.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
-// The formatter is a PURE byte producer (design §3c) — no DB, no container — so these are ordinary
+// The formatter is a PURE byte producer (design §3c) — no database at all — so these are ordinary
 // unit tests. We decode the ESC/POS payload back to its Latin-1 text (the encoding escpos.ts uses,
 // pinned in escpos.test.ts) to assert the human-readable content, and check the raw cut bytes at the
 // tail. GS V 0 (full cut) is 0x1D 0x56 0x00 (escpos.ts / escpos.test.ts); feed precedes it, so the

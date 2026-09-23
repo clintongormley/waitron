@@ -9,9 +9,6 @@ import { locations } from "./schema/tenants.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// PGlite, not real Postgres: this proves the query + null-filter logic (the read skips a keyless row,
-// the write stamps the column).
-
 // There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
 // build the location the node FKs first, exactly as seedNode's own suite does.
 // Drizzle rather than raw SQL, for two things the raw insert relied on PostgreSQL for. Run against

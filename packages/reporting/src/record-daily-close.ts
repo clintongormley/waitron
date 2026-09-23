@@ -256,9 +256,11 @@ interface ChainHead {
  * The lock was never the only thing keeping two closes off one sequence number. Both unique
  * indexes survive on this engine — `daily_closes_sequence_key` on `(node_id, sequence_no)` and
  * `daily_closes_business_day_key` on `(node_id, business_day)`, declared at
- * `packages/db/drizzle/0000_baseline.sql:665-666`. That they are DECLARED is what I checked; no
- * suite in this package could be run to see one refuse a duplicate, because every one of them
- * currently dies in `seedVenue` on raw PostgreSQL SQL the storage swap has not reached.
+ * `packages/db/drizzle/0000_baseline.sql:665-666` — and each is now watched REFUSING a real
+ * duplicate, by `surfaces a sequence-key collision RAW, not masked as close.already_closed` and by
+ * `reports the business-day key as the table and columns insertClose recognises`, both in
+ * `record-daily-close.test.ts`. Each drives the refusal through the engine rather than crafting an
+ * error, and reads back which index collided.
  */
 async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {
   const [row] = await tx
