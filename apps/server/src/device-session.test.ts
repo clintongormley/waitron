@@ -16,8 +16,9 @@
  * this driver. It is also what encodes the JSON and list columns, whose `::jsonb`, `::uuid` and
  * `array[...]` spellings are syntax this parser refuses (`unrecognized token: ":"`).
  *
- * The "(real Postgres)" in the five describes below is stale and is left for the branch's single
- * rename sweep, the choice `apps/server/src/device.test.ts:24` records.
+ * The "(real Postgres)" in the five describes below is stale — there is one engine and it is
+ * `node:sqlite`. Those are describe NAMES, so correcting them changes test names rather than a
+ * comment, and it is left to a deliberate rename.
  */
 import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";

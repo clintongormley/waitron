@@ -10,7 +10,7 @@ const noopLog: Logger = () => {};
 
 // A focused Hono-level test of the mount ORDER `boot.ts` uses — APIs first, then the two SPAs,
 // dashboard (`/manage`) before till (`` = root catch-all, mounted LAST). A full `startServer`
-// needs a database and a real container (see `boot.test.ts`); this proves the routing CONTRACT that
+// needs a migrated venue directory (see `boot.test.ts`); this proves the routing CONTRACT that
 // actually matters without one: the till's root catch-all must not shadow the APIs or `/manage`.
 // It is an ORDERING REGRESSION GUARD — it may pass on first write (Task 2's `mountSpa` is correct),
 // and its value is that it goes RED if a future edit registers the catch-all before an API or

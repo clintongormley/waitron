@@ -45,12 +45,13 @@ import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// PGlite is the correct target: print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx —
-// no privilege or concurrency dimension (station_printers' PK and FKs are proven against real Postgres
-// in Task 1's station-printers.test.ts, enqueuePrintJob's outbox shape in packages/printing's
-// outbox.test.ts). The load-bearing invariants HERE are logical: the order-scope dedupe, round
-// independence (ruling R-D), and never-block (no socket). PGlite is in-process WASM, so "no socket
-// opened" is a clean structural proof, exactly as outbox.test.ts relies on.
+// Print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx, and the invariants HERE are
+// logical: the order-scope dedupe, round independence (ruling R-D), and never-block (no socket).
+// station_printers' PK and FKs are proven in packages/db's station-printers.test.ts,
+// enqueuePrintJob's outbox shape in packages/printing's outbox.test.ts. `node:sqlite` reaches the
+// venue file in-process, so the database access opens no socket of its own — which is what keeps
+// "Socket.prototype.connect was never called" a clean structural proof rather than one muddied by
+// driver traffic, exactly as outbox.test.ts relies on.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -129,8 +130,11 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 /** Read the print-job outbox. `payload` is typed by the shared `binary` column, which declares a
- * Uint8Array; this suite runs on PGlite, whose own bytea parser returns one anyway, so the target
- * cannot tell the column's mapping from the driver's (measured in packages/db columns.test.ts). */
+ * Uint8Array. The column is a BLOB and `node:sqlite` hands a BLOB back as a plain Uint8Array
+ * already, so nothing here can tell the column's read mapping from the driver's — the same blind
+ * spot PGlite's bytea parser gave the PostgreSQL version of this file. What survives is that the
+ * BYTES round-trip. The mapping itself is pinned in
+ * `packages/db/src/schema/columns.test.ts:173`, which is where that file's line 624 points too. */
 async function printJobsFor(
   tx: Transaction,
 ): Promise<{ id: string; printerId: string; status: string; payload: Uint8Array }[]> {

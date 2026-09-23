@@ -1,6 +1,6 @@
-// A pure Hono unit test — NO database. apps/server's vitest globalSetup boots one shared Postgres
-// container for the package's real-PG suites, but this suite touches none of it: it mounts the gate
-// on a bare Hono app and drives it with `app.request(...)`, so nothing here reads `db`.
+// A pure Hono unit test — NO database: it mounts the gate on a bare Hono app and drives it with
+// `app.request(...)`, so nothing here reads `db`. The shared-container setup this header used to
+// describe is gone; `apps/server/vitest.config.ts` names no `globalSetup` at all.
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { readOnlyGate } from "./read-only-gate.js";

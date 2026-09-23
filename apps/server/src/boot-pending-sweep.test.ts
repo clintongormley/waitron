@@ -9,11 +9,11 @@ import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
 
 // `withPendingSweep` is a PURE wrapper over the loop's `pass` — a stubbed `inner` and a fake provider
-// enumerator suffice (no container). It runs each connected card provider's `resolvePending` around
+// enumerator suffice (no database). It runs each connected card provider's `resolvePending` around
 // the singleton fiscal pass and returns the INNER report verbatim, so the `/health` contract is
 // untouched by a sweep that runs, logs, or throws. `connectedCardProviderSweep` (the enumerator boot
-// wires in) is the credential-gated part that DOES need a database — its own describe below uses
-// PGlite and a fake pool.
+// wires in) is the credential-gated part that DOES need a database — its own describe below uses a
+// real venue file and a fake pool.
 
 const REPORT: PassReport = { duties: [], nextDueAt: null };
 
@@ -189,10 +189,9 @@ describe("withPendingSweep", () => {
   });
 });
 
-// `connectedCardProviderSweep` gates on a SEALED CREDENTIAL, so it needs a real (PGlite) database +
-// a `tenant_credentials` table. PGlite is right here: the enumerator only reads the credential
-// PRESENCE (metadata, no decrypt) and pool behaviour is faked, so nothing depends on the deployment
-// role or on concurrency.
+// `connectedCardProviderSweep` gates on a SEALED CREDENTIAL, so it needs a real database and a
+// `tenant_credentials` table. The enumerator only reads the credential PRESENCE (metadata, no
+// decrypt) and pool behaviour is faked.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,

@@ -3926,9 +3926,9 @@ export interface StationQueueGroup {
  * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
  * order fixes that group's position (oldest-first) and its `queuedAt`. Venue-wide (till-reroute §3.6 —
  * not node-scoped): the station's queue is the whole venue's, so a promoted node keeps serving the
- * dead node's fired items. Runs on the CALLER's transaction. PGlite
- * proves the join, the exclusions, the grouping and the ordering; the venue-wide, cross-node read is
- * real-Postgres's job (working-order.pay-and-dispatch.test.ts), the CLAUDE.md §4 split.
+ * dead node's fired items. Runs on the CALLER's transaction. `working-order.test.ts` proves the
+ * join, the exclusions, the grouping and the ordering; the venue-wide, cross-node read is
+ * `working-order.pay-and-dispatch.test.ts`'s.
  */
 /**
  * Read modifier descriptions for the supplied parent lines, then each parent product's OWN allergens
@@ -4283,10 +4283,10 @@ export interface ExpoOrder {
  *
  * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
- * Runs on the CALLER's transaction. PGlite proves the join, the
- * exclusions, the course grouping and the fired/away roll-ups — plain SQL a single backend proves; the
- * venue-wide, cross-node read is real-Postgres's job (working-order.pay-and-dispatch.test.ts), the same split
- * `listStationQueue` uses (CLAUDE.md §4).
+ * Runs on the CALLER's transaction. `working-order.test.ts` proves the join, the
+ * exclusions, the course grouping and the fired/away roll-ups; the
+ * venue-wide, cross-node read is `working-order.pay-and-dispatch.test.ts`'s, the same split
+ * `listStationQueue` uses.
  */
 export async function listExpoQueue(
   tx: Transaction,

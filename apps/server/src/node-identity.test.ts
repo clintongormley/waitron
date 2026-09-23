@@ -8,9 +8,8 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
-// PGlite, not real Postgres: `establishNodeIdentity` seals a credential owner-side and stamps
-// `nodes.public_key`, both under `withTransaction`. PGlite exercises this round-trip and its
-// behavioural assertions on a superuser connection; it does not check grants. CLAUDE.md §4.
+// `establishNodeIdentity` seals a credential and stamps `nodes.public_key`, both under
+// `withTransaction`. This suite exercises that round-trip and its behavioural assertions.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

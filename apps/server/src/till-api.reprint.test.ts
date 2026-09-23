@@ -30,7 +30,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the
+// This file proves the HTTP SHAPE of the reprint route — the
 // `requireSession` guard, the `requireUuidId` screen, and that `reprintOrderTickets` re-enqueues
 // through the SAME outbox path the fire uses. The reprint VERB's logic (re-query all fired items,
 // R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`. Schema is

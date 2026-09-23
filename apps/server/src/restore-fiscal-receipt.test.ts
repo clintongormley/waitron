@@ -32,14 +32,18 @@ import { restoreDatabase } from "./restore.js";
  * refused. `docs/handoffs/2026-09-21-f1-step25-disposition.md` says this must be REBUILT rather
  * than retired, and all five are reachable on this engine.
  *
- * WHY THIS SUITE INSTALLS THE TRIGGERS ITSELF, stated so nobody reads it as a claim about the
- * product. The product's own migrating paths DO carry them — `applyMigrations` installs the pair
- * per set (`packages/migrations/src/apply.ts:105`). This database is not one of those: `useVenueDb`
- * migrates with `runMigrations` (`packages/db/src/testing/venue-db.ts:168`), which hands drizzle
- * only a folder and a table name (`packages/db/src/migrate.ts:37-40`) and never reaches the
- * installer — so a `useVenueDb` database carries no append-only trigger unless its `setup` puts one
- * there. Hence the pair below, with the text the installer emits, copied rather than imported
- * because `apps/server` does not depend on `@waitron/store`.
+ * THE TRIGGER STATEMENTS IN `setup` BELOW ARE REDUNDANT, stated so nobody reads them as a claim
+ * about the product. `useVenueDb` pairs each migration set with `installAppendOnlyTriggers` over the
+ * tables that set declared (`packages/db/src/testing/venue-db.ts:116-117`), and
+ * `migrationOptionsFor` carries the declared list through
+ * (`packages/migrations/src/manifest.ts:163`), so this database already refuses what the box
+ * refuses before a case runs. Measured 2026-09-23, with the control in the other direction: with the
+ * `setup` loop below doing nothing the one case still passes, and with the declared list emptied as
+ * well it fails (`expected [ …(22) ] to deeply equal ArrayContaining{…}`). The statements are
+ * `create trigger if not exists`, which is why the duplicate is silent; their text is copied rather
+ * than imported because `apps/server` does not depend on `@waitron/store`. The product's own
+ * migrating paths install the same pair from the same list
+ * (`applyMigrations`, `packages/migrations/src/apply.ts:105`).
  * What the INSTALLER produces is pinned by `scripts/append-only-triggers.test.ts`; what is pinned
  * HERE is the restore — and the "present in the copy" assertion below compares the copy's whole
  * trigger set against the SOURCE's rather than against a hand-written list, so it says the same

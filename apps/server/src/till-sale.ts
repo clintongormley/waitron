@@ -1567,7 +1567,7 @@ async function finalizeSettleRecovery(
 
 /**
  * Map a provider result onto an {@link IntegratedPayOutcome} — a PURE function (unit-tested in
- * `till-sale-integrated.test.ts`, which needs no container, CLAUDE.md §4). `captured` and
+ * `till-sale-integrated.test.ts`, which needs no database). `captured` and
  * `accepted_offline` both chained a sale (their `settledAt` is set), so both map to the `captured` arm
  * carrying the ticket the caller filed; `network_unavailable` maps to its own arm (nothing filed);
  * `attempting` — the state the SumUp adapter returns on a poll-window stall, leaving the row open for

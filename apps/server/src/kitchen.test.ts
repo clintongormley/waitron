@@ -37,12 +37,9 @@ import {
 } from "./kitchen.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: these are CONFIG verbs — plain inserts/by-id UPDATEs with no privilege or
-// concurrency dimension. The `till.configure` gate lives on the ROUTE (Task 7), and the
-// `WHERE is_default` partial-unique is already proven against real Postgres in packages/db's
-// kitchen-stations.test.ts (Task 1). PGlite serialises every query onto one backend,
-// so it would be a FALSE PASS for a concurrency test — but there is no concurrency here, so it is the
-// correct lighter target (CLAUDE.md §4), the same choice tables.ts's FP-1/FP-2 config suite makes.
+// These are CONFIG verbs — plain inserts and by-id UPDATEs. The `till.configure` gate lives on the
+// ROUTE (Task 7), and the `WHERE is_default` partial-unique is proven in packages/db's
+// kitchen-stations.test.ts.
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
@@ -354,9 +351,8 @@ describe("routing config", () => {
 });
 
 // KDS-2 course config verbs — mirror the station-config suite above EXACTLY, minus the default concept
-// (kitchen_courses has no `is_default`; a null course simply fires earliest, spec §2b). Same lighter
-// PGlite target for the same reason (config verbs, no privilege/concurrency dimension — the schema's own
-// defaults and course FKs live in packages/db's kitchen-courses.test.ts against real Postgres).
+// (kitchen_courses has no `is_default`; a null course simply fires earliest, spec §2b). Config verbs
+// again — the schema's own defaults and course FKs live in packages/db's kitchen-courses.test.ts.
 describe("kitchen-course config", () => {
   it("creates/lists/updates/deactivates a course and orders by display_order then name", async () => {
     const cfg = await setupVenue();

@@ -9,8 +9,8 @@ import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 
-// PGlite is sufficient: this is pure build/sign logic exercised through the same
-// `establishNodeIdentity` glue as node-identity.test.ts, not a privilege concern. CLAUDE.md §4.
+// Pure build/sign logic, exercised through the same `establishNodeIdentity` glue as
+// node-identity.test.ts.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

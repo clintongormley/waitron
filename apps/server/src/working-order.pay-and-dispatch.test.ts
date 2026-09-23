@@ -2134,7 +2134,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 });
 
-// KDS-3 Task 3 (folded in per the Task-2 review) — the cross-station expo/pass read over real Postgres.
+// KDS-3 Task 3 (folded in per the Task-2 review) — the cross-station expo/pass read.
 // `listExpoQueue` gathers the venue's OPEN orders (with a not-yet-away item) across ALL stations; unlike
 // the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
 // node-scoped either. `working-order.test.ts` covers the join/grouping/exclusions; this case takes

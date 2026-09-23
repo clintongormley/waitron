@@ -625,8 +625,7 @@ describe("recordTillSale", () => {
  * location's full-tag `invoice_locales` at the single point content enters a fiscal line — so the
  * `working_order_lines_check_locales` trigger (which requires the per-line `descriptions` map to hold
  * EXACTLY the venue's `invoice_locales`) passes on the insert, and the same re-keyed `priced` flows on
- * to `sale_lines`. Real Postgres, exactly like the sales above: the trigger and the chained record are
- * the point. A bare-`es` product on a `{es-ES}` venue would otherwise be REJECTED by the trigger.
+ * to `sale_lines`. Like the sales above, the trigger and the chained record are the point. A bare-`es` product on a `{es-ES}` venue would otherwise be REJECTED by the trigger.
  */
 describe("priceOrderLines re-keys bare catalogue content to the venue invoice_locales", () => {
   // `customerName` is the per-language text the re-key acts on. The staff `name` is deliberately a
@@ -754,8 +753,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
  * PARENT line, validating every answer server-side (the client is never the gate). These are the
  * fiscal-adjacent invariants — a filed order carries parent + child `sale_lines`, and a
  * parked-then-paid one re-prices its children from their add-time lock to the same total/desglose.
- * Real Postgres, like the sales above: the chained record and the self-referential
- * `parent_line_id` are the point.
+ * Like the sales above, the chained record and the self-referential `parent_line_id` are the point.
  */
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {

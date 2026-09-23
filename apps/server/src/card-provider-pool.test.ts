@@ -12,8 +12,8 @@ import { createCardProviderPool } from "./card-provider-pool.js";
 // The pool's own contract (build-once, cache, evict-to-rebuild, unknown-id, propagate-a-build-
 // failure) is provider-agnostic, so most cases here use a FAKE CardProviderContribution with a spy
 // `build` — deterministic call counting with no vault I/O. One case wires the real SumUp seat over a
-// seeded `payments.sumup` credential (PGlite; superuser, single backend — nothing here depends on the
-// deployment role) to prove the pool actually threads its deps into a real seat's `build`.
+// seeded `payments.sumup` credential to prove the pool actually threads its deps into a real seat's
+// `build`.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

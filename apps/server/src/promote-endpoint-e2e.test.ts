@@ -81,8 +81,12 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 // `WAITRON_ADMIN_DATABASE_URL` named the non-owner `app_login` role, so the promote's owner write
 // was refused `42501` and surfaced as a loud 500 rather than a silent no-op, and then booted the
 // same node with the variable unset to show the fallback to the migrations URL. That variable is
-// gone from the whole tree (`grep -rn WAITRON_ADMIN_DATABASE_URL` over the worktree, 2026-09-22:
-// no matches), `config.ts` reads no connection URL at all, and there is no second connection for a
+// gone from the CODE, and the scope is the whole receipt:
+// `grep -rn WAITRON_ADMIN_DATABASE_URL apps packages scripts deploy .github` returns only these
+// three comment lines (run 2026-09-23). The UNSCOPED grep over the worktree is not zero and never
+// will be — it also reaches the retired plans and specs under `docs/superpowers/`, which record the
+// variable as it was. `grep -c 'DATABASE_URL\|databaseUrl' apps/server/src/config.ts` returns 0, so
+// config reads no connection URL at all, and there is no second connection for a
 // promote to fail over to. **What is no longer covered:** that a promote whose point-of-no-return
 // write is refused fails CLOSED — a 500 with the deployment untouched — rather than reporting
 // success. The failure mode it guarded (a promote that half-succeeds) is not reachable through a

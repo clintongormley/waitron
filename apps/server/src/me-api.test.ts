@@ -96,10 +96,10 @@ const suite = useVenueDb({
 // `boot.ts` derives it via `readVenueLocale`; the me routes only carry it through.
 const VENUE_LOCALE = "en-GB";
 
-// A fixed sentinel node id: this hermetic suite runs on PGlite WITHOUT the sync migrations, so no
+// A fixed sentinel node id: this hermetic suite migrates WITHOUT the sync sets, so no
 // `persons` capture trigger fires and no test here asserts a sync origin — the value only has to be
-// present so the widened `MeApiDeps.cfg` (`{ nodeId }`) is satisfied. The origin-attribution
-// proof for this route lives in `sync-origin.test.ts` (real Postgres, manifest template).
+// present so the widened `MeApiDeps.cfg` (`{ nodeId }`) is satisfied. The origin-attribution suite
+// this used to point at, `sync-origin.test.ts`, is not in the tree.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 // The enabled-module set the whoami echoes as `modules`, mirroring boot's `setsToMigrate.map(m => m.name)`
@@ -580,7 +580,7 @@ describe("mountMeApi — swaps", () => {
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
       cookie: await cookieFor(me),
       // A hostile `requestedByPersonId` in the body is IGNORED — identity comes from the session only
-      // (the real-PG identity test proves this by deletion; here we assert the filed row is `me`).
+      // (`me-api.cross-person.test.ts` proves it by deletion; here we assert the filed row is `me`).
       body: {
         fromShiftId: myShift,
         toPersonId: colleague,

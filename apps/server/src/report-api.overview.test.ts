@@ -29,7 +29,7 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite exercises the overview route and its value mapping from report aggregates.
+// What this suite exercises: the overview route and its value mapping from report aggregates.
 // Keep current-day sales in this fixture separate from the fixed-period VAT-return fixture.
 const noopLog: Logger = () => {};
 

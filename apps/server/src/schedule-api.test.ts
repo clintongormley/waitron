@@ -208,7 +208,8 @@ describe("mountScheduleApi — swaps", () => {
     const res = await send(mountApp(), "POST", "/api/schedule/swaps", {
       cookie: await cookieFor(me, "1111"),
       // A hostile `requestedByPersonId` in the body is IGNORED — identity comes from the session only
-      // (the real-PG identity test proves this by deletion; here we assert the filed row is `me`).
+      // (`me-api.cross-person.test.ts` proves it by deletion for the sibling DASHBOARD route; here
+      // we assert the filed row is `me`).
       body: {
         fromShiftId: myShift,
         toPersonId: colleague,

@@ -88,8 +88,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
-// PGlite exercises working-order state, validation, foreign keys, triggers and node-scoped reads.
-// Real PostgreSQL covers concurrent order-number allocation.
+// This suite exercises working-order state, validation, foreign keys, triggers and node-scoped
+// reads. Concurrent order-number allocation is `working-order.pay-and-dispatch.test.ts`'s.
 const LOCALE = "es-ES";
 
 /**
@@ -849,12 +849,11 @@ describe("parkOrder", () => {
   });
 
   it("replays the existing order on a re-sent park, creating no second order", async () => {
-    // PGlite (a single backend) is correct here: this is a SEQUENTIAL lost-response retry — the
-    // first park commits, then the re-sent park with the SAME client-minted id collides against
-    // that already-committed row on the SAME backend. It is NOT concurrency (two backends racing):
-    // one connection replaying its own committed write is exactly what a single backend proves. The
-    // CONCURRENT park backstop — two backends racing the same id — is proven separately against
-    // real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
+    // This case is a SEQUENTIAL lost-response retry: the first park commits, then the re-sent park
+    // with the SAME client-minted id collides against that already-committed row. It is NOT
+    // concurrency — one caller replaying its own committed write. The CONCURRENT park backstop,
+    // two callers racing the same id, is proven separately in
+    // `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -1891,9 +1890,9 @@ describe("abandonHeldOrder", () => {
 // ---------------------------------------------------------------------------------------------------
 // KDS-1 Task 3 — fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
 // SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
-// tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
-// and the no-default refusal — plain SQL a single backend proves; the `ticket_items` schema's own
-// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every
+// tab's round-send via addTabRound) funnel through it. This suite proves the resolver, the snapshot
+// rule and the no-default refusal; the `ticket_items` schema's own
+// columns, unique and cascade are packages/db `ticket-items.test.ts`'s. Every
 // write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
@@ -2534,9 +2533,9 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // conditional-UPDATE state machine (queued → preparing → ready, illegal moves refused via an empty
 // `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
-// collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
-// grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
-// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction`.
+// collected and abandoned orders. This suite proves the transition logic, the whole-ticket fan-out
+// and the grouping/exclusion filters; the NODE scoping is
+// working-order.pay-and-dispatch.test.ts's. Every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
@@ -3110,7 +3109,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 });
 
-// PGlite exercises course hold/fire decisions, held-item refusal and fireCourse idempotency.
+// Course hold/fire decisions, held-item refusal and fireCourse idempotency.
 
 /** The order's ticket items joined to their line, carrying the fields the hold-and-fire tests read:
  *  the item id (the bump target), its product (to key by line), its snapshotted course and — the
@@ -3360,9 +3359,9 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // corrected via recall, not a silent move — validates a non-null target with the same `requireLiveCourse`
 // the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
-// (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
-// plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
-// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through
+// (open tab) and `ticket_items` (kitchen), never a filed record. This suite proves the update + the
+// guards; the serialisation of a concurrent send/recall/fire is
+// working-order.pay-and-dispatch.test.ts's. Every write runs through
 // `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
@@ -3497,7 +3496,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
 });
 
 // sendLines releases selected held items, refreshes queue time and enqueues their kitchen prints.
-// PGlite exercises these writes and skips already-fired items.
+// These cases exercise those writes and the skip of already-fired items.
 describe("sendLines (A2: fire specific held lines / send-all)", () => {
   /** A fixed instant well in the past — an aged `queued_at` a same-tx `now()` refresh moves off, so the
    *  refresh is observable (within one transaction `now()` is constant, so an un-aged held line rung and
@@ -3547,8 +3546,8 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
         .where(and(eq(ticketItems.workingOrderId, tabId), isNull(ticketItems.firedAt)));
 
       const before = await itemsByLineNo(tx, tabId);
-      // Read the stored aged stamp back (Postgres renders it in the session TZ, not the ISO literal we
-      // wrote), and use THAT as the baseline the refresh must move off.
+      // Read the stored aged stamp back rather than assuming the literal round-trips, and use THAT
+      // as the baseline the refresh must move off.
       const agedStamp = before.get(2)!.queuedAt;
       expect(before.get(2)!.firedAt).toBeNull(); // main1 held
       expect(before.get(3)!.firedAt).toBeNull(); // main2 held
@@ -3695,7 +3694,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
 });
 
 // recallLines clears fired_at only while a ticket is queued. Started items refuse recall;
-// already-held items are unchanged. PGlite exercises these state transitions.
+// already-held items are unchanged. These cases exercise those state transitions.
 describe("recallLines (A4: un-send a not-started line — fired → held)", () => {
   it("un-fires a fired-not-started line back to held (fired_at → null, state stays queued)", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -3828,8 +3827,8 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
 // voiding a HELD line (never printed) enqueues nothing. `recallLines` emits RECALLED for the items it
 // actually un-fires (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
 // reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
-// `ticket_items`/`working_order_lines`/`print_jobs`. PGlite proves the enqueue count + payload in both
-// directions; every write runs through `withTransaction`.
+// `ticket_items`/`working_order_lines`/`print_jobs`. These cases prove the enqueue count + payload
+// in both directions; every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("correction slips on recall & void (A6)", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
@@ -3976,8 +3975,8 @@ describe("correction slips on recall & void (A6)", () => {
 // that marker onto the priced PARENT row (parents come out of `priceOrderLines` in input order) and hands
 // it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
 // the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
-// time, never stored (no migration). PGlite proves the hold short-circuit and the parent correlation under
-// modifier expansion — plain SQL a single backend proves; every write runs through `withTransaction`.
+// time, never stored (no migration). These cases prove the hold short-circuit and the parent
+// correlation under modifier expansion; every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("addTabRound hold-on-send (A3)", () => {
   it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {
@@ -4067,9 +4066,9 @@ describe("addTabRound hold-on-send (A3)", () => {
 // KDS-3 Task 2 — the cross-station expo/pass read. `listExpoQueue` aggregates every OPEN order on the
 // node (with at least one not-yet-away item), gathers its ticket items ACROSS stations, and groups them
 // by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
-// station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
-// join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
-// single backend proves; the NODE scoping is real-Postgres's job (working-order.pay-and-dispatch.test.ts).
+// station, no station name) it joins `kitchen_stations` to label each item's station. These cases
+// prove the join, the collected/abandoned/fully-away exclusions, the course grouping and the
+// roll-ups; the NODE scoping is working-order.pay-and-dispatch.test.ts's.
 // Every read/write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
@@ -4310,9 +4309,9 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // advancing every FIRED, not-yet-ready item across ALL its stations straight to `ready` (skipping HELD
 // items and no-op when none match). `markCourseAway` stamps `away_at = now()` on every READY item of the
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
-// idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
-// dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
-// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs
+// idempotent via `away_at IS NULL`. These cases prove the set-based logic, the held-skip and the
+// ready-only dispatch; the NODE scoping is
+// working-order.pay-and-dispatch.test.ts's (`listExpoQueue` node-symmetry). Every write runs
 // through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
@@ -4448,8 +4447,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 // cross-venue line. The product DEFAULT (`product.course_id`) is an already-valid stored FK and is NOT
 // re-screened (that would reject a legitimately-deactivated default). Exercised through `addTabRound`
 // (the round path that threads the override today); the screen lives in `priceOrderLines`, so the order
-// paths are covered by the SAME code. PGlite: plain SQL + the by-id FK, no privilege or
-// concurrency dimension.
+// paths are covered by the SAME code — plain SQL plus the by-id FK.
 // ---------------------------------------------------------------------------------------------------
 describe("voidTabLine extras cascade (FIX 2)", () => {
   /** Attach an extras list whose one product may be picked TWICE, returning the ids the wire needs. A

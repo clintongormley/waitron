@@ -57,7 +57,7 @@ import type { TillConfig } from "./till-config.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
+// The session routes are LOGIC (login → cookie → logout), and the login
 // path runs through `withTransaction` exactly as production does. Sessions/persons live in
 // identity; the schema is the whole manifest (the tables here span modules that FK into core, so
 // the shared ordered set is the fixture).
@@ -92,8 +92,8 @@ let hiddenAguaOfferId: string;
 // SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) now resolve `till_id` from
 // the authenticated enrolled device. This suite's single seeded tenant gets ONE enrolled `till` device
 // (bound to `cfg.tillId`) in setup; the happy-path place/sale calls carry its cookie so they reach the
-// route body rather than being refused `device.unauthorized`. (The device gate itself is proven over
-// real Postgres in `till-api.fiscal-sale-paths.test.ts`; here it is just the setup a place/cancel test needs.)
+// route body rather than being refused `device.unauthorized`. (The device gate itself is proven in
+// `till-api.fiscal-sale-paths.test.ts`; here it is just the setup a place/cancel test needs.)
 let tillDeviceCookie: string;
 
 const suite = useVenueDb({
@@ -283,8 +283,8 @@ function collect(
 }
 
 /** The till's config for the seeded tenant. `nodeId` is the seeded node the working-order routes
- * write and filter by; `seriesId` is unused by these routes (the chained sale write is proven over
- * real Postgres in `till-api.fiscal-sale-paths.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
+ * write and filter by; `seriesId` is unused by these routes (the chained sale write is proven in
+ * `till-api.fiscal-sale-paths.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
  * one the sale/catalogue routes read. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
@@ -702,8 +702,10 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
   });
 
   it("keys the throttle on the CANONICAL personId, so an alternate UUID spelling shares the bucket (§5)", async () => {
-    // Postgres canonicalises UUIDs on cast, so an uppercase / dash-free spelling of Ana's id logs in as
-    // the SAME person. The throttle must therefore key on the canonical value, or a brute-forcer cycles
+    // `canonicaliseUuid` (`till-session.ts`) folds an uppercase / dash-free spelling of Ana's id to
+    // the same canonical value, so both spellings name the SAME person — the id column is plain
+    // `text` and folds nothing itself, which is why the route does it (`till-api.ts`'s
+    // `POST /api/session` states that). The throttle must therefore key on the canonical value, or a brute-forcer cycles
     // spellings to get a fresh back-off bucket per spelling and evades the window. Fixed injected clock
     // (CLAUDE.md §4): the window opens and blocks a later `check` at the same `now`, deterministically.
     const now = 5_000_000;
@@ -733,7 +735,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(upper.status).toBe(429);
     expect(await upper.json()).toMatchObject({ error: { code: "pin.throttled" } });
 
-    // And a dash-free spelling (which Postgres also canonicalises to the same uuid) shares the bucket.
+    // And a dash-free spelling, which `canonicaliseUuid` folds the same way, shares the bucket.
     const dashless = await post(ana.id.replace(/-/g, ""), "5555");
     expect(dashless.status).toBe(429);
     expect(await dashless.json()).toMatchObject({ error: { code: "pin.throttled" } });
@@ -1207,7 +1209,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   it("GET /api/till echoes cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
     // A default of `false` would pass even if the route hardcoded it, so drive `cfg.tipsEnabled` to
     // `true` (against the suite default `false` asserted above). The per-device `cardProvider` string
-    // (from the paying device's default reader) is proven in the real-PG `till-api.fiscal-sale-paths.test.ts`, where
+    // (from the paying device's default reader) is proven in `till-api.fiscal-sale-paths.test.ts`, where
     // a device + reader can be seeded; a cookieless request here carries `cardProvider: "none"`.
     const app = new Hono();
     mountTillApi(app, { ...deps(suite.db), cfg: { ...cfg, tipsEnabled: true } }, collect([]));
@@ -1651,8 +1653,8 @@ describe("POST /api/sales (session-guarded sale)", () => {
     // The 7b malformed-id follow-up for the OPTIONAL `workingOrderId` (only a malformed one is an error;
     // absent / well-formed-unknown are valid walk-ups). The non-empty basket + cash tender clear
     // `recordTillSale`'s early-outs, so in the RED state the id reaches `payWorkingOrder`'s
-    // `eq(workingOrders.id, req.id)` lock read and `22P02`s → 500; the screen refuses it 400 first
-    // (PGlite adequate — the screen fires at the HTTP boundary before any query, CLAUDE.md §4).
+    // `eq(workingOrders.id, req.id)` lock read and `22P02`s → 500; the screen refuses it 400 first,
+    // at the HTTP boundary before any query runs.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
@@ -1691,7 +1693,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     // now routes to its reader's provider through the pool, and the reader is resolved from the paying
     // DEVICE. A cookieless caller therefore nets to `device.unauthorized` (401) at `requireSaleTillId`
     // — the SP-A.2 §16.4 gate — before any reader read. The reader-routing happy path and the
-    // `reader.not_found` refusal (a device with no default reader) are proven in the real-PG
+    // `reader.not_found` refusal (a device with no default reader) are proven in
     // `till-api.fiscal-sale-paths.test.ts`, where a device + reader can be seeded.
     const id = await openSession(suite.db);
     const app = new Hono();
@@ -1736,7 +1738,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     // A non-undefined stub provider clears the route's `cardProvider === undefined` guard, so in the RED
     // state a malformed `id` genuinely reaches `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)`
     // lock read — a `uuid` column — and `22P02`s → an opaque 500, the same exposure `/api/sales` has. The
-    // route screen refuses it 400 first, so the stub is never invoked (PGlite adequate, CLAUDE.md §4).
+    // route screen refuses it 400 first, so the stub is never invoked.
     mountTillApi(app, { ...deps(suite.db), cardProvider: {} as PaymentProvider }, collect([]));
 
     const res = await app.request("/api/pay", {
@@ -2060,8 +2062,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   // place/prep/collect/cancel malformed-id tests below. An un-screened `:id` reaches
   // `getHeldOrder`/`updateHeldOrder`/`abandonHeldOrder`'s `eq(workingOrders.id, id)` (a `uuid` column)
   // and `22P02`s → an opaque 500; the `requireUuidId` screen refuses it FIRST with the same domain code
-  // an absent/non-open id gets on that route. PGlite adequate — the screen fires before any query runs
-  // (CLAUDE.md §4).
+  // an absent/non-open id gets on that route. The screen fires before any query runs.
   it("GET /:id with a malformed id is 404 working_order.not_found, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2241,9 +2242,9 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
 });
 
 // KDS-1 station-display operate routes: GET /api/stations, GET /api/stations/:id/queue, POST
-// /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic (PGlite):
+// /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic:
 // the station list, the per-station queue read, the per-line + whole-ticket bumps and the
-// malformed-id screens are plain logic a single backend proves; `working-order.pay-and-dispatch.test.ts` also
+// malformed-id screens are plain logic; `working-order.pay-and-dispatch.test.ts` also
 // covers node filtering of `ticket_items` (`working-order.pay-and-dispatch.test.ts`). `placeOrder`'s OWN fire
 // seeds ticket items with no fiscal write under this suite's `prepay` cfg (only
 // `invoice_first`/Mode T dispatch a fiscal doc).
@@ -2800,16 +2801,14 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 });
 
 describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue.configure) gate (FP-2, Task 4)", () => {
-  // PGlite, like the rest of this suite. The novel thing under test is the FIRST on-till
+  // The novel thing under test is the FIRST on-till
   // `authorize(venue.configure)` hop: the route resolves the SESSION operator's OWN role and
   // refuses a write the role cannot make (no supervisor override this slice — manager-on-till
   // only). That gate is `authorize` reading `persons.role` for the open session and asking
-  // `roleHasPermission` — a query plus a JS lookup whose 204-vs-403 outcome is IDENTICAL on
-  // PGlite and real Postgres, because it turns on the person's role VALUE, not on any privilege /
-  // concurrency behaviour (CLAUDE.md §4's real-PG triggers). The write itself
+  // `roleHasPermission` — a query plus a JS lookup whose 204-vs-403 outcome turns on the person's
+  // role VALUE alone. The write itself
   // (`setTablePlacement`'s UPDATE on dining_tables) is proven by the management-api placement
-  // sibling, which wraps the SAME verb (management-api.test.ts). So the lighter target is the right
-  // one here and the heavier one adds nothing to THIS gate proof — the choice §4 asks to state.
+  // sibling, which wraps the SAME verb (management-api.test.ts).
 
   // A live zone every placement body points at, and the two operators the gate distinguishes: a MANAGER
   // (role `manager`, which holds `venue.configure`) and a STAFF operator (Ana, role `staff`, which does

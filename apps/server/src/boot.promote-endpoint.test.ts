@@ -36,7 +36,7 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 
 // Slice 2 Task 7 boot integration: the promote endpoint (`POST /management-api/promote`) is mounted on
 // BOTH deployment modes before the SPA catch-alls, and its path is exempt from the read-only gate — so a
-// mirror AND a fenced node reach the handler. Three real-PG boots prove it end to end:
+// mirror AND a fenced node reach the handler. Three real boots prove it end to end:
 //  - a MIRROR: a credential-less POST reaches the credential screen (401), NOT a gated 403 or a 404 —
 //    proof the endpoint is mounted on a mirror and the read-only gate lets the promote POST through;
 //  - an unfenced PRIMARY: an admin login promotes and gets the idempotent `{alreadyPrimary,restarting}`;

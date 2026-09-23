@@ -79,9 +79,9 @@ export async function submitFiscalReadiness(args: {
 }): Promise<FiscalTestStatus> {
   if (args.contribution.activationReadiness === "not-applicable") return "accepted";
   const testIdentity = fiscalReadinessDatabaseKey(args.readinessInput);
-  // Its own venue DIRECTORY under the state root, retained between runs exactly as the single
-  // PGlite directory was: the readiness sample is a real preproduction sale on a real chain, so it
-  // must not share a file with the box's own venue and must survive a restart.
+  // Its own venue DIRECTORY under the state root, retained between runs: the readiness sample is a
+  // real preproduction sale on a real chain, so it must not share a file with the box's own venue
+  // and must survive a restart.
   const directory = join(args.stateDir, `fiscal-readiness-db-${testIdentity}`);
   // Through the product's own migrating path rather than set-by-set on this function's own handle,
   // which is what it did before: `applyMigrations` is the one place that installs the append-only

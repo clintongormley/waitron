@@ -12,10 +12,9 @@ import type { NodeId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
-// PGlite is enough: `provisionNode` looks a node up by id and runs each module's seed, no role or
-// concurrency behaviour under test, so a container adds no needed coverage (§4). The fiscal seed one
-// layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as do
-// stripe-account.test.ts and aeat-transport.test.ts.
+// `provisionNode` looks a node up by id and runs each module's seed. The fiscal seed one layer down
+// is covered in packages/fiscal-verifactu/src/provisioning.test.ts, as are stripe-account.test.ts
+// and aeat-transport.test.ts.
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
 // never survives the `nodeId()` brand.

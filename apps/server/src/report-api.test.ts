@@ -22,7 +22,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
 import "./errors.js";
 
-// PGlite exercises VAT-export validation, permissions, status mapping and the encoded body.
+// What this suite exercises: VAT-export validation, permissions, status mapping and the encoded body.
 // Sales and received invoices are seeded directly because the report reads their stored values.
 const noopLog: Logger = () => {};
 
@@ -133,7 +133,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
     await seedTenant(db);
-    // The one venue's location/till/node/series, seeded directly as the superuser (the demo idiom).
+    // The one venue's location/till/node/series, seeded directly (the demo idiom).
     // Through the table definitions, not raw SQL: every `id` here (and `tills.created_at` /
     // `nodes.created_at`) is a JavaScript `$defaultFn` generator on this engine, which a raw insert
     // never reaches, and `invoice_locales` is encoded by the column's own write mapping — the
