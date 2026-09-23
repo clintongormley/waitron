@@ -2089,7 +2089,7 @@ image constraints under *Detail → Box image*.
   a certificate secret the verifactu slot turns into one; for the void and substitution refs and
   the node registration checked field by field, where an empty void or substitution record id
   had passed; and for a correction or substitution returning the new sale's id rather than the
-  replaced sale's; no source file changed; 100/100/100/100); `setup` (**PR #TBD**, 2026-09-23 —
+  replaced sale's; no source file changed; 100/100/100/100); `setup` (**PR #523**, 2026-09-23 —
   tests across the wizard shell, its API client and nine screens, among them answers arriving
   after the wizard is removed, a newer connection check winning over a late boot read, a country
   pack with no provinces, and a draft country with no pack; one bug fixed, going back to "Select
