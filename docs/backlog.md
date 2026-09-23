@@ -454,16 +454,23 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), not yet armed. **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Task 1 has landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's reports success while emptying the
 menus' extras attachments and variant price overrides. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
 
-**Task 1 (`feat/variants-parent-id`): once it lands, every dev venue needs `wa-wt reset demo <name>`,
-and no provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
+**Task 1 LANDED as #511 (2026-09-23): every dev venue now needs `wa-wt reset demo <name>`, and no
+provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
 venue `main` had already migrated aborts at the rebuild of `products` with
 `error in trigger products_media_image_fk_parent_delete: no such table: main.products` and rolls
 back, so the box does not boot until it is wiped (re-run 2026-09-23 through `applyMigrations`).
+What it left open, each already written into the plan's later tasks: the kitchen station routing,
+preparation routes and the kitchen screen's allergens and dietary labels still read a variant
+line's raw columns (Task 5, dish and extras); and republishing a variant's allergens and diet must
+not write values that hide its parent's (Task 6). Deliberately left: the counts of `products`'
+columns, keys and checks in the comment of the shipped `packages/media/drizzle/0001_image_references.sql`
+are stale, because editing a shipped migration changes the hash `packages/migrations/src/journal-hashes.ts`
+compares.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
