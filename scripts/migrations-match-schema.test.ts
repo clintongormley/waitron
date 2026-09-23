@@ -22,37 +22,25 @@ import {
  * WEAKER THAN ITS NAME, in the ways a reader would otherwise assume away:
  *
  * 1. **It compares the TypeScript schema with the head SNAPSHOT, never with the SQL.** That is what
- *    `generate` diffs. A hand-written migration (`*_sql.sql`, a custom migration) does not change
- *    the snapshot, so a constraint added or dropped by hand is invisible here, and a `.sql` file
- *    edited after it was generated is too.
- * 2. **It passes only `dialect`, `schema` and `out` to drizzle-kit.** The config is loaded and its
- *    keys pinned to the set known today, so an option that would change what `generate` emits
- *    (`casing`, say) fails the key check and forces this file to be revisited rather than being
- *    silently dropped.
- * 3. **It trusts drizzle-kit's own diff.** Whatever drizzle-kit does not model, this does not see.
+ *    `generate` diffs. A hand-written migration (a `drizzle-kit generate --custom` migration) does
+ *    not change the snapshot, so a constraint added or dropped by hand is invisible here, and a
+ *    `.sql` file edited after it was generated is too.
+ * 2. **It trusts drizzle-kit's own diff.** Whatever drizzle-kit does not model, this does not see.
  *
- * `--out` is a path RELATIVE to the package: measured 2026-09-23 on drizzle-kit v0.31.10, an
- * absolute `--out` fails because drizzle-kit prefixes `./` and gets ENOENT on `.//tmp/...`.
+ * drizzle-kit reads a throwaway config that spreads the package's own and replaces only `out`, so
+ * every option the package sets reaches `generate`. `out` is a path RELATIVE to the package:
+ * measured 2026-09-23 on drizzle-kit v0.31.10, an absolute one fails because drizzle-kit prefixes
+ * `./` and gets ENOENT on `.//tmp/...` — and exits 0, which `generationFailure` refuses.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/** The keys every `drizzle.config.ts` in the tree sets, as read on 2026-09-23. */
-const KNOWN_CONFIG_KEYS = ["dialect", "migrations", "out", "schema"];
-
 /**
- * Measured 2026-09-23: all thirteen sets regenerated one after another in 7s, about half a second
- * each. The spawn limit is far above that; the per-test bound clears the spawn limit plus the copy
- * and the comparison around it.
+ * Measured 2026-09-23: one set regenerates in about half a second. The spawn limit is far above
+ * that; the per-test bound clears the spawn limit plus the copy and the comparison around it.
  */
 const GENERATE_TIMEOUT_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000;
-
-interface DrizzleConfig {
-  dialect: string;
-  schema: string;
-  out: string;
-}
 
 let scratch = "";
 beforeAll(() => {
@@ -77,20 +65,51 @@ function differences(before: string, after: string): string[] {
   return out.sort();
 }
 
-/** The package's drizzle config, loaded as code rather than read as text. */
-async function loadConfig(packageDir: string): Promise<Record<string, unknown>> {
-  const path = join(packageDir, "drizzle.config.ts");
-  const loaded = (await import(pathToFileURL(path).href)) as { default: Record<string, unknown> };
-  return loaded.default;
+/** The package that owns a migration set: its folder, its drizzle-kit and its config file. */
+interface DrizzlePackage {
+  dir: string;
+  bin: string;
+  configPath: string;
 }
 
-/** Runs `drizzle-kit generate` for a package, writing into `outDir` instead of its own set. */
-function generate(packageDir: string, config: DrizzleConfig, outDir: string) {
-  const bin = join(packageDir, "node_modules", ".bin", "drizzle-kit");
-  const args = ["generate", "--dialect", config.dialect, "--schema", config.schema];
-  args.push("--out", relative(packageDir, outDir));
-  return spawnSync(bin, args, {
-    cwd: packageDir,
+/**
+ * The package that owns `set`, after checking it can regenerate that set: it has a
+ * `drizzle.config.ts` and its own drizzle-kit, and the config — loaded as code, not read as text —
+ * writes to `set` itself, so the copy compared below is a copy of what `generate` would change.
+ */
+async function drizzlePackage(set: string): Promise<DrizzlePackage> {
+  const dir = join(repoRoot, dirname(set));
+  const configPath = join(dir, "drizzle.config.ts");
+  const bin = join(dir, "node_modules", ".bin", "drizzle-kit");
+  if (!existsSync(configPath)) throw new Error(`${set}: no drizzle.config.ts beside it`);
+  if (!existsSync(bin)) throw new Error(`${set}: no node_modules/.bin/drizzle-kit in its package`);
+  const loaded = (await import(pathToFileURL(configPath).href)) as { default: { out?: unknown } };
+  const { out } = loaded.default;
+  if (typeof out !== "string" || resolve(dir, out) !== join(repoRoot, set)) {
+    throw new Error(`${set}: drizzle.config.ts's out is ${String(out)}, not this set`);
+  }
+  return { dir, bin, configPath };
+}
+
+/**
+ * Runs `drizzle-kit generate` for a package, writing into `outDir` instead of its own set. The
+ * config drizzle-kit reads is the package's own with `out` replaced, and with `overrides` on top.
+ */
+function generate(
+  pkg: DrizzlePackage,
+  outDir: string,
+  name: string,
+  overrides: Record<string, string> = {},
+) {
+  const configPath = join(scratch, `${name}.drizzle.config.ts`);
+  const replaced = { out: relative(pkg.dir, outDir), ...overrides };
+  writeFileSync(
+    configPath,
+    `import base from ${JSON.stringify(pkg.configPath)};\n` +
+      `export default { ...base, ...${JSON.stringify(replaced)} };\n`,
+  );
+  return spawnSync(pkg.bin, ["generate", "--config", configPath], {
+    cwd: pkg.dir,
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     timeout: GENERATE_TIMEOUT_MS,
@@ -126,9 +145,11 @@ function generationFailure(run: ReturnType<typeof generate>): string | undefined
 const sets = migrationSets(repoRoot);
 
 describe("every migration set matches its package's TypeScript schema", () => {
-  // Vacuous-pass anchor: a discovery that matched nothing would run no case below and pass.
+  // Vacuous-pass anchor: a discovery that matched nothing would run no case below and pass. The
+  // floor sits below today's tree so retiring a set does not fail it; the two names stop an empty
+  // or mis-pathed discovery.
   it("checks the real sets", () => {
-    expect(sets.length).toBeGreaterThanOrEqual(13);
+    expect(sets.length).toBeGreaterThan(5);
     expect(sets).toContain(join("packages", "db", "drizzle"));
     expect(sets).toContain(join("packages", "fiscal-verifactu", "drizzle"));
   });
@@ -136,26 +157,10 @@ describe("every migration set matches its package's TypeScript schema", () => {
   it.each(sets)(
     "%s: drizzle-kit generate changes nothing",
     async (set) => {
-      const packageDir = join(repoRoot, dirname(set));
-      const configPath = join(packageDir, "drizzle.config.ts");
-      const bin = join(packageDir, "node_modules", ".bin", "drizzle-kit");
-      expect(existsSync(configPath), `${set}: no drizzle.config.ts beside it`).toBe(true);
-      expect(existsSync(bin), `${set}: no node_modules/.bin/drizzle-kit in its package`).toBe(true);
-
-      const config = await loadConfig(packageDir);
-      expect(Object.keys(config).sort(), `${set}: drizzle.config.ts keys`).toEqual(
-        KNOWN_CONFIG_KEYS,
-      );
-      expect(typeof config.dialect).toBe("string");
-      expect(typeof config.schema).toBe("string");
-      expect(typeof config.out).toBe("string");
-      expect(resolve(packageDir, config.out as string), `${set}: config's out`).toBe(
-        join(repoRoot, set),
-      );
-
+      const pkg = await drizzlePackage(set);
       const copy = join(scratch, set.replaceAll("/", "__"));
       cpSync(join(repoRoot, set), copy, { recursive: true });
-      const run = generate(packageDir, config as unknown as DrizzleConfig, copy);
+      const run = generate(pkg, copy, set.replaceAll("/", "__"));
       expect(generationFailure(run), set).toBeUndefined();
       expect(
         differences(join(repoRoot, set), copy),
@@ -177,8 +182,7 @@ describe("negative control", () => {
     "writes a new migration when the snapshot lacks a table the schema declares",
     async () => {
       const set = join("packages", "identity", "drizzle");
-      const packageDir = join(repoRoot, dirname(set));
-      const config = (await loadConfig(packageDir)) as unknown as DrizzleConfig;
+      const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control");
       cpSync(join(repoRoot, set), copy, { recursive: true });
 
@@ -192,7 +196,7 @@ describe("negative control", () => {
       delete snapshot.tables.persons;
       writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
-      const run = generate(packageDir, config, copy);
+      const run = generate(pkg, copy, "control");
       expect(generationFailure(run)).toBeUndefined();
       const found = differences(join(repoRoot, set), copy);
       expect(found.some((line) => /^new: [^/]+\.sql$/.test(line))).toBe(true);
@@ -210,18 +214,17 @@ describe("negative control", () => {
  */
 describe("negative control: a generation that did not finish", () => {
   const set = join("packages", "bookings", "drizzle");
-  const packageDir = join(repoRoot, dirname(set));
 
   it(
     "is refused when the schema module throws at import",
     async () => {
-      const config = (await loadConfig(packageDir)) as unknown as DrizzleConfig;
+      const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control-throws");
       cpSync(join(repoRoot, set), copy, { recursive: true });
       const throwing = join(scratch, "throwing-schema.ts");
       writeFileSync(throwing, 'throw new Error("negative control: schema import failed");\n');
 
-      const run = generate(packageDir, { ...config, schema: relative(packageDir, throwing) }, copy);
+      const run = generate(pkg, copy, "control-throws", { schema: relative(pkg.dir, throwing) });
       expect(differences(join(repoRoot, set), copy)).toEqual([]);
       expect(generationFailure(run) ?? "accepted as finished").toContain(
         "negative control: schema import failed",
@@ -233,7 +236,7 @@ describe("negative control: a generation that did not finish", () => {
   it(
     "is refused when drizzle-kit stops to ask whether a column was renamed",
     async () => {
-      const config = (await loadConfig(packageDir)) as unknown as DrizzleConfig;
+      const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control-prompt");
       cpSync(join(repoRoot, set), copy, { recursive: true });
 
@@ -254,7 +257,7 @@ describe("negative control: a generation that did not finish", () => {
       const edited = join(scratch, "control-prompt-edited");
       cpSync(copy, edited, { recursive: true });
 
-      const run = generate(packageDir, config, copy);
+      const run = generate(pkg, copy, "control-prompt");
       expect(differences(edited, copy)).toEqual([]);
       expect(generationFailure(run) ?? "accepted as finished").toContain(
         "Interactive prompts require a TTY",
