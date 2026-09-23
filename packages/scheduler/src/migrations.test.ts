@@ -4,10 +4,10 @@ import {
   CHECK_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  isPgError,
+  isRefusal,
   newId,
   nowIso,
-  pgErrorMessage,
+  engineErrorMessage,
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -61,8 +61,8 @@ describe("the scheduler migration set", () => {
     // refusal class SQLite still names, so the constraint-name half carries over unchanged —
     // measured on Node v26.7.0, the refusal reads
     // `CHECK constraint failed: scheduled_runs_period_ck`.
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/scheduled_runs_period_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/scheduled_runs_period_ck/);
   });
 
   it("rejects an unknown state", async () => {
@@ -72,8 +72,8 @@ describe("the scheduler migration set", () => {
         values (${newId()}, 'x', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 'wat',
                 ${NOW}, ${NOW})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/scheduled_runs_state_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/scheduled_runs_state_ck/);
   });
 
   it("rejects a negative generation", async () => {
@@ -84,8 +84,8 @@ describe("the scheduler migration set", () => {
         values (${newId()}, 'x', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', -1, 'pending',
                 ${NOW}, ${NOW})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/scheduled_runs_generation_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/scheduled_runs_generation_ck/);
   });
 
   it("rejects a negative attempts count", async () => {
@@ -96,8 +96,8 @@ describe("the scheduler migration set", () => {
         values (${newId()}, 'x', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', -1, 'pending',
                 ${NOW}, ${NOW})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/scheduled_runs_attempts_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/scheduled_runs_attempts_ck/);
   });
 
   // The single most load-bearing constraint in this schema: the runner's gap claim is an

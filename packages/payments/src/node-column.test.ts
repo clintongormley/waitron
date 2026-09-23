@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, FOREIGN_KEY_VIOLATION, captureError, isPgError } from "@waitron/db";
+import { CORE_MIGRATIONS, FOREIGN_KEY_VIOLATION, captureError, isRefusal } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
@@ -83,12 +83,12 @@ describe("payments.node_id (node rekey scaffolding, Task 3)", () => {
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     const { seeded } = await seedOrderWithNode();
     const error = await captureError(() => insertPayment(seeded, "p-bad-node", BOGUS_NODE));
-    // `isPgError(..., FOREIGN_KEY_VIOLATION)` rather than the SQLSTATE literal `23503`. This engine
+    // `isRefusal(..., FOREIGN_KEY_VIOLATION)` rather than the SQLSTATE literal `23503`. This engine
     // has no SQLSTATEs: `node:sqlite` sets `code` to `"ERR_SQLITE_ERROR"` on every failure alike and
     // puts the discriminating extended result code on `errcode` — measured, the assertion read
     // `'ERR_SQLITE_ERROR'` where it wanted `'23503'`. `FOREIGN_KEY_VIOLATION`
     // (`packages/db/src/sql-state.ts`) is the class, and this is the idiom the package's own
     // foreign-key suites already use (`./schema/payments-reader-id.fk.test.ts`).
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

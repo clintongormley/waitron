@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
-  isPgError,
+  isRefusal,
   locations,
   printers,
   withTransaction,
@@ -365,9 +365,9 @@ describe("listPrinters", () => {
 // reads it (`packages/db/src/sql-state.ts`). The codes below are the ones that suite measured:
 // 2067 a unique index, 275 a CHECK. Every case in this block kept its subject; what changed is the
 // spelling of a refusal.
-describe("isPgError (@waitron/db result-code cause-walk, as printers.ts uses it)", () => {
+describe("isRefusal (@waitron/db result-code cause-walk, as printers.ts uses it)", () => {
   it("recognises a bare driver error", () => {
-    expect(isPgError(Object.assign(new Error("unique"), { errcode: 2067 }), UNIQUE_VIOLATION)).toBe(
+    expect(isRefusal(Object.assign(new Error("unique"), { errcode: 2067 }), UNIQUE_VIOLATION)).toBe(
       true,
     );
   });
@@ -375,7 +375,7 @@ describe("isPgError (@waitron/db result-code cause-walk, as printers.ts uses it)
   it("recognises a violation wrapped in a cause chain (drizzle wraps the real error)", () => {
     const inner = Object.assign(new Error("unique"), { errcode: 2067 });
     expect(
-      isPgError(
+      isRefusal(
         new Error("outer", { cause: new Error("mid", { cause: inner }) }),
         UNIQUE_VIOLATION,
       ),
@@ -383,7 +383,7 @@ describe("isPgError (@waitron/db result-code cause-walk, as printers.ts uses it)
   });
 
   it("does not match a different class of refusal", () => {
-    expect(isPgError(Object.assign(new Error("check"), { errcode: 275 }), UNIQUE_VIOLATION)).toBe(
+    expect(isRefusal(Object.assign(new Error("check"), { errcode: 275 }), UNIQUE_VIOLATION)).toBe(
       false,
     );
   });
@@ -393,13 +393,13 @@ describe("isPgError (@waitron/db result-code cause-walk, as printers.ts uses it)
     looped.cause = looped;
     // The loop carries no result code of its own, so what this case proves is that the walk
     // RETURNS rather than spinning — with a code on it the answer would be true either way.
-    expect(isPgError(looped, UNIQUE_VIOLATION)).toBe(false);
+    expect(isRefusal(looped, UNIQUE_VIOLATION)).toBe(false);
   });
 
   it("returns false for a non-object value", () => {
-    expect(isPgError(null, UNIQUE_VIOLATION)).toBe(false);
-    expect(isPgError(undefined, UNIQUE_VIOLATION)).toBe(false);
-    expect(isPgError("nope", UNIQUE_VIOLATION)).toBe(false);
+    expect(isRefusal(null, UNIQUE_VIOLATION)).toBe(false);
+    expect(isRefusal(undefined, UNIQUE_VIOLATION)).toBe(false);
+    expect(isRefusal("nope", UNIQUE_VIOLATION)).toBe(false);
   });
 });
 

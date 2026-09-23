@@ -7,7 +7,7 @@ import {
   diningTables,
   FOREIGN_KEY_VIOLATION,
   locations,
-  pgErrorMessage,
+  engineErrorMessage,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -65,7 +65,7 @@ describe("the bookings Drizzle table config", () => {
 // WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so nothing here is a claim about a
 // privilege; what it still shows is the CHECK and the three foreign keys.
 //
-// The refusals themselves also carry less than they did. `pgErrorCode` answers
+// The refusals themselves also carry less than they did. `driverErrorCode` answers
 // `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the refusal CLASS comes off
 // `errcode` instead (`packages/db/src/sql-state.ts`: 275 for a CHECK where this was `23514`, 787
 // for a foreign key where it was `23503`). And the foreign-key MESSAGE is the engine's own —
@@ -170,7 +170,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] }); // 275, was 23514
     // The CHECK's message DOES carry its name here, unlike the foreign keys' — so this one case
     // can still say which constraint refused it.
-    expect(pgErrorMessage(e)).toMatch(/bookings_party_size_ck/);
+    expect(engineErrorMessage(e)).toMatch(/bookings_party_size_ck/);
   });
 
   // The refusal that changed HANDS at the flip: `status` was a PostgreSQL ENUM TYPE, so the engine
@@ -180,7 +180,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await seedParents();
     const e = await captureError(() => seedBooking("21:00", { status: "pencilled_in" }));
     expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] });
-    expect(pgErrorMessage(e)).toMatch(/bookings_status_ck/);
+    expect(engineErrorMessage(e)).toMatch(/bookings_status_ck/);
   });
 
   it("refuses a table_id with no dining_tables row (bookings_table_fk)", async () => {
@@ -189,7 +189,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       seedBooking("19:00", { table_id: "bbbbbbbb-0000-4000-8000-000000000009" }),
     );
     expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] }); // 787, was 23503
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a tab_id with no working_orders row (bookings_tab_fk)", async () => {
@@ -198,7 +198,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       seedBooking("18:00", { tab_id: "dddddddd-0000-4000-8000-000000000001" }),
     );
     expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a location_id with no locations row (bookings_location_fk)", async () => {
@@ -207,6 +207,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       seedBooking("17:00", { location_id: "eeeeeeee-0000-4000-8000-000000000001" }),
     );
     expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 });

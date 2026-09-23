@@ -143,7 +143,7 @@ export {
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTransaction } from "./tenancy.js";
-export { isPgError, isUniqueViolation } from "./unique-violation.js";
+export { isRefusal, isUniqueViolation } from "./unique-violation.js";
 export {
   checkFailed,
   constraintTarget,
@@ -184,7 +184,7 @@ export { CORE_MIGRATIONS } from "./migrations.js";
  * it reproduces `immutability.test.ts`'s pattern against its own module-owned table and needs the
  * same wrapped-driver-error readers this package's own suite uses.
  */
-export { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
+export { captureError, driverErrorCode, engineErrorMessage } from "./testing/errors.js";
 
 // english-only.ts's GENERIC_PACKAGES/SPANISH_WORDS/findSpanish/sourceFilesIn are deliberately
 // NOT re-exported here, despite costing nothing at runtime in isolation. `english-only.ts`

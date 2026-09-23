@@ -1,9 +1,9 @@
 import {
   CHECK_VIOLATION,
   captureError,
-  isPgError,
+  isRefusal,
   newId,
-  pgErrorMessage,
+  engineErrorMessage,
   triggerRaised,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -131,8 +131,8 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "F2", facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
   });
 
   it("rejects a facturas_sustituidas sitting on a NULL tipo_factura", async () => {
@@ -145,8 +145,8 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: null, facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/registros_facturas_sustituidas_f3_ck/);
   });
 });
 

@@ -6,7 +6,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { refusalOn } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedNode } from "../testing/seed.js";
@@ -159,7 +159,7 @@ describe("park & retrieve schema", () => {
            1000, 100, 110, 1000, 100)`,
       ),
     );
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("points a draft line's product_id at the products primary key", async () => {

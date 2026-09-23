@@ -5,7 +5,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -128,7 +128,7 @@ describe("table↔tab link columns (mutual FKs)", () => {
         tx.update(diningTables).set({ tabId: randomUUID() }).where(eq(diningTables.id, tableId)),
       ),
     );
-    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
 
     // Proof by deletion: with foreign keys off, the same dangling pointer is accepted.
     await withForeignKeysOff(suite.db, async () => {
@@ -159,7 +159,7 @@ describe("table↔tab link columns (mutual FKs)", () => {
           .where(eq(workingOrders.id, woId)),
       ),
     );
-    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
 
     await withForeignKeysOff(suite.db, async () => {
       await inTx((tx) =>

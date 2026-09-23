@@ -26,8 +26,8 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   captureError,
-  isPgError,
-  pgErrorMessage,
+  isRefusal,
+  engineErrorMessage,
   runMigrations,
   openVenueDatabase,
   type Database,
@@ -261,8 +261,8 @@ describe("payments migrations", () => {
           insert into payment_policy (id, offline_mode, offline_amount_cap, created_at, updated_at)
           values (2, 'cash_only', 0, ${stamps})`);
     });
-    expect(isPgError(second, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(second)).toMatch(/payment_policy_singleton_ck/);
+    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(second)).toMatch(/payment_policy_singleton_ck/);
 
     // WHICH CONSTRAINT REFUSES THE SECOND ROW HAS CHANGED, and the old assertion named the one that
     // no longer fires. On PostgreSQL `id` took its `DEFAULT 1`, so an insert omitting it collided
@@ -282,8 +282,8 @@ describe("payments migrations", () => {
           insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
           values ('cash_only', 0, ${stamps})`);
     });
-    expect(isPgError(duplicate, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(duplicate)).toMatch(/payment_policy_singleton_ck/);
+    expect(isRefusal(duplicate, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(duplicate)).toMatch(/payment_policy_singleton_ck/);
     expect(
       (await db.execute<{ n: number }>(sql`select count(*) as n from payment_policy`)).rows,
     ).toEqual([{ n: 1 }]);

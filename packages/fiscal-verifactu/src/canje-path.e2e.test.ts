@@ -74,7 +74,7 @@ function f3CanjeRecord(): RegistroAlta {
 }
 
 /** Insert the flattened record under a fresh sale and return the sale id. */
-async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
+async function storeF3(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.db, till, 1);
   const row = toRegistroRow(record, {
     tillId: till.tillId,
@@ -116,7 +116,7 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
 describe("the F3 canje drain path", () => {
   it("stores an F3 registro carrying the recipient and substituted tickets", async () => {
     // Check the stored recipient and substitution blocks before serialization.
-    const saleId = await storeF3AsAppUser(f3CanjeRecord());
+    const saleId = await storeF3(f3CanjeRecord());
 
     const [row] = await suite.db
       .select()
@@ -138,7 +138,7 @@ describe("the F3 canje drain path", () => {
     // EXACT path the drainer submits by (drain.ts:722-729 `toEnvioRegistro` -> serializeEnvio). If
     // `destinatarios` had not survived `fromRegistroRow`, the XML AEAT receives would omit the
     // mandatory recipient and the F3 would be rejected — the same class of bug #46 fixed for the R5.
-    const saleId = await storeF3AsAppUser(f3CanjeRecord());
+    const saleId = await storeF3(f3CanjeRecord());
     const row = await rawRegistro(saleId);
 
     // Mirrors drain.ts:722-729 `toEnvioRegistro` and :733-735 `cabeceraFor`, both module-private:

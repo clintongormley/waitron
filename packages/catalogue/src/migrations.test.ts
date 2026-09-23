@@ -6,10 +6,10 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
-  isPgError,
+  isRefusal,
   categories as coreCategories,
   products,
-  pgErrorMessage,
+  engineErrorMessage,
   UNIQUE_VIOLATION,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -283,22 +283,22 @@ describe("the one-row catalogue tables hold at most one row", () => {
     const second = await captureError(() =>
       db.insert(contentLanguages).values({ id: 2, defaultLanguage: "es", languages: ["es"] }),
     );
-    expect(isPgError(second, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
     // A CHECK is the one refusal class SQLite still names, so this half survives unchanged.
-    expect(pgErrorMessage(second)).toContain("content_languages_singleton_ck");
+    expect(engineErrorMessage(second)).toContain("content_languages_singleton_ck");
     const duplicate = await captureError(() =>
       db.insert(contentLanguages).values({ defaultLanguage: "es", languages: ["es"] }),
     );
-    expect(isPgError(duplicate, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("refuses a second unit-seed marker", async () => {
     await db.insert(unitSeedStates).values({ id: 1 });
     const second = await captureError(() => db.insert(unitSeedStates).values({ id: 2 }));
-    expect(isPgError(second, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(second)).toContain("unit_seed_states_singleton_ck");
+    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(second)).toContain("unit_seed_states_singleton_ck");
     const duplicate = await captureError(() => db.insert(unitSeedStates).values({ id: 1 }));
-    expect(isPgError(duplicate, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
   });
 });
 
@@ -404,7 +404,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
    */
   async function refusal(write: () => Promise<unknown>, key: string) {
     const error = await captureError(write);
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
   }
 
   it("refuses a menu section or offer whose menu, product or section does not exist", async () => {

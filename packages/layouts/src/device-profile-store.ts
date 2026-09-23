@@ -4,7 +4,7 @@ import {
   RESTRICT_VIOLATION,
   constraintTarget,
   deviceProfiles,
-  isPgError,
+  isRefusal,
   isUniqueViolation,
   nowIso,
   sameTarget,
@@ -128,10 +128,10 @@ export function translateWriteError(err: unknown): never {
       throw new AppError("device_profile.name_taken", {});
     }
   }
-  if (isPgError(err, FOREIGN_KEY_VIOLATION)) {
+  if (isRefusal(err, FOREIGN_KEY_VIOLATION)) {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
   }
-  if (isPgError(err, RESTRICT_VIOLATION)) {
+  if (isRefusal(err, RESTRICT_VIOLATION)) {
     throw new AppError("device_profile.in_use", {});
   }
   throw err;

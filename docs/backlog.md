@@ -2564,7 +2564,7 @@ action:** export the names from `@waitron/store` and read them.
 predicate — OPEN (found 2026-09-23, task F1's review wave).** Both are `[1811]`, because SQLite
 gives a foreign key's `ON DELETE RESTRICT` and every hand-written `RAISE(ABORT)` the same result
 code. `triggerRaised` exists for the trigger direction and matches the exact words. The restrict
-direction has no equivalent, so `isPgError(err, RESTRICT_VIOLATION)` is true for EVERY trigger
+direction has no equivalent, so `isRefusal(err, RESTRICT_VIOLATION)` is true for EVERY trigger
 refusal as well — including the append-only ones. Two callers take it:
 `packages/layouts/src/canvas-store.ts` and `packages/layouts/src/device-profile-store.ts`. Both give
 the right answer TODAY, and only because exactly one trigger sits on each path — the device-profile
@@ -3579,9 +3579,11 @@ it; and a correction must not decrement a count where it should drop it.
 - **Stale PGlite prose — DONE by T2**, and it was roughly a hundred files rather than the dozen this
   line guessed at. `scripts/schema-equivalence.{sh,md}` went with it: deleted, not swept, because the
   script's whole subject was dumping and diffing a PostgreSQL schema.
-- **`isPgError`, `pgErrorCode`, `pgErrorMessage` and `storeF3AsAppUser` still carry the old engine's
-  name.** `packages/db/src/unique-violation.ts` records that renaming them touches every caller.
-  Nobody owns this yet; it is a rename-only change and wants its own item.
+- **The four helpers named after PostgreSQL — DONE (2026-09-23, `chore/rename-pg-helpers`).**
+  Renamed, with no behaviour change: `isPgError` is `isRefusal`, `pgErrorCode` is
+  `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and the canje test's
+  `storeF3AsAppUser` is `storeF3`. Historical plans and specs under `docs/superpowers/` keep the
+  old names, as written.
 - **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
   `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
   `apps/server/src/management-api.ts` no longer take one. Every route still calls

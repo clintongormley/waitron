@@ -21,7 +21,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FORM_FACTOR_REFUSAL } from "../trigger-refusals.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedKitchenStation, seedTenant } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
@@ -92,7 +92,7 @@ describe("device_profiles form-factor drift guard (locked while an active device
     const error = await captureError(() =>
       db.update(deviceProfiles).set({ formFactor: "till" }).where(eq(deviceProfiles.id, profileId)),
     );
-    expect(pgErrorMessage(error)).toBe(FORM_FACTOR_REFUSAL);
+    expect(engineErrorMessage(error)).toBe(FORM_FACTOR_REFUSAL);
   });
 
   it("allows changing form_factor when the referencing device is INACTIVE (negative control)", async () => {
@@ -158,6 +158,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
     const again = await captureError(() =>
       db.update(deviceProfiles).set({ formFactor: "kds" }).where(eq(deviceProfiles.id, profileId)),
     );
-    expect(pgErrorMessage(again)).toBe(FORM_FACTOR_REFUSAL);
+    expect(engineErrorMessage(again)).toBe(FORM_FACTOR_REFUSAL);
   });
 });

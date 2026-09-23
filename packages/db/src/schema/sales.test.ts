@@ -10,9 +10,9 @@ import {
   TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { saleLines, sales, tenders } from "./sales.js";
@@ -177,7 +177,7 @@ describe("sales — the commercial record", () => {
     // error 3000 on a duplicate. The database refuses first.
     await recordCompleteSale(suite.db);
     const error = await captureError(() => recordCompleteSale(suite.db));
-    expect(isPgError(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("permits the same invoice number in two different series", async () => {
@@ -311,8 +311,8 @@ describe("sales — the commercial record", () => {
         ),
       ),
     );
-    expect(isPgError(error, NOT_NULL_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toBe("NOT NULL constraint failed: sales.node_id");
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("NOT NULL constraint failed: sales.node_id");
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
@@ -325,7 +325,7 @@ describe("sales — the commercial record", () => {
         }),
       ),
     );
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -368,14 +368,14 @@ describe("sales — locale snapshot", () => {
     const error = await captureError(() => recordCompleteSale(suite.db, { locale: "en" }));
     // SQLite reports a named CHECK as `CHECK constraint failed: <name>`, so the constraint the
     // PostgreSQL version named is still the thing this asserts.
-    expect(pgErrorMessage(error)).toMatch(/sales_locale_member_ck/);
+    expect(engineErrorMessage(error)).toMatch(/sales_locale_member_ck/);
   });
 
   it("rejects more than two invoice locales", async () => {
     const error = await captureError(() =>
       recordCompleteSale(suite.db, { invoiceLocales: ["es", "ca", "en"] }),
     );
-    expect(pgErrorMessage(error)).toMatch(/sales_invoice_locales_ck/);
+    expect(engineErrorMessage(error)).toMatch(/sales_invoice_locales_ck/);
   });
 });
 
@@ -408,8 +408,8 @@ describe("sales — tender coverage", () => {
     const error = await captureError(() =>
       suite.db.insert(tenders).values({ saleId: id, method: "cash", amount: 0, settledAt: AT }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenders_amount_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenders_amount_ck/);
   });
 
   it("rejects a negative-amount tender", async () => {
@@ -427,7 +427,7 @@ describe("sales — tender coverage", () => {
         settledAt: AT,
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
   });
 
   it("accepts a positive-amount tender", async () => {
@@ -454,8 +454,8 @@ describe("sales — tender coverage", () => {
         settledAt: AT,
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
   });
 
   it("accepts a tender whose tip equals its amount", async () => {
@@ -484,8 +484,8 @@ describe("sales — tender coverage", () => {
         settledAt: AT,
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
   });
 });
 
@@ -505,12 +505,12 @@ describe("sales — immutability", () => {
     const update = await captureError(() =>
       suite.db.update(sales).set({ total: 99900 }).where(eq(sales.id, saleId)),
     );
-    expect(isPgError(update, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(update)).toBe("sales is append-only");
+    expect(isRefusal(update, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(update)).toBe("sales is append-only");
 
     const remove = await captureError(() => suite.db.delete(sales).where(eq(sales.id, saleId)));
-    expect(isPgError(remove, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(remove)).toBe("sales is append-only");
+    expect(isRefusal(remove, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(remove)).toBe("sales is append-only");
   });
 
   it("carries only the chosen variant snapshot identifier, with no live catalogue link", () => {
@@ -580,8 +580,8 @@ describe("sales — fiscal_state", () => {
         ),
       ),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/sales_fiscal_state_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/sales_fiscal_state_ck/);
   });
 });
 
@@ -662,8 +662,8 @@ describe("sales — corrective link and negative total", () => {
     const error = await captureError(() =>
       insertSale({ total: -100, correctsSaleId: null, invoiceNumber: 2 }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/sales_total_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/sales_total_ck/);
   });
 
   it("still accepts a corrective sale with a positive total", async () => {
@@ -707,7 +707,7 @@ describe("sales — corrective link and negative total", () => {
       }),
     );
     // Foreign key violation — the (corrects_sale_id) FK onto sales.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 

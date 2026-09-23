@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { refusalOn } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION, NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -123,7 +123,7 @@ describe("invoice_series schema", () => {
     const error = await captureError(() =>
       db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "XX", purpose: "invented" }),
     );
-    expect(pgErrorMessage(error)).toMatch(/invoice_series_purpose_ck/);
+    expect(engineErrorMessage(error)).toMatch(/invoice_series_purpose_ck/);
   });
 
   it("has exactly the columns it has today — none relating a series to a chain", async () => {
@@ -207,7 +207,7 @@ describe("invoice_series schema", () => {
         sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, '99999999-9999-4999-8999-999999999999', 'FX')`,
       ),
     );
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("has no unique constraint on node_id alone", async () => {

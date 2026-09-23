@@ -20,7 +20,7 @@ import {
   TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "./sql-state.js";
-import { isPgError, isUniqueViolation } from "./unique-violation.js";
+import { isRefusal, isUniqueViolation } from "./unique-violation.js";
 
 /**
  * Every case here is a REAL refusal from the engine, never a hand-built error: what this file
@@ -99,7 +99,7 @@ describe("reading a SQLite refusal", () => {
     const db = await open();
     const error = await refusal(db, sql`insert into parent (id, name) values (3, null)`);
     expect(constraintTarget(error)).toEqual({ table: "parent", columns: ["name"] });
-    expect(isPgError(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
     expect(isUniqueViolation(error)).toBe(false);
   });
 
@@ -116,17 +116,17 @@ describe("reading a SQLite refusal", () => {
     const error = await refusal(db, sql`insert into child (id, parent_id) values ('c9', 99)`);
     // `FOREIGN KEY constraint failed`, and that is the whole message — no table, no column, no
     // constraint name. A caller that has to know WHICH foreign key cannot learn it from here.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
     expect(constraintTarget(error)).toBeUndefined();
   });
 
   it("tells a restricted delete apart from a value naming no parent", async () => {
     const db = await open();
     const error = await refusal(db, sql`delete from parent where id = 1`);
-    expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
     // The two directions carried different SQLSTATEs on PostgreSQL and carry different result
     // codes here, so the distinction survives the engine change.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(false);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(false);
   });
 
   it("names nothing for a CHECK, and still reports the class", async () => {
@@ -135,7 +135,7 @@ describe("reading a SQLite refusal", () => {
       db,
       sql`insert into child (id, parent_id, amount) values ('c3', 1, 0)`,
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(constraintTarget(error)).toBeUndefined();
   });
 
@@ -182,14 +182,14 @@ describe("reading a trigger's raise", () => {
       db,
       sql`insert into child (id, parent_id, code) values ('c4', 1, 'STOP')`,
     );
-    expect(isPgError(raised, TRIGGER_ABORT)).toBe(true);
+    expect(isRefusal(raised, TRIGGER_ABORT)).toBe(true);
     expect(triggerRaised(raised, RAISED)).toBe(true);
 
     // The control, and the whole reason the predicate reads the message: SQLite implements
     // `ON DELETE RESTRICT` with an internal trigger, so a restricted delete arrives under the SAME
     // result code as the raise above. Only the words separate them.
     const restricted = await refusal(db, sql`delete from parent where id = 1`);
-    expect(isPgError(restricted, TRIGGER_ABORT)).toBe(true);
+    expect(isRefusal(restricted, TRIGGER_ABORT)).toBe(true);
     expect(triggerRaised(restricted, RAISED)).toBe(false);
   });
 
@@ -243,7 +243,7 @@ describe("reading a trigger's raise", () => {
  *
  * `constraintTarget` returns `undefined` for every CHECK, because a CHECK names no key; what
  * SQLite puts after the colon is the constraint's NAME. That is enough to tell one CHECK on a
- * table from another, which `isPgError(error, CHECK_VIOLATION)` on its own is not.
+ * table from another, which `isRefusal(error, CHECK_VIOLATION)` on its own is not.
  */
 describe("reading which CHECK refused a write", () => {
   it("names the constraint a refused row broke, and declines its sibling on the same table", async () => {
@@ -254,7 +254,7 @@ describe("reading which CHECK refused a write", () => {
       db,
       sql`insert into child (id, parent_id, amount) values ('c6', 1, 0)`,
     );
-    expect(isPgError(amount, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(amount, CHECK_VIOLATION)).toBe(true);
     expect(checkFailed(amount, "child_amount_ck")).toBe(true);
     // The control, and the whole point: the class alone cannot separate these two, because both
     // are 275 on the same table.
@@ -282,7 +282,7 @@ describe("reading which CHECK refused a write", () => {
     const db = await open();
     db.run(sql`create table anon (a integer, check (a > 0))`);
     const error = await refusal(db, sql`insert into anon (a) values (0)`);
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(checkFailed(error, "anon_a_ck")).toBe(false);
   });
 

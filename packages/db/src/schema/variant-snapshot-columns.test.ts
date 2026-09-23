@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
@@ -106,7 +106,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
         .insert(workingOrderLines)
         .values(lineValues({ lineNo: 3, variantDescriptions: { es: "Café solo" } })),
     );
-    expect(pgErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
+    expect(engineErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
   });
 
   it("rejects a variant_descriptions carrying an unconfigured locale", async () => {
@@ -118,7 +118,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
         }),
       ),
     );
-    expect(pgErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
+    expect(engineErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
   });
 
   it("applied the same new columns to sale_lines with matching types", async () => {

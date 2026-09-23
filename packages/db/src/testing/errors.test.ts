@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { captureError, pgErrorCode, pgErrorMessage } from "./errors.js";
+import { captureError, driverErrorCode, engineErrorMessage } from "./errors.js";
 
 /*
  * immutability.test.ts exercises these against real driver errors, but only
@@ -12,54 +12,54 @@ import { captureError, pgErrorCode, pgErrorMessage } from "./errors.js";
  * driver that behaves differently from either target.
  */
 
-it("pgErrorCode reads a top-level .code", () => {
-  expect(pgErrorCode({ code: "42501" })).toBe("42501");
+it("driverErrorCode reads a top-level .code", () => {
+  expect(driverErrorCode({ code: "42501" })).toBe("42501");
 });
 
-it("pgErrorCode falls back to .cause.code when .code is absent", () => {
-  expect(pgErrorCode({ cause: { code: "WT001" } })).toBe("WT001");
+it("driverErrorCode falls back to .cause.code when .code is absent", () => {
+  expect(driverErrorCode({ cause: { code: "WT001" } })).toBe("WT001");
 });
 
-it("pgErrorCode prefers a top-level .code over .cause.code", () => {
-  expect(pgErrorCode({ code: "42501", cause: { code: "WT001" } })).toBe("42501");
+it("driverErrorCode prefers a top-level .code over .cause.code", () => {
+  expect(driverErrorCode({ code: "42501", cause: { code: "WT001" } })).toBe("42501");
 });
 
-it("pgErrorCode returns undefined when neither is a string", () => {
-  expect(pgErrorCode({})).toBeUndefined();
-  expect(pgErrorCode({ code: 42501 })).toBeUndefined();
-  expect(pgErrorCode(null)).toBeUndefined();
-  expect(pgErrorCode(undefined)).toBeUndefined();
+it("driverErrorCode returns undefined when neither is a string", () => {
+  expect(driverErrorCode({})).toBeUndefined();
+  expect(driverErrorCode({ code: 42501 })).toBeUndefined();
+  expect(driverErrorCode(null)).toBeUndefined();
+  expect(driverErrorCode(undefined)).toBeUndefined();
 });
 
-it("pgErrorMessage reads .cause.message when present", () => {
+it("engineErrorMessage reads .cause.message when present", () => {
   const error = { message: "Failed query: ...", cause: { message: "permission denied" } };
-  expect(pgErrorMessage(error)).toBe("permission denied");
+  expect(engineErrorMessage(error)).toBe("permission denied");
 });
 
-it("pgErrorMessage falls back to the top-level .message when .cause has none", () => {
-  expect(pgErrorMessage({ message: "boom" })).toBe("boom");
+it("engineErrorMessage falls back to the top-level .message when .cause has none", () => {
+  expect(engineErrorMessage({ message: "boom" })).toBe("boom");
 });
 
-it("pgErrorMessage throws when neither .cause.message nor .message is a string", () => {
+it("engineErrorMessage throws when neither .cause.message nor .message is a string", () => {
   // No String(error) fallback: that would reproduce a DrizzleQueryError's
   // generic "Failed query: <sql>" text and let a pattern that happens to
   // match the SQL pass an assertion for the wrong reason (the exact trap
   // tenancy.test.ts's rejectsWithCauseMatching, Task 4, was written to
   // close).
-  expect(() => pgErrorMessage(null)).toThrow(/neither \.cause\.message nor \.message/);
-  expect(() => pgErrorMessage(undefined)).toThrow(/neither \.cause\.message nor \.message/);
-  expect(() => pgErrorMessage("plain string rejection")).toThrow(
+  expect(() => engineErrorMessage(null)).toThrow(/neither \.cause\.message nor \.message/);
+  expect(() => engineErrorMessage(undefined)).toThrow(/neither \.cause\.message nor \.message/);
+  expect(() => engineErrorMessage("plain string rejection")).toThrow(
     /neither \.cause\.message nor \.message/,
   );
-  expect(() => pgErrorMessage({})).toThrow(/neither \.cause\.message nor \.message/);
+  expect(() => engineErrorMessage({})).toThrow(/neither \.cause\.message nor \.message/);
 });
 
-it("pgErrorMessage says what it received and why it will not guess", () => {
+it("engineErrorMessage says what it received and why it will not guess", () => {
   // The whole message, once. The pattern above matches its first clause, which leaves the part a
   // reader actually needs — what arrived, and the reason a String(error) fallback is refused —
   // free to be deleted.
-  expect(() => pgErrorMessage("plain string rejection")).toThrow(
-    "pgErrorMessage: neither .cause.message nor .message is a string on this error " +
+  expect(() => engineErrorMessage("plain string rejection")).toThrow(
+    "engineErrorMessage: neither .cause.message nor .message is a string on this error " +
       "(received: plain string rejection) — refusing to fall back to String(error), which would " +
       'reproduce a DrizzleQueryError\'s generic "Failed query: <sql>" text and let an ' +
       "assertion on it pass for the wrong reason",

@@ -929,12 +929,11 @@ describe("parkOrder", () => {
     // the cause chain — the same normalisation `record-void.test.ts` makes for this identical
     // assertion shape.
     //
-    // This asserted the SQLSTATE `23505` through `pgErrorCode` until the storage swap. `node:sqlite`
-    // puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the discriminating value on
-    // `errcode`, so no string code separates a duplicate key from anything else here; and SQLite
-    // splits what PostgreSQL folded into `23505` — 1555 for a primary key, 2067 for any other
-    // unique index (packages/db/src/sql-state.ts). `UNIQUE_VIOLATION` holds both, so the claim is
-    // the one this case always made: the collision surfaced as a duplicate key.
+    // `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the
+    // discriminating value on `errcode`, so no string code separates a duplicate key from anything
+    // else here; and SQLite reports a duplicate key two ways — 1555 for a primary key, 2067 for any
+    // other unique index (packages/db/src/sql-state.ts). `UNIQUE_VIOLATION` holds both, so the
+    // claim is that the collision surfaced as a duplicate key.
     const error = await captureError(() => parkOrder({ db }, cfg, { id, lines }));
     expect(isUniqueViolation(error)).toBe(true);
 

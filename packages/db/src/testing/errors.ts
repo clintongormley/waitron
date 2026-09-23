@@ -13,8 +13,7 @@
  * `checkFailed` / `triggerRaised` beside it are what a test asking WHICH
  * refusal this was should call.
  *
- * It survives because the SQLSTATE it was named for is gone but the two
- * shapes it walks are not: a refusal from `db.run` arrives as drizzle's
+ * The two shapes it walks: a refusal from `db.run` arrives as drizzle's
  * `DrizzleError`, which has no `.code` of its own and carries the engine's
  * error on `.cause`, while one from `db.all`, `db.get`, `db.execute` or an
  * awaited drizzle query builder is the engine's own `Error`, with `.code` at
@@ -25,7 +24,7 @@
  * branch each shape takes and nothing about what arrives from this engine:
  * no value in that file is one `node:sqlite` produces.
  */
-export function pgErrorCode(error: unknown): string | undefined {
+export function driverErrorCode(error: unknown): string | undefined {
   const e = error as { code?: unknown; cause?: { code?: unknown } } | null | undefined;
   if (typeof e?.code === "string") return e.code;
   if (typeof e?.cause?.code === "string") return e.cause.code;
@@ -74,12 +73,12 @@ export function pgErrorCode(error: unknown): string | undefined {
  * covers the real shapes is every suite that matches a refusal's words —
  * `../schema/sales.test.ts`'s `sales is append-only` among them.
  */
-export function pgErrorMessage(error: unknown): string {
+export function engineErrorMessage(error: unknown): string {
   const e = error as { message?: unknown; cause?: { message?: unknown } } | null | undefined;
   if (typeof e?.cause?.message === "string") return e.cause.message;
   if (typeof e?.message === "string") return e.message;
   throw new Error(
-    `pgErrorMessage: neither .cause.message nor .message is a string on this error ` +
+    `engineErrorMessage: neither .cause.message nor .message is a string on this error ` +
       `(received: ${String(error)}) — refusing to fall back to String(error), which would ` +
       `reproduce a DrizzleQueryError's generic "Failed query: <sql>" text and let an ` +
       `assertion on it pass for the wrong reason`,

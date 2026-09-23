@@ -5,8 +5,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedTenant } from "../testing/seed.js";
 
@@ -40,7 +40,7 @@ describe("tenants is one row, keyed 1", () => {
         ),
       ),
     );
-    expect(isPgError(second, UNIQUE_VIOLATION)).toBe(true); // the primary key
+    expect(isRefusal(second, UNIQUE_VIOLATION)).toBe(true); // the primary key
 
     const otherId = await captureError(() =>
       Promise.resolve(
@@ -50,7 +50,7 @@ describe("tenants is one row, keyed 1", () => {
         ),
       ),
     );
-    expect(isPgError(otherId, CHECK_VIOLATION)).toBe(true); // tenants_singleton_ck
+    expect(isRefusal(otherId, CHECK_VIOLATION)).toBe(true); // tenants_singleton_ck
 
     const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from tenants`);
     expect(still[0]!.n).toBe(1);
@@ -95,8 +95,8 @@ describe("tenants is one row, keyed 1", () => {
         ),
       ),
     );
-    expect(isPgError(omitted, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(omitted)).toMatch(/tenants_singleton_ck/);
+    expect(isRefusal(omitted, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(omitted)).toMatch(/tenants_singleton_ck/);
 
     const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from tenants`);
     expect(still[0]!.n).toBe(1);

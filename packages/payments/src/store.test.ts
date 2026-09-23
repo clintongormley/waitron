@@ -4,7 +4,7 @@ import {
   CORE_MIGRATIONS,
   captureError,
   nodes,
-  pgErrorMessage,
+  engineErrorMessage,
   tills,
   workingOrders,
 } from "@waitron/db";
@@ -863,7 +863,7 @@ describe("Mode 3 initiated lifecycle", () => {
     await initiate(seeded, HOSTED, "pay-1");
     // `db.transaction`/`tx.insert` wrap the driver error in a `DrizzleQueryError` whose own
     // `.message` is the generic "Failed query: ..." — the actual constraint-violation text lives on
-    // `.cause` (see `@waitron/db`'s `pgErrorMessage`, used the same way throughout
+    // `.cause` (see `@waitron/db`'s `engineErrorMessage`, used the same way throughout
     // packages/db/src/schema/*.test.ts for a unique/check-constraint assertion).
     //
     // This engine names the COLUMNS, never the index: the PostgreSQL text this replaced carried
@@ -874,7 +874,7 @@ describe("Mode 3 initiated lifecycle", () => {
     // `toBe` on the whole string rather than a loose match. Measured 2026-09-22 on Node v26.7.0
     // against a two-row probe over this exact partial index: errcode 2067, `ERR_SQLITE_ERROR`.
     const error = await captureError(() => initiate(seeded, HOSTED, "pay-2"));
-    expect(pgErrorMessage(error)).toBe(
+    expect(engineErrorMessage(error)).toBe(
       "UNIQUE constraint failed: payments.provider, payments.external_ref",
     );
   });

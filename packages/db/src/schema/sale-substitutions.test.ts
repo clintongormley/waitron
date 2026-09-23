@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { refusalOn, triggerRaised } from "../constraint-target.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -254,7 +254,7 @@ describe("sale_substitutions — the N:1 link", () => {
     // `../constraint-target.ts` records the same gap). The old `23503` named no particular key
     // either, so this pins what the case always pinned — that the link with the absent parent is
     // the statement refused, while the link to a real ticket in the case above is accepted.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("rejects a link whose substitution sale does not exist", async () => {
@@ -264,7 +264,7 @@ describe("sale_substitutions — the N:1 link", () => {
         substitutedSaleId: ticket1,
       }),
     );
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 

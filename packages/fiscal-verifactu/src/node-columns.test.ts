@@ -2,7 +2,7 @@ import {
   FOREIGN_KEY_VIOLATION,
   NOT_NULL_VIOLATION,
   captureError,
-  isPgError,
+  isRefusal,
   newId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -92,7 +92,7 @@ describe("cadenas.node_id", () => {
         sql`insert into cadenas (node_id, actualizado_en) values (null, '2026-07-20T18:20:30.000Z')`,
       ),
     );
-    expect(isPgError(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
   });
 });
 
@@ -122,7 +122,7 @@ describe("registros_facturacion.node_id", () => {
   it("is NOT NULL — a registro without it is refused", async () => {
     expect(await nodeIdNullability("registros_facturacion")).toEqual([{ is_nullable: "NO" }]);
     const error = await captureError(() => insertRegistro(null));
-    expect(isPgError(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
   });
 
   it("accepts a valid node id", async () => {
@@ -133,6 +133,6 @@ describe("registros_facturacion.node_id", () => {
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     const error = await captureError(() => insertRegistro(BOGUS_NODE));
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

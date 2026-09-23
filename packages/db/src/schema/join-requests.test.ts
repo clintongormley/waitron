@@ -2,7 +2,7 @@ import { asc, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -77,6 +77,6 @@ describe("join_requests", () => {
     // one of its values. The regenerated SQLite column is `text` with an `in (...)` CHECK
     // (`packages/db/src/schema/columns.ts`'s `enumType`/`enumCheck`), so the same bad label is
     // refused by that CHECK instead. Same question, the engine's own vocabulary.
-    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
   });
 });

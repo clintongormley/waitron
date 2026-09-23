@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { RESTRICT_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { canvases } from "./canvases.js";
 import { deviceProfiles } from "./device-profiles.js";
@@ -81,7 +81,7 @@ describe("device_profiles canvas FK (canvas_id) → canvases", () => {
     // plain NO ACTION gives. That distinction survives the engine change: measured on this suite,
     // a RESTRICT refusal is errcode 1811 and a NO ACTION delete of a referenced row (a node an
     // invoice_series names) is 787, which is `FOREIGN_KEY_VIOLATION`.
-    expect(isPgError(e, RESTRICT_VIOLATION)).toBe(true);
+    expect(isRefusal(e, RESTRICT_VIOLATION)).toBe(true);
     // The message half is not decoration. 1811 is `SQLITE_CONSTRAINT_TRIGGER`, which this schema's
     // own `raise(abort, …)` guards also report (`../sql-state.ts`) — including one on
     // `device_profiles`, the table holding the reference under test: `device_profile_form_factor_locked`
@@ -89,7 +89,7 @@ describe("device_profiles canvas FK (canvas_id) → canvases", () => {
     // and its own text (measured). The statement here writes `canvases`, so that particular trigger
     // is not on this path; the point is that the class alone cannot tell a trigger refusal from a
     // RESTRICT one, and the message can.
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
     // The control in the other direction, and the half a foreign-key refusal can no longer carry
     // itself: it names no table and no column, so nothing in it says WHICH key blocked the delete.
     // An otherwise identical canvas that no profile references deletes cleanly, so it is the

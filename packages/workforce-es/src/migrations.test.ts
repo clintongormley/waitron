@@ -6,10 +6,10 @@ import {
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  isPgError,
+  isRefusal,
   newId,
   nowIso,
-  pgErrorMessage,
+  engineErrorMessage,
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -93,8 +93,8 @@ describe("the workforce-es (convenio_config) migration set", () => {
         insert into convenio_config (id, created_at, location_id, working_days_per_week)
         values (${rowIdentity()}, ${locationId}, 0)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/convenio_config_working_days_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/convenio_config_working_days_ck/);
   });
 
   it("rejects an overtime_model outside the enum", async () => {
@@ -108,8 +108,8 @@ describe("the workforce-es (convenio_config) migration set", () => {
         insert into convenio_config (id, created_at, location_id, overtime_model)
         values (${rowIdentity()}, ${locationId}, 'annual_hours')`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/convenio_config_overtime_model_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/convenio_config_overtime_model_ck/);
   });
 
   it("allows only one convenio_config per location", async () => {
@@ -145,7 +145,7 @@ describe("the workforce-es (convenio_config) migration set", () => {
     );
     // A foreign-key refusal names nothing on this engine — the whole message is
     // `FOREIGN KEY constraint failed` — so the class is all there is to assert.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 

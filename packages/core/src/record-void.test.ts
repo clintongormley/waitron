@@ -15,7 +15,7 @@ import {
   isUniqueViolation,
   incidents,
   invoiceSeries,
-  pgErrorCode,
+  driverErrorCode,
   saleVoids,
   sales,
   withTransaction,
@@ -478,7 +478,7 @@ describe("recordVoid — error propagation", () => {
       }),
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect(pgErrorCode(error)).toBe("53100");
+    expect(driverErrorCode(error)).toBe("53100");
   });
 });
 

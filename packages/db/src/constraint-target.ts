@@ -233,7 +233,7 @@ export function indexViolated(error: unknown, index: string): boolean {
  * The question a write path asks when the table it writes carries SEVERAL checks and it translates
  * only one of them. {@link constraintTarget} answers `undefined` for every CHECK, because a CHECK
  * names no key — what SQLite puts after the colon is the constraint's NAME — so
- * `isPgError(error, CHECK_VIOLATION)` was all a caller had, and it accepts every sibling check on
+ * `isRefusal(error, CHECK_VIOLATION)` was all a caller had, and it accepts every sibling check on
  * the table alike. `printers` carries seven, one of which means "this transport is short of a
  * field it needs" and six of which mean something else entirely.
  *

@@ -49,8 +49,7 @@ const SIF_PARAMS = {
 /**
  * The key `registro_sif_instalacion_uq` declares, in its own column order (./schema/sif.ts).
  *
- * The replacement for `pgErrorCode(error) === "23505"`. SQLite reports no SQLSTATE — every failure
- * carries `code: "ERR_SQLITE_ERROR"` and the discriminating value is a numeric `errcode`
+ * SQLite reports no SQLSTATE — every failure carries `code: "ERR_SQLITE_ERROR"` and the discriminating value is a numeric `errcode`
  * (packages/db/src/sql-state.ts) — so the two cases below ask `refusalOn`, which matches the class
  * AND the table and columns the engine's own message named, on one layer of the cause chain.
  *

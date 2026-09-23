@@ -4,7 +4,7 @@ import type { Database } from "./client.js";
 import { refusalCode } from "./constraint-target.js";
 import { locations, tenants } from "./schema/tenants.js";
 import { CHECK_VIOLATION, type RefusalClass } from "./sql-state.js";
-import { pgErrorMessage } from "./testing/errors.js";
+import { engineErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 
@@ -34,7 +34,7 @@ afterEach(async () => {
  * **That is a fact about this path, not about the driver.** `db.run` wraps the same refusal in
  * drizzle's `DrizzleError` and puts the engine's error on `.cause` (the same refusal, taken down
  * both paths on the same runtime, 2026-09-23). Nothing breaks either way: `refusalCode` walks the
- * cause chain and `pgErrorMessage` falls back across it, so a case added here through `run` would
+ * cause chain and `engineErrorMessage` falls back across it, so a case added here through `run` would
  * still be read correctly — it would just not match the shape described above.
  */
 async function rejectsWithRefusal(
@@ -49,7 +49,7 @@ async function rejectsWithRefusal(
     (err: unknown) => {
       expect(err).toBeInstanceOf(Error);
       expect(refusal).toContain(refusalCode(err));
-      expect(pgErrorMessage(err)).toMatch(pattern);
+      expect(engineErrorMessage(err)).toMatch(pattern);
     },
   );
 }

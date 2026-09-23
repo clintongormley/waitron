@@ -33,8 +33,8 @@ import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
 import { TRIGGER_ABORT } from "./sql-state.js";
-import { isPgError } from "./unique-violation.js";
-import { captureError, pgErrorMessage } from "./testing/errors.js";
+import { isRefusal } from "./unique-violation.js";
+import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { seedNode } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
@@ -195,13 +195,13 @@ describe("order_amendments append helper", () => {
         .set({ reason: "forged" })
         .where(eq(orderAmendments.workingOrderId, order)),
     );
-    expect(isPgError(eU, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(eU)).toBe("order_amendments is append-only");
+    expect(isRefusal(eU, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(eU)).toBe("order_amendments is append-only");
     const eD = await captureError(() =>
       suite.db.delete(orderAmendments).where(eq(orderAmendments.workingOrderId, order)),
     );
-    expect(isPgError(eD, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(eD)).toBe("order_amendments is append-only");
+    expect(isRefusal(eD, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(eD)).toBe("order_amendments is append-only");
   });
 
   it("the stored hash commits the reason, actor and capturing node — a tamper of any breaks verification", async () => {

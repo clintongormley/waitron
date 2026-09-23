@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type Database, type VenueDatabase } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { runMigrations } from "./migrate.js";
-import { captureError, pgErrorMessage } from "./testing/errors.js";
+import { captureError, engineErrorMessage } from "./testing/errors.js";
 
 /**
  * `runMigrations` against a real file, through Drizzle's own migrator rather than the layered
@@ -149,7 +149,7 @@ describe("runMigrations against a probe folder", () => {
     const refusal = await captureError(async () =>
       venue.run(sql`insert into probe_b (id, a_id) values (1, 99)`),
     );
-    expect(pgErrorMessage(refusal)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(refusal)).toBe("FOREIGN KEY constraint failed");
     venue.run(sql`insert into probe_a (id) values (99)`);
     venue.run(sql`insert into probe_b (id, a_id) values (1, 99)`);
   });
@@ -182,7 +182,7 @@ describe("runMigrations against a probe folder", () => {
       sql`insert into probe_b (id, a_id) values (2, null)`,
     ]) {
       const refusal = await captureError(async () => venue.run(statement));
-      expect(pgErrorMessage(refusal)).toBe("no such table: main.probe_a");
+      expect(engineErrorMessage(refusal)).toBe("no such table: main.probe_a");
     }
   });
 });

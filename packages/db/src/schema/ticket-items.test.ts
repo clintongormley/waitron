@@ -4,7 +4,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -209,7 +209,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     await seedTicket(nodeA, orderId, lineId, stationA);
     const e = await captureError(() => seedTicket(nodeA, orderId, lineId, stationA));
-    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("cascades a ticket item away when its working_order_line is deleted (ON DELETE CASCADE)", async () => {

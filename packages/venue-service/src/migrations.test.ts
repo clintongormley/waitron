@@ -6,9 +6,9 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   FOREIGN_KEY_VIOLATION,
-  isPgError,
+  isRefusal,
   locations,
-  pgErrorMessage,
+  engineErrorMessage,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
@@ -339,7 +339,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
    * Asserts that `statement` is refused by a foreign key.
    *
    * WHAT THIS LOST, stated because the signature still carries a constraint name. The second half
-   * used to be `expect(pgErrorMessage(error)).toContain(constraint)`, which pinned WHICH foreign
+   * used to assert that the error's message contained `constraint`, which pinned WHICH foreign
    * key refused: PostgreSQL names the constraint in its message. SQLite's message is
    * `FOREIGN KEY constraint failed` and stops there — `packages/db/src/constraint-target.ts`
    * records the same thing, that a foreign key's message names no key — so nothing here can tell
@@ -350,8 +350,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
    */
   async function refusal(statement: ReturnType<typeof sql>, constraint: string) {
     const error = await captureError(() => db.transaction((tx) => tx.execute(statement)));
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION), constraint).toBe(true);
-    expect(pgErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION), constraint).toBe(true);
+    expect(engineErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
   }
 
   it("refuses a department, zone or menu that does not exist", async () => {
@@ -438,8 +438,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
         );
       }),
     );
-    expect(isPgError(eager, FOREIGN_KEY_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(eager)).toContain("FOREIGN KEY constraint failed");
+    expect(isRefusal(eager, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(eager)).toContain("FOREIGN KEY constraint failed");
     // The statement-level refusal rolls its transaction back, so neither row survives it.
     expect(
       (

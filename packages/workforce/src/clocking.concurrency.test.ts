@@ -76,7 +76,7 @@ function event(at: string): ClockEventInput {
  * code (e.g. `attendance.already_open`), anything else is stringified so an unexpected failure
  * names itself rather than hiding behind a generic label.
  *
- * `pgErrorCode` is deliberately NOT used. On this engine it answers the same string
+ * `driverErrorCode` is deliberately NOT used. On this engine it answers the same string
  * (`ERR_SQLITE_ERROR`) for every driver failure alike, so classifying by it would report every
  * distinct refusal identically — the trap `packages/db/src/constraint-target.ts` documents.
  */

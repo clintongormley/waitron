@@ -4,7 +4,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { UNIQUE_VIOLATION, checkFailed, isPgError, printers } from "@waitron/db";
+import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { CharacterSet } from "./charset.js";
@@ -21,7 +21,7 @@ import type { PaperWidth, Resolution } from "./layout.js";
  * from the SQLSTATE alone — `createPrinter`'s pre-check names it precisely on the common path).
  *
  * The CHECK branch names its constraint, because `printers` carries SEVEN and only this one means
- * "this transport is short of a field it needs". `isPgError(error, CHECK_VIOLATION)` asks which
+ * "this transport is short of a field it needs". `isRefusal(error, CHECK_VIOLATION)` asks which
  * CLASS a refusal is and never WHICH constraint, so it accepted all seven alike: a `characterTable`
  * of 300 trips `printers_character_table_ck` and came back as `printer.invalid_config` wearing the
  * `transport_fields` reason, telling an operator to fix a field that was not the problem. SQLite
@@ -30,7 +30,7 @@ import type { PaperWidth, Resolution } from "./layout.js";
  * supplies.
  */
 function translatePrinterWriteError(error: unknown, localKey: string | undefined): never {
-  if (localKey !== undefined && isPgError(error, UNIQUE_VIOLATION)) {
+  if (localKey !== undefined && isRefusal(error, UNIQUE_VIOLATION)) {
     throw new AppError("printer.already_registered", { localKey });
   }
   if (checkFailed(error, "printers_transport_fields_ck")) {

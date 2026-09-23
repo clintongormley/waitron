@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -78,6 +78,6 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
     const e = await captureError(() => seedMembership(LOCATION_A, catalogue));
     // PostgreSQL folded a primary-key collision into `23505` with every other unique index; SQLite
     // reports it under its own result code, which is why the class is a list (`../sql-state.ts`).
-    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 });
