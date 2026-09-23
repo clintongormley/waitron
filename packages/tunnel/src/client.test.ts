@@ -214,6 +214,82 @@ describe("runTunnelClient handshake + splice edge cases", () => {
     expect(scripted.count()).toBe(2);
   });
 
+  it("starts the heartbeat once, however many times the relay acks", async () => {
+    // A second `ack` on a registered connection must not start a second heartbeat loop beside the
+    // first. Each loop opens with one `sleep(heartbeatMs)`, so the count of those calls is the count
+    // of loops. The sleep never resolves on its own, so neither loop gets past its first nap.
+    const heartbeatNaps: number[] = [];
+    let registeredTwice: () => void = () => {};
+    const acks = new Promise<void>((res) => (registeredTwice = res));
+    let registrations = 0;
+    scripted = await scriptRelay((box) => {
+      void onceRegister(box).then(() => {
+        box.write(encodeFrame({ t: "ack" }));
+        box.write(encodeFrame({ t: "ack" }));
+      });
+    });
+    ac = new AbortController();
+    void runTunnelClient({
+      relayHost: "127.0.0.1",
+      relayPort: scripted.port,
+      boxId: "b",
+      token: "t",
+      localPort: 1,
+      poolSize: 1,
+      heartbeatMs: 777,
+      sleep: (ms, signal) => {
+        if (ms === 777) heartbeatNaps.push(ms);
+        return realSleep(60_000, signal);
+      },
+      signal: ac.signal,
+      log: (_l, code) => {
+        if (code === "tunnel.connection_registered" && ++registrations === 2) registeredTwice();
+      },
+    });
+    await acks;
+    await wait(10); // a second heartbeat, if one were started, has reached its first nap by now
+    expect(heartbeatNaps).toHaveLength(1);
+  });
+
+  it("ignores a frame it has no use for and still splices on the `go` that follows", async () => {
+    // `ping` is a box→relay frame; arriving from the relay it means nothing to the client, which
+    // must keep reading rather than drop the connection. The relay then pairs it (`go`): only the
+    // FIRST connection is ever sent `go`, so a replacement dial means the ignored frame killed it.
+    let outcome: (o: "paired" | "replaced") => void = () => {};
+    const settled = new Promise<"paired" | "replaced">((res) => (outcome = res));
+    local = createServer(() => {});
+    const localPort = await new Promise<number>((r) =>
+      local!.listen(0, () => r((local!.address() as AddressInfo).port)),
+    );
+    scripted = await scriptRelay((box, index) => {
+      if (index > 0) {
+        outcome("replaced");
+        return;
+      }
+      void onceRegister(box).then(() => {
+        box.write(encodeFrame({ t: "ack" }));
+        box.write(encodeFrame({ t: "ping" }));
+        box.write(encodeFrame({ t: "go" }));
+      });
+    });
+    ac = new AbortController();
+    void runTunnelClient({
+      relayHost: "127.0.0.1",
+      relayPort: scripted.port,
+      boxId: "b",
+      token: "t",
+      localPort,
+      poolSize: 1,
+      minBackoffMs: 1,
+      sleep: realSleep,
+      signal: ac.signal,
+      log: (_l, code) => {
+        if (code === "tunnel.paired") outcome("paired");
+      },
+    });
+    expect(await settled).toBe("paired");
+  });
+
   it("resolves immediately when the signal is already aborted (never dials)", async () => {
     scripted = await scriptRelay(() => {
       throw new Error("must not dial when pre-aborted");

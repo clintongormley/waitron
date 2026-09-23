@@ -177,6 +177,33 @@ describe("createRelayStandin", () => {
     good.destroy();
   });
 
+  it("survives a box that resets its connection, and keeps serving", async () => {
+    // A hard reset (resetAndDestroy) reaches the relay's side as an 'error' (ECONNRESET). Unhandled,
+    // that error would crash the process; the relay must drop the socket and carry on.
+    relay = await createRelayStandin({ verifyToken: () => true });
+    const box = connect(relay.boxPort, "127.0.0.1");
+    box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
+    await readFrame(box); // ack — parked idle
+    box.resetAndDestroy();
+    await sleep(20); // let the reset reach the relay
+    const good = connect(relay.boxPort, "127.0.0.1");
+    good.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
+    expect((await readFrame(good))!.frame).toEqual({ t: "ack" });
+    good.destroy();
+  });
+
+  it("survives a client that resets its connection while waiting for a box, and keeps serving", async () => {
+    relay = await createRelayStandin({ verifyToken: () => true, waitForBoxMs: 5000 });
+    const client = connect(relay.clientPort, "127.0.0.1");
+    await sleep(20); // let the relay accept the client and park it as a waiter
+    client.resetAndDestroy();
+    await sleep(20); // let the reset reach the relay
+    const box = connect(relay.boxPort, "127.0.0.1");
+    box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
+    expect((await readFrame(box))!.frame).toEqual({ t: "ack" });
+    box.destroy();
+  });
+
   it("pairs two clients with two idle connections from the same box", async () => {
     relay = await createRelayStandin({ verifyToken: () => true });
     const box1 = connect(relay.boxPort, "127.0.0.1");
