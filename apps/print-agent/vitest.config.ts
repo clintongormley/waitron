@@ -12,7 +12,7 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary"],
       // Process entries are exercised by a manual boot; their helpers are tested directly.
       exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/dev-bin.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

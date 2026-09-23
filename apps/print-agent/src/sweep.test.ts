@@ -64,6 +64,12 @@ describe("hostsInSubnet", () => {
     expect(hostsInSubnet("192.168.10.10/")).toEqual([]);
     expect(hostsInSubnet("192.168.10.10/40")).toEqual([]);
   });
+
+  it("returns nothing for an address with an over-long or out-of-range octet", () => {
+    // `0010` is the value 10, which only the three-digit rule refuses; `256` only the range rule.
+    expect(hostsInSubnet("0010.0.0.1/30")).toEqual([]);
+    expect(hostsInSubnet("256.0.0.1/30")).toEqual([]);
+  });
 });
 
 describe("sweepCandidates", () => {
@@ -86,6 +92,14 @@ describe("sweepCandidates", () => {
     const ifaces: Ifaces = {
       eth0: [iface("192.168.10.10", "192.168.10.10/30")],
       docker0: [iface("172.17.0.1", "172.17.0.1/16")],
+    };
+    expect(sweepCandidates({ interfaces: () => ifaces })).toEqual(["192.168.10.9"]);
+  });
+
+  it("passes over an interface name that carries no entries", () => {
+    const ifaces: Ifaces = {
+      ghost: undefined,
+      eth0: [iface("192.168.10.10", "192.168.10.10/30")],
     };
     expect(sweepCandidates({ interfaces: () => ifaces })).toEqual(["192.168.10.9"]);
   });

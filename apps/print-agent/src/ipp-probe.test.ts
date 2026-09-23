@@ -437,6 +437,21 @@ describe("queryMediaSupported", () => {
     }
   });
 
+  it("returns nothing, without waiting out the deadline, when the connection drops mid-reply", async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-length": "1000" });
+      res.write(Buffer.from([0x02, 0x00]), () => res.socket?.destroy());
+    });
+    const port = await listen(server);
+    try {
+      const started = Date.now();
+      expect(await queryMediaSupported("127.0.0.1", 3000, port)).toBeUndefined();
+      expect(Date.now() - started).toBeLessThan(1500);
+    } finally {
+      await close(server);
+    }
+  });
+
   it("returns nothing when the reply stalls after its headers", async () => {
     const server = createServer((_req, res) => {
       res.writeHead(200);
