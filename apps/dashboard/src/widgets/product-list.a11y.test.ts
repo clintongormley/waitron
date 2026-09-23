@@ -13,7 +13,8 @@ import type { Product } from "../api/client.js";
  * active/inactive badges, the Unavailable badge, and both a product WITH a decorative image and one
  * WITHOUT (the placeholder) — so axe sees the whole rendered surface, every branch of the row
  * template. The Inactive product sits behind the status filter, so one case shows every status. A
- * product with an Active and a removed variant covers the variant rows, and under the Inactive filter
+ * product with an Active variant (its own VAT, noted under its price) and a removed one covers the
+ * variant rows, and under the Inactive filter
  * the muted row its product is drawn as while it is there only as the removed variant's context.
  */
 const products: Product[] = [
@@ -190,6 +191,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(table.shadowRoot!.querySelectorAll("[data-test=active-badge]")).toHaveLength(6);
+    expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

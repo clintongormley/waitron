@@ -231,6 +231,27 @@ describe("a removed variant in the parent's editor", () => {
       params: { language: "en" },
     });
   });
+
+  // R8: removing a variant through its OWN page (the products list's Remove) is never refused for
+  // a customer name lacking the default language, exactly as its product's save allows; making it
+  // Active again is still checked.
+  it("saves a variant's own page Inactive without the default language, and refuses it Active", async () => {
+    const spanishOnly = { customerName: { es: "Grande" } };
+    const saved = await save(null, input);
+    const [small, large] = saved.variants;
+    await save(saved.id, {
+      ...saved,
+      variants: [small!, { ...large!, ...spanishOnly, active: false }],
+    });
+    const own = await read(large!.id!);
+    const removed = await save(large!.id!, { ...own, active: false });
+    expect(removed).toMatchObject({ ...spanishOnly, active: false });
+    await expect(save(large!.id!, { ...own, active: true })).rejects.toMatchObject({
+      code: "content.translation_required",
+      params: { language: "en" },
+    });
+    expect(await read(large!.id!)).toMatchObject({ active: false });
+  });
 });
 
 it("changes the product's unit on update", async () => {

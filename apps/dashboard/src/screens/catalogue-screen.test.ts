@@ -820,6 +820,10 @@ describe("catalogue-screen", () => {
     it("confirms a variant's Remove and makes the variant Inactive through its own write", async () => {
       history.replaceState(null, "", "/manage/catalogue");
       const api = variantApi();
+      // Sold out as well, so a write that resets availability while removing is caught.
+      vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
+        Promise.resolve(id === "v1" ? { ...variantValue, available: false } : value),
+      );
       const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
       await flush(el);
       emit(list(el), "delete-product", { productId: "v1" });
@@ -838,7 +842,7 @@ describe("catalogue-screen", () => {
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
         ...variantValue,
         active: false,
-        available: true,
+        available: false,
       });
       expect(dialog.getAttribute("open")).toBeNull();
     });
@@ -858,6 +862,23 @@ describe("catalogue-screen", () => {
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", { ...variantValue, active: true });
       expect(api.listProducts).toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    // A restore that was written and then could not reload the list is a load failure: the banner
+    // says why the list is stale, and the restore is not attempted again.
+    it("reports a failed reload after a written restore as a load failure", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      vi.mocked(api.listProducts).mockRejectedValue({ code: "catalogue.not_found" });
+      emit(list(el), "restore-product", { productId: "v1" });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        codeMessage("catalogue.not_found"),
+      );
+      expect((el as unknown as { busy: boolean }).busy).toBe(false);
     });
 
     it("reports a refused restore on the screen", async () => {

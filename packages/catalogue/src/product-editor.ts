@@ -135,10 +135,11 @@ export async function saveProductEditor(
   if (value.parentId !== undefined && value.parentId !== storedParentId)
     throw new AppError("product.invalid", { field: "parentId" });
   // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
-  // must satisfy the enabled languages. A blank one is legal (it falls back to `name`), so only a
-  // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
-  // default-language entry.
-  if (value.customerName !== null)
+  // must satisfy the default content language. A blank one is legal (it falls back to `name`), so
+  // only a supplied customer name is validated — validateContentTranslations({}) would wrongly
+  // demand a default-language entry. A variant saved Inactive is skipped, as its product's save
+  // skips it (`setProductVariants`), so removing it is never refused; it is checked when made Active.
+  if (value.customerName !== null && (!isVariant || value.active))
     await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId === null) {
     const [catalogue] = await tx

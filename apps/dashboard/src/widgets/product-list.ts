@@ -65,6 +65,12 @@ export class ProductList extends LitElement {
       wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(vat-note) {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        white-space: nowrap;
+      }
     `,
   ];
 
@@ -119,11 +125,10 @@ export class ProductList extends LitElement {
       : t("editor.missing_choice");
   }
 
-  /** A variant's row reads the values it is sold and reported under, which the server resolves. */
+  /** A variant's row reads the values it is reported under, which the server resolves. */
   #values({ product, variant }: ProductRow): {
     primaryCategoryId: string | null;
     categoryIds: string[];
-    vatClass: Product["vatClass"];
   } {
     return variant?.effective ?? product;
   }
@@ -204,14 +209,19 @@ export class ProductList extends LitElement {
         key: "price",
         label: t("product.price"),
         align: "end",
-        cell: (row) => this.#price(row),
+        // The list has no VAT column (#387); a variant whose VAT differs from its product's notes
+        // it under its price, since nothing else on the row would show it.
+        cell: (row) => {
+          const vat = row.variant?.effective.vatClass;
+          return html`<span data-test="price">${this.#price(row)}</span>${
+              vat === undefined || vat === row.product.vatClass
+                ? nothing
+                : html`<span part="vat-note" data-test="vat-note"
+                    >${t("product.vat")}: ${vatClassName(vat)}</span
+                  >`
+            }`;
+        },
         sortValue: (row) => Number(this.#price(row).split("–")[0]),
-      },
-      {
-        key: "vat",
-        label: t("product.vat"),
-        cell: (row) => vatClassName(this.#values(row).vatClass),
-        sortValue: (row) => vatClassName(this.#values(row).vatClass),
       },
       {
         key: "modifiers",

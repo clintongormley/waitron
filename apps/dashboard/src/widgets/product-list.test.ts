@@ -212,7 +212,7 @@ describe("product-list", () => {
   // options list this product does NOT hold, so a column printing the loaded set instead of the
   // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
   // against the options lists — which also reaches "Punto" — loses "Salsas".
-  it("shows reporting and other categories, attached modifier list names, and the VAT class", async () => {
+  it("shows reporting and other categories, attached modifier list names, and no VAT column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -241,10 +241,7 @@ describe("product-list", () => {
     expect(headers).toContain(t("product.reporting_category"));
     expect(headers).toContain(t("product.other_categories"));
     expect(headers).toContain(t("editor.modifiers"));
-    expect(headers).toContain(t("product.vat"));
-    expect(cellUnder(root, "prod-1", t("product.vat")).textContent!.trim()).toBe(
-      vatClassName("reduced"),
-    );
+    expect(headers).not.toContain(t("product.vat"));
     const text = root.querySelector("tbody tr")!.textContent!;
     expect(text).toContain("Comida");
     expect(text).toContain("Temporada, Terraza");
@@ -623,10 +620,10 @@ describe("product-list", () => {
     expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe("3.00");
   });
 
-  // Since #539 a variant may set its own VAT and categories, so its row shows the values it is
-  // sold and reported under — the server's `effective` — rather than its product's. Every field
-  // differs between the two here, so a row reading the product's values fails.
-  it("shows a variant's own name and its effective price, VAT and categories", async () => {
+  // Since #539 a variant may set its own price, VAT and categories, so its row shows the values it
+  // is sold and reported under — the server's `effective` — rather than its product's. Every field
+  // differs between Wine 175 and its product, so a row reading the product's values fails.
+  it("shows a variant's own name and its effective price and categories", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -641,9 +638,9 @@ describe("product-list", () => {
               ...bunVariant,
               id: "w175",
               name: "Wine 175",
-              unitPrice: null,
+              unitPrice: "4.75",
               effective: {
-                unitPrice: "4.00",
+                unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "drinks",
                 categoryIds: ["drinks", "bar"],
@@ -663,17 +660,64 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    const cell = (header: string) => cellUnder(root, "wine:w175", header).textContent!.trim();
-    expect(cell(t("product.name"))).toBe("Wine 175");
-    expect(cell(t("product.price"))).toBe("4.00");
-    expect(cell(t("product.vat"))).toBe(vatClassName("general"));
-    expect(cell(t("product.reporting_category"))).toBe("Bebidas");
-    expect(cell(t("product.other_categories"))).toBe("Barra");
-    expect(cellUnder(root, "wine", t("product.vat")).textContent!.trim()).toBe(
-      vatClassName("reduced"),
+    const cell = (header: string) => cellUnder(root, "wine:w175", header);
+    expect(cell(t("product.name")).textContent!.trim()).toBe("Wine 175");
+    expect(cell(t("product.price")).querySelector('[data-test="price"]')!.textContent!.trim()).toBe(
+      "4.75",
     );
+    expect(cell(t("product.reporting_category")).textContent!.trim()).toBe("Bebidas");
+    expect(cell(t("product.other_categories")).textContent!.trim()).toBe("Barra");
     expect(cellUnder(root, "wine", t("product.other_categories")).textContent!.trim()).toBe(
       "Terraza",
+    );
+  });
+
+  // A variant's VAT is noted under its price only where it differs from its product's, so the list
+  // keeps no VAT column and still shows the one value that would otherwise be invisible.
+  it("notes a variant's VAT under its price only where it differs from its product's", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "wine",
+          unitPrice: "4.00",
+          vatClass: "reduced",
+          variants: [
+            {
+              ...bunVariant,
+              id: "w175",
+              name: "Wine 175",
+              unitPrice: "4.75",
+              effective: {
+                unitPrice: "4.75",
+                vatClass: "general",
+                primaryCategoryId: "category-1",
+                categoryIds: ["category-1"],
+              },
+            },
+            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: null },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    const note = (rowKey: string) =>
+      cellUnder(root, rowKey, t("product.price")).querySelector<HTMLElement>(
+        '[data-test="vat-note"]',
+      );
+    expect(note("wine:w175")!.textContent!.trim()).toBe(
+      `${t("product.vat")}: ${vatClassName("general")}`,
+    );
+    expect(note("wine:w125")).toBeNull();
+    expect(note("wine")).toBeNull();
+    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe("4.00");
+    // Cell markup lives in the table's shadow root, so only ::part reaches it: a muted, smaller line.
+    const style = getComputedStyle(note("wine:w175")!);
+    expect(style.display).toBe("block");
+    expect(style.color).not.toBe(
+      getComputedStyle(cellUnder(root, "wine:w175", t("product.price"))).color,
     );
   });
 

@@ -1322,6 +1322,47 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
+  it("saves a variant's own page Inactive without the default language, and refuses it Active", async () => {
+    const app = mountApp("es-ES");
+    const { parentId } = await parentWithVariant(app);
+    const editor = async (id: string) =>
+      (await (await send(app, "GET", `/management-api/products/${id}/editor`)).json()) as {
+        variants: { id: string; name: string }[];
+      } & Record<string, unknown>;
+    const parent = await editor(parentId);
+    const french = {
+      name: "Café corto",
+      customerName: { fr: "Café court" },
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: false,
+    };
+    expect(
+      (
+        await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
+          body: { ...parent, variants: [...parent.variants, french] },
+        })
+      ).status,
+    ).toBe(200);
+    const { id } = (await editor(parentId)).variants.find(({ name }) => name === "Café corto")!;
+    const own = await editor(id);
+    const put = (active: boolean) =>
+      send(app, "PUT", `/management-api/products/${id}/editor`, { body: { ...own, active } });
+    const removed = await put(false);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toMatchObject({
+      customerName: { fr: "Café court" },
+      active: false,
+    });
+    const refused = await put(true);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "content.translation_required" },
+    });
+  });
+
   it("lists every variant, a removed one too, with its own price and its effective price, VAT and categories", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
