@@ -344,8 +344,9 @@ export class TillFloorScreen extends LitElement {
    * Whether this face may return to the COUNTER (handheld-tableside §6a). A counter/fixed till can
    * (default `true`); a handheld's floor is the TOP of the phone shell — its face set `HANDHELD_FACES`
    * excludes `counter` — so the app threads `false` and the Back-to-counter affordance is not rendered.
-   * UI honesty only: the app's own face-set gate (`#goToScreen`) is what actually refuses the
-   * transition, so even a stray `back-to-counter` cannot escape the shell.
+   * Inside the shell a stray `back-to-counter` selects the `counter` tab (`till-app.ts`
+   * `#onBackToCounter`), and because the phone canvas authors no counter tab the shell falls back to
+   * its first tab (`#activeTab`).
    */
   @property({ attribute: false }) canExitToCounter = true;
   /**

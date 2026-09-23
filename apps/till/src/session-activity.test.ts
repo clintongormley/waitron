@@ -120,8 +120,6 @@ describe("SessionActivity", () => {
   });
 
   it("is a clean no-op when the Wake Lock API is absent", async () => {
-    // No wakeLock injected and no `navigator.wakeLock` in this branch would leave the feature undefined;
-    // pass an explicit undefined to exercise the feature-absent path deterministically.
     const sa = new SessionActivity({
       wakeLock: undefined,
       now: () => 0,

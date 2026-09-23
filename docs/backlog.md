@@ -2191,8 +2191,11 @@ image constraints under *Detail → Box image*.
   counter paths, the server router's start and error statuses, the session's wake lock and idle
   timer, tender entry by the Enter key, idle choices and weighed dishes, and nine screens; one bug
   fixed, a sale or a new table answering after the operator had logged out took the till off the
-  lock screen with nobody signed in, and now leaves it locked; no test added to the files lane B's
-  variants work was changing; 98.82/99.08/98.97/96.93 statements/lines/functions/branches).
+  lock screen with nobody signed in, and now leaves it locked; no test added to the files the
+  variants branch `feat/variants-sale-line` (not yet pushed on 2026-09-23) changes, which is why
+  the table-service, boot-and-counter and three `tender-pay-*` suites are separate files that can
+  be folded back into `till-app.test.ts` and `tender-pay.test.ts` once it lands;
+  98.82/99.08/98.97/96.93).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2566,32 +2569,52 @@ may make one or both of those branches reachable, or show they can go.
 (found 2026-09-23, till coverage, PR #TILL_PR).** The till coverage branch fixed the case where a late answer
 reopened a logged-out till (it now stays on the lock screen). The same late answer can also arrive
 after a DIFFERENT operator has logged in: `#showTicket` and `#onOpenTable` in
-`apps/till/src/till-app.ts` would then push the previous operator's ticket or table over the new
-session. That case was reasoned from the code, not run. What to show is a product question: the
-sale may have filed, so hiding it entirely loses the one signal that it did. **Next action:** decide
+`apps/till/src/till-app.ts` then push the previous operator's ticket or table over the new session.
+Reproduced 2026-09-23 in the till coverage branch's review on a till, with the sale and the
+table-open answers held back across a logout and a second operator's login: both appeared over the
+new session. What to show is a product question: the sale may have filed, so hiding it entirely
+loses the one signal that it did. **Next action:** decide
 (for example a per-session counter that drops the navigation but keeps a "the previous sale filed"
 notice), then fix it test-first.
 
-**Till code that no test can reach, and two small till defects — OPEN (found 2026-09-23, till
+**Till code that no test can reach, and small till defects — OPEN (found 2026-09-23, till
 coverage, PR #TILL_PR).** Left uncovered rather than deleted, each by reading its callers (none was
 run without the code):
+
 - `till-app.ts`: the handlers for `show-station`, `show-expo`, `show-schedule`, `open-allergens`,
-  `close-allergens`, `new-sale`, `back-to-counter`, `back-to-floor` and `show-floor` each keep an
-  arm for when the shell is not active, which after a successful boot only the lock screen is, and
-  nothing on the lock screen emits them; `#goToScreen` is reached only through one of those arms.
+  `close-allergens`, `new-sale`, `back-to-counter` and `back-to-floor` each keep an arm for when
+  the shell is not active, which after a successful boot only the lock screen is, and nothing on the
+  lock screen emits them; `#goToScreen` is reached only through one of those arms.
+- `#onShowFloor` in `till-app.ts` has no shell split at all: the one control that emits
+  `show-floor`, the counter screen's floor button (`screens/till-counter-screen.ts`), is drawn only
+  when the counter is not `embedded`, and the app mounts it only as its `embedded` counter tab. It
+  waits for the floor read and then sets the screen with no lock check, so a synthetic `show-floor`
+  followed by a logout left the till unlocked when the read answered (run in review, 2026-09-23).
+- `till-app.ts`: the `#setScreen` calls in `#showTicket`'s and `#onOpenTable`'s no-shell arms
+  (after a successful boot only a till locked mid-request reaches that arm, and the lock check then
+  skips the call), and the `?? []` on the shell's `.tabs` binding.
 - `trust-check.ts:83` (`timer` is always set by then), `widgets/station-queue.ts:501` (the bump
   button renders only when a next step exists), `session-activity.ts:67` and `:125`,
   `screens/till-station-screen.ts:302` and four `?? []` fallbacks in
   `screens/till-schedule-screen.ts`.
-- `api/server-router.ts:208` stores a server's `nodeId` that nothing reads.
+- `api/server-router.ts` writes a tracked server's `nodeId` at `:184`, `:208` and `:214`, and
+  nothing reads it.
 - `deviceKindLabel` (`apps/till/src/i18n/device-label.ts`) looks a kind up in a plain object, so
   `deviceKindLabel("constructor")` returns `undefined` rather than the kind (run). The server sends
   only `till`, `handheld` and `kds_station` today.
 - In `apps/till/src/session-activity.test.ts`, "is a clean no-op when the Wake Lock API is absent"
   passes `wakeLock: undefined`, which falls back to the real `navigator.wakeLock` — present in the
   test browser — so it does not test an absent API. The branch added a test that does.
-**Next action:** delete the unreachable arms with a receipt each, key the label lookup on own
-properties, and rename or rewrite that wake-lock test.
+- `apps/till/src/till-app.test.ts`'s handheld face-set block (its opening comment and the "does NOT
+  leave the face-set when back-to-counter fires from the floor" case) still credits the app's
+  face-set gate; inside the shell it is the shell's first-tab fallback that keeps a handheld off
+  the counter, as the next case in that block says, and the two "show-floor …" cases in its
+  live-floor block select the floor tab rather than fire `show-floor`. Left for after the variants
+  branch, which changes that file.
+
+**Next action:** delete the unreachable arms, and `#onShowFloor` with its `show-floor` listener (or
+give it the lock check), with a receipt each; key the label lookup on own properties; rename or
+rewrite that wake-lock test; and correct those test comments.
 
 **`quoteLiteral` still quotes for PostgreSQL, and SQLite refuses its backslash form — OPEN (found
 2026-09-23, identity's coverage review, PR #526).** `packages/shared/src/sql-literal.ts` doubles every
