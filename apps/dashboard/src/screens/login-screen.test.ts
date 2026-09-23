@@ -1535,3 +1535,808 @@ it("Enter submits current shadow input values once while login is pending", asyn
   resolve({ personId: "p1", offerPasskey: false });
   await flush(el);
 });
+
+type WtInput = import("@waitron/ui").WtInput;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const never = () => new Promise<never>(() => undefined);
+
+function field(el: LoginScreen, name: string): WtInput {
+  return el.shadowRoot!.querySelector<WtInput>(`wt-input[name=${name}]`)!;
+}
+
+function summaryErrors(el: LoginScreen): readonly string[] {
+  return el.shadowRoot!.querySelector<HTMLElement & { errors: readonly string[] }>(
+    "wt-form-error-summary",
+  )!.errors;
+}
+
+/** Presses Enter in a field's native input, the way a keyboard does (the event starts inside the
+ * field's own shadow root). */
+function pressEnter(el: LoginScreen, name: string): void {
+  field(el, name)
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+}
+
+function click(el: LoginScreen, test: string): void {
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!.click();
+}
+
+/** Removes the screen, lets `settle` run while it is detached, then puts it back. */
+async function whileDetached(el: LoginScreen, settle: () => void): Promise<void> {
+  const host = el.parentElement!;
+  el.remove();
+  settle();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  host.appendChild(el);
+  await flush(el);
+}
+
+describe("login-screen: Google configuration", () => {
+  it("sends the page itself to Google when no navigator is injected", async () => {
+    const api = stubApi({
+      beginGoogleLogin: vi.fn().mockResolvedValue({ authorizationUrl: "#google-authorization" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
+    await openPassword(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(location.hash).toBe("#google-authorization");
+  });
+
+  it("opens the password step when a remembered Google sign-in is no longer configured", async () => {
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "owner@example.com", method: "google" }),
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }) }),
+    });
+    await flush(el);
+    expect(field(el, "password")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=google-login]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=login-context] strong")!.textContent).toBe(
+      "owner@example.com",
+    );
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+  });
+
+  it("keeps sign-in usable without Google when its configuration cannot be read", async () => {
+    const unhandled = vi.fn();
+    window.addEventListener("unhandledrejection", unhandled);
+    try {
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api: stubApi({ getGoogleConfig: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      });
+      await flush(el);
+      await continueWithEmail(el);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(field(el, "password")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=google-login]")).toBeNull();
+      expect(summaryErrors(el)).toEqual([]);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("unhandledrejection", unhandled);
+    }
+  });
+
+  it("ignores a Google configuration that arrives after the screen is removed", async () => {
+    const config = deferred<{ configured: boolean; privacyNoticeUrl?: string }>();
+    const api = stubApi({
+      getGoogleConfig: vi.fn().mockReturnValueOnce(config.promise).mockImplementation(never),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await whileDetached(el, () =>
+      config.resolve({ configured: true, privacyNoticeUrl: "https://restaurant.example/privacy" }),
+    );
+    await continueWithEmail(el);
+    expect(el.shadowRoot!.querySelector("[data-test=google-login]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("a[target=_blank]")).toBeNull();
+  });
+
+  it("starts Google sign-in once when its button is pressed twice", async () => {
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "owner@example.com", method: "google" }),
+    );
+    const begin = deferred<{ authorizationUrl: string }>();
+    const api = stubApi({ beginGoogleLogin: vi.fn().mockReturnValue(begin.promise) });
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, navigate });
+    await flush(el);
+    const button = el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=google-login]")!;
+    button.click();
+    button.click();
+    begin.resolve({ authorizationUrl: "https://accounts.google.test/login" });
+    await flush(el);
+    expect(api.beginGoogleLogin).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("https://accounts.google.test/login");
+  });
+
+  it("does not leave for Google when the answer arrives after the screen is removed", async () => {
+    const begin = deferred<{ authorizationUrl: string }>();
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ beginGoogleLogin: vi.fn().mockReturnValue(begin.promise) }),
+      navigate,
+    });
+    await flush(el);
+    await openPassword(el);
+    click(el, "google-login");
+    await whileDetached(el, () =>
+      begin.resolve({ authorizationUrl: "https://accounts.google.test/login" }),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("explains a refused Google start and stays on the screen", async () => {
+    const navigate = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ beginGoogleLogin: vi.fn().mockRejectedValue({ code: "google.invalid" }) }),
+      navigate,
+    });
+    await flush(el);
+    await openPassword(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(summaryErrors(el)).toEqual([codeMessage("google.invalid")]);
+    expect(field(el, "password")).not.toBeNull();
+  });
+});
+
+describe("login-screen: remembering the account", () => {
+  it("unticking Remember forgets any sign-in shortcut this browser still holds", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    sessionStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "old@example.com", method: "passkey" }),
+    );
+    sessionStorage.setItem(
+      "waitron-google-login-preference",
+      JSON.stringify({ expiresAt: Date.now() + 60_000 }),
+    );
+    const remember = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=remember-email]")!;
+    remember.click();
+    expect(remember.checked).toBe(true);
+    expect(sessionStorage.length).toBe(2);
+    remember.click();
+    expect(remember.checked).toBe(false);
+    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
+  });
+});
+
+describe("login-screen: language chooser", () => {
+  it.each([
+    ["the sign-in form", "/manage/"],
+    ["an emailed account link", "/manage/account?token=t1&purpose=invitation"],
+  ])("offers the server's languages on %s", async (_where, url) => {
+    history.replaceState(null, "", url);
+    const api = stubApi({
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [{ code: "en-GB", label: "English (server)" }],
+        venueDefault: "es-ES",
+      }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser")!;
+    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+    await vi.waitFor(() =>
+      expect(
+        chooser.shadowRoot!.querySelector('[data-test="lang-en-GB"]')?.textContent?.trim(),
+      ).toBe("English (server)"),
+    );
+    expect(api.getLocales).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("login-screen: emailed account links", () => {
+  it("cancels a link that is still being checked", async () => {
+    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ inspectAccountAction: vi.fn(never) }),
+    });
+    expect(el.shadowRoot!.textContent).toContain(t("account.validating_link"));
+    click(el, "cancel-account-action");
+    await el.updateComplete;
+    expect(field(el, "email")).not.toBeNull();
+    expect(new URLSearchParams(location.search).has("token")).toBe(false);
+  });
+
+  it("leaves the address alone when it no longer carries the cancelled link", async () => {
+    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await flush(el);
+    history.replaceState(null, "", "/manage/elsewhere?keep=1");
+    click(el, "cancel-account-action");
+    await el.updateComplete;
+    expect(field(el, "email")).not.toBeNull();
+    expect(location.pathname + location.search).toBe("/manage/elsewhere?keep=1");
+  });
+
+  async function mountExpiredLink(overrides: Partial<DashboardApi> = {}) {
+    history.replaceState(
+      null,
+      "",
+      "/manage/account?token=expired&purpose=invitation#email=pending%40example.test",
+    );
+    const api = stubApi({
+      inspectAccountAction: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "account_action.invalid" })
+        .mockImplementation(never),
+      ...overrides,
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
+    return { el, api };
+  }
+
+  it("sends one new link when Resend is pressed twice before the first request lands", async () => {
+    const request = deferred<void>();
+    const { el, api } = await mountExpiredLink({
+      requestPasswordReset: vi.fn().mockReturnValue(request.promise),
+    });
+    click(el, "resend-account-link");
+    click(el, "resend-account-link");
+    request.resolve();
+    await flush(el);
+    expect(api.requestPasswordReset).toHaveBeenCalledExactlyOnceWith("pending@example.test");
+    expect(el.shadowRoot!.textContent).toContain(t("account.link_resent"));
+  });
+
+  it("does not report a resent link whose answer arrives after the screen is removed", async () => {
+    const request = deferred<void>();
+    const { el } = await mountExpiredLink({
+      requestPasswordReset: vi.fn().mockReturnValue(request.promise),
+    });
+    click(el, "resend-account-link");
+    await whileDetached(el, () => request.resolve());
+    expect(el.shadowRoot!.textContent).toContain(t("account.validating_link"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("account.link_resent"));
+  });
+
+  it("explains a refused resend", async () => {
+    const { el } = await mountExpiredLink({
+      requestPasswordReset: vi.fn().mockRejectedValue({ code: "account_action.rate_limited" }),
+    });
+    click(el, "resend-account-link");
+    await flush(el);
+    expect(summaryErrors(el)).toEqual([codeMessage("account_action.rate_limited")]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("account.link_resent"));
+  });
+
+  async function mountValidatedInvitation(overrides: Partial<DashboardApi> = {}) {
+    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    const api = stubApi(overrides);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await flush(el);
+    return { el, api };
+  }
+
+  it("explains a new password or PIN that is too short without submitting", async () => {
+    const { el, api } = await mountValidatedInvitation();
+    input(el, "new-password", "short");
+    input(el, "new-pin", "12");
+    click(el, "complete-account");
+    await el.updateComplete;
+    expect(api.completeAccountAction).not.toHaveBeenCalled();
+    expect(field(el, "new-password").error).toBe(codeMessage("password.too_short"));
+    expect(field(el, "new-pin").error).toBe(codeMessage("pin.too_short"));
+    expect(summaryErrors(el)).toEqual([
+      codeMessage("password.too_short"),
+      codeMessage("pin.too_short"),
+    ]);
+  });
+
+  it("completes an account once when Set password is pressed twice", async () => {
+    const completion = deferred<{ personId: string; authenticated: boolean }>();
+    const { el, api } = await mountValidatedInvitation({
+      completeAccountAction: vi.fn().mockReturnValue(completion.promise),
+    });
+    input(el, "new-password", "new password");
+    input(el, "new-pin", "4321");
+    click(el, "complete-account");
+    click(el, "complete-account");
+    completion.resolve({ personId: "p1", authenticated: true });
+    await flush(el);
+    expect(api.completeAccountAction).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
+  });
+
+  it("ignores a completed account whose answer arrives after the screen is removed", async () => {
+    const completion = deferred<{ personId: string; authenticated: boolean }>();
+    const { el } = await mountValidatedInvitation({
+      completeAccountAction: vi.fn().mockReturnValue(completion.promise),
+      inspectAccountAction: vi
+        .fn()
+        .mockResolvedValueOnce({ email: "new@example.test", purpose: "invitation" })
+        .mockImplementation(never),
+    });
+    input(el, "new-password", "new password");
+    input(el, "new-pin", "4321");
+    click(el, "complete-account");
+    await whileDetached(el, () => completion.resolve({ personId: "p1", authenticated: true }));
+    expect(new URLSearchParams(location.search).get("token")).toBe("token-1");
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).toBeNull();
+  });
+
+  it.each([
+    ["beside the new password", "password.too_short", codeMessage("password.too_short")],
+    ["only in the summary", "account_action.invalid", ""],
+  ])("shows a refused completion %s", async (_where, code, fieldError) => {
+    const { el } = await mountValidatedInvitation({
+      completeAccountAction: vi.fn().mockRejectedValue({ code }),
+    });
+    input(el, "new-password", "new password");
+    input(el, "new-pin", "4321");
+    click(el, "complete-account");
+    await flush(el);
+    expect(field(el, "new-password").error).toBe(fieldError);
+    expect(summaryErrors(el)).toContain(codeMessage(code));
+  });
+});
+
+describe("login-screen: password and second factor", () => {
+  it("sends one sign-in when Log in is pressed twice before the first answer", async () => {
+    const answer = deferred<{ personId: string }>();
+    const api = stubApi({ login: vi.fn().mockReturnValue(answer.promise) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openPassword(el);
+    input(el, "password", "correct horse");
+    click(el, "submit");
+    click(el, "submit");
+    answer.resolve({ personId: "p1" });
+    await flush(el);
+    expect(api.login).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not sign in when the password answer arrives after the screen is removed", async () => {
+    const answer = deferred<{ personId: string }>();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ login: vi.fn().mockReturnValue(answer.promise) }),
+    });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    await openPassword(el);
+    input(el, "password", "correct horse");
+    click(el, "submit");
+    await whileDetached(el, () => answer.resolve({ personId: "p1" }));
+    expect(events).toHaveLength(0);
+  });
+
+  it("marks a wrong authenticator code beside the code field and keeps the code step", async () => {
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockRejectedValueOnce({ code: "totp.invalid" });
+    const { el } = await signInWithPassword({ login });
+    input(el, "one-time-code", "000000");
+    pressEnter(el, "one-time-code");
+    await flush(el);
+    expect(login).toHaveBeenLastCalledWith({
+      email: "clinton@example.com",
+      password: "correct horse battery",
+      totp: "000000",
+    });
+    expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
+    expect(el.shadowRoot!.querySelector("[data-test=submit-factor]")).not.toBeNull();
+  });
+
+  it("goes back from the code step to the password with the typed code forgotten", async () => {
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockResolvedValueOnce({ personId: "p1" });
+    const { el } = await signInWithPassword({ login });
+    input(el, "one-time-code", "123456");
+    click(el, "back-to-password");
+    await el.updateComplete;
+    expect(field(el, "one-time-code")).toBeNull();
+    click(el, "submit");
+    await flush(el);
+    expect(login).toHaveBeenLastCalledWith({
+      email: "clinton@example.com",
+      password: "correct horse battery",
+    });
+  });
+
+  it("signs in with a recovery code, then asks for an authenticator code before adding a passkey", async () => {
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockResolvedValueOnce({ personId: "p1", offerPasskey: true });
+    const { el, api } = await signInWithPassword({ login, ...passkeyRegistrationStubs() });
+    const switchLink = () =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=switch-factor]")!;
+    expect(field(el, "one-time-code").label).toBe(t("login.authenticator_code"));
+    expect(switchLink().textContent).toBe(t("login.use_recovery_code"));
+
+    input(el, "one-time-code", "123456");
+    switchLink().click();
+    await el.updateComplete;
+    expect(field(el, "one-time-code").label).toBe(t("login.recovery_code"));
+    expect(field(el, "one-time-code").value).toBe("");
+    expect(switchLink().textContent).toBe(t("login.use_authenticator_code"));
+    switchLink().click();
+    await el.updateComplete;
+    expect(field(el, "one-time-code").label).toBe(t("login.authenticator_code"));
+    switchLink().click();
+    await el.updateComplete;
+
+    input(el, "one-time-code", " ABCD-EFGH ");
+    pressEnter(el, "one-time-code");
+    await flush(el);
+    expect(login).toHaveBeenLastCalledWith({
+      email: "clinton@example.com",
+      password: "correct horse battery",
+      recoveryCode: "ABCD-EFGH",
+    });
+
+    // A recovery code is spent by the sign-in, so adding a passkey asks for the authenticator.
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
+    expect(field(el, "one-time-code").label).toBe(t("login.authenticator_code"));
+    expect(field(el, "one-time-code").value).toBe("");
+    input(el, "one-time-code", "654321");
+    pressEnter(el, "one-time-code");
+    await flush(el);
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
+      currentPassword: "correct horse battery",
+      totp: "654321",
+    });
+  });
+});
+
+describe("login-screen: password reset by email", () => {
+  it("sends a reset from the password step, and one resend when Resend is pressed twice", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    const second = deferred<void>();
+    const api = stubApi({
+      requestPasswordReset: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockReturnValue(second.promise),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openPassword(el, "bea@x.com");
+    click(el, "reset-by-email");
+    await flush(el);
+    expect(api.requestPasswordReset).toHaveBeenCalledExactlyOnceWith("bea@x.com");
+    expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")!.textContent).toContain(
+      "bea@x.com",
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    click(el, "resend-reset");
+    click(el, "resend-reset");
+    second.resolve();
+    await flush(el);
+    expect(api.requestPasswordReset).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts no countdown when the reset answer arrives after the screen is removed", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const request = deferred<void>();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ requestPasswordReset: vi.fn().mockReturnValue(request.promise) }),
+    });
+    await openPassword(el);
+    click(el, "reset-by-email");
+    el.remove();
+    request.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("explains a refused reset and stays on the password step", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({
+        requestPasswordReset: vi.fn().mockRejectedValue({ code: "account_action.rate_limited" }),
+      }),
+    });
+    await openPassword(el);
+    click(el, "reset-by-email");
+    await flush(el);
+    expect(summaryErrors(el)).toEqual([codeMessage("account_action.rate_limited")]);
+    expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")).toBeNull();
+    expect(field(el, "password")).not.toBeNull();
+  });
+});
+
+describe("login-screen: the passkey offer after sign-in", () => {
+  async function offer(overrides: Partial<DashboardApi> = {}) {
+    return signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+      ...passkeyRegistrationStubs(),
+      ...overrides,
+    });
+  }
+
+  it("adds the passkey when Enter is pressed in its name", async () => {
+    const { el, api } = await offer();
+    input(el, "passkey-name", "Laptop");
+    pressEnter(el, "passkey-name");
+    await flush(el);
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
+      currentPassword: "correct horse battery",
+    });
+  });
+
+  it("reports a failed passkey ceremony with the passkey message and keeps the offer open", async () => {
+    const { el } = await offer();
+    vi.mocked(navigator.credentials.create).mockRejectedValue(
+      new DOMException("Authenticator failed", "UnknownError"),
+    );
+    click(el, "setup-passkey");
+    await vi.waitFor(() =>
+      expect(summaryErrors(el)).toEqual([codeMessage("passkey.verification_failed")]),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
+  });
+
+  it("does not sign in when the skip is recorded after the screen is removed", async () => {
+    const { release, passkeyOfferSeen } = pendingOfferSeen();
+    const { el } = await offer({ passkeyOfferSeen });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    click(el, "skip-passkey");
+    el.remove();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toHaveLength(0);
+  });
+
+  it("asks the device for no passkey when the registration options arrive after removal", async () => {
+    const stubs = passkeyRegistrationStubs() as { passkeyRegisterOptions: () => Promise<unknown> };
+    const registerOptions = await stubs.passkeyRegisterOptions();
+    const options = deferred<unknown>();
+    const { el } = await offer({
+      passkeyRegisterOptions: vi.fn().mockReturnValue(options.promise),
+    } as Partial<DashboardApi>);
+    click(el, "setup-passkey");
+    el.remove();
+    options.resolve(registerOptions);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(navigator.credentials.create).not.toHaveBeenCalled();
+  });
+
+  it("does not register a passkey the device returns after the screen is removed", async () => {
+    const { el, api } = await offer();
+    const created = deferred<Credential | null>();
+    const create = vi.mocked(navigator.credentials.create);
+    const credential = await create.getMockImplementation()!();
+    create.mockReturnValue(created.promise);
+    click(el, "setup-passkey");
+    await vi.waitFor(() => expect(create).toHaveBeenCalled());
+    el.remove();
+    created.resolve(credential);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
+  });
+
+  it("does not sign in when the registered passkey is confirmed after the screen is removed", async () => {
+    const verified = deferred<unknown>();
+    const { el, api } = await offer({
+      passkeyRegisterVerify: vi.fn().mockReturnValue(verified.promise),
+    } as Partial<DashboardApi>);
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    click(el, "setup-passkey");
+    await vi.waitFor(() => expect(api.passkeyRegisterVerify).toHaveBeenCalled());
+    el.remove();
+    verified.resolve({ credentialId: "new-key" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.passkeyOfferSeen).not.toHaveBeenCalled();
+    expect(events).toHaveLength(0);
+  });
+
+  it("shows no error for a ceremony that fails after the screen is removed", async () => {
+    const { el } = await offer();
+    const created = deferred<Credential | null>();
+    const create = vi.mocked(navigator.credentials.create).mockReturnValue(created.promise);
+    click(el, "setup-passkey");
+    await vi.waitFor(() => expect(create).toHaveBeenCalled());
+    await whileDetached(el, () =>
+      created.reject(new DOMException("Authenticator failed", "UnknownError")),
+    );
+    expect(summaryErrors(el)).toEqual([]);
+  });
+});
+
+describe("login-screen: signing in with a passkey", () => {
+  it("asks the device once when the passkey button is pressed twice", async () => {
+    const options = deferred<unknown>();
+    const api = stubApi({ passkeyAuthOptions: vi.fn().mockReturnValue(options.promise) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openPasskey(el);
+    const button = el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=passkey-login]")!;
+    button.click();
+    button.click();
+    options.resolve({ challengeHandle: "h1", options: { challenge: "AQID" } });
+    await flush(el);
+    expect(api.passkeyAuthOptions).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores another way to sign in while a passkey prompt is pending", async () => {
+    const api = stubApi({ passkeyAuthOptions: vi.fn(never) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("a[data-test=use-password]")!.click();
+    await el.updateComplete;
+    expect(field(el, "password")).toBeNull();
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(t("login.use_passkey_heading"));
+  });
+
+  it("asks the device nothing when the passkey options arrive after the screen is removed", async () => {
+    const options = deferred<unknown>();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ passkeyAuthOptions: vi.fn().mockReturnValue(options.promise) }),
+    });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    el.remove();
+    options.resolve({ challengeHandle: "h1", options: { challenge: "AQID" } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+  });
+
+  it("does not sign in when the passkey is confirmed after the screen is removed", async () => {
+    const verified = deferred<{ personId: string }>();
+    const api = stubApi({ passkeyAuthVerify: vi.fn().mockReturnValue(verified.promise) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    el.remove();
+    verified.resolve({ personId: "p9" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toHaveLength(0);
+  });
+
+  it("shows no error for a passkey refusal that arrives after the screen is removed", async () => {
+    const verified = deferred<{ personId: string }>();
+    const api = stubApi({ passkeyAuthVerify: vi.fn().mockReturnValue(verified.promise) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    await whileDetached(el, () => verified.reject({ code: "connection.failed" }));
+    expect(summaryErrors(el)).toEqual([]);
+  });
+
+  it("returns to the password without an error when the passkey prompt is aborted", async () => {
+    vi.mocked(navigator.credentials.get).mockRejectedValueOnce(
+      new DOMException("Aborted", "AbortError"),
+    );
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await flush(el);
+    expect(field(el, "password")).not.toBeNull();
+    expect(summaryErrors(el)).toEqual([]);
+  });
+});
+
+describe("login-screen: passkey autofill on the email step", () => {
+  it("signs in with the passkey the browser offers in the email field", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    const events: CustomEvent[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e as CustomEvent));
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    expect(api.passkeyAuthVerify).toHaveBeenCalledWith({
+      challengeHandle: "h1",
+      response: expect.objectContaining({ id: "cred-abc" }),
+    });
+    expect(events[0]!.detail).toEqual({
+      personId: "p9",
+      loginMethod: "passkey",
+      rememberEmail: false,
+    });
+    expect(events[0]!.bubbles && events[0]!.composed).toBe(true);
+  });
+
+  it("offers no autofill when the browser cannot say whether it supports it", async () => {
+    conditionalMediationAvailable.mockRejectedValue(new Error("unavailable"));
+    const unhandled = vi.fn();
+    window.addEventListener("unhandledrejection", unhandled);
+    try {
+      const api = stubApi();
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await flush(el);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(conditionalMediationAvailable).toHaveBeenCalled();
+      expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+      expect(summaryErrors(el)).toEqual([]);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("unhandledrejection", unhandled);
+    }
+  });
+
+  it("asks the device nothing when the autofill options arrive after the email step is left", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const options = deferred<unknown>();
+    const api = stubApi({ passkeyAuthOptions: vi.fn().mockReturnValue(options.promise) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(api.passkeyAuthOptions).toHaveBeenCalled());
+    await continueWithEmail(el);
+    options.resolve({ challengeHandle: "h1", options: { challenge: "AQID" } });
+    await flush(el);
+    expect(navigator.credentials.get).not.toHaveBeenCalled();
+    expect(field(el, "password")).not.toBeNull();
+  });
+
+  it("does not confirm an autofilled passkey the browser returns after the screen is removed", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const got = deferred<Credential | null>();
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(got.promise);
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
+    el.remove();
+    got.resolve(passkeyCredential());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.passkeyAuthVerify).not.toHaveBeenCalled();
+  });
+
+  it("does not sign in when an autofilled passkey is confirmed after the screen is removed", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const verified = deferred<{ personId: string }>();
+    const api = stubApi({ passkeyAuthVerify: vi.fn().mockReturnValue(verified.promise) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    const events: Event[] = [];
+    el.addEventListener("logged-in", (e) => events.push(e));
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    el.remove();
+    verified.resolve({ personId: "p9" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toHaveLength(0);
+  });
+
+  it("shows no error when the person dismisses the autofill prompt", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockRejectedValueOnce(
+      new DOMException("Dismissed", "NotAllowedError"),
+    );
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
+    await flush(el);
+    expect(summaryErrors(el)).toEqual([]);
+    expect(field(el, "email")).not.toBeNull();
+  });
+
+  it("shows no error for an autofill failure that arrives after the screen is removed", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const verified = deferred<{ personId: string }>();
+    const api = stubApi({
+      passkeyAuthVerify: vi.fn().mockReturnValue(verified.promise),
+      passkeyAuthOptions: vi
+        .fn()
+        .mockResolvedValueOnce({ challengeHandle: "h1", options: { challenge: "AQID" } })
+        .mockImplementation(never),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    await whileDetached(el, () => verified.reject({ code: "connection.failed" }));
+    expect(summaryErrors(el)).toEqual([]);
+  });
+});

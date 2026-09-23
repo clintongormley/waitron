@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { UnitForm } from "./unit-form.js";
 import "./unit-form.js";
@@ -181,5 +181,64 @@ describe("unit-form", () => {
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=name-es]")!.value,
     ).toBe("caja");
+  });
+
+  it("leaves out an optional translation that is blank, or that was enabled after the form opened", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es", "en"],
+    });
+    change(el, "name-es", "caja");
+    change(el, "abbreviation-es", "cj");
+    el.locales = ["es", "en", "fr"];
+    await el.updateComplete;
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    expect(submit.mock.calls[0]![0].detail).toStrictEqual({
+      value: { name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+    });
+  });
+
+  it("submits when Enter is pressed in a field", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+    });
+    change(el, "name-en", "box");
+    change(el, "abbreviation-en", "bx");
+    await el.updateComplete;
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    const field =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=name-en]")!;
+    await field.updateComplete;
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    expect(submit).toHaveBeenCalledOnce();
+    expect(submit.mock.calls[0]![0].detail.value).toEqual({
+      name: { en: "box" },
+      abbreviation: { en: "bx" },
+      precision: 0,
+    });
+  });
+
+  it("neither submits nor cancels while busy", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      busy: true,
+      locales: ["en"],
+      value: { id: "u1", name: { en: "box" }, abbreviation: { en: "bx" }, precision: 0 },
+    });
+    const seen = vi.fn();
+    el.addEventListener("wt-submit", seen);
+    el.addEventListener("wt-cancel", seen);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
+      new CustomEvent("wt-close", { bubbles: true, composed: true }),
+    );
+    expect(seen).not.toHaveBeenCalled();
   });
 });

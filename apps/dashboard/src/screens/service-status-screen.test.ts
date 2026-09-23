@@ -320,3 +320,72 @@ it("refreshes displayed statuses when their data changes elsewhere", async () =>
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listStatuses).toHaveBeenCalledTimes(2);
 });
+
+describe("service-status row edges", () => {
+  function pressEnter(el: ServiceStatusScreen, sel: string): void {
+    const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+  }
+
+  it("saves the row when Enter is pressed in its display-order field", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=order-s1]")).not.toBeNull());
+    type(el, "[data-test=order-s1]", "4");
+    await el.updateComplete;
+
+    pressEnter(el, "[data-test=order-s1]");
+
+    expect(api.updateStatus).toHaveBeenCalledWith("s1", {
+      label: "Bill requested",
+      color: "#ef4444",
+      displayOrder: 4,
+      active: true,
+    });
+  });
+
+  it("does not submit from a colour field on Enter", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=color-s1]")).not.toBeNull());
+    type(el, "[data-test=new-label]", "Needs water");
+    await el.updateComplete;
+
+    pressEnter(el, "[data-test=color-s1]");
+    pressEnter(el, "[data-test=new-color]");
+
+    expect(api.updateStatus).not.toHaveBeenCalled();
+    expect(api.createStatus).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when Save is pressed on a row that has since disappeared", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({}, TWO_SEED), { liveData });
+    const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+      api,
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=save-s2]")).not.toBeNull());
+    const staleSave = q(el, "[data-test=save-s2]")!;
+    vi.mocked(api.listStatuses).mockResolvedValue(SEED.map((s) => ({ ...s })));
+    liveData.invalidate([{ type: "table_service_statuses", id: "s2" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=row-s2]")).toBeNull());
+
+    staleSave.click();
+    await el.updateComplete;
+
+    expect(api.updateStatus).not.toHaveBeenCalled();
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(errorKey(el)).toBeNull();
+  });
+});

@@ -221,3 +221,35 @@ describe("diagnostics-screen", () => {
     expect(banner).toContain(codeMessage("authorization.not_permitted", "es-ES"));
   });
 });
+
+describe("diagnostics-screen verbosity and polling details", () => {
+  it("shows debug verbosity without a revert window when no revert is pending", async () => {
+    const api = stubApi({
+      getVerbosity: vi.fn().mockResolvedValue({ level: "debug", revertsAt: null }),
+    });
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=verbosity-on]")).not.toBeNull());
+
+    expect(q(el, "[data-test=verbosity-window]")).toBeNull();
+  });
+
+  it("takes the interval poll through the passive background client, and the first load through the active one", async () => {
+    vi.useFakeTimers();
+    try {
+      const background = stubApi();
+      const api = stubApi({ background } as Partial<DashboardApi>);
+      await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.getRecentLogs).toHaveBeenCalledTimes(1);
+      expect(background.getRecentLogs).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1500);
+
+      expect(background.getRecentLogs).toHaveBeenCalledTimes(1);
+      expect(background.getVerbosity).toHaveBeenCalledTimes(1);
+      expect(api.getRecentLogs).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

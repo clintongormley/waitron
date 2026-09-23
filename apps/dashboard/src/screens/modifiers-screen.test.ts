@@ -918,3 +918,281 @@ it("ignores a stale detail read from an earlier open of the same list", async ()
   await el.updateComplete;
   expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull();
 });
+
+// ---------------------------------------------------------------------------
+// Searching the tables
+
+async function search(found: Table, text: string): Promise<string> {
+  await found.updateComplete;
+  const box = found.shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
+  box.value = text;
+  box.dispatchEvent(new Event("input", { bubbles: true }));
+  await found.updateComplete;
+  return found.shadowRoot.querySelector("tbody")!.textContent!;
+}
+
+it("finds a list by its name and by the status it shows", async () => {
+  const el = await mount(
+    api({
+      listExtraLists: vi
+        .fn()
+        .mockResolvedValue([extraList, { ...extraList, id: "e2", name: "Sauces", active: false }]),
+    }),
+  );
+  const extras = table(el, "extra-lists");
+
+  const byName = await search(extras, "Sauces");
+  expect(byName).toContain("Sauces");
+  expect(byName).not.toContain("Breads");
+
+  const byStatus = await search(extras, t("extras.not_in_use"));
+  expect(byStatus).toContain("Sauces");
+  expect(byStatus).not.toContain("Breads");
+});
+
+it("finds a detail-modal row by its name and by the type it shows", async () => {
+  const client = api({
+    getExtraListDependants: vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: "Hamburguesa" }],
+      menus: [{ id: "mn1", name: "Menú del día" }],
+    }),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "open-extra-e1");
+  const usage = table(el, "list-usage");
+  await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
+
+  const byName = await search(usage, "Hamburguesa");
+  expect(byName).toContain("Hamburguesa");
+  expect(byName).not.toContain("Menú del día");
+
+  const byType = await search(usage, t("modifiers.usage_type.menu"));
+  expect(byType).toContain("Menú del día");
+  expect(byType).not.toContain("Hamburguesa");
+});
+
+it("switches back to the Extras tab from Options", async () => {
+  const el = await mount();
+  await selectTab(el, "options");
+  await selectTab(el, "extras");
+  expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
+  expect(location.pathname).toBe("/manage/modifiers/view/extras");
+});
+
+// ---------------------------------------------------------------------------
+// Products for the extras form
+
+it("offers the extras form no products once the venue has no catalogue left", async () => {
+  const client = api({
+    listCatalogues: vi.fn().mockResolvedValueOnce(catalogues).mockResolvedValue([]),
+  });
+  const el = await mount(client);
+  await vi.waitFor(() => expect(extraForm(el).products).toEqual(products));
+
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-extra-list"]')!.click();
+  await el.updateComplete;
+  extraForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { ...extraList, items: [] } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() => expect(client.listCatalogues).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(extraForm(el).products).toEqual([]));
+  expect(client.listProducts).toHaveBeenCalledTimes(1);
+});
+
+// ---------------------------------------------------------------------------
+// Saving
+
+function submitFrom(form: HTMLElement, value: unknown): void {
+  form.dispatchEvent(
+    new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
+it("updates the extras list that was opened rather than creating one", async () => {
+  const client = api();
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "edit-extra-e1");
+  const form = extraForm(el);
+  const input = { ...extraList, name: "Breads and rolls" };
+  submitFrom(form, input);
+  await vi.waitFor(() => expect(form.open).toBe(false));
+  expect(client.updateExtraList).toHaveBeenCalledWith("e1", input);
+  expect(client.createExtraList).not.toHaveBeenCalled();
+});
+
+it("sends one save when two submissions arrive before the first answers", async () => {
+  let resolve!: (value: ExtraList) => void;
+  const client = api({
+    createExtraList: vi
+      .fn()
+      .mockImplementation(() => new Promise<ExtraList>((done) => (resolve = done))),
+  });
+  const el = await mount(client);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-extra-list"]')!.click();
+  await el.updateComplete;
+  const form = extraForm(el);
+  submitFrom(form, { ...extraList, items: [] });
+  submitFrom(form, { ...extraList, items: [] });
+  expect(client.createExtraList).toHaveBeenCalledTimes(1);
+  resolve(extraList);
+  await vi.waitFor(() => expect(form.open).toBe(false));
+  expect(client.createExtraList).toHaveBeenCalledTimes(1);
+});
+
+it("ignores a submission when no editor is open", async () => {
+  const client = api();
+  const el = await mount(client);
+  submitFrom(optionForm(el), { ...optionList, labels: [] });
+  await el.updateComplete;
+  expect(client.createOptionList).not.toHaveBeenCalled();
+  expect(client.updateOptionList).not.toHaveBeenCalled();
+  expect(optionForm(el).fieldErrors).toEqual({});
+  expect(optionForm(el).busy).toBe(false);
+});
+
+it.each([
+  ["extras", "add-extra-list", extraForm, "createExtraList"],
+  ["options", "add-option-list", optionForm, "createOptionList"],
+] as const)(
+  "keeps the %s editor open when it is cancelled while its save is in flight",
+  async (tab, addButton, formOf, create) => {
+    let resolve!: (value: unknown) => void;
+    const client = api({
+      [create]: vi.fn().mockImplementation(() => new Promise((done) => (resolve = done))),
+    });
+    const el = await mount(client);
+    await selectTab(el, tab);
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${addButton}"]`)!.click();
+    await el.updateComplete;
+    const form = formOf(el);
+    submitFrom(form, tab === "extras" ? { ...extraList, items: [] } : { ...optionList });
+    await el.updateComplete;
+    form.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(form.open).toBe(true);
+    resolve(tab === "extras" ? extraList : optionList);
+    await vi.waitFor(() => expect(form.open).toBe(false));
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Deleting
+
+it("names only the menus in the delete warning when no product carries the list", async () => {
+  const client = api({
+    getExtraListDependants: vi
+      .fn()
+      .mockResolvedValue({ products: [], menus: [{ id: "mn1", name: "Desayuno" }] }),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "delete-extra-e1");
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+  );
+  expect(dialog.querySelector('[data-test="delete-warning"]')!.textContent!.trim()).toBe(
+    [
+      t("modifiers.delete_warning_intro"),
+      t("modifiers.delete_warning_menus").replace("{count}", "1"),
+    ].join(" "),
+  );
+});
+
+it("names only the products in the delete warning when no menu carries the list", async () => {
+  const client = api({
+    getExtraListDependants: vi.fn().mockResolvedValue({
+      products: [
+        { id: "p1", name: "Café" },
+        { id: "p2", name: "Tostada" },
+      ],
+      menus: [],
+    }),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "delete-extra-e1");
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+  );
+  expect(dialog.querySelector('[data-test="delete-warning"]')!.textContent!.trim()).toBe(
+    [
+      t("modifiers.delete_warning_intro"),
+      t("modifiers.delete_warning_products").replace("{count}", "2"),
+    ].join(" "),
+  );
+});
+
+function escape(target: HTMLElement, key = "Escape"): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  target.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+it("holds the delete dialog open while its delete is in flight, then closes it", async () => {
+  let resolve!: () => void;
+  const client = api({
+    deleteExtraList: vi
+      .fn()
+      .mockImplementation(() => new Promise<void>((done) => (resolve = done))),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "delete-extra-e1");
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  expect(escape(dialog)).toBe(false);
+
+  confirmDelete(el).click();
+  confirmDelete(el).click();
+  await el.updateComplete;
+  expect(client.deleteExtraList).toHaveBeenCalledTimes(1);
+  expect(escape(dialog)).toBe(true);
+  expect(escape(dialog, "Enter")).toBe(false);
+  dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(dialog.open).toBe(true);
+
+  resolve();
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
+  expect(client.deleteExtraList).toHaveBeenCalledTimes(1);
+});
+
+// ---------------------------------------------------------------------------
+// The detail modal's Edit
+
+it("opens no editor from the detail modal when a refresh has removed the list", async () => {
+  const background = api({ listExtraLists: vi.fn().mockResolvedValue([]) });
+  const liveData = new LiveData();
+  const client = api({ background, liveData });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "open-extra-e1");
+  const modal = detailModal(el);
+  expect(modal.open).toBe(true);
+  liveData.invalidate([{ type: "extra_lists", id: "e1" }]);
+  await vi.waitFor(() => expect(table(el, "extra-lists").rows).toEqual([]));
+
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="detail-edit"]')!.click();
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
+  expect(extraForm(el).open).toBe(false);
+});
+
+it("opens one editor when Edit is pressed twice before the modal closes", async () => {
+  const el = await mount();
+  await clickInTable(el, "extra-lists", "open-extra-e1");
+  const edit = el.shadowRoot!.querySelector<HTMLElement>('[data-test="detail-edit"]')!;
+  edit.click();
+  edit.click();
+  await el.updateComplete;
+  expect(detailModal(el).open).toBe(false);
+  expect(extraForm(el).open).toBe(true);
+  expect(extraForm(el).value).toEqual(extraList);
+});

@@ -172,3 +172,20 @@ describe("allergen-dietary-picker", () => {
     expect([...pxOffenders, ...remEmOffenders]).toEqual([]);
   });
 });
+
+describe("allergen-dietary-picker while busy", () => {
+  it("keeps both summaries closed when Edit is clicked", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+      busy: true,
+      value: { allergens: ["milk"], dietary: [] },
+    });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-allergens"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="dietary"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="allergens-summary"]')!.textContent).toBe(
+      allergenName("milk"),
+    );
+  });
+});

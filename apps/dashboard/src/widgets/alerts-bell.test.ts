@@ -232,4 +232,10 @@ describe("dashboard-alerts-bell", () => {
       await page.viewport(width, height);
     }
   });
+
+  it("offers no Go to until it is told which screens the session may open", async () => {
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts: [ongoing] });
+    expect(qa(el, "[data-test=alert-item]")).toHaveLength(1);
+    expect(q(el, "[data-test=alert-go-to]")).toBeNull();
+  });
 });

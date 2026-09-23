@@ -305,4 +305,39 @@ describe("dashboard-alerts-screen", () => {
       await page.viewport(width, height);
     }
   });
+
+  it("shows the code of an alert it has no wording for, so it can still be identified", async () => {
+    const unworded: AlertView = { ...open, key: "incident:i9", code: "vendor.unmapped_check" };
+    const api = stubApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [open, unworded] }),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    const [worded, raw] = rows(el, "open-alerts-table");
+    expect(raw!.textContent).toContain("vendor.unmapped_check");
+    expect(worded!.textContent).not.toContain("payment.offline_forward_declined");
+  });
+
+  it("says someone handled an alert when the server records neither who nor when", async () => {
+    const anonymous: AlertView = { ...handled, handledAt: undefined, handledBy: undefined };
+    const api = stubApi({
+      listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [anonymous] }),
+    });
+    history.replaceState(null, "", "/manage/alerts/view/handled");
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    const cells = rows(el, "handled-alerts-table")[0]!.querySelectorAll("td");
+    expect(cells[cells.length - 1]!.textContent!.trim()).toBe("by someone");
+  });
+
+  it("keeps its tab when a change event bubbles up from inside a tab's content", async () => {
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });
+    await flush(el);
+    el.shadowRoot!.querySelector("[data-test=open-alerts-table]")!.dispatchEvent(
+      new CustomEvent("wt-change", { bubbles: true, composed: true, detail: { value: "handled" } }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("open");
+    expect(location.pathname).toBe("/manage/alerts/view/open");
+  });
 });

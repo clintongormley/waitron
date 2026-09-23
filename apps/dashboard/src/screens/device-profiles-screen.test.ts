@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -503,4 +504,98 @@ it("refreshes displayed profiles when their data changes elsewhere", async () =>
   liveData.invalidate([{ type: "device_profiles", id: "changed-elsewhere" }]);
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
+});
+
+describe("device-profiles-screen remaining edges", () => {
+  it("labels a profile whose canvas is no longer in the set as an unknown canvas", async () => {
+    const orphan: DeviceProfile = { ...profiles[0]!, id: "p3", canvasId: "c-gone" };
+    const el = await mount(stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([orphan]) }));
+
+    expect(el.shadowRoot!.querySelector("[data-test=profile-canvas-p3]")!.textContent).toBe(
+      `${t("device_profiles.canvas_label")}: ${t("device_profiles.canvas_unknown")}`,
+    );
+  });
+
+  it.each([
+    ["blank", "  "],
+    ["non-numeric", "soon"],
+  ])("clears the inactivity timeout when the minutes field is %s", async (_label, value) => {
+    const phone: DeviceProfile = {
+      ...profiles[0]!,
+      formFactor: "phone-portrait",
+      inactivityTimeoutSeconds: 300,
+    };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).not.toBeNull(),
+    );
+
+    change(el, "profile-inactivity", value);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+
+    await vi.waitFor(() =>
+      expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+        "p1",
+        "Front counter",
+        "c1",
+        ["integrated-card-payment", "open-cash-drawer"],
+        "phone-portrait",
+        null,
+      ),
+    );
+  });
+
+  it("saves the profile when Enter is pressed in the inactivity field", async () => {
+    const phone: DeviceProfile = { ...profiles[0]!, formFactor: "phone-portrait" };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(phone) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).not.toBeNull(),
+    );
+    change(el, "profile-inactivity", "2");
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-inactivity]")!;
+    await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+
+    await vi.waitFor(() =>
+      expect(api.updateDeviceProfile).toHaveBeenCalledWith(
+        "p1",
+        "Front counter",
+        "c1",
+        ["integrated-card-payment", "open-cash-drawer"],
+        "phone-portrait",
+        120,
+      ),
+    );
+  });
+
+  it("deletes once when the confirm button is pressed twice", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-p1]")!.click();
+    await el.updateComplete;
+    const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+
+    confirm.click();
+    confirm.click();
+
+    await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2));
+    expect(api.deleteDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(api.deleteDeviceProfile).toHaveBeenCalledWith("p1");
+  });
 });

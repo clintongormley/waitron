@@ -268,3 +268,72 @@ it("refreshes displayed rows when their data changes elsewhere", async () => {
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.getPlannedVsActual).toHaveBeenCalledTimes(2);
 });
+
+describe("planned-actual-screen — location refreshes", () => {
+  const twoLocations = [
+    { id: "loc-1", name: "Main" },
+    { id: "loc-2", name: "Annex" },
+  ];
+
+  it("moves to a remaining location when a refresh removes the selected one", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue(twoLocations) }), {
+      liveData,
+    });
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await flush(el);
+    const select = locationSelect(el);
+    select.value = "loc-2";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
+      "loc-2",
+      expect.any(String),
+      expect.any(String),
+    );
+    vi.mocked(api.getLocations).mockResolvedValue([
+      { id: "loc-1", name: "Main" },
+      { id: "loc-3", name: "Terrace" },
+    ]);
+    liveData.invalidate([{ type: "locations", id: "loc-2" }]);
+    await vi.waitFor(() =>
+      expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
+        "loc-1",
+        expect.any(String),
+        expect.any(String),
+      ),
+    );
+    expect(locationSelect(el).value).toBe("loc-1");
+  });
+
+  // The rows query depends on locations itself, so the refresh re-reads it once on its own; the
+  // screen must not start a second load for a location it already shows.
+  it("keeps the selected location, re-reading its rows once, when a refresh still lists it", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue(twoLocations) }), {
+      liveData,
+    });
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await flush(el);
+    const select = locationSelect(el);
+    select.value = "loc-2";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+    const rowLoads = vi.mocked(api.getPlannedVsActual).mock.calls.length;
+    vi.mocked(api.getLocations).mockResolvedValue([
+      ...twoLocations,
+      { id: "loc-3", name: "Terrace" },
+    ]);
+    liveData.invalidate([{ type: "locations", id: "loc-3" }]);
+    await vi.waitFor(() => expect(api.getLocations).toHaveBeenCalledTimes(2));
+    await flush(el);
+    await flush(el);
+    const since = vi.mocked(api.getPlannedVsActual).mock.calls.slice(rowLoads);
+    expect(since.map(([locationId]) => locationId)).toEqual(["loc-2"]);
+    expect(locationSelect(el).value).toBe("loc-2");
+  });
+});

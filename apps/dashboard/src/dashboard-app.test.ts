@@ -3831,3 +3831,299 @@ describe("alerts in the shell", () => {
     expect(bell(el)).toBeNull();
   });
 });
+
+describe("dashboard-app: session signals", () => {
+  const DEADLINE_KEY = "waitron-management-session-deadline";
+  const notice = (el: DashboardApp) =>
+    login(el)?.shadowRoot!.querySelector<HTMLElement>(".notice")?.textContent?.trim() ?? null;
+  const sessionInvalid = (code: string) =>
+    window.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
+  const otherTabDeadline = (newValue: string | null, key = DEADLINE_KEY) =>
+    window.dispatchEvent(new StorageEvent("storage", { key, newValue }));
+
+  async function signedIn(overrides: Record<string, unknown> = {}) {
+    const api = stubApi(overrides);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    return { el, api };
+  }
+
+  /** Makes the next visibility change read as the tab coming back into view. */
+  function tabVisible(): void {
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  it("stays signed in when a request reports a code that is not about the session", async () => {
+    const { el } = await signedIn();
+    sessionInvalid("catalogue.not_found");
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(login(el)).toBeNull();
+  });
+
+  it("returns to login with the suspension notice when the person is suspended", async () => {
+    const { el } = await signedIn();
+    sessionInvalid("person.suspended");
+    await flush(el);
+    expect(notice(el)).toBe(codeMessage("person.suspended"));
+  });
+
+  it("does not re-check a signed-out tab when it comes back into view", async () => {
+    const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    tabVisible();
+    await flush(el);
+    expect(getMe).toHaveBeenCalledTimes(1);
+  });
+
+  it("broadcasts no session deadline for activity before anyone has signed in", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    });
+    await flush(el);
+    window.dispatchEvent(new Event("waitron-session-active"));
+    expect(localStorage.getItem(DEADLINE_KEY)).toBeNull();
+  });
+
+  it("ignores another tab's storage writes that are not the session deadline", async () => {
+    const { el } = await signedIn();
+    otherTabDeadline("0", "some-other-key");
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+  });
+
+  it.each([
+    ["ended the session", "0"],
+    ["wrote an unreadable deadline", "not-a-number"],
+    ["removed the deadline", null],
+  ])("returns to login when another tab %s", async (_what, value) => {
+    const { el } = await signedIn();
+    otherTabDeadline(value);
+    // Before any timer can run: the return is immediate, not a deadline scheduled for "now".
+    await el.updateComplete;
+    expect(notice(el)).toBe(codeMessage("management_session.expired"));
+  });
+
+  it("follows another tab's later deadline instead of its own", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, sessionExpiresInSeconds: 1 }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(overview(el)).not.toBeNull();
+      otherTabDeadline(String(Date.now() + 5_000));
+      await vi.advanceTimersByTimeAsync(4_999);
+      await el.updateComplete;
+      expect(overview(el)).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      expect(notice(el)).toBe(codeMessage("management_session.expired"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores another tab's deadline while signed out", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    });
+    await flush(el);
+    otherTabDeadline("0");
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    expect(notice(el)).toBeNull();
+  });
+
+  it.each([
+    ["no notice when the re-check cannot reach the server", "connection.failed", null],
+    [
+      "the suspension notice when the re-check finds a suspension",
+      "person.suspended",
+      "person.suspended",
+    ],
+  ])("a signed-in tab's failed re-check returns to login with %s", async (_what, code, shown) => {
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse })
+      .mockRejectedValueOnce({ code });
+    const { el } = await signedIn({ getMe });
+    tabVisible();
+    await flush(el);
+    expect(getMe).toHaveBeenCalledTimes(2);
+    expect(login(el)).not.toBeNull();
+    expect(notice(el)).toBe(shown === null ? null : codeMessage(shown));
+  });
+
+  it("drops a re-check failure that lands after the session has already ended", async () => {
+    let fail!: (error: unknown) => void;
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse })
+      .mockReturnValueOnce(new Promise((_resolve, reject) => (fail = reject)));
+    const { el } = await signedIn({ getMe });
+    tabVisible();
+    sessionInvalid("management_session.expired");
+    await flush(el);
+    fail({ code: "person.suspended" });
+    await flush(el);
+    expect(notice(el)).toBe(codeMessage("management_session.expired"));
+  });
+});
+
+describe("dashboard-app: remaining faces and shell controls", () => {
+  // Reads that never answer: each face below is asserted mounted, not loaded.
+  const pending = () => vi.fn(() => new Promise(() => undefined));
+  const faceApi = () =>
+    stubApi({
+      listLibraryProducts: pending(),
+      getLocationSettings: pending(),
+      listDeviceProfiles: pending(),
+      getBackupStatus: pending(),
+      getEmailInbox: pending(),
+      listPaymentProviders: pending(),
+      listReaders: pending(),
+      liveData: new LiveData(),
+    });
+
+  it.each([
+    ["categories", "dashboard-categories-screen"],
+    ["location-settings", "dashboard-location-settings-screen"],
+    ["device-profiles", "dashboard-device-profiles-screen"],
+    ["diagnostics", "dashboard-diagnostics-screen"],
+    ["backup", "dashboard-backup-screen"],
+    ["email", "dashboard-email-screen"],
+    ["payments", "dashboard-payments-screen"],
+    ["alerts", "dashboard-alerts-screen"],
+  ])("opens %s for a manager from its address, with the shell's api", async (screen, tag) => {
+    history.replaceState(null, "", `/manage/${screen}`);
+    const api = faceApi();
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag);
+    expect(face).not.toBeNull();
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toMatch(new RegExp(`^/manage/${screen}(/|$)`));
+  });
+
+  it("hands the payments face the request primitive and the venue's onboarding mode", async () => {
+    history.replaceState(null, "", "/manage/payments");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: faceApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    const payments = el.shadowRoot!.querySelector<
+      HTMLElement & { request: DashboardRequest; mode?: string }
+    >("dashboard-payments-screen")!;
+    expect(payments.request).toBe(stubRequest);
+    expect(payments.mode).toBe("prepare");
+  });
+
+  it("follows a Go to from the Alerts face, keeping the event inside the shell", async () => {
+    history.replaceState(null, "", "/manage/alerts");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: faceApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    const alertsFace = el.shadowRoot!.querySelector<
+      HTMLElement & { canOpen: (screen: string) => boolean }
+    >("dashboard-alerts-screen")!;
+    expect(alertsFace.canOpen("sales")).toBe(true);
+    expect(alertsFace.canOpen("no-such-screen")).toBe(false);
+    const escaped = vi.fn();
+    el.addEventListener("wt-alert-go-to", escaped);
+    emit(alertsFace, "wt-alert-go-to", { screen: "sales" });
+    await flush(el);
+    expect(sales(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/sales");
+    expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("files every enabled module the session may use into its group, after the core items", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: ["bookings", "venue-service"],
+        permissions: ["booking.manage", "venue_service.manage"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const service = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
+    ].map((item) => item.dataset.test);
+    expect(service).toEqual([
+      "nav-floor",
+      "nav-statuses",
+      "nav-kitchen",
+      "nav-bookings",
+      "nav-venue-operations",
+    ]);
+  });
+
+  it("offers the server's languages in the signed-in shell's chooser", async () => {
+    const getLocales = vi.fn().mockResolvedValue({
+      locales: [{ code: "en-GB", label: "English (server)" }],
+      venueDefault: "es-ES",
+      loginDefault: "es-ES",
+      venueName: "Deli Test SL",
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getLocales }),
+    });
+    await flush(el);
+    expect(getLocales).not.toHaveBeenCalled();
+    const chooser = shellChooser(el)!;
+    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+    await vi.waitFor(() =>
+      expect(
+        chooser.shadowRoot!.querySelector('[data-test="lang-en-GB"]')?.textContent?.trim(),
+      ).toBe("English (server)"),
+    );
+    expect(getLocales).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a request to open a product's editor from a session that cannot see the catalogue", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff", permissions: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(mySchedule(el)).not.toBeNull();
+    const before = location.href;
+    const lastTrailEntry = diag.snapshot().at(-1);
+    const escaped = vi.fn();
+    el.addEventListener("wt-edit-product", escaped);
+    emit(mySchedule(el)!, "wt-edit-product", { productId: "p1" });
+    await flush(el);
+    expect(mySchedule(el)).not.toBeNull();
+    expect(catalogue(el)).toBeNull();
+    expect(location.href).toBe(before);
+    // No navigation happened, so none is recorded on the diagnostics trail.
+    expect(diag.snapshot().at(-1)).toEqual(lastTrailEntry);
+    expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("keeps the drawer open for keys other than Escape", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    layout().dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(layout().classList.contains("drawer-open")).toBe(true);
+  });
+});

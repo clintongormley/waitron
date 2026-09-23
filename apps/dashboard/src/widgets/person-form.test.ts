@@ -227,3 +227,53 @@ describe("person-form", () => {
     ).toBe("");
   });
 });
+
+describe("person-form validation and keyboard submit", () => {
+  it("rejects a malformed email beside the field without emitting create-person", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    change(el, "email", "ada@example");
+    await el.updateComplete;
+    let created = false;
+    el.addEventListener("create-person", () => {
+      created = true;
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    await el.updateComplete;
+    expect(created).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=email]")!.getAttribute("error")).toBe(
+      codeMessage("person.email_invalid"),
+    );
+  });
+
+  it("submits on Enter in a field, sending a blank telephone as null", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    const events: CustomEvent[] = [];
+    el.addEventListener("create-person", (event) => events.push(event as CustomEvent));
+    const field = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-test=email]",
+    )!;
+    await field.updateComplete;
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+    expect(events.map((event) => event.detail)).toEqual([
+      {
+        firstNames: "Ada",
+        lastNames: "Lovelace",
+        displayName: "Ada",
+        email: "ada@example.com",
+        telephone: null,
+        role: "staff",
+      },
+    ]);
+  });
+});

@@ -2231,7 +2231,15 @@ image constraints under *Detail → Box image*.
   variants branch `feat/variants-sale-line` (not yet pushed on 2026-09-23) changes, which is why
   the table-service, boot-and-counter and three `tender-pay-*` suites are separate files that can
   be folded back into `till-app.test.ts` and `tender-pay.test.ts` once it lands;
-  98.82/99.08/98.97/96.93).
+  98.82/99.08/98.97/96.93); `apps/dashboard` (**PR #DASH_PR**, 2026-09-23 — tests for the login
+  screen's Google, passkey, two-step, emailed-link and reset paths, the app shell's session signals,
+  module navigation and screens opened from their address, the printers, backup, payments,
+  kitchen, devices and email screens (a disabled printer offered again keeps its id), the canvas
+  editor and grid preview, categories, units and their forms, the modifiers screen and the extra
+  and option list forms, the API client's routes and refusals, and the staff, profile, roster,
+  schedule and purchases screens; no source file changed; none added to the files lane B's variants
+  work is changing; 99.2/99.58/99.42/97.73 statements/lines/functions/branches, 97.71 branches on a
+  second run).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2600,6 +2608,35 @@ reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that br
 three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
+
+**The units screen puts a missing abbreviation's refusal beside the name — OPEN (found
+2026-09-23, dashboard coverage, PR #DASH_PR).** `apps/dashboard/src/screens/units-screen.ts` (about
+line 190) shows every `content.translation_required` refusal beside the unit's NAME field. The server
+checks the name and the abbreviation separately (`packages/catalogue/src/units.ts`) and raises the same
+code, which carries only a language (`packages/catalogue/src/content-languages.ts`), so a refused
+abbreviation is reported beside the name — the shape CLAUDE.md §3 describes for the product editor.
+Found by reading; no test pins it. **Next action:** have the refusal name the field (or check each
+field separately), then place it test-first.
+
+**Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #DASH_PR).** Each from
+reading unless marked run:
+- Two dashboard client methods nothing calls: `connectPaymentProvider` and `addReader` in
+  `apps/dashboard/src/api/client.ts` (grep of `apps/dashboard/src` outside tests: no callers; run).
+  Left in place because lane B is changing that file.
+- A closed `wt-dialog` fires its `close` event one step later, so a dialog reopened within that step
+  is shut again; `staff-screen.ts` and `purchases-screen.ts` have no guard, `profile-screen.ts` has
+  one (`#closingModal`). Seen once under coverage load in a test (run); a person cannot reopen that
+  fast.
+- `my-schedule-screen.ts` shows "no swaps" / "no absences" while those lists are still loading.
+- `content-languages.ts` sends `languages-closed` twice on Cancel (counted in a test run), and its
+  Enter-to-save cannot fire because the dialog holds no text box.
+- `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
+  all would pass; the server always sends one.
+- Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
+  "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
+  kitchen, backup, devices, printing-rules, my-schedule, profile, extra-list and option-list files,
+  and a handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
+  receipt each, or leave them as defensive code by decision.
 
 **What the till shows the NEXT operator when the previous one's request answers late — OPEN
 (found 2026-09-23, till coverage, PR #536).** The till coverage branch fixed the case where a late answer

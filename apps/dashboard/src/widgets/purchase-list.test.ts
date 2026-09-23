@@ -192,3 +192,39 @@ describe("purchase-list", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-test=row]").length).toBe(0);
   });
 });
+
+describe("purchase-list refreshes", () => {
+  const deleteControl = (el: PurchaseList, id: string): HTMLElement =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=delete-${id}]`)!;
+
+  it("renders a replaced invoices list when no row was armed", async () => {
+    const { el } = await mountWidget<PurchaseList>("dashboard-purchase-list", {
+      invoices: [invoice({ id: "a" })],
+    });
+    el.invoices = [invoice({ id: "a" }), invoice({ id: "b", supplierName: "Bodegas Norte SA" })];
+    await el.updateComplete;
+    const rows = el.shadowRoot!.querySelectorAll("wt-card[data-test=row]");
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.textContent).toContain("Bodegas Norte SA");
+  });
+
+  it("stays disarmed through a second outside press, so the next Delete arms instead of deleting", async () => {
+    const { el } = await mountWidget<PurchaseList>("dashboard-purchase-list", {
+      invoices: [invoice({ id: "pi-7" })],
+    });
+    deleteControl(el, "pi-7").click(); // arm
+    await el.updateComplete;
+    // Both presses land before the list re-renders, so the second reaches the click-away listener
+    // while nothing is armed.
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(deleteControl(el, "pi-7").getAttribute("data-armed")).toBeNull();
+    const deleted: unknown[] = [];
+    el.addEventListener("delete-purchase", (event) => deleted.push((event as CustomEvent).detail));
+    deleteControl(el, "pi-7").click();
+    await el.updateComplete;
+    expect(deleted).toEqual([]);
+    expect(deleteControl(el, "pi-7").getAttribute("data-armed")).toBe("true");
+  });
+});

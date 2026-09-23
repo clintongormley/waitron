@@ -165,3 +165,35 @@ it("refreshes displayed absences when their data changes elsewhere", async () =>
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
 });
+
+describe("approvals-screen — remaining decisions", () => {
+  it("rejects a swap → calls decideSwap with 'rejected' and reloads the queues", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reject-swap-sw1]")!.click();
+    await flush(el);
+    expect(api.decideSwap).toHaveBeenCalledExactlyOnceWith("sw1", "rejected");
+    expect(api.listPendingSwaps).toHaveBeenCalledTimes(2);
+  });
+
+  it("approves an absence → calls decideAbsence with 'approved' and reloads the queues", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=approve-absence-ab1]")!.click();
+    await flush(el);
+    expect(api.decideAbsence).toHaveBeenCalledExactlyOnceWith("ab1", "approved");
+    expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
+  });
+
+  it("files at most one absence decision when two buttons are clicked together", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<ApprovalsScreen>("dashboard-approvals-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=approve-absence-ab1]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reject-absence-ab1]")!.click();
+    await flush(el);
+    expect(api.decideAbsence).toHaveBeenCalledExactlyOnceWith("ab1", "approved");
+  });
+});

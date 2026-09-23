@@ -118,3 +118,55 @@ describe("shift-dialog", () => {
     expect(add).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("shift-dialog guards and keyboard submit", () => {
+  it("drops a Remove while a write is in flight", async () => {
+    const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
+      open: true,
+      day: "2026-03-02",
+      personId: "p1",
+      shift,
+      busy: true,
+    });
+    const remove = capture(el, "remove-shift");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove]")!.click();
+    await el.updateComplete;
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("confirms on Enter in a field", async () => {
+    const { el } = await mountWidget<ShiftDialog>("dashboard-shift-dialog", {
+      open: true,
+      day: "2026-03-02",
+      personId: "p1",
+      shift,
+    });
+    const update = capture(el, "update-shift");
+    setInput(el, "shift-role", "kitchen");
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-test=shift-role]",
+    )!;
+    await field.updateComplete;
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+    expect(update).toHaveBeenCalledExactlyOnceWith({
+      shiftId: "s1",
+      patch: {
+        startsAt: "2026-03-02T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2026-03-02T13:00:00Z",
+        endsOffsetMinutes: 0,
+        role: "kitchen",
+      },
+    });
+  });
+});

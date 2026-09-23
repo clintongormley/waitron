@@ -415,3 +415,122 @@ it("sizes both single-input cells from the shared sizing token, not a literal wi
     ["label-0-kitchen-name", token],
   ]);
 });
+
+function text(el: OptionListForm, testId: string): string {
+  return el.shadowRoot!.querySelector(`[data-test="${testId}"]`)!.textContent!.trim();
+}
+
+it("puts a customer-name refusal beside the first language, and an active one in the summary", async () => {
+  const { el } = await mount({
+    value: cooked,
+    fieldErrors: {
+      customerName: "Needs a customer-facing name.",
+      active: "Cannot be switched off.",
+      "labels.0.customerName": "The label needs one too.",
+    },
+  });
+
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "customer-name-en").error).toBe(
+    "Needs a customer-facing name.",
+  );
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "customer-name-es").error).toBe("");
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "label-0-customer-name-en").error).toBe(
+    "The label needs one too.",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+  expect(summary(el).sort()).toEqual([
+    "Cannot be switched off.",
+    "Needs a customer-facing name.",
+    "The label needs one too.",
+  ]);
+});
+
+it.each([
+  ["a label as a whole", "labels.0"],
+  ["a label field with no input", "labels.0.available"],
+  ["a label the form does not hold", "labels.9.name"],
+])("shows a refusal naming %s under the labels table", async (_what, path) => {
+  const { el } = await mount({ value: cooked, fieldErrors: { [path]: "Something is wrong." } });
+
+  expect(text(el, "labels-error")).toBe("Something is wrong.");
+  expect(summary(el)).toEqual(["Something is wrong."]);
+});
+
+it("moves a rejected label's message under the labels table once that label is removed", async () => {
+  const { el } = await mount({ value: cooked, fieldErrors: { "labels.1.name": "Already used." } });
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+
+  await click(el, "remove-label-1");
+
+  expect(text(el, "labels-error")).toBe("Already used.");
+  expect(summary(el)).toEqual(["Already used."]);
+});
+
+it("reads a label with no kitchen name as blank and submits blank kitchen names as null", async () => {
+  const { el, host } = await mount({
+    value: { ...cooked, labels: [{ ...cooked.labels[0]!, kitchenName: null }, cooked.labels[1]!] },
+  });
+  const submitted = record(host);
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "label-0-kitchen-name").value).toBe("");
+
+  await type(el, "kitchen-name", "  ");
+  await type(el, "label-1-kitchen-name", " ");
+  await click(el, "save");
+
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.kitchenName).toBeNull();
+  expect(submitted[0]!.labels.map((label) => label.kitchenName)).toEqual([null, null]);
+});
+
+it("holds the dialog open against Escape only while it is saving", async () => {
+  const { el } = await mount({ value: cooked });
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const press = (key: string) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    modal.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  expect(press("Escape")).toBe(false);
+  el.busy = true;
+  await el.updateComplete;
+  expect(press("Escape")).toBe(true);
+  expect(press("Enter")).toBe(false);
+});
+
+it("ignores a drag whose row was removed mid-gesture, leaving the save's messages in place", async () => {
+  const WELL = "55555555-5555-4555-8555-555555555555";
+  const { el, host } = await mount({
+    value: {
+      ...cooked,
+      labels: [
+        ...cooked.labels,
+        { id: WELL, name: "Well done", customerName: {}, kitchenName: "W", available: true },
+      ],
+    },
+  });
+  const submitted = record(host);
+  const handle = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${RARE}"]`)!;
+  handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1 }));
+
+  await click(el, "remove-label-0");
+  await type(el, "name", "");
+  await click(el, "save");
+  expect(summary(el)).toEqual([t("options.name_required")]);
+
+  const firstRow = el.shadowRoot!.querySelector("tbody tr")!.getBoundingClientRect();
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 1,
+      clientY: firstRow.top + firstRow.height / 2,
+    }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+  await el.updateComplete;
+
+  expect(summary(el)).toEqual([t("options.name_required")]);
+  await type(el, "name", "Cooked");
+  await click(el, "save");
+  expect(submitted[0]!.labels.map((label) => label.id)).toEqual([MEDIUM, WELL]);
+});
