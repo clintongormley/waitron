@@ -236,7 +236,7 @@ export class ProductList extends LitElement {
         label: t("product.status"),
         // Spec §15.6: the product's Active state is its own cell and the filter's answer — for its
         // variant rows too, for the reason the sold-on-its-own column gives. Available is shown
-        // only when it is off, as a second badge: an Unavailable product is never hidden.
+        // only when it is off, as a second badge: no product is hidden for being Unavailable.
         cell: ({ product, variant }) => {
           if (variant)
             return variant.available

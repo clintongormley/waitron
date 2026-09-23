@@ -15,8 +15,9 @@ export interface DataTableColumn<Row> {
     allLabel: string;
     value: (row: Row) => string;
     options: { value: string; label: string }[];
-    /** The option the filter starts on before a choice is made or restored. Choosing the all
-     * option is then remembered as a choice of its own, so it outlives a reload. */
+    /** The option the filter starts on, while no choice is made or restored and the column's
+     * options include it. Choosing the all option is then remembered as a choice of its own, so on
+     * a table with a `viewKey` it outlives a reload. */
     initial?: string;
   };
   align?: "start" | "end";
@@ -355,8 +356,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   /** Removes every choice whose column offers options that do not include it, and reports whether it
-   * removed any. A choice whose column offers none waits, kept and stored but not applied, until the
-   * column offers a non-empty list to judge it by. */
+   * removed any. A chosen "all" (an empty string) is the exception: it is kept exactly while its
+   * column names an `initial`, and removed otherwise. Any other choice whose column offers none
+   * waits, kept and stored but not applied, until the column offers a non-empty list to judge it by. */
   #judgeFilters(): boolean {
     const kept = Object.entries(this.filterSelections).filter(([key, value]) => {
       // The all option is kept only where it overrides an initial choice; anywhere else it is what

@@ -86,7 +86,7 @@ export const products = table(
     unitPrice: money("unit_price"),
     vatClass: label("vat_class"),
     // Two states (spec §15.6): `active` is whether the product exists for the venue — deleting makes
-    // it false, nothing is ever deleted — and `available` is "sold out for now". The till sells a
+    // it false and removes no row — and `available` is "sold out for now". The till sells a
     // product only when both are true. `available` is never inherited by a variant.
     active: flag("active").notNull().default(true),
     available: flag("available").notNull().default(true),

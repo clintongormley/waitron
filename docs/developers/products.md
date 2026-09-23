@@ -250,11 +250,13 @@ variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice` and
 "I typed spaces" and "I left it empty" store identically.
 
 A product has two states (spec §15.6). **Active / Inactive** is whether it exists for the venue:
-Delete sends `active: false`, Restore sends `active: true`, and nothing is ever deleted.
+Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`listMenuOffers`, `listAvailableProducts` and `readExtraProducts` in
-`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`).
+`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`) —
+except that a held order's line kept at or below its quantity is still billed although its dish or
+an extra has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`.
 `listMenuOffers` keeps an Unavailable product's offer only when its caller passes
 `includeUnavailable`, as the menu management route and the venue readiness check do. Until
 variants become products (plan Task 3), a variant carries only its own `available`.

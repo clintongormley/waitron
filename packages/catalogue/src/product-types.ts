@@ -101,7 +101,9 @@ export interface Product {
   /** Whether the product exists for the venue; deleting it makes it Inactive (spec §15.6). */
   active: boolean;
   /** Whether it can be sold right now: false is "sold out for now", and hides nothing in the
-   * dashboard. The till sells a product only when it is both Active and Available. */
+   * dashboard. The till sells a product only when it is both Active and Available — except that a
+   * held order's line kept at or below its quantity is still billed although its dish or an extra
+   * has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`. */
   available: boolean;
   /** The PUBLISHED allergen union (manual overlay merged with any recipe-derived floor), or null when
    * not yet reviewed. */

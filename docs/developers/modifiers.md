@@ -185,7 +185,9 @@ of this section.
 
 A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
 rebuilds what those answers would freeze NOW and compares the result with what the stored line
-holds, by value; equal, every line and its locked price are kept. One line that does not match
+holds, by value; equal, every line and its locked price are kept — except that a line whose
+quantity rises also needs its dish's product and every extra's product to be Active and Available,
+otherwise the edit falls to the replacement path and is refused. One line that does not match
 sends the WHOLE order down the replacement path, which re-prices every line on it.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
@@ -280,7 +282,7 @@ a line — the product grid and tender-pay's weighed quantity — decide whether
 from that field or from an available variant (`needsModifierPicker`,
 `apps/till/src/state/order-line.ts`).
 
-Five things it is worth knowing about that payload:
+Six things it is worth knowing about that payload:
 
 - **The order is the product's own `product_modifiers.sort`, on both reads** (spec §5). A menu
   offer changes what is inside an extras entry, and whether the entry is there at all, but not
@@ -299,6 +301,18 @@ Five things it is worth knowing about that payload:
   file: a required list the picker never drew would refuse the order with `options.label_required`
   or `extras.limit_exceeded`, and an offered list the server does not know about would be refused
   as `options.invalid`.
+- **An extras list offers only the items whose product is Active and Available** (spec §15.6), and
+  a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field
+  `productId`), the same refusal as a pick the list never offered. That filter is NOT in
+  `resolveAttachedModifiers`: it sits in the two separate queries that read the items' `products`
+  rows — `readExtraProducts` (`offered-modifiers.ts`) for what the till is offered, and
+  `resolveBasketModifiers` (`apps/server/src/working-order.ts`) for a basket priced afresh, which
+  includes the replacement path of a held-order edit. The exception is a held-order edit in which
+  every line is quantity-only: a line kept at or below its stored quantity keeps a pick that has
+  since sold out, and for a line whose quantity rises `updateHeldOrder` checks the dish's and its
+  extras' states itself. Tests: "an extra the till cannot sell" in
+  `packages/catalogue/src/offered-modifiers.test.ts`, and "refuses an extras pick of an Unavailable
+  or an Inactive product as a pick the list does not offer" in `apps/server/src/till-sale.test.ts`.
 - **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them (spec §3.1). Each is the product's own or, where a variant leaves it blank, its parent's —

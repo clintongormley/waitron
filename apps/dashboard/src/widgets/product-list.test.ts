@@ -437,8 +437,8 @@ describe("product-list", () => {
   });
 
   // Spec §15.6: Inactive (deleted) products are hidden behind a status filter that starts on
-  // Active; an Unavailable (sold out for now) product is never hidden. The fixtures give Active and
-  // Available DIFFERENT values, so a column or filter reading the wrong flag fails.
+  // Active; no product is hidden for being Unavailable (sold out for now). The fixtures give Active
+  // and Available DIFFERENT values, so a column or filter reading the wrong flag fails.
   it("starts the status filter on Active, so an Inactive product is hidden until it is changed", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
