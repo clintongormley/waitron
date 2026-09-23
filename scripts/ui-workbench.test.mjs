@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { expect, test } from "vitest";
 
 test("the documented UI workbench command reaches Vite", { timeout: 35000 }, () => {
