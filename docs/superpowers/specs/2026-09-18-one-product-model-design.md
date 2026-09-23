@@ -1,6 +1,6 @@
 # One product model: extras, options and variants — design
 
-**Status:** design approved by the owner in the brainstorm of 2026-09-18. Branch 1 landed (its
+**Status:** design approved by the owner in the brainstorm of 2026-09-18; branch 2 revised by the owner on 2026-09-23 (§15). Branch 1 landed (its
 thirteen tasks, ending #480). Branch 2's plan is
 `docs/superpowers/plans/2026-09-23-variants-as-products.md` (2026-09-23), which records where the
 code has moved since this spec was written and the decisions it takes where this spec is silent.
@@ -116,7 +116,9 @@ from the conversation, that is called out so the reviewer can veto it.
    offer, as it does today. An extra's VAT rate is always the product's own `vat_class`; the old
    "inherit the dish's rate" choice (`option_group_items.vat_class` NULL) is removed.
 
-10. **A parent product can be sold as itself as well as by variant.** "Coffee" at €1.50 is sellable,
+10. **Revised for branch 2 on 2026-09-23 — see §15.1, which withdraws this decision: a parent with variants is never sold itself.**
+    The original text follows, for the record.
+    **A parent product can be sold as itself as well as by variant.** "Coffee" at €1.50 is sellable,
     and "Large" at €2.00 is a variant of it — no need to invent a "Regular" variant. The `sold_alone`
     flag on the parent controls this: with it on, the till shows the parent plus its variants as
     choices including the plain one; with it off, the diner must pick a variant (today's rule, now
@@ -155,6 +157,9 @@ Since Waitron is pre-production, existing rows get the default `true` and the se
 is no backfill (CLAUDE.md §3).
 
 ### 1.2 `parent_id` (branch 2)
+
+**Revised for branch 2 on 2026-09-23 — see §15.2 (names are never inherited) and §15.3 (a variant's price may be blank and
+then follows the parent's).**
 
 A nullable self-reference, `parent_id → products(id)`. A row with a non-null `parent_id` **is** a
 variant. The reading rule is one sentence:
@@ -321,12 +326,16 @@ declarations").
 
 ### 4.1 Which products get a till tile
 
+**Revised for branch 2 on 2026-09-23 — see §15.4, which replaces this subsection.**
+
 The till grid shows products that are `sold_alone` **and** have no parent. Tapping one opens the pick:
 the product itself (if `sold_alone`), plus its published, available variants, each with its price.
 A parent with `sold_alone = false` is today's rule exactly — the diner must pick a variant — and
 `product.variant_required` is raised from that flag rather than from "has any variants".
 
 ### 4.2 Menus
+
+**Revised for branch 2 on 2026-09-23 — see §15.5, which replaces how variants reach a menu.**
 
 `menu_items` keeps one row per product; a variant is a product, so it gets its own `menu_items` row
 (the `(menu_id, product_id)` uniqueness still holds — a variant has its own `product_id`). A variant's
@@ -599,6 +608,94 @@ per-task reviews because it touches fiscal invariants and a cross-package contra
   options lists. Recorded so a future session does not assume a variant can carry its own.
 - **`docs/backlog.md`** is updated in the same change that lands each branch (the moment it goes stale
   is a merge), and the modifier/variant entries in it are reconciled against what these branches ship.
+
+## 15. Branch 2 revisions (owner, 2026-09-23)
+
+Agreed with the owner on 2026-09-23, one decision at a time, while reviewing the branch-2 plan
+(`docs/superpowers/plans/2026-09-23-variants-as-products.md`). Where this section and an earlier
+one disagree, **this section wins**; the earlier text is kept, with a pointer, as the record of what
+was first decided. Branch 1 is unaffected.
+
+### 15.1 A parent with variants is never sold itself
+
+Decision 10 is withdrawn. A product with at least one **Active** variant (§15.6) cannot be rung up
+as itself: it holds what its variants share and is the one button on the till, and choosing it
+means choosing one of its variants. Example: "Wine by the glass" is the parent; "Wine 125" and
+"Wine 175" are what is sold. A product with no Active variants sells as itself, exactly as a product
+does today. There is no "Regular" variant, stored or displayed: the manager adds every variant
+themselves, starting with the first. A product with exactly one variant is allowed.
+
+`product.variant_required` stays, and is raised when a product with an Active variant is rung up
+without one. `sold_alone` no longer has anything to do with variants (§15.4).
+
+### 15.2 A variant has its own full name, and its names are never inherited
+
+A variant is named in full ("Wine 125"), not as a suffix of its parent's name. Receipts, kitchen
+tickets, the till basket and the staff name in reports show the variant's own name alone; the
+" · " join of parent and variant names (`packages/catalogue/src/product-presentation.ts`) is no
+longer used for a variant line. The sale line still records BOTH names in their separate columns
+(§4.3 — `name` the parent's, `variant_name` the variant's), so a report can group by parent (§6).
+
+Because the variant's name is what is printed, **a variant's three names are never inherited**: a
+blank customer name or kitchen name falls back to the **variant's own** staff name, the rule every
+product already follows, never to the parent's names. Every other field in §1.2's inherited list —
+VAT, category and membership, unit, station, course, allergens and diet, dietary declarations,
+description, and photo — still reads the parent's value when the variant leaves it blank. Two blanks
+cannot be told from "none": a variant cannot be in no category, or have no unit, while its parent
+has one.
+
+### 15.3 Prices
+
+- **The parent's price is the base price.** A variant whose own price is blank sells at it; so a
+  variant's price becomes optional, while a product with no parent still needs one.
+- **Every stored price is a full price**, never a difference, at every level. Changing the base
+  price moves only the variants whose price is blank.
+- **On a menu, the most specific price that is set wins**, in this order: the variant's price on
+  that menu; the variant's own price; the parent's price on that menu; the parent's own price.
+- **Every price field shows, as its hint, the price it would fall back to** (§9.1) — in the product
+  editor and on every menu.
+- Where variants are listed with prices — the till's variant picker now, a customer menu later — a
+  variant whose price differs from its parent's price on that menu may be labelled with the
+  difference ("+€1.50"). The label is computed for display; nothing stores it.
+
+### 15.4 Which products get a till button
+
+Every Active, Available (§15.6), top-level product offered on the menu gets a till button,
+**including one with `sold_alone = false`**, so staff can ring up an extra such as bacon on its own.
+`sold_alone` now governs only a future customer-facing menu, where such products are not listed on
+their own. A variant never has a button of its own. Tapping a parent that has variants opens its
+variants with the **first available one preselected**; a parent whose variants are all unavailable
+on that menu has nothing to sell and gets no button.
+
+### 15.5 Variants follow their parent onto every menu
+
+Putting a parent on a menu offers **every Active variant of it** there, at its price by §15.3,
+automatically — including a variant added to the catalogue later. The menu stores something for a
+variant only when the manager overrides its price there, or switches it off for that menu; without
+such a setting there is nothing stored. The menu screen lists the parent's variants so either can be
+set. A variant is presented under its parent, in ONE order set in the product editor and used
+everywhere (the till picker, every menu); per-menu variant ordering is not kept.
+
+### 15.6 Two states: Active, and Available
+
+Today one switch does two jobs: the product editor labels it *Available* and the products list shows
+it as *Active / Inactive*, and "delete" sets it off. It becomes two, for products and variants alike:
+
+- **Active / Inactive** — whether the item exists for the venue. Deleting a product or removing a
+  variant makes it **Inactive**; it is hidden behind a status filter on the products list and in the
+  product editor's variant section, and making it Active again restores it. Removing is always
+  allowed, whatever refers to the item, because nothing is deleted.
+- **Available / Unavailable** — sold out for now. It toggles freely and never hides the item from
+  the dashboard.
+
+The till offers an item only when it is both Active and Available, as it offers only an Active one
+today.
+
+### 15.7 What this does not change
+
+The parent of a variant is fixed when the variant is created and is in the same catalogue. A variant
+offers its parent's extras and options lists (§4.4). The filed sale line carries frozen names and no
+catalogue reference (decision 11), and the fiscal fingerprint is unchanged.
 
 ## Provenance
 
