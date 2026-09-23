@@ -1126,7 +1126,7 @@ out, and neither is a double filing a run here could show:
   five-minute gate, counted from when the row was CLAIMED (`enviado_en`) rather than from the
   restart — so after a promotion the inherited row is usually stale already and the first pass
   recovers it; a node that claimed a row moments before it died is the case that waits.
-  **2026-09-23: the restart reset is built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it once per boot, before the first filing pass.
+  **2026-09-23: the restart reset is built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a boot's first filing pass, and again only if that attempt failed.
 
 - **A DIFFERENT identity for one economic sale** — an invoice number reissued under re-keying — is
   the one genuine double-filing shape, and the only real-system concern that survives. AEAT does not

@@ -500,10 +500,11 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * The restart reset (topology design §5.2): every `enviando` row back to `pendiente`, due now, with
  * no staleness gate, raising `incidencia` as `recoverStaleClaims` does. Sound only before this
  * process's first drain pass and while no other process files from this database, so the host
- * calls it once per boot. A resend of a record the previous run had filed meets AEAT's duplicate
- * check (error 3000): when AEAT reports its stored copy `Correcta` or `AceptadaConErrores`,
- * `resolveEstadoEfectivo` reads that as an accept and `applyOutcome` marks the row accepted without
- * comparing fingerprints; only an annulled or unstated copy reaches `handleDuplicate`.
+ * calls it before that pass, and again only if that attempt failed. A resend of a record the
+ * previous run had filed meets AEAT's duplicate check (error 3000): when AEAT reports its stored
+ * copy `Correcta` or `AceptadaConErrores`, `resolveEstadoEfectivo` reads that as an accept and
+ * `applyOutcome` marks the row accepted without comparing fingerprints; only an annulled or
+ * unstated copy reaches `handleDuplicate`.
  */
 export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
   await withTransaction(db, (tx) => requeueClaims(tx, now, null));

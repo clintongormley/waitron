@@ -3422,7 +3422,7 @@ any of this code, so you can still read how something worked under PostgreSQL.
   Waitron retains the engine's required semantics and checks for claimed self-host targets.
   Every store result in the prototype note is MinIO's. Topology §12.2's real-store gate remains
   open; the conditional-write promotion tie-break must be demonstrated on each target (risk 11).
-- **The restart reset is built (2026-09-23), and its precondition is not.** `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it once per boot, before the first filing pass — so a
+- **The restart reset is built (2026-09-23), and its precondition is not.** `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a boot's first filing pass, and again only if that attempt failed — so a
   node that restarts files an inherited "being filed right now" sale on its first pass, with no
   five-minute wait. It runs only where the drain does: on the singleton primary, with submission
   switched on. What it assumes and nothing enforces is ONE server process per venue folder: a second
