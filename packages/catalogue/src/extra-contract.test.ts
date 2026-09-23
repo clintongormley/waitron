@@ -612,3 +612,29 @@ describe("parseMenuExtraPublications", () => {
     );
   });
 });
+
+describe("extra contract field shapes", () => {
+  it("refuses a customer name whose entries are not all text", () => {
+    expect(() => parseExtraListInput({ ...breadsBody, customerName: { en: 5 } })).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "customerName" } }),
+    );
+  });
+
+  it("refuses a kitchen name that is not text, and folds a blank one to null", () => {
+    expect(() => parseExtraListInput({ ...breadsBody, kitchenName: 42 })).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "kitchenName" } }),
+    );
+    expect(parseExtraListInput({ ...breadsBody, kitchenName: "   " }).kitchenName).toBeNull();
+  });
+
+  it("refuses an answer whose list id or picked product id is not text", () => {
+    expect(() => validateExtraSelections([breads()], [{ listId: 7, picks: [] }])).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "listId" } }),
+    );
+    expect(() =>
+      validateExtraSelections([breads()], [{ listId: breadsId, picks: [{ productId: 7 }] }]),
+    ).toThrowError(
+      expect.objectContaining({ code: "extras.invalid", params: { field: "productId" } }),
+    );
+  });
+});

@@ -15,6 +15,7 @@ import {
   assignProductUnit,
   createUnit,
   deleteUnit,
+  getSellableUnit,
   getUnit,
   listUnits,
   productsUsingUnit,
@@ -24,6 +25,7 @@ import {
 import { assertQuantityPrecision } from "./units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 
 /**
  * Both rows go through their drizzle tables: `catalogues.id` and `products.id` come from each
@@ -219,5 +221,49 @@ describe("unit operations", () => {
     expect(() => assertQuantityPrecision("1.2345", 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
     );
+  });
+});
+
+describe("what a unit operation refuses for an id that names nothing", () => {
+  const MISSING = "00000000-0000-4000-8000-0000000000bb";
+
+  it("refuses to read, sell by, update or delete a unit no row holds", async () => {
+    const attempts: ((tx: Transaction) => Promise<unknown>)[] = [
+      (tx) => getUnit(tx, MISSING),
+      (tx) => getSellableUnit(tx, MISSING),
+      (tx) => updateUnit(tx, MISSING, { precision: 1 }, "en"),
+      (tx) => updateUnit(tx, MISSING, {}, "en"),
+      (tx) => deleteUnit(tx, MISSING),
+    ];
+    for (const attempt of attempts) {
+      await expect(run(attempt)).rejects.toMatchObject({
+        code: "unit.not_found",
+        params: { unitId: MISSING },
+      });
+    }
+  });
+
+  it("refuses to assign a unit to a product no row holds", async () => {
+    await seedTenant(suite.db);
+    const unit = await run((tx) =>
+      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+    );
+
+    await expect(run((tx) => assignProductUnit(tx, MISSING, unit.id))).rejects.toMatchObject({
+      code: "product.not_found",
+      params: { productId: MISSING },
+    });
+
+    expect(await run((tx) => productsUsingUnit(tx, unit.id))).toEqual([]);
+  });
+
+  it("answers an empty patch with the unit as stored, changing nothing", async () => {
+    const unit = await run((tx) =>
+      createUnit(tx, { name: { en: "portion" }, precision: 2, abbreviation: { en: "u" } }, "en"),
+    );
+
+    expect(await run((tx) => updateUnit(tx, unit.id, {}, "en"))).toEqual(unit);
+
+    expect(await run((tx) => getUnit(tx, unit.id))).toEqual(unit);
   });
 });

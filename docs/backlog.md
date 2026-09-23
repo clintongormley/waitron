@@ -2138,7 +2138,13 @@ image constraints under *Detail → Box image*.
   a profile read for a person row that no longer exists, and the refusals and side effects of
   editing, deactivating, resetting, clearing the PIN of and re-inviting staff; a collision that
   reaches the write past its availability check is planted by a test-only trigger, since one
-  writer at a time leaves no race to win; no source file changed; 100/100/100/100).
+  writer at a time leaves no race to win; no source file changed; 100/100/100/100); `catalogue`
+  (**PR #530**, 2026-09-23 — tests for listing and renaming a menu's sections, the
+  unit reads and writes refused for an id that names nothing, a variant refused as
+  Unavailable or not offered on a menu, a product with no variant sold as itself, a delete
+  preview's menus in offer-id order, a product extras read handed a wider attachment map or one
+  naming a deleted list, and non-text names and ids in the extras and options contracts; no
+  source file changed; 98.82/99.53/100/97.37).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

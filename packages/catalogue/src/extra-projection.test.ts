@@ -822,3 +822,35 @@ describe("what deleting an extras list would touch", () => {
     expect(await run((tx) => readMenuExtras(tx, [offers.burger]))).toEqual(new Map());
   });
 });
+
+describe("a product extras read handed the caller's attachments", () => {
+  it("answers only the products asked for, when the map covers a wider set", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    await run(async (tx) => {
+      await carries(tx, "burger", list.id);
+      await carries(tx, "pizza", list.id);
+    });
+    const attachments = await run((tx) => readProductModifiers(tx, [ids.burger, ids.pizza]));
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger], attachments));
+
+    expect([...carried.keys()]).toEqual([ids.burger]);
+  });
+
+  it("skips an attachment naming a list no row holds", async () => {
+    const list = await run((tx) => createExtraList(tx, toppings(), "en"));
+    const attachments = new Map([
+      [
+        ids.burger,
+        [
+          { kind: "extras" as const, id: UNKNOWN_ID },
+          { kind: "extras" as const, id: list.id },
+        ],
+      ],
+    ]);
+
+    const carried = await run((tx) => readProductExtras(tx, [ids.burger], attachments));
+
+    expect(carried.get(ids.burger)!.map((each) => each.id)).toEqual([list.id]);
+  });
+});

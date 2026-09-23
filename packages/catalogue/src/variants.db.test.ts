@@ -666,3 +666,47 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
     );
   });
 });
+
+describe("selectMenuVariant refuses a variant it may not sell", () => {
+  const small: ProductVariant = {
+    id: "33333333-3333-4333-8333-333333333333",
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: "2.00",
+    available: true,
+    active: true,
+  };
+  const offer = {
+    productId: "44444444-4444-4444-8444-444444444444",
+    name: "Coffee",
+    customerName: null,
+    kitchenName: null,
+    unitPrice: "8.00",
+    variants: [{ id: small.id, unitPrice: "2.50", available: true }],
+  };
+  const refused = expect.objectContaining({
+    code: "product.variant_unavailable",
+    params: { variantId: small.id },
+  });
+
+  it("refuses a variant that is Unavailable on the product", () => {
+    expect(() => selectMenuVariant(offer, [{ ...small, available: false }], small.id)).toThrow(
+      refused,
+    );
+  });
+
+  it("refuses a variant this menu does not offer now", () => {
+    const withdrawn = { ...offer, variants: [{ ...offer.variants[0]!, available: false }] };
+    expect(() => selectMenuVariant(withdrawn, [small], small.id)).toThrow(refused);
+    expect(() => selectMenuVariant({ ...offer, variants: [] }, [small], small.id)).toThrow(refused);
+  });
+
+  it("refuses a variant that is no longer Active", () => {
+    const other = { ...small, id: "55555555-5555-4555-8555-555555555555" };
+    expect(() => selectMenuVariant(offer, [{ ...small, active: false }, other], small.id)).toThrow(
+      refused,
+    );
+  });
+});
