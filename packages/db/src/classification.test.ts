@@ -6,8 +6,9 @@ import { CORE_CHANGE_SOURCES, CORE_CLASSIFICATION } from "./classification.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
-/** The tables core's migrations LEAVE IN EXISTENCE — CREATEs minus later DROPs, filename order
- * (`readdirSync` does not sort). */
+/** The tables core's migrations LEAVE IN EXISTENCE — CREATEs minus later DROPs, a RENAME
+ * counting as a drop of the old name and a create of the new, in filename order (`readdirSync`
+ * does not sort). */
 function tablesInDrizzle(): Set<string> {
   const files = readdirSync(DRIZZLE)
     .filter((f) => f.endsWith(".sql"))

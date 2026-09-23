@@ -2669,7 +2669,7 @@ request boundary on the four catalogue writes, refusing one as `management.reque
 the field, so the product writes store nothing and the menu-item writes answer a 400 rather than a
 500. Still open: `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`)
 still accept and store a negative when called directly — a seed, a script or a future caller — and
-`products.unit_price` still carries no check constraint. The SQLite flip has landed (#489), so this
+`products.unit_price` still carries no `>= 0` check. The SQLite flip has landed (#489), so this
 is now actionable: decide whether the screen belongs in the ops or as a `products.unit_price >= 0`
 check beside the sibling price checks the other catalogue tables carry. **One thing the flip
 changes about the choice:** a check constraint is now the only thing that would refuse it at the

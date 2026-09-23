@@ -24,10 +24,10 @@ interface JournalEntry {
 /**
  * Two migrations of our own rather than the core set's files.
  *
- * The core set ships ONE migration today, and this suite needs a second entry to put below a
- * watermark — an assertion resting on core shipping two would break the day core is regenerated as
- * a single baseline again. What is under test is drizzle's own `max(created_at)` arithmetic and
- * this package's count check, neither of which reads what the SQL says.
+ * This suite needs a second entry to put below a watermark, and an assertion resting on however
+ * many migrations core ships would break the day core is regenerated as a single baseline again.
+ * What is under test is drizzle's own `max(created_at)` arithmetic and this package's count check,
+ * neither of which reads what the SQL says.
  */
 const MIGRATIONS: { entry: JournalEntry; sql: string }[] = [
   {

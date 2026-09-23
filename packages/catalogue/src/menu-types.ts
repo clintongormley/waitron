@@ -110,7 +110,9 @@ export interface AccessibleCatalogue {
  * One product an extras list offers, with everything a surface needs to draw and describe it: the
  * RESOLVED price (§3.3's chain — the menu offer's own price, then the list item's, then the
  * product's `unit_price` — already settled, because a till has no way to walk it), the terms of the
- * OFFER, and the product's own names and declarations.
+ * OFFER, and the product's names and declarations. Every product value here is the picked product's
+ * EFFECTIVE one — its own, or its parent's where a variant leaves it blank — except the names, which
+ * are always its own.
  *
  * `ExtraListItem` (modifier-list-types.ts) carries none of the product's facts on purpose: the row
  * duplicates nothing the `products` row already holds (spec
@@ -119,7 +121,7 @@ export interface AccessibleCatalogue {
  *
  * `addAllergens` and `suitableFor` take the vocabulary of a CHILD line rather than of a product,
  * because that is what a pick becomes: the same two field names, carrying the same two values, as
- * `QueueModifier` (`readQueueSubItems`, apps/server/src/working-order.ts) — the product's own
+ * `QueueModifier` (`readQueueSubItems`, apps/server/src/working-order.ts) — the product's
  * `allergens`, and its `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown
  * BESIDE the dish's own declarations, never folded into them (spec §3.4).
  */
@@ -130,7 +132,7 @@ export interface OfferedExtraItem {
   kitchenName: string | null;
   /** GROSS, in the money shape `unitPrice` uses. Never null: the inheritance is already resolved. */
   price: string;
-  /** Always the extra PRODUCT's own rate — an extra never inherits the dish's (spec §3.3). */
+  /** Always the extra PRODUCT's effective rate, never the dish's (spec §3.3). */
   vatClass: VatClass;
   maxQuantity: number;
   preselected: boolean;

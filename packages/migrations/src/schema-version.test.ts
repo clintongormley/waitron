@@ -99,8 +99,8 @@ describe("appliedSchemaVersion — against a real database", () => {
     // A hand-built journal table holding fewer rows than the set ships — the state where the two
     // answers DIFFER (CLAUDE.md §1: a measurement where both answers look alike measures nothing).
     // The schema mirrors drizzle's own journal table; only the row COUNT matters. `expected` comes
-    // from a fixture journal rather than the core set's, which ships a single baseline today — a
-    // partial state has to be able to sit strictly below it.
+    // from a fixture journal rather than the core set's, whose length changes as migrations land —
+    // a partial state has to be able to sit strictly below it whatever that length is.
     const partialTable = "__drizzle_migrations_partial";
     suite.db.run(
       sql.raw(

@@ -49,10 +49,11 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   The claim was taken on 2026-09-21, when the SQLite regeneration had just replaced every
  *   hand-written custom migration with a generated baseline; two hand-written sets have landed since.
  *   `grep -Ein 'create (constraint )?trigger'` over every `packages/<pkg>/drizzle/*.sql` now matches
- *   `packages/db/drizzle/0001_behavioural_triggers.sql` and
- *   `packages/media/drizzle/0001_image_references.sql`, and media's triggers sit ON tables core and
- *   catalogue create — real cross-set edges, which is why this guard passes only because media
- *   DECLARES both in its `requires`; the anchor test pins one of them,
+ *   `packages/db/drizzle/0001_behavioural_triggers.sql`,
+ *   `packages/db/drizzle/0004_variant_one_level.sql` (triggers on core's own `products`, so no
+ *   cross-set edge) and `packages/media/drizzle/0001_image_references.sql`, and media's triggers sit
+ *   ON tables core and catalogue create — real cross-set edges, which is why this guard passes
+ *   only because media DECLARES both in its `requires`; the anchor test pins one of them,
  *   `media→core via trigger on products`. What the scan still cannot see is append-only
  *   enforcement, which is runtime code (`packages/store/src/append-only.ts`). The
  *   `CREATE CONSTRAINT TRIGGER` spelling it also accepts is PostgreSQL-only: sqlite3 3.51 answers `near "CONSTRAINT": syntax error`, so those two controls

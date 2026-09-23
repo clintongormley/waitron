@@ -56,7 +56,7 @@ Measured on `main` on 2026-09-23:
   (`packages/catalogue/src/variants.ts:263-264`).
 - **Variants are sellable only on the menu-offer path** (an order with a service zone). The plain
   `productId` path refuses a `variantId` with `management.request_invalid`
-  (`apps/server/src/working-order.ts:381-383`). This plan keeps that.
+  (`priceOrderLines`, `apps/server/src/working-order.ts`). This plan keeps that.
 - **`working_order_lines.product_id` is always the PARENT today**; the chosen variant sits in a
   separate `variant_id` column with no foreign key. **`sale_lines` carries `variant_id` too.**
 - **No variant data reaches the fiscal hash.** `backend.recordSale` receives header fields only
@@ -161,15 +161,16 @@ improvised around.
 - **V15 (plan) — `listProductVariantsForProducts` is deleted in Task 5** (spec §4.5, §8) once the
   order path decides from the offer; `listProductVariants` stays for the editor.
 - **V16 (plan) — Extras obey Active and Available too.** Spec §15.6 says the till offers an item
-  only when it is both; the extras read (`offered-modifiers.ts:128-143`) and the order path's extras
-  read (`working-order.ts:185-193`) filter on neither today. Task 2 adds the filter. A variant may be
-  an extras item like any product; its child line freezes the variant's own names (V2) and its
-  effective VAT and price.
+  only when it is both; the extras read (`readExtraProducts`, `offered-modifiers.ts`) and the order
+  path's extras read (`resolveBasketModifiers`, `working-order.ts`) filter on neither today. Task 2
+  adds the filter. A variant may be an extras item like any product; its child line freezes the
+  variant's own names (V2) and its effective VAT and price.
 - **Stored and resolved prices are different fields (plan).** `MenuItem.grossPrice` is the STORED
   menu price (`string` until Task 4, then `string | null`); `MenuOffer.unitPrice` is the RESOLVED
-  price the till and the order path charge (added in Task 3, and what `working-order.ts:299` reads
-  from then on instead of `grossPrice`); nested variants are `MenuOfferVariant` (Task 3), carrying
-  both the resolved `unitPrice` and the stored `menuPrice` and `offered` the menu screen needs.
+  price the till and the order path charge (added in Task 3, and what `priceOrderLines` in
+  `working-order.ts` reads from then on instead of `grossPrice`); nested variants are
+  `MenuOfferVariant` (Task 3), carrying both the resolved `unitPrice` and the stored `menuPrice` and
+  `offered` the menu screen needs.
 
 ## Global Constraints
 
@@ -453,8 +454,8 @@ END;
   `pnpm --filter @waitron/db exec vitest run` and `pnpm --filter @waitron/catalogue exec vitest run
   src/migrations.test.ts` — both migrate fresh databases inside the migrator's transaction, the case
   the schema guard cannot see. Add no test that the media triggers survive on a fresh database (media
-  migrates after core there, and the name pin at `scripts/behavioural-triggers.test.ts:322-331`
-  already asserts those names, so it could not fail). Re-run the upgrade once on the final migrations
+  migrates after core there, and the `IMAGE_REFERENCE_TRIGGERS` name pin in
+  `scripts/behavioural-triggers.test.ts` already asserts those names, so it could not fail). Re-run the upgrade once on the final migrations
   (migrate a venue directory on `main`, then again with this branch) and paste what it printed into
   the PR. Add one line to `docs/backlog.md`: after this lands every dev venue needs
   `wa-wt reset demo <name>`, and no provisioned box takes the image without a wipe.
@@ -569,7 +570,7 @@ Spec §15.6, V6. Products only — no variant is written yet. After it, "sold ou
 
 **Files:**
 - Modify: `packages/db/src/schema/catalogue.ts` (`products.available`); Create (generated): `packages/db/drizzle/0005_*.sql`
-- Modify: `packages/catalogue/src/product-types.ts`, `product-editor.ts`, `product-editor-input.ts`, `operations.ts` (`listMenuOffers`, `listAvailableProducts`, `toProduct`, create/update), `offered-modifiers.ts` (`:128-143`), `apps/server/src/catalogue-api.ts`, `apps/server/src/working-order.ts` (`:185-193`)
+- Modify: `packages/catalogue/src/product-types.ts`, `product-editor.ts`, `product-editor-input.ts`, `operations.ts` (`listMenuOffers`, `listAvailableProducts`, `toProduct`, create/update), `offered-modifiers.ts` (`readExtraProducts`), `apps/server/src/catalogue-api.ts`, `apps/server/src/working-order.ts` (`resolveBasketModifiers`)
 - Modify: `apps/dashboard/src/widgets/product-list.ts`, `product-editor.ts`, `screens/catalogue-screen.ts`, `api/client.ts`, `i18n/strings.ts`
 - Test: the matching `*.test.ts`, `*.a11y.test.ts`; `apps/server/src/catalogue-api.test.ts`, `till-sale.test.ts`
 
@@ -812,7 +813,7 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
 **Files:**
 - Modify: `packages/db/src/schema/orders.ts`, `sales.ts` (drop `variantId`; fix the stale `0031` pointer at `sales.ts:230`); Create (generated): `packages/db/drizzle/0006_*.sql`
 - Modify: `packages/core/src/sale-line.ts`, `sale-line-rows.ts`; `packages/catalogue/src/pricing.ts`, `variants.ts` (delete `listProductVariantsForProducts`), `product-presentation.ts`, `menu-types.ts`, `operations.ts`, `index.ts`
-- Modify: `apps/server/src/working-order.ts` (offer-line build `:292-312`, kitchen routing `:1166-1174`, kitchen-screen allergens `:3990-4000`, held-order fast path `:3150-3252`, the variant text re-keying `:519-533`); `packages/venue-service/src/operations.ts` (preparation routes, `:1003`)
+- Modify: `apps/server/src/working-order.ts` (the offer-line build and the variant text re-keying in `priceOrderLines`, kitchen routing in `fireLines`, kitchen-screen allergens in `readQueueSubItems`, the held-order fast path in `updateHeldOrder`); `packages/venue-service/src/operations.ts` (preparation routes, `resolvePreparationRouteOutcomes`)
 - Modify: `apps/till/src/api/client.ts`, `state/order-line.ts`, `widgets/modifier-picker.ts`, `widgets/product-grid.ts`, `widgets/product-name.ts`, `menu-filter.ts`, `till-app.ts` (retrieval)
 - Test: `packages/db/src/schema/variant-snapshot-columns.test.ts`, `sales.test.ts` (`:516-525`: `["variant_id"]` → `[]`), `orders.test.ts` (`:500-517`: `["product_id","variant_id"]` → `["product_id"]`), `packages/core/src/sale-line-rows.test.ts`, `packages/catalogue/src/pricing.test.ts`, `product-presentation.test.ts`, `variants.db.test.ts`; `apps/server/src/till-sale.test.ts`, `working-order.test.ts`, `kitchen-print.test.ts`, `receipt-ticket.test.ts`, `tabs.test.ts`; `apps/till/src/widgets/modifier-picker.test.ts`, `product-grid.test.ts`, `product-name.test.ts`, `basket.test.ts`, `state/order-line.test.ts`; `packages/fiscal-verifactu/src/write-path.e2e.test.ts`
   (Tighten pinned column lists rather than deleting those cases. The name-join assertions that change are listed in Step 2 and named in the PR.)
@@ -857,10 +858,11 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
     `kitchen-print.test.ts` (`:997`, `:1007`), `receipt-ticket.test.ts`, `basket.test.ts` — list each
     in the PR.
   - held orders: a change of variant alone on a kept line re-prices it (closes the gap at
-    `working-order.ts:3150-3211`); a quantity-only edit of a variant line with an options answer
-    keeps its line id and locked price (the fast path looks lists up by the PARENT's id, since a
-    variant carries none of its own — `:3237-3252`); a retrieved held order returns each line's
-    `variantId` (the line's `product_id` when that product has a parent).
+    `updateHeldOrder`'s kept-line check in `working-order.ts`); a quantity-only edit of a variant
+    line with an options answer keeps its line id and locked price (the fast path looks lists up by
+    the PARENT's id, since a variant carries none of its own — `updateHeldOrder`'s fast path); a
+    retrieved held order returns each line's `variantId` (the line's `product_id` when that product
+    has a parent).
   - the filed `sale_lines` row has no `variant_id` column (`pragma table_info(sale_lines)`).
 - [ ] **Step 3: Write the failing till tests** (V4). `product-grid.test.ts`: an Active, Available
   offer gets a button whether or not `soldAlone`; a parent whose variants are all unavailable gets
@@ -884,8 +886,8 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
   offer-line build takes `vatClass`, `pricingUnit`, `unit`, `courseId`, `category` and price from the
   selection. Kitchen routing, the kitchen-screen allergen read and preparation-route resolution join
   the parent through `parentProducts` / `effectiveProductColumns` and match product-level routes on
-  `coalesce(products.parent_id, products.id)`. The variant-text re-keying (`:519-533`) fills a blank
-  locale with the VARIANT's staff name. `product-presentation.ts` implements V2 in its one join
+  `coalesce(products.parent_id, products.id)`. The variant-text re-keying (in `priceOrderLines`)
+  fills a blank locale with the VARIANT's staff name. `product-presentation.ts` implements V2 in its one join
   function. Delete `listProductVariantsForProducts` (V15). Remove every `variantId` from the row
   writes, `readLockedLines`, `carveOffLines`, `getHeldOrder` (which derives it from the product's
   parent), the pricing types and `RecordSaleLine` / `saleLineRows`; `updateHeldOrder`'s same-line
@@ -944,8 +946,9 @@ export interface InheritedValues {
     one join-table field (categories) and one JSON field (allergens).
   - allergen and diet publishing for a variant (the first review found both ways it goes wrong:
     `createProduct`/`updateProduct`'s republish always writes a non-null `diet`,
-    `operations.ts:643-668, 740`, and a published allergen value built from the variant's own recipe
-    overlay, which is null, drops the parent's recipe-derived allergens):
+    `republishProductOverlays` and `createProduct`'s insert in `operations.ts`, and a published
+    allergen value built from the variant's own recipe overlay, which is null, drops the parent's
+    recipe-derived allergens):
     - ALL FOUR overlays null (`manual_allergens`, `recipe_derivation`, `diet_derivation`,
       `diet_override`) → `allergens` AND `diet` stay NULL, so the parent's published values are read;
     - `manual_allergens` alone overridden → the union of it and the PARENT's recipe derivation;

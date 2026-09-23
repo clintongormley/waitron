@@ -186,14 +186,14 @@ Configuration transfer places media rows before category image references and pr
 and primary choice. Category parent references target existing core identities, so metadata rows can
 be restored in any order after those identities.
 
-There is no per-change migration history to point at any more. The storage switch regenerated every
-module's PostgreSQL chain into one SQLite baseline per set, so all three files this paragraph used
-to name are gone and so is core's `0020_category_names` — `grep -rn 0020_category_names` over
-`packages/` and `apps/` matched nothing on 2026-09-23. What exists now is the end state: the
-catalogue set is `packages/catalogue/drizzle/0000_baseline.sql`, the media set is
-`packages/media/drizzle/0000_baseline.sql` plus the image-reference triggers in
-`0001_image_references.sql`, and the core set is `packages/db/drizzle/0000_baseline.sql` plus
-`0001_behavioural_triggers.sql`.
+The storage switch regenerated every module's PostgreSQL chain into one SQLite baseline per set, so
+all three files this paragraph used to name are gone and so is core's `0020_category_names` —
+`grep -rn 0020_category_names` over `packages/` and `apps/` matched nothing on 2026-09-23. The
+category tables are created by the baselines: `packages/catalogue/drizzle/0000_baseline.sql`, and
+`packages/db/drizzle/0000_baseline.sql` for `products.category_id`; the media set adds the category
+image triggers in `packages/media/drizzle/0001_image_references.sql`. Core's later migrations change
+`products` for variants — `0003_variant_inherited_nullable.sql` rebuilds the table and carries
+`category_id` and its key to `categories` across — and none of them touches category membership.
 
 The operational advice that hung off the old migration still holds, and it is a house rule rather
 than a property of any one file: schema changes drop and recreate, with no translation and no

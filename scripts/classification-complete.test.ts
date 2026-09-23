@@ -61,8 +61,8 @@ function discoverDrizzlePackages(): DrizzlePackage[] {
 }
 
 /** Every table a module's migrations leave in existence (lowercased), by module name — CREATEs minus
- * later DROPs, in filename order. A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`)
- * contributes an empty set. */
+ * later DROPs, a RENAME counting as a drop of the old name and a create of the new, in filename
+ * order. A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`) contributes an empty set. */
 function createdTablesByModule(discovered: DrizzlePackage[]): Map<string, Set<string>> {
   const byModule = new Map<string, Set<string>>();
   for (const { moduleName, sqls } of discovered) {

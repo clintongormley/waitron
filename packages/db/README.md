@@ -73,14 +73,15 @@ exists.
 
 ## Migrations
 
-Core has two migrations, both written for the storage switch: `0000_baseline.sql` is the schema
-drizzle-kit generates from the barrel, and `0001_behavioural_triggers.sql` is a `--custom`
-migration carrying the nine behavioural rules this package used to enforce with hand-written
-PostgreSQL triggers, restored as SQLite triggers. Neither file contains a `GRANT`, a role or an
-`ENABLE ALWAYS`: there is no database role to grant anything to, and file permissions on the venue
-directory are the access control.
+Core's migrations are the schema drizzle-kit generates from the barrel — `0000_baseline.sql`
+first, then each later change — plus the `--custom` files that carry triggers, which a schema cannot
+declare: `0001_behavioural_triggers.sql`, the nine behavioural rules this package used to enforce
+with hand-written PostgreSQL triggers, restored as SQLite triggers; and `0004_variant_one_level.sql`,
+which keeps a variant one level deep, its parent fixed, and a product's id unchanged. No migration
+contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
+and file permissions on the venue directory are the access control.
 
-The **append-only** triggers are not in either file. They are installed at runtime by
+The **append-only** triggers are not in any of these files. They are installed at runtime by
 `installAppendOnlyTriggers` (`@waitron/store`), from the table names each migration set declares,
 which is why every migrating path gets them without having to remember to.
 

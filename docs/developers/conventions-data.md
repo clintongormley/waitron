@@ -903,13 +903,24 @@ because append-only refusals are not written into migrations at all now
 The live instance of the trigger edge is `packages/media`. Its
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
 of them sit on tables another set owns: `products`, created by core in
-`packages/db/drizzle/0000_baseline.sql`, and `category_details`, created by catalogue. Both are
+`packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
+`0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue. Both are
 declared — media's descriptor reads `requires: { core: "*", modules: { catalogue: "*" } }`
 (`packages/media/src/module.ts`) — which is what the guard checks; the guard's job is the case where
 such an edge is NOT declared. Core's own behavioural triggers
 (`packages/db/drizzle/0001_behavioural_triggers.sql`) are all on core tables and so are not edges at
 all. The live-update triggers are installed at boot and sit outside this migration-text guard; their
 behaviour is exercised by `packages/db/src/change-feed.test.ts`.
+
+**A core rebuild of a table another set has triggers on applies fresh and fails on an upgrade.**
+Core's `0003_variant_inherited_nullable.sql` rebuilds `products`, which media's triggers name. On a
+fresh database core migrates before media creates them, and the whole chain applies. On a venue
+`main` had already migrated, the core set aborted at the rebuild's final rename of
+`__new_products` to `products` with
+`error in trigger products_media_image_fk_parent_delete: no such table: main.products`, and rolled
+back: afterwards core's journal still held its two earlier rows and `products` had no `parent_id`
+(measured 2026-09-23 through `applyMigrations`: every set's folders at `5bc04408e`, then
+`feat/variants-parent-id`'s). That is why that branch wipes every venue (`docs/backlog.md`).
 
 `scripts/module-graph-honesty.test.ts` derives both edge kinds from the SQL text, and says so. **Two
 hedges from its own header belong here, because a failing test can never restore them.** The

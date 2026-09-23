@@ -309,8 +309,8 @@ beforeAll(async () => {
   }
 
   // The OLDER artifact needs a database one core migration behind the code it is restored with.
-  // Rewinding the journal table cannot express that: no shipped core migration adds a column (the
-  // second, `0001_behavioural_triggers`, only adds triggers), so no shipped step could re-add the
+  // Rewinding the journal table cannot express that: no shipped core migration adds
+  // `invoice_series.retired_at` (the baseline creates it), so no shipped step could re-add the
   // one the dump lacks. Instead the older restore gets its OWN
   // root: the shipped sets plus one extra core step that re-adds the column its dump lacks. The
   // dump is then genuinely one migration behind that root, and only the extra step replays.

@@ -1165,9 +1165,7 @@ export async function fireLines(
 
   // Read the legacy product and category station overrides in one batch. A missing category yields a
   // null route; modifier children have already been removed from this list.
-  // RAW columns, not `effectiveProductColumns`: a variant line that inherits its station and category
-  // would route to the default station, not its parent's — Task 5 of the variants-as-products plan
-  // (docs/superpowers/plans/2026-09-23-variants-as-products.md) fixes it.
+  // RAW columns until variants-as-products Task 5: an inheriting variant gets the default station.
   const productIds = [
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
@@ -3971,9 +3969,7 @@ async function readQueueSubItems(
   // dietary labels, taken from the PRODUCT the child line names (LEFT join, so a child whose product
   // row has gone still renders its frozen text). Shown beside the dish's own; no fold, because the
   // dish's figures and each extra's are independent.
-  // RAW columns, not `effectiveProductColumns`: a variant extra that inherits its allergens and
-  // labels would SILENTLY show none (a null reads as "declares none" below), with no error — Task 5
-  // of the variants-as-products plan fixes it.
+  // RAW columns until variants-as-products Task 5: an inheriting variant extra SILENTLY shows none.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
@@ -4000,8 +3996,7 @@ async function readQueueSubItems(
   // Each parent line's OWN allergens and diet — the PARENT line's product (LEFT join: a null base is
   // allowed and yields `pending: true`). No modifier contribution: each dish shows its own
   // recipe-derived figures, and each extra's own list is shown separately.
-  // RAW columns, as above: a variant dish that inherits them would show its allergens as not
-  // reviewed (its null sets `pending` below) and no dietary labels (Task 5).
+  // RAW columns, as above: an inheriting variant dish reads allergens unreviewed and no labels.
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,

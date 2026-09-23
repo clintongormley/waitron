@@ -139,6 +139,7 @@ export const products = table(
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),
     unique("products_id_catalogue_key").on(t.id, t.catalogueId),
+    // Target of variants-as-products Task 3's key `(product_id, variant_id) → (parent_id, id)`.
     unique("products_parent_id_key").on(t.parentId, t.id),
     foreignKey({
       columns: [t.parentId, t.catalogueId],

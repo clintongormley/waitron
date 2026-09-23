@@ -56,8 +56,8 @@ export interface ExtraListItem {
   maxQuantity: number;
   preselected: boolean;
   /** A GROSS (VAT-inclusive) two-place decimal string — the column stores the amount as a count of
-   * whole cents and the read converts it. null means "charge the product's own `unitPrice`" — see
-   * `resolveExtraPrice` in extras.ts. */
+   * whole cents and the read converts it. null means "charge the product's `unitPrice`" — its own,
+   * or its parent's where a variant leaves it blank; see `resolveExtraPrice` in extras.ts. */
   price: string | null;
 }
 
