@@ -700,10 +700,36 @@ left open, besides the bullets above that it updated:
   predates Task 6, not checked with `git blame`. **Next action:** check whether anything still reads
   `products.pricing_unit` for a product with a unit row, and either update it on reassignment or
   say why it does not matter.
-- **Review suggestions not taken, because they reshape the contract Task 7 consumes:** split the
-  editor's types into a product shape and a variant shape (removing the non-null workarounds in
-  `saveProductEditor` and the dashboard), derive `InheritedValues` from the product type, and write
-  a parent's variant republishes in one statement. **Next action:** reconsider once Task 7 lands.
+- **Review suggestions not taken:** split the editor's types into a product shape and a variant
+  shape (removing the non-null workarounds in `saveProductEditor` and the dashboard), derive
+  `InheritedValues` from the product type, and write a parent's variant republishes in one
+  statement. Task 7 consumed the contract as it stands and did not take them. **Next action:**
+  reconsider on their own; nothing waits on them. Task 9's cleanup removes the old variant table
+  and its shapes, not the editor's types, so it does not cover them.
+
+What Task 7 (`feat/variants-editor-screen`, the dashboard's variant page) leaves open:
+- **The product list shows "—" for a variant's allergens**, because the list's data carries none for
+  a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
+  whether the list should read a variant's effective allergens, and add them to that read if so.
+- **Each variants-table row's Available switch is named only "Available"** to a screen reader, not
+  with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). `main` at `5add727d7`
+  already labelled it the same way. **Next action:** name the switch after its variant.
+- **Not yet looked at on a phone (390px wide):** the variants table's price heading may show only
+  its unit select's arrow, and a variant's name may sit a few pixels low in its product-list row.
+  **Next action:** open both at that width, in both themes, and look.
+- **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
+  (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
+  `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one
+  grouping helper.
+- **A variant image usage's `productId` has no reader in the dashboard any more**
+  (`packages/media/src/dashboard/client.ts`): the image library now links a variant's use to the
+  variant's own page by its `id`. **Next action:** drop the field, or say what it is kept for.
+- **The product list's events are not named `wt-*`:** `edit-product`, `delete-product` and the new
+  `restore-product` (`apps/dashboard/src/widgets/product-list.ts`), against CLAUDE.md §3's event
+  rule. **Next action:** rename the three together, with the catalogue screen that listens to them
+  (`apps/dashboard/src/screens/catalogue-screen.ts`). `wt-edit-product` is already taken: the units
+  screen sends it to `apps/dashboard/src/dashboard-app.ts`, so pick names that cannot reach that
+  handler by mistake.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated

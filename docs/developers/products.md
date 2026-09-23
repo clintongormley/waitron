@@ -179,17 +179,21 @@ The server accepts a product with any number of variants, one included (spec
 `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15.1).
 `product.variant_count_invalid` stays registered and nothing throws it.
 
-The editor still keeps its own draft at **no variants, or at least two**, with a fold:
+The editor allows any number too, one included (`apps/dashboard/src/widgets/product-editor.ts`):
 
-- Pressing **Add variant** on a product with a plain price turns that price into a variant named with
-  the translated default "Regular", and opens the Add window for the *second* one. So the first Add
-  always produces two, never one.
-- The plain price is validated before the fold, while its field is still on screen. Once the price
-  has become a variant the field is gone, and a bad value would have nowhere left to be corrected.
-- Cancelling that first Add folds the lone "Regular" back into the plain price, which is what makes
-  Cancel a true undo.
-- Removing variants down to one folds that one's price back into the plain price field and drops the
-  row.
+- **Add variant** opens the Add window for one variant, and saving that window adds one row.
+  Cancelling it adds nothing.
+- The price field stays on screen with variants. While at least one variant is Active its label
+  reads "Base price per" and the unit (`editor.base_price_unit`), and a variant with no price of its
+  own shows the base price as its hint, in its window and in its table row.
+- Each row's menu offers **Open**, **Edit** and **Remove** (or **Restore**). **Open** goes to the
+  variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
+  save first, while the product form has unsaved changes, because opening the page replaces the form.
+- **Remove** marks a saved variant Inactive in the draft, and **Restore** marks it Active again; one
+  that was never saved is simply dropped from the draft. The table's "Show variants" select filters
+  rows by status and starts on Active; it switches to showing every row when a reported problem or a
+  newly added unsaved variant would otherwise be hidden (`dashboard-variant-table`,
+  `apps/dashboard/src/widgets/variant-table.ts`).
 
 A variant has its own name (all three of them) and availability. Its tax rate, station, course,
 image and allergen and dietary declarations are its parent's while it leaves them blank and its own
@@ -265,7 +269,9 @@ fields that change often are always visible; everything else is folded into a `w
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
 collapsed. Top to bottom: Name, Categories, Available, ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info,
 Price (and the variants table, if there are variants), Modifiers, then Cancel and Save. An Inactive
-product's editor also opens with a line saying so, and offers Restore beside Save.
+product's editor also opens with a line saying so, and offers Restore beside Save. Opened on a
+variant, the same form is the variant's own page: it has no Modifiers or Variants section, and each
+field the variant may leave blank to take the parent's value shows that value as its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
@@ -297,11 +303,12 @@ The product write body carries `name` (required, plain text), `customerName` (a 
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `categoryIds`,
 `primaryCategoryId`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
-dietary declarations, the two required state flags `active` and `available` (below), and
-`variants` — each
-variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice` and `available`, plus
-`id` when it already exists. A customer-facing name whose every entry is blank parses to `null`, so
-"I typed spaces" and "I left it empty" store identically.
+dietary declarations, the two required state flags `active` and `available` (below), and `variants`
+— each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
+a required `active`, plus `id` when it already exists. Each variant's `active` is written as sent,
+and a saved variant left out of the body is made Inactive (`setProductVariants`,
+`packages/catalogue/src/variants.ts`). A customer-facing name whose every entry is blank parses to
+`null`, so "I typed spaces" and "I left it empty" store identically.
 
 A product has two states (spec §15.6). **Active / Inactive** is whether it exists for the venue:
 Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.

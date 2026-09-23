@@ -62,20 +62,39 @@ Use variants for forms of the same product that need distinct names and prices, 
 single** and **Coffee, double**. Each variant has its own availability. Reordering or editing the
 variants keeps their stable identities, so a menu's settings for a variant keep pointing at it.
 
-Variants appear as a table under the price. Drag a row by the handle at its start to reorder it, or
-focus the handle and use the up and down arrow keys. The row menu offers **Edit** and **Remove**, and
-each row's **Available** switch takes effect as you flip it. Editing a variant opens a small window
-where it gets its own price, image and its own three names — staff, customer-facing and kitchen —
-each falling back to the variant's staff name exactly as the product's do. On the till, a receipt,
-a kitchen ticket and the sales report, a variant is shown under its own name alone, so name it in
-full: **Large coffee**, not **Large**.
+Variants appear as a table under the price. Choose **Add variant** to add one. A small window opens
+where you give the variant its three names (staff, customer-facing and kitchen), its price, image
+and availability; the customer-facing and kitchen names fall back to the variant's staff name
+exactly as the product's do. Save the window to add that one variant, or cancel it to add nothing.
+On the till, a receipt, a kitchen ticket and the sales report, a variant is shown under its own name
+alone, so name it in full: **Large coffee**, not **Large**.
 
-A product has either no variants or at least two — never exactly one. The first time you choose **Add
-variant**, the price you already entered becomes a variant called **Regular** and the window opens for
-the second one, so you always end up with a pair. Regular prints alone too, so rename it to the full
-name, for example **Regular coffee**. Cancel that window and the Regular variant folds
-back into the plain price, undoing the whole thing. Remove variants until one is left and its price
-folds back the same way.
+The product keeps its own price field. Once the product has an Active variant, the field's label
+starts **Base price**, because a variant you leave without a price of its own sells at it. That
+variant's empty price shows the base price greyed out as a hint, in its window and in its row of the
+table.
+
+Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
+arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
+offers **Open**, **Edit** and **Remove**. **Edit** reopens the small window. Changes you make in the
+table, including the Available switch, are saved when you save the product.
+
+**Open** takes you to the variant's own page, where it can have its own VAT, categories, allergens
+and the other product details. Apart from the names, each detail you leave blank there shows the
+product's value greyed out as a hint, and the variant uses the product's value. The page has no
+Modifiers or Variants section, because a variant always uses its product's extras and options lists.
+**Open** appears once the variant has been saved, and it waits while the product has unsaved
+changes, because leaving the product would lose them: save the product first.
+
+**Remove** makes a saved variant Inactive once you save the product: the till stops offering it, and
+its past sales are kept. A variant you added and have not saved yet is simply dropped. The table
+shows only Active variants at first; set **Show variants** to **Inactive** or **Any status** to see
+removed ones, and choose **Restore** from a row's menu to make one Active again.
+
+The products list shows each variant under its product, with its own name, the price it sells at and
+its categories. If a variant's VAT differs from its product's, the list notes it under the variant's
+price. A variant's row menu offers **Remove** or **Restore** there too, and an Inactive variant is
+listed once you change the **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
 In the menu offer you can optionally give a variant its own price on that menu, or clear its

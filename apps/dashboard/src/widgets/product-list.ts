@@ -233,12 +233,9 @@ export class ProductList extends LitElement {
       {
         key: "sold-alone",
         label: t("product.sold_alone"),
-        // A variant is a way of buying its product, so the answer is the PRODUCT's for every row:
-        // read in packages/ui/src/components/wt-data-table.ts, `#visibleRows` judges every row
-        // against the chosen value and `#treeVisible` restores a match's ancestors but never its
-        // children, so a variant answering anything else would either strand its product as a
-        // childless row or render it as an ancestor-only ghost. The CELL still shows the muted dash,
-        // and contributes nothing to search, like the other product-level columns.
+        // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
+        // every row and a variant is shown or hidden together with its product. The cell still
+        // shows the muted dash and contributes nothing to search.
         cell: ({ product, variant }) => {
           if (variant) return html`<span part="variant-muted">—</span>`;
           return html`<span

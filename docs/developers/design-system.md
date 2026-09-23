@@ -618,9 +618,10 @@ Two notes on the primitives this pattern uses, both in the table above:
   attributes, so a host can style or query the state from outside.
 - `wt-price-input` is the money field a priced form wants: an amount joined to a trailing unit
   button. The button's visible text is its accessible name, so `unit` must never be empty. It emits
-  `wt-change` on input and `wt-unit-click` when the button is pressed. A plain product's editor swaps
-  that button for the unit dropdown on `wt-unit-click`; a product with variants keeps the unit
-  dropdown in the variants table's price heading instead.
+  `wt-change` on input and `wt-unit-click` when the button is pressed. The product editor draws its
+  price field with that button whether or not the product has variants, and opens the unit dropdown
+  under the field on `wt-unit-click`. A product with variants also has a unit select (`pricing-unit`)
+  in the variants table's price heading. Both change the same product unit, on purpose.
 
 ### Dashboard banner
 
@@ -1193,9 +1194,12 @@ On the products screens (spec §15.6), **Active / Inactive** says whether a prod
 venue, and **Available / Unavailable** says whether it is sold out for now. Delete makes a product
 Inactive, and Restore makes it Active again; never label either of them "unavailable". The products
 list's Status filter starts on Active, so an Inactive product is hidden until the filter is changed,
-while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. Other
-screens' words for "switched off, kept for the record" are still being settled in
-`docs/backlog.md`.
+while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. A
+variant's Remove makes it Inactive and its Restore makes it Active, on the products list and in the
+product editor's variants section; an Inactive variant is hidden behind the list's same Status
+filter, and in the editor behind the variants section's own "Show variants" filter, which also
+starts on Active. Other screens' words for "switched off, kept for the record" are still being
+settled in `docs/backlog.md`.
 
 ### Navigation and language controls
 
