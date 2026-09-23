@@ -124,6 +124,22 @@ describe("deriveOptionSelections", () => {
     expect(result.unanswered).toEqual([]);
   });
 
+  it("tries a list's next answer when the holder of its first cannot give it up", () => {
+    // The narrow list comes first and takes "Al punto"; the wide list's first candidate is that same
+    // answer, and the narrow list has nothing else to move to, so the wide list must fall through to
+    // "Poco hecho" rather than stop.
+    const narrow = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
+    const result = deriveOptionSelections(
+      [narrow, punto],
+      [frozen("Punto", "Al punto"), frozen("Punto", "Poco hecho")],
+    );
+    expect(result.options).toEqual([
+      { listId: "list-punto-2", labelId: "label-medium-2" },
+      { listId: "list-punto", labelId: "label-rare" },
+    ]);
+    expect(result.unanswered).toEqual([]);
+  });
+
   it("answers the same two lists when arrival order needs no move (control)", () => {
     // The same dish and the same two answers, arriving the other way round — the order in which
     // taking each answer as it comes already satisfies both. It must keep working.

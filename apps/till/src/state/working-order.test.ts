@@ -209,6 +209,62 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(0);
   });
 
+  it("setLineExtras with the note key present but undefined clears the stored note", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1", { note: "no sugar" });
+    s.setLineExtras(0, { note: undefined });
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+  });
+
+  it("setLineModifiers replaces the line's whole answer set, marks dirty and notifies", () => {
+    const s = new WorkingOrderStore();
+    const pick: SelectedExtra = {
+      listId: "list-milk",
+      productId: "p-oat",
+      name: "Leche de avena",
+      price: "0.50",
+      quantity: 1,
+    };
+    s.loadFrom("held-1", [{ product: cafe, quantity: "2", extras: [pick], note: "hot" }]);
+    let n = 0;
+    s.subscribe(() => n++);
+    const frozen = {
+      listName: { es: "Tamaño" },
+      listCustomerName: { es: "Tamaño para el cliente" },
+      listKitchenName: "Tamaño cocina",
+      labelName: { es: "Grande" },
+      labelCustomerName: { es: "Grande para el cliente" },
+      labelKitchenName: "Grande cocina",
+    };
+    s.setLineModifiers(0, {
+      options: [{ listId: "list-size", labelId: "label-large" }],
+      optionSnapshots: [frozen],
+    });
+    // The picks the new selection does not name are gone; the note is not an answer, so it stays.
+    expect(s.lines[0]).toEqual({
+      product: cafe,
+      quantity: "2",
+      note: "hot",
+      options: [{ listId: "list-size", labelId: "label-large" }],
+      optionSnapshots: [frozen],
+    });
+    expect(s.total).toBe("3.00");
+    expect(s.dirty).toBe(true);
+    expect(n).toBe(1);
+  });
+
+  it("setLineModifiers is a true no-op for an out-of-range index — no mutation, no notification", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    let n = 0;
+    s.subscribe(() => n++);
+    s.setLineModifiers(-1, { options: [{ listId: "l", labelId: "x" }] });
+    s.setLineModifiers(3, { options: [{ listId: "l", labelId: "x" }] });
+    expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
+    expect(s.dirty).toBe(false);
+    expect(n).toBe(0);
+  });
+
   it("stops notifying once the subscription is disposed", () => {
     const s = new WorkingOrderStore();
     let n = 0;

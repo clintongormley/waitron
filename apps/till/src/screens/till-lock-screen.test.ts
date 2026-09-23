@@ -340,6 +340,42 @@ describe("till-lock-screen", () => {
     expect(spy).toHaveBeenCalledWith({ code: "en-GB" });
   });
 
+  it("feeds its language chooser from the venue's locale list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+    await vi.waitFor(() => {
+      const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
+      expect(menu?.textContent).toContain("English");
+    });
+    expect(api.getLocales).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no Switch device control outside dev mode", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-switch-device]")).toBeNull();
+  });
+
+  it("in dev mode, Switch device emits a composed, bubbling switch-device event", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi(),
+      devMode: true,
+    });
+    await flush(el);
+    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-switch-device]")!;
+    expect(button.textContent).toContain(t("device.switch"));
+    let captured: CustomEvent | undefined;
+    el.addEventListener("switch-device", (event) => (captured = event as CustomEvent));
+    button.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.detail).toBeNull();
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
   it("keeps the language chooser available in PIN mode", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);

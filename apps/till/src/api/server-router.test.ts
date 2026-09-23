@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SERVERS_STORAGE_KEY, ServerRouter, withServerTarget } from "./server-router.js";
 
 const BOX = "https://box.deli.test";
@@ -345,6 +345,133 @@ describe("ServerRouter", () => {
     await r.probeNow(); // round 2: cloud → standby again — a real change from the repainted `unknown`
     expect(changed).toHaveBeenCalledTimes(1);
     expect(r.statuses().find((s) => s.url === CLOUD)?.state).toBe("standby");
+  });
+});
+
+describe("ServerRouter — polling, refusals and stored state", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("start() probes at once and then every interval; a second start() adds no second poller", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({ [BOX]: { acceptingSales: true, term: 1, nodeId: "b" } });
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl,
+      storage: memoryStorage(),
+      intervalMs: 1_000,
+    });
+    r.start();
+    r.start();
+    await r.probeNow();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    r.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("stop() is safe on a router never started, and a stopped router can start polling again", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({ [BOX]: { acceptingSales: true, term: 1, nodeId: "b" } });
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl,
+      storage: memoryStorage(),
+      intervalMs: 1_000,
+    });
+    r.stop();
+    r.start();
+    await r.probeNow(); // joins the round start() began, so it adds no fetch of its own
+    r.stop();
+    r.start();
+    await r.probeNow();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    r.stop();
+  });
+
+  it("reads a server answering an error status as unreachable, forgetting the term it had", async () => {
+    let status = 200;
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ acceptingSales: false, term: 4, nodeId: "b" }), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    await r.probeNow();
+    expect(r.statuses()[0]).toMatchObject({ state: "standby", term: 4 });
+    status = 503;
+    await r.probeNow();
+    expect(r.statuses()).toEqual([
+      { url: BOX, label: "box.deli.test", state: "unreachable", term: null },
+    ]);
+    expect(r.waiting).toBe(true);
+  });
+
+  it("ranks a primary reporting a term above one reporting none, in either order", async () => {
+    const table: Record<string, Answer> = {
+      [BOX]: { acceptingSales: true, term: null, nodeId: "b" },
+      [CLOUD]: { acceptingSales: true, term: 1, nodeId: "c" },
+    };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ url: BOX }, { url: CLOUD }]);
+    await r.probeNow();
+    expect(r.current).toBe(CLOUD);
+    table[BOX] = { acceptingSales: true, term: 3, nodeId: "b" };
+    table[CLOUD] = { acceptingSales: true, term: null, nodeId: "c" };
+    await r.probeNow();
+    expect(r.current).toBe(BOX);
+  });
+
+  it("starts from the page origin alone when the stored value holds no server list", () => {
+    const storage = memoryStorage();
+    storage.data.set(SERVERS_STORAGE_KEY, JSON.stringify({ servers: { url: CLOUD } }));
+    const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}), storage });
+    expect(r.statuses().map((s) => s.url)).toEqual([BOX]);
+  });
+
+  it("persists to the page's localStorage when no storage is injected", () => {
+    const previous = localStorage.getItem(SERVERS_STORAGE_KEY);
+    try {
+      localStorage.setItem(SERVERS_STORAGE_KEY, JSON.stringify({ servers: [{ url: CLOUD }] }));
+      const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}) });
+      expect(r.statuses().map((s) => s.url)).toEqual([BOX, CLOUD]);
+      r.setServers([]);
+      expect(JSON.parse(localStorage.getItem(SERVERS_STORAGE_KEY)!)).toEqual({ servers: [] });
+    } finally {
+      if (previous === null) localStorage.removeItem(SERVERS_STORAGE_KEY);
+      else localStorage.setItem(SERVERS_STORAGE_KEY, previous);
+    }
+  });
+
+  it("keeps the list in memory when the page has no localStorage at all", () => {
+    const previous = localStorage.getItem(SERVERS_STORAGE_KEY);
+    localStorage.setItem(SERVERS_STORAGE_KEY, JSON.stringify({ servers: [{ url: CLOUD }] }));
+    const saved = localStorage;
+    const prev = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: undefined });
+    try {
+      const r = new ServerRouter({ origin: BOX, fetchImpl: probeFetch({}) });
+      // The stored CLOUD entry is not read: with no storage the router starts from the origin alone.
+      expect(r.statuses().map((s) => s.url)).toEqual([BOX]);
+      expect(() => r.setServers([{ url: CLOUD }])).not.toThrow();
+      expect(r.statuses().map((s) => s.url)).toEqual([BOX, CLOUD]);
+    } finally {
+      if (prev) Object.defineProperty(globalThis, "localStorage", prev);
+      else delete (globalThis as { localStorage?: unknown }).localStorage;
+      if (previous === null) saved.removeItem(SERVERS_STORAGE_KEY);
+      else saved.setItem(SERVERS_STORAGE_KEY, previous);
+    }
   });
 });
 

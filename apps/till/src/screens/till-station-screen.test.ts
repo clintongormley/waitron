@@ -380,6 +380,76 @@ describe("till-station-screen", () => {
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
+  it("a stray advance with no station configured reads no queue", async () => {
+    const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector(".empty")!.dispatchEvent(
+      new CustomEvent("advance-ticket-item", {
+        detail: { itemId: "ti-1", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing"));
+    await flush(el);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
+  });
+
+  it("stops before choosing a station when removed while the station list is loading", async () => {
+    let resolveStations!: (value: Station[]) => void;
+    const api = stubApi({
+      listStations: vi.fn(
+        () =>
+          new Promise<Station[]>((done) => {
+            resolveStations = done;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    el.remove();
+    resolveStations(stations);
+    await flush(el);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
+  });
+
+  it("re-tapping the active station keeps its queue on screen while it reloads", async () => {
+    let resolveReload!: (value: StationQueueGroup[]) => void;
+    const api = stubApi({
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce(cocinaQueue)
+        .mockImplementationOnce(
+          () =>
+            new Promise<StationQueueGroup[]>((done) => {
+              resolveReload = done;
+            }),
+        ),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-1"]')!.click();
+    await el.updateComplete;
+    expect(api.getStationQueue).toHaveBeenCalledTimes(2);
+    expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
+    resolveReload(barraQueue);
+    await vi.waitFor(() => expect(queueWidget(el)!.groups).toEqual(barraQueue));
+  });
+
+  it("switching to another station clears the old queue while the new one loads", async () => {
+    const api = stubApi({
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce(cocinaQueue)
+        .mockImplementationOnce(() => new Promise<StationQueueGroup[]>(() => {})),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-station="st-2"]')!.click();
+    await el.updateComplete;
+    expect(queueWidget(el)!.groups).toEqual([]);
+  });
+
   it("a failed queue read leaves the queue empty (degrade gracefully)", async () => {
     const api = stubApi({
       getStationQueue: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -792,7 +862,99 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   });
 });
 
+describe("till-station-screen device-mode whole-ticket bump selection", () => {
+  const firedAt = "2026-08-17T10:00:00.000Z";
+  const mixed: StationQueueGroup[] = [
+    {
+      orderId: "wo-1",
+      orderNumber: 5,
+      label: null,
+      queuedAt: firedAt,
+      status: "placed",
+      thresholds: DEFAULT_THRESHOLDS,
+      items: [
+        {
+          id: "ti-fired-queued",
+          workingOrderLineId: "wl-1",
+          state: "queued",
+          name: "A",
+          quantity: "1.000",
+          course: null,
+          firedAt,
+        },
+        {
+          id: "ti-held",
+          workingOrderLineId: "wl-2",
+          state: "queued",
+          name: "B",
+          quantity: "1.000",
+          course: null,
+          firedAt: null,
+        },
+        {
+          id: "ti-already-preparing",
+          workingOrderLineId: "wl-3",
+          state: "preparing",
+          name: "C",
+          quantity: "1.000",
+          course: null,
+          firedAt,
+        },
+      ],
+    },
+  ];
+
+  function deviceApi(): TillApi {
+    return {
+      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: mixed } }),
+      deviceAdvance: vi.fn().mockResolvedValue(undefined),
+      advanceTicket: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TillApi;
+  }
+
+  async function bump(api: TillApi, orderId: string): Promise<void> {
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
+      api,
+      deviceMode: true,
+      bumpMode: "ticket",
+    });
+    await flush(el);
+    queueWidget(el)!.dispatchEvent(
+      new CustomEvent("advance-ticket", {
+        detail: { orderId, stationId: "st-dev", to: "preparing" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect(api.getDeviceStation).toHaveBeenCalledTimes(2));
+  }
+
+  it("advances only the fired lines whose next step is the target, skipping held and later lines", async () => {
+    const api = deviceApi();
+    await bump(api, "wo-1");
+    expect(api.deviceAdvance).toHaveBeenCalledTimes(1);
+    expect(api.deviceAdvance).toHaveBeenCalledWith("ti-fired-queued", "preparing");
+    expect(api.advanceTicket).not.toHaveBeenCalled();
+  });
+
+  it("advances nothing for an order no longer on the loaded queue, and still reloads", async () => {
+    const api = deviceApi();
+    await bump(api, "wo-gone");
+    expect(api.deviceAdvance).not.toHaveBeenCalled();
+    expect(api.advanceTicket).not.toHaveBeenCalled();
+  });
+});
+
 describe("station destination history", () => {
+  it("drops a requested station from the address when the venue has no stations", async () => {
+    history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
+    const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await vi.waitFor(() => expect(location.pathname).toBe("/tabs/counter/view/station"));
+    expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
+    expect(api.getStationQueue).not.toHaveBeenCalled();
+  });
+
   it("restores a validated station after refresh and replaces an unavailable station", async () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {

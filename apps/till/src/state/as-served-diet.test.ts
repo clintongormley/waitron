@@ -255,3 +255,22 @@ it.each(["answered here", "frozen by the server"] as const)(
     expect(asServedDiet(selected)).toEqual({ vegan: "no", vegetarian: "yes", contains: [] });
   },
 );
+
+it("a dish declaring only kosher claims nothing about vegan, vegetarian or halal", () => {
+  const prod = product(null, []);
+  prod.dietaryDeclarations = ["kosher"];
+  expect(asServedDiet(line(prod))).toEqual({
+    vegan: "unknown",
+    vegetarian: "unknown",
+    contains: [],
+    kosher: "yes",
+  });
+});
+
+it("an unreviewed dish's allergens read pending with nothing listed; a reviewed one does not", () => {
+  const unreviewed = product(null, []);
+  expect(asServedAllergens(line(unreviewed))).toEqual({ allergens: {}, pending: true });
+  const reviewed = product(null, []);
+  reviewed.allergens = {};
+  expect(asServedAllergens(line(reviewed))).toEqual({ allergens: {}, pending: false });
+});

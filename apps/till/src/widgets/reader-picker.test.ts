@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillReaderPicker } from "./reader-picker.js";
@@ -79,6 +80,17 @@ describe("till-reader-picker", () => {
     el.addEventListener("reader-picker-cancel", cancelled);
     click(el, ".cancel");
     expect(cancelled).toHaveBeenCalledOnce();
+    expect(chosen).not.toHaveBeenCalled();
+  });
+
+  it("emits reader-picker-cancel when the dialog is dismissed with Escape, choosing nothing", async () => {
+    const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", { readers });
+    const chosen = vi.fn();
+    const cancelled = vi.fn();
+    el.addEventListener("reader-chosen", chosen);
+    el.addEventListener("reader-picker-cancel", cancelled);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(cancelled).toHaveBeenCalledOnce());
     expect(chosen).not.toHaveBeenCalled();
   });
 });

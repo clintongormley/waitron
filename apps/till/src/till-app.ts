@@ -1064,9 +1064,9 @@ export class TillApp extends LitElement {
       // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
       // leaving `staff` at its default `[]` — the picker stays empty rather than surfacing an error or
       // (under `void #onLoggedIn`) escaping as an unhandled rejection; the operator can still sell.
-      // ON THE COUNTER PATH ONLY: `staff` is consumed exclusively by `case "schedule":`, a face a
-      // handheld's face-set can never reach ({@link HANDHELD_FACES}), so a handheld landing on the floor
-      // never fetches it — mirroring the held-list/station-queue guard above.
+      // ON THE COUNTER PATH ONLY: `staff` is consumed exclusively by `case "schedule":`, a drill-in
+      // {@link #pushDrill} refuses for a handheld ({@link #affordances} gives it none), so a handheld
+      // landing on the floor never fetches it — mirroring the held-list/station-queue guard above.
       try {
         this.staff = await this.api.listStaff();
       } catch {
@@ -2096,13 +2096,17 @@ export class TillApp extends LitElement {
     // mount points"): a handheld/tablet whose canvas authors an `order` tab (a `table-order` card)
     // SWITCHES to that tab — the tab bar owns the navigation, so the screen mounts as that tab's card
     // (no drill, no second Back). A TILL authors no such tab, so it keeps B2.1's drill-in OVER the floor
-    // tab (which stays active underneath). The legacy path shows the `table-order` screen as before.
+    // tab (which stays active underneath). Off the shell — after a successful boot, only the lock screen,
+    // reached when a logout lands while the tab is opening — the till stays locked.
     if (this.#inShell()) {
       const orderTabKey = this.#tableOrderTabKey();
       if (orderTabKey !== undefined)
         this.#setActiveTab(orderTabKey); // card mount (handheld/tablet)
       else this.#pushDrill({ kind: "table-order" }); // drill mount (till)
-    } else this.#setScreen("table-order");
+    } else if (this.screen !== "lock") {
+      // A late answer must not unlock a logged-out till.
+      this.#setScreen("table-order");
+    }
   }
 
   /**
@@ -2395,24 +2399,19 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The face-set gate for the transitions that can fire WHILE A HANDHELD IS ACTIVE (handheld-tableside
-   * §6a). A normal operator till may reach every {@link Screen}; a handheld may reach ONLY
-   * {@link HANDHELD_FACES} (`lock`/`floor`/`table-order`), so a `target` outside that set is REFUSED —
-   * the handheld stays put. This makes {@link HANDHELD_FACES} the genuine gate rather than a scattered
-   * `handheldMode` read.
+   * Refuses a {@link Screen} outside {@link HANDHELD_FACES} (`lock`/`floor`/`table-order`) for a
+   * handheld (handheld-tableside §6a); any other device may reach every screen.
    *
-   * The handler routed through here is the one whose event can reach the app from inside the phone shell:
-   *  - {@link #onBackToCounter} — a `back-to-counter` from the floor's Back or bubbled from the
-   *    table-order subtree; the gate keeps it off the counter POS (and the `station`/`expo`/`schedule`
-   *    it leads to).
+   * Its only caller is the no-shell arm of {@link #onBackToCounter}. Inside the shell that handler
+   * switches to the `counter` tab instead, and what keeps a handheld off the counter there is the
+   * shell falling back to its first tab, because the phone canvas authors no counter tab (the
+   * "does NOT leave the face-set when back-to-counter bubbles from the table-order screen" test in
+   * `till-app.test.ts`).
    *
-   * The remaining counter-side setters — {@link #onShowStation}, {@link #onShowExpo},
-   * {@link #onShowSchedule} and the payment→`ticket` transitions — route through {@link #setScreen}
-   * (which records the nav trail then assigns `this.screen`) and are
-   * NOT gated, because their affordances are emitted only by the counter screen
-   * (`till-counter-screen`), which a handheld never reaches: unreachable-by-affordance, not gated.
-   * Proven by deletion: drop the guard and a handheld's `back-to-counter` lands it on the counter (the
-   * §6a containment test goes red).
+   * The other counter-side handlers — {@link #onShowStation}, {@link #onShowExpo} and
+   * {@link #onShowSchedule} — do not come through here. Inside the shell they push a drill-in, which
+   * {@link #pushDrill} refuses for a handheld because {@link #affordances} gives a handheld none; their
+   * no-shell arms call {@link #setScreen} unchecked.
    */
   #goToScreen(target: Screen): void {
     if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
@@ -2432,9 +2431,12 @@ export class TillApp extends LitElement {
    * Whether navigation should route through the drill-in STACK — true ONLY on the canvas tab shell
    * surface: a canvas is present AND the shell is the active surface ({@link #shellActive}). Every
    * rerouted nav handler branches on this and its `#setScreen`/`#goToScreen` else-arm still drives the
-   * `screen` state machine (SP-B4 keeps it as the lock-vs-not marker), though off-lock a successful boot
-   * always has a canvas, so that else-arm is only reached before login / on a boot failure — where
-   * {@link render} shows the lock screen, never a distinct legacy screen. Handheld + kds with a canvas
+   * `screen` state machine (SP-B4 keeps it as the lock-vs-not marker). Off-lock a successful boot always
+   * has a canvas, but the else-arm is also reached by an async handler whose answer arrives after
+   * logout, and an arm that sets `screen` there takes the till off the lock screen — which is why
+   * {@link #showTicket} and {@link #onOpenTable} check for `lock` first. {@link #onShowFloor} does
+   * not, and nothing in the app emits `show-floor` (see `docs/backlog.md`, the till unreachable-code
+   * entry). Handheld + kds with a canvas
    * are shell devices too (SP-B2.2 — the fence in {@link #shellActive} is gone).
    */
   #inShell(): boolean {
@@ -2472,14 +2474,15 @@ export class TillApp extends LitElement {
     this.ticketWorkingOrderId = workingOrderId;
     this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
     if (this.#inShell()) this.#pushDrill({ kind: "ticket" });
-    else this.#setScreen("ticket");
+    // A late answer must not unlock a logged-out till.
+    else if (this.screen !== "lock") this.#setScreen("ticket");
   }
 
-  /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
-   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). On
-   * the shell surface ({@link #inShell}) this POPS the drill back to the counter tab; otherwise it routes
-   * through {@link #goToScreen} so a handheld (whose face-set excludes `counter`, §6a) cannot use it to
-   * escape the phone shell, and a normal legacy till reaches the counter exactly as before. */
+  /** Return to the counter from a screen that emits `back-to-counter` — the schedule, station, expo and
+   * live-floor screens do — basket intact (the basket is till-owned and survives the trip). On the shell
+   * surface ({@link #inShell}) this selects the `counter` tab and pops the drill; a handheld's phone
+   * canvas authors no counter tab, so the shell shows its first tab instead. Otherwise it routes through
+   * {@link #goToScreen}, whose face-set check refuses `counter` for a handheld (§6a). */
   #onBackToCounter(): void {
     this.errorKey = undefined;
     if (this.#inShell()) {

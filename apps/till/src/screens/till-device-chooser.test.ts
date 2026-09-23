@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEV_DEVICE_STORAGE_KEY } from "../api/dev-device.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -155,6 +156,23 @@ describe("till-device-chooser", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
+  });
+
+  it("dismisses the new-device modal when the dialog itself closes (Escape)", async () => {
+    const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", { api: stubApi() });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-setup-new]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull());
+    expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
+    expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("navigates with the real location by default", () => {
+    new TillDeviceChooser().navigate("#device-chooser-default-navigate");
+    expect(location.hash).toBe("#device-chooser-default-navigate");
   });
 
   it("an approved join writes the new id to this tab's sessionStorage and navigates", async () => {

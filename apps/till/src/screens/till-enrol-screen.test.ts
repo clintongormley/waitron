@@ -418,3 +418,23 @@ it("renders its own language chooser, so a fresh device can be set up in Spanish
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-language-chooser")).not.toBeNull();
 });
+
+it("feeds its language chooser from the venue's locale list", async () => {
+  const getLocales = vi.fn().mockResolvedValue({
+    locales: [
+      { code: "es-ES", label: "Español" },
+      { code: "en-GB", label: "English" },
+    ],
+    venueDefault: "es-ES",
+  });
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
+    api: stubApi({ getLocales }),
+  });
+  const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+  chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+  await vi.waitFor(() => {
+    const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
+    expect(menu?.textContent).toContain("English");
+  });
+  expect(getLocales).toHaveBeenCalledTimes(1);
+});

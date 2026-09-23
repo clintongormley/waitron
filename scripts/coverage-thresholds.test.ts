@@ -77,6 +77,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/setup",
   "@waitron/shared",
   "@waitron/sync-enrolment",
+  "@waitron/till",
   "@waitron/tunnel",
   "@waitron/ui",
   "@waitron/ui-core",

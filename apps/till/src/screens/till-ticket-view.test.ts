@@ -585,6 +585,23 @@ it("resolves a filed line's unit abbreviation from a BARE content-language key",
   expect(norm(el.shadowRoot!.querySelector(".line-qty")!.textContent ?? "").trim()).toBe("0.32 ud");
 });
 
+it("names a filed line from its first stored description when none is in the invoice locale", async () => {
+  const { el } = await mount({
+    lines: [{ descriptions: { en: "Water", ca: "Aigua" }, quantity: "1", gross: "2.00" }],
+  });
+  expect(el.shadowRoot!.querySelector(".line-name")!.textContent).toBe("Water");
+});
+
+it("prints an empty name, not a crash, for a filed line with no descriptions at all", async () => {
+  const { el } = await mount({
+    lines: [{ descriptions: {}, quantity: "1", gross: "2.00" }],
+  });
+  const rows = el.shadowRoot!.querySelectorAll(".line");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.querySelector(".line-name")!.textContent).toBe("");
+  expect(norm(rows[0]!.textContent!)).toContain("2,00 €");
+});
+
 it("shows a dish's frozen options answers in the DINER's wording", async () => {
   // Three different texts per name, so the assertion fails if the receipt reads the staff or the
   // kitchen side by mistake (CLAUDE.md §3).
