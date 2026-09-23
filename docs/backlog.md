@@ -2000,13 +2000,12 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **Every package to the high coverage bar, `98/98/98/95` — IN PROGRESS (owner decision
-  2026-09-23).** The first promotion is done: every package that already cleared all four metrics
-  on 2026-09-23 was promoted in one change, 21 of them. Each package still under the bar gets tests
-  in a pull request of its own and is promoted in the same change; when none is left at the floor,
-  the floor is retired from `scripts/coverage-thresholds.test.ts`, `CLAUDE.md` §2 and the developer
-  docs. Coverage rises only through tests that assert behaviour, never an exclude or a lowered bar.
-  Which packages are still under it: `HIGH_BAR_PACKAGES` against the workspace; the starting figures
+- **Every package to the high coverage bar, `98/98/98/95` — OPEN (owner decision 2026-09-23).**
+  The first promotion is done: every package that already cleared all four metrics on 2026-09-23
+  was promoted in one change, 21 of them. Each package still under the bar gets tests in a pull
+  request of its own and is promoted in the same change; when none is left at the floor, the floor
+  is retired from the guard and from every place the tree states it, prose included. Which packages
+  are still under it: `HIGH_BAR_PACKAGES` against the workspace; the starting figures
   are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first promotion — measured
   2026-09-23*.
 
@@ -3551,8 +3550,9 @@ conflict.
   [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
 - **Comments carry invariants, not history** (CLAUDE.md §1). The coverage bar is negotiable with a
   reason.
-- **Every package holds the high coverage bar, `98/98/98/95`** (owner, 2026-09-23), superseding the
-  2026-09-05 split that reserved it for the fiscal core and the data layer. Progress: B9.
+- **Every package is to hold the high coverage bar, `98/98/98/95`** (owner, 2026-09-23),
+  superseding the 2026-09-05 split that reserved it for the fiscal core and the data layer.
+  Progress: B9.
 
 ---
 

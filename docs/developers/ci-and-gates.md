@@ -120,7 +120,8 @@ went on naming four packages after the flip (#489) added `@waitron/store` and ma
 gone from all three rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES`
 away, and a guard over prose would fail on rewording that changed nothing. Worth noting how the third
 was found: the sweep used the package names and the two bar strings as its keys, and the key that
-finds bookings is the word "six".
+finds bookings is the word "six". The dated measurement subsections below name packages as the
+record of one run, not as the list.
 
 The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
 `packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
@@ -135,11 +136,11 @@ subsection below says what it costs to leave it where it is.
 that run coverage, 1,066 test files and 13,811 tests. Every member's
 `coverage/coverage-summary.json` was read, and none holds a path outside its own package directory
 (the sibling-prefix leak described below). **21 packages cleared `98/98/98/95` on all four metrics
-and were promoted together**, joining the five already there — as measured then;
-`HIGH_BAR_PACKAGES` is authoritative from here on: `composition`, `country`,
+and were promoted together**, joining the five already there: `composition`, `country`,
 `country-es`, `country-gb`, `country-packs`, `credentials`, `dashboard-modules`, `diagnostics`,
 `fiscal`, `layouts`, `membership`, `migrations`, `module`, `purchasing`, `recipes`, `reporting`,
-`scheduler`, `shared`, `ui`, `workforce` and `workforce-es`. The nearest to its new bar is
+`scheduler`, `shared`, `ui`, `workforce` and `workforce-es` — as measured that day;
+`HIGH_BAR_PACKAGES` is the list from here on. The nearest to its new bar is
 `scheduler`, 1.22 points over on statements; eighteen of the 21 are at 100% on all four.
 
 The 20 still under it, with the metric furthest below its bar — `printing` (functions, 1.23 short),
