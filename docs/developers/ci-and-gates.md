@@ -841,9 +841,9 @@ passed in Chromium. Check host execution before deferring browser testing to ano
 
 ## Migration-upgrade test coverage gap
 
-### Only the `core` migration set has an upgrade test; every module set is still migrated from a VIRGIN database only
+### No test applies a shipped migration to a database already at an earlier point
 
-So a green gate is no evidence that a module set can upgrade a box. Drizzle applies a set's
+So a green gate is no evidence that any set can upgrade a box. Drizzle applies a set's
 PENDING migrations in one transaction, so a statement that is legal on a virgin database — where
 the same batch creates everything it then names — can be refused on a database that already
 carries the earlier migrations.
@@ -853,7 +853,10 @@ Cost: a bricked box, an hour of guesswork, and a wipe that destroyed the evidenc
 The upgrade regression that migrated real databases from each release point covered `core` alone.
 It was deleted with the PostgreSQL test harness on 2026-09-22 — its subject was PostgreSQL's own
 enum-safety rule inside drizzle's single migrate transaction, and there is no `ALTER TYPE` left —
-so **no migration set has an upgrade test at all today.**
+so **no test applies a shipped migration to a database already at an earlier point today.** One
+test does apply a migration step to a database that is already migrated — the older-artifact case in
+`apps/server/src/restore-fiscal-e2e.test.ts` — and the step it replays is one it makes up, not a
+shipped one.
 
 **2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
 was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the
@@ -864,7 +867,7 @@ SQLite has no enum types and no `ALTER TYPE`, and the regenerated baselines carr
 with a named `CHECK` instead, so no file in the tree can hold the statement that guard searched
 for. It was deleted rather than left green over a spelling that can no longer appear, which is a
 state it could only reach by having its anti-vacuity floor lowered. The general gap above is
-unaffected: it is about module sets never being upgrade-tested, not about enums.
+unaffected: it is about shipped migrations never being upgrade-tested, not about enums.
 
 ## Check every command's exit status
 

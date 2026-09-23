@@ -482,10 +482,11 @@ harness on 2026-09-22. **No fixture in this tree calls `withNetworkAliases()` to
 the mechanism with no live example; reach for it again if a networked fixture comes back. Evidence:
 `docs/superpowers/specs/2026-09-09-test-load-design.md`.
 
-## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally, for the one container left.
+## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally, for the `bench/` rigs.
 
-That is `bench/sqlite-failover`, whose `startStore` opens a MinIO container
-(`bench/sqlite-failover/src/store.ts`). Ryuk hangs on this machine, so it has to be off; with it off
+Two rigs start a container: `bench/sqlite-failover`, whose `startStore` opens a MinIO container
+(`bench/sqlite-failover/src/store.ts`), and `bench/pglite-throughput`, which starts a PostgreSQL one
+(`bench/pglite-throughput/src/bench.ts`). Ryuk hangs on this machine, so it has to be off; with it off
 an interrupted run leaks, which is the next section.
 
 **A recurrent stall needs a retained log and a live database snapshot.** This was recorded against
@@ -499,8 +500,8 @@ the stalled operation before assigning its cause to resource contention.
 The bloat (once: 173 volumes, 23 GB) starved the `freePort` race in `apps/server`'s boot and
 end-to-end suites, while an isolated re-run passed and proved nothing. Run `pnpm reap` when that
 bites. The command (`scripts/reap-testcontainers.mjs`) removes containers labelled
-`com.waitron.reapable` — stamped by one helper today, `startStore` in
-`bench/sqlite-failover/src/store.ts`, which nothing pins — AND older than 2 h —
+`com.waitron.reapable` — stamped by `startStore` in `bench/sqlite-failover/src/store.ts`, which
+nothing pins, and NOT by `bench/pglite-throughput`, whose container `pnpm reap` leaves behind — AND older than 2 h —
 so another repo's or a live watch-mode container survives — with their anon volumes. It never
 touches images and there is no blanket `docker volume prune` (it would reach other projects and the
 named dev volumes). `docker volume inspect` before any manual `rm`. Once a leaked container is gone
@@ -527,7 +528,10 @@ is no `process.title` anywhere in `vitest@4.1.11`'s `dist/`. Measured 2026-09-19
 `packages/identity`, one version each: 3.2.7 showed `node (vitest)` and `node (vitest 1)`, 4.1.11
 showed no `(vitest` at any sample and a worker running `…/vitest/dist/workers/forks.js`.
 
-## A probe that needs a Unix SOCKET runs inside the container.
+## A probe that needs a Unix SOCKET runs inside the container — RETIRED from CLAUDE.md
+
+Taken out of `CLAUDE.md` on 2026-09-23: no suite starts a container, and the measurement below was
+taken on a harness that is gone. The mechanism is kept here for whoever writes the next one.
 
 Bind-mounting a socket directory out of Docker Desktop's VM gives `ECONNREFUSED` on macOS, and a
 scratchpad path blows the 104-byte `sun_path` limit before you get that far. Install what the probe

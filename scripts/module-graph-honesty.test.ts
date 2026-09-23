@@ -52,18 +52,19 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   `packages/db/drizzle/0001_behavioural_triggers.sql` and
  *   `packages/media/drizzle/0001_image_references.sql`, and media's triggers sit ON tables core and
  *   catalogue create — real cross-set edges, which is why this guard passes only because media
- *   DECLARES both in its `requires`. What the scan still cannot see is append-only enforcement,
- *   which is runtime code (`packages/store/src/append-only.ts`). The `CREATE CONSTRAINT TRIGGER`
- *   spelling it also accepts is
- *   PostgreSQL-only: sqlite3 3.51 answers `near "CONSTRAINT": syntax error`, so those two controls
+ *   DECLARES both in its `requires`; the anchor test pins one of them,
+ *   `media→core via trigger on products`. What the scan still cannot see is append-only
+ *   enforcement, which is runtime code (`packages/store/src/append-only.ts`). The
+ *   `CREATE CONSTRAINT TRIGGER` spelling it also accepts is PostgreSQL-only: sqlite3 3.51 answers `near "CONSTRAINT": syntax error`, so those two controls
  *   pin a spelling this engine cannot run.
  * - A SQLITE TRIGGER'S BODY IS NOT READ. On PostgreSQL a trigger reached another module through
  *   `EXECUTE FUNCTION <fn>`, and that edge kind was detected here; SQLite has no functions at all
  *   (sqlite3 3.51: `CREATE FUNCTION` → `near "FUNCTION": syntax error`, and `FOR EACH ROW EXECUTE
  *   FUNCTION f()` → `near "EXECUTE": syntax error`), so the detector was deleted as dead syntax. A
- *   SQLite trigger instead carries statements between `BEGIN` and `END`, and an `INSERT INTO
- *   <other module's table>` in there is a real cross-module edge that NEITHER remaining detector
- *   sees. Nothing covers that today.
+ *   SQLite trigger instead carries statements between `BEGIN` and `END`, and an `INSERT INTO` or a
+ *   `SELECT … FROM` naming another module's table in there is a real cross-module edge that NEITHER
+ *   remaining detector sees — media's triggers on `media_images` read core's and catalogue's tables
+ *   that way. Nothing covers that today.
  * - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
  *   slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers),
  *   so a `references`/`create trigger` mention in any of those is ignored — pinned by the
@@ -337,15 +338,17 @@ describe("the tree's module graph is honest", () => {
   // just as `workforce→identity`, so it stays a control for the one detector it exercises: strip the
   // backtick from the `REFERENCES` character class and this goes red.
   //
-  // What this anchor does NOT cover is the trigger detector — the tree contains no trigger at all
-  // since the SQLite regeneration, so that detector's only controls are the crafted cases above.
-  // See the header's known limitation headed THE TRIGGER DETECTOR HAS NO TREE ANCHOR.
+  // The trigger detector has its own real edge: `packages/media/drizzle/0001_image_references.sql`
+  // puts a trigger ON core's `products`. Break the `ON <table>` capture in `CREATE_TRIGGER` and the
+  // second assertion below goes red (tried 2026-09-23). See the header's known limitation headed THE
+  // TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN.
   it("discovers the modules and finds the known real cross-module edges", () => {
     for (const name of ["core", "identity", "payments", "workforce"]) {
       expect(modules).toContain(name);
     }
     expect(modules.length).toBeGreaterThanOrEqual(10);
     expect(foundEdgeDetails.has("workforce→identity via FK reference on persons")).toBe(true);
+    expect(foundEdgeDetails.has("media→core via trigger on products")).toBe(true);
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {

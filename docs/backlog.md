@@ -1856,11 +1856,12 @@ image constraints under *Detail → Box image*.
 
 ### B4. Upgrades and migrations
 
-- **Core release points 1 to 6 cannot upgrade at all.** Entries 2 to 6 carry `when` values below
-  entry 1's and drizzle picks what to apply from `max(created_at)`; no journal edit repairs it. The
-  only real repair is a squashed baseline — **an owner decision nobody has taken**. Until it is, the
-  hazard stands: **do not run `pnpm --filter @waitron/db db:generate`** (it proposes dropping the
-  bookings table, which left core's barrel but stayed in core's snapshot chain).
+- **Core release points 1 to 6 could not upgrade — CLOSED 2026-09-23.** The storage switch (#489)
+  regenerated every migration set, so the journal that had that shape no longer exists
+  ([conventions-data.md](developers/conventions-data.md) → the core journal's contradictory shape),
+  and the `db:generate` hazard went with it: run on 2026-09-23 in a throwaway checkout whose schema
+  and migration files are `main`'s at `9cd2fda58`, `pnpm --filter @waitron/db db:generate` printed `No schema changes, nothing to migrate` and
+  wrote no file.
 - **Every migrating path but boot runs with no ahead-of-image check.** No count belongs here:
   `conventions-data.md` holds the list, re-grepped 2026-09-22, and it is longer than what CLAUDE.md
   §3 names — it adds a readiness runner and the dev and demo scripts under `apps/server/scripts`.
