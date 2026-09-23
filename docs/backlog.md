@@ -2047,9 +2047,8 @@ image constraints under *Detail → Box image*.
   dismiss, default-callback and error-copy paths; 100/100/100/100); `server-kit` (**PR #515**,
   2026-09-23 — tests for the mTLS test server recording the first of two CNs, serving a client
   certificate with no CN, and refusing a second close; 100/100/100/98); `sync-enrolment` (**PR
-  #TBD**, 2026-09-23 — already at 100/100/100/100 after #511 tested the rename scanner; two tests
-  added for a drop and re-create inside one migration file and for table names read without regard
-  to case, each gap found by deleting the code with every test still green).
+  #TBD**, 2026-09-23 — tests for a drop and re-create inside one migration file and for table names
+  read without regard to case; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

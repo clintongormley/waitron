@@ -730,9 +730,10 @@ browser test** — most of these rules exist because a test passed while proving
 - **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
   Measured both ways on `packages/sync-enrolment/src/migration-tables.ts` under
   `@vitest/coverage-v8@4.1.11`: with the pair the package reads 2 of 2 branches and passes; with the
-  same two guards marked `next` it reads 4 of 6 and fails its 85% branch bar. Whether `next` can
-  ever work is not established — the provider's `ast-v8-to-istanbul@1.0.6` does parse `next` hints —
-  but it did not here, and it fails silently, with no message naming the marker. Nothing guards it.
+  same two guards marked `next` it reads 4 of 6 and fails the package's branch bar. Whether `next`
+  can ever work is not established — the provider's `ast-v8-to-istanbul@1.0.6` does parse `next`
+  hints — but it did not here, and it fails silently, with no message naming the marker. Nothing
+  guards it.
 - **A page asserted as a STRING, or reached only through its API, has nothing checking that it
   renders.** An invalid CSS value, an unclosed tag, an unreadable dark-theme colour and a screen that
   throws on open all pass every such assertion. Cost: a corrupted colour value on `/setup/trust` that
