@@ -2220,6 +2220,18 @@ image constraints under *Detail → Box image*.
   (only its own suite and the barrel re-export), while `generatePassword`'s single caller is
   `apps/server/src/break-glass.ts`. Each is a rename or a deletion rather than a comment fix.
 
+- **Two fiscal-package comments that need a probe, not a reword — OPEN (T2, 2026-09-23).**
+  `packages/fiscal-verifactu/src/chain.test.ts`'s header says a previous test's committed rows are
+  simply out of scope rather than something to clean up, and that nothing there could truncate
+  `registros_facturacion` anyway because the append-only trigger blocks it. Both look stale against
+  `packages/db/src/testing/venue-db.ts`, where `resetPerTest` DEFAULTS to true and the reset drops
+  every trigger, deletes every migrated table and recreates the triggers — but discriminating the two
+  readings needs a run, and T2 was comments-only in that package by design (`RUNNER.md` H2). The same
+  reseed prose survives in `drain.test.ts` and `write-path.e2e.test.ts`. Separately,
+  `drain.test.ts` describes a `VerifactuBackend.drain` method; the class has no such method, and the
+  drain pass reaches it through the fiscal slot. **Next action:** one probe for the reset question,
+  then correct all three headers together.
+
 - **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
   `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
   stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
