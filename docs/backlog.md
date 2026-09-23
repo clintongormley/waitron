@@ -3617,7 +3617,7 @@ it; and a correction must not decrement a count where it should drop it.
   `packages/fiscal-verifactu/src/canje-path.e2e.test.ts` is `storeF3`. Historical plans and specs
   under `docs/superpowers/` keep the old names, as written.
 - **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce**
-  (found 2026-09-23 on `chore/rename-pg-helpers`). Several say drizzle wraps every failed query in
+  (found 2026-09-23 in PR #524's review). Several say drizzle wraps every failed query in
   a `DrizzleQueryError` whose own `.code` is undefined. On `node:sqlite` only `db.run` wraps (as
   `DrizzleError`, message `Failed to run the query '<sql>'`), while `db.all`, `db.get`,
   `db.execute` and an awaited query builder reject with the engine's own error
