@@ -1,6 +1,6 @@
 # SQLite slice 2: stream and cold restore — design
 
-**Date:** 2026-09-23. **Status:** design, awaiting owner review.
+**Date:** 2026-09-23. **Status:** approved by the owner 2026-09-23, and amended the same day while planning — §0 items 11–17 and the passages they touch. The plan is `docs/superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md`.
 
 **Builds on:** [SQLite + Litestream topologies](2026-09-16-sqlite-litestream-topology-design.md)
 (the architecture; its §11 names this slice) and
@@ -41,6 +41,25 @@ chain with nothing re-entered but one recovery kit, and staff can see how curren
    hourly copies and 30 days.
 10. **Litestream runs as a child process of the server** (§4.1), not a separate container and not a
     host service.
+
+**Taken while planning (2026-09-23), after the design was approved:**
+
+11. **Images are shrunk on upload.** The owner expects up to 5,000 product images, and they were
+    stored full-size inside `venue.db`, which would have made every daily copy, every rebuild and every
+    archive 10–24 GB. Each upload is resized (at most 1,600 pixels on the long side, WebP) with its
+    location data removed; the upload limit rises from 5 MiB to 20 MiB. The resizing library, sharp,
+    loads libvips (LGPL-3.0-or-later) as a separate shared library; its notices ship in the box image
+    and the legal track gets a line for the advisor to confirm.
+12. **A login survives a rebuild and a promotion.** Sessions are venue data, not keyed by node.
+13. **One recovery key per venue.** Turning archives on reuses the key streaming set up.
+14. **An archive restore gets the same first start as a bucket rebuild**: a certificate for this
+    machine's addresses and a membership document one term higher (§5.1 step 7).
+15. **The break-glass and `waitron-credentials` tools keep working beside a running server**; the
+    single-process lock (§6) refuses everything else.
+16. **A box never replaces a pointer that names a higher term than its own**; it stops streaming and
+    raises `backup.stream_refused` (§4.4).
+17. **The venue id is the node's location id** (`config.till.locationId`), which boot already treats as
+    the single operational venue.
 
 ---
 
@@ -85,7 +104,11 @@ back without what `node.db` held.
   `webauthn_challenges`, `totp_enrollments`, `google_oidc_states` (`packages/identity`);
   `scheduled_runs` (`packages/scheduler`); `tenant_credentials` (`packages/credentials`). The plan
   decides each. Two are settled here: `node_membership` stays a single row, because the membership
-  document is the same on every node of a venue, and `change_log` needs nothing (below).
+  document is the same on every node of a venue, and `change_log` needs nothing (below). Settled
+  during planning: the session and sign-in tables become `state`, because a login survives a rebuild
+  and a promotion (§0.12); `deployment` keeps only the environment stamp, a single `state` row, and
+  this node's role moves to a new `local` table keyed by node id; `tenant_credentials` stays `local`
+  without a node id until slice 3 replaces the per-machine key (§3.3).
 - **Anything that works as a live login is stored as a hash**, because the bucket now holds it. Two
   identifiers are bearer cookies stored raw today: a management session's id, sent as the dashboard
   cookie (`apps/server/src/management-api.ts`), and a till session's id, sent as the shift cookie
@@ -218,8 +241,12 @@ the measurements of §8.1 and the prototype, whose verdicts do not carry across 
   before the first full copy lands are in a generation no restore follows yet. That window is normally
   seconds; if the bucket fails inside it, `backup.stream_behind` fires and the window lasts until the
   bucket answers.
-- **A refused pointer write** ("precondition failed") means another box is writing this venue. The box
-  stops streaming and raises `backup.stream_refused`. **A "conflict" answer is retried, not treated as
+- **A refused pointer write** ("precondition failed") means another box is writing this venue — with
+  one exception found during planning: the S3 client resends a write after a server error, so a write
+  that landed but lost its answer is refused on the resend. A refusal is therefore a loss only if the
+  pointer does not now hold exactly the bytes this box wrote. On a real loss the box stops streaming
+  and raises `backup.stream_refused`. **A pointer naming a higher term than this box's is never
+  replaced**, whatever the conditional write would allow (§0.16). **A "conflict" answer is retried, not treated as
   a loss** — Amazon documents that a conditional write can be answered with a conflict when a delete
   races it, and that the write may be retried (topology §13, risk 11's note).
 - **History.** Litestream's own words, from its configuration reference
@@ -243,14 +270,22 @@ was stopping Litestream.
 
 - **Alert first:** `backup.stream_behind` once freshness (§7) passes a threshold — 15 minutes to
   start.
-- **Then a hard limit.** When the side file reaches a size limit (set in the plan against the box's
-  disk, measured, not padded), the supervisor stops Litestream, folds the file back from a connection
-  outside the write queue's sale path, raises `backup.stream_paused`, and restarts Litestream when the
-  bucket answers again.
+- **Then a hard limit of 256 MiB.** When the side file reaches it, the supervisor stops Litestream,
+  folds the file back, raises `backup.stream_paused`, and restarts Litestream when the bucket answers
+  again. The figure sits below the largest side file the prototype sold against without slowing (310
+  MB, results note S4), and below Litestream's own emergency threshold: its configuration reference
+  (`truncate-page-n`, default "121359, ~500MB") says that past it Litestream "forces a blocking
+  TRUNCATE (which blocks both readers and writers)" — a pause on the sale path this limit exists to
+  keep us short of. No box disk size is recorded anywhere to set it against instead.
+- **The fold-back runs on the writer connection, in a write-queue slot, with no transaction open.**
+  Measured during planning (Node v26.7.0, SQLite 3.53.4): run from a separate connection while a sale's
+  transaction was open, it waited out the whole busy timeout, and because `node:sqlite` is synchronous
+  the whole process waited with it. On the writer, between transactions, it took under a millisecond,
+  or answered "busy" in under a millisecond when a reader held the file.
 - **What restarting after that looks like is measured first** (§8.1, item 1). If Litestream uploads a
   fresh full copy on restart, the same generation continues. If it does not, the supervisor opens a new
-  generation after every pause instead, and the generation name gains a per-node counter; the plan
-  records which.
+  generation after every pause; generation names already carry when they were opened (§4.4), so no
+  extra counter is needed.
 - **Whether SQLite's automatic folding should be switched off at all** is measured too (§8.1, item 2).
   The topology design says to (§8.3); the prototype found the setting makes no difference while the
   store is unreachable. Until the measurement says otherwise, `packages/store` keeps SQLite's default,
@@ -265,18 +300,24 @@ was stopping Litestream.
 Beside the existing "Restore from an archive file":
 
 1. The owner uploads or pastes the **recovery kit**.
-2. The box reads `current.json`, has Litestream restore the latest point of the named generation into a
-   **side file**, runs SQLite's `integrity_check` and the existing "is this database ahead of this
-   software" check. A failure stops here with nothing on the box changed.
-3. It verifies `current.json`'s signature against the public key carried in the kit, not the one in
-   the restored database — a key read from the bucket would vouch for a pointer read from the same
-   bucket. What this proves, and what it does not: the pointer was written by the node the owner's kit
-   names. It does not prove the generation's files are untampered; **whoever can write the bucket can
-   replace the venue's data**, and the bucket's own access control is the defence. Step 5 adds that the
-   secrets row was locked by someone holding the recovery key.
-4. **It checks whether the old box still looks alive.** If the live generation received a change file
+2. The box reads `current.json` and verifies its signature against the public key carried in the kit,
+   not the one in the restored database — a key read from the bucket would vouch for a pointer read
+   from the same bucket. What this proves, and what it does not: the pointer was written by the node
+   the owner's kit names. It does not prove the generation's files are untampered; **whoever can write
+   the bucket can replace the venue's data**, and the bucket's own access control is the defence. Step
+   5 adds that the secrets row was locked by someone holding the recovery key. An unverified pointer
+   stops here, before anything is downloaded.
+3. **It checks whether the old box still looks alive.** If the live generation received a change file
    in the last 10 minutes, the wizard says so and requires the owner to confirm the old box is gone.
    This is the only protection against two boxes selling that slice 2 can offer.
+4. It has Litestream restore the latest point of the named generation into a **side file**, and runs
+   SQLite's `integrity_check` and the existing "is this database ahead of this software" check. A
+   failure stops here with nothing on the box changed. **Litestream leaves two tables of its own in
+   the database it streams, and so in the restored copy** — `_litestream_seq` and `_litestream_lock`,
+   measured during planning on 0.5.17 — plus a `.venue.db-litestream/` folder beside the live file.
+   Any check that lists a live or restored database's tables leaves the two tables out by name, and
+   the code that wipes or replaces `venue.db` (`apps/server/src/db-wipe.ts`, `restoreDatabase`)
+   removes the folder with it.
 5. It unlocks that node's locked secrets row (§3.1) with the kit's recovery key.
 6. It stages the restore for the existing restore-on-next-start path
    (`apps/server/src/restore-request.ts`, `runStagedRestore`). **That path takes only an encrypted
@@ -284,25 +325,32 @@ Beside the existing "Restore from an archive file":
    `restoreFromArtifact` refuses anything without `manifest.json` and `db.dump`
    (`apps/server/src/restore.ts`, `validateArtifact`). The request gains a second source kind: the
    restored database file plus the unlocked row's entries. Its validation replaces "decrypt and
-   unpack" with steps 2 and 5, then runs the same compatibility gate (on the row's manifest), the same
+   unpack" with steps 4 and 5, then runs the same compatibility gate (on the row's manifest), the same
    entry-name guard, and the same `writeValidated`: place the database, run the restore hooks — the
    fiscal one retires the node's registration and mints a fresh installation number above the clock
    floor, fresh series and a fresh chain head (`packages/fiscal-verifactu/src/restore.ts`,
    `registro-sif.ts`) — and write the state files last. The box does not assemble an archive from
    the pieces, which would write a second full copy of the database into the state folder.
-7. **On first start** the box:
+7. **On first start** — after a bucket rebuild or an archive restore alike (§0.14) — the box:
    - re-issues its server certificate from the restored certificate authority for THIS machine's
      addresses. The restored certificate names the dead box's IP addresses, and today it is minted
      only when `server.key` is absent (`apps/server/src/box-secrets.ts`); devices trust the authority,
      not the certificate, so a re-issued one is accepted;
-   - signs a membership document one term higher, carrying this machine's contact address;
+   - signs a membership document one term above the HIGHER of its own term and the bucket pointer's
+     (when bucket settings exist and the pointer is readable), carrying this machine's contact
+     address. An archive can be older than several rebuilds, and §0.16 would otherwise refuse its
+     stream for good; an archive restore whose database holds bucket settings runs step 3's liveness
+     check before it is staged;
    - opens its generation and starts streaming per §4.4;
    - trades.
 
 Tills and handhelds keep trusting the box without re-pairing, because the certificate authority came
-back with it. **Whether each kind of device finds the box at a changed address by itself is not
-established here** — the plan checks each (discovery, the membership document's contact address, a
-device configured by IP) and states any that would need a human.
+back with it. **Finding the box at a changed address**, read from the code during planning and not
+run on hardware: tills, handhelds and kitchen screens opened at `https://waitron.local`, and a print
+agent on the box itself, find it by themselves (on iPhones this rests on `waitron.local` resolving,
+which a design spec lists as unverified); a device opened at an IP address, and a print agent on
+another computer given an IP address, need a person to point them at the new address. The wizard's
+last screen says so.
 
 ### 5.2 Command line
 
@@ -313,7 +361,8 @@ numbers (topology §7.5).
 ### 5.3 Going live is never blocked
 
 Cash sales start as soon as the box is up. Filing and card payments need the credentials, which step 5
-already unlocked.
+already unlocked. **If a step of the first start fails** (step 7), the box still goes live, does not
+stream, raises an alert, and retries the step at the next start.
 
 ---
 
@@ -369,7 +418,9 @@ lock can serve.
   and update, and an update must not stall on a bucket outage. The box status page and
   `/api/backup/status` show the same.
 - **Alerts** beside the existing `backup.*` family (`apps/server/src/alert-sources.ts`), each with
-  English and Spanish wording and an area claim (`scripts/alert-codes.test.ts`):
+  English and Spanish wording checked by `scripts/ongoing-alert-codes.test.ts` (these are ongoing
+  alerts, whose area comes from the alert source; `scripts/alert-codes.test.ts` covers recorded
+  incident codes only):
   `backup.stream_behind`, `backup.stream_paused`, `backup.stream_refused`, and
   `backup.stream_bucket_unusable` for a bucket whose key stopped working or which stopped honouring
   the conditional write. These names are proposals: codes are never renamed once shipped, so the plan
@@ -396,7 +447,9 @@ Each on 0.5.17, each stating in advance what the failing result would print:
 3. **Which restore points survive a 168-hour window:** 30-second, 5-minute or hourly boundaries.
    Decides what the spec may promise about going back in time.
 4. **Restore time with a day of changes** on a database of realistic size, product images included —
-   they live in the database (`media_image_data.bytes`).
+   they live in the database (`media_image_data.bytes`). Realistic, after §0.11's shrinking: up to
+   5,000 images at about 171 KiB each, roughly 0.87 GB — estimated from ten real 2.6–5.0 MB food
+   photos shrunk during planning, not from a venue.
 5. **The pinned binary on Linux, both processor types.** Every prototype run was darwin/arm64.
 
 ### 8.2 Tests
@@ -409,7 +462,12 @@ Each on 0.5.17, each stating in advance what the failing result would print:
   suite may start a container (CLAUDE.md §4), so it runs a small S3-compatible server as a plain child
   process. Which server is chosen in the plan, after checking that it honours conditional writes, that
   a pinned binary is obtainable, and its size against the CI cache, which this repository already has
-  full (CLAUDE.md §2). The prototype rig stays as the MinIO reference.
+  full (CLAUDE.md §2). **Chosen during planning: versitygw 1.8.0**, which refused both conditional
+  writes with 412, let one of twenty racing writers win, publishes checksummed binaries for every
+  platform needed, and which Litestream 0.5.17 streamed to and restored from on the owner's Mac;
+  SeaweedFS is the recorded fallback. Garage and rclone overwrote the object instead of refusing. MinIO
+  is not an option: its repository is archived and its binaries are no longer published. The
+  prototype rig stays as a record.
 - **Proved by deletion** (CLAUDE.md §4), each with the case in the other direction:
   - removing the "only if unchanged" condition fails a test;
   - moving the pointer before the first full copy fails a test;
@@ -430,6 +488,7 @@ Each on 0.5.17, each stating in advance what the failing result would print:
 
 Each lands on its own. The first three do not need Litestream.
 
+0. Shrink every uploaded image before it is stored (§0.11).
 1. Per-machine rows keyed by node id; session identifiers stored as hashes (§2).
 2. The secrets row locked with the recovery key, and a recovery key without an archive destination
    (§3.1).
