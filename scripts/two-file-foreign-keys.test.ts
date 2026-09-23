@@ -35,9 +35,9 @@ import {
  *    moment someone deleted a key there, with the key still live in every migrated database.
  * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
  *    the snapshot, and `migrations-match-schema.test.ts` compares the TypeScript with the snapshot,
- *    never with the SQL. None is known today: on 2026-09-23 `git ls-files '*_sql.sql'` printed
- *    nothing, and no committed migration under a package's `drizzle` directory says `ADD
- *    CONSTRAINT` outside a comment. Nothing keeps it that way.
+ *    never with the SQL. None is known today: on 2026-09-23 the three custom migrations (journal
+ *    entries whose snapshot equals the one before, `id` and `prevId` aside) had no `REFERENCES` or
+ *    `FOREIGN KEY` outside a `--` comment. Nothing keeps it that way.
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */

@@ -32,8 +32,9 @@ import {
  *    declared in non-test source to reach a database, so the column itself is still covered — but a
  *    stale claim written in a test is not.
  * 2. **The schema check reads drizzle's own snapshot of the schema, not a live database.** It sees a
- *    column added through a drizzle table definition, because that regenerates a snapshot; it cannot
- *    see one added by hand-written SQL. Two other checks cover that path: migration `.sql` files, and
+ *    column added through a drizzle table definition, because that regenerates a snapshot (and
+ *    `migrations-match-schema.test.ts` fails when it was not regenerated); it cannot see one added
+ *    by hand-written SQL. Two other checks cover that path: migration `.sql` files, and
  *    the COLUMN spelling tested against non-test TypeScript as well as the identifier — so an
  *    `alter table … add column "tenant_id"` written inside a `sql` template is read too. What none of
  *    the three sees is SQL assembled from pieces that never spell the column out.

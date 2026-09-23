@@ -533,8 +533,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   whose columns changed under a kept name passes.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
-  RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts` and
-  `inmutabilidad` — the first two because a regeneration is exactly what has dropped constraints and
+  RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
+  `scripts/migrations-match-schema.test.ts` and `inmutabilidad` — the first two because a regeneration is exactly what has dropped constraints and
   triggers declared outside the TypeScript schema before.
 - **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
   deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows.**
@@ -739,7 +739,7 @@ browser test** — most of these rules exist because a test passed while proving
   package's report. Cost: `packages/sync` read 81.57% statements on files belonging to
   `packages/sync-enrolment`. See [testing-guide.md](docs/developers/testing-guide.md).
 - **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
-  Measured both ways on `packages/sync-enrolment/src/migration-tables.ts` under
+  Measured both ways for #437 (2026-09-19) on `packages/sync-enrolment/src/migration-tables.ts` under
   `@vitest/coverage-v8@4.1.11`: with the pair the package reads 2 of 2 branches and passes; with the
   same two guards marked `next` it reads 4 of 6 and fails the package's branch bar. Whether `next`
   can ever work is not established — the provider's `ast-v8-to-istanbul@1.0.6` does parse `next`

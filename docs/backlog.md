@@ -3862,7 +3862,13 @@ What the preparation tasks left, with F1's own answers where it found them:
     `classification-complete` reads its SQL through them. `two-file-foreign-keys` builds its
     table-to-class map once. Left, found while doing it: `no-tenant-column`'s SQL check still
     passed with one set's SQL dropped, because it checks for an absence and the remaining files
-    clear its floor of eight.
+    clear its floor of eight. `module-graph-honesty`, `schema-constraints` and
+    `packages/db/src/classification.test.ts` still read a set's SQL their own way — the top of the
+    `drizzle` folder only, and `module-graph-honesty` unsorted — rather than through
+    `migrationSqlFiles`, which walks subfolders; no set has SQL in a subfolder today
+    (`find packages apps -path '*/drizzle/*/*.sql' -not -path '*/node_modules/*'` printed nothing,
+    2026-09-23), and drizzle's migrator applies only `<folder>/<tag>.sql` for each journal entry.
+    `journal-monotonic` parses `_journal.json` itself rather than sharing `headSnapshot`'s reader.
   - P5's three (#475) — **one DONE, one moot, one still declined, for a restated reason**
     (2026-09-23, PR #531). **Done:** the two-call write conversion
     `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
