@@ -495,21 +495,38 @@ jobs:
       # portable and self-describing going forward — a regression here (the write silently dropped,
       # or a future esbuild option this detection cannot sniff) would otherwise only surface off
       # this specific Node version, in whatever environment an operator's Dockerfile happens to run.
+      #
+      # Like the step above, this one STARTS the bundle rather than making it fail, and for the same
+      # reason: it used to capture `node server.js` in a `$(…)` and grep the output for
+      # `server.config_missing`, which no longer happens — the bundle opens a venue directory and
+      # SERVES, so the capture never returned and the step ran until the job's own limit killed it.
+      # That is what it did on this branch's first push (15m14s, cancelled), and the job log's
+      # closing lines name the orphans: a `bash` and a `node-MainThread`.
+      #
+      # Reaching `server.listening` from a directory with no ancestor package.json is also exactly
+      # what this step wants to prove — every import resolved with only `dist/` present.
       - name: Smoke-test dist/ copied out on its own, with no ancestor package.json
+        env:
+          WAITRON_HTTP_PORT: "18081"
+          WAITRON_VENUE_DIR: "${{ runner.temp }}/standalone-venue"
         run: |
           standalone=$(mktemp -d)
           cp -r apps/server/dist/. "$standalone/"
           set +e
-          output=$(node "$standalone/server.js" 2>&1)
-          code=$?
+          timeout 60s node "$standalone/server.js" > standalone.log 2>&1 &
+          bundle=$!
+          found=1
+          for _ in $(seq 1 60); do
+            if grep -q '"event":"server.listening"' standalone.log; then found=0; break; fi
+            kill -0 "$bundle" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$bundle" 2>/dev/null
+          wait "$bundle" 2>/dev/null
           set -e
-          echo "$output"
-          if [ "$code" -eq 0 ]; then
-            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
-            exit 1
-          fi
-          if ! grep -q "server.config_missing" <<< "$output"; then
-            echo "expected the 'server.config_missing' code in output, got: $output" >&2
+          cat standalone.log
+          if [ "$found" -ne 0 ]; then
+            echo "expected the copied-out bundle to reach server.listening on port 18081" >&2
             exit 1
           fi
 
