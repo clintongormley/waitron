@@ -2739,11 +2739,12 @@ image constraints under *Detail → Box image*.
   about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
   (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080
   to about 270, tests included), `packages/printing` (#572, about 1,040 to about 350, tests
-  included), `packages/bookings` (#574, about 1,020 to about 270, tests included) and
-  `packages/credentials` (#577, about 990 to about 410, tests included). A pruning pull request
+  included), `packages/bookings` (#574, about 1,020 to about 270, tests included),
+  `packages/credentials` (#577, about 990 to about 410, tests included) and `packages/shared` (#579,
+  about 945 to about 330, tests included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
-  push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574 and
-  #577 and left for the package that owns each, all still OPEN:
+  push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577
+  and #579 and left for the package that owns each, all still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `scheduler` (#577 fixed credentials')
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2946,6 +2947,19 @@ image constraints under *Detail → Box image*.
     records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
     says the descriptor is the only place bookings is named, while
     `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
+  - Found by #579 (`packages/shared`). A money amount can pass the twelve-integer-digit bound on its
+    way into cents: `assertMoney` checks the integer digits before rounding, so `decimalToCents`
+    turns `999999999999.999` into 100000000000000 cents, and `centsToDecimal` turns that back into
+    `1000000000000.00` without refusing it (measured 2026-09-24 with a throwaway vitest case in
+    `packages/shared`; control: `999999999999.99` round-trips unchanged).
+    `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) still
+    gives 99999999999999 cents as the bound, and has only the PostgreSQL raw-read table, not the
+    SQLite one #579's commit message now carries. `packages/core/src/errors.ts` points at
+    `errors.reachability.test.ts` files in `packages/core` and `packages/db` that no longer exist
+    (the check is `scripts/errors-reachable.test.ts`). Comments saying drizzle wraps a failed query
+    remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps every failed" -- ':!docs'` listed
+    files in `apps/server`, `packages/catalogue`, `db`, `identity`, `media`, `migrations`,
+    `printing` and `store` on 2026-09-24, not each checked (see the `DrizzleQueryError` entry below).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3429,13 +3443,14 @@ rewrite that wake-lock test; and correct those test comments.
 
 **`quoteLiteral` still quotes for PostgreSQL, and SQLite refuses its backslash form — OPEN (found
 2026-09-23, identity's coverage review, PR #526).** `packages/shared/src/sql-literal.ts` doubles every
-backslash and wraps the value in `E'…'` when it contains one, and its header still argues from
-PostgreSQL's `standard_conforming_strings`. Measured 2026-09-23 on `node:sqlite` (Node v26.7.0):
+backslash and wraps the value in `E'…'` when it contains one, and its header argued from
+PostgreSQL's `standard_conforming_strings` (since #579 the header only says the `E'…'` form is
+PostgreSQL's and SQLite refuses it). Measured 2026-09-23 on `node:sqlite` (Node v26.7.0):
 `select E'a\\b' as v` fails with `near "as": syntax error`, and in a plain literal SQLite keeps a
 backslash as itself, so doubling it would also change the value. Its one product caller,
 `packages/db/src/change-feed.ts`, quotes fixed relation type names with no backslash, so nothing
 fails today. **Next action:** make it SQLite's rule (double the single quote only), test-first with a
-backslash case, and rewrite the header.
+backslash case, and drop the header's note.
 
 **Two identity error descriptions say less than the code raises — OPEN (found 2026-09-23, identity's
 coverage review, PR #526).** In `packages/identity/src/errors.ts`, `account_action.invalid` reads
@@ -4747,8 +4762,7 @@ it; and a correction must not decrement a count where it should drop it.
   also includes test fixtures that build a wrapped error by hand; among the comments are
   `packages/core/src/record-sale.test.ts`, `packages/db/src/schema/series.test.ts`,
   `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
-  `packages/shared/src/cause-chain.ts` and `packages/shared/src/engine-failure.ts` carry the
-  sentence this branch corrected in `packages/db/src/unique-violation.ts`.
+  #579 took the sentence out of `packages/shared/src/cause-chain.ts` and `engine-failure.ts`.
   (`packages/credentials/src/bin.ts`'s claim that the message carries the bind parameters went
   with #577, which measured a refused credential write: a plain engine error reading
   `CHECK constraint failed: …`, with no SQL and no parameter.) The thrown text
@@ -4870,9 +4884,9 @@ What the preparation tasks left, with F1's own answers where it found them:
     and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
   - Follow-up: every other `maxWorkers: 1` config whose comment gives the coverage reason, apart
     from `payments`, which carries its own measurement, still says the pin is needed without having
-    measured it; the same one-worker-against-several coverage comparison would settle each. Two of
-    those comments, in `packages/shared/vitest.config.ts` and
-    `packages/diagnostics/vitest.config.ts`, also still say the pre-push hook runs a whole-workspace
+    measured it; the same one-worker-against-several coverage comparison would settle each. One of
+    those comments, in `packages/diagnostics/vitest.config.ts`, also still says (#579 fixed
+    `packages/shared`'s) the pre-push hook runs a whole-workspace
     `pnpm -r test:coverage`. The hook has run no package tests since #338; its only test run is the
     root `pnpm vitest run --coverage`. #515, the dashboard-kit coverage branch and the apps/server
     coverage branch fixed the same words in server-kit, dashboard-kit, dashboard-modules and
