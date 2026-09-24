@@ -2603,6 +2603,21 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle.** The shared
+  script every Node bundle is built with lives under `scripts/`, which `scripts/changed-scope.mjs`
+  classifies as root scope, and root scope emits `code=false`, so neither ci.yml's `bundle-smoke`
+  nor any member's build runs on that pull request (checked 2026-09-24 by running the classifier
+  over that one path). The push to `main` after the merge does not build one either: ci.yml widens
+  `scope` to `global` there but keeps the classifier's `code`, which gates `bundle-smoke` and the
+  image job. Unless a code-gated run comes first, the first CI build of a bundle after such a merge
+  is `image-nightly.yml`'s 03:00 UTC run on `main`, whose `deploy/Dockerfile` builds the server's
+  and print-agent's bundles, not credentials' or provisioning's. Before the flags moved, a flag
+  change was an edit to a package's `package.json`, which set `code=true` and ran `bundle-smoke`,
+  which builds the credentials and server bundles, not print-agent's or provisioning's. What still
+  runs is the root project, whose `scripts/bundle-node.test.mjs` bundles one small file through the
+  script. Decide whether root scope should report `code=true` for this file, or name the four
+  members as its consumers. `scripts/dev-server-proxy.ts` has the same shape for the three
+  front-ends' `vite.config.ts`.
 - **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
   floor retired 2026-09-24 by **PR #549**).** Every package and the root project now hold
   the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package

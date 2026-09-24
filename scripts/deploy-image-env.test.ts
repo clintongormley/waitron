@@ -313,21 +313,21 @@ it("stores image-library bytes in the database without a separate image volume",
 /**
  * sharp is a native addon with a shared library beside it, and esbuild does not refuse to bundle
  * it. Without `--external:sharp` the build exits 0 and the bundle cannot even be loaded: bundled
- * sharp declares `createRequire` a second time beside the `--banner:js` these commands add, and
- * `node --check dist/server.js` reports `SyntaxError: Identifier 'createRequire' has already been
- * declared`. Measured 2026-09-23 on esbuild 0.28.2.
+ * sharp declares `createRequire` a second time beside the banner `scripts/bundle-node.mjs` adds,
+ * and `node --check dist/server.js` reports `SyntaxError: Identifier 'createRequire' has already
+ * been declared`. Measured 2026-09-23 on esbuild 0.28.2.
  *
- * Every bundle is built by `scripts/bundle-node.mjs`, and the flag is checked by calling that
+ * Every Node bundle is built by `scripts/bundle-node.mjs`, and the flag is taken from that
  * script's own argument builder. The rest reads package.json TEXT: it sees a workspace script that
- * calls `esbuild` itself, but not a package script that runs a file of its own which calls esbuild
- * or its JavaScript API. It finds the bundles that can reach `@waitron/media` by following
- * `dependencies`, so a reach through a devDependency or a relative import across packages is
- * invisible to it.
+ * calls `esbuild` by name, but not a package script that runs a file of its own which calls esbuild
+ * or its JavaScript API. It pins that `@waitron/server`'s and `@waitron/provisioning`'s `build`
+ * scripts name the shared script, so a NEW member that reaches `@waitron/media` and bundles
+ * through something the first case cannot see — a file of its own, another bundler, or esbuild
+ * reached by path — is not flagged.
  */
 describe("sharp stays outside every bundle and ships beside the server's", () => {
   type Manifest = {
     name: string;
-    dependencies?: Record<string, string>;
     scripts?: Record<string, string>;
   };
   let listed: Manifest[] | undefined;
@@ -349,24 +349,11 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
     expect(direct).toEqual([]);
   }, 60_000);
 
-  it("builds the bundles that can reach @waitron/media with the shared script", () => {
-    const byName = new Map(manifests().map((manifest) => [manifest.name, manifest]));
-    const reachesMedia = (name: string, seen = new Set<string>()): boolean => {
-      if (name === "@waitron/media") return true;
-      if (seen.has(name)) return false;
-      seen.add(name);
-      return Object.keys(byName.get(name)?.dependencies ?? {}).some(
-        (dependency) => byName.has(dependency) && reachesMedia(dependency, seen),
-      );
-    };
-    const bundlers = manifests()
-      .filter(
-        (manifest) =>
-          (manifest.scripts?.build ?? "").includes("scripts/bundle-node.mjs") &&
-          reachesMedia(manifest.name),
-      )
-      .map((manifest) => manifest.name);
-    expect(bundlers).toEqual(expect.arrayContaining(["@waitron/server", "@waitron/provisioning"]));
+  it("builds the Node bundles that can reach @waitron/media with the shared script", () => {
+    const builds = new Map(manifests().map(({ name, scripts }) => [name, scripts?.build ?? ""]));
+    for (const name of ["@waitron/server", "@waitron/provisioning"]) {
+      expect(builds.get(name), name).toContain("scripts/bundle-node.mjs");
+    }
   }, 60_000);
 
   it("names --external:sharp for every bundle the shared script builds", () => {

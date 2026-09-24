@@ -69,8 +69,9 @@ jobs:
   #             AND format:check AND the repo-level Vitest project, all ungated), on pull requests
   #             AND on main, so an inert change — prose, or root config no code-gated job reads —
   #             costs nothing in either place, and neither does a change to the repository's OWN
-  #             machinery (`scripts/`, `.husky/`, `.github/`, `scope=root`): no package reads it,
-  #             and the one suite that does is in that ungated job.
+  #             machinery (`scripts/`, `.husky/`, `.github/`, `scope=root`), which gives no package
+  #             any CI work — the two files members do read are named in `scripts/changed-scope.mjs`
+  #             above ROOT_SCOPE_PREFIXES.
   #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
   #             packages that depend on them. On main, run everything, because that unfiltered run
   #             is what verifies the narrowing was right.

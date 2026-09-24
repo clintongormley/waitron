@@ -516,8 +516,8 @@ documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, 
 the changed packages and their dependents.
 
 `lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
-project, which is the suite that does read the machinery — so a regression in a skipped path is
-still caught there.
+project — so a regression in a skipped path is caught there only as far as the root suites
+exercise it.
 
 A merge to `main` runs the unfiltered suite whenever anything outside those two sets changed; that
 run verifies the narrowing, and a root-only or docs-only merge does not get one. Read the
@@ -690,12 +690,14 @@ script's own argument builder, which it imports, so every command that script ru
 cannot see a bundle built some other way: it finds a direct `esbuild` call by reading each
 workspace member's `package.json` scripts as TEXT, so a package script that runs a file of its own
 which calls esbuild, or esbuild's JavaScript API, passes. `packages/ui-core`'s browser build is
-built exactly that way (`packages/ui-core/scripts/build.mjs`) and reaches no sharp. It finds the
-bundles that must use the shared script by following `dependencies` through each member's
-`package.json`, so a reach through a devDependency or a relative import across packages is
-invisible to it. bundle-smoke's `grep -q 'import("sharp")'` step reads the server bundle (`dist/server.js` in
-`apps/server`) only, so the other bundles the server's `build` makes, and `waitron-provision`
-(`dist/bin.js` in `packages/provisioning`), are not read by it.
+built exactly that way (`packages/ui-core/scripts/build.mjs`) and reaches no sharp. The bundles
+that can reach `@waitron/media` are named in the test rather than found: it pins that
+`@waitron/server`'s and `@waitron/provisioning`'s `build` scripts name the shared script, so a NEW
+member that reaches `@waitron/media` and bundles through something the first case cannot see — a
+file of its own, another bundler, or esbuild reached by path — is not flagged. bundle-smoke's
+`grep -q 'import("sharp")'` step reads the server bundle (`dist/server.js` in `apps/server`) only,
+so the other bundles the server's `build` makes, and `waitron-provision` (`dist/bin.js` in
+`packages/provisioning`), are not read by it.
 
 ## Two TypeScript compilers are installed, and that is deliberate
 

@@ -21,7 +21,7 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * entry is only correct alongside something that puts the file there before the link.
  *
  * A `waitron.commands` target must be NAMED as the outfile of an `<entry>=<outfile>` pair its own
- * member's `build` script hands to `scripts/bundle-node.mjs`, which builds every bundle.
+ * member's `build` script hands to `scripts/bundle-node.mjs`, which builds every Node bundle.
  * Only `apps/server`'s copy is read anywhere (`scripts/deploy-image-env.test.ts`), so the rest would
  * otherwise be a hardcoded list nothing checks (CLAUDE.md §2). One-directional: a build may write
  * files that are no command.
@@ -29,8 +29,9 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * LIMITATION, stated because this half reads TEXT: it reads those pairs from the build script's
  * STRING and never observes what a build writes. A build that put the file there another way — an
  * esbuild call of its own, a different wrapper, a quoted value — is reported unbuilt, and a build
- * script that merely MENTIONS a pair after the shared script's name passes. Same shape, and same reason, as the disclosures in
- * scripts/dashboard-browser-purity.test.ts and scripts/module-graph-honesty.test.ts.
+ * script that merely MENTIONS a pair after the shared script's name passes. Same shape, and same
+ * reason, as the disclosures in scripts/dashboard-browser-purity.test.ts and
+ * scripts/module-graph-honesty.test.ts.
  *
  * Lives in the ROOT project (CLAUDE.md §4): it reads every member's manifest, and a
  * package-resident guard only runs when its own package is in scope.

@@ -31,6 +31,7 @@ export function parsePairs(argv) {
 
 export function bundle(pairs, { run = execFileSync } = {}) {
   for (const { entry, outfile } of pairs) {
+    // Found on PATH: each caller keeps esbuild in its devDependencies and runs this via `pnpm run`.
     run("esbuild", esbuildArgs(entry, outfile), { stdio: "inherit" });
   }
 }
