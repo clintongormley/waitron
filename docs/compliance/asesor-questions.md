@@ -9,8 +9,9 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-23** — Q21 (when a table's invoice is issued: pre-bill first, or the invoice
-when the bill is presented) added beside Q14; Q22 (printing the ticket only on request, or never) and
+Last revised **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
+in) added beside the filing questions. Before that, **2026-09-23** — Q21 (when a table's invoice
+is issued: pre-bill first, or the invoice when the bill is presented) added beside Q14; Q22 (printing the ticket only on request, or never) and
 Q23 (backup copies held abroad or by us) added; the preparation-environment question numbered Q24.
 The same day, the open questions were rewritten as a standalone document for the advisor, in English
 and Spanish (kept outside the repository). Before that, **2026-09-13** — Q20 (zero-rate products shown as **No tax**) added. Q17 (F3 *canje*)
@@ -1198,6 +1199,47 @@ Primary-source boundary checked 2026-09-13:
 requires the cause for a non-subject operation; the committed AEAT
 `SuministroInformacion.xsd` defines the separate `N1` and `N2` values. Neither source determines the
 correct treatment for the venue's particular product.
+
+---
+
+### Q25. A void made on a later day — which VAT period does the annulment land in? (added 2026-09-24)
+
+**Why it matters.** The fiscal core voids a sale by filing an RF de anulación of the original
+invoice, and it checks nothing about the sale's date (`recordVoid`,
+`packages/core/src/record-void.ts`). No till screen or server route calls it yet (on 2026-09-24,
+`git grep recordVoid` outside `packages/payments` and the fiscal packages found only tests), so the
+product has not yet decided when a void is allowed — which part (b) below would settle. Today the
+quarterly *modelo 303* figure (`packages/reporting/src/vat-return.ts`) and the daily reports leave a
+voided sale out of the period it was ISSUED in, whenever the void happened, so a void on 5 August of
+a 4 August sale changed 4 August's recomputed VAT after that day's frozen close (*cierre Z*) had
+been taken (found by #601's review). The owner decided on 2026-09-24 that the daily reports count a
+void on the day it is made, so a later void no longer changes a closed day's re-derived figures. The
+*modelo 303* keeps its current behaviour until this question is answered.
+
+[verifactu-findings.md](verifactu-findings.md) §7 already settles that anulación is only for an
+invoice that should never have existed, and that a real sale is corrected with a factura
+rectificativa. Do not ask that. What it does not settle is the period, and whether elapsed time
+changes which mechanism applies.
+
+> Nuestro TPV podrá anular un ticket ya emitido (con el permiso correspondiente), y lo remitirá a
+> la AEAT como registro de facturación de anulación de la factura original. Entendemos, por las
+> preguntas frecuentes de la AEAT para desarrolladores, que la anulación solo procede cuando la
+> factura no debió expedirse, y que en los demás casos procede una factura rectificativa.
+>
+> **(a)** Si la anulación se registra en un día, o en un trimestre, posterior al de la factura
+> anulada, ¿en qué periodo debe reflejarse en el modelo 303: en el de la factura original, como si
+> no se hubiera expedido, o en el periodo en que se registra la anulación? Si el periodo de la
+> factura original ya se declaró, ¿cómo se regulariza?
+>
+> **(b)** ¿Hay algún plazo o circunstancia (por ejemplo, que ese periodo ya se haya declarado) a
+> partir del cual un ticket emitido por error ya no pueda anularse y deba corregirse con una factura
+> rectificativa? Nos serviría para limitar en el TPV cuándo se permite anular.
+>
+> **(c)** Nuestro cierre diario (cierre Z) es un documento interno de control de caja, no una
+> declaración, y reflejará la anulación el día en que se hace. ¿Hay algún inconveniente en que ese
+> documento interno la sitúe en un día distinto del que corresponda a efectos del IVA?
+
+This records a question; no enquiry has been sent.
 
 ---
 

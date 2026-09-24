@@ -2829,8 +2829,11 @@ image constraints under *Detail → Box image*.
     August for a 4 August sale, and 4 August's recomputed VAT went from 21.00 to 0.00. So
     `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`'s "Determinism" claim that
     re-deriving a closed day and comparing it to its snapshot is a valid audit does not hold as
-    written (a dated pointer there says so); whether the derived close should ignore later voids,
-    or the audit should compare something else, is open. `stableStringify`
+    written (a dated pointer there says so). **Owner decision 2026-09-24: a void counts on the day it is
+    made, not the day of the sale**, so a later void no longer changes a closed day's re-derived
+    figures — queued as lane B's B10. The quarterly *modelo 303* keeps today's behaviour until the
+    asesor answers `docs/compliance/asesor-questions.md` Q25 (which VAT period a later annulment
+    lands in). No till screen or server route calls `recordVoid` yet. `stableStringify`
     (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined` hashes
     differently from the row the database stores (the column drops the key); its comment now
     states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
