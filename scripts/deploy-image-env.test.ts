@@ -457,7 +457,9 @@ describe("the box image carries libvips's licence, its notices and a written sou
  * Litestream ships in the image as its own program, under Apache-2.0. Reads TEXT, like the libvips
  * block: it ties the notice's version to the pin `packages/stream` exports and proves the files and
  * the image-smoke step exist, not that the licence text is the one at the tag or that the built
- * image holds it — the image-smoke step is what looks inside the image.
+ * image holds it — the image-smoke step is what looks inside the image. It reads
+ * `litestream/NOTICES.txt` as TEXT too, comparing its `Litestream version:` line with the pin and
+ * never its module list with the binary.
  */
 describe("the box image carries Litestream's licence and a notice naming the pinned version", () => {
   const PIN_LINE = /^export const LITESTREAM_VERSION = "([0-9.]+)";$/m;
@@ -480,9 +482,6 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     );
   });
 
-  // The header line is the only thing that ties the notice file to a version, so a pin moved
-  // without rerunning scripts/litestream-notices.mjs fails here; the module list under it is not
-  // compared with the binary.
   it("ships the notices of what the binary bundles, generated for the pinned version", () => {
     const bundled = read("deploy/third-party/litestream/NOTICES.txt");
     expect(bundled.match(/^Litestream version: ([0-9.]+)$/gm)).toEqual([

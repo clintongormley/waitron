@@ -4805,6 +4805,23 @@ bench rig keeps its own Litestream download script (its version is pinned beside
 table through `scripts/setup-litestream.test.mjs`, which injects the download and the platform; the
 full box image was not built locally, only its `litestream` stage.
 
+**Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
+owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
+notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs (`vite build`,
+copied to `/app/web/`) and the print-agent bundle (`apps/print-agent`'s `build`, the same
+`bundle-node.mjs`, copied to `/app/print-agent.js` in `deploy/Dockerfile`'s `print-agent` stage)
+carry npm packages whose `LICENSE` files are left behind by bundling. The app image's
+`/app/third-party/` holds notices for libvips and Litestream only, and the print-agent image has no
+`/app/third-party/` at all. Measured 2026-09-24 in the
+`chore/litestream-notices` worktree: `apps/server/src/bin.ts` bundled with `bundle-node.mjs`'s
+options (esbuild 0.28.2, default `legalComments`, which keeps legal comments at the end of the file)
+took in 81 npm packages, 76 of which have a `LICENSE` file, and the output kept one block of legal
+comments covering 9 source files from 8 of those packages; `apps/till` built with `vite build`
+(Vite 8.3.0) contains Lit, whose source opens with a `@license` comment, and its output holds no
+`@license` or `/*!` comment at all. The other server bundles, the print-agent bundle and the dashboard and
+setup SPAs were not built. Needed: a generated notice file for each bundle — the server's and the
+SPAs' beside the Litestream one, and the print-agent's in the print-agent image.
+
 **The SQLite slice-1 preparation tasks are all landed.** Column vocabulary (P1 — #390, #393, #394,
 #396–#404, #408, #413, #414, #416); the `useVenueDb` test-helper conversion (P2 — every package
 #421–#470, plus the rule and guard #473); the change log replacing `LISTEN`/`NOTIFY` (P3 — #477);

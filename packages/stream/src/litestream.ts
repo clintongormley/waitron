@@ -7,7 +7,8 @@ import "./errors.js";
 /**
  * The one Litestream version this package runs: every measurement the design rests on was taken on
  * it. `scripts/litestream-pin.test.ts` holds it equal to the box image's, the setup script's and the
- * bench's.
+ * bench's. Moving it also means regenerating the image's Litestream notice file
+ * (`deploy/third-party/README.md`).
  */
 export const LITESTREAM_VERSION = "0.5.17";
 

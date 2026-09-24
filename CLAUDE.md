@@ -376,13 +376,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   in the browser and repeats the derivation at the server boundary.
 - **A command name is declared under `waitron.commands`, never `bin`.** Nothing builds at install
   time, so a `bin` under `dist/` is never linked by the install that reads it.
-- **A change that adds third-party code or a binary to the box image carries its licence notices
-  in the same change**, under `deploy/third-party/` (owner decision 2026-09-24). Cost: the pinned
-  Litestream shipped with its own licence alone while it bundles the Go modules it was built from,
-  several under MIT or BSD terms that ask for their notices. Guard: the third-party blocks in
-  `scripts/deploy-image-env.test.ts`, weaker than their name — they cover libvips and Litestream
-  only, and for Litestream they compare the notice file's version line with the pin, never its
-  module list with the binary.
+- **A change adding third-party code or a binary to the image carries its licence notices, shipped
+  in `/app/third-party/`** (owner, 2026-09-24). Cost: Litestream shipped without its Go modules'
+  notices. Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their
+  name — they read text, cover libvips and Litestream only, and for Litestream compare the version
+  line, not the module list. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
   its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an

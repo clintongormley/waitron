@@ -1,7 +1,10 @@
 # Third-party software in the Waitron box image
 
 The box image carries software written by others under their own licences. This folder is
-copied to `/app/third-party/` in the image (`deploy/Dockerfile`).
+copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips and
+Litestream; the npm packages bundled into the server, the web apps and the print-agent have no
+notice file yet, and the print-agent image, built by the same `deploy/Dockerfile`, has no
+`/app/third-party/` at all (`docs/backlog.md`).
 
 ## libvips and the libraries built into it
 
@@ -53,5 +56,30 @@ Version 2.0.
   the Go standard library and runtime, and every Go module the binary lists as built in. Its header
   names the Litestream version and the command that produced it,
   `node scripts/litestream-notices.mjs`, which reads the module list from `go version -m` run on
-  the pinned Linux binaries and copies each module's files unmodified from the Go module proxy.
-  Rerun it whenever the pinned version changes.
+  the pinned Linux binaries and copies each module's files from the Go module proxy unchanged,
+  except that a text with no final newline is given one.
+
+To regenerate it when the pinned version changes, set `v` to the new version and the two sums to
+the SHA-256 values `deploy/Dockerfile`'s `litestream` stage pins for the `x86_64` and `arm64`
+assets, then run this from the repository root:
+
+```sh
+v=0.5.17
+sum_x86_64=<the x86_64 sum from deploy/Dockerfile's litestream stage>
+sum_arm64=<the arm64 sum from deploy/Dockerfile's litestream stage>
+d=$(mktemp -d)
+for arch in x86_64 arm64; do
+  curl -fsSL -o "$d/$arch.tar.gz" \
+    "https://github.com/benbjohnson/litestream/releases/download/v$v/litestream-$v-linux-$arch.tar.gz"
+done
+printf '%s  %s\n' "$sum_x86_64" "$d/x86_64.tar.gz" "$sum_arm64" "$d/arm64.tar.gz" | sha256sum -c -
+for arch in x86_64 arm64; do
+  mkdir "$d/$arch" && tar -xzf "$d/$arch.tar.gz" -C "$d/$arch" litestream
+  go version -m "$d/$arch/litestream" > "$d/mods-$arch.txt"
+done
+node scripts/litestream-notices.mjs deploy/third-party/litestream/NOTICES.txt \
+  "$d/mods-x86_64.txt" "$d/mods-arm64.txt"
+```
+
+The Go toolchain that runs `go version -m` need not be the one the binaries were built with.
+Measured 2026-09-24: a go1.25.1 toolchain read binaries built with go1.25.14.
