@@ -790,9 +790,9 @@ What Task 11 left open:
   width, where the strip scrolls; a wider screen was not tried. A keyboard or screen-reader user
   then starts from the strip. **Next action:** decide whether (1) should show the id or a
   "missing menu" label, and whether (2) should focus the selected tab.
-- **Two things in the image library that the review of the `media` coverage pull request raised
-  and left for the owner** (`packages/media/src/dashboard/image-library.ts` and `image-picker.ts`;
-  found 2026-09-24, not fixed because that pull request changed tests only). (1) When the image
+- **Two things in the image library that #547's review raised and left for the owner**
+  (`packages/media/src/dashboard/image-library.ts` and `image-picker.ts`; found 2026-09-24, not
+  fixed because #547 changed tests only). (1) When the image
   picker is handed a new live-data source, the library keeps listening to the first one until its
   next load: the review removed the search that the picker test runs after the swap, and an
   invalidation on the new source then triggered no reload (`expected 2 to be greater than 2`).
@@ -2380,7 +2380,7 @@ image constraints under *Detail → Box image*.
   operations screen left uncovered because no current caller reaches them — by reading, except the
   missing-department refusal in `recordWorkingLineContexts`, which a foreign key was measured to
   block; each is listed with its reason in the pull request; 99.4/99.34/100/97.61); `media`
-  (**this pull request**, 2026-09-24 — tests for the configuration-transfer refusals of a
+  (**PR #547**, 2026-09-24 — tests for the configuration-transfer refusals of a
   label spelled in two cases and a bundle with no usable default language, search's leading or
   doubled OR, a term scored at its best field and an image at its best OR group, name and date
   ties broken by id, an edit to an unknown id reported as not found first, the upload fallback
