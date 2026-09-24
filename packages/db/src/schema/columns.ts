@@ -9,9 +9,13 @@ import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
  * Every helper below emits `text`, `integer` or `blob`, so picking the wrong helper of a group
  * leaves the generated schema byte-identical, and what separates them is the helper's NAME, its
  * read mapping and the typechecker. No column type here refuses a wrong value; the one refusal this
- * file builds is an `enumText` column's `check()` constraint. `smallCount` and `bigCount` bound
- * nothing, because SQLite's INTEGER is 64-bit whatever the name says, and the integer-digit bounds
- * of money, quantity and rate live only in `@waitron/shared`'s converters.
+ * file builds is an `enumText` column's `check()` constraint. Measured 2026-09-21, the same seven
+ * inserts against PGlite and a real `node:sqlite` file: `'not-a-uuid'`, `'not-a-day'`,
+ * `'not-a-time'`, `'{not json'`, 1000.00 into `numeric(5, 2)`, 2147483648 into `integer` and 32768
+ * into `smallint` were each refused by PostgreSQL and each ACCEPTED and stored by the SQLite column
+ * that replaces it. `smallCount` and `bigCount` bound nothing, because SQLite's INTEGER is 64-bit
+ * whatever the name says, and the integer-digit bounds of money, quantity and rate live only in
+ * `@waitron/shared`'s converters.
  */
 
 export const id = (name: string) => text(name);
@@ -89,6 +93,10 @@ export const rate = (name: string) => integer(name);
  * declaration written `as const`, `VALUES_ANNOTATED` the same declaration typed `("a" | "b")[]`.)
  * An UNANNOTATED variable is widened to `string[]` at its own declaration, before `enumText` sees
  * it, so it is that declaration that loses the values, not the call.
+ *
+ * Never conclude from the spelling that a substitution is caller-safe. Take a control that reaches
+ * the column — narrow it to a set the code does not write and watch the typechecker fail — and if
+ * that control passes, the typechecker cannot see that column and you have measured nothing.
  */
 export const enumText = <const T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
@@ -97,7 +105,9 @@ export const enumText = <const T extends string>(name: string, values: readonly 
  * A closed vocabulary declared ONCE at the top of a schema file and used to build columns. The
  * result is a column builder (`ticketState("state")`) carrying `enumValues`, for a request
  * validator at runtime and for `(typeof ticketState.enumValues)[number]` at type level. The
- * narrowing is `enumText`'s, so the table in that helper's note applies unchanged.
+ * narrowing is `enumText`'s, so the table in that helper's note applies unchanged. The `const`
+ * modifier is NOT what makes the narrowing work: removing it moves no pin in `columns.test.ts`,
+ * measured 2026-09-21.
  */
 export const enumType = <const T extends string>(values: readonly T[]) =>
   Object.assign((name: string) => enumText(name, values), {
@@ -128,8 +138,9 @@ export const enumCheck = (column: AnyColumn) => {
 /**
  * A true/false flag, stored as 0 or 1 and read back as a boolean.
  *
- * `node:sqlite` refuses to bind a JavaScript boolean; drizzle's boolean mode converts before the
- * bind, so a column declared here is safe where a hand-written `sql` fragment passing one is not.
+ * Measured on Node v26.7.0, `node:sqlite` refuses to bind a JavaScript boolean; drizzle's boolean
+ * mode converts before the bind, so a column declared here is safe where a hand-written `sql`
+ * fragment passing one is not.
  */
 export const flag = (name: string) => integer(name, { mode: "boolean" });
 
@@ -177,8 +188,10 @@ const bytes = customType<{ data: Uint8Array; driverData: Uint8Array }>({
  * Opaque bytes, handed to callers as a `Uint8Array`.
  *
  * A custom type rather than drizzle's `blob(name, { mode: "buffer" })`, which hands a caller a node
- * `Buffer`. The custom type itself stays private: its overloads also accept no name at all, so
- * exporting it directly would make `binary()` compile where every sibling helper demands a name.
+ * `Buffer`. Measured on a real `node:sqlite` file, 2026-09-21: the driver binds a `Uint8Array` or a
+ * `Buffer`, refuses a bare `ArrayBuffer`, and hands a BLOB back as a plain `Uint8Array` already.
+ * The custom type itself stays private: its overloads also accept no name at all, so exporting it
+ * directly would make `binary()` compile where every sibling helper demands a name.
  */
 export const binary = (name: string) => bytes(name);
 

@@ -16,7 +16,8 @@ export const saleVoids = table(
     reason: label("reason").notNull(),
     // tsString rather than ts, for the reason given at `sales.issuedAt`.
     voidedAt: tsString("voided_at").notNull(),
-    /** The person who authorised the void. */
+    /** The person who authorised the void. Nullable, no FK: `persons` is in @waitron/identity's
+     * migration set, not the core one. */
     voidedBy: id("voided_by"),
   },
   (t) => [

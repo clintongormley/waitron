@@ -99,9 +99,10 @@ export const sales = table(
     counterpartyLegalName: label("counterparty_legal_name"),
     counterpartyCountryCode: label("counterparty_country_code"),
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
-    // ordinary sale.
+    // ordinary sale. Plain uuid, no FK: `persons` is in @waitron/identity's migration set, not the
+    // core one.
     authorizedBy: id("authorized_by"),
-    // The operator who rang this sale, from their open session.
+    // The operator who rang this sale, from their open session. Plain uuid, no FK, as above.
     operatorId: id("operator_id"),
     // The parked working order this sale was FILED from, or NULL for a walk-up sale rung with no
     // draft. This is the SALE-IDEMPOTENCY KEY: `sales_working_order_id_key` below makes it unique,

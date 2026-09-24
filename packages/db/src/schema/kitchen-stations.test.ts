@@ -83,7 +83,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       ),
     );
     expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
-    // SQLite names the constraint in the message when it has one.
+    // A CHECK refusal names the constraint in the message.
     expect(engineErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
   });
 

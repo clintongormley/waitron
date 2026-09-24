@@ -53,6 +53,8 @@ export const workingOrders = table(
       /* v8 ignore start */
       .references(() => tills.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
+    // Nullable although `createOpenOrder` always sets it: a NULL node_id skips the FK check below,
+    // leaving room for a future non-till writer to omit it.
     nodeId: id("node_id"),
     // The human-facing order number: allocated per node from working_order_counters, printed on
     // the ticket, and typed back in to retrieve the order at any register. No UNIQUE here: the

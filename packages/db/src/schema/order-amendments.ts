@@ -29,7 +29,8 @@ export const orderAmendments = table(
     // 1-based position within THIS order's amendment chain; contiguous and hashed.
     sequenceNo: count("sequence_no").notNull(),
     kind: orderAmendmentKind("kind").notNull(),
-    // The accountable actor (the operator from the open session).
+    // The accountable actor (the operator from the open session). Plain uuid, no FK:
+    // `persons` is in @waitron/identity's migration set, not the core one.
     actorId: id("actor_id").notNull(),
     // NULL on the genesis `order_placed`; required by the app for `order_cancelled`.
     reason: label("reason"),

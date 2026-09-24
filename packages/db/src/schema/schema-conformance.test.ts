@@ -6,6 +6,10 @@
 // each table's declared foreign keys, indexes and checks against the built database with no
 // allowance list found nothing unmatched on either side.
 //
+// The three allowance lists this suite used to carry went because the objects they listed were
+// written by hand in `--custom` migrations drizzle-kit had never diffed; the flip regenerated every
+// set as one baseline, so every one of them is a declaration now.
+//
 // Two facts about the core set that the factory cannot state for a set it has not seen:
 //
 //   - Every check in `drizzle/0000_baseline.sql` is written with a `CONSTRAINT <name>` clause, so
