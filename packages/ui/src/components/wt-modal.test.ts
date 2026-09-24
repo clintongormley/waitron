@@ -182,15 +182,9 @@ test("Escape closes the modal, emits wt-close and returns focus to its trigger",
 });
 
 test("keeps the body in the tab order, whether or not there is anything to scroll", async () => {
-  // Whether the body overflows depends on the content and on the viewport, so its tab stop must
-  // not: a reader who cannot put focus in the body cannot scroll it from the keyboard. Chromium
-  // makes a text-only scrolling box focusable by itself, so the short modal below is the case that
-  // shows the component doing it.
-  //
-  // `tabIndex` is asserted rather than where focus lands, because neither focus route can tell 0
-  // from -1: `.focus()` works on both, and so does showModal()'s own initial focus, since -1 is
-  // still focusable and the body is the dialog's first focusable descendant. Measured 2026-09-20
-  // by setting the component to -1: no other test the file held then failed.
+  // A reader who cannot focus the body cannot scroll it from the keyboard. Chromium makes a scrolling
+  // text box focusable by itself, so the short modal is the case that shows the component doing it.
+  // `tabIndex` is asserted because `.focus()` and showModal()'s initial focus both work at -1 too.
   const short = await openModal();
   const shortBody = short.shadowRoot!.querySelector<HTMLElement>(".body")!;
   expect(shortBody.tabIndex).toBe(0);

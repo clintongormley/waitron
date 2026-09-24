@@ -1,10 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 
-/**
- * Drives a host's re-render on a fixed interval so time-based UI (KDS order-age bands) advances
- * live between action-refreshes WITHOUT any server push — the pull-only order-timing mechanism
- * (see the order-timing-alerts spec §5.2). The widget binds an age/clock property to `now`.
- */
+/** Re-renders the host on a fixed interval, so time-based UI advances without a server push. */
 export class TickingClock implements ReactiveController {
   now = Date.now();
   #host: ReactiveControllerHost;
@@ -18,8 +14,8 @@ export class TickingClock implements ReactiveController {
   }
 
   hostConnected(): void {
-    // Idempotent: a reconnect / DOM adoption can call this twice without an intervening
-    // hostDisconnected. Without clearing first, the old interval leaks and updates double-fire.
+    // A reconnect can call this twice without a hostDisconnected between, which would leak the old
+    // interval.
     this.hostDisconnected();
     this.#timer = setInterval(() => {
       this.now = Date.now();

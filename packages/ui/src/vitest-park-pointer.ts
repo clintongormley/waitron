@@ -1,27 +1,16 @@
 import type { BrowserCommand } from "vitest/node";
 
-/**
- * The slice of Playwright's `Page` that `parkPointer` touches. Only the playwright provider's browser
- * command context carries a `page` (see `provider.getCommandsContext` in @vitest/browser-playwright),
- * so it is cast narrowly at the boundary rather than typed onto `BrowserCommandContext` itself — the
- * same boundary cast every command in these configs uses for `page`.
- */
 interface PlaywrightMousePage {
   mouse: { move(x: number, y: number): Promise<void> };
 }
 
 /**
- * Moves the real mouse cursor off every element, so nothing is left matching CSS `:hover`.
- *
- * The cursor position belongs to the PAGE, and every test file in a worker shares one page — so a
- * `userEvent` click or hover parks the cursor at those coordinates for every later test, in this
- * file and in every file that runs after it. Whatever then renders under those coordinates is
- * `:hover`ed with no test having asked for it, and `wt-button`'s hover rule dims it to
- * `--wt-opacity-hover`, which axe scores as a colour-contrast violation.
+ * Moves the real mouse cursor off every element, so nothing is left matching CSS `:hover`. The cursor
+ * belongs to the page every test file in a worker shares, so an earlier test's click can leave a later
+ * test's element hovered, and `wt-button`'s hover dimming then fails axe's colour-contrast check.
  *
  * `userEvent.unhover()` cannot do this: @vitest/browser implements it as a hover of `html > body`,
- * which parks the cursor in the MIDDLE of the page, on top of whatever is mounted there. Negative
- * coordinates are outside the viewport, so no element can be under them.
+ * which parks the cursor in the middle of the page. Negative coordinates are outside the viewport.
  */
 export const parkPointer: BrowserCommand<[]> = async (context) => {
   const { page } = context as unknown as { page: PlaywrightMousePage };
@@ -29,11 +18,7 @@ export const parkPointer: BrowserCommand<[]> = async (context) => {
 };
 
 /**
- * Ready-to-spread `commands` fragment. Every browser-mode vitest config whose tests run the
- * `parkPointer` hook — those that import `a11y-helpers.ts`, and the local `test-helpers.ts` copies
- * in apps/till and apps/dashboard that call `commands.parkPointer()` — spreads this into
- * `test.browser.commands`, so the `beforeEach(() => commands.parkPointer())` finds a registered
- * command instead of throwing `TypeError`. `scripts/park-pointer-registered.test.ts` guards that
- * every such package registers it.
+ * Spread into `test.browser.commands` by every config whose tests call `commands.parkPointer()`, which
+ * otherwise throws `TypeError`. Guard: `scripts/park-pointer-registered.test.ts`.
  */
 export const parkPointerCommands = { parkPointer };

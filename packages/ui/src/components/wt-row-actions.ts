@@ -54,15 +54,9 @@ export class WtRowActions extends LitElement {
   ];
 
   @property() label = "";
-  /** Defaults to the row-actions kebab; a menu anchored elsewhere (e.g. an account menu) passes
-   * its own icon name so this stays the one popover-menu primitive instead of a duplicate. */
   @property() icon = "kebab";
-  /** wt-icon's own size scale — a per-row kebab wants the default; a banner-level trigger (e.g.
-   * the account menu) reads better larger. */
   @property() iconSize: WtIconSize = "md";
-  /** Which trigger edge the popup lines up with. "start" (the default) pins the popup's left edge
-   * under the trigger so a per-row menu opens into the margin beside the table; "end" pins its right
-   * edge for a menu anchored at the trailing edge (e.g. the banner account menu) so it opens inward. */
+  /** The trigger edge the popup lines up with; "end" suits a menu at the trailing edge. */
   @property() align: "start" | "end" = "start";
   @state() private expanded = false;
   @query("button") private trigger!: HTMLButtonElement;

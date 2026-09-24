@@ -385,10 +385,8 @@ test("wt-change bubbles and crosses shadow boundaries", async () => {
     },
     { once: true },
   );
-  // Clicked programmatically, as wt-input's and wt-switch's twin tests do: a nested shadow root is
-  // outside applyTokens' reach (it adopts the token sheet on the document only), so this combobox
-  // has no padding, border or min-height and its trigger's box is empty — a real pointer click
-  // has nothing to land on. The dispatch under test does not care how the click arrived.
+  // Clicked programmatically: a nested shadow root is outside applyTokens' reach, so the trigger has
+  // no box for a real pointer click to land on.
   const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
   trigger.click();
   await el.updateComplete;

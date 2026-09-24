@@ -1,4 +1,3 @@
-// packages/ui/src/category-color.ts
 /** WCAG relative luminance of an #rrggbb colour. */
 function luminance(hex: string): number {
   const c = hex

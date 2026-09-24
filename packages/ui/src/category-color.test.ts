@@ -1,4 +1,3 @@
-// packages/ui/src/category-color.test.ts
 import { expect, test } from "vitest";
 import { readableTextColor, CATEGORY_PALETTE, isHexColor } from "./category-color.js";
 

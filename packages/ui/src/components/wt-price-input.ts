@@ -3,18 +3,9 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
-/**
- * A money field with a trailing button that shows the pricing unit ("each", "kg", …). The product
- * editor uses one per variant/product price: typing emits `wt-change` with the raw string value,
- * and pressing the unit button emits `wt-unit-click` for the consumer to open its unit picker.
- *
- * The unit button's visible text IS its accessible name, so a consumer must supply `unit`; an empty
- * unit leaves the button nameless.
- */
+/** The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless. */
 @customElement("wt-price-input")
 export class WtPriceInput extends LitElement {
-  // Delegates .focus() on the host to the inner <input> — the product editor focuses the price
-  // field directly when a variant row opens.
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [
@@ -111,8 +102,6 @@ export class WtPriceInput extends LitElement {
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
 
-  // A named field uses its semantic name for both the input's id and name; an unnamed one falls
-  // back to a per-instance id so its label association never collides with another field's.
   private readonly generatedInputId = uniqueId("wt-price-input");
   private readonly errorId = uniqueId("wt-price-input-error");
 
@@ -122,8 +111,7 @@ export class WtPriceInput extends LitElement {
   }
 
   private onUnitClick(event: Event): void {
-    // Stop the native click before re-emitting, or a consumer listening across the shadow boundary
-    // observes the change twice (see the design system's event-discipline rule).
+    // Stop the native click before re-emitting, or a consumer across the shadow boundary sees two.
     event.stopPropagation();
     this.dispatchEvent(
       new CustomEvent("wt-unit-click", { detail: {}, bubbles: true, composed: true }),

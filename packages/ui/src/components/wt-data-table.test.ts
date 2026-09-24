@@ -124,8 +124,6 @@ test("wt-sort-change bubbles and crosses shadow boundaries, so an ancestor outsi
   expect(received).toEqual({ sortKey: "name", sortDirection: "ascending" });
 });
 
-// The ordering tests below share one shape: a single sortable column whose values are the whole
-// point of the case, and a row key per row so the rendered order can be read back.
 type SortRow = { id: string; value: string | number | null };
 
 async function sortTable(sortRows: SortRow[]): Promise<WtDataTable<SortRow>> {
@@ -577,9 +575,6 @@ test("a row whose parent is absent renders at the top level", async () => {
   expect(row.getAttribute("aria-level")).toBe("1");
 });
 
-// Nesting and selection arrived from two different branches and were merged by hand, so they are
-// checked together as well as apart: a checkbox at every depth, a nested row's own key on the
-// event, and select-all counting the rows a collapsed branch has hidden as not there.
 test("tree mode and selection work together, and collapsing takes rows out of select-all", async () => {
   const el = await treeTable({ selectable: true, selected: [] });
   const boxKeys = () =>
@@ -877,8 +872,6 @@ test("noMatchesMessage shows when a search excludes every row", async () => {
 });
 
 test("search matches a column that exposes only a sortValue", async () => {
-  // The name column has neither searchValue nor sortValue, so it contributes nothing; count has a
-  // sortValue but no searchValue, exercising the String(sortValue(row) ?? "") fallback branch.
   const el = await table({
     searchable: true,
     columns: [
@@ -1584,9 +1577,7 @@ test("labels a row's activator 'Open row' when the consumer names none", async (
 });
 
 test("an in-cell control's click is not also wired to the row activator", async () => {
-  // A wiring check only: a synthetic .click() dispatches straight on the Edit button, so it proves
-  // the activator's @click is not bound to the row as well (no double-fire). It does NOT prove the
-  // z-index layering — that needs a real coordinate click, in the next test.
+  // A synthetic click proves wiring only; the next test's real click proves the layering.
   const clicked: string[] = [];
   const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
   el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!.click();
@@ -1601,19 +1592,13 @@ test("paints the focused clickable row from a token", async () => {
   // Before focus, the cell paints no raised background of its own.
   expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(30, 40, 50)");
   activate.focus();
-  // :focus-within (focus is on the row's activator button) paints the row cell from the token.
-  // Asserted via :focus-within, not :hover — getComputedStyle cannot force a hover state.
+  // Via :focus-within, because getComputedStyle cannot force a hover state.
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
 test("a real pointer click on an in-cell control does not fall through to the row activator", async () => {
-  // The load-bearing z-index test. The stretched activator overlays the WHOLE row, so a real mouse
-  // click at the Edit button would reach the activator (and fire rowClick) unless the in-cell control
-  // is lifted above it. A synthetic .click() can't show this — it dispatches on the element whatever
-  // paints on top — so this uses a real pointer click (userEvent, backed by the Playwright provider),
-  // which hit-tests the button's actual on-screen position. Proven by deletion: dropping the z-index
-  // lift makes Playwright unable to reach the obscured Edit button (see the task-8 fix report's
-  // negative control), so this test would fail there.
+  // The stretched activator overlays the whole row, so only a real pointer click, which hit-tests
+  // on-screen position, shows whether the Edit button is lifted above it.
   const clicked: string[] = [];
   const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
   const edit = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!;

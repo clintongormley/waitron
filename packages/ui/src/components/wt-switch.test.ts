@@ -28,8 +28,6 @@ test("gives each instance a unique id so labels never collide", async () => {
   const inputB = b.shadowRoot!.querySelector("input")!;
   const label = a.shadowRoot!.querySelector("label")!;
   expect(inputA.id).not.toBe(inputB.id);
-  // Pins down the actual "wt-switch-N" shape uniqueId() produces, and that the label's `for`
-  // really points at it — not just that two instances' ids differ from each other.
   expect(inputA.id).toMatch(/^wt-switch-\d+$/);
   expect(inputB.id).toMatch(/^wt-switch-\d+$/);
   expect(label.htmlFor).toBe(inputA.id);
@@ -56,9 +54,6 @@ test("emits wt-change with the new checked state", async () => {
 });
 
 test("wt-change bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
-  // See wt-input.test.ts's identical-purpose test for why the nested-shadow-root + document
-  // listener is required to make bubbles and composed both load-bearing (a light-DOM mount()
-  // can't distinguish "composed: false" from "composed: true" at all).
   const el = await mountInShadowRoot("<wt-switch></wt-switch>");
   let received: CustomEvent<{ checked: boolean }> | undefined;
   document.addEventListener(
@@ -81,14 +76,8 @@ test("does not leak the native change event outside the component", async () => 
   host.addEventListener("change", () => native++);
 
   const input = el.shadowRoot!.querySelector("input") as HTMLInputElement;
-  // Dispatch a synthetic composed change event rather than input.click(): a
-  // checkbox's native `change` event from real user activation is
-  // composed: false by spec, so it can never cross the shadow boundary at
-  // all, with or without stopPropagation() — that would make this
-  // assertion pass unconditionally regardless of whether the component
-  // guards against leaking. Constructing the event with composed: true
-  // explicitly forces the code path this test actually exists to check,
-  // matching the pattern wt-input's own (sound) leak test already uses.
+  // Composed on purpose: a real click's native `change` is not composed, so it could never leak and
+  // the assertion would pass whatever the component does.
   input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 
   expect(native).toBe(0);
@@ -111,10 +100,7 @@ test("checked track paints from the primary token", async () => {
 });
 
 test("disabled switch dims via the disabled-opacity token", async () => {
-  // Mirrors wt-button's and wt-input's identically-named tests. Unlike those two, wt-switch
-  // applies the opacity to :host([disabled]) itself (see base-styles.ts's disabledStyles doc
-  // comment for why it can't share that fragment), so the assertion reads the host's own computed
-  // style rather than an inner element's.
+  // wt-switch dims the host itself, not an inner element.
   const el = await mount("<wt-switch disabled></wt-switch>");
   host.style.setProperty("--wt-opacity-disabled", "0.3");
   expect(getComputedStyle(el).opacity).toBe("0.3");
@@ -135,11 +121,7 @@ test("focusing the host delegates focus to the inner input", async () => {
 });
 
 test("the input's hit target does not extend beyond the host's bounds", async () => {
-  // Regression guard: the input used to be `position: absolute; inset: 0; height: 100%` plus
-  // `min-height: var(--wt-tap-min)` on the INPUT itself, which stretched it to 44px tall inside an
-  // 18px-tall host — overflowing far enough to steal clicks from anything stacked directly below
-  // the switch. The tap target must come from the host/control being at least 44px, not from the
-  // input escaping its container.
+  // An input overflowing its host steals clicks from whatever sits below the switch.
   const el = await mount("<wt-switch></wt-switch>");
   const input = el.shadowRoot!.querySelector("input") as HTMLInputElement;
   const hostRect = el.getBoundingClientRect();

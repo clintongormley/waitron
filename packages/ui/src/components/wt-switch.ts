@@ -5,7 +5,6 @@ import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../
 
 @customElement("wt-switch")
 export class WtSwitch extends LitElement {
-  // Delegates .focus() on the host to the inner <input> — same rationale as wt-button/wt-input.
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [
@@ -96,8 +95,6 @@ export class WtSwitch extends LitElement {
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property() name = "";
 
-  // Unique per instance so a page with multiple wt-switch elements never
-  // collides label `for`/input `id` pairs.
   private readonly inputId = uniqueId("wt-switch");
 
   private onChange(event: Event): void {

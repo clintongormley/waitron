@@ -368,12 +368,8 @@ test("pins the badge to the trigger's top trailing corner", async () => {
 });
 
 test("a menu given no label ships an unnamed button, and opens from its leading edge", async () => {
-  // Not a virtue: `label` has no wording of its own to fall back on, so an unlabelled menu renders
-  // `aria-label=""` and its button has no accessible name at all. The nearest control is
-  // wt-row-actions.a11y.test.ts's "detects a missing accessible name on the hamburger", which
-  // REMOVES the attribute rather than leaving it empty — a different DOM state with the same axe
-  // outcome. Nothing scans an unlabelled menu with axe today. What this pins is only that the
-  // empty default is what reaches the attribute, rather than some invented English.
+  // Not a virtue: an unlabelled menu's button has no accessible name, and no axe test scans this
+  // state. This pins only that no invented English fills the gap.
   const el = (await mount("<wt-row-actions></wt-row-actions>")) as WtRowActions;
   expect(el.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe("");
   expect(el.align).toBe("start");

@@ -240,7 +240,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * button covers the row and calls this on click. Per-row controls (the selection checkbox, the
    * Edit/Delete menu) sit above the activator, so they are never swallowed. A tree table ignores it. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
-  /** The accessible name for each row's activator button; defaults to a generic label. */
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";
@@ -257,7 +256,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * Works in both flat and tree mode — the header and every visible row (at any depth) gets a box. */
   @property({ type: Boolean }) selectable = false;
   @property({ attribute: false }) selected: readonly string[] = [];
-  /** Accessible name for each row's checkbox; defaults to a generic label when not supplied. */
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
 
@@ -449,12 +447,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#persistView();
   }
 
-  /**
-   * The comparator both the plain and tree rendering paths share: nulls sort last, numbers
-   * compare numerically, everything else compares as a locale-aware string, and a tie (or an
-   * unsortable column) falls back to each row's original position in `this.rows` so the sort
-   * is stable and, with no sortable column selected, a no-op.
-   */
+  /** Nulls sort last in either direction, and a tie keeps the incoming order. */
   #sortByColumn(
     rows: readonly Row[],
     column: DataTableColumn<Row> | undefined,
@@ -480,8 +473,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
-  /** The text a row exposes to the search box: every column's searchValue, or its sortValue as a
-   * fallback, joined so a term can match any column. */
   #searchHaystack(row: Row): string {
     return this.columns
       .map((column) =>
@@ -500,8 +491,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return term === "" || this.#searchHaystack(row).includes(term);
   }
 
-  /** The rows left after the toolbar: every active filter (AND), then the search term. The single
-   * choke point every render path funnels through, so flat and tree mode narrow identically. */
   #visibleRows(): readonly Row[] {
     const active = this.columns.flatMap((column) => {
       const selected = this.#activeFilter(column);

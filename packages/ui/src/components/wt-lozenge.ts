@@ -3,11 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { readableTextColor, isHexColor } from "../category-color.js";
 
-/**
- * A pill for a category. With a colour it fills that background and sets the text to black or white
- * for contrast; the colour is data, applied inline (the one no-hardcoded-chrome exemption). With no
- * colour it is a neutral outlined chip whose chrome reads tokens.
- */
+/** The category colour is data, so it is applied inline rather than from a token. */
 @customElement("wt-lozenge")
 export class WtLozenge extends LitElement {
   static override styles = [
@@ -49,12 +45,8 @@ export class WtLozenge extends LitElement {
   override render() {
     const colored = isHexColor(this.color);
     const style = colored ? `background:${this.color};color:${readableTextColor(this.color)}` : "";
-    // A real <slot>, not `${this.textContent}`: Lit only re-runs render() when a reactive property
-    // changes, and a list that reuses this element by index (e.g. the products modal's category
-    // list) can swap in a different category whose colour happens to match the previous one — only
-    // 24 palette colours, so collisions are common. `color` would then be unchanged, render() would
-    // never re-fire, and a captured `this.textContent` snapshot would go stale while the slotted
-    // light-DOM content (owned by the caller, not by this element's own render cycle) stays correct.
+    // A <slot>, not `${this.textContent}`: an element reused for another category with the same colour
+    // changes no reactive property, so render() would not re-run and a copied text would go stale.
     return html`<span class=${colored ? "" : "none"} style=${style}><slot></slot></span>`;
   }
 }

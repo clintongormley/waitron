@@ -19,7 +19,6 @@ test("FLOOR_ASPECT is the single 3:2 canvas ratio", () => {
   expect(FLOOR_ASPECT).toBe(3 / 2);
 });
 
-// sizeForCapacity buckets: <=2 -> S, 3-4 -> M, 5-6 -> L, >=7 -> XL, nullish -> M.
 test.each([
   [1, "S"],
   [2, "S"],
@@ -66,9 +65,6 @@ test("snapRotation snaps to the nearest 15 degrees and wraps at 360", () => {
 });
 
 test("snapRotation normalizes a negative rotation into the [0, 360) contract", () => {
-  // The exported helper's documented contract is [0, 360) for ANY input. The rotate control only ever
-  // ADDS +STEP so a negative never reaches it through the UI today, but the helper is exported and its
-  // contract must hold: -8 snaps to the -15 detent, which must wrap UP to 345, never stay negative.
   expect(snapRotation(-8)).toBe(345);
   expect(snapRotation(-7)).toBe(0);
   expect(snapRotation(-15)).toBe(345);
@@ -81,8 +77,6 @@ test("clampPermille pins a coordinate into the 0..1000 canvas range", () => {
   expect(clampPermille(1400)).toBe(1000);
 });
 
-// defaultTraySlot: the tap-to-place slot is the canvas centre (500,500) nudged right by one GRID_STEP
-// per already-placed table (so successive placements don't stack exactly), clamped into range.
 test("defaultTraySlot centres the first placement and nudges each later one right by a grid step", () => {
   expect(defaultTraySlot(0)).toEqual({ posX: 500, posY: 500 });
   expect(defaultTraySlot(1)).toEqual({ posX: 550, posY: 500 });
@@ -90,12 +84,9 @@ test("defaultTraySlot centres the first placement and nudges each later one righ
 });
 
 test("defaultTraySlot clamps posX into the 0..1000 range once the nudges run off the edge", () => {
-  // 500 + 20 * 50 = 1500, clamped to 1000; posY is always the centre.
   expect(defaultTraySlot(20)).toEqual({ posX: 1000, posY: 500 });
 });
 
-// isTableZoneless: a table belongs under the "no zone" tab when it has no zone OR points at a zone
-// not among the currently-active ones (a deactivated zone is never nulled on the table).
 test("isTableZoneless is true for a null zone and for a zone missing from the known set", () => {
   const known = new Set(["z1", "z2"]);
   expect(isTableZoneless({ zoneId: null }, known)).toBe(true);
@@ -106,8 +97,6 @@ test("isTableZoneless is false for a table whose zone is active", () => {
   expect(isTableZoneless({ zoneId: "z1" }, new Set(["z1", "z2"]))).toBe(false);
 });
 
-// buildZoneTabs: the active zones sorted by displayOrder, mapped to { key, name }, plus a trailing
-// no-zone tab (key null, the passed label) iff some table is zoneless or points at a deactivated zone.
 test("buildZoneTabs orders the zone tabs by displayOrder", () => {
   const zones = [
     { id: "z2", name: "Terraza", displayOrder: 2 },
@@ -144,8 +133,6 @@ test("buildZoneTabs appends the no-zone tab for a table pointing at a deactivate
   ]);
 });
 
-// resolveActiveTabKey: an explicit request wins; `undefined` (nothing picked yet) falls back to the
-// first tab's key, or `undefined` when there are no tabs at all.
 test("resolveActiveTabKey falls back to the first tab when nothing is requested", () => {
   const tabs = [
     { key: "z1", name: "A" },
@@ -168,8 +155,6 @@ test("resolveActiveTabKey honours an explicit request, including the null no-zon
 });
 
 test("resolveActiveTabKey falls back to the first tab when the requested key is no longer present", () => {
-  // A zone the operator had selected can be deactivated/removed, leaving `requested` naming a tab that
-  // is gone; without this fallback both screens filter every table against a dead key → an empty floor.
   const tabs = [
     { key: "z1", name: "A" },
     { key: "z2", name: "B" },
@@ -178,13 +163,10 @@ test("resolveActiveTabKey falls back to the first tab when the requested key is 
 });
 
 test("resolveActiveTabKey falls back to the first tab when a null request has no no-zone tab", () => {
-  // `null` (the no-zone tab) is equally stale once every table has a zone and the no-zone tab is gone.
   const tabs = [{ key: "z1", name: "A" }];
   expect(resolveActiveTabKey(null, tabs)).toBe("z1");
 });
 
-// toFloorTable: the placement half maps verbatim (null coords default to 0); the occupancy half is
-// supplied separately (a live read-model on the till, neutral "free" defaults on the dashboard).
 test("toFloorTable maps a placed table's coordinates and occupancy", () => {
   const table = toFloorTable(
     {
@@ -259,9 +241,6 @@ test("toFloorTable defaults null coordinates to 0 and a missing tab total to nul
   expect(table.state).toBe("free");
 });
 
-// KDS order-timing alerts (design §7.3): timingBand threads through from the occupancy half so the
-// map/tray token (fed by this exact function, `till-floor-screen.ts`'s `#toFloorTable`) can render the
-// same flash-red accent the till's list card shows.
 test("toFloorTable threads a supplied timingBand through onto the FloorTable", () => {
   const table = toFloorTable(
     {

@@ -56,14 +56,10 @@ export class WtDialog extends LitElement {
    * binding `.dismissible=${false}`, never `?dismissible`. */
   @property({ type: Boolean }) dismissible = true;
 
-  // Shadows the native ARIAMixin accessor (same pattern as wt-button) so a caller-supplied
-  // aria-label reaches the inner shadow <dialog> when there is no `heading` to derive a name
-  // from. When `heading` IS set, aria-labelledby (pointing at the <h2>) takes precedence — see
-  // render() below.
+  // Shadows the native ARIAMixin accessor so a caller's aria-label reaches the inner <dialog> when
+  // there is no `heading` to name it.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
 
-  // Unique per instance so a page with multiple wt-dialog elements never collides the <h2> id
-  // that aria-labelledby points at.
   private readonly headingId = uniqueId("wt-dialog-heading");
 
   @query("dialog") private dialog!: HTMLDialogElement;
@@ -92,12 +88,8 @@ export class WtDialog extends LitElement {
     if (!this.dismissible) event.preventDefault();
   }
 
-  // Toggled imperatively (not via a reactive property) so that discovering
-  // footer content — at first render and again on every later `slotchange` —
-  // never schedules an extra Lit update cycle just to flip a CSS class. The
-  // footer's padding/divider only apply once something is actually
-  // projected into the "footer" slot; an empty footer must not leave a bare
-  // bar across the bottom of the dialog.
+  // Toggled imperatively rather than through a reactive property, so a `slotchange` does not
+  // schedule another Lit update just to flip a class.
   private updateHasFooter(): void {
     const hasFooter = this.footerSlot.assignedNodes({ flatten: true }).length > 0;
     this.footerEl.classList.toggle("has-content", hasFooter);

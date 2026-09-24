@@ -2,42 +2,21 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import type { FloorTable } from "../floor.js";
-// `TimingBand` is a plain data shape from the GENERIC `@waitron/shared` package (not a server
-// package) — same rationale as `floor.ts`'s identical import.
 import type { TimingBand } from "@waitron/shared";
 
-/**
- * The optional locale-dependent suffix words the token renders next to its DATA. Copy travels as props
- * (the `@waitron/ui` convention — see wt-switch's `label`), never as hardcoded locale strings, so a
- * consumer app threads its own i18n through: `covers` follows the cover count ("plazas"/"covers"),
- * `toServe` follows the pending-to-serve count ("por servir"/"to serve"). Absent ⇒ just the number.
- * `forgotten` is the accessible name for the order-timing FORGOTTEN marker (KDS order-timing alerts,
- * design §7.3) — absent ⇒ the marker renders `aria-hidden` (decorative, colour/shape only), exactly
- * like `covers`/`toServe`'s "absent ⇒ bare" convention. This package carries no inline copy of its
- * own, so an app that wants the marker to have a name (rather than being purely visual) supplies one.
- */
+/** Localised words the token puts beside its data; this package carries no copy of its own. */
 export interface TableTokenLabels {
   covers?: string;
   toServe?: string;
-  /** The PREFIX word for the reserved chip (the localised "Reserved"), rendered before the "HH:MM" time
-   *  ("Reserved 20:30"), unlike the count-suffix labels above. Absent ⇒ just the time. */
+  /** A prefix, unlike the suffixes above: "Reserved 20:30". */
   reserved?: string;
-  /** The accessible name for the forgotten marker (KDS order-timing alerts, design §7.3) — the localised
-   *  "Forgotten". Absent ⇒ the CSS-only marker stays `aria-hidden`. */
+  /** The forgotten marker's accessible name; without one the marker is `aria-hidden`. */
   forgotten?: string;
 }
 
 /**
- * The shared occupancy TOKEN: FP-1's live-floor card visual, extracted verbatim so the till's list card
- * (FP-2 Task 6) and the floor map (`<wt-floor-canvas>`) render the SAME markup, class names and
- * state-accent colours and can never drift apart. Purely presentational — it owns no interaction; the
- * consumer wraps it in whatever tappable/draggable element it needs and reads the placement itself.
- *
- * State accent (a coloured left edge) is DATA-driven from {@link FloorTable.state}, using the exact FP-1
- * tokens: `free → --wt-color-success`, `open-tab → --wt-color-primary`, `delivery-pending →
- * --wt-color-danger`. The manual status badge's arbitrary colour rides on an inline style (never chrome
- * CSS), exactly as FP-1's card, so an unreviewed status colour can never fail the no-hardcoded-chrome
- * guard.
+ * Presentational only: the consumer wraps it in whatever tappable or draggable element it needs. The
+ * manual status's colour is data, so it rides on an inline style rather than in the stylesheet.
  */
 @customElement("wt-table-token")
 export class WtTableToken extends LitElement {
@@ -232,49 +211,25 @@ export class WtTableToken extends LitElement {
     `,
   ];
 
-  /** The table this token renders. */
   @property({ attribute: false }) table!: FloorTable;
 
-  /** Optional localisable suffix words (see {@link TableTokenLabels}). */
   @property({ attribute: false }) labels: TableTokenLabels = {};
 
-  /**
-   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
-   * colour/motion as the only signal, and the flash must honour prefers-reduced-motion). `undefined`
-   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
-   * deterministic assertion — the same injectable-override shape till-floor-screen/
-   * till-station-queue/till-expo-screen already use (KDS order-timing alerts, design §7.3).
-   *
-   * NO TickingClock here — this token is a pure presentational leaf fed by whatever `.table` the
-   * consumer (`till-floor-screen`, via `wt-floor-canvas`) supplies on ITS OWN refresh cadence; the
-   * same controller ruling `till-floor-screen.ts` documents applies unchanged.
-   */
+  /** Overrides the `prefers-reduced-motion` query, which is read on every render when unset. */
   @property({ attribute: false }) reducedMotion?: boolean;
 
-  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
-   *  prefers-reduced-motion media query unless {@link reducedMotion} is injected. Mirrors
-   *  till-floor-screen/till-station-queue/till-expo-screen. */
   #prefersReducedMotion(): boolean {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** The order-timing accent class for the table's timingBand (KDS order-timing alerts, design
-   *  §7.3): undefined/'fresh' renders nothing (the occupancy accent is untouched); 'warm'/'overdue'
-   *  get the steady age-* class; 'forgotten' additionally gets 'flash' unless motion is reduced.
-   *  Space-prefixed (or empty) so it interpolates directly after the shape class. Mirrors
-   *  till-floor-screen's identical #timingAccentClass. */
+  /** Space-prefixed, so it interpolates straight after the shape class. */
   #timingAccentClass(band: TimingBand | undefined): string {
     if (band === undefined || band === "fresh") return "";
     const flash = band === "forgotten" && !this.#prefersReducedMotion();
     return ` age-${band}${flash ? " flash" : ""}`;
   }
 
-  /** The forgotten marker (design §7.3) — a non-colour tell rendered UNCONDITIONALLY whenever
-   *  timingBand is 'forgotten' (never gated on reducedMotion itself, exactly like
-   *  till-floor-screen's .badge.forgotten text chip). Its accessible name is OPTIONAL and
-   *  consumer-supplied ({@link TableTokenLabels.forgotten}) — present, the marker carries
-   *  role="img"/aria-label; absent, it is aria-hidden (purely decorative, colour/shape only), the
-   *  same "absent ⇒ bare" convention covers/toServe already use. */
+  /** A non-colour tell, shown whatever the motion preference. */
   #forgottenMarker(t: FloorTable): TemplateResult | typeof nothing {
     if (t.timingBand !== "forgotten") return nothing;
     const label = this.labels.forgotten;
@@ -285,11 +240,7 @@ export class WtTableToken extends LitElement {
 
   override render(): TemplateResult | typeof nothing {
     const t = this.table;
-    // Nothing to draw until a table is assigned (a bare element mounted before its `.table` prop set).
     if (t == null) return nothing;
-    // The stored shape drives a distinct corner radius (see the `.shape-*` rules). An unplaced tray
-    // token carries no shape (`null`) and falls back to `rect` — the default rounded rect it drew
-    // before, so the tray is visually unchanged.
     return html`
       <div
         class="card state-${t.state} shape-${t.shape ?? "rect"}${this.#timingAccentClass(
@@ -335,8 +286,6 @@ export class WtTableToken extends LitElement {
     `;
   }
 
-  /** The state-specific occupancy body — only the open tab's running total is DATA the token can show
-   * without a locale word; the free / delivery lines are the consumer's to add via its own copy. */
   #occupancy(t: FloorTable): TemplateResult | typeof nothing {
     if (t.state === "open-tab" && t.tabTotal != null) {
       return html`<span class="occupancy tab-open"

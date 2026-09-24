@@ -25,9 +25,6 @@ test("clicking the header opens it and emits wt-toggle", async () => {
 });
 
 test("wt-toggle bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
-  // See wt-input.test.ts's identical-purpose test for why the nested-shadow-root + document
-  // listener is required to make bubbles and composed both load-bearing (a light-DOM mount()
-  // can't distinguish "composed: false" from "composed: true" at all).
   const el = await mountInShadowRoot(
     '<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>',
   );

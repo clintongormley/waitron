@@ -23,9 +23,6 @@ function table(overrides: Partial<FloorTable> = {}): FloorTable {
   };
 }
 
-/** Mounts a token, optionally assigning `labels` and — for the order-timing accent's reduced-motion
- *  gate — an injectable `reducedMotion` (the same test-deterministic override
- *  `till-station-queue`/`till-expo-screen`/`till-floor-screen` already use). */
 async function mountToken(
   t: FloorTable,
   labels?: TableTokenLabels,
@@ -100,7 +97,6 @@ test("shows the manual status badge with its DATA colour, mirroring FP-1", async
   const badge = el.shadowRoot!.querySelector<HTMLElement>(".badge.status")!;
   const dot = badge.querySelector<HTMLElement>(".dot")!;
   expect(badge.textContent?.trim()).toBe("Reservada");
-  // The arbitrary status colour rides on an inline style (never chrome CSS), exactly as FP-1's card.
   expect(badge.style.borderColor).toBe("rgb(10, 20, 30)");
   expect(dot.style.background).toBe("rgb(10, 20, 30)");
 });
@@ -108,7 +104,6 @@ test("shows the manual status badge with its DATA colour, mirroring FP-1", async
 test("shows the reserved chip (label + time) only when a reservation time is set", async () => {
   const reserved = await mountToken(table({ reservedTime: "20:30" }), { reserved: "Reservada" });
   const chip = reserved.shadowRoot!.querySelector(".badge.reserved");
-  // The locale label precedes the wall-clock time ("Reservada 20:30").
   expect(chip?.textContent?.replace(/\s+/g, " ").trim()).toBe("Reservada 20:30");
 
   const none = await mountToken(table({ reservedTime: null }));
@@ -137,8 +132,6 @@ test("the state accent paints from the success token for a free table", async ()
   expect(getComputedStyle(card).borderLeftColor).toBe("rgb(1, 2, 3)");
 });
 
-// The stored table shape must render DISTINCTLY (Copilot: round/square/rect changed the enum but nothing
-// visual — a dead control). Each shape maps to its own class and a distinct, token-driven corner radius.
 test("renders each table shape as a distinct class and corner radius", async () => {
   const round = await mountToken(table({ shape: "round" }));
   const square = await mountToken(table({ shape: "square" }));
@@ -147,21 +140,17 @@ test("renders each table shape as a distinct class and corner radius", async () 
   expect(cardOf(round).classList.contains("shape-round")).toBe(true);
   expect(cardOf(square).classList.contains("shape-square")).toBe(true);
   expect(cardOf(rect).classList.contains("shape-rect")).toBe(true);
-  // The three classes resolve to three DIFFERENT radii (round = full/pill, square = sm, rect = md),
-  // proving the shape is a live visual and not just a class name.
+  // A class alone would pass with no visual difference, so the radii are compared too.
   const radiusOf = (el: HTMLElement) => getComputedStyle(cardOf(el)).borderTopLeftRadius;
   expect(new Set([radiusOf(round), radiusOf(square), radiusOf(rect)]).size).toBe(3);
 });
 
 test("an unplaced (shapeless) token falls back to the rounded-rect shape", async () => {
-  // A tray token carries no shape (null); it keeps the default rounded rect it drew before, so the
-  // tray is visually unchanged by the shape work.
   const bare = await mountToken(table({ shape: null }));
   expect(bare.shadowRoot!.querySelector(".card")!.classList.contains("shape-rect")).toBe(true);
 });
 
-/** Answers the reduced-motion query with `matches`, delegating every other query (theming, layout)
- *  to the real `matchMedia`. Returns the undo. */
+/** Returns the undo. */
 function stubReducedMotion(matches: boolean): () => void {
   const QUERY = "(prefers-reduced-motion: reduce)";
   const original = window.matchMedia.bind(window);
@@ -174,9 +163,6 @@ function stubReducedMotion(matches: boolean): () => void {
   };
 }
 
-// ── KDS order-timing alerts (design §7.3, fix round 1): the flash-red requirement on the MAP/canvas
-// token, mirroring till-floor-screen's LIST card treatment so the escalation reads as one visual
-// language on whichever floor view a manager happens to be looking at. ──────────────────────────────
 describe("order-timing accent (timingBand)", () => {
   test("renders no timing accent when timingBand is undefined (fresh) — occupancy accent untouched", async () => {
     const el = await mountToken(table({ state: "free" }));
@@ -215,8 +201,7 @@ describe("order-timing accent (timingBand)", () => {
     const card = el.shadowRoot!.querySelector(".card")!;
     expect(card.classList.contains("age-forgotten")).toBe(true);
     expect(card.classList.contains("flash")).toBe(false);
-    // The marker is the non-colour tell — it renders regardless of the motion setting, exactly like
-    // till-floor-screen's .badge.forgotten text chip (never gated on reducedMotion itself).
+    // The marker is the non-colour tell, so reduced motion does not remove it.
     expect(el.shadowRoot!.querySelector("[data-forgotten]")).not.toBeNull();
   });
 
