@@ -4910,7 +4910,7 @@ counting toward the recovery page (`apps/server/src/node-entry.ts` put the count
 the container's entrypoint now refuses any argument (`server.entry_arguments_refused`) instead of
 booting a second server when `docker compose run app <command>` is given no `--entrypoint`. #573's
 review left three findings, each reproduced by its Codex seat with a real second process. The owner
-decided the first two on 2026-09-24, and A18d (branch `feat/venue-lock-liveness`) does them:
+decided the first two on 2026-09-24, and #608 did them:
 (1) a venue folder held by a STUCK process restart-looped the box and never reached the recovery
 page. Every holder now keeps `venue.holder.json` beside `venue.lock` with a heartbeat. A refused
 start counts, as `provisioning.database_holder_stalled`, when that heartbeat is 30 s old or more
@@ -4924,7 +4924,11 @@ another start counted after a clear. Still open from (2): the level is read befo
 another start writes can still push a server restarting at that moment onto the page (older than
 #573). Still open, the owner's call: (3) only an unwrapped `provisioning.database_in_use` is
 recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path wraps
-them today). Also
+them today). Left by #608, no behaviour change decided: the watchdog appends its line to
+`waitron.log` without creating the log folder, so on a machine with no such folder that line is
+lost (the JSON report and stderr still carry it; a box's `logs` volume always exists); the
+recovery page has Spanish wording for the stalled-holder row only, every other row is English;
+only a store's `close()` waits for the watchdog thread to end, not a bare `release()`. Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into several test files.
@@ -5579,7 +5583,7 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
     never on the unauthenticated recovery page — with an optional description of what they were
     doing, and a setting to send them automatically. The owner's aim: the more bugs reported, the
     better.
-  - **Where the freeze reports are (A18d, branch `feat/venue-lock-liveness`).** One JSON file per
+  - **Where the freeze reports are (#608).** One JSON file per
     process the watchdog kills, named `holder-frozen-<killedAt>-<pid>.json` (the time with `:` and `.`
     turned into `-`), in `<logDir>/crash-reports/`. On a box that is `/var/lib/waitron/logs/crash-reports/`
     on the persistent `logs` volume (`deploy/compose.yml`), outside the venue database, so a restore
