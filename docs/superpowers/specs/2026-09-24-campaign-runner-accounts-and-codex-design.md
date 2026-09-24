@@ -95,6 +95,16 @@ The stall check keeps its three signals, with two changes:
   while planning: a Claude seat can outlast the idle limit with a quiet log). It is never applied to
   the driver's own engine, because the driver is always in the tree, and another lane on the same
   account would then keep a stuck firing alive.
+  - For a Claude seat the search covers only the project folders named after a checkout under
+    `/tmp` or `$TMPDIR` (`-private-tmp-*`, `-private-var-folders-*`, `-tmp-*`), because
+    `claude-seat.sh review-run` refuses any other checkout, and a Claude-driven lane on the same
+    login writes under `projects` all the time. Two costs: `claude-seat.sh review-branch` accepts
+    any checkout, so a `review-branch` seat run from an ordinary worktree is not counted; and any
+    Claude session working under `/tmp` still counts. The signal is weak even where it applies:
+    `claude-seat.sh` runs `claude -p --no-session-persistence`, so a seat writes no transcript,
+    only tool-result files (reported by the final-review fix wave, 2026-09-24).
+  - For a Codex seat there is no such confinement, so on a shared Codex login another Codex-driven
+    lane can keep a Claude lane's stuck Codex seat alive until the 4-hour limit.
 
 The CPU-use signal is unchanged for both engines.
 
@@ -141,11 +151,14 @@ A one-time manual step, helped by `~/waitron-campaign-shared/new-account.sh clau
   `settings.json`. It does not touch plugins: they are installed into the new folder after login,
   the same ones `~/.claude` has (`superpowers` and `security-guidance`, both from
   `claude-plugins-official`, as of 2026-09-24).
-- **codex:** symlinks `AGENTS.md`, `skills` and `config.toml` to `~/.codex`.
+- **codex:** symlinks `AGENTS.md`, `skills`, `config.toml` and `hooks.json` to `~/.codex` (`hooks.json`
+  carries the start-of-session test-first instruction and the model guard). Plugins — Codex's
+  superpowers among them, which the linked `config.toml` enables — are installed after login, as for
+  Claude. (`hooks.json` and the Codex plugins were added during implementation, 2026-09-24.)
 
 The script refuses a folder that already exists. Logging in and installing plugins stay manual:
 `CLAUDE_CONFIG_DIR=<folder> claude`, then `/login` and `/plugin install` for each plugin above; or
-`CODEX_HOME=<folder> codex login`.
+`CODEX_HOME=<folder> codex login`, then install the plugins `~/.codex` has.
 
 ## Testing
 
