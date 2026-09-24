@@ -1,4 +1,3 @@
-// The public surface of @waitron/db. Re-exports only — no logic here.
 export { lockVenueDatabase, openVenueDatabase } from "./client.js";
 export type {
   Database,
@@ -10,9 +9,6 @@ export type {
 } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
-// Claiming a batch of job rows by stamping them, in one statement (`job-claim.ts`). A caller that
-// claims by SELECTING and stamps nothing writes its own selection, because on this engine the
-// claim is its transaction boundary rather than a clause.
 export { claimRows } from "./job-claim.js";
 export type { ClaimSpec } from "./job-claim.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and
@@ -184,28 +180,17 @@ export {
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**
- * Testing infrastructure exported for reuse by a module package's OWN test suite: the small,
- * dependency-light readers every immutability suite in this repo is built from, and the crafted
- * engine refusal a translator's unit test hands in. Nothing that drags a test-only dependency in
- * with it belongs here — it would become a transitive dependency of the production surface for
- * every consumer of this package.
- *
- * `packages/fiscal-verifactu`'s `inmutabilidad.test.ts` is the first consumer outside this package:
- * it reproduces `immutability.test.ts`'s pattern against its own module-owned table and needs the
- * same wrapped-driver-error readers this package's own suite uses.
+ * Testing infrastructure exported for reuse by a module package's OWN test suite. Nothing that
+ * drags a test-only dependency in with it belongs here — it would become a transitive dependency of
+ * the production surface for every consumer of this package.
  */
 export { captureError, driverErrorCode, engineErrorMessage } from "./testing/errors.js";
 export { refusalError, type Refusal, type RefusalError } from "./testing/refusals.js";
 
-// english-only.ts's GENERIC_PACKAGES/SPANISH_WORDS/findSpanish/sourceFilesIn are deliberately
-// NOT re-exported here, despite costing nothing at runtime in isolation. `english-only.ts`
-// computes `PACKAGES_ROOT` from `import.meta.dirname` at MODULE LOAD TIME (a top-level const,
-// not inside a function), and `drizzle-kit generate` loads this barrel transitively — any
-// downstream package whose Drizzle schema imports a core table from `@waitron/db` (every module
-// package does) pulls this file in through `drizzle-kit`'s own CJS-transformed loader, where
-// `import.meta.dirname` is `undefined` and the top-level `join(undefined, "..", "..")` throws
-// immediately, breaking `drizzle-kit generate` for that package. Verified live: adding this
-// export broke `pnpm --filter @waitron/fiscal-verifactu exec drizzle-kit generate` outright.
+// english-only.ts is deliberately NOT re-exported here. It computes `PACKAGES_ROOT` from
+// `import.meta.dirname` at MODULE LOAD TIME, and `drizzle-kit generate` loads this barrel
+// transitively through its own CJS-transformed loader, where `import.meta.dirname` is `undefined`
+// and the top-level `join` throws.
 export { installChangeFeed } from "./change-feed.js";
 export { CORE_CHANGE_SOURCES } from "./classification.js";
 // The in-process change feed. Only the subscribe half is public: draining the log and handing the

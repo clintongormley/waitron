@@ -33,13 +33,10 @@ const NEW_ID_SQL =
   `substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))`;
 
 /**
- * The changed row's own identity, as a JSON object.
- *
- * PostgreSQL read `changed_row ->> 'id'` out of the row rendered as JSON and then dropped null
- * keys with `jsonb_strip_nulls`, so a table with no `id` column and a row whose `id` was null both
- * produced `{"type": …}` alone. Measured on PGlite against that function, 2026-09-22. Here the two
- * have to be told apart before the statement is built, because `new."id"` on a table with no such
- * column is a PREPARE error rather than a null — and sixteen of the declared sources are keyless.
+ * The changed row's own identity, as a JSON object. A table with no `id` column and a row whose
+ * `id` is null both produce `{"type": …}` alone, but the two have to be told apart before the
+ * statement is built, because `new."id"` on a table with no such column is a PREPARE error rather
+ * than a null.
  */
 function identitySql(row: "new" | "old", type: string, hasId: boolean): string {
   const literal = quoteLiteral(type);
@@ -54,8 +51,7 @@ function identitySql(row: "new" | "old", type: string, hasId: boolean): string {
  * The whole `resources` array for one version of a row, built as text and parsed back with
  * `json()`.
  *
- * Concatenation rather than `json_group_array` over a subquery: both work inside a trigger body
- * (measured on Node v26.7.0 against `node:sqlite`, 2026-09-22), and this one is a single
+ * Concatenation rather than `json_group_array` over a subquery, because this one is a single
  * expression with no row ordering to reason about. `json()` is what makes the result land as an
  * ARRAY rather than as a string — SQLite's JSON functions carry a subtype that `json_object`
  * honours.
@@ -64,8 +60,6 @@ function resourcesSql(row: "new" | "old", source: ChangeSource, hasId: boolean):
   const related = (source.related ?? []).map((relation) => {
     const column = plainName("column", relation.column);
     const object = `json_object('type', ${quoteLiteral(relation.type)}, 'id', ${row}."${column}")`;
-    // A related identity the row does not carry is left out entirely, which is what the PL/pgSQL's
-    // `if related_id is not null` did.
     return ` || case when ${row}."${column}" is not null then ',' || ${object} else '' end`;
   });
   return `json('[' || ${identitySql(row, source.type, hasId)}${related.join("")} || ']')`;
@@ -80,7 +74,7 @@ function recordSql(row: "new" | "old", source: ChangeSource, hasId: boolean): st
 }
 
 /**
- * Install as the table owner. Events identify changed resources; business values stay in the DB.
+ * Events identify changed resources; business values stay in the DB.
  *
  * The triggers write their event into `change_log` inside the caller's own transaction and signal
  * nothing out of the database. Who takes those rows out again, and when a listener may hear about
@@ -88,26 +82,18 @@ function recordSql(row: "new" | "old", source: ChangeSource, hasId: boolean): st
  *
  * `change_log` is never one of `sources`: `CORE_CHANGE_SOURCES` in `./classification.ts`.
  *
- * **Three triggers per source, with the source's arguments baked in.** PostgreSQL carried one
- * generic PL/pgSQL function reading `TG_ARGV` and `TG_OP`, and one `after insert or update or
- * delete` trigger per table. SQLite has neither stored functions nor a trigger covering more than
- * one event, so the arguments are resolved here and each event gets its own statement — the shape
- * `installAppendOnlyTriggers` (`@waitron/store`) and `0001_behavioural_triggers.sql` already use.
+ * **Three triggers per source, with the source's arguments baked in**, because SQLite has neither
+ * stored functions nor a trigger covering more than one event.
  *
- * **An update writes two rows, old then new, and an update that changes nothing writes none.** The
- * PL/pgSQL opened with `NEW is not distinct from OLD`; a SQLite row trigger fires either way, so
- * the silence is bought with a `when` clause comparing every column with `is not`, which treats
- * null the way `is distinct from` does. The column list is read back from the database rather than
- * from the schema, because what the trigger has to compare is what the table actually has.
+ * **An update writes two rows, old then new, and an update that changes nothing writes none.** A
+ * SQLite row trigger fires either way, so the silence is bought with a `when` clause comparing
+ * every column with `is not`, which treats null the way `is distinct from` does. The column list is
+ * read back from the database rather than from the schema, because what the trigger has to compare
+ * is what the table actually has.
  *
- * **Dropped and recreated rather than created if absent**, because `create or replace trigger` is
- * what this replaced: a source whose declared type or related columns change gets the new
- * definition on the next boot rather than keeping the old one for the life of the file.
- *
- * **One loss, recorded rather than worked around: there is no `ENABLE ALWAYS` here.** On
- * PostgreSQL that flag made the trigger fire under a logical-replication apply worker, which skips
- * ordinary triggers. SQLite has no apply worker and no such flag, and no product code replicates
- * (CLAUDE.md §3); whatever restores replication decides this again.
+ * **Dropped and recreated rather than created if absent**, so a source whose declared type or
+ * related columns change gets the new definition on the next boot rather than keeping the old one
+ * for the life of the file.
  */
 export async function installChangeFeed(
   db: Database | Transaction,

@@ -9,38 +9,25 @@ import "./errors.js";
 /**
  * Which environment a database can be stamped for. A package-local union, deliberately NOT
  * `apps/server`'s identically-shaped `DeploymentEnvironment` type — this package must never import
- * from `apps/server` — but a union all the same, not a bare `string`: narrowing this at compile
- * time is what makes an unrepresentable value (e.g. `"staging"`, a stray `process.env.NODE_ENV`) a
- * `tsc` error instead of a runtime `deployment_environment_ck` violation discovered only once
- * `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
- * `Entorno` (`registro-row.ts`) closes one layer down.
+ * from `apps/server` — but a union all the same, so an unrepresentable value is a `tsc` error
+ * instead of a runtime `deployment_environment_ck` violation.
  */
 export type DeploymentEnvironment = "production" | "preproduction";
 
 /**
  * Whether the `deployment` table exists in the file behind this handle.
  *
- * **`sqlite_master` rather than `pragma table_info`, because a table name BINDS here.** Measured on
- * Node v26.7.0 against `node:sqlite`: `pragma table_info(?)` is refused at prepare time with
- * `near "?": syntax error`, and the same pragma with the name written into the statement text
- * returns its rows — so a pragma probe would have to build SQL by concatenation, which `CLAUDE.md`
- * §3 allows only with an escape or a validate-and-throw. A catalogue read needs neither.
+ * **`sqlite_master` rather than `pragma table_info`, because a table name BINDS here.**
+ * `pragma table_info(?)` is refused at prepare time, so a pragma probe would have to build SQL by
+ * concatenation, which `CLAUDE.md` §3 allows only with an escape or a validate-and-throw.
  *
  * **Probing at all, rather than running the read and catching the refusal**, is what lets these
  * readers keep their contract of answering for a database whose migrations have not run: catching
  * would mean matching the engine's refusal text, which is a string this repository does not own.
  *
- * The catalogue is per FILE — a venue handle sees the venue file's tables and nothing else, pinned
- * by `packages/store/src/index.test.ts`.
- *
- * {@link readMirrorConfig} and {@link readNodeMembership} probe their own tables the same way and
- * point here for the reason.
- *
- * Exported because one caller outside this file needs the two halves of {@link
- * readDeploymentEnvironment}'s `null` told apart: `waitron-provision venue` STAMPS a migrated
- * directory that carries no row, and must refuse one whose schema was never created at all, where
- * the insert would be met by `no such table: deployment`. Every other caller must keep treating the
- * two as one thing — see the `null` paragraph below.
+ * Exported because `waitron-provision venue` must tell the two halves of {@link
+ * readDeploymentEnvironment}'s `null` apart. Every other caller must keep treating the two as one
+ * thing.
  */
 export async function deploymentTableExists(db: Database): Promise<boolean> {
   const present = await db.execute<{ name: string }>(
@@ -53,17 +40,10 @@ export async function deploymentTableExists(db: Database): Promise<boolean> {
  * The environment this database was stamped for, or `null` if it has none.
  *
  * `null` covers BOTH "the table does not exist yet" and "the table is empty", and callers must not
- * try to tell them apart: on a first-ever boot the migration that creates the table has not run,
- * and on a database predating this feature the table exists but is empty. Both mean the same
- * thing — nothing recorded what this database is for — and both are handled identically.
+ * try to tell them apart: both mean nothing recorded what this database is for.
  *
- * {@link deploymentTableExists} is what makes the first half of that true — see it for why the
- * existence of the table is read off the catalogue rather than discovered by running the select.
- *
- * The return type is narrowed to `DeploymentEnvironment | null`, not a bare `string`, because
- * the `deployment_environment_ck` check in `./schema/deployment.js` is what makes this honest: no
- * row can exist in this column outside `'production'`/`'preproduction'`, so a value read back here
- * is one of those two by construction, never a value merely assumed to be safe.
+ * The narrowed return type is honest because the `deployment_environment_ck` check in
+ * `./schema/deployment.js` admits no other value into the column.
  */
 export async function readDeploymentEnvironment(
   db: Database,
@@ -79,7 +59,7 @@ export async function readDeploymentEnvironment(
 /**
  * Records which environment this database belongs to. Idempotent for the same value; a DIFFERENT
  * value is refused rather than overwritten, because the rows already written under the first one
- * cannot be moved (the design's §2). A node's role lives on `node_roles` and is not touched here.
+ * cannot be moved.
  */
 export async function stampDeployment(
   db: Database,
@@ -97,8 +77,7 @@ export async function stampDeployment(
 }
 
 /** Which role a node plays — a `primary` writes and originates; a `mirror` holds no singleton duties
- * and boots behind a read-only gate. Narrowed so an unrepresentable value is a `tsc` error, not a
- * runtime CHECK violation. */
+ * and boots behind a read-only gate. */
 export type DeploymentMode = "primary" | "mirror";
 
 /** Whether a node holds the venue's singleton duties (the AEAT submitter and payment reconciler) —
@@ -106,7 +85,7 @@ export type DeploymentMode = "primary" | "mirror";
 export type SingletonRole = "primary" | "secondary";
 
 /** Whether `node_roles` exists behind this handle — read off the catalogue for the reason given on
- * {@link deploymentTableExists}. What lets the readers below answer before migrations have run. */
+ * {@link deploymentTableExists}. */
 async function nodeRolesTableExists(db: Database): Promise<boolean> {
   const present = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name = ${"node_roles"}`,
@@ -164,11 +143,11 @@ export async function setDeploymentMode(
 /**
  * Sets one node's mode on a caller's transaction, creating the node's row if it has none. `mirror`
  * co-sets `singleton_role = 'secondary'` in the same write, so the pair `node_roles_role_valid_ck`
- * forbids is never written even transiently; `primary` leaves `singleton_role` as it is — which of
- * the two a primary holds is the promote action's call. Nothing in the database refuses another
- * caller this write. `scripts/write-path-tables.test.ts` flags a `node_roles` write written in one
- * of the statement or builder shapes its `detector` matches, in the production source under each
- * app's and package's `src`, outside this file; its header lists what it cannot see.
+ * forbids is never written even transiently; `primary` leaves `singleton_role` as it is. Nothing in
+ * the database refuses another caller this write. `scripts/write-path-tables.test.ts` flags a
+ * `node_roles` write written in one of the statement or builder shapes its `detector` matches, in
+ * the production source under each app's and package's `src`, outside this file; its header lists
+ * what it cannot see.
  */
 export async function setDeploymentModeTx(
   tx: Transaction,

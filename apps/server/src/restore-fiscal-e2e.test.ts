@@ -1,11 +1,6 @@
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
 // which is what makes this an end-to-end proof rather than a fixture: the append-only triggers on
 // `registros_facturacion`, and the schema every assertion reads, are the ones a box would carry.
-// `useVenueDb` is deliberately not used: it migrates through `runMigrations`
-// (`packages/db/src/testing/venue-db.ts:169`), which hands drizzle a folder and a table name and
-// nothing else (`packages/db/src/migrate.ts:37-40`), so it never reaches the trigger installer —
-// a database it built could only answer the ledger-immutability case with a trigger this file had
-// installed itself.
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

@@ -65,7 +65,7 @@ describe("seedNode", () => {
 
   it("inserts one node for the tenant + location and returns its id", async () => {
     // seedNode takes the location as given, so build it first: a node FKs it, and
-    // there is deliberately no seedLocation helper (only seedTenant and seedNode exist).
+    // there is deliberately no seedLocation helper.
     await seedTenant(db);
     const [loc] = await db
       .insert(locations)
@@ -109,8 +109,7 @@ describe("seedKitchenStation", () => {
     const { location } = await seedVenue();
     const id = await seedKitchenStation(db, { locationId: location });
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
-    // column's own mapping turns it back into a boolean. That is why the key reads `isDefault`
-    // here — the shape of the read changed, the values asserted did not.
+    // column's own mapping turns it back into a boolean.
     const rows = await db
       .select({ name: kitchenStations.name, isDefault: kitchenStations.isDefault })
       .from(kitchenStations)

@@ -24,18 +24,10 @@ afterEach(async () => {
  * a sibling CHECK on the same table, and the message alone also accepts any error whose text
  * happens to name the constraint — a wrapper reproducing the failed SQL among them.
  *
- * The identity comes from `errcode` on the error itself, because on the path this suite takes
- * nothing wraps it. Every case below rejects from an awaited drizzle query builder, and that path
- * hands back the engine's own error: measured on Node v26.7.0 by logging the empty-list case below,
- * a plain `Error` whose own properties are `stack`, `message`, `code`, `errcode` and `errstr`, with
- * `code` the constant `"ERR_SQLITE_ERROR"`, `errcode` 275 and `cause` undefined — which is why the
- * `.cause` this helper used to require is not there to require.
- *
- * **That is a fact about this path, not about the driver.** `db.run` wraps the same refusal in
- * drizzle's `DrizzleError` and puts the engine's error on `.cause` (the same refusal, taken down
- * both paths on the same runtime, 2026-09-23). Nothing breaks either way: `refusalCode` walks the
- * cause chain and `engineErrorMessage` falls back across it, so a case added here through `run`
- * would still be read correctly — it would just not match the shape described above.
+ * Every case below rejects from an awaited drizzle query builder, which hands back the engine's own
+ * error with no `.cause`; `db.run` would wrap it in drizzle's `DrizzleError` instead. Either is
+ * read correctly: `refusalCode` walks the cause chain and `engineErrorMessage` falls back across
+ * it.
  */
 async function rejectsWithRefusal(
   promise: Promise<unknown>,
@@ -90,11 +82,9 @@ describe("invoice_locales", () => {
   });
 
   it("rejects an empty locale list", async () => {
-    // The trap this constraint exists for, which survives the engine change: a CHECK whose
-    // expression is NULL is SATISFIED, so a length function returning NULL on an empty list would
-    // let this row through. `json_array_length('[]')` is 0, not NULL — measured on Node v26.7.0
-    // against `node:sqlite`, with `json_array_length(null)` as the control, which IS null and is
-    // accepted by the same CHECK.
+    // The trap this constraint exists for: a CHECK whose expression is NULL is SATISFIED, so a
+    // length function returning NULL on an empty list would let this row through.
+    // `json_array_length('[]')` is 0, not NULL.
     await rejectsWithRefusal(insertLocales([]), CHECK_VIOLATION, /locations_invoice_locales_len/);
   });
 
@@ -106,13 +96,3 @@ describe("invoice_locales", () => {
     );
   });
 });
-
-/*
- * LOSS, from the storage swap: the `withTransaction transaction context` case is deleted.
- *
- * It opened a transaction and read back the `app.tenant_id` session setting, asserting it was
- * never set — the database holds one taxpayer, so there is no tenant to scope a session to
- * (spec §1). SQLite has no session-setting facility, so there is no setting to read and nothing
- * for the assertion to distinguish: any wording would pass against an engine that could not have
- * failed it. The property is structural here rather than checked.
- */

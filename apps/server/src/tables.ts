@@ -44,9 +44,9 @@ function requirePlacementInt(value: number, max: number, field: string): void {
  *
  * Asked BEFORE the write rather than read off the refusal afterwards. The engine's foreign-key
  * refusal is the whole message `FOREIGN KEY constraint failed` — no table, no column, no
- * constraint name (`packages/db/src/constraint-target.ts` states this and names this caller), and
- * `dining_tables` carries a location FK and a status FK beside the zone one, so a refusal cannot be
- * attributed to any of the three.
+ * constraint name (`packages/db/src/constraint-target.ts` states this), and `dining_tables`
+ * carries a location FK and a status FK beside the zone one, so a refusal cannot be attributed to
+ * any of the three.
  *
  * `dining_tables_zone_fk` is still in the schema and is still what makes a dangling `zone_id`
  * impossible; this check only decides what the caller is TOLD. The two can disagree only if the

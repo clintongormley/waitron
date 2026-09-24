@@ -10,9 +10,8 @@ import "@waitron/shared";
  * The rule exists because a code is a translation key and may already sit in a persisted record.
  * Neither applies to this one. It is thrown by `migrationOptionsFor` before the host finishes
  * booting — earlier than any tenant scope, any `incidents` row, or any display layer — so no stored
- * value and no localisation bundle references it. `packages/db/src/errors.ts` documents TWO prior
- * clean renames made on the same reasoning — that file says the code "has been renamed twice, and
- * both renames were clean", and enumerates both.
+ * value and no localisation bundle references it. `series.not_found` was renamed twice on the same
+ * reasoning, both times inside #12 (`10b16fd57`).
  *
  * The prefix had to change because `server.*` is reserved for facts about the host PROCESS
  * (`apps/server/src/errors.ts` says so in its own doc comment), and "a migration set is not where
@@ -31,7 +30,7 @@ import "@waitron/shared";
  * `git log --all -S"server.tenant_not_found"` returns nothing — and its own comment calls it
  * "Deliberately NOT `server.*`". So it shows the naming rule being applied up front; it does not
  * show a rename. The prior renames are `series.not_found`'s, and there are TWO of them, both
- * enumerated in `packages/db/src/errors.ts`.
+ * inside #12 (`10b16fd57`).
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

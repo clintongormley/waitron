@@ -32,10 +32,7 @@ afterEach(async () => {
 
 describe("package public surface (./index.js)", () => {
   it("opens a database and runs migrations via the package root", async () => {
-    // The `driver` assertion this case used to open with is gone with the tag itself
-    // (`client.ts:29-31`): there is one engine, so there is nothing for a consumer to read off a
-    // handle to tell which one it got. What is left is the end-to-end claim — open, migrate, query
-    // — using only names the barrel exports.
+    // Open, migrate, query — using only names the barrel exports.
     const directory = mkdtempSync(join(tmpdir(), "waitron-db-root-"));
     directories.push(directory);
     const store = await openVenueDatabase(directory);
@@ -52,9 +49,6 @@ describe("package public surface (./index.js)", () => {
 
   // `tenancy.test.ts` imports its subjects from the deep paths (`./schema/tenants.js`,
   // `./tenancy.js`), never from `./index.js`, so it cannot catch a re-export deleted from the root.
-  // The brief lists `withTransaction` and the three tables (`tenants`, `locations`, `tills`) under
-  // "Produces" — this is the one test that pins them as part of the actual package surface a
-  // consumer imports.
   it("re-exports withTransaction and the tenancy tables from the package root", () => {
     expect(withTransaction).toBeTypeOf("function");
     expect(getTableName(tenants)).toBe("tenants");

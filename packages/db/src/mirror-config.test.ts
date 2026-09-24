@@ -7,8 +7,6 @@ import { isRefusal } from "./unique-violation.js";
 import { captureError } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// The accessors are pure SQL logic — upsert and read of one node's row.
-
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 // A fixed v4 UUID standing in for the primary's nodeId (the mirror's sync origin).
@@ -22,9 +20,7 @@ const SAMPLE: Parameters<typeof writeMirrorConfig>[2] = {
 };
 
 // A database with NO migration set applied, so `mirror_config` does not exist — the state of a
-// primary that has never been adopted as a mirror. Its own `useVenueDb` rather than the migrated
-// one the accessors' round-trip uses: the helper applies its sets in `beforeAll`, so one handle
-// cannot be both migrated and unmigrated.
+// primary that has never been adopted as a mirror.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 

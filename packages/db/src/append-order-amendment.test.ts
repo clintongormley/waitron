@@ -2,25 +2,13 @@
  * `appendOrderAmendment`'s per-order hash chain: the genesis shape, the link, the stored hash's
  * coverage, and that overlapping appends land as one gap-free chain.
  *
- * THREE LOSSES, from the storage swap:
- *  - the `select … for update` on the parent `working_orders` row is DELETED, not translated.
- *    SQLite has no row locks and drizzle's SQLite query builder has no `.for()`. What serialises
- *    writers instead is the venue file's write queue — one write transaction on the file at a time
- *    (`packages/store/src/write-queue.ts`, and `append-order-amendment.ts`'s own header says the
- *    same at the call site). So the last case here no longer shows that a LOCK held under
- *    contention; it shows that the queue serialises overlapping callers. The control that used to
- *    back it — delete `.for("update")` and watch every writer collide on
- *    `order_amendments_chain_position_key` — has nothing left to delete. The receipt for the queue
- *    itself, with a control in the other direction, is `racePair` in
- *    `packages/catalogue/test/fixtures.ts`.
- *  - the append-only case was a LAYERED proof, and one layer is left: the case is now simply
- *    that the append-only trigger refuses.
- *  - the chain is read back through the Drizzle export rather than raw SQL. A raw `select` of
- *    `is_first_entry` answers 0 or 1, not a boolean, and `verifyAmendmentChain` reads that field.
+ * What serialises overlapping writers is the venue file's write queue
+ * (`packages/store/src/write-queue.ts`), so the last case shows the queue serialising them. The
+ * receipt for the queue itself, with a control in the other direction, is `racePair` in
+ * `packages/catalogue/test/fixtures.ts`.
  *
- * `order_amendments` is append-only for EVERY caller, so nothing can clean it up between tests —
- * the table only grows. Each test therefore seeds its OWN working order and scopes its reads to
- * that order's id rather than reading a table-wide total that would drift.
+ * The suite runs with `resetPerTest: false`, so `order_amendments` only grows across tests: each
+ * test seeds its OWN working order and scopes its reads to that order's id.
  *
  * A second LOCATION is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps
  * in. There is one taxpayer row: a second `tenants` row cannot be inserted.
@@ -129,8 +117,7 @@ describe("order_amendments append helper", () => {
    * Through the Drizzle export rather than raw SQL, for two reasons the engine forces: a raw
    * `select` of `is_first_entry` returns 0 or 1 where `verifyAmendmentChain` reads a boolean, and
    * `event_at` needs no projection at all — it is stored as the exact ISO instant
-   * `appendOrderAmendment` truncated to whole seconds, where PostgreSQL's `timestamptz` had to be
-   * rendered back with `to_char` before `Date.parse` saw the instant the hash committed. */
+   * `appendOrderAmendment` truncated to whole seconds. */
   async function readAmendments(order: string): Promise<VerifiableAmendment[]> {
     return suite.db
       .select({
@@ -246,8 +233,7 @@ describe("order_amendments append helper", () => {
 
   it("serialises overlapping appends to one order into a gap-free, verifiable chain", async () => {
     // The subject: N callers append to ONE fresh order at once and all N commit with contiguous
-    // positions 1..N and one unbroken hash chain. See this file's header for what arranges that
-    // now and what the PostgreSQL version proved instead.
+    // positions 1..N and one unbroken hash chain. See this file's header for what arranges that.
     const WRITERS = 10;
     const order = await openOrder(TILL_A1, nodeA);
     // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a

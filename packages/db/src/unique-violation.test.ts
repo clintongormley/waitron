@@ -15,9 +15,9 @@ function wrapped(wrappers: number, tail: unknown): unknown {
  * Every fixture here carries a NUMBER on `errcode`, which is what `node:sqlite` discriminates a
  * refusal by: `code` is the constant `"ERR_SQLITE_ERROR"` on every failure alike, so a fixture
  * spelling its refusal on `code` states nothing this predicate can read, and a case built that way
- * answers `false` whichever refusal it meant. The three numbers below are the engine's own, measured
- * on Node v26.7.0 by refusing one real write of each kind — a second row on a unique index (2067),
- * a repeated `integer primary key` (1555), and a child row naming no parent (787).
+ * answers `false` whichever refusal it meant. The three numbers below are the engine's own: a
+ * second row on a unique index (2067), a repeated `integer primary key` (1555), and a child row
+ * naming no parent (787).
  */
 const UNIQUE_INDEX = 2067;
 const PRIMARY_KEY = 1555;
@@ -34,17 +34,17 @@ describe("isUniqueViolation", () => {
   });
 
   it("recognises a primary-key collision as the same class", () => {
-    // SQLite splits what PostgreSQL folded into one SQLSTATE: a primary key refuses under its own
-    // result code. A caller asking "was this key already taken?" must get the same answer for both,
-    // which is why `UNIQUE_VIOLATION` is a list (./sql-state.ts).
+    // A primary key refuses under its own result code. A caller asking "was this key already
+    // taken?" must get the same answer for both, which is why `UNIQUE_VIOLATION` is a list
+    // (./sql-state.ts).
     expect(isUniqueViolation(Object.assign(new Error("dup"), { errcode: PRIMARY_KEY }))).toBe(true);
   });
 
   it("recognises a violation wrapped in a cause chain", () => {
-    // Drizzle wraps a failed query in a DrizzleQueryError whose own fields are undefined; a guard
-    // that only inspects the top level would misreport a genuine violation as something else
-    // entirely. (This driver hands most refusals over unwrapped — measured in ./tenancy.test.ts —
-    // so the walk is what makes the predicate indifferent to which.)
+    // A refusal from `db.run` arrives as drizzle's `DrizzleError`, whose own `errcode` is undefined
+    // and whose `.cause` carries the engine's error; a guard that only inspected the top level
+    // would misreport it. Other paths hand the refusal over unwrapped, so the walk is what makes
+    // the predicate indifferent to which.
     const inner = Object.assign(new Error("dup"), { errcode: UNIQUE_INDEX });
     expect(
       isUniqueViolation(new Error("outer", { cause: new Error("mid", { cause: inner }) })),

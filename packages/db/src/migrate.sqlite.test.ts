@@ -9,20 +9,8 @@ import { runMigrations } from "./migrate.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 
 /**
- * `runMigrations` against a real file, through Drizzle's own migrator rather than the layered
- * probe that step 13 used — the probe reads each set's SQL and executes the statements itself, so
- * it cannot show that the journal, the folder layout and the migrator agree.
- *
- * **This is the migrator's only suite.** `migrate.test.ts` beside it drove the two PostgreSQL
- * migrators and was deleted with them; the cases below that name a probe folder came from it. This
- * file was the survivor because the fixture the converted cases need — a fresh directory per case,
- * closed afterwards — was already here.
- *
- * **One case was deleted rather than converted:** "applies a migration folder via the node-postgres
- * driver", the whole of the old file's Testcontainers block. It existed because `runMigrations`
- * chose between two migrators on a driver tag, so one engine proved nothing about the other. There
- * is one engine and one migrator (`migrate.ts:37`), and no tag to dispatch on. Nothing is lost that
- * a second target could still have shown.
+ * `runMigrations` against a real file, through Drizzle's own migrator, so the journal, the folder
+ * layout and the migrator are shown to agree. This is the migrator's only suite.
  */
 const FOLDER_A = join(import.meta.dirname, "..", "test", "migrations-a");
 const FOLDER_B = join(import.meta.dirname, "..", "test", "migrations-b");
@@ -87,12 +75,6 @@ describe("runMigrations on SQLite", () => {
 /**
  * The same migrator against the two probe folders under `packages/db/test`, which exist so these
  * cases can name a folder nothing else migrates and a journal table nothing else writes.
- *
- * Their SQL needed no translating — `create table "probe_a" ("id" integer primary key not null)`
- * and folder B's `references "probe_a"("id")` are accepted verbatim by SQLite, measured by running
- * these cases. The `dialect` field in each `meta/_journal.json` was corrected to `sqlite` for the
- * reader's sake only: `readMigrationFiles` reads `journal.entries` and nothing else
- * (`drizzle-orm/migrator.js:12`), so the field reaches no code either way.
  */
 describe("runMigrations against a probe folder", () => {
   it("applies a migration folder", async () => {
@@ -155,24 +137,11 @@ describe("runMigrations against a probe folder", () => {
   });
 
   it("migrates a module folder before the core folder, and the refusal lands at the first write", async () => {
-    // WHAT CHANGED. This case replaces "fails loudly when a module folder is migrated before the
-    // core folder", whose assertion was that migrating folder B alone REJECTS, with a message
-    // matching /probe_a/ — green against PGlite and real PostgreSQL until this branch, which is the
-    // only receipt here for what the other engine did. It does not hold on SQLite: measured by
-    // running folder B alone on this tree, `runMigrations` throws NOTHING and leaves `probe_b` in
-    // `sqlite_master`, because SQLite resolves a foreign key when a row is written rather than when
-    // the table is created.
-    //
-    // WHAT IS LOST, and nothing now checks it: migration ORDER is no longer caught at migrate time.
-    // A database migrated module-before-core comes up with tables that look right. Ordering was
-    // never `runMigrations`' promise — `migrate.ts`'s own docstring says so — so what has gone is a
-    // backstop the engine supplied, not a guarantee this package made.
-    //
-    // WHAT REPLACES IT is where the refusal actually lands. Both inserts below were measured: a
-    // write naming a parent row and a write whose foreign key is NULL are refused alike while
-    // `probe_a` is missing, with the same message. The null one is an assertion rather than a
-    // footnote because it is the one that shows the refusal is about the missing TABLE — a refusal
-    // about the missing ROW could not fire for a null key.
+    // SQLite resolves a foreign key when a row is written rather than when the table is created, so
+    // migrating folder B alone throws NOTHING: migration ORDER is not caught at migrate time, and
+    // nothing else checks it. The refusal lands at the first write. The null-key insert is the one
+    // that shows the refusal is about the missing TABLE — a refusal about the missing ROW could not
+    // fire for a null key.
     const { venue } = await open();
     await runMigrations(venue, { migrationsFolder: FOLDER_B, migrationsTable: TABLE_B });
     expect(tableNames(venue)).toContain("probe_b");

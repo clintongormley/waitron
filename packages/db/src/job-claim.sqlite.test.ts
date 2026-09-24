@@ -7,24 +7,8 @@ import { openVenueDatabase, type Database } from "./client.js";
 import { claimRows } from "./job-claim.js";
 
 /**
- * `claimRows`, and the only suite over it. Two siblings stood beside this file until the SQLite
- * flip: job-claim.test.ts, which ran the same cases on PGlite, and job-claim.pg.test.ts against a
- * real server. Both are deleted, and what the real-server one held has no successor, so it is named
- * below rather than assumed.
- *
- * What a case here can and cannot show: with one writer per file there is no second claimer to
+ * `claimRows`, and the only suite over it. With one writer per file there is no second claimer to
  * partition a queue against, so every case is about what ONE claim selects, stamps and returns.
- * The property the deleted `for update … skip locked` bought — that a second claimer skips a row
- * the first holds — has nothing to hold it open on this engine.
- *
- * **Three cases lost their subject and are not repeated here.** One was named "locks only the table
- * `of` names, so a claim may join one the role may not lock", and it proved why the claim narrowed
- * its lock; there is no lock to narrow. The other two belonged to the sibling helpers that claimed
- * by SELECTING and stamped nothing, which are written inline at their one caller each now. What
- * those two asserted — the selection returns exactly the claimable rows and leaves them unstamped —
- * is asserted at those callers instead: `claimAcceptedOffline`'s case in
- * `packages/payments/src/store.test.ts`, and the deployment-environment cases in
- * `packages/fiscal-verifactu/src/drain.test.ts`.
  */
 type ClaimedProbe = { position: number; status: string };
 
@@ -133,8 +117,8 @@ describe("claiming job rows on SQLite", () => {
       claimableJoin: sql`join probe_printers p on p.id = j.printer_id`,
       claimable: sql`j.status = 'pending' and p.active = 1`,
       // A correlated subquery, not a joined table: SQLite's `UPDATE … FROM` refuses a RETURNING
-      // clause that names the FROM table's columns — `no such column: p.host`, measured on
-      // SQLite 3.53.4. A subquery in the same position reads the neighbour normally.
+      // clause that names the FROM table's columns. A subquery in the same position reads the
+      // neighbour normally.
       returning: sql`probe_jobs.position,
         (select host from probe_printers where probe_printers.id = probe_jobs.printer_id) as host`,
       limit: 5,

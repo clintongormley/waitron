@@ -1,64 +1,31 @@
-// A bare side-effect import, not a value used anywhere in this file. It is what makes
-// TypeScript treat "@waitron/shared" as a real module to augment rather than defining a fresh
-// ambient module of the same name — the same idiom used to add fields to Express's `Request`.
+// A bare side-effect import. It is what makes TypeScript treat "@waitron/shared" as a real module
+// to augment rather than defining a fresh ambient module of the same name.
 import "@waitron/shared";
 
 /**
- * packages/db's own contribution to the shared error registry, added by declaration merging
- * rather than pre-declared in packages/shared itself — see the design note atop
- * packages/shared/src/errors.ts. packages/shared is the leaf every package depends on and must
- * never need to change just because a dependent package adds a code; this file is how
- * packages/db adds one without packages/shared knowing about it in advance.
- *
- * Namespace convention: the prefix names the DOMAIN CONCEPT the code describes, never the
- * package whose source happens to contain the `throw new AppError(...)` call — see the design
- * note atop packages/shared/src/errors.ts for the full reasoning (spec §9: a code is a
- * translation key, and "which package's source threw this" is an implementation detail that
- * must not leak into it). `allocateInvoiceNumber` (./allocate-number.ts) throws this one for
- * "there is no such series" — a fact about a series, not about packages/db — so it is
- * `series.not_found`, not `db.series_not_found` and not `core.series_not_found`, regardless of
- * which package's source happens to contain the throw today or after some later refactor.
- *
- * This code has been renamed twice, and both renames were clean rather than deprecate-and-add,
- * for the same reason each time: the "codes are never renamed" rule (see
- * packages/shared/src/errors.ts) protects a code that might already be written into an incident
- * record or a dashboard, and this one never was.
- *
- *   1. `SERIES_NOT_FOUND` (Task 6's pre-Task-9 stand-in `@waitron/shared`) → `db.series_not_found`
- *      (Task 9, throwing-package convention — since overruled).
- *   2. `db.series_not_found` → `series.not_found` (this fix round, domain-concept convention).
- *
- * Neither name was ever logged, persisted, or had a consumer outside this workspace's own test
- * suite, and every call site (allocate-number.ts and allocate-number.test.ts) is renamed in the
- * same commit each time. A deprecated-but-dead alias sitting in the registry forever would be
- * pure clutter protecting nothing.
+ * packages/db's own contribution to the shared error registry, added by declaration merging — see
+ * the design note atop packages/shared/src/errors.ts.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
-     * No such dining table. `dining_tables` is a core table, so this code lives here
-     * rather than in a verb package: it has throwers in more than one package (apps/server's table
-     * verbs and @waitron/bookings' `requireActiveTable`), and only their common dependency — this
-     * package — can hold the one declaration they all import. `tableId` is a caller-supplied uuid, not
-     * a secret. `table.*` names the DOMAIN CONCEPT, never the throwing package. A DEACTIVATED table is
-     * the distinct `table.inactive` (apps/server), surfaced only where openTab needs it. Never renamed.
+     * No such dining table. It lives here rather than in a verb package because it has throwers in
+     * more than one package, and only their common dependency — this package — can hold the one
+     * declaration they all import. `tableId` echoes the id the caller sent, so it carries no
+     * secret. A DEACTIVATED table is the distinct `table.inactive`.
      */
     "table.not_found": { tableId: string };
     "series.not_found": { seriesId: string };
     /**
-     * A node has no `purpose='standard'` invoice series. Reached by R3b's mirror→primary promote when
-     * correcting `config.till.seriesId` to the cloud's OWN reserved standard series (the code the primary
-     * derived at adopt, `<primaryCode>-<numeroInstalacion>`). A promoted cloud always has one (R2
-     * established it), so this is a corruption/misuse refusal, structured so it reaches a screen
-     * translatable rather than a raw empty-result crash — the shape `sif.not_registered` follows.
-     * `series.*` names the domain concept; never renamed once shipped.
+     * A node has no `purpose='standard'` invoice series. A corruption/misuse refusal, structured so
+     * it reaches a screen translatable rather than a raw empty-result crash.
      */
     "series.no_standard_for_node": { nodeId: string };
     /**
      * A series code being opened for a node is one the node already holds — live or retired: the
      * natural key `(node_id, code)` covers both, so a retired code can never be reopened.
      * Reached only by a restore deriving a code that a human had chosen earlier; the restore is
-     * redone. `series.*` names the domain concept; never renamed once shipped.
+     * redone.
      */
     "series.code_collision": { code: string };
     /**
@@ -78,7 +45,7 @@ declare module "@waitron/shared" {
      * either database file is opened. The restart reset of in-flight AEAT submissions
      * (`apps/server/src/restart-reset.ts`) relies on one server process per folder. `database` is
      * the venue DIRECTORY, as in `provisioning.database_unmigrated`: operator configuration, never a
-     * secret. Never renamed.
+     * secret.
      */
     "provisioning.database_in_use": { database: string };
   }

@@ -87,7 +87,7 @@ import "./errors.js";
 // This suite reached the SQLite engine as `useTemplateDb({ template: "manifest" })` — a per-file
 // clone of a shared PostgreSQL template, with `suite.pg.connect()` handing out extra backends. Both
 // are gone. There is ONE venue file and ONE handle, and `withTransaction` IS the write lock
-// (`packages/db/src/tenancy.ts:20-22` → `withWriteLock`, `packages/store/src/write-queue.ts`), so
+// (`packages/db/src/tenancy.ts` → `withWriteLock`, `packages/store/src/write-queue.ts`), so
 // two overlapping transactions on this handle queue rather than contend. Nothing here establishes
 // what any database role may read or write, because there are no roles.
 //
@@ -458,9 +458,9 @@ async function collectedAtSet(id: string): Promise<boolean> {
  * Through the Drizzle export rather than raw SQL, for the two reasons `append-order-amendment.test.ts`
  * records against its own copy of this helper: a raw `select` of `is_first_entry` returns 0 or 1
  * where `verifyAmendmentChain` compares it against a boolean with `!==`
- * (`packages/db/src/order-amendment-hash.ts:136`), and `event_at` needs no projection at all — it is
+ * (`packages/db/src/order-amendment-hash.ts`), and `event_at` needs no projection at all — it is
  * a `tsString` column holding the exact ISO instant `appendOrderAmendment` truncated to whole
- * seconds, which a CHECK constraint pins (`packages/db/src/schema/order-amendments.ts:107`). The
+ * seconds, which a CHECK constraint pins (`packages/db/src/schema/order-amendments.ts`). The
  * `to_char(... at time zone 'UTC', ...)` this replaces existed to render a PostgreSQL `timestamptz`
  * back into that same string.
  */

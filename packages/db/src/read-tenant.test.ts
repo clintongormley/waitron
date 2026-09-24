@@ -16,13 +16,9 @@ describe("readTenant", () => {
   });
 
   it("returns the taxpayer's country, tax id and legal name", async () => {
-    // `created_at` is stated because this insert is RAW SQL. The column's default is
-    // `$defaultFn(now)`, which drizzle evaluates in JavaScript per insert and binds as a
-    // parameter (`schema/columns.ts`) — it is not a SQL DEFAULT, so a statement that does not go
-    // through drizzle's insert builder never reaches it, and the row is refused
-    // `NOT NULL constraint failed: tenants.created_at`. Every other raw insert into this table
-    // states it for the same reason (`schema/tenants.singleton.test.ts`,
-    // `testing/venue-db.test.ts`).
+    // `created_at` is stated because this insert is RAW SQL: the column's default is a `$defaultFn`
+    // drizzle evaluates in JavaScript, which a statement that does not go through drizzle's insert
+    // builder never reaches.
     await pg.db.execute(sql`
       insert into tenants (id, country, tax_id, legal_name, created_at)
       values (1, 'ES', 'B12345678', 'Deli SL', ${new Date().toISOString()})`);

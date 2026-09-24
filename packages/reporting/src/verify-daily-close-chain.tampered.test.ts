@@ -14,7 +14,7 @@
  *
  * The four subjects below are unchanged: an edited snapshot, a deleted middle close, a deleted tip,
  * and a deleted head. `daily_close_chain` is NOT append-only
- * (`packages/db/src/classification.ts:26` classifies it without `appendOnly`), so the last of them
+ * (`packages/db/src/classification.ts` classifies it without `appendOnly`), so the last of them
  * deletes the head directly and needs no bypass — on PostgreSQL it went through the same helper
  * only because that helper was the file's one mutation path.
  *

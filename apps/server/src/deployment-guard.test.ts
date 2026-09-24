@@ -12,7 +12,7 @@ import { assertDeploymentMatches } from "./deployment-guard.js";
 // Measured, not assumed. With `resetPerTest: false` added to the options below,
 // `pnpm --filter @waitron/server exec vitest run src/deployment-guard.test.ts` reports
 // `1 failed | 3 passed`: the "refuses a production host" case throws
-// `deployment.already_stamped` from `packages/db/src/deployment.ts:91`, because the first case's
+// `deployment.already_stamped` from `packages/db/src/deployment.ts`, because the first case's
 // `production` row is still sitting there. With the default it reports `4 passed`. The unstamped
 // case is NOT the case that shows this — a surviving `production` row reads as a match and it
 // passes either way, which is why the control was read off the third case.

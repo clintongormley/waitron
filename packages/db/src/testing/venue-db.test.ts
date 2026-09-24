@@ -7,22 +7,6 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "./venue-db.js";
 
-/**
- * The first three cases are about the CONTRACT a caller relies on — a migrated database, and data
- * emptied between tests. They came from plan task P2 and their assertions are untouched. Two things
- * about the STATEMENTS had to change, both measured on Node v26.7.0:
- *
- * - `count(*)::int` is `unrecognized token: ":"` (errcode 1); `cast(count(*) as int)` asks the
- *   engine the same question.
- * - the insert now states `created_at`. On PostgreSQL that column defaulted to `now()` SERVER-side,
- *   so a raw insert omitting it still got a value; the SQLite schema's default is `$defaultFn`,
- *   which Drizzle applies CLIENT-side and a raw insert never reaches, so the column arrives NULL
- *   and the engine answers `NOT NULL constraint failed: tenants.created_at`.
- *
- * Everything below them is new with the SQLite body: the reset is a `delete` per table rather than
- * one `TRUNCATE … CASCADE`, so the foreign keys, the append-only triggers and the identity
- * counters each need their own case.
- */
 const where = (db: Database) =>
   db.all<{ file: string }>(sql`select file from pragma_database_list where name = 'main'`)[0].file;
 
@@ -58,8 +42,8 @@ describe("useVenueDb", () => {
   });
 
   it("opens a real file on disk, not an in-memory database", () => {
-    // `pragma database_list` reports the empty string for `:memory:` — measured 2026-09-21 on Node
-    // v26.7.0 — so this discriminates the two.
+    // `pragma database_list` reports the empty string for `:memory:`, so this discriminates the
+    // two.
     const file = where(suite.db);
     expect(file.endsWith(`${"/"}venue.db`)).toBe(true);
     expect(existsSync(file)).toBe(true);
@@ -67,9 +51,9 @@ describe("useVenueDb", () => {
 });
 
 /**
- * The reset's three SQLite-only problems, each with its own table in `setup`:
- * a foreign key that makes delete ORDER matter, an append-only trigger that refuses the delete
- * outright, and an `AUTOINCREMENT` counter that `restart identity` used to reset.
+ * The reset's three problems, each with its own table in `setup`: a foreign key that makes delete
+ * ORDER matter, an append-only trigger that refuses the delete outright, and an `AUTOINCREMENT`
+ * counter.
  */
 describe("the per-test reset", () => {
   const suite = useVenueDb({
@@ -78,7 +62,7 @@ describe("the per-test reset", () => {
       // Named so the PARENT sorts FIRST: the reset empties tables in name order, so these two are
       // the pair that needs the foreign-key check deferred. With the names the other way round the
       // child is already empty when the parent's turn comes and the case passes whether the
-      // deferral is there or not — measured, and the reason this fixture reads oddly.
+      // deferral is there or not.
       db.run(sql`create table parent (id integer primary key, name text)`);
       db.run(
         sql`create table parent_child (id integer primary key, parent_id integer not null references parent(id))`,
@@ -110,8 +94,7 @@ describe("the per-test reset", () => {
 
   it("left the append-only trigger refusing an update", () => {
     // Seeded here rather than in `setup`: `FOR EACH ROW` is SQLite's only granularity, so an
-    // UPDATE against an EMPTY protected table succeeds whether the trigger is there or not
-    // (measured 2026-09-21) — the false pass this repository has already been bitten by.
+    // UPDATE against an EMPTY protected table succeeds whether the trigger is there or not.
     suite.db.run(sql`insert into guarded (id, v) values (2, 'b')`);
     expect(() => suite.db.run(sql`update guarded set v = 'c' where id = 2`)).toThrow();
     expect(count(suite.db, "guarded")).toBe(1);
@@ -144,11 +127,7 @@ describe("resetPerTest: false", () => {
   });
 });
 
-/**
- * Read at describe-body time — before any `beforeAll` has run — the same way `lifecycle.test.ts`
- * reads its accessors. The message names no function, because after the storage swap the one it
- * used to name does not exist.
- */
+/** Read at describe-body time — before any `beforeAll` has run. */
 describe("the accessor before the suite has started", () => {
   const suite = useVenueDb({ migrations: [] });
   const early = ((): unknown => {
@@ -161,8 +140,6 @@ describe("the accessor before the suite has started", () => {
 
   it("throws rather than handing back undefined", () => {
     expect(early).toBeInstanceOf(Error);
-    // Pinned exactly rather than by a pattern: what the plan asked for is a message naming no
-    // function, and only the whole string says that.
     expect((early as Error).message).toBe(
       "test database not started: the accessor was read before beforeAll ran",
     );
@@ -201,12 +178,11 @@ describe("after both of those suites finished", () => {
 
 /**
  * One row in `table`, with foreign keys and check constraints turned off so one generic value
- * satisfies every column. The technique — and the reason for it — is
- * `scripts/append-only-triggers.test.ts`'s: neither pragma touches TRIGGERS, which is what the
- * cases below are about, and the control case runs under exactly the same two.
+ * satisfies every column. Neither pragma touches TRIGGERS, which is what the cases below are about,
+ * and the control case runs under exactly the same two.
  *
- * Both pragmas are issued outside a transaction: inside one `pragma foreign_keys` is a silent no-op
- * (measured on this branch, recorded on `packages/media/drizzle/0001_image_references.sql`).
+ * Both pragmas are issued outside a transaction: inside one `pragma foreign_keys` is a silent
+ * no-op.
  */
 function seedOneRow(db: Database, table: string): void {
   db.run(sql.raw("pragma foreign_keys = off"));
@@ -235,9 +211,7 @@ function seedOneRow(db: Database, table: string): void {
  *
  * The engine's own words, never drizzle's: its wrapper message is
  * `Failed to run the query '<the statement>'`, so a `toThrow(/sales is append-only/)` against the
- * wrapper reads the STATEMENT it quoted and passes with no trigger installed at all — measured here
- * on the way to this helper, and the same false-pass shape
- * `scripts/append-only-triggers.test.ts` records for its own case.
+ * wrapper reads the STATEMENT it quoted and passes with no trigger installed at all.
  */
 function refusalFor(db: Database, statement: string): string | undefined {
   try {
@@ -255,13 +229,8 @@ function refusalFor(db: Database, statement: string): string | undefined {
 
 /**
  * A suite's database refuses what the box refuses: every table the migrated set's own module
- * declared `appendOnly()` carries the refusal triggers.
- *
- * Why this is the helper's business and not the product's alone: the product installs them in
- * `applyMigrations` (`packages/migrations/src/apply.ts`), which a suite does not go through — it
- * hands `runMigrations` a folder and a table name. Without the install here, a test that rewrites a
- * filed sale passes and proves nothing about the box, in the one area CLAUDE.md §5 says cannot be
- * repaired afterwards.
+ * declared `appendOnly()` carries the refusal triggers. The product installs them in
+ * `applyMigrations`, which a suite does not go through.
  */
 describe("a migrated set's append-only tables", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
