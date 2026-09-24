@@ -36,6 +36,7 @@ export const GENERIC_PACKAGES = [
   "print-agent",
   "diagnostics",
   "sync-enrolment",
+  "stream",
   "composition",
   "fiscal-none",
   "provisioning",

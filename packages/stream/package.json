@@ -1,0 +1,29 @@
+{
+  "name": "@waitron/stream",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing/memory-store.js": "./src/testing/memory-store.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@waitron/membership": "workspace:*",
+    "@waitron/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "typescript": "^7.0.0",
+    "vitest": "^4.1.11"
+  }
+}

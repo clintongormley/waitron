@@ -241,6 +241,9 @@ the measurements of §8.1 and the prototype, whose verdicts do not carry across 
   A box only ever writes a generation it opened.
 - **`current.json`** names the live generation: venue id, term, node id, generation, and the time it
   was written, signed with the node's membership key (`packages/membership`, `signDocumentBody`).
+  (2026-09-24: as built, the pointer is signed with `signBytes` over a purpose-tagged message,
+  `packages/stream/src/pointer.ts`; the plan's appendix, Spec problems item 1 under the Task 4–5
+  notes, explains why.)
 - **Order of opening a generation:**
   1. start Litestream into the new generation;
   2. wait until its first full copy has landed in the bucket;

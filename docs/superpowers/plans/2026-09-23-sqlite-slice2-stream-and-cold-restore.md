@@ -39,7 +39,8 @@ the **Reconciliation** section below win over a task's text, and the disagreemen
   (CLAUDE.md §3). Verify each regeneration with `scripts/schema-constraints.test.ts` and
   `scripts/append-only-triggers.test.ts`.
 - Every package holds **98/98/98/95** coverage; `@waitron/stream` joins `HIGH_BAR_PACKAGES` in
-  `scripts/coverage-thresholds.test.ts` and the shard lists the day it is created.
+  `scripts/coverage-thresholds.test.ts` and the shard lists the day it is created. (2026-09-24: that
+  list was retired by #549, so the `HIGH_BAR_PACKAGES` step does not apply.)
 - **No package suite starts a container.** The loop test runs versitygw and Litestream as plain child
   processes, downloaded per CI run (the Actions cache is at its budget).
 - Error codes name the domain concept, follow their siblings' prefix (`backup.stream_*`,
@@ -7772,6 +7773,25 @@ the prototype results note; the spec and the backlog point at them."
 ---
 
 ### Task 5: `@waitron/stream` — the bucket client, the signed pointer, generations, pruning and the bucket check
+
+**2026-09-24:** the built package departs from the code shown below in these ways; the files under
+`packages/stream/` are authoritative. (i) A 403 at the bucket check's listing step reports
+`list_failed`, not `access_denied`, as this task's own reasoning says; the snippet and its test
+still show `access_denied`. (ii) A 501 is reported as `conditional_write_unsupported` only during the
+write step: the check's four conditional writes, and the read-back `putOwnBytes` makes after a
+refusal of one of its own two writes. (iii) There is no `errors.test.ts`: the registry's reachability is checked by
+the root guard `scripts/errors-reachable.test.ts`. (iv) The `HIGH_BAR_PACKAGES` step does not apply;
+that list was retired by #549. (v) Review fixes: a bucket listing that is incomplete (an entry with
+no key or no time, a truncated page with no continuation token, a repeated token) or that names a
+key outside the requested folder is refused rather than used, and pruning refuses a listed key
+outside the venue's folder; the pointer write, the generation claim and the bucket check's two
+writes meant to succeed each treat a "refused" answer as success when the bucket holds exactly the
+bytes they wrote (`putOwnBytes` in `conditional.ts`), while after each of the check's two deliberately
+refused writes it reads the object back and reports `create_only_ignored` or `if_match_ignored` if
+the object changed; the in-memory bucket's version tag is the MD5 of the bytes, as
+S3's is for a PUT stored unencrypted or with SSE-S3; and pruning deletes every old generation's files
+through one bounded pool of concurrent deletes, then their markers, so no marker is deleted until
+every file delete has succeeded.
 
 **Branch:** `feat/sqlite-slice2-stream-package` (one pull request)
 

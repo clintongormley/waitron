@@ -847,6 +847,11 @@ in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that de
 `test:coverage` script at all — today only the two `bench/` members — additionally goes in
 `PACKAGES_WITHOUT_TESTS`.
 
+- A generic, English-only package must also be named in `GENERIC_PACKAGES`
+  (`packages/db/src/english-only.ts`) and in its pinned copy in `scripts/english-only.test.ts`. No
+  guard fails when it is left out: a package in neither that list nor a module's declared vocabulary
+  is never scanned for Spanish words.
+
 ### A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides it
 
 Adding a member to `migrations.manifest.json`, `GENERIC_PACKAGES` or `OWN_SHARD_PACKAGES` left

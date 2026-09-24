@@ -316,6 +316,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/server-kit",
   "@waitron/dashboard-modules",
   "@waitron/store",
+  "@waitron/stream",
 ];
 
 export const LIGHT_B_PACKAGES = [
