@@ -14,7 +14,14 @@ type SentRequest = {
   headers: Record<string, string>;
 };
 type Scripted =
-  { status: number; headers?: Record<string, string>; body?: string } | { throws: string };
+  | {
+      status: number;
+      headers?: Record<string, string>;
+      body?: string;
+      /** The connection drops with this message after the body's first chunk. */
+      breaksAfterFirstChunk?: string;
+    }
+  | { throws: string };
 
 const xml = { "content-type": "application/xml" };
 function errorBody(code: string, message: string): string {
@@ -38,6 +45,21 @@ const CONFLICT: Scripted = {
 };
 const PUT_OK: Scripted = { status: 200, headers: { etag: '"v2"' } };
 
+function bodyStream(text: string, breaks: string | undefined): Readable {
+  if (breaks === undefined) return Readable.from([Buffer.from(text)]);
+  let started = false;
+  return new Readable({
+    read() {
+      if (started) {
+        this.destroy(Object.assign(new Error(breaks), { code: "ECONNRESET" }));
+        return;
+      }
+      started = true;
+      this.push(Buffer.from(text));
+    },
+  });
+}
+
 /**
  * The network, scripted. The real client builds, signs and sends each request; this answers in turn.
  * The response shape — a status, headers and a Node stream body — is the one the pinned client
@@ -56,7 +78,7 @@ function network(responses: Scripted[]) {
         response: {
           statusCode: next.status,
           headers: next.headers ?? {},
-          body: Readable.from([Buffer.from(next.body ?? "")]),
+          body: bodyStream(next.body ?? "", next.breaksAfterFirstChunk),
         },
       };
     },
@@ -197,6 +219,17 @@ describe("get", () => {
     expect(new TextDecoder().decode(got?.body)).toBe("hello");
     expect(sent[0]!.method).toBe("GET");
     expect(sent[0]!.path).toBe("/owner-bucket/waitron/venues/v1/current.json");
+  });
+
+  it("a connection that drops partway through the body is a request failure with no status", async () => {
+    const response = { status: 200, headers: { etag: '"e1"' }, body: "hel" };
+    const whole = storeOver([response]);
+    expect(new TextDecoder().decode((await whole.store.get("k"))?.body)).toBe("hel");
+    const broken = storeOver([{ ...response, breaksAfterFirstChunk: "read ECONNRESET" }]);
+    expect(await rejection(broken.store.get("k"))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: "k", status: null, name: "Error" },
+    });
   });
 
   it("answers null for a missing KEY", async () => {

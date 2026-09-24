@@ -106,7 +106,12 @@ export function createS3ObjectStore(
       if (out.Body === undefined || out.ETag === undefined) {
         throw requestFailed("get", key, out.$metadata.httpStatusCode ?? null, "IncompleteResponse");
       }
-      return { body: await out.Body.transformToByteArray(), etag: out.ETag };
+      try {
+        return { body: await out.Body.transformToByteArray(), etag: out.ETag };
+      } catch (error) {
+        // The answer began but never completed, so there is no status to report.
+        throw requestFailed("get", key, null, nameOf(error));
+      }
     },
 
     async put(key, body, condition) {
