@@ -48,6 +48,12 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    * the engine refuses the copy while a transaction is open on the connection (`./archive.ts`).
    */
   archiveTo: (path: string) => Promise<void>;
+  /**
+   * Folds this file's write-ahead side file back into it and truncates the side file to nothing.
+   * `reclaimed` is false when another connection was still reading it; nothing waits in that case,
+   * and the caller tries again later. Not callable from inside {@link StoreHandle.withWriteLock}.
+   */
+  checkpointTruncate: () => Promise<{ reclaimed: boolean }>;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */
   close: () => Promise<void>;
 };
@@ -98,11 +104,10 @@ async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
  * `INSERT OR REPLACE` performs internally fires a `BEFORE DELETE` trigger only with this on, and
  * SQLite's default is off (`./append-only.ts`).
  *
- * Automatic checkpointing stays at SQLite's own default. The topology design
- * (`docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md` §8.3) sets
- * `wal_autocheckpoint = 0`, which is right only once Litestream does the checkpointing instead —
- * and Litestream arrives in slice 2. Turning it off here, with nothing else checkpointing, would
- * let the write-ahead file grow without limit from day one.
+ * Automatic checkpointing stays at SQLite's own default: every 1000 pages, and always PASSIVE, which
+ * never invokes the busy handler (https://www.sqlite.org/pragma.html), so it never waits on
+ * Litestream. With streaming off nothing else checkpoints, so switching it off would let the
+ * write-ahead file grow without limit.
  */
 async function openConnection(path: string): Promise<DatabaseSync> {
   const connection = new DatabaseSync(path);
@@ -200,6 +205,23 @@ export async function openVenueStore<
     return Object.assign(db, {
       withWriteLock: <T>(body: () => Promise<T>) => writes.run(body),
       archiveTo: (path: string) => archiveTo(db, path),
+      // On the writer, in a queue slot that opens no transaction: inside the writer's own
+      // transaction a checkpoint is refused (`database table is locked`). With no busy wait it
+      // answers `busy` at once while a reader still holds the side file; with the store's wait it
+      // blocks on the busy handler, and on this synchronous engine the whole process blocks with it.
+      // The timeout is restored in `finally`, before anything else can run on the connection.
+      checkpointTruncate: () =>
+        writes.exclusive(() => {
+          connections.write.exec("pragma busy_timeout = 0");
+          try {
+            const row = connections.write.prepare("pragma wal_checkpoint(truncate)").get() as {
+              busy: number;
+            };
+            return { reclaimed: row.busy === 0 };
+          } finally {
+            connections.write.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
+          }
+        }),
       // Idempotent: `node:sqlite` throws "database is not open" on a second close, and a caller
       // that closed one file still has to be able to close the store.
       close: async () => {

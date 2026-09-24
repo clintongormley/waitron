@@ -59,5 +59,17 @@ export function createWriteQueue(connections: Connections) {
       tail = mine.catch(() => undefined);
       return mine;
     },
+    /**
+     * Runs `body` in the queue's order with NO transaction open: for work that must run neither
+     * inside a transaction nor beside one, such as a checkpoint (`./index.ts`, `checkpointTruncate`).
+     */
+    async exclusive<T>(body: () => T): Promise<T> {
+      if (inBody.getStore() === true) {
+        throw new Error("write lock: a body asked for the lock it is already holding");
+      }
+      const mine = tail.then(() => body());
+      tail = mine.catch(() => undefined);
+      return mine;
+    },
   };
 }

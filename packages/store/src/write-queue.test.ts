@@ -113,4 +113,50 @@ describe("the write queue", () => {
     });
     expect(who(db)).toEqual([{ who: "after" }]);
   });
+
+  it("runs exclusive work after the transaction ahead of it, with no transaction open", async () => {
+    const db = open();
+    const queue = createWriteQueue(connectionPair(db, db));
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const ahead = queue.run(async () => {
+      db.prepare("insert into t (who) values (?)").run("sale");
+      await gate;
+    });
+    const seen: boolean[] = [];
+    const exclusive = queue.exclusive(() => {
+      seen.push(db.isTransaction);
+      return "done";
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    // Still behind the open transaction: running now would put it INSIDE that transaction.
+    expect(seen).toEqual([]);
+    release();
+    await ahead;
+    await expect(exclusive).resolves.toBe("done");
+    expect(seen).toEqual([false]);
+  });
+
+  it("refuses exclusive work asked for from inside a running body, rather than hanging", async () => {
+    const db = open();
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(queue.run(async () => queue.exclusive(() => "inner"))).rejects.toThrow(
+      "write lock: a body asked for the lock it is already holding",
+    );
+    await expect(queue.exclusive(() => "after")).resolves.toBe("after");
+  });
+
+  it("keeps the queue usable after exclusive work throws", async () => {
+    const db = open();
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(
+      queue.exclusive(() => {
+        throw new Error("deliberate");
+      }),
+    ).rejects.toThrow("deliberate");
+    await queue.run(async () => {
+      db.prepare("insert into t (who) values (?)").run("after");
+    });
+    expect(who(db)).toEqual([{ who: "after" }]);
+  });
 });
