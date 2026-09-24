@@ -196,7 +196,7 @@ async function cookies(): Promise<string> {
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { tillId: cfg.tillId, personId, pin: "5555" }),
   );
-  return `${SESSION_COOKIE}=${session.id}; ${payDeviceCookie}`;
+  return `${SESSION_COOKIE}=${session.token}; ${payDeviceCookie}`;
 }
 
 async function post(path: string, body: object): Promise<Response> {
