@@ -561,7 +561,7 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
       db.exec("create table marker (id integer primary key, v text)");
       db.exec("insert into marker (v) values ('CRASHED-TAIL')");
       process.stdout.write("ready");
-      setInterval(() => {}, 1000);
+      setInterval(() => db, 1000);
     `;
     const child = spawn(process.execPath, ["-e", script], {
       stdio: ["ignore", "pipe", "inherit"],
