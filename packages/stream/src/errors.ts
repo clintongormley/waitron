@@ -7,7 +7,8 @@ export type BucketOperation = "get" | "put" | "list" | "delete";
 /**
  * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
  * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
- * ever carries a credential: `name` is the store's error code, never its message text.
+ * ever carries a credential: `name` is the store's error code, or the name of a listing this package
+ * refused, never message text.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

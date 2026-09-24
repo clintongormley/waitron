@@ -175,8 +175,8 @@ function failed(error: unknown, step: Step): ProbeResult {
     const detail = `${name} (${status})`;
     // A 403 on the listing is the missing list permission; it is reported as the listing's failure.
     if (status === 403 && step !== "list") return refuse("access_denied", detail);
-    // Every write the check makes carries a condition, so a 501 on a write is reported as conditional
-    // writes unsupported — as is a 501 about some other part of the write.
+    // Every write the check makes carries a condition, so a 501 during the write step is reported as
+    // conditional writes unsupported — including one answering the read-back `putOwnBytes` makes.
     if (status === 501 && step === "write") return refuse("conditional_write_unsupported", detail);
     return refuse(otherwise, detail);
   }
