@@ -8,7 +8,6 @@ const contribution = (id: string): FiscalContribution => ({
   id,
   activationReadiness: "not-applicable",
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
-  // These tests exercise slot SELECTION only; the runtime submission seat is never invoked here.
   drain: () => Promise.reject(new Error("fiscal-slot selection tests never run the drain seat")),
   resetInFlight: () =>
     Promise.reject(new Error("fiscal-slot selection tests never run the reset seat")),
@@ -60,7 +59,6 @@ describe("selectFiscalModule", () => {
     const config = selectFiscalModule(MODULES, "a", empty);
     expect(config.overrides.get("a")).toBe(true);
     expect(config.overrides.get("b")).toBe(false);
-    // The resolved slot is exactly the selected member — no ambiguity for the boot-time check.
     expect(fiscalSlot(enabledModules(MODULES, config), null)).toBe(A.fiscal);
   });
 
@@ -69,7 +67,6 @@ describe("selectFiscalModule", () => {
     const config = selectFiscalModule(MODULES, "a", base);
     expect(config.overrides.get("a")).toBe(true);
     expect(config.overrides.get("b")).toBe(false);
-    // A non-fiscal override in the base is carried through untouched.
     expect(config.overrides.get("core")).toBe(true);
   });
 

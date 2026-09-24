@@ -1,4 +1,3 @@
-// The entire public surface of @waitron/module. Re-exports only — no logic here.
 export type {
   WaitronModule,
   NonDbSource,

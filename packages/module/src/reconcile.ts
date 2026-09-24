@@ -1,23 +1,14 @@
-/**
- * The outcome of comparing DESIRED (the modules.json enabled set) against ACTUAL (the modules whose
- * schema the database has already migrated, derived from appliedSchemaVersion — spec §3). Every
- * module lands in exactly one class.
- */
+/** DESIRED (the enabled set) against ACTUAL (the migrated modules); each module is in one class. */
 export interface Reconciliation {
-  /** enabled but not yet migrated → migrate (and, when provisioned, seed). */
+  /** enabled but not yet migrated. */
   readonly toMigrate: readonly string[];
-  /** enabled and already migrated → nothing (an idempotent re-run is a no-op). */
+  /** enabled and already migrated. */
   readonly steady: readonly string[];
-  /** migrated but no longer enabled → soft-disable: skip, data kept (spec §5). */
+  /** migrated but no longer enabled: skipped, data kept. */
   readonly softDisabled: readonly string[];
 }
 
-/**
- * Pure set arithmetic. `enabled` order is preserved in `toMigrate`/`steady`; `softDisabled` is in
- * `migrated` iteration order. No DB access here — the caller derives `migrated` from
- * appliedSchemaVersion and runs this OUTSIDE any transaction (spec §3: that probe's 42P01 catch
- * would poison one).
- */
+/** `enabled` order is preserved in `toMigrate`/`steady`; `softDisabled` is in `migrated` order. */
 export function reconcile(
   enabled: readonly string[],
   migrated: ReadonlySet<string>,

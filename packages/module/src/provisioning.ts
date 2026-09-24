@@ -19,9 +19,7 @@ export interface NodeSeed {
   run(tx: Transaction, node: ProvisionedNode): Promise<string>;
 }
 
-/** One module's line in a provisioning run's summary: which module seeded, and the one-line report
- * its `NodeSeed.run` returned. Named here because both runners (`@waitron/provisioning`'s
- * `applyVenue` and `apps/server`'s `provisionNode`) return a list of these. */
+/** One module's line in a provisioning run's summary: the report its `NodeSeed.run` returned. */
 export interface SeedReport {
   readonly module: string;
   readonly report: string;
