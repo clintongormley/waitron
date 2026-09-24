@@ -262,6 +262,7 @@ export async function openVenueStore<
         await node.close();
       } finally {
         lock.release();
+        await watchdogStopped();
       }
     },
   };
