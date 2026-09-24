@@ -4,14 +4,6 @@ import "./staff-screen.js";
 import type { StaffScreen } from "./staff-screen.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 
-/**
- * Mounts the screen with an `api` STUB assigned as a property, exactly as
- * `login-screen.a11y.test.ts` does: the screen's `connectedCallback` fires
- * `void this.#load()` → `api.listStaff()`; with no `api` that is an unhandled rejection, which
- * pollutes the run (a stray rejection is a finding). So the stub's `listStaff` resolves a small
- * list. The create form is left CLOSED (its default), so its `wt-dialog` renders nothing to the
- * a11y tree — the snapshot covers the composed staff-list and the add button.
- */
 const people: PersonSummary[] = [
   {
     personId: "p1",
@@ -40,7 +32,6 @@ function stubApi(): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight staff fetch and the follow-up render. */
 async function flush(el: StaffScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;

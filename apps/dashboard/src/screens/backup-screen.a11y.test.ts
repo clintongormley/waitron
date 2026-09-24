@@ -5,13 +5,9 @@ import type { BackupScreen } from "./backup-screen.js";
 import type { BackupStatusView, DashboardApi } from "../api/client.js";
 
 /**
- * The backup admin screen scanned by axe in both themes, in five shapes: the configure wizard (off,
- * with the minted key + download + checkbox + policy controls), the same wizard driven into its
- * advanced paste + pick-weekdays + fixed-time branches (so every conditional control is scanned), the
- * read-only managed-by-environment surface, the enabled state with the rotate section + re-shown old
- * key, and the error state (a rejected status load shows the `role="alert"` banner). Mounted by
- * ASSIGNING the `api` stub as a property; the screen loads on connect, so the stub must resolve or a
- * stray rejection pollutes the run. Every colour is a `--wt-*` token. Mirrors `diagnostics-screen.a11y.test.ts`.
+ * Scanned in five shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
+ * conditional control is scanned. The screen loads on connect, so the stub must resolve or a stray
+ * rejection pollutes the run.
  */
 
 const OFF: BackupStatusView = {

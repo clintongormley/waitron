@@ -5,13 +5,8 @@ import type { CanvasEditorScreen } from "./canvas-editor-screen.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 
 /**
- * The Lienzos (canvas editor) screen scanned by axe in both themes, in two states: LIST mode (the
- * gallery of canvases, its Crear button, per-row Editar/Duplicar/Eliminar controls and thumbnails),
- * and EDITOR mode with a card selected (the tab bar, the interactive canvas, the palette and the card
- * property panel with its span steppers, config, visibility toggles and reorder/remove controls).
- * Mounted by ASSIGNING the `api` STUB as a property (never bare markup), exactly as the sibling screen
- * a11y suites do: `connectedCallback` fires `void this.#load()` → `listCanvases()`, so the stub must
- * resolve it (and `getCanvas`, reached when the editor opens) or a stray rejection pollutes the run.
+ * Scanned in LIST mode and in EDITOR mode with a card selected. The `api` stub must resolve
+ * `listCanvases` and `getCanvas`, or a stray rejection pollutes the run.
  */
 const canvases: Canvas[] = [
   {
@@ -41,7 +36,6 @@ function stubApi(): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight load and the follow-up render. */
 async function flush(el: CanvasEditorScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;

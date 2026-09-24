@@ -13,14 +13,11 @@ import type {
   DashboardApi,
 } from "../api/client.js";
 
-/** The client-side recovery-key floor for a PASTED key, mirroring the server's shared
- * `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`, 12). A short paste is caught here for
- * fast feedback; the server stays the authority and rejects `backup.recovery_key_too_short` regardless.
- * The MINTED default key is safe by construction, so this gate only bites the advanced paste path. */
+/** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
+ * feedback on a PASTED key; the server stays the authority. */
 const MIN_KEY_LENGTH = 12;
 
-/** The seven weekdays offered when the operator picks specific days, in Monday-first display order.
- * `n` is the JS `Date.getDay()` value the server's schedule expects (0 = Sunday … 6 = Saturday). */
+/** Monday-first display order; `n` is the `Date.getDay()` value the server's schedule expects. */
 const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
   { n: 1, labelKey: "backup.weekday.mon" },
   { n: 2, labelKey: "backup.weekday.tue" },
@@ -31,29 +28,6 @@ const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
   { n: 0, labelKey: "backup.weekday.sun" },
 ];
 
-/**
- * The management dashboard's BACKUP admin screen (backup-recovery-key-wizard, Task 7): the authenticated
- * surface that drives the `/api/backup/*` routes — configure a destination + recovery key + policy, turn
- * backups on, see their status, and rotate the key. Manager-gated in the shell (Configuration nav,
- * `requiresManager`).
- *
- * On connect it loads `getBackupStatus()`; when the box is WRITABLE (this node is the primary and the
- * environment does not own the config) it MINTS a recovery key up front (`mintBackupKey`), the safe
- * default — the operator sees it once with a COPY button and a real DOWNLOAD file (`Blob` +
- * `URL.createObjectURL` on an `<a download>`, which works in this first-party app), and cannot apply
- * until an "I have saved this key somewhere safe" checkbox is ticked. An advanced toggle lets them paste
- * their own passphrase instead (validated to {@link MIN_KEY_LENGTH} client-side, the server the authority).
- *
- * When `managedByEnvironment` is true the surface is READ-ONLY — the box's own environment owns the
- * config, so there is nothing to change here. Once backups are ON, the screen offers a ROTATE control
- * behind a loud warning: archives taken before a rotate still need the OLD key, so it re-shows that key
- * (`getBackupRecoveryKey`) for the operator to keep before changing it.
- *
- * ERROR HANDLING mirrors the sibling screens: `#load`/`#mint`/`#apply`/`#rotate`/`#showOldKey` are each
- * fully `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` (the raw thrown `{ code }`,
- * falling back to `server.internal`) rendered in a `role="alert"` banner. `codeMessage` maps the raw
- * `backup.*` code to localised copy at the render edge, so the banner shows a sentence, never the wire code.
- */
 @customElement("dashboard-backup-screen")
 export class BackupScreen extends LitElement {
   static override styles = [
@@ -178,7 +152,6 @@ export class BackupScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -188,22 +161,16 @@ export class BackupScreen extends LitElement {
     },
   );
 
-  // The loaded running status. Undefined until the first load settles; the body renders off it.
   @state() private status?: BackupStatusView;
   @state() private errorKey: string | null = null;
 
-  // ── Draft (the configure + rotate forms share these, since only ONE form renders at a time: the
-  // configure wizard when backups are off, the rotate form when they are on). ────────────────────────
+  // The configure and rotate forms share this draft: only ONE of them renders at a time.
   @state() private destinationDir = "";
-  /** The recovery key the box minted for this session (the safe default), shown once. */
   @state() private mintedKey: string | null = null;
-  /** Advanced: paste your own passphrase instead of the minted default. */
   @state() private advancedPaste = false;
   @state() private pastedKey = "";
-  /** Gates apply/rotate: the operator must confirm they saved the key first. */
   @state() private savedIt = false;
 
-  // Policy draft.
   @state() private daysMode: "daily" | "weekdays" = "daily";
   @state() private weekdays: number[] = [1, 2, 3, 4, 5];
   @state() private timeMode: "auto" | "fixed" = "auto";
@@ -219,23 +186,18 @@ export class BackupScreen extends LitElement {
   @state() private configurationError: "required" | "mismatch" | "request" | null = null;
   @state() private exportingConfiguration = false;
 
-  // Rotate: the re-shown OLD key (null until the operator asks to see it).
   @state() private oldKey: string | null = null;
 
-  // Edit-settings (an ALREADY-ENABLED box): change destination + policy without touching the key.
   @state() private editSettings = false;
-  /** The CURRENT running key, fetched when entering edit mode so a settings change re-applies under the
-   * SAME key (editing settings never re-mints or rotates — only `rotate` changes the key). Held off the
+  /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
    * reactive state so it is never rendered. */
   #reuseKey: string | null = null;
 
-  /** A stable per-instance timestamp for the downloaded key file's name + body, so an operator with
-   * several boxes can tell the files apart and re-renders do not shift the name. */
+  /** Stable per instance, so re-renders do not shift the downloaded key file's name. */
   readonly #stamp = new Date().toISOString();
   readonly #fileStamp = this.#stamp.replace(/[:.]/g, "-");
 
-  /** Memoised object URLs for the download links, keyed by the key text so a re-render reuses the URL
-   * rather than leaking a fresh one each time. Revoked on disconnect. */
+  /** Keyed by the key text so a re-render reuses the URL rather than leaking a fresh one. */
   #blobUrls = new Map<string, string>();
 
   override connectedCallback(): void {
@@ -249,8 +211,6 @@ export class BackupScreen extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** Load the running status, then MINT a default key when the box is writable (primary + not
-   * env-managed) — the safe default the operator records. A rejection becomes the `errorKey` banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -263,8 +223,6 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** Mint a fresh default recovery key into {@link mintedKey}. Called on load and after a successful
-   * apply/rotate so the next operation starts from a new safe key. */
   async #mint(): Promise<void> {
     try {
       const { key } = await this.api.mintBackupKey();
@@ -274,8 +232,6 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** The key the operator will actually apply/rotate to: their pasted one in advanced mode, else the
-   * minted default. */
   get #effectiveKey(): string {
     return this.advancedPaste ? this.pastedKey : (this.mintedKey ?? "");
   }
@@ -290,8 +246,8 @@ export class BackupScreen extends LitElement {
   }
 
   get #rotateDisabled(): boolean {
-    // The OLD key must be re-shown first (§8 step 1): rotating overwrites it, so the operator has to
-    // have had the chance to record it — `oldKey` is non-null only after they revealed it.
+    // The OLD key must be re-shown first: rotating overwrites it, so the operator has to have had the
+    // chance to record it.
     return this.submitting || !this.savedIt || this.#effectiveKey === "" || this.oldKey === null;
   }
 
@@ -311,8 +267,6 @@ export class BackupScreen extends LitElement {
     return { kind: "wall-clock", days, at };
   }
 
-  /** True when a pasted key is below the floor — set the specific `too_short` code and stop. Returns
-   * false (proceed) for the minted default, which is safe by construction. */
   #pastedKeyTooShort(): boolean {
     if (this.advancedPaste && this.#effectiveKey.length < MIN_KEY_LENGTH) {
       this.errorKey = "backup.recovery_key_too_short";
@@ -321,8 +275,6 @@ export class BackupScreen extends LitElement {
     return false;
   }
 
-  /** Configure + enable backups. Guards are the server's; here we only compose the body, refresh the
-   * rendered status, and mint a fresh key for a later rotate. A rejection becomes the `errorKey` banner. */
   async #apply(): Promise<void> {
     if (this.#applyDisabled || this.#pastedKeyTooShort()) return;
     this.errorKey = null;
@@ -346,8 +298,6 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** Rotate the recovery key (reuses the running destination/schedule/retention server-side). A
-   * rejection becomes the `errorKey` banner. */
   async #rotate(): Promise<void> {
     if (this.#rotateDisabled || this.#pastedKeyTooShort()) return;
     this.errorKey = null;
@@ -366,8 +316,6 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** Re-show the EFFECTIVE current key so the operator can keep it before rotating (older archives
-   * still need it). A rejection becomes the `errorKey` banner. */
   async #showOldKey(): Promise<void> {
     this.errorKey = null;
     try {
@@ -378,8 +326,6 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** Enter edit mode for an ALREADY-ENABLED box: fetch the CURRENT key (so the re-apply keeps it) and
-   * PREFILL the destination + policy from the running status. A rejection becomes the `errorKey` banner. */
   async #startEdit(): Promise<void> {
     this.errorKey = null;
     try {
@@ -397,8 +343,6 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** Change destination + policy on an enabled box, re-applying under the SAME (current) key — editing
-   * settings never re-mints or rotates. A rejection becomes the `errorKey` banner. */
   async #saveSettings(): Promise<void> {
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
     this.errorKey = null;
@@ -426,9 +370,8 @@ export class BackupScreen extends LitElement {
     this.errorKey = null;
   }
 
-  /** Seed the destination + policy draft from the running status, so edit mode opens on the CURRENT
-   * settings rather than blank defaults. A non-`wall-clock` running schedule (the box-image `interval`
-   * form the UI cannot author) leaves the schedule controls at their defaults. */
+  /** A non-`wall-clock` running schedule (the box-image `interval` form the UI cannot author) leaves
+   * the schedule controls at their defaults. */
   #prefillFromStatus(s: BackupStatusView): void {
     this.destinationDir = s.destinations[0]?.dir ?? "";
     if (s.schedule?.kind === "wall-clock") {
@@ -448,10 +391,8 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  /** A short, stable client-side fingerprint of a KEY (FNV-1a, 8 hex) — a disambiguator for the
-   * download filename so an operator holding several keys can tell the files apart. It is of the key
-   * BEING downloaded, NOT the running key's server fingerprint: on a rotate the new key's file must not
-   * carry the old key's fingerprint. Falls back to "box" for an (unexpected) empty key. */
+  /** Of the key BEING downloaded, not the running key's server fingerprint: on a rotate the new key's
+   * file must not carry the old key's fingerprint. */
   #fingerprint(key: string): string {
     if (key === "") return "box";
     let h = 0x811c9dc5;
@@ -476,7 +417,6 @@ export class BackupScreen extends LitElement {
     );
   }
 
-  /** A memoised `blob:` URL for the key's download file — one per distinct key, revoked on disconnect. */
   #downloadHref(key: string): string {
     let url = this.#blobUrls.get(key);
     if (url === undefined) {
@@ -487,8 +427,7 @@ export class BackupScreen extends LitElement {
     return url;
   }
 
-  /** Copy a key to the clipboard. A first-party app, so `navigator.clipboard` is available; guarded so a
-   * denied/absent clipboard (a locked-down browser, a test) never becomes an unhandled rejection. */
+  /** Guarded so a denied or absent clipboard never becomes an unhandled rejection. */
   #copy(key: string): void {
     void navigator.clipboard?.writeText(key).catch(() => {
       /* clipboard denied — the download + on-screen key are the fallback */
@@ -762,8 +701,6 @@ export class BackupScreen extends LitElement {
     `;
   }
 
-  /** The edit-settings form for an already-enabled box: destination + policy, PREFILLED and re-applied
-   * under the current key. NO key step — editing settings never changes the key (that is `rotate`). */
   #renderEditSettings(): TemplateResult {
     return html`
       <h2 data-test="edit-title">${t("backup.edit.title")}</h2>
@@ -787,8 +724,6 @@ export class BackupScreen extends LitElement {
     `;
   }
 
-  /** The recovery-key step, shared by configure + rotate: the minted default shown once with copy +
-   * download + the saved-it checkbox, or (advanced) a paste field. Always ends with the acknowledgement. */
   #renderKeyStep(): TemplateResult {
     return html`
       ${

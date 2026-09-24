@@ -17,9 +17,8 @@ import type {
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
 
-// A pair of fake provider panels so the reader-label tests never depend on the real SumUp/Stripe
-// panels (the payments-screen.test.ts idiom) — only `displayNameKey` matters here, so the connect/
-// add-reader forms are never rendered by this screen and can be stubs.
+// Fake provider panels, so the reader-label tests never depend on the real SumUp/Stripe panels; only
+// `displayNameKey` is read by this screen.
 registerCatalogue({
   en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
   es: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
@@ -159,7 +158,7 @@ const readers: ReaderRow[] = [
     deviceCount: 1,
   },
   { id: "r2", provider: "zeta", name: "Bar", active: true, canEnable: true, deviceCount: 0 },
-  // Retired: must be excluded from the picker's options (the printer picker's "active only" idiom).
+  // Retired: must be excluded from the picker's options.
   {
     id: "r3",
     provider: "acme",
@@ -212,7 +211,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight load (the four list verbs) and the follow-up render. */
 async function flush(el: DevicesScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -221,7 +219,6 @@ async function flush(el: DevicesScreen): Promise<void> {
 const q = (el: DevicesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
-/** Pick a value in one of the native <select>s and fire its `change`. */
 function pickSelect(el: DevicesScreen, testId: string, value: string): void {
   const select = q(el, `[data-test=${testId}]`) as HTMLSelectElement;
   select.value = value;
@@ -320,7 +317,7 @@ describe("devices-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
   });
 
-  // ── The pairing window (device-join-and-accept §1.1) ───────────────────────────────────────────
+  // ── The pairing window ─────────────────────────────────────────────────────────────────────────
 
   it("shows the shut window's Open control, with the refused-knock hint", async () => {
     const api = stubApi({
@@ -391,7 +388,7 @@ describe("devices-screen", () => {
     );
   });
 
-  // ── The pending queue (device-join-and-accept §1.2) ────────────────────────────────────────────
+  // ── The pending queue ──────────────────────────────────────────────────────────────────────────
 
   it("lists the pending requests by the name the device asked for", async () => {
     const api = stubApi();
@@ -403,11 +400,9 @@ describe("devices-screen", () => {
     expect(text(el, "[data-test=join-asked-j1]")).toBe("2026-09-08 10:02");
   });
 
-  // Design §1.2 rule 1: the list must never show the answer beside the question. Asserted against the
-  // SPECIFIC number this fake server holds — a blanket /\d{2}/ would trip on the row's own timestamp
-  // and could never pass — over the panel's rendered TEXT, plus the fact that nothing fetched a
-  // challenge to render the list. Not `innerHTML`: lit stamps a per-run random marker comment into
-  // every template, and one containing the digits "47" failed this test once for that reason alone.
+  // The list must never show the answer beside the question. Asserted against the SPECIFIC number
+  // over the panel's rendered TEXT: a blanket /\d{2}/ would match the row's timestamp, and `innerHTML`
+  // carries lit's random marker comments, one of which contained "47" once.
   it("never renders the request's verification number in the pending list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -546,9 +541,8 @@ describe("devices-screen", () => {
     expect(api.joinRequests).toHaveBeenCalledTimes(2);
   });
 
-  // Design §1.2: a wrong tap has ALREADY denied the request server-side. It is terminal for the row —
-  // the dialog closes, the row is gone, and the copy sends the operator back to the device. Proven by
-  // deletion: drop the `device.join_mismatch` branch in #accept and this fails.
+  // A wrong tap has ALREADY denied the request server-side, so it is terminal for the row: the dialog
+  // closes, the row is gone, and the copy sends the operator back to the device.
   it("treats a mismatch as terminal: the row goes, and the operator is told to ask again", async () => {
     const api = stubApi({
       acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
@@ -625,7 +619,7 @@ describe("devices-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("join_request.not_found");
   });
 
-  // The generate-code panel and its verb are gone: a device is created by ACCEPTING a request now.
+  // The generate-code panel and its verb are gone: a device is created by ACCEPTING a request.
   it("shows none of the retired generate-code controls", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -636,7 +630,7 @@ describe("devices-screen", () => {
     expect(q(el, "[data-test=copy-code]")).toBeNull();
   });
 
-  // ── Revoke + reassign (unchanged row controls) ─────────────────────────────────────────────────
+  // ── Revoke + reassign ──────────────────────────────────────────────────────────────────────────
 
   it("does not show the revoke / reassign / hardware controls for an already-revoked device", async () => {
     const api = stubApi();
@@ -734,10 +728,9 @@ describe("devices-screen", () => {
     expect(select.value).toBe("dp1");
   });
 
-  // ── Per-device hardware editor (Task 14) ───────────────────────────────────────────────────────
+  // ── Per-device hardware editor ─────────────────────────────────────────────────────────────────
 
   // A row's hardware editor PATCHes the receipt printer + cash drawer and reflects the stored values.
-  // Proven by deletion: drop the patchDeviceHardware call and the API is never hit.
   it("saves a row's edited hardware and reflects the update", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -788,7 +781,7 @@ describe("devices-screen", () => {
     expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
   });
 
-  // ── Per-device default reader (Task 16) ────────────────────────────────────────────────────────
+  // ── Per-device default reader ──────────────────────────────────────────────────────────────────
 
   it("loads the reader list ONCE for the whole screen, and each active device's current default", async () => {
     const api = stubApi();

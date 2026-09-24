@@ -10,15 +10,7 @@ import type {
   RecipeLine,
 } from "../api/client.js";
 
-/**
- * The recipe screen scanned by axe in both themes, driven to its FULLEST surface: mounted by ASSIGNING
- * the `api` stub as a property (the screen loads ingredients + catalogues on connect, so the stub must
- * resolve them or a stray rejection pollutes the run), then a catalogue and a product are chosen so the
- * catalogue picker, the product picker AND the recipe editor (with its ingredient switches, one
- * pre-checked) all render. The ingredient form is left CLOSED (its default), so its dialog renders
- * nothing to the a11y tree (it is scanned in `ingredient-form.a11y.test.ts`). axe is run against the
- * themed host so a color-contrast check means what it means in the app.
- */
+// The ingredient form stays closed here; its dialog is scanned in `ingredient-form.a11y.test.ts`.
 const INGREDIENTS: Ingredient[] = [
   {
     id: "i1",

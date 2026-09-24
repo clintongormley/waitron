@@ -18,13 +18,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/**
- * Mounts the screen with an `api` STUB assigned as a property, never from bare markup. The screen
- * fetches only the public Google configuration on connect (email login has no pre-login roster).
- * The language chooser reads `getLocales` when opened. The passkey and account-action methods keep
- * every rendered state free of incidental missing-stub errors. Mounted via `mountWidget`'s property assignment,
- * mirroring `till-lock-screen.a11y.test.ts`.
- */
 function stubApi(): DashboardApi {
   return {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
@@ -42,7 +35,6 @@ function stubApi(): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles any follow-up render. */
 async function flush(el: LoginScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;

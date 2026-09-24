@@ -2,8 +2,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-// The named import evaluates the module, which registers `<dashboard-location-picker>` via its
-// `@customElement` side effect — so no separate side-effect import is needed alongside the helper.
+// This import also registers `<dashboard-location-picker>`.
 import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -11,18 +10,10 @@ import type { DashboardApi, LocationSummary, PlannedVsActualRow } from "../api/c
 import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 import { personNameMap, resolvePersonName } from "../person-utils.js";
 
-/** The exclusive end of the week starting at `monday` — Monday + 7 days (the half-open [from, to)). */
 function weekEnd(monday: string): string {
   return new Date(Date.parse(`${monday}T00:00:00Z`) + 7 * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
-/**
- * The management dashboard's PLANNED-VS-ACTUAL SCREEN (design §3h): a location picker + week picker
- * whose from/to bound `[Monday, Monday+7)`, over a table of one (person, local day) row each —
- * planned vs worked minutes, late minutes, and the no-show / unplanned flags. Person ids render as
- * names via `listStaff`. Every async path is `try/catch`ed into the `errorKey` banner (the
- * roster-screen pattern); a location or week change reloads. Read-only: it authors nothing.
- */
 @customElement("dashboard-planned-actual-screen")
 export class PlannedActualScreen extends LitElement {
   static override styles = [
@@ -96,8 +87,6 @@ export class PlannedActualScreen extends LitElement {
   @state() private weekMonday = mondayOf(today());
   @state() private rows: PlannedVsActualRow[] = [];
   @state() private errorKey: string | null = null;
-  // A personId → displayName lookup rebuilt whenever the staff list loads (in #load), so #name is
-  // O(1) per rendered row rather than a per-row scan of the staff list.
   #names = new Map<string, string>();
 
   override connectedCallback(): void {
@@ -105,8 +94,6 @@ export class PlannedActualScreen extends LitElement {
     void this.#load();
   }
 
-  /** Load the locations + staff, pick a location (keeping a still-valid one across a reconnect), then
-   * the selected location + week's rows. A rejection anywhere becomes the error banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     let initial = true;
@@ -137,7 +124,6 @@ export class PlannedActualScreen extends LitElement {
     }
   }
 
-  /** Load the selected location + week's comparison rows. Throws to its caller's catch. */
   async #loadRows(): Promise<void> {
     await this.#queries.watch(
       "getPlannedVsActual",
@@ -148,8 +134,6 @@ export class PlannedActualScreen extends LitElement {
     );
   }
 
-  /** Surface a rejection as the `errorKey` banner — the thrown domain `{ code }`, or `server.internal`
-   * when the value carries none (a bare Error / network fault). The one place the fallback lives. */
   #fail(error: unknown): void {
     this.errorKey = codeOf(error);
   }
@@ -168,8 +152,7 @@ export class PlannedActualScreen extends LitElement {
   async #onSelectWeek(event: Event): Promise<void> {
     event.stopPropagation();
     const value = (event.target as HTMLInputElement).value;
-    // A cleared <input type=date> (value "") builds an Invalid Date → NaN; ignore it rather than
-    // reloading with a bogus window.
+    // A cleared date input gives "", which parses to NaN.
     if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
     this.weekMonday = mondayOf(value);
     this.errorKey = null;
@@ -180,13 +163,10 @@ export class PlannedActualScreen extends LitElement {
     }
   }
 
-  /** A person's display name, or the raw id when a row references someone not in the staff list.
-   * Backed by the `#names` map built when the staff list loaded, so it is O(1) per rendered row. */
   #name(personId: string): string {
     return resolvePersonName(this.#names, personId);
   }
 
-  /** The row's advisory flags as a space-joined label — no-show and/or unplanned, or "" for neither. */
   #flags(row: PlannedVsActualRow): string {
     const labels: string[] = [];
     if (row.noShow) labels.push(t("planned.no_show"));

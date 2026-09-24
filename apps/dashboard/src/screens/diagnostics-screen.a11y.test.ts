@@ -5,12 +5,8 @@ import type { DiagnosticsScreen } from "./diagnostics-screen.js";
 import type { DashboardApi, DiagnosticsLine } from "../api/client.js";
 
 /**
- * The diagnostics viewer scanned by axe in both themes, in four shapes: a populated tail (mixed
- * levels, so every level colour renders), an empty ring (just the controls + empty note), a live raise
- * (the `debug` verbosity banner with its filled revert window), and the error state (a rejected poll
- * shows the `role="alert"` banner). Mounted by ASSIGNING the `api` stub as a property; the screen polls
- * on connect, so the stub must resolve or a stray rejection pollutes the run (a rejection is a finding).
- * Every colour is a `--wt-*` token. Mirrors `service-status-screen.a11y.test.ts`.
+ * Scanned in four shapes; the populated tail mixes levels so every level colour renders. The screen
+ * polls on connect, so the stub must resolve or a stray rejection pollutes the run.
  */
 const SEED: DiagnosticsLine[] = [
   { at: "2026-08-31T10:00:00Z", level: "info", event: "http.request", requestId: "r1" },

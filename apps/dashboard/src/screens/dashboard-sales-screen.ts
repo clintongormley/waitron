@@ -21,21 +21,9 @@ import type {
 import { today } from "../date-utils.js";
 
 /**
- * The management dashboard's SALES & TAKINGS SCREEN (design §3 — reporting): a from/to date-range
- * picker over one node's fiscal figures (registered in Task 9). It reads `report.view`-gated data and
- * branches on the range width:
- *   - a SINGLE day (`from === to`) shows the full daily close — the per-till tender cash-up, the
- *     VAT-by-rate desglose, the record counts and that day's top sellers (`api.getDailyClose`);
- *   - a RANGE (`from !== to`) shows a period roll-up — VAT-by-rate + top sellers only, with a note
- *     that per-till tender detail is a single-day view (`api.getSalesPeriod`). Per-till cash-up does
- *     not roll up across days, so it is deliberately absent here.
- *
- * Money fields arrive pre-formatted as decimal strings from the server and are rendered verbatim
- * (there is no client-side currency formatter in this app). Top-seller names are the plain staff
- * name a sales report shows (see `docs/developers/products.md`) — no locale lookup. Every async
- * path is `try/catch`ed into the `errorKey` banner (the roster/overview-screen pattern); a
- * `from > to` range is left for the server to reject (400 `management.request_invalid`, per
- * report-api.ts's `from > to` guard), which surfaces the same way. Read-only: it authors nothing.
+ * A single day (`from === to`) shows the full daily close; a range shows a period roll-up of VAT and
+ * top sellers only, because per-till cash-up does not roll up across days. A `from > to` range is left
+ * for the server to reject.
  */
 @customElement("dashboard-sales-screen")
 export class SalesScreen extends LitElement {
@@ -139,11 +127,8 @@ export class SalesScreen extends LitElement {
     void this.#load();
   }
 
-  /** Load the current range: a single-day close (`from === to`) or a period roll-up (`from !== to`).
-   * BOTH branches' state is cleared up-front, BEFORE the request — so a rejection (including the
-   * server's `management.request_invalid` 400 for `from > to`) can never leave a stale close or period
-   * rendering beside the error banner. Clearing before the `await` also avoids showing the previous
-   * view during a slow fetch. A rejection anywhere becomes the banner. */
+  /** BOTH branches' state is cleared before the request, so a rejection can never leave a stale close
+   * or period rendering beside the error banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     this.close = null;
@@ -165,8 +150,6 @@ export class SalesScreen extends LitElement {
     }
   }
 
-  /** Handle a change to either date picker — `field` selects which bound to move. The two pickers
-   * differ only in that assignment, so they share one handler. */
   #onDateChange(field: "from" | "to", event: Event): void {
     event.stopPropagation();
     const value = (event.target as HTMLInputElement).value;
@@ -210,7 +193,6 @@ export class SalesScreen extends LitElement {
     `;
   }
 
-  /** The single-day full close: per-till tender cash-up, VAT desglose, record counts and top sellers. */
   #renderClose(close: DailyCloseDto): TemplateResult {
     return html`
       <div data-test="daily-close">
@@ -227,7 +209,6 @@ export class SalesScreen extends LitElement {
     `;
   }
 
-  /** The period roll-up: VAT desglose + top sellers, plus a note that the tender cash-up is per-day. */
   #renderPeriod(period: SalesPeriodDto): TemplateResult {
     return html`
       <div data-test="period">
@@ -239,7 +220,6 @@ export class SalesScreen extends LitElement {
     `;
   }
 
-  /** The per-till tender table — one row per (till, method), footed by the tender + tip totals. */
   #renderTender(cash: CashUpDto): TemplateResult {
     return html`
       <h2>${t("sales.tender_title")}</h2>
@@ -276,7 +256,6 @@ export class SalesScreen extends LitElement {
     `;
   }
 
-  /** The VAT-by-rate desglose — one row per rate, footed by the base/VAT and gross totals. */
   #renderVat(vat: VatSummaryDto): TemplateResult {
     return html`
       <h2>${t("sales.vat_title")}</h2>

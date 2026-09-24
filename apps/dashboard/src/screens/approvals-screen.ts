@@ -9,13 +9,6 @@ import { absenceKindName } from "../i18n/domain.js";
 import type { DashboardApi, PendingAbsence, PendingSwap } from "../api/client.js";
 import { personNameMap, resolvePersonName } from "../person-utils.js";
 
-/**
- * The management dashboard's APPROVALS SCREEN (design §3g): the two manager approve/reject queues —
- * ACCEPTED shift swaps and REQUESTED absences — side by side, each row carrying Approve and Reject
- * buttons. Person ids render as names via `listStaff`. Every async path is `try/catch`ed into an
- * `errorKey` banner (the roster/catalogue-screen pattern); a single-flight `busy` gate drops a
- * double-fired decide. On a decide it calls the API then reloads the queues.
- */
 @customElement("dashboard-approvals-screen")
 export class ApprovalsScreen extends LitElement {
   static override styles = [
@@ -82,8 +75,6 @@ export class ApprovalsScreen extends LitElement {
   @state() private absences: PendingAbsence[] = [];
   @state() private errorKey: string | null = null;
   @state() private busy = false;
-  // A personId → displayName lookup rebuilt whenever the staff list loads (in #load), so #name is
-  // O(1) per rendered row rather than a per-row scan of the staff list.
   #names = new Map<string, string>();
 
   override connectedCallback(): void {
@@ -91,9 +82,6 @@ export class ApprovalsScreen extends LitElement {
     void this.#load();
   }
 
-  /** The INITIAL load: the staff list (for name resolution) then both queues — mirrors
-   * roster-screen's `#load` (static data) vs `#loadRoster` (the reloadable part) split. A rejection
-   * anywhere becomes the error banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -107,7 +95,6 @@ export class ApprovalsScreen extends LitElement {
     }
   }
 
-  /** Observe both queues independently of the staff-name lookup. Throws on an initial failure. */
   async #loadQueues(): Promise<void> {
     await Promise.all([
       this.#queries.watch("listPendingSwaps", [], (value) => {
@@ -119,14 +106,10 @@ export class ApprovalsScreen extends LitElement {
     ]);
   }
 
-  /** Surface a rejection as the `errorKey` banner — the thrown domain `{ code }`, or `server.internal`
-   * when the value carries none (a bare Error / network fault). The one place the fallback lives. */
   #fail(error: unknown): void {
     this.errorKey = codeOf(error);
   }
 
-  /** A person's display name, or the raw id when it is not in the loaded staff list. Backed by the
-   * `#names` map built when the staff list loaded, so it is O(1) per rendered row. */
   #name(personId: string): string {
     return resolvePersonName(this.#names, personId);
   }

@@ -29,25 +29,18 @@ import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
-/** The two tabs, and the two kinds of modifier list behind them. */
 type Kind = "extras" | "options";
 
-/** Which of the two dependants modals a piece of state belongs to: the read-only detail modal, or
- * the delete confirmation's cascade preview. */
 type Modal = "view" | "delete";
 
-/** A list of either kind, reduced to what this screen's tables, modals and dialogs read. */
 type ModifierList = ExtraList | OptionList;
 
-/** A product or menu item that carries a list, as both dependants readers return it. */
 type Dependant = { id: string; name: string };
 type UsageDependant = Dependant & { type: "product" | "menu" };
 
 /**
- * What deleting a list of either kind would touch. `extraListDependants` and `optionListDependants`
- * (packages/catalogue/src/{extras,options}.ts) each return exactly these two arrays and no order
- * count: options never touch an order, and an extras-list delete leaves an open order's child lines
- * alone because they name the PRODUCT, not the list (spec
+ * No order count: options never touch an order, and an extras-list delete leaves an open order's
+ * child lines alone because they name the product, not the list (spec
  * 2026-09-18-one-product-model-design.md §3.5).
  */
 type ListDependants = { products: Dependant[]; menus: Dependant[] };
@@ -56,20 +49,8 @@ type ListDependants = { products: Dependant[]; menus: Dependant[] };
  * row still being in the list a later refresh loads. */
 type Target = { kind: Kind; id: string; name: string };
 
-/**
- * The Modifiers page: one screen, two tabs — Extras and Options — each the Categories-pattern table
- * for its kind (spec 2026-09-18-one-product-model-design.md §9.2). A tab has a header Add button, a
- * searchable and filterable table whose sort is remembered under its OWN session-storage key, a
- * detail modal with Edit and Close, and a delete flow that previews what would be lost.
- *
- * Neither kind's delete previews an order count — see {@link ListDependants} — and neither is
- * blocked before the write: `options.in_use` and `extras.in_use` are declared and status-mapped but
- * thrown by nothing, which the `STATUS` map in `apps/server/src/catalogue-api.ts` states on those
- * two entries itself. A refusal that arrives anyway is still shown in the dialog.
- *
- * The extras form edits rows picked from PRODUCTS, which it never loads: this screen reads them
- * (every catalogue's products, as the catalogue screen does) and hands them over.
- */
+/** The extras form picks its rows from products but never loads them: this screen reads them and
+ * hands them over. */
 @customElement("dashboard-modifiers-screen")
 export class ModifiersScreen extends LitElement {
   static override styles = [
@@ -96,10 +77,8 @@ export class ModifiersScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @state() private tab: Kind = "extras";
-  /** The chosen tab lives in the path, as it does on the alerts, printers and venue-operations
-   * screens — profile-screen.ts is the one tabbed screen that keeps its tab in component state — so
-   * a refresh, a back press and a shared link all reopen what the manager was looking at. An unknown
-   * tab falls back to Extras and REPLACES rather than pushes, so Back still leaves the screen. */
+  /** An unknown tab falls back to Extras and replaces rather than pushes, so Back still leaves the
+   * screen. */
   readonly #url = new UrlStateController(
     this,
     () => {
@@ -112,13 +91,12 @@ export class ModifiersScreen extends LitElement {
   );
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
-  /** Every catalogue's products, deduplicated by id — the rows the extras form offers. */
   @state() private products: Product[] = [];
   @state() private locales: ContentLanguages | null = null;
   @state() private loading = true;
   @state() private loadError = false;
   @state() private error: string | null = null;
-  /** Which editor is open, and on which list; null when neither is. A null `value` is a create. */
+  /** A null `value` is a create. */
   @state() private editing: { kind: Kind; value: ModifierList | null } | null = null;
   @state() private busy = false;
   @state() private fieldErrors: Record<string, string> = {};
@@ -176,11 +154,7 @@ export class ModifiersScreen extends LitElement {
       this.loading = false;
     }
   }
-  /** The catalogue ids the product read is grouped over; set by `#load` before `#loadProducts`.
-   * Not reactive state: nothing renders it, and `#loadProducts` reads it in the same turn. */
   #catalogueIds: string[] = [];
-  /** The extras form picks its rows from products, which live per catalogue. One watch per
-   * catalogue, merged by id, is the shape the catalogue screen uses for the same reason. */
   async #loadProducts(): Promise<void> {
     if (this.#catalogueIds.length === 0) {
       this.products = [];
@@ -224,9 +198,6 @@ export class ModifiersScreen extends LitElement {
       this.dependantsError = failed;
     }
   }
-  /** Opens one of the two modals on `list` and starts its read. Both show exactly the same two
-   * arrays and differ only in which fields hold them, so the open, the generation guard and the
-   * read are written once. */
   #openModal(modal: Modal, kind: Kind, list: ModifierList): void {
     if (modal === "delete") this.error = null;
     this.#setDependants(modal, null, false);
@@ -239,10 +210,8 @@ export class ModifiersScreen extends LitElement {
     this.#setDependants(modal, null, false);
     this.#generation[modal]++;
   }
-  /** Feeds a modal's body. A failed fetch sets that modal's own error flag rather than an empty
-   * stand-in: for the detail modal an empty table would read as "nothing carries this list", and for
-   * the delete confirmation — where every consequence cascades and cannot be undone — as "nothing
-   * depends on this", which would have a manager confirm the cascade blind. */
+  /** A failed fetch sets an error flag rather than empty lists, which would read as "nothing depends
+   * on this" and have a manager confirm the cascade blind. */
   async #loadDependants(modal: Modal, kind: Kind, id: string, generation: number): Promise<void> {
     try {
       const rows = await this.#dependantsOf(kind, id);
@@ -251,10 +220,9 @@ export class ModifiersScreen extends LitElement {
       if (generation === this.#generation[modal]) this.#setDependants(modal, null, true);
     }
   }
-  /** The field an authoring refusal names, or `_form` when it names none. Both kinds' refusals
-   * carry it under the same key: `extras.invalid`, `options.invalid` and the two
-   * `*.translation_required` siblings all declare `field` (packages/catalogue/src/errors.ts), and
-   * each form maps that path onto its own inputs. */
+  /** The extras and options saves' refusals that name an input — `extras.invalid`, `options.invalid`,
+   * `extras.product_has_variants` and both `*.translation_required` codes — declare `field`
+   * (packages/catalogue/src/errors.ts). */
   #fieldOf(error: unknown): string {
     const params =
       typeof error === "object" && error !== null && "params" in error ? error.params : null;
@@ -314,24 +282,17 @@ export class ModifiersScreen extends LitElement {
     this.busy = false;
     await this.#load();
   }
-  /** Every loaded product by id, and every extras list's joined product names by list id. The join
-   * is the items column's `cell`, its `searchValue` AND its `sortValue`, so it runs for every row on
-   * every keystroke in the table's search box and again per row when that column sorts. Both indexes
-   * are rebuilt in `willUpdate` when their sources change, never per read. */
+  /** Built in `willUpdate`, not per read: the joined names feed the items column's cell, search and
+   * sort, which run per row on every keystroke. */
   #productById = new Map<string, Product>();
   #itemNamesByList = new Map<string, string>();
-  /** An extras list's offered products, by their STAFF names — the name every dashboard surface
-   * shows (docs/developers/products.md). A product the screen no longer holds is skipped rather
-   * than named: the picker inside the editor is where a missing one is reported. */
+  /** A product the screen no longer holds is skipped: the editor's picker reports a missing one. */
   #joinItemNames(list: ExtraList): string {
     return list.items
       .map((item) => this.#productById.get(item.productId)?.name)
       .filter((name): name is string => name !== undefined)
       .join(", ");
   }
-  /** Belt and braces: the rows and the index are both built from `extraLists` in the same update,
-   * so nothing today reaches the fallback. It joins on the spot rather than showing a blank cell if
-   * anything ever does. */
   #itemNames(list: ExtraList): string {
     return this.#itemNamesByList.get(list.id) ?? this.#joinItemNames(list);
   }
@@ -411,8 +372,6 @@ export class ModifiersScreen extends LitElement {
       },
     ];
   }
-  /** The Name column every dependants table leads with, searching and sorting on the staff name so a
-   * product is found by what the dashboard calls it. */
   #nameColumn<T extends Dependant>(): DataTableColumn<T> {
     return {
       key: "name",
@@ -442,9 +401,7 @@ export class ModifiersScreen extends LitElement {
       },
     ];
   }
-  /** A read-only table of products or menu items in the delete confirmation's cascade preview. It
-   * carries no `emptyMessage`: both call sites are guarded by `length > 0`, and `wt-data-table`
-   * renders that message only when it has no rows at all. */
+  /** No `emptyMessage`: both call sites render this only when there are rows. */
   #dependantsTable(options: {
     testId: string;
     label: string;
@@ -465,9 +422,6 @@ export class ModifiersScreen extends LitElement {
       .rowKey=${(entry: Dependant) => entry.id}
     ></wt-data-table>`;
   }
-  /** The detail modal's body: a spinner until `#loadUsage` resolves, then one filterable table of
-   * every product and menu item that carries the list. A failed fetch says so instead, because an
-   * empty table would read as "nothing carries this". */
   #renderUsage() {
     if (this.usageError)
       return html`<p class="error" data-test="usage-error" role="alert">
@@ -494,9 +448,6 @@ export class ModifiersScreen extends LitElement {
       .emptyMessage=${t("modifiers.no_usage")}
     ></wt-data-table>`;
   }
-  /** The single red warning at the top of the delete confirmation: one paragraph naming every
-   * cascade consequence, space-joined from the sentences that apply. Only called when there IS
-   * something to lose, so the "cannot be undone" opener always leads it. */
   #deleteWarning(dependants: ListDependants): string {
     const parts = [t("modifiers.delete_warning_intro")];
     if (dependants.products.length > 0)
@@ -512,11 +463,6 @@ export class ModifiersScreen extends LitElement {
       );
     return parts.join(" ");
   }
-  /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the red
-   * warning naming every cascade consequence above the affected-products and affected-menus tables
-   * (each shown only when non-empty). With nothing depending on the list there is no warning, just
-   * the buttons. A failed fetch says so instead, because silence here would read as "nothing to
-   * lose". */
   #renderDependants() {
     if (this.dependantsError)
       return html`<p class="error" data-test="dependants-error" role="alert">
@@ -555,8 +501,7 @@ export class ModifiersScreen extends LitElement {
         : nothing
     }`;
   }
-  /** One tab: its heading and Add button, then its table. Each kind's table carries its OWN
-   * `viewKey`, so a sort chosen on one tab is not restored onto the other. */
+  /** Each kind's table has its own `viewKey`, so a sort chosen on one tab is not restored on the other. */
   #renderTab(kind: Kind) {
     const row = kind === "extras" ? "extra" : "option";
     return html`<div class="tab-actions">
@@ -702,9 +647,8 @@ export class ModifiersScreen extends LitElement {
         ></wt-modal
       >`;
   }
-  /** The detail modal's Edit: close the modal and open the same list in its own editor. The list is
-   * re-read from the loaded rows, so an edit started after a background refresh edits what the
-   * screen currently holds rather than the snapshot the modal was opened on. */
+  /** Re-reads the list from the loaded rows, so an edit started after a background refresh edits what
+   * the screen holds now rather than the snapshot the modal opened on. */
   #editViewed(): void {
     const viewing = this.viewing;
     if (!viewing) return;

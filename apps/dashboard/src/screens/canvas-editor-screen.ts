@@ -8,9 +8,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-// Side-effect import: register <canvas-grid-preview> (the shared thumbnail/canvas unit) — the list
-// renders each canvas's first tab as an inert preview with it, and the editor renders its live tab
-// as the interactive canvas.
+// Side-effect import: registers <canvas-grid-preview>.
 import "./canvas-editor/canvas-grid-preview.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -38,47 +36,10 @@ function formFactorFromEvent(event: Event): FormFactor {
   return (event.target as HTMLSelectElement).value as FormFactor;
 }
 
-/** Clamp a card span: colSpan to `1..columns`, rowSpan to `≥1`. The single source of the span clamp —
- * the stepper (`#setSpan`) and the resize drag (`#setSpans`) both route through it, so the two paths
- * can never diverge. */
 function clampSpan(field: "colSpan" | "rowSpan", value: number, columns: number): number {
   return field === "colSpan" ? Math.min(Math.max(value, 1), columns) : Math.max(value, 1);
 }
 
-/**
- * The management dashboard's CANVAS EDITOR screen (SP-B3.2) — the venue's central surface for the
- * per-device grid layouts ("canvases"). LIST mode loads the tenant's
- * canvases (`api.listCanvases()`), and renders each as a card carrying its name, a form-factor badge,
- * tab/card counts and an inert `<canvas-grid-preview>` thumbnail of its first tab, plus per-row Editar /
- * Duplicar / Eliminar controls. It also offers a Crear dialog (name + form-factor) that seeds a fresh
- * draft from the built-in default for that form factor and enters EDITOR mode.
- *
- * EDITOR mode is the draft editor: a tab bar (select/add tab), the interactive
- * `<canvas-grid-preview>` as the canvas, a palette that appends a card at its default spans, and —
- * when a card tile is selected — a property panel with colSpan/rowSpan steppers, remove, and ↑/↓
- * reorder, plus the rest of the property panel (per-card CONFIG + `visibleWhen` toggles + a
- * permission note), TAB settings (title/columns/delete, with a last-tab guard), CANVAS
- * settings (name/form-factor — capabilities moved to the device-profile editor, Task 9), and the real
- * SAVE (`#save`): it refuses an empty
- * name, runs the light client validator (`validateCanvasDraft`) — a broken draft shows the banner and
- * does not write — then `createCanvas`/`updateCanvas` on `editingId` and returns to the reloaded list.
- * Every draft edit goes through `#updateDraft`, which assigns a FRESH `CanvasDef` (never mutates in
- * place) so Lit and the preview re-render. `Cancelar` returns to the list, clearing the draft. The
- * editor root keeps the `editor-placeholder` seam (its `data-editing-id`/`data-form-factor`
- * attributes).
- *
- * DEFENSIVE PARSE. A canvas's `definition` crosses the client boundary as opaque `unknown` (the #70
- * bundle rule — the dashboard never imports `@waitron/layouts`' real type). `#parseDefinition` shallow-
- * checks it before the thumbnail reads it, so a malformed/absent definition renders a neutral
- * `no-preview` placeholder rather than throwing and blanking the whole list.
- *
- * ERROR HANDLING mirrors the sibling screens (printers/staff): every loader/mutation is fully
- * `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` (the raw `{ code }`, falling
- * back to `server.internal`) rendered in a `role="alert"` banner. Both banners map their code with
- * `codeMessage`: the client validator's `canvas_editor.err_*` pseudo-codes and the server's
- * `canvas.*`/`server.*` codes all live in `CODE_MESSAGES`, so one banner shows both kinds localised
- * with no per-key routing.
- */
 @customElement("dashboard-canvas-editor-screen")
 export class CanvasEditorScreen extends LitElement {
   static override styles = [
@@ -230,7 +191,6 @@ export class CanvasEditorScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -240,42 +200,29 @@ export class CanvasEditorScreen extends LitElement {
     },
   );
 
-  /** Which mode is showing. `list` is the canvas gallery; `editor` is the draft grid editor. */
   @state() private mode: "list" | "editor" = "list";
 
-  /** The tenant's canvases, (re)loaded on connect and after every mutation. */
   @state() private canvases: Canvas[] = [];
 
   @state() private errorKey: string | null = null;
 
-  // Crear dialog state: whether it is open, and the fields the operator fills in.
   @state() private createOpen = false;
   @state() private createName = "";
   @state() private createFormFactor: FormFactor = FORM_FACTORS[0];
 
-  // Duplicar dialog state: the canvas being copied (null = closed) and the new name (prefilled
-  // "<name> (copy)"), edited in the dialog before it confirms.
   @state() private duplicateTarget: Canvas | null = null;
   @state() private duplicateName = "";
 
-  // Eliminar dialog state: the canvas armed for deletion (null = closed).
   @state() private deleteTarget: Canvas | null = null;
 
-  // Editor-mode draft: the parsed definition being edited, its name, and the id of the canvas being
-  // edited (null for a freshly-created draft not yet saved).
   @state() private draft: CanvasDef | null = null;
   @state() private draftName = "";
   @state() private editingId: string | null = null;
 
-  /** Which tab of the draft the canvas + palette act on. */
   @state() private activeTabIndex = 0;
 
-  /** What the property panel targets: a card by index, the tab, or the whole canvas — rendering the
-   * card panel, the tab-settings panel, or the canvas-settings panel respectively, or nothing when
-   * `null`. */
   @state() private selection: { card: number } | { tab: true } | { canvas: true } | null = null;
 
-  /** True while a `#save` write is in flight, so Guardar disables itself and no second write races. */
   @state() private saving = false;
 
   #editorRequest = 0;
@@ -323,8 +270,6 @@ export class CanvasEditorScreen extends LitElement {
     void this.#load();
   }
 
-  /** (Re)load the tenant's canvases. Called on connect and after every mutation. A rejection becomes
-   * the `errorKey` banner rather than an unhandled rejection. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -336,8 +281,6 @@ export class CanvasEditorScreen extends LitElement {
     }
   }
 
-  /** The shared shape of every mutation: clear the error banner, run `action`, reload on success, and
-   * turn a rejection into the `errorKey` banner (never an unhandled rejection). */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.errorKey = null;
     try {
@@ -348,13 +291,8 @@ export class CanvasEditorScreen extends LitElement {
     }
   }
 
-  /**
-   * A defensive shallow parse of a canvas's opaque `definition` (it crosses the client boundary as
-   * `unknown`). Returns a {@link CanvasDef} only when the value is an object whose `formFactor` is a
-   * known {@link FormFactor} and whose `tabs` is an array; otherwise `null`, so a malformed row renders
-   * the neutral `no-preview` placeholder rather than throwing. The server's `validateCanvas` stays the
-   * authority — this only decides whether the thumbnail can safely read the definition.
-   */
+  /** A shallow parse of the opaque `definition`: a malformed row renders the `no-preview` placeholder
+   * rather than throwing. The server's `validateCanvas` stays the authority. */
   #parseDefinition(definition: unknown): CanvasDef | null {
     if (typeof definition !== "object" || definition === null) return null;
     const def = definition as Record<string, unknown>;
@@ -363,7 +301,6 @@ export class CanvasEditorScreen extends LitElement {
     return def as unknown as CanvasDef;
   }
 
-  /** Total cards across all tabs of a parsed definition (defensive against a tab missing `cards`). */
   #cardCount(def: CanvasDef): number {
     return def.tabs.reduce((n, tab) => n + (Array.isArray(tab?.cards) ? tab.cards.length : 0), 0);
   }
@@ -376,9 +313,6 @@ export class CanvasEditorScreen extends LitElement {
     this.createOpen = true;
   }
 
-  /** Build a `wt-change` handler that writes the event's value straight into one plain string state
-   * field — the shared shape of the create/canvas/duplicate NAME inputs. (Fields with a different
-   * write-back, like the active tab's title, keep their own handler.) */
   #bindField(field: "createName" | "draftName" | "duplicateName") {
     return (event: CustomEvent<{ value: string }>): void => {
       event.stopPropagation();
@@ -391,9 +325,8 @@ export class CanvasEditorScreen extends LitElement {
     this.createFormFactor = formFactorFromEvent(event);
   }
 
-  /** Seed a fresh draft from the built-in default for the chosen form factor and enter editor mode.
-   * Nothing is written to the server here — that happens on Guardar (`#save`). `structuredClone` gives
-   * the editor a private copy it can mutate without touching the shared `DEFAULT_CANVASES` template. */
+  /** Nothing is written until Guardar. `structuredClone` keeps the shared `DEFAULT_CANVASES` template
+   * untouched by the editor's edits. */
   #confirmCreate(): void {
     ++this.#editorRequest;
     this.draft = structuredClone(DEFAULT_CANVASES[this.createFormFactor]);
@@ -408,13 +341,7 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Editar ─────────────────────────────────────────────────────────────────────────────────────
 
-  /** Open the editor for an existing canvas. FETCHES the canvas fresh via `getCanvas(id)` (spec §6.2)
-   * rather than reusing the possibly-stale list snapshot, then parses its definition into a PRIVATE
-   * editable draft (`structuredClone`, so structural edits never touch the store's copy) and enters
-   * editor mode. Routed through the screen's `errorKey` pattern: a `getCanvas` rejection — or a
-   * definition the defensive parse rejects — sets the banner and stays in LIST mode rather than
-   * entering a broken editor (and never becomes an unhandled rejection; the caller `void`-invokes it).
-   * Guardar (`#save`) writes the draft back. */
+  /** Fetches the canvas fresh via `getCanvas(id)` rather than reusing the possibly-stale list row. */
   async #openEditor(id: string, fromHistory = false): Promise<void> {
     const request = ++this.#editorRequest;
     this.errorKey = null;
@@ -444,13 +371,12 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Editor: draft mutation (all edits assign a fresh CanvasDef; never mutate in place) ───────────
 
-  /** The single seam every draft edit flows through: assign a fresh {@link CanvasDef} so Lit and the
-   * `<canvas-grid-preview>` both re-render. Never mutate the current draft in place. */
+  /** Every draft edit assigns a fresh {@link CanvasDef} so Lit and the `<canvas-grid-preview>` both
+   * re-render. Never mutate the current draft in place. */
   #updateDraft(next: CanvasDef): void {
     this.draft = next;
   }
 
-  /** Apply `mutate` to the active tab, producing a fresh draft with that one tab replaced. */
   #updateActiveTab(mutate: (tab: TabDef) => TabDef): void {
     const draft = this.draft;
     if (draft === null) return;
@@ -464,9 +390,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#writeEditorUrl(fromHistory);
   }
 
-  /** Append a fresh, empty tab and make it active. Its column count comes from the form factor's
-   * built-in default canvas primary tab (`DEFAULT_CANVASES`), the single source for those figures; the
-   * operator renames/resizes it in the tab-settings panel. */
   #addTab(): void {
     const draft = this.draft;
     if (draft === null) return;
@@ -481,8 +404,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#selectTab(nextIndex);
   }
 
-  /** Append a card of `type` to the active tab at its default spans (colSpan capped to the tab's
-   * column count so a wide card never overflows a narrow tab). */
   #addCard(type: CardType): void {
     const draft = this.draft;
     if (draft === null) return;
@@ -498,14 +419,11 @@ export class CanvasEditorScreen extends LitElement {
     this.#updateActiveTab((t) => ({ ...t, cards: [...t.cards, card] }));
   }
 
-  /** The index of the selected card, or `null` when the selection is not a card. */
   #selectedCardIndex(): number | null {
     const sel = this.selection;
     return sel !== null && "card" in sel ? sel.card : null;
   }
 
-  /** Rewrite the selected card's `colSpan`/`rowSpan` from the stepper's string value: a non-number is
-   * ignored, colSpan clamps to `1..tab.columns`, rowSpan clamps to `≥1`. */
   #setSpan(field: "colSpan" | "rowSpan", raw: string): void {
     const draft = this.draft;
     const index = this.#selectedCardIndex();
@@ -521,9 +439,6 @@ export class CanvasEditorScreen extends LitElement {
     }));
   }
 
-  /** Rewrite one card's BOTH spans in a SINGLE draft rebuild, each clamped via `clampSpan` (colSpan
-   * `1..columns`, rowSpan `≥1`). The resize-drag counterpart to the per-field `#setSpan` stepper —
-   * one `#updateActiveTab` clone rather than two. */
   #setSpans(index: number, spans: { colSpan: number; rowSpan: number }): void {
     const draft = this.draft;
     if (draft === null) return;
@@ -533,11 +448,8 @@ export class CanvasEditorScreen extends LitElement {
     if (current === undefined) return;
     const colSpan = clampSpan("colSpan", spans.colSpan, tab.columns);
     const rowSpan = clampSpan("rowSpan", spans.rowSpan, tab.columns);
-    // A resize drag re-emits raw spans each cell it crosses; past the clamp bound (raw colSpan 13,
-    // 14, 15… above `columns`, or 0, −1… below the minimum) every one snaps to the SAME clamped
-    // result, so skip the rebuild when neither clamped span differs from the card's current spans —
-    // no #updateActiveTab clone, no re-render. The output is already correct; only the wasted work
-    // is removed. A genuine change still rewrites.
+    // Past the clamp bound a resize drag re-emits spans that clamp to the same result, so skip the
+    // rebuild when neither clamped span differs from the card's current spans.
     if (colSpan === current.colSpan && rowSpan === current.rowSpan) return;
     this.#updateActiveTab((t) => ({
       ...t,
@@ -555,7 +467,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#setSpan("rowSpan", event.detail.value);
   }
 
-  /** Remove the selected card from the active tab and clear the selection. */
   #removeCard(): void {
     const index = this.#selectedCardIndex();
     if (index === null) return;
@@ -563,10 +474,8 @@ export class CanvasEditorScreen extends LitElement {
     this.selection = null;
   }
 
-  /** Move the selected card to its neighbour (`delta` −1 = up, +1 = down); a no-op at either end that
-   * fires no draft rebuild. For an adjacent move a splice equals a swap, so this delegates to
-   * `#moveCardTo` (which follows the selection) — the `to` bounds guard here keeps the boundary a true
-   * no-op rather than letting `#moveCardTo` clamp an out-of-range target back in and rewrite. */
+  /** The bounds guard keeps either end a true no-op rather than letting `#moveCardTo` clamp the target
+   * back in and rewrite. */
   #moveCard(delta: -1 | 1): void {
     const from = this.#selectedCardIndex();
     if (from === null) return;
@@ -579,10 +488,8 @@ export class CanvasEditorScreen extends LitElement {
     this.#moveCardTo(from, to);
   }
 
-  /** Reorder a card within the active tab: remove it at `from` and insert it at `to` (an index in the
-   * array AFTER the removal). This is the direct-manipulation counterpart to the ↑/↓ swap — the
-   * layout is FLOW-based, so a drag "move" is a splice, not an x/y placement. The selection follows
-   * the card to its landing index. `#moveCard` (keyboard) stays a swap; both are kept. */
+  /** `to` is an index in the array AFTER the removal. The layout is flow-based, so a drag move is a
+   * splice, not an x/y placement. */
   #moveCardTo(from: number, to: number): void {
     const draft = this.draft;
     if (draft === null) return;
@@ -597,15 +504,11 @@ export class CanvasEditorScreen extends LitElement {
     this.selection = { card: landing };
   }
 
-  /** Apply a `move-card` drag intent from the preview. */
   #onMoveCard(event: CustomEvent<{ from: number; to: number }>): void {
     event.stopPropagation();
     this.#moveCardTo(event.detail.from, event.detail.to);
   }
 
-  /** Apply a `resize-card` drag intent from the preview: select the resized card and write both spans
-   * through `#setSpans`, which clamps each via the shared `clampSpan` (colSpan 1..columns, rowSpan ≥1)
-   * in ONE draft rebuild — no duplicated clamp, no double clone. */
   #onResizeCard(event: CustomEvent<{ index: number; colSpan: number; rowSpan: number }>): void {
     event.stopPropagation();
     const { index, colSpan, rowSpan } = event.detail;
@@ -613,7 +516,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#setSpans(index, { colSpan, rowSpan });
   }
 
-  /** Discard the draft and return to the list, clearing the error banner too. */
   #cancelEditor(fromHistory = false): void {
     ++this.#editorRequest;
     this.#url.write({ canvas: null, "canvas-tab": null }, fromHistory);
@@ -632,8 +534,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#setConfigColumns(event.detail.value);
   }
 
-  /** Set (or, on an empty entry, CLEAR) the selected product-grid card's `config.columns` — a number
-   * clamped to 1..12, an empty box removing the key so the config never carries a stray value. */
   #setConfigColumns(raw: string): void {
     const draft = this.draft;
     const index = this.#selectedCardIndex();
@@ -661,9 +561,7 @@ export class CanvasEditorScreen extends LitElement {
     }));
   }
 
-  /** Toggle the selected card's membership of a visibility `state`. The result is rebuilt in the
-   * contract's declared state order (deterministic, not click order), and an EMPTY result OMITS
-   * `visibleWhen` entirely rather than storing `[]` — the shape the server and validator expect. */
+  /** An EMPTY result omits `visibleWhen` rather than storing `[]`. */
   #onVisibleToggle(event: CustomEvent<{ checked: boolean }>, state: string): void {
     event.stopPropagation();
     const draft = this.draft;
@@ -706,8 +604,6 @@ export class CanvasEditorScreen extends LitElement {
     this.#updateActiveTab((tab) => ({ ...tab, columns }));
   }
 
-  /** Remove the active tab. A no-op at the last tab (the button is also disabled there) so a canvas
-   * never ends up tab-less. `activeTabIndex` clamps back into range and the selection clears. */
   #deleteTab(): void {
     const draft = this.draft;
     if (draft === null || draft.tabs.length <= 1) return;
@@ -732,14 +628,7 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Persist the draft: refuse an empty NAME first (the server accepts `""`, so it is guarded here),
-   * then run the light client validator (`validateCanvasDraft`) — a broken draft sets the banner and
-   * does NOT write. Only a clean draft reaches the server: `updateCanvas` when editing an existing
-   * canvas, `createCanvas` for a fresh one, after which the editor returns to the (reloaded) list. A
-   * server rejection (a `canvas.*` code) stays in the editor with the banner shown. Guardar disables
-   * itself while the write is in flight.
-   */
+  /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
     if (this.saving) return;
     const request = this.#editorRequest;
@@ -790,10 +679,8 @@ export class CanvasEditorScreen extends LitElement {
     this.duplicateName = `${canvas.name}${t("canvas_editor.copy_suffix")}`;
   }
 
-  /** Create a copy of the armed canvas under the entered name, from the SAME definition, then reload.
-   * Duplicar is an IMMEDIATE server write (unlike Crear, which only enters editor mode), and the server
-   * accepts `""` as a name, so a blank/whitespace name is refused HERE — the dialog stays open (target
-   * kept) so the operator can correct it rather than silently persisting an empty-named canvas. */
+  /** Duplicar writes immediately and the server accepts `""` as a name, so a blank name is refused
+   * here and the dialog stays open for a correction. */
   #confirmDuplicate(): void {
     const target = this.duplicateTarget;
     if (target === null) return;
@@ -809,7 +696,6 @@ export class CanvasEditorScreen extends LitElement {
     this.deleteTarget = canvas;
   }
 
-  /** Delete the armed canvas, then reload. A rejection (a since-deleted id) becomes the error banner. */
   #confirmDelete(): void {
     const target = this.deleteTarget;
     if (target === null) return;
@@ -883,9 +769,9 @@ export class CanvasEditorScreen extends LitElement {
     </li>`;
   }
 
-  /** The `<option>` list for a form-factor `<select>`. With `selected` given (canvas settings) the
-   * matching option carries `?selected`; without it (the Crear dialog, whose `<select>` binds no value)
-   * the browser's default first-option selection stands — matching `createFormFactor`'s default. */
+  /** With `selected` given, the matching option carries `?selected`; without it (the Crear dialog,
+   * whose `<select>` binds no value) the browser's first-option default stands, matching
+   * `createFormFactor`'s default. */
   #renderFormFactorOptions(selected?: FormFactor): TemplateResult {
     return html`${FORM_FACTORS.map(
       (ff) =>
@@ -991,12 +877,9 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Editor renderers ─────────────────────────────────────────────────────────────────────────────
 
-  /** The tab bar: one button per draft tab (selecting `activeTabIndex`) plus a `+ Tab` button.
-   * The buttons are a plain group, NOT an ARIA `tablist`: `wt-button` wraps a native `<button>` in its
-   * shadow root, so `role="tab"` on the host (which forwards only `aria-label`) leaves the real
-   * focusable control nested inside it — axe flags `aria-required-children` / `nested-interactive` /
-   * `no-focusable-content`. The active tab is conveyed with `aria-current` (a GLOBAL ARIA property,
-   * valid on any element, so no `aria-allowed-attr` issue) plus the `primary` variant. */
+  /** A plain group, NOT an ARIA `tablist`: `wt-button` wraps a native `<button>` in its shadow root,
+   * so `role="tab"` on the host leaves the focusable control nested inside it, which axe flags. The
+   * active tab is conveyed with `aria-current` plus the `primary` variant. */
   #renderTabBar(draft: CanvasDef): TemplateResult {
     return html`<div class="tabbar">
       ${draft.tabs.map(
@@ -1023,7 +906,6 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The palette: one button per card type; a click appends that card to the active tab. */
   #renderPalette(): TemplateResult {
     return html`<div class="palette" data-test="palette">
       <h2 class="panel-title">${t("canvas_editor.palette_title")}</h2>
@@ -1042,8 +924,6 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The config section for the selected card: a field per `configFields` entry (only product-grid's
-   * `columns` today), or a "no settings" note when the card takes none. */
   #renderConfig(card: CardInstance): TemplateResult | typeof nothing {
     const fields = CARD_CONTRACTS[card.type].configFields;
     if (fields.length === 0) {
@@ -1064,8 +944,6 @@ export class CanvasEditorScreen extends LitElement {
     )}`;
   }
 
-  /** The visibility section: one switch per declared visibility state, toggling `visibleWhen`
-   * membership. Absent for a card with no visibility states. */
   #renderVisibleWhen(card: CardInstance): TemplateResult | typeof nothing {
     const states = CARD_CONTRACTS[card.type].visibilityStates;
     if (states.length === 0) return nothing;
@@ -1087,9 +965,6 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The card property panel: colSpan/rowSpan steppers, per-card config + visibility, a permission
-   * note, then remove and ↑/↓ reorder. (No capability note any more — capabilities relocated onto the
-   * device profile, Task 9, so the canvas editor no longer knows a device's capability set.) */
   #renderCardPanel(tab: TabDef, index: number): TemplateResult {
     const card = tab.cards[index]!;
     const contract = CARD_CONTRACTS[card.type];
@@ -1147,8 +1022,6 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The tab-settings panel (selection = tab): the active tab's title + column count, and a Delete
-   * that is disabled at the last tab (the last-tab guard). */
   #renderTabSettings(draft: CanvasDef): TemplateResult | typeof nothing {
     const tab = draft.tabs[this.activeTabIndex];
     if (tab === undefined) return nothing;
@@ -1184,9 +1057,6 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** The canvas-settings panel (selection = canvas): the canvas NAME (edits `draftName`) and its form
-   * factor. Capabilities are NO LONGER edited here — they relocated onto the device profile (Task 9),
-   * edited in the device-profile editor. */
   #renderCanvasSettings(draft: CanvasDef): TemplateResult {
     return html`<div class="panel" data-test="canvas-settings-panel">
       <h2 class="panel-title">${t("canvas_editor.canvas_settings")}</h2>
@@ -1211,9 +1081,6 @@ export class CanvasEditorScreen extends LitElement {
     </div>`;
   }
 
-  /** Pick the property panel for the current selection: the card panel when a card is selected AND
-   * still present in the active tab, else the tab- or canvas-settings panel, else `nothing`. A guard
-   * clause per case (each doing its own TS narrowing) rather than a nested ternary. */
   #renderPanel(draft: CanvasDef, activeTab: TabDef | null): TemplateResult | typeof nothing {
     const cardIndex = this.#selectedCardIndex();
     if (cardIndex !== null && activeTab !== null && activeTab.cards[cardIndex] !== undefined) {
@@ -1225,10 +1092,6 @@ export class CanvasEditorScreen extends LitElement {
     return nothing;
   }
 
-  /** Editor mode: tab bar, interactive canvas, palette and the property panel for the current
-   * selection (card / tab-settings / canvas-settings). Guardar validates the draft and persists it via
-   * `#save` (create or update on `editingId`); Cancelar discards. The editor root keeps the
-   * `editor-placeholder` seam so the `data-editing-id`/`data-form-factor` hooks still resolve. */
   #renderEditor(): TemplateResult {
     const draft = this.draft;
     const activeTab = draft?.tabs[this.activeTabIndex] ?? null;

@@ -6,17 +6,6 @@ import { t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 
-/**
- * The backup admin screen. Its `api` is a stub: `getBackupStatus` returns the running duty, `mintBackupKey`
- * returns a strong key, `applyBackup`/`rotateBackupKey` return the fresh status, and `getBackupRecoveryKey`
- * re-shows the effective key. Assertions cover each behaviour on its own: it loads + renders the status;
- * shows the destination + policy fields; MINTS a key by default and shows it with a copy button, a real
- * download `<a download>`, and a "saved it" checkbox that gates the apply button; an advanced "paste my
- * own" toggle; the managed-by-environment read-only surface; apply sends the composed body and refreshes;
- * a rejected apply surfaces a localised `role="alert"`; and rotate re-shows the OLD key behind its loud
- * warning. Mirrors `diagnostics-screen.test.ts`.
- */
-
 afterEach(cleanupWidgets);
 
 const OFF: BackupStatusView = {
@@ -61,7 +50,6 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight load (getBackupStatus + the auto-mint) and the follow-up render. */
 async function flush(el: BackupScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -329,7 +317,7 @@ describe("backup-screen", () => {
     const api = stubApi({}, ENABLED);
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
-    // Saved-it ticked but the OLD key not yet re-shown → rotate stays disabled (§8 step 1).
+    // Saved-it ticked but the OLD key not yet re-shown → rotate stays disabled.
     tickCheckbox(el, "[data-test=saved-it]");
     await el.updateComplete;
     expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(true);
@@ -390,7 +378,7 @@ describe("backup-screen", () => {
 
   it("labels the minted key's download file with the minted key, not the running key's fingerprint", async () => {
     // The running box already has key fingerprint "ab12cd34"; the freshly-minted key's download file
-    // must NOT carry that (finding 4 — the old key's fingerprint mislabelling the new key's file).
+    // must NOT carry that.
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
       api: stubApi({}, ENABLED),
     });

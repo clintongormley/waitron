@@ -57,23 +57,19 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight `listStaff` fetch and the follow-up render. */
 async function flush(el: StaffScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
 
-/** The composed staff-list widget the screen renders. */
 function list(el: StaffScreen): StaffList {
   return el.shadowRoot!.querySelector("dashboard-staff-list")!;
 }
 
-/** The create-person form the screen renders. */
 function form(el: StaffScreen): PersonForm {
   return el.shadowRoot!.querySelector("dashboard-person-form")!;
 }
 
-/** The rendered text inside the create form's shared error summary. */
 function formErrorText(el: StaffScreen): string | undefined {
   return (
     form(el)
@@ -82,12 +78,10 @@ function formErrorText(el: StaffScreen): string | undefined {
   );
 }
 
-/** The edit-person dialog the screen renders. */
 function editForm(el: StaffScreen): PersonEdit {
   return el.shadowRoot!.querySelector("dashboard-person-edit")!;
 }
 
-/** Open the edit dialog for a person by dispatching the staff-list's composed `edit-person`. */
 async function openEdit(el: StaffScreen, personId: string): Promise<void> {
   list(el).dispatchEvent(
     new CustomEvent("edit-person", { detail: { personId }, bubbles: true, composed: true }),
@@ -95,7 +89,6 @@ async function openEdit(el: StaffScreen, personId: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** The native <dialog> inside the screen's person-form, once wt-modal's first render has settled. */
 async function nativeDialog(el: StaffScreen): Promise<HTMLDialogElement> {
   const wtDialog = form(el).shadowRoot!.querySelector("wt-modal")!;
   await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
@@ -260,26 +253,18 @@ describe("staff-screen", () => {
     expect(form(el).open).toBe(true);
   });
 
-  // Regression: the create form must REOPEN after a dismiss. The screen is the single owner of the
-  // open state (`formOpen`); the form's `wt-close` bubbles up to the screen's `@wt-close` so
-  // `formOpen` tracks a dismissal. Without that, `formOpen` stays `true` after a dismiss, the second
-  // "add" click is a no-op (true→true schedules no render, so nothing re-commits `.open` on the
-  // child), and the dialog never reopens — recoverable only by a reload. Prove by deletion: drop the
-  // `@wt-close` handler in staff-screen and this fails at the final assertion (form stays closed).
+  // If a dismiss left `formOpen` true, the next add click would be true→true and render nothing.
   it("reopens the create form after a dismiss", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
 
-    // Open it once.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
     expect(form(el).open).toBe(true);
 
-    // Dismiss via the real Escape/backdrop path: the native <dialog> closing makes wt-modal
-    // dispatch a bubbling, composed `wt-close`. `dialog.close()` fires `close` as a QUEUED TASK
-    // (not a microtask), so await the wt-close reaching the screen host before asserting — the same
-    // timing the person-form suite documents.
+    // `dialog.close()` fires `close` as a queued task, not a microtask, so wait for `wt-close` to
+    // reach the screen.
     const dialog = await nativeDialog(el);
     const dismissed = new Promise<void>((resolve) =>
       el.addEventListener("wt-close", () => resolve(), { once: true }),
@@ -289,7 +274,6 @@ describe("staff-screen", () => {
     await el.updateComplete;
     expect(form(el).open).toBe(false);
 
-    // Reopen: with `formOpen` back to false, the second click is a real false→true transition.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
     expect(form(el).open).toBe(true);
@@ -343,8 +327,6 @@ describe("staff-screen", () => {
     );
   });
 
-  // The create form carries the dashboard sign-in email on its create-person detail; the screen
-  // forwards the whole detail (including email) to createPerson unchanged.
   it("forwards the email into createPerson", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -362,9 +344,6 @@ describe("staff-screen", () => {
     expect(api.createPerson).toHaveBeenCalledWith(detail);
   });
 
-  // A create rejected with `person.email_taken` (a duplicate address) surfaces the localised copy in
-  // the create dialog's own banner (its top layer), never the raw wire code — the same routing the
-  // `pin.too_short` case uses. The page-level banner stays suppressed while the dialog is open.
   it("renders person.email_taken from a rejected create in the dialog banner", async () => {
     const api = stubApi({
       createPerson: vi.fn().mockRejectedValue({ code: "person.email_taken" }),
@@ -419,16 +398,12 @@ describe("staff-screen", () => {
     expect(editForm(el).person).toEqual(inactive);
   });
 
-  // #load's guard: a rejected initial listStaff must become the error banner, never an unhandled
-  // promise rejection (the suite runs with pristine output, which pins that). Covers the `.code`
-  // arm of the catch and the role="alert" render.
   it("shows an error key when the initial staff load is rejected (and never rejects)", async () => {
     const api = stubApi({ listStaff: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
-    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
     const banner = el.shadowRoot!.querySelector("[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("server.internal", "es-ES"));
     expect(banner).not.toContain("server.internal");
@@ -442,8 +417,6 @@ describe("staff-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
   });
 
-  // The create guard: a rejected createPerson sets the error key and does NOT reload the list or
-  // close the form, so the operator keeps the entered values and can retry. Covers the `.code` arm.
   it("shows an error key when createPerson is rejected, without reloading or closing the form", async () => {
     const api = stubApi({
       createPerson: vi.fn().mockRejectedValue({ code: "pin.too_short" }),
@@ -461,15 +434,13 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect(api.createPerson).toHaveBeenCalledTimes(1);
-    expect(api.listStaff).toHaveBeenCalledTimes(1); // NOT reloaded
-    expect(form(el).open).toBe(true); // still open for a retry
+    expect(api.listStaff).toHaveBeenCalledTimes(1);
+    expect(form(el).open).toBe(true);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("pin.too_short");
   });
 
-  // The create error must surface INSIDE the create modal (its own top layer), not in the screen's
-  // page-level banner behind the backdrop where a sighted operator could not see it. While the create
-  // form is open the screen passes errorKey DOWN as `.error` and suppresses its own banner. Prove by
-  // deletion: drop the `!this.formOpen` guard and the occluded page banner reappears.
+  // The page-level banner sits behind the modal's backdrop, so while the form is open the error is
+  // shown inside it instead.
   it("routes a rejected create's error into the dialog and suppresses the page banner", async () => {
     const api = stubApi({ createPerson: vi.fn().mockRejectedValue({ code: "pin.too_short" }) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -484,11 +455,9 @@ describe("staff-screen", () => {
     );
     await flush(el);
 
-    // Passed down and rendered inside the create dialog as LOCALISED copy, never the raw wire code.
     expect(form(el).error).toBe("pin.too_short");
     expect(formErrorText(el)).toContain(codeMessage("pin.too_short", "es-ES"));
     expect(formErrorText(el)).not.toContain("pin.too_short");
-    // The screen's own page-level banner is suppressed while the create dialog is open.
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
@@ -511,10 +480,6 @@ describe("staff-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
   });
 
-  // Single-flight: a double-clicked "Crear" fires two create-person events; the second lands while the
-  // first's createPerson await is still pending, and the guard drops it — so at most one person is
-  // filed (createPerson is not server-idempotent). Proven by deletion: remove the `#creating` guard
-  // and createPerson is called twice.
   it("files at most one person when create-person fires twice (double-click)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -555,8 +520,6 @@ describe("staff-screen — row edit", () => {
     expect(editForm(el).person).toEqual(people[0]);
   });
 
-  // #onEditPerson resolves the id against the list it already holds; an id not in that list can only
-  // be a stale event, and the comment says it is dropped. Prove it: no dialog opens for an unknown id.
   it("ignores an edit-person for an unknown id (no dialog opens)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -608,8 +571,6 @@ describe("staff-screen — row edit", () => {
     );
   });
 
-  // A rejected edit action becomes the error banner (never an unhandled rejection — pristine output
-  // pins that) and leaves the dialog OPEN so the operator can retry. Covers the `.code` arm.
   it("shows the thrown code and keeps the dialog open when an edit action is rejected", async () => {
     const api = stubApi({
       savePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
@@ -638,13 +599,11 @@ describe("staff-screen — row edit", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
       "authorization.not_permitted",
     );
-    expect(editForm(el).open).toBe(true); // still open for a retry
+    expect(editForm(el).open).toBe(true);
   });
 
-  // The error must surface INSIDE the modal (its own top layer), not in the screen's page-level
-  // banner, which sits behind the dialog backdrop where a sighted operator could not see it. So while
-  // the edit dialog is open the screen passes the errorKey DOWN as `.error` and suppresses its own
-  // banner. Prove by deletion: drop the `!this.editOpen` guard and the occluded page banner reappears.
+  // The page-level banner sits behind the modal's backdrop, so while the dialog is open the error is
+  // shown inside it instead.
   it("routes a rejected edit action's error into the dialog and suppresses the page banner", async () => {
     const api = stubApi({
       savePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
@@ -670,14 +629,11 @@ describe("staff-screen — row edit", () => {
     );
     await flush(el);
 
-    // Passed down (the raw code stays in the dialog's `error` state) and rendered inside the edit
-    // dialog's shadow as LOCALISED copy, never the raw wire code.
     expect(editForm(el).error).toBe("authorization.not_permitted");
     const summary = editForm(el).shadowRoot!.querySelector("wt-form-error-summary") as unknown as {
       errors: string[];
     };
     expect(summary.errors).toContain(codeMessage("authorization.not_permitted", "es-ES"));
-    // The screen's own page-level banner is suppressed while the edit dialog is open.
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
@@ -696,8 +652,6 @@ describe("staff-screen — row edit", () => {
     );
   }
 
-  // save-person is the one edit action left in the form (reset/deactivate/reactivate moved to the
-  // row's kebab menu) — it still exercises #editWith/#runEditAction's shared guards below.
   it("falls back to server.internal when a rejected edit action carries no code", async () => {
     const api = stubApi({ savePerson: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -723,7 +677,6 @@ describe("staff-screen — row edit", () => {
     expect(api.savePerson).toHaveBeenCalledTimes(1);
   });
 
-  // A forged action event with no open person must be dropped.
   it("drops an edit action that arrives with no person open", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -735,9 +688,6 @@ describe("staff-screen — row edit", () => {
     expect(api.savePerson).not.toHaveBeenCalled();
   });
 
-  // The screen owns the edit-open state, so the dialog's `wt-close` must bubble up and clear it —
-  // the same reopen contract the create form has. Prove by deletion: drop the `@wt-close` handler on
-  // dashboard-person-edit and this fails (editForm stays open after the dismiss).
   it("closes the edit dialog on wt-close and can reopen it", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
@@ -748,9 +698,6 @@ describe("staff-screen — row edit", () => {
     editForm(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(editForm(el).open).toBe(false);
-    // The edit target is dropped on close (the "editingPerson is null when closed" invariant), so no
-    // stale person lingers. Prove by deletion: stop clearing editingPerson in #closeEdit and this
-    // still shows people[0].
     expect(editForm(el).person).toBeNull();
 
     await openEdit(el, "p2");

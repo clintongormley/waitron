@@ -1,8 +1,6 @@
-// card-contracts.ts — a dashboard-LOCAL mirror of @waitron/layouts' card contract data (the browser
-// bundle rule forbids a runtime @waitron/layouts import — its barrel drags @waitron/db). Kept honest by
-// card-contracts.parity.test.ts, which deep-imports the pure source and asserts equality. The server's
-// validateCanvas stays authoritative on every write; this mirror only powers the editor's palette,
-// property panel and the light client validator (validate-canvas.ts).
+// A dashboard-local mirror of @waitron/layouts' card contract data: that barrel pulls @waitron/db into
+// the browser bundle. card-contracts.parity.test.ts compares it with the source. The server's
+// validateCanvas stays authoritative on every write.
 export const CARD_TYPES = [
   "product-grid",
   "basket",
@@ -30,26 +28,19 @@ export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
-/** Form factors that must place every sale-critical card (design §13) — a mirror of
- * @waitron/layouts' `SELLING_FORM_FACTORS`, kept honest by card-contracts.parity.test.ts. Till only
- * for now; extend when the source does. */
+/** Form factors that must place every sale-critical card. */
 export const SELLING_FORM_FACTORS: readonly FormFactor[] = ["till"];
 
 export const GRID_MAX_COLUMNS = 24;
 export const MAX_TAB_TITLE_LENGTH = 60;
 
-/** Fixed row height (px) for the INTERACTIVE editor grid's `grid-auto-rows`: the px meaning of a
- * card's `rowSpan`. The interactive grid and the future live-card renderer share this unit so the
- * editor stays WYSIWYG. A dashboard-local editor constant with NO `@waitron/layouts` source
- * counterpart, so — like `PRODUCT_GRID_MAX_COLUMNS` — it carries no parity-test guard. */
+/** The px meaning of a card's `rowSpan` in the INTERACTIVE editor grid. Dashboard-local, with no
+ * `@waitron/layouts` counterpart, so no parity check. */
 export const EDITOR_ROW_HEIGHT = 48;
 
-/** Upper bound on a product-grid card's own `config.columns` (design §4). A dashboard-local de-dup of
- * the `1..12` the editor's clamp and the client validator both apply — NOT a parity constant (the
- * source inlines the literal), so it carries no parity-test guard. */
+/** Not a parity constant: the source inlines its `1..12`, so no parity check. */
 export const PRODUCT_GRID_MAX_COLUMNS = 12;
 
-/** The editor-facing slice of a card's contract (validators stay server-side; only field NAMES here). */
 export interface CardContractMirror {
   defaultColSpan: number;
   defaultRowSpan: number;
@@ -154,7 +145,6 @@ export const SALE_CRITICAL_CARDS: readonly CardType[] = (
   Object.keys(CARD_CONTRACTS) as CardType[]
 ).filter((t) => CARD_CONTRACTS[t].saleCritical);
 
-/** One placed card (dashboard-local mirror of @waitron/layouts' CardInstance). */
 export interface CardInstance {
   type: CardType;
   colSpan: number;
@@ -162,27 +152,20 @@ export interface CardInstance {
   config: Record<string, unknown>;
   visibleWhen?: string[];
 }
-/** A tab: a titled grid of cards (mirror of TabDef). */
 export interface TabDef {
   key: string;
   title: string;
   columns: number;
   cards: CardInstance[];
 }
-/** A whole canvas (mirror of CanvasDef). Capabilities relocated onto the device profile (Task 9), so
- * they are no longer part of the canvas record. */
 export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];
   theme?: { tokens: Record<string, string> };
 }
 
-// The built-in default canvases (design §4.3) — a dashboard-LOCAL copy of
-// `packages/layouts/src/default-canvases.ts`, one canvas per form factor, that a NEW canvas seeds
-// from (`structuredClone(DEFAULT_CANVASES[ff])`) when the operator picks a form factor in the Crear
-// dialog. It lives here rather than being runtime-imported for the same reason the rest of this file
-// does — `@waitron/layouts`' barrel drags `@waitron/db` into the browser bundle — and is kept honest
-// by card-contracts.parity.test.ts, which deep-imports the pure source and asserts deep equality.
+// The built-in default canvases a new canvas seeds from: a copy of
+// `packages/layouts/src/default-canvases.ts`, compared by card-contracts.parity.test.ts.
 const TILL: CanvasDef = {
   formFactor: "till",
   tabs: [

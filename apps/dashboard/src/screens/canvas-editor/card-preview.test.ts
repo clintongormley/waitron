@@ -4,15 +4,8 @@ import { cardPreview } from "./card-preview.js";
 import { CARD_TYPES, type CardType } from "./card-contracts.js";
 
 /**
- * `cardPreview` is a dashboard-LOCAL, static, presentational silhouette per card type — a
- * recognizable preview of what each till card looks like, with NO data binding. These tests render
- * the bare TemplateResult into a detached container and assert on structure only (the silhouette's
- * chrome is styled by the host component's shadow CSS, so no styling is needed here).
- *
- * Each silhouette's root carries `data-preview="<type>"`; a per-type MARKER selector pins that each
- * type produces a genuinely DISTINCT shape (not just a shared box under a different name). The loop
- * over the full `CARD_TYPES` list drives the exhaustive switch: a missing case throws (and fails to
- * compile), so removing any case fails this suite.
+ * The loop over `CARD_TYPES` drives the exhaustive switch, and each type's MARKER pins a genuinely
+ * distinct shape rather than one box under different names.
  */
 const hosts: HTMLElement[] = [];
 function renderPreview(type: CardType): HTMLElement {
@@ -26,7 +19,6 @@ afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
 });
 
-/** A structure marker unique to each type's silhouette, so "distinct" means distinct shape. */
 const MARKERS: Record<CardType, string> = {
   "product-grid": ".cp-cell",
   basket: ".cp-line",
@@ -78,18 +70,14 @@ describe("cardPreview", () => {
   });
 
   it("returns the same memoized TemplateResult instance for a given type", () => {
-    // The silhouettes depend only on `type` (no data), so they are built ONCE at module load and the
-    // same static instance is returned for every render. Referential stability across calls is what
-    // lets Lit skip re-rendering a tile's silhouette on every drag frame.
+    // Referential stability lets Lit skip re-rendering a tile's silhouette on every drag frame.
     for (const type of CARD_TYPES) {
       expect(cardPreview(type), `silhouette for ${type} is not memoized`).toBe(cardPreview(type));
     }
   });
 
   it("renders the total and tender-pay silhouettes as pure shapes with no text", () => {
-    // Localisation discipline: unlike the other ten silhouettes these two once carried hardcoded
-    // English literals (a currency amount, "Cash"/"Card"). They are decorative (aria-hidden) shapes,
-    // so a non-English locale must never see untranslated text leak through them.
+    // These silhouettes carry no text: a literal here would show untranslated in other locales.
     for (const type of ["total", "tender-pay"] as const) {
       const host = renderPreview(type);
       const root = host.querySelector<HTMLElement>(`[data-preview="${type}"]`)!;

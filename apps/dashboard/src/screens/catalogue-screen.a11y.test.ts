@@ -5,14 +5,9 @@ import type { CatalogueScreen } from "./catalogue-screen.js";
 import type { CatalogueSummary, CategorySummary, DashboardApi, Product } from "../api/client.js";
 
 /**
- * The catalogue screen scanned by axe in both themes, in its two shapes: with catalogues loaded (the
- * add-product control, the product list and the new-catalogue field) and with NONE (the
- * create-a-catalogue prompt). Mounted by ASSIGNING the `api` stub as a property — the screen loads on
- * connect, so the stub must resolve EVERY method `#load` calls or a stray rejection puts the screen
- * into its error-banner state instead of the loaded one this test means to scan (a rejection is itself
- * a finding, but a silently-wrong scanned state is not). The product form is left CLOSED (its
- * default), so its dialog renders nothing to the a11y tree; the extras and options list forms have
- * their own a11y suites (`extra-list-form.a11y.test.ts`, `option-list-form.a11y.test.ts`).
+ * Scanned with catalogues loaded and with NONE. The stub must resolve EVERY method `#load` calls, or a
+ * stray rejection scans the error-banner state instead. The product form is left CLOSED, so its
+ * dialog renders nothing to the a11y tree.
  */
 const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },

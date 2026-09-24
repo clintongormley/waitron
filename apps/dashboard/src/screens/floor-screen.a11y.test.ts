@@ -4,14 +4,6 @@ import "./floor-screen.js";
 import type { FloorScreen } from "./floor-screen.js";
 import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
 
-/**
- * The floor-plan config screen scanned by axe in both themes, in three shapes: populated (a zone + a table,
- * so both panels' rows and the zone <select> render), empty (just the two new-item forms and the empty
- * states), and the error state (a rejected zone create shows the `role="alert"` banner). Mounted by
- * ASSIGNING the `api` stub as a property; the screen loads on connect, so the stub must resolve or a
- * stray rejection pollutes the run (a rejection is a finding). Every colour is a `--wt-*` token; the
- * native `type="number"` inputs and the token-styled `<select>` carry HA-styled labels for axe.
- */
 const ZONES: FloorZone[] = [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }];
 
 const TABLES: DashboardTable[] = [
@@ -25,8 +17,7 @@ const TABLES: DashboardTable[] = [
   },
 ];
 
-/** For the Plano-tab scan: a PLACED table (drawn on the canvas, so it can be selected to open the edit
- * inspector) plus an UNPLACED one (the tray), so axe sees both the canvas chrome and a tray token. */
+/** One placed table (selectable, to open the edit inspector) and one in the tray. */
 const PLACED_TABLES: DashboardTable[] = [
   {
     id: "t1",
@@ -104,16 +95,12 @@ describe.each(["light", "dark"] as const)("floor-screen a11y (%s theme)", (theme
       theme,
     );
     await flush(el);
-    // Open the Plano tab so the editable canvas + tray render…
     el.shadowRoot!.querySelector<HTMLElement>('[data-tab="plano"]')!.dispatchEvent(
       new Event("click"),
     );
     await el.updateComplete;
-    // …then SELECT the placed table inside the canvas so its edit inspector (shape palette / zone /
-    // rotate / remove), rendered with the dashboard's SPANISH copy, is in the tree for axe. The
-    // inspector needs the canvas's own `selectedId`, set by its `#onTap` — so click a `[data-table]`
-    // inside the canvas's shadow root (mirrors the Task-6 till a11y fix; opening the tab alone leaves
-    // the inspector unrendered, so the Spanish chrome would go unscanned).
+    // Opening the tab alone leaves the edit inspector unrendered; selecting a table inside the
+    // canvas puts it in the tree for axe.
     const canvas = el.shadowRoot!.querySelector("wt-floor-canvas") as HTMLElement & {
       shadowRoot: ShadowRoot;
       updateComplete: Promise<unknown>;
@@ -121,7 +108,6 @@ describe.each(["light", "dark"] as const)("floor-screen a11y (%s theme)", (theme
     canvas.shadowRoot.querySelector<HTMLElement>("[data-table]")!.click();
     await canvas.updateComplete;
     await el.updateComplete;
-    // The inspector is present (so axe scans the real Spanish edit chrome, not an empty canvas).
     expect(canvas.shadowRoot.querySelector(".inspector")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

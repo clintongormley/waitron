@@ -107,15 +107,11 @@ export class OverviewScreen extends LitElement {
   @state() private overviewErrorKey: string | null = null;
   @state() private overdueErrorKey: string | null = null;
 
-  /** The ~30s overdue-orders poll (design §7.4), started on connect and cleared on disconnect below —
-   * a leaked interval would keep fetching against a torn-down screen. */
+  /** Cleared on disconnect: a leaked interval would keep fetching against a torn-down screen. */
   #overdueTimer?: ReturnType<typeof setInterval>;
 
-  /** Single-flight guard for the POLLED refetch only (never the initial `#load()` path): true while a
-   * `#loadOverdue()` triggered by the interval is still in flight. On a slow network a 30s tick can
-   * otherwise fire before the previous request has resolved, so requests pile up and a stale response
-   * can land after a newer one and overwrite it. A tick that finds this true is simply skipped — the
-   * next tick will try again once the in-flight request has cleared it. */
+  /** A poll tick that finds a fetch still in flight is skipped, so on a slow network requests do not
+   * pile up and a stale response cannot land after a newer one. */
   #overdueInFlight = false;
 
   override connectedCallback(): void {
@@ -134,20 +130,12 @@ export class OverviewScreen extends LitElement {
     this.#overdueTimer = undefined;
   }
 
-  /**
-   * Load today's overview + the overdue-orders snapshot CONCURRENTLY. Each fetch is fully independent
-   * (fix round 1, Important-2): a rejection from one must not prevent the other's successful
-   * assignment, so a failure in the newer, less-proven `/reports/overdue-orders` route cannot blank
-   * the already-working sales-overview cards (and vice versa). `Promise.all` just waits for both;
-   * each method below owns its own state + its own error field, so there is nothing left to
-   * coordinate here.
-   */
+  /** Each fetch owns its own state and error field, so a rejection from one never blocks the other's
+   * assignment. */
   async #load(): Promise<void> {
     await Promise.all([this.#loadOverview(), this.#loadOverdue()]);
   }
 
-  /** Fetch today's sales overview and store it. Sets/clears ONLY `overviewErrorKey` — never
-   * `overdueErrorKey` (fix round 2: the two fields are fully independent, see the class doc). */
   async #loadOverview(): Promise<void> {
     try {
       await this.#overviewQuery.watch("getSalesOverview", [], (value) => {
@@ -242,18 +230,9 @@ export class OverviewScreen extends LitElement {
   }
 
   /**
-   * The "orders taking too long" tile (design §7.4): a count line ("2 orders overdue") plus a
-   * worst-first list (table · station · minutes · band). `orders` is rendered in the order the server
-   * sent it — the route already sorts worst-first, so re-sorting here would be redundant and risks
-   * disagreeing with the server on ties. A bare walk-up's null `tableLabel` renders the em-dash
-   * placeholder `staff-list.ts` already uses for an absent field, not a new i18n string.
-   *
-   * `errorKey` (fix round 2) renders its own inline note (`overdue-error`), separate from and never
-   * conflated with the calm zero-state — "no overdue orders" and "the check failed" are different
-   * messages, and showing the former for the latter would read as false reassurance. If a PREVIOUS
-   * fetch had already succeeded and a LATER poll tick fails, `orders` still holds that last-known
-   * list, so it keeps rendering alongside the note rather than being blanked by a transient refetch
-   * failure — only a fetch that has NEVER succeeded (`orders === null`) shows the note alone.
+   * `orders` is rendered in the order the server sent it: the route already sorts worst-first, and
+   * re-sorting here could disagree with it on ties. `errorKey` gets its own note, never the calm
+   * zero-state, which would read as false reassurance; a last-known list keeps rendering beside it.
    */
   #renderOverdue(orders: OverdueOrder[] | null, errorKey: string | null): TemplateResult {
     return html`
@@ -302,8 +281,7 @@ export class OverviewScreen extends LitElement {
     `;
   }
 
-  /** The list's band cell — only `overdue`/`forgotten` ever reach this list (the route never returns a
-   * fresh/warm order), so those are the only two labels this needs. */
+  /** The route returns only `overdue` and `forgotten` orders. */
   #bandLabel(band: OverdueOrder["band"]): string {
     return band === "forgotten" ? t("overview.band_forgotten") : t("overview.band_overdue");
   }

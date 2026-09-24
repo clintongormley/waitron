@@ -49,8 +49,7 @@ afterEach(() => {
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
-    // Retained on the stub so the "does not fetch the roster on connect" test can prove the screen
-    // never calls it — the screen itself no longer has a roster picker.
+    // Stubbed so "does not fetch the roster on connect" can show the screen never calls it.
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     passkeyOfferSeen: vi.fn().mockResolvedValue(undefined),
@@ -70,7 +69,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     beginGoogleLogin: vi.fn().mockResolvedValue({
       authorizationUrl: "https://accounts.google.test/login",
     }),
-    // The language chooser reads this only when opened; the screen just passes it through.
     getLocales: vi
       .fn()
       .mockResolvedValue({ locales: [{ code: "en-GB", label: "English" }], venueDefault: "es-ES" }),
@@ -78,7 +76,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Lets a pending `login` promise settle and the element re-render. */
 async function flush(el: LoginScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -119,7 +116,6 @@ async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
   return { el, api };
 }
 
-/** Mounts the screen, opens the password step and submits — an ordinary sign-in. */
 async function signInWithPassword(overrides: Partial<DashboardApi> = {}) {
   const api = stubApi(overrides);
   const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
@@ -131,11 +127,8 @@ async function signInWithPassword(overrides: Partial<DashboardApi> = {}) {
   return { el, api };
 }
 
-/**
- * A `passkeyOfferSeen` stub that stays pending until `release()`, so a test can act in the gap
- * between the click and the recorded resolution. Every call made in that gap is released together,
- * so a test that provokes a second call still finishes instead of hanging on it.
- */
+/** Pending until `release()`, which settles every call made meanwhile, so a test that provokes a
+ * second call does not hang on it. */
 function pendingOfferSeen() {
   const pending: Array<() => void> = [];
   return {
@@ -151,7 +144,6 @@ function pendingOfferSeen() {
   };
 }
 
-/** Api stubs plus the hardware stub for a registration that succeeds. */
 function passkeyRegistrationStubs(): Partial<DashboardApi> {
   vi.spyOn(navigator.credentials, "create").mockResolvedValue({
     id: "new-key",
@@ -320,8 +312,8 @@ describe("login-screen", () => {
 
   it("shows the already-registered message and keeps the offer open when the device holds a passkey", async () => {
     const { el, api } = await mountPasskeyOffer(passkeyRegistrationStubs());
-    // A real InvalidStateError from the ceremony: the library wraps it into a WebAuthnError whose
-    // `.code` must NOT reach codeOf, or it degrades to the generic banner instead of this message.
+    // The library wraps this in a WebAuthnError whose `.code` must not reach codeOf, or the generic
+    // banner shows instead of this message.
     vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
       new DOMException("already registered", "InvalidStateError"),
     );
@@ -334,7 +326,6 @@ describe("login-screen", () => {
     expect(
       el.shadowRoot!.querySelector("wt-form-error-summary")?.shadowRoot?.textContent,
     ).toContain(codeMessage("passkey.already_registered"));
-    // The offer stays open so the person can still skip or retry.
     expect(el.shadowRoot!.querySelector("[data-test=skip-passkey]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
   });
@@ -1097,7 +1088,6 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("password.invalid");
-    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
     const banner = el
       .shadowRoot!.querySelector("wt-form-error-summary")!
       .shadowRoot!.querySelector("[role=alert]")?.textContent;
@@ -1289,9 +1279,6 @@ describe("login-screen", () => {
     );
   });
 
-  // Per-user-language-preference: the login screen renders the transient language chooser, and the
-  // chooser's composed `locale-selected` must ESCAPE the login screen's shadow boundary so the app shell
-  // (dashboard-app) hears it and switches the locale. The screen itself neither persists nor switches.
   it("renders the language chooser and lets its locale-selected event bubble out", async () => {
     const api = stubApi();
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
@@ -1347,8 +1334,6 @@ describe("login-screen", () => {
     });
   });
 
-  // A rejected ceremony step becomes the error banner, never an unhandled rejection (pristine
-  // output pins that). Covers the `.code` arm of the catch with a distinct, non-fallback code.
   it("shows the thrown code as errorKey when a passkey step is rejected (and never rejects)", async () => {
     const api = stubApi({
       passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
@@ -1362,7 +1347,6 @@ describe("login-screen", () => {
     );
   });
 
-  // Covers the `?? "passkey.verification_failed"` fallback arm: a rejection carrying no code.
   it("falls back to passkey.verification_failed when a rejected passkey step carries no code", async () => {
     const api = stubApi({ passkeyAuthOptions: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
@@ -1394,8 +1378,6 @@ describe("login-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).toBeNull();
     expect(events).toHaveLength(1);
-    // `offerPasskey` answers this screen's question about which step to show next; it is not part of
-    // what the app shell is told about the completed sign-in.
     expect(events[0]!.detail).toEqual({
       personId: "p1",
       accountSetup: false,
@@ -1430,9 +1412,6 @@ describe("login-screen", () => {
     expect(events).toHaveLength(1);
   });
 
-  // The offer screen was reachable from an invitation long before it was reachable from an ordinary
-  // sign-in, and that older path recorded nothing — so skipping there meant being asked again at the
-  // next sign-in. Both entrances now leave through the same two exits, and this pins that.
   it("records the resolution when the offer is skipped after an invitation", async () => {
     const { el, api } = await mountPasskeyOffer();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
@@ -1450,17 +1429,14 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
     await flush(el);
     expect(events).toHaveLength(1);
-    // And the screen is left usable. A session-shaped rejection is reported to the shell before the
-    // promise rejects, which puts this screen back in front of the person — holding the form
-    // disabled for the round trip would then leave them unable to sign in at all.
+    // A session-shaped rejection leaves this screen in front of the person, so it must not stay
+    // disabled.
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=submit]")!
         .disabled,
     ).toBe(false);
   });
 
-  // Recording the resolution put a network round trip between the click and the sign-in, where
-  // before there was none. Both of these sign the same person in twice if that gap is left open.
   it("signs in once when the offer is skipped twice before the first skip lands", async () => {
     const { release, passkeyOfferSeen } = pendingOfferSeen();
     const { el, api } = await signInWithPassword({
@@ -1572,7 +1548,6 @@ function click(el: LoginScreen, test: string): void {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!.click();
 }
 
-/** Removes the screen, lets `settle` run while it is detached, then puts it back. */
 async function whileDetached(el: LoginScreen, settle: () => void): Promise<void> {
   const host = el.parentElement!;
   el.remove();

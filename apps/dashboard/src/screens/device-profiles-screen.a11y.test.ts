@@ -5,13 +5,8 @@ import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
 
 /**
- * The Device-profiles screen scanned by axe in both themes, in two states: LIST mode (the profile
- * gallery, its New-profile button, per-row Edit/Duplicate/Delete controls and capability summaries)
- * and EDITOR mode (the flat form — name field, canvas `<select>` and the capability switches). Mounted
- * by ASSIGNING the `api` STUB as a property (never bare markup), as the sibling screen a11y suites do:
- * `connectedCallback` fires `void this.#load()` → `listDeviceProfiles()` + `listCanvases()`, so the
- * stub must resolve both (and `getDeviceProfile`, reached when the editor opens) or a stray rejection
- * pollutes the run.
+ * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`, `listCanvases`
+ * and `getDeviceProfile`, or a stray rejection pollutes the run.
  */
 const canvases: Canvas[] = [{ id: "c1", name: "Counter till", definition: {} }];
 

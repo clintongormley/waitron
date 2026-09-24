@@ -91,8 +91,6 @@ const QR_FITS: Readonly<Record<string, PrintResolution>> = {
   "40": "203dpi",
   "45": "180dpi",
 };
-/** Hardware registration and print-job history; routing policy lives on Printing rules.
- * The server enforces printer.manage for configuration and print.resend for document resends. */
 @customElement("dashboard-printers-screen")
 export class PrintersScreen extends LitElement {
   static override styles = [
@@ -289,7 +287,6 @@ export class PrintersScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -299,8 +296,6 @@ export class PrintersScreen extends LitElement {
     },
   );
 
-  // The enrolled agents (server order kept), the registered printers, and the recent jobs — all
-  // (re)loaded on connect and after every mutation.
   @state() private view = "";
   readonly #url = new UrlStateController(
     this,
@@ -356,12 +351,10 @@ export class PrintersScreen extends LitElement {
 
   @state() private tills: Till[] = [];
 
-  // The id of the agent whose Revoke control is ARMED (awaiting a confirming second click), or null.
   @state() private armedRevokeId: string | null = null;
   @state() private armedDeletePrinterId: string | null = null;
 
-  // The id of the agent whose "Enable" control is ARMED, or null. Its own state (like Deny's) so
-  // arming one agent's re-allow does not disarm another agent's revoke.
+  // Separate from `armedRevokeId`, so arming one agent's re-allow does not disarm another's revoke.
   @state() private armedAllowId: string | null = null;
 
   // Pairing is venue-wide; challenges stay cached because each request's numbers are fixed.
@@ -372,8 +365,7 @@ export class PrintersScreen extends LitElement {
   @state() private armedDenyId: string | null = null;
 
   @state() private discovered: DiscoveredPrinter[] = [];
-  /** A Scan press is listening for results — the button is busy and a second press is ignored. Its
-   * own gate, not `submitting`: the listen runs for seconds and must not block Add/Register. */
+  /** Not `submitting`: the listen runs for seconds and must not block Add or Register. */
   @state() private scanning = false;
   @state() private probeHost = "";
   @state() private probePort = "9100";
@@ -388,10 +380,9 @@ export class PrintersScreen extends LitElement {
   #agentEpoch = 0;
   #pairingOperations: Promise<void> = Promise.resolve();
   #renewPairingAt = 0;
-  // The listen's re-read timer, cleared in `disconnectedCallback` and never started on a detached
-  // screen (the diagnostics screen's `#timer` shape); `#scanUntil` is the wall-clock end of the listen
-  // (five ticks are not ten seconds in a throttled background tab); `#scanInFlight` keeps a slow read
-  // from being overlapped by the next tick, whose older reply could overwrite `discovered`.
+  // `#scanUntil` is wall-clock because a throttled background tab stretches the ticks;
+  // `#scanInFlight` stops the next tick overlapping a slow read whose older reply could overwrite
+  // `discovered`.
   #scanTimer?: ReturnType<typeof setInterval>;
   #scanUntil = 0;
   #scanInFlight = false;
@@ -455,7 +446,6 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** Reload after a mutation; expose failures through the localized error banner. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.errorKey = null;
     try {
@@ -477,11 +467,9 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  // ── Agents: join-and-accept (the shared mechanism, twin of the Devices screen) ───────────────────
+  // ── Agents: join-and-accept ──────────────────────────────────────────────────────────────────────
 
-  /** Re-read the pairing window and this surface's pending queue after a join-side mutation, WITHOUT the
-   * option/list feeds (which none of those mutations change). Throws like the verbs it calls; every
-   * caller wraps it in its own `try/catch`. Disarms any armed deny (the armed row may no longer exist). */
+  /** Disarms any armed deny, since that row may no longer exist. */
   async #reloadJoins(): Promise<void> {
     this.armedDenyId = null;
     const [pairing, pendingJoins] = await Promise.all([
@@ -492,9 +480,6 @@ export class PrintersScreen extends LitElement {
     this.pendingJoins = pendingJoins;
   }
 
-  /** Reload the AGENTS only (not the option feeds) after an accept — the accepted request becomes an
-   * enrolled agent. Throws like `listAgents` itself; the one caller wraps it. Disarms any armed revoke
-   * or allow. */
   async #reloadAgents(): Promise<void> {
     this.armedRevokeId = null;
     this.armedAllowId = null;
@@ -587,8 +572,7 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** Open a pending request's accept dialog, fetching its three numbers the FIRST time only: the server
-   * fixes the set at join, so a second fetch would show the same three and teach nobody anything. */
+  /** Fetches the numbers only the first time: the server fixes them at join. */
   async #openRequest(id: string): Promise<void> {
     this.errorKey = null;
     this.openRequestId = id;
@@ -601,8 +585,7 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** The two-step deny: the first click ARMS `id`, a second on the armed row confirms. Denying is not
-   * undoable, so the confirm gate is deliberate (Revoke's idiom). */
+  /** Denying cannot be undone, so it takes a second, confirming click. */
   #onDeny(id: string): void {
     if (this.armedDenyId === id) {
       this.armedDenyId = null;
@@ -612,7 +595,6 @@ export class PrintersScreen extends LitElement {
     this.armedDenyId = id;
   }
 
-  /** Refuse a pending request, then re-read the queue. `#onDeny` already cleared the armed state. */
   async #deny(id: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -624,15 +606,8 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /**
-   * Accept the open request with the number the admin tapped. An agent binds nothing, so the body is
-   * just `{ choice }`.
-   *
-   * A WRONG number is not a rejected submission: the server DELETED the request before answering
-   * `device.join_mismatch` (the surface-neutral terminal code), so that code closes the dialog and
-   * re-reads the queue without the row. Every other fault leaves the dialog open on the same request for
-   * a retry (there is nothing to correct here, but a transient server fault is worth a second tap).
-   */
+  /** A wrong number has already deleted the request when `device.join_mismatch` arrives, so that code
+   * closes the dialog and re-reads the queue; any other fault leaves the dialog open for a retry. */
   async #accept(request: JoinRequestRow, choice: string): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -659,8 +634,6 @@ export class PrintersScreen extends LitElement {
 
   // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
 
-  /** The two-step revoke: the first click ARMS `id`, a second click on the armed row confirms and
-   * revokes. Arming another row disarms the first (single-valued state). */
   #onRevokeAgent(id: string): void {
     if (this.armedRevokeId === id) {
       this.armedRevokeId = null;
@@ -670,14 +643,11 @@ export class PrintersScreen extends LitElement {
     this.armedRevokeId = id;
   }
 
-  /** Revoke the agent `id` holds, then reload. A rejection becomes the `errorKey` banner. */
   async #revokeAgent(id: string): Promise<void> {
     await this.#mutate(() => this.api.revokeAgent(id));
   }
 
-  /** The two-step allow-again: the first click ARMS `id`, a second on the armed row confirms and
-   * re-allows. Mirrors the revoke idiom so an accidental single click cannot flip a revoked agent back
-   * on. Arming another row disarms the first (single-valued state). */
+  /** Two clicks, so a single accidental one cannot turn a revoked agent back on. */
   #onAllowAgent(id: string): void {
     if (this.armedAllowId === id) {
       this.armedAllowId = null;
@@ -687,7 +657,6 @@ export class PrintersScreen extends LitElement {
     this.armedAllowId = id;
   }
 
-  /** Re-allow the revoked agent `id` holds, then reload. A rejection becomes the `errorKey` banner. */
   async #allowAgent(id: string): Promise<void> {
     await this.#mutate(() => this.api.allowAgent(id));
   }
@@ -904,7 +873,7 @@ export class PrintersScreen extends LitElement {
 
   /** Save only this transport's connection fields; routing policy has its own editor. */
   async #savePrinter(id: string): Promise<void> {
-    this.errorKey = null; // also dismisses a prior banner on the vanished-row early return below
+    this.errorKey = null;
     const row = this.editingPrinter;
     if (row?.id !== id) return;
     if (!this.#validatePrinter(row)) return;
@@ -926,8 +895,6 @@ export class PrintersScreen extends LitElement {
     });
   }
 
-  /** Soft-delete (deactivate) the printer `id` holds, then reload. A rejection becomes the `errorKey`
-   * banner. */
   async #deactivatePrinter(id: string): Promise<void> {
     if (this.armedDeletePrinterId !== id) {
       this.armedDeletePrinterId = id;
@@ -1104,13 +1071,10 @@ export class PrintersScreen extends LitElement {
 
   // ── Formatting helpers ───────────────────────────────────────────────────────────────────────────
 
-  /** Resolve a printer id to its display name; an id no longer in the list falls back to the raw id. */
   #printerName(printerId: string): string {
     return this.printers.find((p) => p.id === printerId)?.name ?? printerId;
   }
 
-  /** Format an ISO instant to the minute (in the browser's local timezone, matching the devices screen);
-   * a null instant (never seen / not yet delivered) shows the "Never" placeholder. */
   #timestamp(iso: string | null): string {
     if (iso === null) return t("printers.last_seen_never");
     return formatIsoMinute(iso);
@@ -1163,8 +1127,7 @@ export class PrintersScreen extends LitElement {
       ${this.pairing?.open ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(this.pairing.openUntil))}</p>` : nothing}`;
   }
 
-  /** One waiting agent: the name it asked for and when, plus Let in and the two-step Deny. NO number is
-   * rendered here and none is fetched to render it — the row shape has none (design §1.2 rule 1). */
+  /** No join number is shown or fetched for the row (design §1.2 rule 1). */
   #renderJoinRequest(request: JoinRequestRow): TemplateResult {
     const armed = this.armedDenyId === request.id;
     return html`<li data-test="join-row-${request.id}">
@@ -1200,13 +1163,8 @@ export class PrintersScreen extends LitElement {
     </li>`;
   }
 
-  /**
-   * The accept dialog: the three numbers as three real buttons, each accessibly named ("Number 47", not
-   * a bare "47") so the comparison against what the agent is showing is a deliberate act. An agent binds
-   * nothing, so — unlike the Devices dialog — there are no profile/station pickers and the numbers are
-   * tappable at once. The server does not say which is real, and a wrong tap denies the request, so the
-   * number IS the accept: there is no separate Accept control.
-   */
+  /** Tapping a number is the accept, so there is no separate Accept control; a wrong tap denies the
+   * request. */
   #renderAcceptDialog(): TemplateResult | typeof nothing {
     const request = this.pendingJoins.find((r) => r.id === this.openRequestId);
     if (request === undefined) return nothing;
@@ -1992,7 +1950,6 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
-  /** A discovered device's display name: its self-reported name, else make + model, else its stable id. */
   #discoveredLabel(device: DiscoveredPrinter): string {
     if (device.name != null && device.name !== "") return device.name;
     const parts = [device.make, device.model].filter((x): x is string => x != null && x !== "");

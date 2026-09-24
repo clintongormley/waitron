@@ -110,10 +110,9 @@ export class PrintingRulesScreen extends LitElement {
     }
   }
   async #load(): Promise<void> {
-    // The reads gate on three permissions: stations on venue.configure, locations on schedule.manage,
-    // and printers/tills on printer.manage; all three currently share manager/admin membership
-    // (packages/identity/src/permissions.ts). Keep this read usable if printer.manage is ever assigned
-    // independently.
+    // Stations gate on venue.configure, locations on schedule.manage, and printers, each printer's
+    // stations and tills on printer.manage. Today manager and admin hold all three
+    // (packages/identity/src/permissions.ts); revisit this fan-out if one is ever granted on its own.
     await Promise.all([
       this.#queries.watch("listPrinters", [], async (printers) => {
         this.printers = printers;

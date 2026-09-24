@@ -231,11 +231,8 @@ export class ProfileScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // dashboard-app.ts renders its OWN Edit button (alongside the outer modal's Close, per
-    // wt-form-actions convention) rather than one inside this screen, so it needs to know which
-    // tab is active to decide whether to show it — Security has no equivalent single action.
-    // Fired here too, not just from #selectTab, so the initial "details" tab is known without the
-    // host having to assume this screen's default.
+    // dashboard-app.ts renders this screen's Edit button, so it needs the active tab, the initial one
+    // included.
     this.#announceTab();
     void this.#load();
   }
@@ -249,8 +246,7 @@ export class ProfileScreen extends LitElement {
       }),
     );
   }
-  /** Called by dashboard-app.ts's relocated Edit button (see #announceTab above). Guarded here too,
-   * independent of that button's own disabled state, since #edit() dereferences `this.profile!`. */
+  /** Guarded here as well as by the button's disabled state, since #edit() dereferences `this.profile!`. */
   editDetails(): void {
     if (this.profile === null) return;
     this.#edit("details");
@@ -312,13 +308,8 @@ export class ProfileScreen extends LitElement {
       locale: this.profile!.locale ?? this.venueLocale,
     };
   }
-  // A native <dialog>'s "close" event lands asynchronously relative to the property change that
-  // triggers it — Cancel or a successful Save call #closeModal() here, which sets this flag before
-  // switching back to view; if a NEW #edit() (opening a different mode) runs before that pending
-  // "close" event actually arrives, the flag — not any timing assumption — is what tells the
-  // @wt-close handler this specific close was already applied, so it must not stomp the newer mode.
-  // Reproduced by tracing #edit() call order under real load: "remove" mode was correctly entered,
-  // then a delayed close from the PRIOR "save and return to view" reset it straight back to "view".
+  // A native <dialog>'s "close" event arrives after the change that caused it. This flag tells the
+  // @wt-close handler that close was already applied, so a late one cannot undo a newer #edit().
   #closingModal = false;
   #closeModal(): void {
     this.#closingModal = true;
@@ -365,9 +356,7 @@ export class ProfileScreen extends LitElement {
         const value = event.detail.value;
         this.fields = { ...this.fields, [field]: value };
         this.errors = { ...this.errors, [field]: "" };
-        // Editing a first/last name re-derives the display name unless the person has customised it
-        // (deriveDisplayName decides that from the previous values), so the details form auto-fills
-        // the same way the setup wizard and the new-staff form do.
+        // deriveDisplayName leaves a customised display name alone, judged from the previous values.
         if (field === "firstNames" || field === "lastNames") {
           const nextFirst = field === "firstNames" ? value : prev.firstNames;
           const nextLast = field === "lastNames" ? value : prev.lastNames;
@@ -416,8 +405,6 @@ export class ProfileScreen extends LitElement {
     if (!f.email.trim()) errors.email = t("form.email_required");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
       errors.email = codeMessage("person.email_invalid");
-    // Telephone is optional (see the false-on-empty note on isValidTelephone) — only a non-blank
-    // number is format-checked, using the same shared check the server write path applies.
     const tel = f.telephone.trim();
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
     return errors;
@@ -516,9 +503,8 @@ export class ProfileScreen extends LitElement {
       await this.#load();
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
     } catch (error) {
-      // A passkey ceremony fails through @simplewebauthn/browser's WebAuthnError, whose `.code` is a
-      // library constant (not a wire code) — so classify EVERY ceremony failure here rather than let
-      // codeOf read that constant and degrade it to the generic banner. Shared with login-screen.ts.
+      // Classified first, so no WebAuthn library `.code` reaches codeOf and degrades to the generic
+      // banner.
       if (this.mode === "passkey") {
         const passkey = classifyPasskeyRegistrationError(error);
         // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing.
@@ -534,8 +520,6 @@ export class ProfileScreen extends LitElement {
         // passkey === null → a server { code } rejection or startRegistration's plain "not supported"
         // / "not completed" Errors (no `.code`): fall through so codeOf yields the passkey fallback.
       }
-      // Server wire codes (password.invalid, totp.invalid, …) still resolve and map; the passkey
-      // fallback covers the plain Errors that reach here.
       const code =
         this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
       this.error = codeMessage(code);
@@ -607,9 +591,7 @@ export class ProfileScreen extends LitElement {
     }
   }
   #selectTab(event: CustomEvent<{ value: string }>): void {
-    // wt-change bubbles/is composed; this panel today has no nested wt-change emitter of its own,
-    // but the guard matches the same pattern used everywhere else a wt-tabs strip owns navigation
-    // (see venue-operations-screen.ts's #selectView).
+    // wt-change is composed, so only the tab strip's own event is a tab choice.
     if (event.target !== event.currentTarget) return;
     this.activeTab = event.detail.value as "details" | "security";
     this.#announceTab();
@@ -887,10 +869,7 @@ export class ProfileScreen extends LitElement {
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         @wt-close=${(e: Event) => {
-          // wt-close is composed+bubbling; this modal has no nested modal of its own today, but
-          // guarding target===currentTarget keeps it correct if one is ever added inside it — see
-          // the matching guard on dashboard-app.ts's outer profile modal, added after exactly this
-          // bug: closing the INNER modal was also closing the outer one it bubbled through.
+          // wt-close is composed: without this guard a nested modal's close would close this one.
           if (e.target !== e.currentTarget) return;
           if (this.#closingModal) {
             this.#closingModal = false;

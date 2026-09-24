@@ -4,15 +4,6 @@ import "./roster-screen.js";
 import type { RosterScreen } from "./roster-screen.js";
 import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.js";
 
-/**
- * The roster screen scanned by axe in both themes, in two shapes: an EMPTY week (the location + week
- * pickers over a person × day grid with no shifts and no publish button) and a DRAFT week with a
- * couple of shifts (grid cells carrying shift spans, plus the Publish button). Mounted by ASSIGNING
- * the `api` stub as a property — the screen loads on connect, so the stub must resolve those or a
- * stray rejection pollutes the run. The shift dialog is left CLOSED (its default), so its dialog
- * renders nothing to the a11y tree. The `<table>` uses `<th scope>` row/column headers so the grid is
- * navigable by a screen reader.
- */
 const staff: PersonSummary[] = [
   {
     personId: "p1",
@@ -33,14 +24,12 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-// Two locations so the shared `<dashboard-location-picker>` renders its select (it renders nothing
-// for a single location) and axe scans it in the screen context, as the inlined picker used to be.
+// Two locations, because `<dashboard-location-picker>` renders nothing for a single one.
 const locations = [
   { id: "loc-1", name: "Main" },
   { id: "loc-2", name: "Annex" },
 ];
-// Today's date in UTC (`toISOString()` is UTC, matching the screen's `today()` seed) — always in the
-// current week the screen defaults to, so the shift renders in a cell.
+// In UTC, like the screen's `today()`, so the shift lands in the week the screen opens on.
 const day = new Date().toISOString().slice(0, 10);
 
 function stubApi(snapshot: RosterSnapshot): DashboardApi {
@@ -67,8 +56,7 @@ describe.each(["light", "dark"] as const)("roster-screen a11y (%s theme)", (them
     );
     await flush(el);
     await expectNoA11yViolations(host);
-    // Beyond axe (which did not flag the mouse-only <td>): every editable cell's affordance is a real
-    // <button> — keyboard-operable — and an empty one carries an accessible name (aria-label).
+    // axe did not flag a bare clickable <td>, so this checks for a real button directly.
     const cell = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test^=cell-]")!;
     expect(cell.tagName).toBe("BUTTON");
     expect(cell.getAttribute("aria-label")).toBeTruthy();

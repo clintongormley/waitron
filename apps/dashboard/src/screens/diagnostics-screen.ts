@@ -6,32 +6,10 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DiagnosticsLine, Verbosity } from "../api/client.js";
 
-/** How often the viewer re-polls the node's recent-log ring + verbosity while it is showing and not
- * paused. A live tail, not a firehose — 1.5s keeps the screen current without hammering the node. */
 const POLL_MS = 1500;
-/** The temporary-raise window (minutes) the "turn on detailed logging" control asks for. The node
- * auto-reverts to its standing level after this, so a manager can never leave debug logging on for
- * good by accident — the raise always expires. */
+/** The node auto-reverts after this window, so a raise always expires. */
 const WINDOW_MINUTES = 15;
 
-/**
- * The management dashboard's LIVE DIAGNOSTICS screen (logging-diagnostics-foundation, Task 15): a
- * manager-only live tail of the node's structured log ring, plus the control to raise log verbosity to
- * `debug` for a bounded window when chasing a fault.
- *
- * It POLLS rather than streams — `getRecentLogs(200)` + `getVerbosity()` on a {@link POLL_MS} interval
- * started in `connectedCallback` and CLEARED in `disconnectedCallback` (a leaked `setInterval` would
- * keep fetching against a torn-down screen). The interval is skipped while `paused`, so an operator can
- * freeze the tail to read a line without it scrolling away; `resume` starts it flowing again and
- * `clear` empties the rendered rows (a local view reset — the node's ring is untouched, so the next
- * poll refills it). "Turn on detailed logging" calls `setVerbosity("debug", 15)` then refreshes, and
- * while a raise is live the header shows when it reverts.
- *
- * ERROR HANDLING mirrors the sibling screens: `#refresh`/`#raise` are each fully `try/catch`ed (invoked
- * via `void`), so a rejection becomes `errorKey` (the raw `{ code }`, falling back to `server.internal`)
- * rendered in a `role="alert"` banner, never an unhandled promise rejection. `codeMessage` maps the raw
- * code to localised copy at the render edge, so the banner shows a sentence and never the raw wire code.
- */
 @customElement("dashboard-diagnostics-screen")
 export class DiagnosticsScreen extends LitElement {
   static override styles = [
@@ -105,26 +83,17 @@ export class DiagnosticsScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
 
-  // The most recent log lines, refreshed on every unpaused poll. Cleared locally by the Clear control.
   @state() private lines: DiagnosticsLine[] = [];
-  // The node's current verbosity (level + pending auto-revert). Undefined until the first poll settles.
   @state() private verbosity?: Verbosity;
-  // Whether the live tail is frozen. While true the interval fires but skips the refresh.
+  // While true the interval still fires but skips the refresh.
   @state() private paused = false;
   @state() private errorKey: string | null = null;
   #timer?: ReturnType<typeof setInterval>;
 
-  /** Single-flight guard for the poll (fix round 1, Important-1): true while a `#refresh()` is still in
-   * flight. `#refresh` is driven by BOTH the ~1500ms interval and `#raise()`, and it awaits two round
-   * trips, so without this a tick (or a raise) can fire before the previous request has resolved —
-   * requests pile up and a slower OLDER response can land after a newer one and overwrite `lines`/
-   * `verbosity` with stale data (a flicker/rollback in the live tail). A call that finds this true
-   * returns early; the next tick tries again once the in-flight request has cleared it. `#refresh`
-   * itself owns the guard, so every caller (interval + raise) goes through it. Mirrors
-   * `dashboard-overview-screen.ts`'s `#overdueInFlight`. */
+  /** `#refresh` is driven by both the interval and `#raise()` and awaits two round trips; a call that
+   * finds this true returns early, so a slower OLDER response can never overwrite a newer one. */
   #inFlight = false;
 
   override connectedCallback(): void {
@@ -136,18 +105,13 @@ export class DiagnosticsScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    // Stop the poll: a leaked interval would keep fetching against a detached screen (and in a browser
-    // test would hang the run). Cleared here, so the timer never outlives the element.
+    // A leaked interval would keep fetching against a detached screen.
     if (this.#timer !== undefined) clearInterval(this.#timer);
     this.#timer = undefined;
     super.disconnectedCallback();
   }
 
-  /** Pull the recent log ring + current verbosity in one round trip pair. A rejection becomes the
-   * `errorKey` banner rather than an unhandled rejection (called via `void`). */
   async #refresh(passive = false): Promise<void> {
-    // Single-flight (see #inFlight): skip if a refresh is already running so an older, slower response
-    // can never land after a newer one and overwrite the tail with stale data.
     if (this.#inFlight) return;
     this.#inFlight = true;
     try {
@@ -163,10 +127,8 @@ export class DiagnosticsScreen extends LitElement {
     }
   }
 
-  /** Raise verbosity to `debug` for the bounded {@link WINDOW_MINUTES} window, then refresh so the
-   * header reflects the new level + revert time — on the next poll tick if a refresh is already in
-   * flight, since the single-flight guard skips a concurrent one. A rejection becomes the `errorKey`
-   * banner; never an unhandled rejection (called via `void`). */
+  /** If a refresh is already in flight the guard skips this one, so the header catches up on the next
+   * poll tick. */
   async #raise(): Promise<void> {
     try {
       await this.api.setVerbosity("debug", WINDOW_MINUTES);
@@ -176,9 +138,7 @@ export class DiagnosticsScreen extends LitElement {
     }
   }
 
-  /** The auto-revert window copy with its `{time}` placeholder filled — `t()` does NO substitution, so
-   * rendering the raw string would show a literal `{time}`. Substitutes the local clock time the raise
-   * reverts at, so the rendered output never contains a `{`. */
+  /** `t()` does NO substitution, so the `{time}` placeholder is filled here. */
   #revertWindow(revertsAt: string): string {
     const at = new Date(revertsAt);
     const clock = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;

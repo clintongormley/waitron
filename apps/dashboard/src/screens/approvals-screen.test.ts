@@ -81,8 +81,7 @@ describe("approvals-screen", () => {
     expect(api.decideSwap).toHaveBeenCalledWith("sw1", "approved");
     expect(api.listPendingSwaps).toHaveBeenCalledTimes(2); // both queues reloaded via #loadQueues
     expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
-    // A decide reloads only the queues, never the roster: staff is fetched once on connect and NOT
-    // refetched on a decide (eff#3 — #loadQueues, not the full #load).
+    // A decide reloads only the queues: staff is fetched once on connect and NOT refetched.
     expect(api.listStaff).toHaveBeenCalledTimes(1);
   });
 
@@ -129,10 +128,8 @@ describe("approvals-screen", () => {
   });
 
   it("surfaces a rejected decide as the error banner and releases busy for a retry", async () => {
-    // The decide handlers' catch path (both #decideSwap and #decideAbsence): a rejected decide must
-    // surface the thrown code as the errorKey banner and release the single-flight `busy` gate in the
-    // `finally`, so a following decide is NOT dropped. The route codes ride through verbatim (a code
-    // absent would fall back to server.internal via the ?? arm).
+    // A rejected decide must surface its code as the banner and release the single-flight `busy`
+    // gate, so a following decide is NOT dropped.
     const api = stubApi({
       decideSwap: vi.fn().mockRejectedValue({ code: "swap.not_decidable" }),
       decideAbsence: vi.fn().mockRejectedValue({ code: "absence.not_found" }),

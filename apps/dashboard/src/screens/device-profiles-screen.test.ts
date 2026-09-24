@@ -375,7 +375,7 @@ describe("device-profiles-screen editor form", () => {
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await flush(el);
-    // No timeout input for a kitchen display — it never idle-logs out.
+    // No timeout input for a kitchen display.
     expect(el.shadowRoot!.querySelector("[data-test=profile-inactivity]")).toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);

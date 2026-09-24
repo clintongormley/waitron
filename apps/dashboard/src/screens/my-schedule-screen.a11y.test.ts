@@ -4,9 +4,6 @@ import "./my-schedule-screen.js";
 import type { MyScheduleScreen } from "./my-schedule-screen.js";
 import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
 
-// One row of each list (a shift, an acceptable swap offered to me, an absence) plus the two request
-// forms and their pickers, so every control the screen renders is under axe at once — in BOTH themes,
-// where the color-contrast check means what it means in the deployed app.
 const roster: RosterEntry[] = [
   { personId: "me", displayName: "Yo" },
   { personId: "col1", displayName: "Colega" },

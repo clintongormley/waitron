@@ -74,11 +74,8 @@ describe("canvas-grid-preview", () => {
 });
 
 // ── Direct manipulation (pointer drag-to-reorder + resize handle) ──────────────────────────────────
-// These drive REAL PointerEvents (browser-mode / Playwright) against the rendered grid. The preview is
-// a VIEW: it emits `move-card {from,to}` and `resize-card {index,colSpan,rowSpan}` INTENTS and never
-// mutates the tab — the screen owns mutation. `setPointerCapture` on a synthetic pointer is a no-op
-// here (guarded in the element), so the listeners are bound on the source element and we dispatch the
-// whole gesture (down → move → up) on it.
+// `setPointerCapture` fails on a synthetic pointer (guarded in the element), so each whole gesture
+// (down → move → up) is dispatched on the source element.
 function pointer(
   target: EventTarget,
   type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
@@ -218,11 +215,8 @@ describe("canvas-grid-preview drag-to-reorder", () => {
   });
 
   it("resets click-suppression on a new gesture: a drag with no trailing click never swallows the next click", async () => {
-    // A real drag sets #suppressClick so its OWN trailing synthetic click is ignored — but pointer
-    // capture releasing over a different tile means the browser fires NO trailing click on the source,
-    // leaving the flag stuck true. The `#suppressClick = false` reset in #onTilePointerDown is what
-    // clears it at the START of the next gesture, so that gesture's legitimate click still selects.
-    // (Prove-by-deletion: removing that reset makes this test fail — the next click is swallowed.)
+    // Capture releasing over a different tile means the browser fires NO trailing click on the source,
+    // leaving #suppressClick stuck true. The next gesture's pointerdown must clear it.
     const el = await mountInteractive();
     const selections: number[] = [];
     el.addEventListener("select-card", (e) => {
@@ -244,13 +238,8 @@ describe("canvas-grid-preview drag-to-reorder", () => {
   });
 
   it("starts each gesture from clean drag state after a MISSED pointerup (no wedge at 0)", async () => {
-    // Robustness: if a pointerup is ever missed (reachable only when setPointerCapture didn't take —
-    // the documented best-effort path), draggingIndex/dropIndex survive into the next gesture, whose
-    // fresh #drag has no cached tiles. The threshold-crossed state is derived from draggingIndex !==
-    // null, so the measure block is skipped and #insertionIndex runs over an empty cache, pinning
-    // dropIndex to 0 for the whole next gesture. The draggingIndex/dropIndex reset in
-    // #onTilePointerDown clears that. (Prove-by-deletion: without the reset the second gesture wedges
-    // to 0, so move-card never fires with the correct `to` and this test fails.)
+    // A missed pointerup leaves draggingIndex set into the next gesture, which then skips measuring
+    // and wedges dropIndex at 0. The reset in #onTilePointerDown clears that.
     const el = await mountInteractive();
     let detail: { from: number; to: number } | null = null;
     el.addEventListener("move-card", (e) => {
@@ -272,10 +261,7 @@ describe("canvas-grid-preview drag-to-reorder", () => {
   });
 
   it("clears drag state and emits no move-card when the pointer stream is cancelled", async () => {
-    // A cancelled pointer stream (touch-cancel, an OS/browser gesture takeover) fires pointercancel
-    // instead of pointerup. The gesture must be abandoned: drag state cleared, capture released, and
-    // NO move-card emitted (a cancelled gesture is not a reorder). (Prove-by-deletion: without the
-    // pointercancel handler the dragged tile stays dimmed and the drop indicator stays visible.)
+    // A cancelled gesture is abandoned: drag state cleared, capture released, and NO move-card.
     const el = await mountInteractive();
     let moved = false;
     el.addEventListener("move-card", () => (moved = true));
@@ -380,10 +366,7 @@ describe("canvas-grid-preview resize handle", () => {
   });
 
   it("cancels the resize on pointercancel: a later pointermove on the handle emits no resize-card", async () => {
-    // A cancelled pointer stream fires pointercancel instead of pointerup. The resize must be
-    // abandoned (#resize cleared, capture released) so a later stray pointermove on the handle does
-    // not resume a resize the user cancelled. (Prove-by-deletion: without the pointercancel handler
-    // #resize survives and the trailing pointermove emits a resize-card.)
+    // A cancelled resize must not be resumed by a later stray pointermove on the handle.
     const el = await mountInteractive(0);
     let count = 0;
     el.addEventListener("resize-card", () => (count += 1));
@@ -412,10 +395,6 @@ describe("canvas-grid-preview resize handle", () => {
 });
 
 // ── Representative card silhouettes ────────────────────────────────────────────────────────────────
-// Each tile draws a dashboard-local static silhouette of its card type (a mini grid, a few basket
-// lines, a big total, …) instead of a grey name box. The silhouette is DECORATIVE: the host wraps it
-// in an `aria-hidden`, `pointer-events: none` container so it never intercepts a drag/select and the
-// resize handle stays on top — the card-type name stays as the tile's accessible caption.
 describe("canvas-grid-preview card silhouettes", () => {
   function tileEl(el: CanvasGridPreview, index: number): HTMLElement {
     return el.shadowRoot!.querySelector<HTMLElement>(`[data-test=tile-${index}]`)!;
@@ -448,17 +427,15 @@ describe("canvas-grid-preview card silhouettes", () => {
     });
     await el.updateComplete;
     // The visible caption text supplies the button's accessible name; the silhouette is aria-hidden.
-    // Locale-agnostic: assert against the resolved card name rather than a hardcoded English string
-    // (the dashboard defaults to es-ES).
     expect(tileEl(el, 0).querySelector(".name")!.textContent!.trim()).toBe(
       t("canvas_editor.card.product-grid"),
     );
   });
 
   it("marks the silhouette decorative: aria-hidden and pointer-events:none so drag/select is never intercepted", async () => {
-    // Prove-by-deletion guard: without `pointer-events: none` on the preview wrapper the silhouette
-    // would swallow pointerdown/click meant for the draggable button; without `aria-hidden` its inner
-    // divs would leak into the button's accessible name and the axe sweep.
+    // Without `pointer-events: none` on the preview wrapper the silhouette would swallow
+    // pointerdown/click meant for the draggable button; without `aria-hidden` its inner divs would leak
+    // into the button's accessible name.
     const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
       tab,
       interactive: true,
@@ -482,14 +459,8 @@ describe("canvas-grid-preview card silhouettes", () => {
   });
 
   it("renders the same memoized silhouette into TWO sibling tiles of the same type as independent, complete DOM subtrees", async () => {
-    // `cardPreview("product-grid")` returns ONE shared, memoized TemplateResult, committed into every
-    // product-grid tile. A TemplateResult is an immutable description, so Lit builds a fresh DOM
-    // subtree per ChildPart — two product-grid tiles must each get their OWN full silhouette, not one
-    // shared/moved node leaving the other empty. This pins that end-to-end (card-preview.test.ts only
-    // proves referential identity of the TemplateResult; the two-distinct-types fixture above never
-    // exercises the aliasing case). What it would catch: if memoization ever wrongly SHARED the built
-    // DOM across tiles, one of the two tiles would come up empty (0 cells) or the two would be the
-    // same node — either assertion below fails.
+    // `cardPreview("product-grid")` returns ONE memoized TemplateResult for every product-grid tile;
+    // each tile must still get its OWN full silhouette, not one shared node leaving the other empty.
     const twoSame: TabDef = {
       ...tab,
       cards: [
@@ -515,7 +486,7 @@ describe("canvas-grid-preview card silhouettes", () => {
   });
 
   it("still emits move-card when a tile bearing a silhouette is dragged past a neighbour", async () => {
-    // Regression: the decorative silhouette must not break slice-2's drag-to-reorder.
+    // The decorative silhouette must not break drag-to-reorder.
     const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
       tab,
       interactive: true,

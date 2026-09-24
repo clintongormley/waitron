@@ -89,12 +89,11 @@ async function mount(api = stubApi()): Promise<UnitsScreen> {
   return el;
 }
 
-/** Mount the screen over a specific unit list (the initial load reads listUnits). */
 async function mountWith(list: Unit[]): Promise<UnitsScreen> {
   return mount(stubApi({ listUnits: vi.fn().mockResolvedValue(list) }));
 }
 
-/** Type into the table's own search box (it lives in wt-data-table's shadow root now). */
+/** The search box is in wt-data-table's shadow root. */
 async function typeTableSearch(el: UnitsScreen, value: string): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
@@ -105,7 +104,6 @@ async function typeTableSearch(el: UnitsScreen, value: string): Promise<void> {
   await table.updateComplete;
 }
 
-/** The keys of the rows the units table currently renders (after any search or filter). */
 function listedKeys(el: UnitsScreen): string[] {
   return [
     ...el
@@ -508,8 +506,7 @@ describe("units-screen", () => {
 
   it("restores focus to the row menu when the in-use modal is cancelled", async () => {
     const el = await mount(inUseApi());
-    // The modal opens from u1's row, so focus must return to u1's menu — found by row key, since
-    // the table now sorts by name and u1 is not necessarily the first row.
+    // Found by row key: the table sorts by name, so u1 is not necessarily the first row.
     const menu = el
       .shadowRoot!.querySelector("wt-data-table")!
       .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="u1"] wt-row-actions')!;

@@ -23,7 +23,6 @@ const invoices: PurchaseInvoice[] = [
   },
 ];
 
-/** A base create-purchase detail (as `dashboard-purchase-form` emits it), overridable per test. */
 function createDetail(overrides: Record<string, unknown> = {}) {
   return {
     header: {
@@ -52,7 +51,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight fetches and the follow-up render. */
 async function flush(el: PurchasesScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -63,7 +61,6 @@ const list = (el: PurchasesScreen): PurchaseList | null =>
 const form = (el: PurchasesScreen): PurchaseForm =>
   el.shadowRoot!.querySelector("dashboard-purchase-form")!;
 
-/** Dispatch a composed event from a child as the real widget would. */
 function emitFromChild(child: Element, type: string, detail: unknown): void {
   child.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
@@ -117,7 +114,6 @@ describe("purchases-screen", () => {
     await flush(el);
     expect(api.createPurchaseInvoice).toHaveBeenCalledWith(createDetail());
     expect(form(el).open).toBe(false);
-    // listPurchaseInvoices: once on connect + once after the create.
     expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(2);
   });
 

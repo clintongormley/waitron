@@ -65,7 +65,6 @@ async function settle(el: ModifiersScreen): Promise<void> {
   });
 }
 
-/** Move to a tab the way `wt-tabs` announces a choice. */
 async function selectTab(el: ModifiersScreen, key: string): Promise<void> {
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;

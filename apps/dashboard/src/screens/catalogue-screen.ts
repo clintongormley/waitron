@@ -100,15 +100,12 @@ export class CatalogueScreen extends LitElement {
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
-  /** The extras lists the refusal in `errorKey` names, when it names any. */
   @state() private refusedLists: string[] = [];
   @state() private languageSettingsOpen = false;
-  /** The product or variant the Delete confirmation is open for. */
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
-  /** The modifier list the nested extras or options form is EDITING, or null while it is creating
-   * one. The same form does both, and this is what decides which write its Save performs; one state
-   * serves both kinds because only one nested form is ever open. */
+  /** The list the nested form is EDITING, or null while it is creating one: this decides which write
+   * its Save performs. One state serves both kinds because only one nested form is ever open. */
   @state() private editingList: {
     kind: "extras" | "options";
     value: ExtraList | OptionList;
@@ -309,8 +306,6 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
-  /** Makes a removed variant Active again through its own page's write, the same write Delete
-   * uses to make it Inactive. */
   async #restoreProduct(productId: string): Promise<void> {
     if (this.busy || !this.#knows(productId)) return;
     this.busy = true;
@@ -369,12 +364,9 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * The editor field a rejected product write belongs to, as a `fieldErrors` entry. A refusal
-   * carries one of two things the editor has somewhere to put: the FIELD it is about, or — for the
-   * content languages — the LANGUAGE whose text is missing, which is the shape this editor's own
-   * translated inputs produce. Which refusals carry which is pinned by
-   * `packages/catalogue/src/product-editor.test.ts`; a nutrition refusal carries neither, so it
-   * reaches the screen's banner like any other refusal with nothing to point at.
+   * A refusal carries either the FIELD it is about or, for the content languages, the LANGUAGE whose
+   * text is missing. Which refusals carry which is pinned by `packages/catalogue/src/product-editor.test.ts`;
+   * one carrying neither reaches the screen's banner.
    */
   #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
     const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
@@ -398,13 +390,9 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * A refused nested list write, keyed by the field path the server named — which is the key both
-   * list forms map onto their own inputs — or `_form` when it names none. The Modifiers screen
-   * reads the same refusals the same way (`#fieldOf`, `modifiers-screen.ts`).
-   *
-   * Empty while nothing has been refused: the create controller clears its error whenever a form
-   * opens or is cancelled, so one form never shows what another one earned. Without this the modal
-   * covers the screen's own banner and a refused create says nothing at all.
+   * Keyed by the field path the server named, or `_form` when it names none. Empty while nothing has
+   * been refused: the create controller clears its error whenever a form opens or is cancelled. Without
+   * this the modal covers the screen's own banner and a refused create says nothing at all.
    */
   #childFieldErrors(): Record<string, string> {
     const error = this.#child.error;
@@ -457,8 +445,6 @@ export class CatalogueScreen extends LitElement {
     );
   }
 
-  /** The product editor asked to edit one of its attached modifier lists. Every one of them is
-   * already loaded, so this opens the same nested form the create path uses, seeded with the row. */
   #editRelated(event: CustomEvent<{ kind: ProductChildKind; id: string }>): void {
     event.stopPropagation();
     const { kind, id } = event.detail;
@@ -472,12 +458,10 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * One list form's Cancel, honoured only while a form of that KIND is the open one. A dismissal
-   * produces a SECOND `wt-cancel` later: the `<dialog>` this screen just closed delivers its native
-   * `close` event a task afterwards, `wt-dialog.ts` turns that into `wt-close`, and the form answers
-   * with another cancel. By then a different form can be open, and an unchecked handler closes that
-   * one. The same kind reopened inside that task needs no check here: `wt-dialog.ts` drops the late
-   * report for a dialog that is open again.
+   * Honoured only while a form of that KIND is the open one. A dismissal produces a SECOND `wt-cancel`
+   * a task later (the closed `<dialog>`'s native `close`, which `wt-dialog.ts` turns into `wt-close`),
+   * and by then a different form can be open. The same kind reopened inside that task needs no check:
+   * `wt-dialog.ts` drops the late report for a dialog that is open again.
    */
   #cancelList(kind: "extras" | "options"): void {
     if (this.#child.kind !== kind) return;

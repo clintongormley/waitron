@@ -170,7 +170,7 @@ describe("canvas-editor-screen list mode", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
     await el.updateComplete;
-    // Create only enters editor mode; the save is B7 — no API write here, and the list is gone.
+    // Create only enters editor mode: no API write here, and the list is gone.
     expect(api.createCanvas).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c1]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=create-name]")).toBeNull();
@@ -187,7 +187,7 @@ describe("canvas-editor-screen list mode", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
     await flush(el); // getCanvas resolves, mode → editor
-    // Edit-open fetches the freshest definition rather than reusing the list snapshot (spec §6.2).
+    // Edit-open fetches the freshest definition rather than reusing the list snapshot.
     expect(api.getCanvas).toHaveBeenCalledWith("c1");
     expect(el.shadowRoot!.querySelector("[data-test=canvas-row-c1]")).toBeNull();
     const placeholder = el.shadowRoot!.querySelector("[data-test=editor-placeholder]")!;
@@ -251,9 +251,7 @@ describe("canvas-editor-screen editor mode", () => {
       new CustomEvent("select-card", { detail: { index }, bubbles: true, composed: true }),
     );
   }
-  // The tiles live in <canvas-grid-preview>'s OWN shadow root — querySelectorAll does not cross a
-  // shadow boundary, so the brief's flat `canvas-grid-preview [data-test^=tile-]` selector matches
-  // nothing; pierce into the preview's shadow root to count/read the rendered tiles as intended.
+  // The tiles live in <canvas-grid-preview>'s OWN shadow root, which querySelectorAll does not cross.
   function previewRoot(el: CanvasEditorScreen): ShadowRoot {
     return el.shadowRoot!.querySelector("canvas-grid-preview")!.shadowRoot!;
   }
@@ -397,11 +395,8 @@ describe("canvas-editor-screen editor mode", () => {
   });
 
   it("does not rebuild the draft on resize moves that stay pinned at the clamp bound", async () => {
-    // The resize drag re-emits raw spans each cell it crosses; dragging PAST the max-column bound
-    // (raw colSpan 13, 14, 15…) snaps to the SAME clamped result each step. The owner must rebuild
-    // the draft only when the clamped spans actually change, not on every beyond-bound move.
-    // (Prove-by-deletion: without the skip in #setSpans, each beyond-bound move rebuilds the draft to
-    // an identical clamped result, so the active-tab object identity changes and this test fails.)
+    // Past the max-column bound every drag step clamps to the SAME result, so the draft must be
+    // rebuilt only when the clamped spans actually change.
     const el = await openEditor();
     const preview = el.shadowRoot!.querySelector("canvas-grid-preview") as HTMLElement & {
       tab: object | null;
@@ -459,11 +454,9 @@ describe("canvas-editor-screen editor mode", () => {
   });
 });
 
-// A COMPLETE, client-valid `till` definition (all four sale-critical cards present) — the fixture the
-// happy-path save + property-panel tests edit and save back. Distinct from the module-level `canvases`
-// fixture, whose c1 is deliberately a single-card, single-tab till (structural-edit tests read it) that
-// would FAIL the client validator, so it cannot exercise a successful save. `held-orders` at index 4
-// carries a `visibleWhen` so the visibility-toggle test has a card with visibility states to edit.
+// A complete, client-valid `till` definition for the save and property-panel tests. The module-level
+// `canvases` fixture's c1 is a single-card till that would FAIL the client validator. `held-orders` at
+// index 4 carries a `visibleWhen` for the visibility-toggle test.
 const validTillDefinition = {
   formFactor: "till",
   tabs: [
@@ -629,8 +622,6 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
   });
 
   it("edits the canvas name and form factor in canvas settings", async () => {
-    // Capabilities are no longer edited here — they relocated onto the device profile (Task 9), so
-    // canvas settings offers only the name + form factor now.
     const { el, api } = await openValidEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
     await el.updateComplete;
@@ -648,7 +639,6 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect(id).toBe("c1");
     expect(name).toBe("Renamed");
     expect(definition.formFactor).toBe("kds");
-    // The saved definition carries no capabilities key (relocated to the device profile, Task 9).
     expect("capabilities" in definition).toBe(false);
   });
 
@@ -755,8 +745,6 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
   });
 
   it("canvas settings no longer renders a Capabilities section (relocated to the device profile, Task 9)", async () => {
-    // Capabilities editing moved to the device-profile editor. Canvas settings offers only the name +
-    // form factor, so neither the section nor any capability switch is present.
     const { el } = await openValidEditor();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
     await el.updateComplete;

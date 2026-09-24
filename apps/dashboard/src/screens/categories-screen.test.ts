@@ -107,8 +107,8 @@ it("counts direct memberships and opens category products", async () => {
   await products.updateComplete;
   expect(products.rows.map((row) => (row as { id: string }).id)).toEqual(["p"]);
 });
-// Removing a membership that was the reporting category clears it (see #assign); the picker now
-// accepts that as a valid, final choice instead of demanding a replacement before submission.
+// Removing a membership that was the reporting category clears it (see #assign); the picker accepts
+// that as a valid, final choice instead of demanding a replacement before submission.
 it("saves a membership with no reporting category after removing the primary", async () => {
   const { el, api } = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -268,10 +268,9 @@ it("opens the products modal from the name and lists members with lozenges", asy
   expect(products.rows.map((row) => (row as { id: string }).id).sort()).toEqual(["p", "r"]);
   const lozenges = [...products.shadowRoot!.querySelectorAll("wt-lozenge")];
   expect(lozenges.some((lozenge) => lozenge.textContent?.trim() === "Drinks")).toBe(true);
-  // "Napkin" has no membership beyond the reporting category "Food", so its Other categories
-  // cell falls back to the muted dash rather than an empty lozenge list. This cell is handed to
-  // wt-data-table as a callback like the name cell, so it lands in the TABLE's shadow root: read
-  // the painted colour back, because presence alone passed while the dash rendered unmuted.
+  // "Napkin" has no membership beyond its reporting category, so its Other categories cell falls
+  // back to the muted dash. The cell lands in the TABLE's shadow root, so read the painted colour back:
+  // presence alone passes while the dash renders unmuted.
   const dash = products.shadowRoot!.querySelector<HTMLElement>('[part~="muted"]');
   expect(dash).not.toBeNull();
   expect(dash!.textContent!.trim()).toBe("—");
@@ -327,8 +326,7 @@ it("adds products via the table's own per-row selection in one call", async () =
 });
 
 // The add table's select-all header box selects every visible (searched/filtered) row, and Add
-// then sends the whole picked set — proving the dialog uses the primitive's own select-all rather
-// than a screen-side "select all visible" checkbox.
+// then sends the whole picked set.
 it("adds products using the table's own select-all", async () => {
   const fx = apiFixture();
   const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
@@ -410,8 +408,8 @@ it("titles the delete dialog with the category name, shows affected products, an
     'wt-data-table[data-test="category-delete-products"]',
   )!;
   await table.updateComplete;
-  // The dependant resolves to a full product row inside the table's shadow root. The old design's
-  // per-row "reporting category, will be cleared" flag is gone — the warning is a single top block.
+  // The dependant resolves to a full product row inside the table's shadow root, with no per-row
+  // "will be cleared" flag: the warning is a single top block.
   expect(table.shadowRoot!.textContent).toContain("Toast");
   expect(table.shadowRoot!.textContent).not.toContain("will be cleared");
 });
@@ -460,9 +458,8 @@ it("shows the delete preview with the affected products and child links, disabli
   expect(products.shadowRoot!.textContent).toContain("Toast");
 });
 
-// The delete popup now carries ONE red warning at the top that names every consequence in a single
-// paragraph, replacing the old scattered intro line, per-section headings and per-row flag. The
-// affected-products table and the child links stay below it.
+// The delete popup carries ONE red warning at the top naming every consequence in a single paragraph;
+// the affected-products table and the child links stay below it.
 it("shows one red warning at the top combining every consequence, and drops the old per-message text", async () => {
   setLocale("en-GB");
   const fx = apiFixture();
@@ -519,7 +516,7 @@ it("shows one red warning at the top combining every consequence, and drops the 
   expect([...dialog.querySelectorAll("a")].some((a) => a.textContent?.includes("Breakfast"))).toBe(
     true,
   );
-  // None of the old, scattered wording survives — the colon intro or the per-row cleared flag.
+  // None of the old, scattered wording survives: the colon intro or the per-row cleared flag.
   expect(dialog.textContent).not.toContain("Deleting it will:");
   expect(dialog.textContent).not.toContain("will be cleared");
   const table = dialog.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
@@ -529,8 +526,8 @@ it("shows one red warning at the top combining every consequence, and drops the 
   expect(table.shadowRoot!.textContent).not.toContain("will be cleared");
 });
 
-// A leaf category nothing depends on gets no warning block at all — just the buttons, matching the
-// preserved empty-case behaviour (Delete still enables once the empty preview resolves).
+// A leaf category nothing depends on gets no warning block at all, just the buttons (Delete still
+// enables once the empty preview resolves).
 it("shows no warning block when nothing depends on the category", async () => {
   const { el } = await mount();
   const list = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -552,8 +549,8 @@ it("shows no warning block when nothing depends on the category", async () => {
   expect(modal.querySelector("wt-spinner")).toBeNull();
 });
 
-// A product's search haystack now includes every category it belongs to, not only its name and
-// reporting category — so a term unique to one of its OTHER categories finds it.
+// A product's search haystack includes every category it belongs to, not only its name and
+// reporting category, so a term unique to one of its OTHER categories finds it.
 it("finds a product by a category it belongs to beyond its reporting one", async () => {
   const fx = apiFixture();
   // "Beverages" appears nowhere except as Toast's non-reporting (other) category, so a match on it
@@ -632,9 +629,8 @@ it("says the delete preview failed and keeps Delete disabled", async () => {
   const warning = modal.querySelector('[data-test="dependants-error"]')!;
   expect(warning.textContent).toContain(t("categories.delete_preview_error"));
   expect(warning.getAttribute("role")).toBe("alert");
-  // It has to LOOK like a warning, not just be one. This node is a child of wt-modal in the
-  // screen's own shadow root, so the screen's .error rule does reach it — unlike the cell markup
-  // this branch had to move onto ::part(). Read the colour rather than assume either way.
+  // It has to LOOK like a warning. This node is in the screen's own shadow root, so the screen's
+  // .error rule does reach it; read the colour rather than assume.
   const dangerToken = getComputedStyle(el).getPropertyValue("--wt-color-danger").trim();
   expect(getComputedStyle(warning).color).toBe(hexToRgb(dangerToken));
   // Not still pretending to load, and not offering the delete either.
@@ -683,14 +679,10 @@ it("clears a failed delete preview when the dialog is reopened", async () => {
   expect(modal.querySelector('[data-test="dependants-error"]')).toBeNull();
 });
 
-// Two in-flight preview fetches for the SAME category — from clicking delete on the same row
-// twice in a row — must not let the older one's outcome apply once it finally settles: comparing
-// the category id alone cannot tell a superseded request from the current one, since both share
-// the same id. (Reproducing this via a real close-then-reopen click sequence instead is flaky:
-// wt-modal's `.open` change cascades into a native <dialog>-driven `wt-close` event that can land
-// on a later task than any fixed wait accounts for. Opening the same row twice needs no close at
-// all — `#openDelete` has no guard against being called while already open — so the only thing
-// under test is the generation guard itself, not modal-closing timing.)
+// Two in-flight preview fetches for the SAME category must not let the older one's outcome apply:
+// the category id alone cannot tell them apart. The row is opened twice without closing, because a
+// real close-then-reopen is flaky: wt-modal's close lands as a `wt-close` event on a later task than
+// any fixed wait accounts for.
 it("ignores a stale preview response from an earlier open of the same category", async () => {
   const fx = apiFixture();
   let resolveFirst!: (value: CategoryDependants) => void;
@@ -720,11 +712,8 @@ it("ignores a stale preview response from an earlier open of the same category",
     expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
   );
   resolveFirst({ products: [], children: [], parentId: null, routes: [] }); // the stale one lands late
-  // A resolved promise's continuation, and the Lit update it triggers, are both microtask work —
-  // unlike the flaky close/reopen version of this test, nothing here crosses a native-event
-  // macrotask boundary, so `updateComplete` genuinely settles the outcome rather than merely
-  // proving it hadn't landed YET. Await it twice: once for the fetch's own `.then`, once for the
-  // state change it makes to actually paint.
+  // Both the fetch's continuation and the Lit update it triggers are microtask work, so
+  // `updateComplete` settles the outcome. Await it twice: once for the `.then`, once for the paint.
   await el.updateComplete;
   await el.updateComplete;
   // The stale success must not clear the warning or enable Delete.
@@ -918,12 +907,9 @@ it("filters by name keeping ancestors in tree mode", async () => {
   expect(muted("eggs")).toBe(false);
 });
 
-// These two suites assert RENDERED style, not just markup. The name column's cell markup is handed
-// to wt-data-table as a cell callback, so it lands in wt-data-table's shadow root rather than this
-// screen's — and a stylesheet only styles nodes inside the shadow root that adopted it. Presence and
-// attribute assertions pass either way, which is how a release where no swatch, no thumbnail box and
-// no muting ever appeared in the browser still went green. Reading geometry and colour back is what
-// distinguishes "the element is there" from "the element is visible".
+// These two suites assert RENDERED style, not just markup. The name cell's markup is handed to
+// wt-data-table as a callback, so it lands in the table's shadow root, where this screen's stylesheet
+// does not reach; presence and attribute assertions pass either way.
 it("renders each name with its colour square, sized and bordered from tokens", async () => {
   const fx = apiFixture();
   fx.api.listCategories.mockResolvedValue([{ ...food, color: "#b12525" }]);
@@ -956,10 +942,8 @@ it("renders each name with its colour square, sized and bordered from tokens", a
   expect(placeholder.getBoundingClientRect().height).toBeGreaterThan(0);
 });
 
-// The placeholder above and a real image are different elements under different rules, so the
-// styling has to be proven separately for each. The src 404s here; only the box is under test.
-// The stored colour is interpolated into an inline style attribute, so the screen checks it rather
-// than trusting it — the same guard wt-lozenge applies. An unusable value draws the empty swatch.
+// The stored colour is interpolated into an inline style, so the screen checks it rather than
+// trusting it. An unusable value draws the empty swatch.
 it("draws the empty swatch for a colour that is not #rrggbb", async () => {
   const fx = apiFixture();
   fx.api.listCategories.mockResolvedValue([{ ...food, color: "red; background-image: url(x)" }]);
@@ -975,6 +959,8 @@ it("draws the empty swatch for a colour that is not #rrggbb", async () => {
   expect(getComputedStyle(swatch).backgroundImage).toBe("none");
 });
 
+// The placeholder and a real image are different elements under different rules, so each is proven
+// separately. The src 404s here; only the box is under test.
 it("sizes a category's thumbnail image from tokens", async () => {
   const fx = apiFixture();
   fx.api.listCategories.mockResolvedValue([{ ...food, image: "cheese.png" }]);

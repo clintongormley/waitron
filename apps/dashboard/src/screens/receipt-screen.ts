@@ -10,30 +10,8 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
 
 /**
- * The management dashboard's RECEIPT SCREEN: authors the NON-FISCAL receipt trim (design §8/§9) — a
- * `headerSubtitle` rendered under the venue name and a `footerMessage` rendered under the VERI*FACTU
- * legend, both optional. It CANNOT touch the immutable art. 7.1 core (issuer/NIF, número/serie/fecha,
- * goods, tipo/base, total, QR + legend); it only authors the two trim strings that render around it.
- *
- * On connect it loads `api.getReceipt()` and reads its `receipt` into the two fields. `headerSubtitle`
- * is a `wt-input`; `footerMessage` is a native token-styled `<textarea>` — `wt-input` exposes no multiline
- * affordance (`packages/ui/src/components/wt-input.ts` renders a single `<input>`), so a multiline field
- * falls back to a native `<textarea>` styled with the shared tokens, exactly as the login/create-person
- * pickers fall back to a native `<select>` for want of a `wt-select` primitive (`@waitron/ui`'s
- * `selectStyles`).
- *
- * GUARDAR composes the two fields back into a `ReceiptConfig` and calls `api.putReceipt`. A BLANK field
- * (empty or whitespace-only) is OMITTED, so its key is ABSENT rather than an empty string — the config a
- * screen with two untouched empty fields sends is `{}`, matching the server's `DEFAULT_RECEIPT = {}`, and
- * `till-ticket-view` renders each trim as `nothing` when its key is absent. A present field is trimmed of
- * surrounding whitespace before it is sent. `putReceipt` is a full-replace idempotent PUT (design §7), so
- * there is no single-flight guard: a double-fire re-sends the same config, not a second distinct write.
- *
- * ERROR HANDLING mirrors `catalogue-screen.ts`/`staff-screen.ts`: `#load` and `#save`
- * are each fully `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` — the raw thrown
- * `{ code }`, falling back to `server.internal` — rendered in a `role="alert"` banner, never an unhandled
- * promise rejection. The raw code stays in state; `codeMessage` (`../i18n/codes.js`) maps it to localised
- * copy at the render edge, so the banner shows a sentence and never the raw wire code.
+ * Authors only the non-fiscal trim printed around a receipt; the fiscal core of the receipt is not
+ * editable here. The footer is a native `<textarea>` because `wt-input` has no multiline form.
  */
 @customElement("dashboard-receipt-screen")
 export class ReceiptScreen extends LitElement {
@@ -81,7 +59,6 @@ export class ReceiptScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #draft = new DraftRows<{ id: string; headerSubtitle: string; footerMessage: string }>();
   readonly #queries = new DashboardQueries(
@@ -92,9 +69,6 @@ export class ReceiptScreen extends LitElement {
     },
   );
 
-  // The two authored trim strings, loaded from the receipt config on connect and composed back on
-  // Guardar. Held as plain strings (never `undefined`) so the fields bind cleanly; a blank one is
-  // dropped from the composed config so its key is absent, not `""`.
   @state() private submitting = false;
   @state() private headerSubtitle = "";
   @state() private footerMessage = "";
@@ -105,11 +79,6 @@ export class ReceiptScreen extends LitElement {
     void this.#load();
   }
 
-  /**
-   * Load the authored receipt trim (or the server's `DEFAULT_RECEIPT`) and populate the two fields. An
-   * absent key resolves to `""` (an empty field, not the string "undefined"). A rejection becomes the
-   * `errorKey` banner rather than an unhandled rejection.
-   */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -138,27 +107,18 @@ export class ReceiptScreen extends LitElement {
     }
   }
 
-  /** The header wt-input's composed `wt-change`. `stopPropagation` keeps it inside this screen (the
-   * house field-handler pattern). */
   #onHeaderChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.headerSubtitle = event.detail.value;
   }
 
-  /** The footer `<textarea>`'s native `input`. `stopPropagation` keeps the (composed) input event from
-   * leaking past this screen's shadow boundary, the same discipline the wt-change handler follows. */
   #onFooterInput(event: Event): void {
     event.stopPropagation();
     this.footerMessage = (event.target as HTMLTextAreaElement).value;
   }
 
-  /**
-   * Compose the two fields into a `ReceiptConfig` and persist. A blank field (trimmed to `""`) is
-   * OMITTED so its key is absent — a screen with both fields empty sends `{}`, matching the server's
-   * `DEFAULT_RECEIPT`; a present field is sent trimmed. A rejection becomes the `errorKey` banner (the
-   * raw `receipt.invalid` the server throws, or a fallback); never an unhandled rejection (called via
-   * `void`).
-   */
+  /** A blank field is left out rather than sent as `""`, so two empty fields send `{}`, the server's
+   * `DEFAULT_RECEIPT`. */
   async #save(): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;

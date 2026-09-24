@@ -102,9 +102,7 @@ async function click(el: ProfileScreen, action: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
   await flush(el);
 }
-// The Edit action for "Your details" lives in dashboard-app.ts's modal footer, not in this screen
-// (see editDetails() on ProfileScreen) — standalone here, tests call the same public entry point
-// that button uses.
+// The Edit button lives in dashboard-app.ts, so the tests call the entry point it uses.
 async function editDetails(el: ProfileScreen) {
   el.editDetails();
   await flush(el);
@@ -121,9 +119,8 @@ describe("your profile", () => {
     const { el, api } = await mount({
       getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null, lastNames: " " }),
     });
-    // The details card stays visible behind the modal — see "opens Edit in a modal over the
-    // details card, not in place of it" below — so what actually proves the edit form opened
-    // automatically is the modal itself being open with the incomplete fields shown.
+    // The details card stays visible behind the modal, so the open modal is what shows the edit form
+    // opened.
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
     for (const [name, key] of [
       ["firstNames", "form.first_names_required"],
@@ -145,8 +142,6 @@ describe("your profile", () => {
     expect(api.saveProfile).toHaveBeenCalledWith(
       expect.objectContaining({ firstNames: "Alex", lastNames: "Rivera" }),
     );
-    // Back to view — the details card (its Edit action lives in dashboard-app.ts's modal footer
-    // now, see editDetails()) rather than left stuck open after a successful save.
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 
@@ -161,9 +156,6 @@ describe("your profile", () => {
     await expectNoA11yViolations(host);
   });
   it("shows why the initial load failed, not just a bare Reload button", async () => {
-    // The error summary now lives inside the per-field edit modal (#renderModal), which never
-    // renders at all while profile is still null — so an initial load failure used to leave the
-    // caught error (set in #load()'s catch) with nowhere to display.
     const { el } = await mount({
       getProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
@@ -176,25 +168,17 @@ describe("your profile", () => {
     expect(modal.open).toBe(false);
     await editDetails(el);
     expect(modal.open).toBe(true);
-    // The card is still there behind the modal — this is the whole point of the modal pattern:
-    // editing overlays the page rather than replacing it.
     expect(el.shadowRoot!.textContent).toContain("alex@example.com");
     expect(el.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();
     await click(el, "cancel");
     expect(modal.open).toBe(false);
   });
   it("a stale close from the previous modal never reopens or reverts a newer one", async () => {
-    // The native <dialog> underlying wt-modal fires its "close" event asynchronously relative to
-    // the property change that triggers it. If that event from an EARLIER close (Cancel, or a
-    // successful Save) arrives after a NEWER edit has already opened, it must not stomp the newer
-    // one back to view. Reproduced only under real timing load — this simulates the race
-    // deterministically by dispatching the delayed event by hand, rather than depending on luck.
+    // The late "close" is dispatched by hand, so the race does not depend on timing.
     const { el } = await mount();
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await editDetails(el);
-    // Cancel, then immediately open a different edit — both BEFORE Lit has rendered either
-    // transition, so the real "close" event this Cancel will eventually cause has not fired yet
-    // (its flag is still armed) by the time "remove" is already the current mode.
+    // Both clicks land before Lit renders either transition, so Cancel's own "close" has not fired.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-passkey]")!.click();
     await flush(el);
@@ -372,7 +356,7 @@ describe("your profile", () => {
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({ currentPassword: "current" });
-    // Preserve the optionsJSON contract: the deprecated call shape emits a warning.
+    // The library warns if optionsJSON is omitted and its deprecated call shape is used.
     expect(warn).not.toHaveBeenCalled();
     expect(navigator.credentials.create).toHaveBeenCalledExactlyOnceWith({
       publicKey: {
@@ -464,7 +448,6 @@ describe("your profile", () => {
 
   it("labels the field 'Display name' and requires it under its own message", async () => {
     const { el } = await mount();
-    // Read-only view: the first detail row is the display name.
     const label = el.shadowRoot!.querySelector(".field-label")!;
     expect(label.textContent).toBe(t("person.display_name"));
     await editDetails(el);
@@ -544,8 +527,8 @@ describe("your profile", () => {
 
   it("shows a passkey-specific message, not the generic banner, for any other ceremony failure", async () => {
     const { el, api } = await mount();
-    // A real WebAuthnError (name "UnknownError") carries a `.code` like ERROR_AUTHENTICATOR_GENERAL_ERROR
-    // that must NOT reach codeOf, or it degrades to the generic "Something went wrong" banner.
+    // The library wraps this in a WebAuthnError whose `.code` must not reach codeOf, or the generic
+    // banner shows instead.
     vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
       new DOMException("authenticator failed", "UnknownError"),
     );
