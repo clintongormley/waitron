@@ -74,13 +74,17 @@ describe("probeBucket", () => {
 
   // Reconciliation N13: a bucket that gave NO answer is not a refusal. The supervisor reads a throw as
   // "unreachable, the lag already shows it" and an answer as "unusable" (Task 7), so the two must differ.
-  it("throws the store's own error when the bucket gives no answer at all, leaving nothing behind", async () => {
-    const store = createMemoryObjectStore();
-    const noAnswer = failure(null, "ECONNREFUSED");
-    store.failNext({ operation: "put", error: noAnswer });
-    await expect(probeBucket(store, NONCE)).rejects.toBe(noAnswer);
-    expect([...store.snapshot().keys()]).toEqual([]);
-  });
+  it.each(["put", "list"] as const)(
+    "throws the store's own error when the bucket gives no answer at the %s step, leaving nothing behind",
+    async (operation) => {
+      const store = createMemoryObjectStore();
+      const noAnswer = failure(null, "ECONNREFUSED");
+      store.failNext({ operation, error: noAnswer });
+      await expect(probeBucket(store, NONCE)).rejects.toBe(noAnswer);
+      // At the list step the object has been written, so only the clean-up removes it.
+      expect([...store.snapshot().keys()]).toEqual([]);
+    },
+  );
 
   it.each([
     [403, "access_denied"],
@@ -95,6 +99,23 @@ describe("probeBucket", () => {
       detail: expect.any(String),
     });
   });
+
+  it.each([
+    ["get", "read_mismatch"],
+    ["list", "list_failed"],
+    ["delete", "delete_failed"],
+  ] as const)(
+    "names a 501 at the %s step as %s, since that step made no conditional write",
+    async (operation, reason) => {
+      const store = createMemoryObjectStore();
+      store.failNext({ operation, error: failure(501, "NotImplemented") });
+      await expect(probeBucket(store, NONCE)).resolves.toEqual({
+        ok: false,
+        reason,
+        detail: "NotImplemented (501)",
+      });
+    },
+  );
 
   it("names a write refused for a reason that is not the bucket's as write_failed", async () => {
     const store = createMemoryObjectStore();

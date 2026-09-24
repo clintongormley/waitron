@@ -56,14 +56,14 @@ async function steps(
     version = (await store.put(key, first, { ifNoneMatch: "*" })).etag;
     state.written = true;
   } catch (error) {
-    return failed(error, "write_failed");
+    return failed(error, "write");
   }
 
   let read: StoredObject | null;
   try {
     read = await store.get(key);
   } catch (error) {
-    return failed(error, "read_mismatch");
+    return failed(error, "read");
   }
   if (read === null)
     return { ok: false, reason: "read_mismatch", detail: "the object just written was not found" };
@@ -79,7 +79,7 @@ async function steps(
   try {
     listed = await store.list(PROBE_PREFIX);
   } catch (error) {
-    return failed(error, "list_failed");
+    return failed(error, "list");
   }
   if (!listed.some((object) => object.key === key)) {
     return {
@@ -96,7 +96,7 @@ async function steps(
       reason: "create_only_ignored",
       detail: "a write only-if-absent replaced an object that existed",
     };
-  if (again !== "refused") return failed(again.error, "write_failed");
+  if (again !== "refused") return failed(again.error, "write");
 
   const fresh = await attempt(() => store.put(key, bytes("replace"), { ifMatch: version }));
   if (fresh === "refused") {
@@ -106,7 +106,7 @@ async function steps(
       detail: "a write only-if-unchanged was refused although nothing had changed",
     };
   }
-  if (fresh !== "accepted") return failed(fresh.error, "write_failed");
+  if (fresh !== "accepted") return failed(fresh.error, "write");
 
   const stale = await attempt(() => store.put(key, bytes("stale"), { ifMatch: version }));
   if (stale === "accepted")
@@ -115,14 +115,14 @@ async function steps(
       reason: "if_match_ignored",
       detail: "a write only-if-unchanged replaced an object that had changed",
     };
-  if (stale !== "refused") return failed(stale.error, "write_failed");
+  if (stale !== "refused") return failed(stale.error, "write");
 
   let after: StoredObject | null;
   try {
     await store.delete(key);
     after = await store.get(key);
   } catch (error) {
-    return failed(error, "delete_failed");
+    return failed(error, "delete");
   }
   if (after !== null)
     return {
@@ -145,16 +145,27 @@ async function attempt(
   }
 }
 
-function failed(error: unknown, otherwise: ProbeFailure): ProbeResult {
+type Step = "write" | "read" | "list" | "delete";
+
+const STEP_FAILURE: Record<Step, ProbeFailure> = {
+  write: "write_failed",
+  read: "read_mismatch",
+  list: "list_failed",
+  delete: "delete_failed",
+};
+
+function failed(error: unknown, step: Step): ProbeResult {
+  const otherwise = STEP_FAILURE[step];
   if (isAppError(error) && hasCode(error, "backup.stream_request_failed")) {
     const { status, name } = error.params;
-    const detail = status === null ? name : `${name} (${status})`;
     if (status === null) throw error;
-    // At the listing step a 403 is the missing list permission, which the owner is told by name.
-    if (status === 403 && otherwise !== "list_failed") {
-      return { ok: false, reason: "access_denied", detail };
+    const detail = `${name} (${status})`;
+    // A 403 on the listing is the missing list permission; it is reported as the listing's failure.
+    if (status === 403 && step !== "list") return { ok: false, reason: "access_denied", detail };
+    // Every write the check makes is conditional, so a write the store does not implement is one.
+    if (status === 501 && step === "write") {
+      return { ok: false, reason: "conditional_write_unsupported", detail };
     }
-    if (status === 501) return { ok: false, reason: "conditional_write_unsupported", detail };
     return { ok: false, reason: otherwise, detail };
   }
   return {
