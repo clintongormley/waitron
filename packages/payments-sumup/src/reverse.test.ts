@@ -5,8 +5,6 @@ import { decimal, isAppError } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
 
-// This file proves the reversal LOGIC (the T1 pre-check, the network refund between the two
-// transactions, the T2 write). `setup` is shared with `provider.test.ts`.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,

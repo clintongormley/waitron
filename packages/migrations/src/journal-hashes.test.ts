@@ -62,9 +62,6 @@ describe("journalHashes", () => {
   });
 });
 
-// The absent-table and driver-error cases run against the REAL engine. They used to hand the
-// function a fake rejecting with PostgreSQL's SQLSTATE `42P01`, a value `node:sqlite` never
-// produces — so they passed while the product threw `no such table` on every first boot.
 describe("journalHashes — against a real database", () => {
   const suite = useVenueDb({ migrations: migrationOptionsFor([core], null) });
 

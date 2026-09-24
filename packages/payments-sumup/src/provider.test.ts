@@ -64,8 +64,6 @@ describe("SumUp card details mapping", () => {
   });
 });
 
-// This file proves the adapter's LOGIC (T1/T1.5/T2 sequencing, outcome mapping, the poll window).
-// `setup` is shared with `reverse.test.ts` (`./testing/setup.ts`).
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
@@ -167,10 +165,8 @@ describe("SumUpCloudProvider.collect", () => {
   });
 
   it("a SUCCESSFUL transaction with a malformed last4 still captures — the card block is dropped, never the charge", async () => {
-    // The run-it reviewer's money-safety case: a 5-char last_4_digits passed the old truthy guard,
-    // was built into the card block, then `payments_card_last4_ck` REJECTED the capture write
-    // (23514) — a real charge stuck `attempting`. The adapter must drop malformed card facts so the
-    // capture persists with card columns null (CLAUDE.md §5); the DB CHECK stays the backstop.
+    // A 5-char last4 would trip `payments_card_last4_ck` and block the capture write. The adapter
+    // must drop malformed card facts so the capture persists with card columns null (CLAUDE.md §5).
     const { provider, params, row } = await setup(suite, (f) =>
       f.cardNext({
         card: { last4: "58380", type: "VISA" },

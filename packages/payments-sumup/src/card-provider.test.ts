@@ -7,9 +7,6 @@ import { isAppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
 
-// One venue file (`useVenueDb`): the seat reads a sealed credential and maps SumUp REST calls
-// through an injected `fetch`, so nothing here turns on who is connected or on two writers
-// contending. It seeds a sealed `payments.sumup` credential the seat then reads.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -50,7 +47,7 @@ const json = (status: number, body: unknown): Response =>
 const memberships = (items: { resource_id: string; resource: { name: string } }[]) => () =>
   json(200, { items });
 
-/** Seeds a `payments.sumup` credential for a fresh tenant and returns its id. */
+/** Seeds the tenant row and a sealed `payments.sumup` credential. */
 async function seedSumUp(value: {
   apiKey: string;
   merchantCode: string;
@@ -342,10 +339,9 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
   });
 
   it("add maps a 4xx pairing refusal to payment.pairing_refused (never a null-ref reader)", async () => {
-    // A bad, expired or already-used pairing code (the common operator mistake) is a SumUp 4xx. The
-    // seat must surface the actionable `payment.pairing_refused` — carrying only the providerId, never
-    // the code or SumUp's body — so the route never inserts a `card_readers` row with a null
-    // `provider_ref` (which would be a NOT-NULL violation → opaque 500).
+    // A bad, expired or already-used pairing code is a SumUp 4xx. The seat must surface the
+    // actionable `payment.pairing_refused`, carrying only the providerId, never the code or SumUp's
+    // body.
     const seen: Seen[] = [];
     const fetch = routedFetch(
       {

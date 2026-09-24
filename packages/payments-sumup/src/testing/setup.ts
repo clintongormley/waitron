@@ -13,8 +13,7 @@ import { SumUpCloudProvider } from "../provider.js";
 const NODE = "11111111-1111-4111-8111-111111111111";
 
 /** The fixture shared by the adapter suites (`provider.test.ts`, `reverse.test.ts`): a seeded
- * working order, a `FakeSumUp`, and a provider wired to the seeded venue (stamped on the incidents
- * it raises). `makeProvider` builds another provider against the same db and fake. `row` reads a
+ * working order, a `FakeSumUp`, and a provider wired to the seeded venue. `makeProvider` builds another provider against the same db and fake. `row` reads a
  * payment back by ref (asserting the persisted state).
  *
  * It takes the accessor OBJECT rather than a `Database` because the suites call it inside an `it`
@@ -37,7 +36,6 @@ export async function setup(suite: { readonly db: Database }, tune?: (f: FakeSum
     tillId: brandTillId(t.tillId),
     workingOrderId: brandWorkingOrderId(t.workingOrderId),
     amount: decimal("12.50"),
-    // The chosen reader's vendor ref is now a per-collect input, not baked into the provider.
     readerRef: "rdr_1",
   };
   const row = async (ref: string) => {

@@ -897,8 +897,9 @@ export async function startServer(
   // The reads run on `db`, the store already open above — there is one file here and nothing to
   // choose between. They are also outside any transaction, and nothing needs them to be inside one:
   // `appliedSchemaVersion` asks `sqlite_master` whether the journal table exists rather than issuing
-  // a statement it expects to be refused (`packages/migrations/src/schema-version.ts` carries the
-  // measurement that decided that), so no refusal reaches this code at all.
+  // a statement it expects to be refused (the reason is on `appliedSchemaVersion` in
+  // `packages/migrations/src/schema-version.ts`; measured in #489), so no refusal reaches this code
+  // at all.
   // SP-1b drift visibility only (the outbox schema-version park gate that once read this is gone with
   // the sync block). Computed in the trading-mode block, used solely to log `module.reconcile` drift.
   let appliedModuleVersions: Record<string, number> = {};

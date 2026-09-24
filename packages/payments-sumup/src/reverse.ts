@@ -14,12 +14,11 @@ import type { SumUpClient } from "./client.js";
 import { SUMUP_PROVIDER } from "./client.js";
 
 /**
- * void / refund / partialRefund via SumUp's refund endpoint (there is no separate void: spec §5,
- * confirmed against SumUp's OpenAPI file 2026-09-10). T1: find + read-only reversibility pre-check
- * inside `withTransaction`; network: the refund, OUTSIDE every transaction; T2: `recordVoid`/`recordRefund`, or
- * `recordFailedRefund` when SumUp refused (the row's state is untouched). The same T1/T2 shape as
- * `reverseViaStripe`; not shared with it because one vendor's package must not import another's —
- * lifting both into a neutral `@waitron/payments` primitive is recorded in the backlog.
+ * void / refund / partialRefund via SumUp's refund endpoint (there is no separate void). T1: find +
+ * read-only reversibility pre-check inside `withTransaction`; network: the refund, OUTSIDE every
+ * transaction; T2: `recordVoid`/`recordRefund`, or `recordFailedRefund` when SumUp refused (the
+ * row's state is untouched). The same T1/T2 shape as `reverseViaStripe`; not shared with it
+ * because one vendor's package must not import another's.
  */
 export async function reverseViaSumUp(
   db: Database,

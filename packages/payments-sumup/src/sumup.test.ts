@@ -13,13 +13,11 @@ import { SumUpCloudProvider } from "./provider.js";
 
 const NODE = "11111111-1111-4111-8111-111111111111";
 
-// Nothing else in this package asserts the case below, so the file stays for it rather than being
-// deleted.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("the sumup cloud adapter's reader requirement", () => {
   it("collect() throws when no readerRef is supplied — a SumUp collect cannot proceed without a reader", async () => {
-    // The reader is a per-collect input now; a collect with none is a host wiring error, not a
+    // The reader is a per-collect input; a collect with none is a host wiring error, not a
     // decline. Thrown before any DB write or network call — no attempting row.
     const t = await seedWorkingOrder(suite.db, freshNif());
     const provider = new SumUpCloudProvider({

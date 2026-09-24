@@ -8,8 +8,8 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 //
 // NOTE: the ERROR-CODE copy for `payment.provider_merchant_ambiguous`,
 // `payment.provider_credential_rejected`, `payment.pairing_expired` and `payment.pairing_refused`
-// lives centrally in `apps/dashboard/src/i18n/codes.ts` (registered via `registerCodeMessages`) — that
-// is Task 15's job. This panel is self-contained: it renders its OWN screen strings for the pairing
+// lives centrally in `apps/dashboard/src/i18n/codes.ts` (registered via `registerCodeMessages`).
+// This panel is self-contained: it renders its OWN screen strings for the pairing
 // outcomes (`pairing_expired`, `pairing_failed`) and falls back to the shared `codeMessage` for a
 // rejected connect, so it needs no code copy of its own here.
 

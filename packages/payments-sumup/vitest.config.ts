@@ -2,21 +2,15 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 import { playwright } from "@vitest/browser-playwright";
 
 // Two projects share one coverage report: the server suites run in Node, and the dashboard panel's
-// Lit widgets run in real headless Chromium (mirrors packages/bookings). The `groupOrder`s below run
-// the Node project first.
+// Lit widgets run in real headless Chromium. The `groupOrder`s below run the Node project first.
 export default defineConfig({
   test: {
     projects: [
       {
         test: {
           name: "node",
-          // Numbered from 1, not 0: Vitest 4 lifts a groupOrder-0 project that runs one isolated
-          // worker out of its group and appends it after every other group, which puts Chromium ahead
-          // of a node project numbered 0. Measured on packages/bookings, against the same run on
-          // Vitest 3: with 0/1 the browser project's first test precedes the node project's, with 1/2
-          // it follows. bookings, payments-stripe, payments-sumup and venue-service carry this
-          // identical shape; packages/media and apps/dashboard split into projects too but pin no
-          // project-level worker limit, so the lift never reached them.
+          // Numbered from 1, not 0: Vitest 4 moves a groupOrder-0 project that pins one worker after
+          // every other group (CLAUDE.md §4).
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,
@@ -39,8 +33,8 @@ export default defineConfig({
         },
       },
       {
-        // The browser / Lit project — mirrors packages/ui and packages/bookings: real headless
-        // Chromium via Playwright, scoped to the `./dashboard` sub-path.
+        // The browser / Lit project: real headless Chromium via Playwright, scoped to the
+        // `./dashboard` sub-path.
         test: {
           name: "browser",
           sequence: { groupOrder: 2 },
@@ -67,9 +61,8 @@ export default defineConfig({
       exclude: [
         ...coverageConfigDefaults.exclude,
         "src/index.ts",
-        // Re-export barrel: no imperative code, on which v8 reports phantom uncovered branches.
         "src/dashboard/index.ts",
-        // Test-only mount/cleanup helper (the ui and bookings packages exclude their own the same way).
+        // Test-only mount/cleanup helper.
         "src/dashboard/test-helpers.ts",
         // The real HTTP boundary to SumUp. Its hermetic tests are in src/sumup-client.test.ts.
         "src/sumup-client.ts",

@@ -38,8 +38,8 @@ export interface SumUpClientOptions {
 }
 
 /**
- * `SumUpClient` over SumUp's REST API (paths and shapes from SumUp's OpenAPI file, read
- * 2026-09-10 — docs/research/2026-09-10-sumup-solo-experiments.md, Provenance). Every request is
+ * `SumUpClient` over SumUp's REST API (paths and shapes from SumUp's OpenAPI file —
+ * docs/research/2026-09-10-sumup-solo-experiments.md, Provenance). Every request is
  * a bearer-keyed JSON call; a 5xx or a transport failure THROWS (the caller does not know whether
  * the operation happened), a 4xx is a definite refusal and is returned as data. Error bodies are
  * never included in a thrown message: they can echo request fields.
@@ -56,10 +56,9 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
   ): Promise<{ status: number; json: unknown }> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    // The deadline must cover the BODY read, not just the headers. `res.text()` streams the body and
-    // can wedge on its own after the headers arrive; clearing the timer the moment `doFetch` resolved
-    // (the headers) left that read unbounded. Keeping the timer alive until the whole call has read
-    // its body — abort included — is what bounds it (CLAUDE.md §5: nothing external may freeze a sale).
+    // The deadline must cover the BODY read, not just the headers: `res.text()` can wedge on its own
+    // after the headers arrive, so the timer stays alive until the body is read (CLAUDE.md §5:
+    // nothing external may freeze a sale).
     try {
       const res = await doFetch(`${base}${path}`, {
         method,
@@ -156,8 +155,9 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         "POST",
         `/v1.0/merchants/${mc}/payments/${encodeURIComponent(p.transactionId)}/refunds`,
         // `amount` is in MINOR units (integer cents), like the checkout `value` — NOT euros. Euros
-        // truncate to 0 cents and SumUp silently refunds €0.00 with a 201 (runbook §4b). Omitting
-        // `amount` (a full refund) refunds the whole transaction.
+        // truncate to 0 cents and SumUp silently refunds €0.00 with a 201
+        // (docs/research/2026-09-10-sumup-solo-experiments.md §4b). Omitting `amount` (a full
+        // refund) refunds the whole transaction.
         p.amount === undefined ? {} : { amount: toMinorUnits(p.amount) },
       );
       return { status: r.status >= 400 ? "refused" : "accepted" } as const;
@@ -174,8 +174,7 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       });
       // A 4xx is a DEFINITE refusal (bad/expired/used pairing code). Throw so the route never inserts
       // a `card_readers` row with a null `provider_ref` (a NOT-NULL violation → opaque 500); the seat
-      // maps this to the actionable `payment.pairing_refused`. The old code returned the error body
-      // here, so `{ id, status }` came back undefined and the null ref reached the insert.
+      // maps this to the actionable `payment.pairing_refused`.
       if (r.status >= 400) throw new SumUpPairingRefused(problemTitle(r.json));
       const data = r.json as { id?: unknown; status?: unknown };
       // A 2xx with a malformed body cannot yield a usable reader id either — refuse rather than seal

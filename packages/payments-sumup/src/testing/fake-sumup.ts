@@ -43,20 +43,11 @@ interface Held extends CardFacts {
   onFirstFind?: SumUpTransaction["status"];
 }
 
-/** A deterministic in-memory `SumUpClient`. NOT barrel-exported. Test controls shape the NEXT
- * checkout: `declineNext` (the customer's card is refused → `FAILED`), `cancelNext` (→ `CANCELLED`),
- * `stallNext` (stays `PENDING` until `settle`/`decline` is called by name), `refuseNext` (SumUp
- * rejects the create with a 4xx), `throwOnCreateNext` (network error on create),
- * `throwOnFindNext` (network error mid-poll), `invisibleUntilSettled` (the transaction is not
- * findable — 404 — until it resolves; models a reader that has not started the checkout),
- * `refundRefusesNext`; `resolveOnFirstFind(status)` gives the next checkout `status` the first time
- * it is polled (a resolution that lands mid-collect); `setStatus(clientTransactionId, status)`
- * writes any status, including `REFUNDED` or an unknown one, for the sweep tests.
- *
- * Reader management (Task 6/7): `pairReader` inserts a reader as `processing` — matching the real
- * client, the device confirms asynchronously — and `setReaderStatus(id, status)` is the test's stand-in
- * for that confirmation (typically to `"paired"`); `readerStatus` reports `online` for a `"paired"`
- * reader only. `setMemberships` overrides the default single-merchant list `memberships()` returns. */
+/** A deterministic in-memory `SumUpClient`. NOT barrel-exported. The `…Next` controls are one-shot;
+ * each shapes the next call of its kind (create, find or refund). `invisibleUntilSettled` models a
+ * reader that has not started the checkout (a 404 until it resolves). `pairReader` inserts a reader
+ * as `processing`, because the device confirms asynchronously; `setReaderStatus` stands in for that
+ * confirmation. */
 export class FakeSumUp implements SumUpClient {
   lastCreate: Parameters<SumUpClient["createCheckout"]>[0] | undefined;
   lastRefund: { transactionId: string; amount?: Decimal } | undefined;

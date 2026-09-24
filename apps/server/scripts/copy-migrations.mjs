@@ -1,6 +1,6 @@
 // Copies each package's `drizzle/` folder in beside the bundle, because the bundle cannot resolve
 // them: every *_MIGRATIONS descriptor computes its folder from its own import.meta.url, and esbuild
-// collapses all five onto dist/. Reads the SAME manifest `@waitron/migrations` reads, so the two
+// collapses them all onto dist/. Reads the SAME manifest `@waitron/migrations` reads, so the two
 // cannot disagree about names.
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";

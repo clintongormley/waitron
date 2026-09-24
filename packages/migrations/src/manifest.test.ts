@@ -18,11 +18,8 @@ describe("the migration manifest", () => {
   });
 
   it("resolves under a bundle root by name", () => {
-    // A real fixture, not the illustrative "/opt/waitron/drizzle" apps/server/src/config.test.ts
-    // uses for ROOT: that path is never touched on disk there (loadConfig only plumbs the string
-    // through), but migrationOptionsFor's journal check runs in the root branch too — so a
-    // bundle-root test needs a folder that actually exists, or it fails on migrations.set_missing
-    // rather than on the assertion it's meant to check.
+    // migrationOptionsFor's journal check runs in the root branch too, so a bundle-root test needs a
+    // folder that actually exists, or it fails on migrations.set_missing rather than on the assertion.
     const root = mkdtempSync(join(tmpdir(), "waitron-migrations-"));
     try {
       mkdirSync(join(root, "core", "meta"), { recursive: true });
@@ -38,17 +35,10 @@ describe("the migration manifest", () => {
   });
 
   it("resolves a relative root against this package, not the process's cwd", async () => {
-    // WAITRON_MIGRATIONS_DIR is operator-supplied and could be relative. The from-source branch
-    // resolves `from` against this package's own directory (resolve(here, "..", ...)); this proves
-    // the root branch uses the identical base for a RELATIVE root, not process.cwd() — which would
-    // resolve differently depending on where the process happens to be launched from. There is no
-    // real folder at the computed path, so this reaches the same throw as the tests below; the
-    // assertion is on the resolved `folder`, not on success.
-    //
-    // "against this package" is a statement about running FROM SOURCE, which is the only way this
-    // suite ever runs. In a bundle `import.meta.url` is the bundle's own URL and the base moves with
-    // it — `migrationOptionsFor`'s own doc comment carries the built-artefact receipt. Do not read
-    // this test as pinning `packages/migrations` for the shipped form.
+    // The root branch uses the from-source branch's base for a RELATIVE root, not process.cwd().
+    // There is no real folder at the computed path, so the assertion is on the resolved `folder`.
+    // "Against this package" holds FROM SOURCE only; in a bundle the base moves (see
+    // `migrationOptionsFor`).
     const error = await captureError(() =>
       Promise.resolve(
         migrationOptionsFor(
@@ -65,9 +55,7 @@ describe("the migration manifest", () => {
   });
 
   it("refuses a root whose folder is absent, rather than silently migrating nothing", async () => {
-    // The ABSENT case: nothing exists at this path at all, not even the parent directory. Drizzle's
-    // own migrator already rejects this on its own — see the next test for the case that requires
-    // THIS function's own check.
+    // The ABSENT case: nothing exists at this path at all, not even the parent directory.
     const error = await captureError(() =>
       Promise.resolve(
         migrationOptionsFor(
@@ -81,12 +69,7 @@ describe("the migration manifest", () => {
   });
 
   it("refuses a folder that exists but carries no journal, not just an absent one", async () => {
-    // The EMPTY case, and the reason this function's check exists at all: Drizzle's migrator treats
-    // an empty folder as "zero migrations" and boots clean against an unmigrated database, failing
-    // later and somewhere else. A test that only reaches the absent case above would still pass even
-    // if this function's own existsSync check were deleted entirely, since Drizzle would reject that
-    // case on its own — this one creates the folder for real, empty, and proves the check still
-    // fires when Drizzle alone would not have complained yet.
+    // The EMPTY case: the folder exists but holds no journal.
     const root = mkdtempSync(join(tmpdir(), "waitron-migrations-empty-"));
     try {
       mkdirSync(join(root, "core"), { recursive: true });

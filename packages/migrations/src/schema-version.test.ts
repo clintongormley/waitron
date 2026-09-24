@@ -1,4 +1,3 @@
-// A real SQLite venue, opened by the test helper that owns one. No container: the engine is a file.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,8 +69,7 @@ describe("expectedSchemaVersion", () => {
 describe("appliedSchemaVersion — input validation", () => {
   it("throws migrations.invalid_table for a name that is not a drizzle journal table", async () => {
     // Validation runs BEFORE any query, so a db that would throw if touched proves the name is
-    // rejected without reaching SQL — the §3 utility-statement discipline: never interpolate an
-    // unvalidated identifier into `from "<table>"`.
+    // rejected without reaching SQL.
     const neverQueried = {
       execute: () => {
         throw new Error("appliedSchemaVersion must reject a bad table name before querying");

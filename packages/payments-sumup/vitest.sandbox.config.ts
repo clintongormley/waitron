@@ -1,9 +1,8 @@
 import { defineConfig } from "vitest/config";
 
-// A SEPARATE config from vitest.config.ts, scoped to only the nightly SumUp test-mode sandbox
-// suite (`src/**/*.sandbox.test.ts`) — the file the normal config's `exclude` keeps out of every
-// PR run. Long timeouts: this suite waits on a real SumUp Solo reader round trip, not an
-// in-process fake.
+// A SEPARATE config from vitest.config.ts, scoped to the live-reader suite
+// (`src/**/*.sandbox.test.ts`) — the file the normal config's `exclude` keeps out of every PR run.
+// Long timeouts: this suite waits on a real SumUp Solo reader round trip, not an in-process fake.
 export default defineConfig({
   test: {
     globals: true,

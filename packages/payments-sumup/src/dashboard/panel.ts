@@ -4,9 +4,6 @@ import { SUMUP_STRINGS } from "./strings.js";
 import "./sumup-connect-form.js"; // side-effect: defines <sumup-connect-form>
 import "./sumup-add-reader.js"; // side-effect: defines <sumup-add-reader>
 
-// Importing `./strings.js` (transitively, through the two elements) runs its module-load
-// registerCatalogue, so the SumUp strings resolve by the time this panel is mounted.
-
 /** The SumUp provider's dashboard panel: its connect form and pairing add-reader dialog, plus the
  * strings they use. The generic Payments screen reaches SumUp only through this value (the browser twin
  * of the server's `SUMUP_CARD_PROVIDER` seat), never by importing the element files. */

@@ -13,8 +13,6 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 import { NOT_FOUND_GRACE_MS, RESOLVE_RETRY_MS, SumUpCloudProvider } from "./provider.js";
 
-// One venue file — the sweep's logic. The grant question this used to hand off to sumup.test.ts
-// has no home any more: this engine has no roles, and that suite's own header says so.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
