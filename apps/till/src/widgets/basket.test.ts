@@ -569,6 +569,38 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)).toBeNull();
   });
 
+  it("marks a retrieved pick and a retrieved dish that are not offered now, pricing the pick per dish", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [
+      {
+        workingOrderLineId: "stored-cafe",
+        product: cafe,
+        quantity: "2",
+        notOfferedExtras: [
+          { productId: "p-oat", name: "Leche de avena", price: "0.40", quantity: 2 },
+        ],
+      },
+      {
+        workingOrderLineId: "stored-gone",
+        product: { ...cafe, id: "gone", name: "Cortado" },
+        quantity: "1",
+        notOffered: true,
+      },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+
+    const tag = t("basket.not_offered");
+    const pickRow = el.shadowRoot!.querySelector(".option")!;
+    expect(pickRow.textContent).toContain("Leche de avena");
+    // 0.40 × 2 cafés × 2 per café.
+    expect(pickRow.textContent).toContain(formatMoney("1.60"));
+    expect(pickRow.textContent).toContain(tag);
+    const names = [...el.shadowRoot!.querySelectorAll(".line > .name")];
+    expect(names[0]!.textContent).not.toContain(tag);
+    expect(names[1]!.textContent).toContain("Cortado");
+    expect(names[1]!.textContent).toContain(tag);
+  });
+
   // ── As-served diet & contains badges (dietary-classification) ────────────────────────────────
   // The basket shows each line's OWN DIET profile CLIENT-side (`asServedDiet`, the diet twin of
   // `asServedAllergens`) — the dish's recipe-derived diet, no modifier contribution — and renders
