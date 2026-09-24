@@ -389,8 +389,9 @@ export async function claimAcceptedOffline(
 }
 
 /** The same statement as `claimAcceptedOffline`, for a real adapter whose network call must not
- * run inside the transaction. Two passes listing the same rows are harmless: the advances each
- * match only a row still `accepted_offline`, plus the race-safe incident dedup. */
+ * run inside the transaction. Two passes listing the same rows advance each row once, because the
+ * advances match only a row still `accepted_offline`; but the caller raises the declined incident
+ * either way, so only its `recordIncidentOnce` keeps that to one incident. */
 export async function listAcceptedOffline(
   tx: Transaction,
   provider: string,
@@ -610,9 +611,8 @@ export interface ReconcilableRow {
 /**
  * Auditable: money we believe we hold (`captured`/`settled`, by `settled_at`) or believe is pending
  * (`initiated`, by `created_at`). `accepted_offline` belongs to `forward()`.
- * `failed`/`voided`/`refunded`/`partially_refunded` are absent too: nothing is expected to settle
- * for them, and `existingReferences` still sees them, so their settlements never read as
- * missingLocal.
+ * `failed`/`voided`/`refunded`/`partially_refunded` are absent too, and `existingReferences` still
+ * sees them, so a settlement for one never reads as missingLocal.
  */
 export async function listReconcilable(
   tx: Transaction,

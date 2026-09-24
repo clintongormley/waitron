@@ -23,7 +23,7 @@ export default defineConfig({
         "drizzle.config.ts",
         "drizzle/**",
         "src/testing/**",
-        // The two public re-export barrels: v8 reports phantom uncovered branches/functions on
+        // The two public re-export barrels: v8 has reported phantom uncovered branches/functions on
         // re-export bindings. Their surface is asserted by src/index.test.ts and
         // schema-ownership.test.ts.
         "src/index.ts",
