@@ -2980,7 +2980,7 @@ image constraints under *Detail → Box image*.
     there). `claimGap` uses an untargeted `.onConflictDoNothing()` on a table with two unique
     constraints (the `id` primary key and `scheduled_runs_key`); CLAUDE.md §3 asks for a named
     target there, though `id` is freshly generated (read, not run).
-  - Found by #579 (`packages/shared`). **DONE 2026-09-24 (`fix/conversion-edges`)** for the way
+  - Found by #579 (`packages/shared`). **DONE 2026-09-24 (PR #583)** for the way
     in — see the P6 entry's DONE items: `decimalToCents` now rounds to cents first and then refuses
     an amount that, once rounded to cents, has more than twelve integer digits, so 99999999999999 cents, the bound
     `docs/developers/conventions-data.md` gives, is now the bound enforced. The receipt: `assertMoney`
@@ -4984,7 +4984,7 @@ What the preparation tasks left, with F1's own answers where it found them:
     from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
     and a `/ 100` puts a second copy of the scale outside the files
     `packages/shared/src/conventions.test.ts` checks.
-    **Found in #531's review — DONE 2026-09-24 (`fix/conversion-edges`):** `decimalToCents` now
+    **Found in #531's review — DONE 2026-09-24 (PR #583):** `decimalToCents` now
     checks the bound on the amount rounded to cents, so `"999999999999.995"` is refused with
     `shared.decimal_overflow`. The receipt that found it: `decimalToCents` checked the twelve-digit
     bound BEFORE it rounded to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
@@ -5008,7 +5008,7 @@ What the preparation tasks left, with F1's own answers where it found them:
     from `sqlToQuery(check.value).sql` alone (read in its bundled source, not run), so the
     migration would say `?`. Only `sql.raw(String(n))` renders the number, and a constant that
     works only through `sql.raw` is a trap for the next tidy-up, so the literals stay.
-    **DONE 2026-09-24 (`fix/conversion-edges`, owner decision):** `rawThousandthsToDecimal` now
+    **DONE 2026-09-24 (PR #583, owner decision):** `rawThousandthsToDecimal` now
     reads a total past nine integer digits: its only width limit is what a JavaScript number holds
     exactly, refused with `shared.invalid_thousandths` (like `rawCentsToDecimal`); one quantity is
     still bounded at nine. Found 2026-09-23 in #529's review: the quantity raw reader refused any
@@ -5016,11 +5016,15 @@ What the preparation tasks left, with F1's own answers where it found them:
     quantities. That is the
     opposite choice to money's raw reader, which deliberately admits a total wider than any one
     amount.
-    **DONE 2026-09-24 (`fix/conversion-edges`)** — the same edge as the #531 entry above, fixed
+    **DONE 2026-09-24 (PR #583)** — the same edge as the #531 entry above, fixed
     there. The receipt (same review): `decimalToCents` checked the money bound BEFORE rounding to
     cents, so `decimalToCents("999999999999.995")` returned `100000000000000`, an amount with thirteen integer
     digits that `assertMoney` refuses (measured 2026-09-23 on #529's branch). `main` then checked in
     the same order (`toScale(assertMoney(value), MONEY_SCALE)`), so it predated #529.
+    **OPEN** (left by PR #583, owner's call): `assertMoney` (`packages/shared/src/money.ts`) now has
+    no product caller — only its export and its own tests. It checks the digits BEFORE rounding, the
+    order #583 removed from `decimalToCents`, so a caller reaching for it as "the money bound" would
+    bring the edge back. Codex's review recommended deleting it in its own change. Default: delete it.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
     **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
     contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,
