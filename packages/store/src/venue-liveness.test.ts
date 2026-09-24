@@ -1,5 +1,13 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -11,15 +19,18 @@ import {
   setVenueCrashReportDirectory,
   setVenueHolderKind,
   setVenueLivenessTimings,
+  setVenueWatchdogLogFile,
+  setWatchdogWorkerFactory,
   STACK_CAPTURE_MS,
   VENUE_HOLDER_FROZEN_CODE,
+  WATCHDOG_KILL_MS,
   WATCHDOG_TICK_MS,
 } from "./venue-liveness.js";
 import { lockVenueDirectory, VenueInUseError, type VenueLock } from "./venue-lock.js";
 
 /**
  * Clears a child's worst case with room: Node's startup on a loaded runner (the largest and least
- * predictable part), the child's shortened staleness bound, and its capture deadline. A child that
+ * predictable part), the child's shortened kill bound, and its capture deadline. A child that
  * is never killed is ended by {@link CHILD_DEADLINE_MS}, below this.
  */
 const CHILD_TIMEOUT_MS = 30_000;
@@ -36,6 +47,8 @@ afterEach(() => {
   setVenueLivenessTimings({});
   setVenueHolderKind("script");
   setVenueCrashReportDirectory(null, null);
+  setVenueWatchdogLogFile(null);
+  setWatchdogWorkerFactory(null);
 });
 
 const tempDir = () => {
@@ -79,6 +92,7 @@ describe("the liveness bounds", () => {
     expect(WATCHDOG_TICK_MS).toBe(1000);
     expect(STACK_CAPTURE_MS).toBe(2000);
     expect(VENUE_HOLDER_STALE_MS).toBe(30_000);
+    expect(WATCHDOG_KILL_MS).toBe(120_000);
     expect(VENUE_HOLDER_FROZEN_CODE).toBe("provisioning.database_holder_frozen");
   });
 });
@@ -227,6 +241,26 @@ describe("the watchdog thread", () => {
     expect(runningWatchdog()).toBeUndefined();
     await exited;
   });
+
+  it(
+    "failing to start leaves nothing behind: no lock, no holder file, no heartbeat",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      setVenueLivenessTimings({ heartbeatMs: 20 });
+      setWatchdogWorkerFactory(() => {
+        throw new Error("no thread for you");
+      });
+      const directory = tempDir();
+      await expect(lockVenueDirectory(directory)).rejects.toThrow("no thread for you");
+      expect(runningWatchdog()).toBeUndefined();
+      expect(holderFiles(directory)).toEqual([]);
+      await sleep(200);
+      expect(holderFiles(directory)).toEqual([]);
+      setWatchdogWorkerFactory(null);
+      await lock(directory);
+      expect(readVenueHolder(directory)?.pid).toBe(process.pid);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -246,7 +280,7 @@ registerHooks({
 const { lockVenueDirectory } = await import(${source("venue-lock.ts")});
 const liveness = await import(${source("venue-liveness.ts")});
 const [directory, reports] = process.argv.slice(1);
-liveness.setVenueLivenessTimings({ tickMs: 50, staleMs: 600, captureMs: 1000 });
+liveness.setVenueLivenessTimings({ tickMs: 50, killMs: 600, captureMs: 1000 });
 `;
 
 interface Outcome {
@@ -307,10 +341,12 @@ describe("a holder whose main thread freezes", () => {
     async () => {
       const directory = tempDir();
       const reports = join(tempDir(), "crash-reports");
+      writeFileSync(`${reports}.log`, "an earlier line\n");
       const outcome = await runChild(
         `liveness.setVenueHolderKind("restore");
 await lockVenueDirectory(directory);
 liveness.setVenueCrashReportDirectory(reports, "test-build-7");
+liveness.setVenueWatchdogLogFile(reports + ".log");
 function spinForever() { for (;;) {} }
 setTimeout(spinForever, 100);`,
         directory,
@@ -330,6 +366,9 @@ setTimeout(spinForever, 100);`,
       const stack = line!.stack as { function: string; file: string; line: number }[];
       expect(stack[0]).toMatchObject({ function: "spinForever", file: "[eval1]" });
       expect(stack[0]!.line).toBeGreaterThan(0);
+      expect(readFileSync(`${reports}.log`, "utf8")).toBe(
+        `an earlier line\n${JSON.stringify(line)}\n`,
+      );
 
       const files = readdirSync(reports);
       expect(files).toHaveLength(1);
@@ -392,7 +431,7 @@ setTimeout(longQuery, 100);`,
   );
 
   it(
-    "is killed when it freezes before its event loop turns again, and writes no report unasked",
+    "is killed when it freezes before its event loop turns again, and writes no files unasked",
     async () => {
       const directory = tempDir();
       const reports = join(tempDir(), "crash-reports");
@@ -406,6 +445,7 @@ spinForever();`,
       expect(outcome.signal).toBe("SIGKILL");
       expect(frozenLine(outcome.stderr)).toBeDefined();
       expect(existsSync(reports)).toBe(false);
+      expect(existsSync(`${reports}.log`)).toBe(false);
     },
     CHILD_TIMEOUT_MS,
   );

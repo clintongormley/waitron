@@ -28,8 +28,9 @@ export interface VenueHolder {
 }
 
 /**
- * How long without a heartbeat before a holder counts as frozen: both a refused start's judgement
- * of the file and the holder's own watchdog use it. Six of the holder's 5 s rewrites.
+ * How long without a heartbeat before a process refused the folder calls its holder frozen: six of
+ * the holder's 5 s rewrites. The holder's own watchdog kills on a longer bound
+ * (`WATCHDOG_KILL_MS`, `./venue-liveness.ts`).
  */
 export const VENUE_HOLDER_STALE_MS = 30_000;
 
@@ -62,8 +63,9 @@ export function readVenueHolder(directory: string): VenueHolder | null {
 
 /**
  * Whether the holder's heartbeat is younger than {@link VENUE_HOLDER_STALE_MS} at `now`. A heartbeat
- * a whole bound or more AHEAD of `now` is stale too: a live holder rewrites it from the same clock
- * every few seconds, so only a holder that stopped before the clock stepped back leaves one there.
+ * a whole bound or more AHEAD of `now` is stale too. A live holder rewrites it from the same clock
+ * every 5 s, so a step back of more than the bound makes a live holder read stale only until its
+ * next rewrite.
  */
 export function isVenueHolderFresh(holder: VenueHolder, now: Date): boolean {
   const age = now.getTime() - Date.parse(holder.heartbeatAt);

@@ -1,8 +1,7 @@
 import { hostname } from "node:os";
-import { Worker } from "node:worker_threads";
+import { Worker, type WorkerOptions } from "node:worker_threads";
 import {
   removeVenueHolder,
-  VENUE_HOLDER_STALE_MS,
   writeVenueHolder,
   type VenueHolder,
   type VenueHolderKind,
@@ -10,6 +9,18 @@ import {
 
 export const HOLDER_HEARTBEAT_MS = 5000;
 export const WATCHDOG_TICK_MS = 1000;
+/**
+ * How long without a tick before the watchdog kills the process — far above the 30 s after which a
+ * refused start calls the heartbeat stale, because killing a backup mid-statement is worse than a
+ * frozen process living longer. Measured 2026-09-24 on Node v26.7.0, macOS NVMe: `VACUUM INTO` of a
+ * 2.3 GB database took 2412 ms and `pragma wal_checkpoint(truncate)` 32 ms; a box on slower storage
+ * is slower.
+ *
+ * Any stretch with no timer turn looks frozen, including a long run of awaited synchronous
+ * `node:sqlite` work: measured on Node v26.7.0, 30M `await Promise.resolve()` ran 680 ms and a 50 ms
+ * interval fired 0 times (19 times in an idle second). The long kill bound is the mitigation.
+ */
+export const WATCHDOG_KILL_MS = 120_000;
 /** How long the watchdog waits for the frozen thread to pause before killing it without a stack. */
 export const STACK_CAPTURE_MS = 2000;
 export const VENUE_HOLDER_FROZEN_CODE = "provisioning.database_holder_frozen";
@@ -17,14 +28,14 @@ export const VENUE_HOLDER_FROZEN_CODE = "provisioning.database_holder_frozen";
 interface Timings {
   heartbeatMs: number;
   tickMs: number;
-  staleMs: number;
+  killMs: number;
   captureMs: number;
 }
 
 const PRODUCTION_TIMINGS: Timings = {
   heartbeatMs: HOLDER_HEARTBEAT_MS,
   tickMs: WATCHDOG_TICK_MS,
-  staleMs: VENUE_HOLDER_STALE_MS,
+  killMs: WATCHDOG_KILL_MS,
   captureMs: STACK_CAPTURE_MS,
 };
 
@@ -39,9 +50,15 @@ interface WatchdogSettings {
   kind: VenueHolderKind;
   crashReportDirectory: string | null;
   version: string | null;
+  logFile: string | null;
 }
 
-const settings: WatchdogSettings = { kind: "script", crashReportDirectory: null, version: null };
+const settings: WatchdogSettings = {
+  kind: "script",
+  crashReportDirectory: null,
+  version: null,
+  logFile: null,
+};
 
 /** Posts every change to a running watchdog, whose thread cannot ask once the main thread froze. */
 const update = (change: Partial<WatchdogSettings>) => {
@@ -65,6 +82,11 @@ export function setVenueCrashReportDirectory(
   update({ crashReportDirectory: directory, version });
 }
 
+/** A log file the watchdog appends its line to, besides stderr. Default none. */
+export function setVenueWatchdogLogFile(file: string | null): void {
+  update({ logFile: file });
+}
+
 /**
  * The watchdog, as a source string rather than a module so the bundler (`scripts/bundle-node.mjs`)
  * carries it as text: a worker file path would not exist beside the bundle. It reaches Node's modules
@@ -80,9 +102,9 @@ export function setVenueCrashReportDirectory(
  * and the version, and nothing else — no environment, command line, frame variables or venue data —
  * because both outlive the process in places other people read.
  *
- * Inspector reaches a thread spinning in JavaScript and not one blocked inside native code, such as
- * a synchronous SQLite statement; after `captureMs` the process is killed without a stack either way
- * (both cases are in `./venue-liveness.test.ts`).
+ * Inspector reached a thread spinning in JavaScript and not one inside a synchronous `node:sqlite`
+ * statement or a blocking FIFO read (measured on Node v26.7.0); after `captureMs` the process is
+ * killed without a stack either way (the spinning and SQLite cases are in `./venue-liveness.test.ts`).
  */
 const WATCHDOG_SOURCE = String.raw`
 const { workerData, parentPort } = process.getBuiltinModule("node:worker_threads");
@@ -98,7 +120,7 @@ const nowMs = () => Number(process.hrtime.bigint() / 1000000n);
 
 const check = setInterval(() => {
   const silentMs = nowMs() - Number(Atomics.load(beat, 0) / 1000000n);
-  if (silentMs < workerData.staleMs) return;
+  if (silentMs < workerData.killMs) return;
   clearInterval(check);
   const lastTickAt = new Date(Date.now() - silentMs).toISOString();
   capture((stack) => kill(stack, lastTickAt));
@@ -144,8 +166,12 @@ function kill(stack, lastTickAt) {
     lastTickAt,
     stack,
   };
+  const line = JSON.stringify({ ...facts, at: killedAt, level: "error", event: "venue.holder_frozen" }) + "\n";
   try {
-    fs.writeSync(2, JSON.stringify({ ...facts, at: killedAt, level: "error", event: "venue.holder_frozen" }) + "\n");
+    fs.writeSync(2, line);
+  } catch {}
+  try {
+    if (settings.logFile !== null) fs.appendFileSync(settings.logFile, line);
   } catch {}
   try {
     const directory = settings.crashReportDirectory;
@@ -182,8 +208,20 @@ export function runningWatchdog(): Worker | undefined {
   return watchdog?.worker;
 }
 
-/** Reported as a process warning: a failing liveness side has no caller to throw to. */
+/**
+ * Reported as a process warning, not thrown: a heartbeat runs on a timer with no caller, and a
+ * release must still let the lock go.
+ */
 const warn = (error: unknown, name: string) => process.emitWarning((error as Error).message, name);
+
+type WorkerFactory = (source: string, options: WorkerOptions) => Worker;
+const newWorker: WorkerFactory = (source, options) => new Worker(source, options);
+let createWorker = newWorker;
+
+/** For tests: how the watchdog thread is made; `null` restores `new Worker`. */
+export function setWatchdogWorkerFactory(factory: WorkerFactory | null): void {
+  createWorker = factory ?? newWorker;
+}
 
 function startWatchdog(lockedAt: string): Watchdog {
   // The main thread's monotonic clock, which the worker reads on the same clock: a wall-clock step
@@ -191,22 +229,23 @@ function startWatchdog(lockedAt: string): Watchdog {
   const beat = new BigInt64Array(new SharedArrayBuffer(8));
   const stamp = () => Atomics.store(beat, 0, process.hrtime.bigint());
   stamp();
-  const tick = setInterval(stamp, timings.tickMs);
-  tick.unref();
-  const worker = new Worker(WATCHDOG_SOURCE, {
+  // The thread first, so a thread that cannot start leaves no timer behind.
+  const worker = createWorker(WATCHDOG_SOURCE, {
     eval: true,
     workerData: {
       beat: beat.buffer,
       settings,
       code: VENUE_HOLDER_FROZEN_CODE,
       lockedAt,
-      staleMs: timings.staleMs,
+      killMs: timings.killMs,
       tickMs: timings.tickMs,
       captureMs: timings.captureMs,
     },
   });
   worker.unref();
   worker.on("error", (error) => warn(error, "VenueWatchdogWarning"));
+  const tick = setInterval(stamp, timings.tickMs);
+  tick.unref();
   return { worker, tick };
 }
 
@@ -214,9 +253,10 @@ function startWatchdog(lockedAt: string): Watchdog {
 const heartbeats = new Map<string, NodeJS.Timeout>();
 
 /**
- * Called in the synchronous section that first takes a folder's lock. When the holder file cannot
- * be written it throws before starting anything, and the caller gives the lock back: without the
- * file, a process refused the folder cannot tell this live holder from a frozen one.
+ * Called in the synchronous section that first takes a folder's lock, and all or nothing: when the
+ * holder file cannot be written or the watchdog cannot start, it throws having left no file and no
+ * timer, and the caller gives the lock back. Without the file, a process refused the folder cannot
+ * tell this live holder from a frozen one.
  */
 export function beginHolding(directory: string): void {
   const now = new Date().toISOString();
@@ -228,6 +268,12 @@ export function beginHolding(directory: string): void {
     heartbeatAt: now,
   };
   writeVenueHolder(directory, holder);
+  try {
+    watchdog ??= startWatchdog(now);
+  } catch (error) {
+    removeVenueHolder(directory);
+    throw error;
+  }
   let failing = false;
   const heartbeat = setInterval(() => {
     try {
@@ -245,7 +291,6 @@ export function beginHolding(directory: string): void {
   }, timings.heartbeatMs);
   heartbeat.unref();
   heartbeats.set(directory, heartbeat);
-  watchdog ??= startWatchdog(now);
 }
 
 /** Called on a folder's last release, while its lock is still held. */

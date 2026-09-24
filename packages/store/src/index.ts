@@ -25,6 +25,7 @@ export type { VenueHolder, VenueHolderKind } from "./venue-holder.js";
 export {
   setVenueCrashReportDirectory,
   setVenueHolderKind,
+  setVenueWatchdogLogFile,
   VENUE_HOLDER_FROZEN_CODE,
 } from "./venue-liveness.js";
 import { createWriteQueue } from "./write-queue.js";
