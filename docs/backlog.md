@@ -98,8 +98,16 @@ The local remote-access integration now covers venue-owned staff certificate key
 CSR/install commands, live TLS reload and the minimal public availability endpoint.
 Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway
 replacement and revocation. Customer remote setup UI and production deployment remain
-open. Next on this integration track: SQLite/Litestream backup
-and replacement recovery. Connected does not
+open. Disposable backup fixtures now capture real SQLite archives and restore them
+through Waitron validation, migration and module hooks for Cloud's local two-venue
+proof. The backup fixture supplies normal on-disk identity/TLS state, proves source
+Cloud credentials and staff TLS keys are excluded, and drops old backup destination
+settings on the test replacement. It never starts the restored server. This changes
+test tooling only: the production backup adapter and customer recovery UI remain open.
+Cloud's independent Litestream storage proof does not supply the sealed state row,
+stream supervisor or cold-restore activation still owned by SQLite slice 2. Next,
+connect those landed interfaces to Cloud's scoped storage and owner recovery flow;
+keep fresh installation enrolment and fiscal activation explicit. Connected does not
 mean those services are configured. Cloud service ownership stays in the Cloud
 backlog; this repository owns its adapter, screen and node-side behavior. Public
 hosting, ingress controls and Cloud audit/retention remain deployment work.
