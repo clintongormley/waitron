@@ -4483,7 +4483,7 @@ Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`
 `provisioning.database_in_use`, while opens inside one process share it; restore and
 `waitron-rejoin` take it before changing any file; break-glass, `waitron-credentials`, two dev
 scripts and the Cloud backup fixture's capture open without it), landed as #566. The question it
-left open was decided by the owner on 2026-09-24 and done in (this PR): a start the lock refuses no
+left open was decided by the owner on 2026-09-24 and done in #573: a start the lock refuses no
 longer counts toward the recovery page (`apps/server/src/node-entry.ts` puts the count back), and
 the container's entrypoint now refuses any argument (`server.entry_arguments_refused`) instead of
 booting a second server when `docker compose run app <command>` is given no `--entrypoint`. Also
