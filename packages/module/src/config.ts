@@ -70,9 +70,9 @@ export function serializeModuleConfig(config: ModuleConfig): Record<string, bool
 }
 
 /**
- * The disabled `provision-only` modules, which refuse venue provisioning: a provision-only module
- * mints unrecoverable state at provision. Fiscal-slot members are excluded: with two members one is
- * always disabled, and `fiscalSlot`'s exactly-one rule governs them.
+ * The disabled `provision-only` modules; `apps/server/src/provision.ts` refuses venue provisioning
+ * while this is non-empty. Fiscal-slot members are excluded: with two members one is always
+ * disabled, and `fiscalSlot`'s exactly-one rule governs them.
  */
 export function disabledProvisionOnly(
   modules: readonly WaitronModule[],
