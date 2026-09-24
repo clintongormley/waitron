@@ -4044,7 +4044,7 @@ wizard can skip minting one. Only rotate changes the key."
   - `readSealedStateRow(tx: Transaction, nodeId: string): Promise<Uint8Array | null>`.
   - The row's entries are named exactly as the archive's: `manifest.json`, then any module non-database state as `<source>/<file>`, then `secrets/<path>` for each `RECOVERY_FILES` path, then `secrets/backup.env` / `secrets/modules.json` when present. There is no `db.dump`.
   - `collectSealedEntries`, `sealNodeState`, `writeSealedStateRow`, `createSealedStateRefresher`, `SealedStateDeps`, `SealedStateRefresher`, `SealedStateOutcome`.
-  - (2026-09-24, review fixes on this task's branch: `sealNodeState` returns `Promise<Uint8Array>` and seals through `encryptArtifactAsync`; the backup routes call the refresh straight after each write to `backup.env`, before the reload and any check that can refuse, not just before the final `return`. The code and instructions below still show the first version.)
+  - (2026-09-24, review fixes on this task's branch: `sealNodeState` returns `Promise<Uint8Array>` and seals through `encryptArtifactAsync`; the backup routes call the refresh straight after each write to `backup.env`, before the reload and any check that can refuse, not just before the final `return`; all three writes go through one `persist` helper in `mountBackupApi`, which writes and then refreshes; the refresh chain turns any rejection into `"failed"`, so `refresh()` never rejects; a failure whose thrown value carries a system error code (`EACCES`, `ENOSPC`) logs it as `errno` beside `errorCode`; logging comes after the outcome is settled, so a refresh whose row has committed answers `"sealed"` even when the logger then throws; the backup sweep in `backup-sweep.ts` encrypts with `encryptArtifactAsync` too; and `classification.ts` no longer gives a reason for filtering out `node_sealed_state`. The code and instructions below still show the first version.)
   - `collectStateParts`, `assembleArchiveEntries`, `StateParts` in `archive-entries.ts`.
 
 Why a core table: it belongs to every box whatever modules are enabled, `apps/server` (which owns
@@ -15054,6 +15054,20 @@ import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
 import { StreamHost } from "./stream-host.js";
 
+// The route calls `putCredential` itself, so the harness sees the credential write through this
+// pass-through wrapper.
+const credentialWrites = vi.hoisted(() => ({ onPut: (): void => {} }));
+vi.mock("@waitron/credentials", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/credentials")>();
+  return {
+    ...real,
+    putCredential: (...args: Parameters<typeof real.putCredential>) => {
+      credentialWrites.onPut();
+      return real.putCredential(...args);
+    },
+  };
+});
+
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -15117,6 +15131,7 @@ interface Harness {
 function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Harness {
   const key = { value: startKey };
   const order: string[] = [];
+  credentialWrites.onPut = () => order.push("put-credential");
   const stream = {
     reload: vi.fn(async () => {
       order.push("reload");
@@ -15267,7 +15282,7 @@ describe("stream settings routes", () => {
     expect(stored).toBeNull();
   });
 
-  it("Save sets a recovery key when there is none, seals the bucket, refreshes the locked row, then starts streaming", async () => {
+  it("Save sets a recovery key when there is none, refreshes the locked row, seals the bucket, then starts streaming", async () => {
     await clearBucket();
     const { app, key, order } = harness();
     const cookie = await login(app);
@@ -15277,7 +15292,7 @@ describe("stream settings routes", () => {
     expect(key.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
     // The row must be locked under the key BEFORE the first generation opens, or a rebuild from
     // that generation finds no row to unlock.
-    expect(order).toEqual(["write-key", "refresh", "reload"]);
+    expect(order).toEqual(["write-key", "refresh", "put-credential", "reload"]);
     const view = await res.json();
     expect(view).toEqual({
       isPrimary: true,
@@ -15562,7 +15577,8 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
 
   // Save and switch on. The order is the invariant: a key exists, the locked row is written under
   // it, and only then does a generation open — so the first generation already holds a row a
-  // rebuild can unlock.
+  // rebuild can unlock. The refresh comes straight after the `backup.env` write, when there is one,
+  // and before the credential write that can refuse: the file has changed whatever this answers.
   app.put("/api/backup/stream", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -15572,13 +15588,13 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       if ((await deps.readRecoveryKey()) === undefined) {
         await deps.writeRecoveryKey(randomBytes(32).toString("base64url"));
       }
+      await deps.sealedState.refresh();
       await withTransaction(deps.db, (tx) =>
         putCredential(tx, deps.ring, {
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({ venueId: deps.venueId, bucket }),
         }),
       );
-      await deps.sealedState.refresh();
       await deps.stream.reload();
       return c.json(await view());
     }),

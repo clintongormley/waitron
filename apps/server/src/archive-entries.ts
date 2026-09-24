@@ -28,9 +28,8 @@ export async function collectStateParts(deps: {
 }
 
 /**
- * The archive's entries in their one order, shared by the archive and the sealed state row
- * (`dump` null). Optional state goes under `secrets/` too, because the restore writes every
- * `secrets/` entry back under the state folder.
+ * The archive's entries in their one order; a null `dump` leaves out `db.dump`. Optional state goes
+ * under `secrets/` too, because the restore writes every `secrets/` entry back under the state folder.
  */
 export function assembleArchiveEntries(
   manifest: BackupManifest,

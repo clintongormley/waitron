@@ -121,8 +121,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
  *
  * `change_log` is filtered out because it is where the trigger PUTS its output: a change trigger on
  * it would insert a row for every row it writes, and that row would trigger another.
- * `node_sealed_state` is filtered out because nothing on the dashboard reads it. Guard:
- * `classification.test.ts`.
+ * Guard: `classification.test.ts`.
  */
 const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state"]);
 
