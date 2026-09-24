@@ -16,7 +16,6 @@ const stub = (name: string, body: string): string => {
 let prints: string;
 let obedient: string;
 let stubborn: string;
-let showsEnv: string;
 let waiting: string;
 
 beforeAll(() => {
@@ -26,7 +25,6 @@ beforeAll(() => {
   // Ignores the polite signal, and leaves a child of its own holding the output pipes after it is
   // killed: `exited` must still settle, by the escalation after the grace.
   stubborn = stub("stubborn", "trap '' TERM; echo ready; sleep 3; :");
-  showsEnv = stub("shows-env", "env");
   // Stays a shell (no `exec`), so its own argv stays readable while it waits.
   waiting = stub("waiting", "sleep 30; :");
 });
@@ -76,13 +74,19 @@ describe("spawnLitestream", () => {
   });
 
   // The vault key and every other secret in this process's environment stay out of the child's.
+  // `env` itself rather than a shell script: a shell adds variables of its own (PWD, SHLVL, _).
   it("hands the child PATH, HOME and the variables it was given, and nothing else", async () => {
     process.env.WAITRON_STREAM_TEST_SENTINEL = "must-not-reach-the-child";
     try {
-      const child = spawnLitestream(showsEnv, [], { WAITRON_STREAM_ACCESS_KEY_ID: "AKIAEXAMPLE" });
-      await child.exited;
-      expect(child.output()).toContain("WAITRON_STREAM_ACCESS_KEY_ID=AKIAEXAMPLE");
-      expect(child.output()).not.toContain("WAITRON_STREAM_TEST_SENTINEL");
+      const child = spawnLitestream("/usr/bin/env", [], {
+        WAITRON_STREAM_ACCESS_KEY_ID: "AKIAEXAMPLE",
+      });
+      await expect(child.exited).resolves.toBe(0);
+      expect(child.output().trim().split("\n").sort()).toEqual([
+        `HOME=${process.env.HOME}`,
+        `PATH=${process.env.PATH}`,
+        "WAITRON_STREAM_ACCESS_KEY_ID=AKIAEXAMPLE",
+      ]);
     } finally {
       delete process.env.WAITRON_STREAM_TEST_SENTINEL;
     }

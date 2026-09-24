@@ -47,8 +47,9 @@ const KILL_GRACE_MS = 5_000;
 const OUTPUT_KEEP = 8_192;
 
 /**
- * Children still running, stopped if this process exits first: a server that dies outside its own
- * shutdown would otherwise leave Litestream streaming a database nobody is writing.
+ * Children still running, sent SIGTERM when this process EXITS (`process.exit`, or the event loop
+ * emptying). A process killed by a signal it has no handler for never emits `exit`, so its
+ * children are not stopped here.
  */
 const live = new Set<ChildProcess>();
 process.on("exit", () => {

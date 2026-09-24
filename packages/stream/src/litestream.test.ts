@@ -5,6 +5,7 @@ import {
   DEFAULT_LITESTREAM_BIN,
   LITESTREAM_VERSION,
   litestreamConfig,
+  litestreamEnv,
   litestreamMetaDir,
   replicaUrl,
   resolveLitestreamBin,
@@ -18,6 +19,18 @@ const BUCKET: BucketConfig = {
   secretAccessKey: "secret-example",
 };
 
+function refusalOf(action: () => unknown): { code: string; params: unknown } | undefined {
+  try {
+    action();
+  } catch (error) {
+    if (isAppError(error) && hasCode(error, "backup.stream_config_unsafe")) {
+      return { code: error.code, params: error.params };
+    }
+    throw error;
+  }
+  return undefined;
+}
+
 describe("the Litestream configuration", () => {
   it("pins the version every measurement was taken on", () => {
     expect(LITESTREAM_VERSION).toBe("0.5.17");
@@ -30,8 +43,8 @@ describe("the Litestream configuration", () => {
     });
     expect(text).toBe(
       [
-        "access-key-id: ${WAITRON_STREAM_ACCESS_KEY_ID}",
-        "secret-access-key: ${WAITRON_STREAM_SECRET_ACCESS_KEY}",
+        "access-key-id: '${WAITRON_STREAM_ACCESS_KEY_ID}'",
+        "secret-access-key: '${WAITRON_STREAM_SECRET_ACCESS_KEY}'",
         "snapshot:",
         "  interval: 24h",
         "  retention: 168h",
@@ -49,13 +62,48 @@ describe("the Litestream configuration", () => {
   // Litestream expands `${VAR}` over the whole file's text before parsing it (its docs, and
   // `-no-expand-env`), so a `$` in any other value would be read as a variable.
   it("refuses a value holding a dollar sign", () => {
-    let refusal: unknown;
-    try {
-      litestreamConfig({ dbPath: "/srv/$HOME/venue.db", replicaUrl: "s3://b/p?region=r" });
-    } catch (error) {
-      refusal = error;
-    }
-    expect(isAppError(refusal) && hasCode(refusal, "backup.stream_config_unsafe")).toBe(true);
+    expect(
+      refusalOf(() =>
+        litestreamConfig({ dbPath: "/srv/$HOME/venue.db", replicaUrl: "s3://b/p?region=r" }),
+      ),
+    ).toEqual({ code: "backup.stream_config_unsafe", params: { field: "dbPath" } });
+  });
+
+  // Litestream substitutes the variables into the file's TEXT and then parses it, so each key lands
+  // in the YAML as written. Unquoted, a secret holding " #" loses everything from the "#", and one
+  // starting "*" or holding ": " stops the file parsing at all.
+  it("lands a key holding YAML's own characters inside a single-quoted scalar, whole", () => {
+    const hostile = { accessKeyId: "*abc", secretAccessKey: "abc #def: g&!@" };
+    const env = litestreamEnv(hostile);
+    expect(env).toEqual({
+      WAITRON_STREAM_ACCESS_KEY_ID: "*abc",
+      WAITRON_STREAM_SECRET_ACCESS_KEY: "abc #def: g&!@",
+    });
+    const expanded = litestreamConfig({ dbPath: "/d/venue.db", replicaUrl: "s3://b/p?region=r" })
+      .replace(/\$\{(\w+)\}/g, (_, name: string) => env[name] ?? "")
+      .split("\n");
+    expect(expanded.slice(0, 2)).toEqual([
+      "access-key-id: '*abc'",
+      "secret-access-key: 'abc #def: g&!@'",
+    ]);
+  });
+
+  // Only a quote ends a single-quoted scalar, and a line break folds it; YAML 1.1, which Litestream's
+  // parser reads, also breaks lines at U+0085, U+2028 and U+2029. Printable ASCII is the whole of
+  // what is let through.
+  it.each([
+    ["accessKeyId", { accessKeyId: "ab'c", secretAccessKey: "s" }],
+    ["secretAccessKey", { accessKeyId: "a", secretAccessKey: "s'" }],
+    ["secretAccessKey", { accessKeyId: "a", secretAccessKey: "s\nsnapshot: x" }],
+    ["secretAccessKey", { accessKeyId: "a", secretAccessKey: "s\r" }],
+    ["accessKeyId", { accessKeyId: "a\u2028b", secretAccessKey: "s" }],
+    ["accessKeyId", { accessKeyId: "a\u0085b", secretAccessKey: "s" }],
+    ["secretAccessKey", { accessKeyId: "a", secretAccessKey: "\u00e9" }],
+  ])("refuses a %s a single-quoted scalar cannot hold whole", (field, keys) => {
+    expect(refusalOf(() => litestreamEnv(keys))).toEqual({
+      code: "backup.stream_config_unsafe",
+      params: { field },
+    });
   });
 
   it("puts the endpoint and region in the replica address only when there is one", () => {
@@ -83,6 +131,30 @@ describe("the Litestream configuration", () => {
       );
     }
   });
+
+  // Litestream reads the address with Go's url.Parse and then path.Clean, so the path must survive
+  // both unchanged: a raw "#" or "?" would end the path there, and an empty, "." or ".." segment
+  // would be cleaned into a different folder than the object store writes to.
+  it("encodes each path segment, so a # or ? in the prefix stays in the path", () => {
+    expect(replicaUrl({ ...BUCKET, prefix: "a#b" }, "v1", "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue-copies/a%23b/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+    );
+    expect(replicaUrl({ ...BUCKET, prefix: "a?b/c%d" }, "v1", "gen-0-a-20260923T120000Z")).toBe(
+      "s3://venue-copies/a%3Fb/c%25d/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2",
+    );
+  });
+
+  it.each(["a//b", "a/../b", "..", "./a", "a/."])(
+    "refuses a prefix path cleaning would change: %j",
+    (prefix) => {
+      expect(
+        refusalOf(() => replicaUrl({ ...BUCKET, prefix }, "v1", "gen-0-a-20260923T120000Z")),
+      ).toEqual({
+        code: "backup.stream_config_unsafe",
+        params: { field: "prefix" },
+      });
+    },
+  );
 
   it("finds the binary from WAITRON_LITESTREAM_BIN, and on PATH when that is unset or empty", () => {
     expect(resolveLitestreamBin({ WAITRON_LITESTREAM_BIN: "/opt/litestream" })).toBe(

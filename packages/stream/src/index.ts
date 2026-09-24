@@ -33,6 +33,7 @@ export {
   ENV_SECRET_ACCESS_KEY,
   LITESTREAM_VERSION,
   litestreamConfig,
+  litestreamEnv,
   litestreamMetaDir,
   replicaUrl,
   resolveLitestreamBin,
