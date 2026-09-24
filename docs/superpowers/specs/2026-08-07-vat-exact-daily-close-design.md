@@ -102,6 +102,14 @@ recomputing from `sale_lines`:
   bucketing (DST-aware cutover), the `activeSalesClause` filtering (voided and F3-canje substitutes
   excluded; rectificativas net in as negatives). `computeDailyClose`'s cash-up and counts are
   untouched.
+
+> **2026-09-24:** superseded for the daily and period VAT summaries and top sellers: a sale voided
+> on a LATER business day now counts on its issue day and is subtracted on the void's day; a
+> same-day void still cancels. The close counts keep such a sale on its issue day and count the
+> void under `voids` on its own day; they subtract nothing. The quarterly modelo 303 keeps the
+> exclusion. See `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`
+> ("Determinism").
+
 - The stale `CAVEAT` block in `vat-summary.ts` (documenting the divergence) is **removed** — it no
   longer applies.
 

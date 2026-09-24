@@ -69,6 +69,13 @@ flow), recorded here so the discrepancy is not mistaken for live work.
 | **D8 — Do NOT attempt the sargable rewrite in this slice (correctness first).** | See §6. |
 | **D9 — Invalid inputs throw a plain `Error`, not a registered code.** | A bad `year`/`month`/day is a caller precondition, the exact class the package's own validators already reject with a plain `Error` (`business-day.ts:20-56`). No new `close.*`/`reporting.*` code — a `reporting.*` code is forbidden (names the package), and no domain condition a till surfaces exists here. |
 
+> **2026-09-24 (D3):** `aggregateVatByRate` now takes a `counted` clause (the sales to add, date
+> filter included) and an optional `reversed` clause (voided sales to subtract); `computeVatSummary` and
+> `computeVatSummaryForPeriod` pass both, `computeVatReturn` passes `counted` only. The core no longer
+> factors `activeSalesClause` once: the exclusions are part of each caller's `counted` clause
+> (`issuedSalesClause` for the two summaries), and only `computeVatReturn` passes
+> `activeSalesClause`. See the 2026-09-24 note in §3 below.
+
 ## 2. No migration — and why that is the correct answer to "call out every migration"
 
 The plan adds **no `packages/db/drizzle/*.sql`**, touches no schema, and creates no `tenant_id`-bearing
@@ -105,10 +112,13 @@ export interface PeriodVatInput {
   F3-canje substitutes excluded, rectificativas netted in as negatives. Issuance anchor
   (`s.issued_at`), same as the daily close.
 
-> **2026-09-24:** superseded for the day-scoped reports: a sale voided on a LATER business day now
-> counts on its issue day and is subtracted on the void's day; a same-day void still cancels. The
-> quarterly modelo 303 keeps the exclusion. See `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`
+> **2026-09-24:** superseded for the daily and period VAT summaries and top sellers: a sale voided
+> on a LATER business day now counts on its issue day and is subtracted on the void's day; a
+> same-day void still cancels. The close counts keep such a sale on its issue day and count the
+> void under `voids` on its own day; they subtract nothing. The quarterly modelo 303 keeps the
+> exclusion. See `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`
 > ("Determinism").
+
 - **Exactness is inherited, not re-derived:** the aggregate is `Σ` of each sale's **filed** per-rate
   `tax` from `sales.vat_breakdown`, grouped by rate — the same read `computeVatSummary` already does,
   just over more days. No re-rounding: the per-invoice figures are already the filed, already-rounded

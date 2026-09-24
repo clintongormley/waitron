@@ -171,9 +171,10 @@ a closed day and comparing to its snapshot is a valid audit.
 
 > **2026-09-24:** not so once a later void touches that day's sales — #601's review recorded a void
 > on 5 August for a 4 August sale and 4 August's recomputed VAT changed from 21.00 to 0.00. Fixed
-> the same day by the owner's decision that a void counts on the day it is made: the day-scoped
-> reports now keep the sale on its issue day and subtract it on the void's business day
-> (`issuedSalesClause`/`reversedSalesClause`, `packages/reporting/src/business-day.ts`), and the
+> the same day by the owner's decision that a void counts on the day it is made: the VAT figures
+> and top sellers now keep the sale on its issue day and subtract it on the void's business day
+> (`issuedSalesClause`/`reversedSalesClause`, `packages/reporting/src/business-day.ts`), the close
+> counts keep the sale on its issue day and count the void under `voids` on its own day, and the
 > closed day re-derives equal to its snapshot (`record-daily-close.test.ts`). A void made on the
 > same business day AFTER that day's close was taken still changes it, as a late sale does.
 
