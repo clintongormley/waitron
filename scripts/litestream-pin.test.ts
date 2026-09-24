@@ -27,14 +27,18 @@ describe("the pinned Litestream", () => {
   });
 
   it("checks the same Linux checksums in the box image and the setup script", () => {
-    for (const platform of ["linux-x86_64", "linux-arm64"]) {
+    // Docker's TARGETARCH names are not the release's asset names, so each arm's pairing is pinned too.
+    for (const [arch, platform] of [
+      ["amd64", "linux-x86_64"],
+      ["arm64", "linux-arm64"],
+    ] as const) {
       const inImage = one(
         DOCKERFILE,
         new RegExp(
-          `litestream-\\$\\{version\\}-${platform}\\.tar\\.gz"; sum="([0-9a-f]{64})"`,
+          `${arch}\\) asset="litestream-\\$\\{version\\}-${platform}\\.tar\\.gz"; sum="([0-9a-f]{64})"`,
           "g",
         ),
-        `${platform} sum in the Dockerfile`,
+        `${arch} → ${platform} sum in the Dockerfile`,
       );
       const inScript = one(
         SETUP,

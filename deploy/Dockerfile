@@ -102,7 +102,7 @@ RUN set -eux; \
   curl -fsSL -o /tmp/litestream.tar.gz \
     "https://github.com/benbjohnson/litestream/releases/download/v${version}/${asset}"; \
   echo "${sum}  /tmp/litestream.tar.gz" | sha256sum -c -; \
-  tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream; \
+  tar --no-same-owner -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream; \
   rm /tmp/litestream.tar.gz; \
   test "$(/usr/local/bin/litestream version)" = "${version}"
 
