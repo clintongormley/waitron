@@ -60,8 +60,8 @@ declare module "@waitron/shared" {
      * Error. */
     "sale.already_substituted": { saleId: string };
     /** Thrown by `recordSale` when a caller-supplied `vatBreakdown`'s bases and taxes, summed and
-     * compared by value, do not equal `total`. The breakdown is filed verbatim, and a chained
-     * record that disagrees with its own total cannot be repaired. */
+     * compared by value, do not equal `total`. The breakdown is handed to the fiscal backend as
+     * given, and a chained record that disagrees with its own total cannot be repaired. */
     "sale.total_mismatch": { declaredTotal: string; breakdownTotal: string };
     /** Never thrown: the write paths build it from a failed `FiscalBackend.checkIntegrity` and
      * record it as an incident. One code whatever issues the regime reported. */

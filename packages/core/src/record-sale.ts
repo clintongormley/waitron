@@ -63,9 +63,9 @@ export interface RecordSaleInput {
    * figure the till displayed and the customer paid against. */
   total: string;
   lines: RecordSaleLine[];
-  /** A caller-supplied VAT breakdown (e.g. `@waitron/catalogue`'s gross-inclusive figures), filed
-   * verbatim and refused with `sale.total_mismatch` unless it sums to `total`. Derived from `lines`
-   * by `buildVatBreakdown` when absent. */
+  /** A caller-supplied VAT breakdown (e.g. `@waitron/catalogue`'s gross-inclusive figures), handed
+   * to the fiscal backend as given and refused with `sale.total_mismatch` unless it sums to
+   * `total`. Derived from `lines` by `buildVatBreakdown` when absent. */
   vatBreakdown?: VatBreakdownLine[];
   clock: TrustedClock;
   /**
@@ -114,9 +114,9 @@ export async function recordSale(
   backend: FiscalBackend,
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Checked before anything is written: a supplied breakdown is filed verbatim, and one that
-  // disagrees with the total would chain a record that cannot be repaired. This is a
-  // caller-precondition failure, not a fiscal condition.
+  // Checked before anything is written: a supplied breakdown is handed to the fiscal backend as
+  // given, and one that disagrees with the total would chain a record that cannot be repaired. This
+  // is a caller-precondition failure, not a fiscal condition.
   if (input.vatBreakdown !== undefined) {
     const breakdownTotal = sumDecimals(input.vatBreakdown.flatMap((g) => [g.base, g.tax]));
     if (compareDecimal(breakdownTotal, decimal(input.total)) !== 0) {
@@ -199,8 +199,8 @@ export async function recordSale(
   // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
   const vatBreakdown = input.vatBreakdown ?? buildVatBreakdown(input.lines);
 
-  // `total` is stored in whole cents. `vat_breakdown` keeps the decimal literals that were filed,
-  // unconverted.
+  // `total` is stored in whole cents. `vat_breakdown` stores, unconverted, the breakdown handed to
+  // `backend.recordSale` below.
   const [inserted] = await tx
     .insert(sales)
     .values({

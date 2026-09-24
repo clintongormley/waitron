@@ -58,8 +58,9 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   }
 
   // Refuses a second settlement, whether a retry or one started at the same time (both cases are
-  // in settle-sale.test.ts). The trigger and unique-key catches below refuse a writer that gets
-  // past this read, and both become `sale.already_settled`.
+  // in settle-sale.test.ts). A writer that gets past this read is refused by the
+  // `tenders_reject_post_settlement` trigger or the `sale_settlements` unique key, and the catches
+  // below turn both into `sale.already_settled`.
   const [existing] = await tx
     .select({ saleId: saleSettlements.saleId })
     .from(saleSettlements)
