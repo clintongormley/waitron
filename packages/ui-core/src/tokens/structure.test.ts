@@ -39,6 +39,9 @@ test("defines the structural contract", () => {
     "--wt-opacity-disabled",
     "--wt-opacity-hover",
     "--wt-dialog-max-width",
+    "--wt-modal-max-width",
+    "--wt-modal-inline-margin",
+    "--wt-modal-inline-padding",
     "--wt-cell-name-max-width",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");

@@ -130,7 +130,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
-`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-cell-name-max-width`,
+`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
+`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-cell-name-max-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`
 
 `--wt-opacity-hover` is `wt-button`'s hover feedback (`button:hover:not(:disabled)`) — a plain
@@ -175,11 +176,13 @@ heading runs on into the row menu's empty heading. Measured 2026-09-24 in the pr
 390px with a four-digit price, the text sizes raised a step and Verdana standing in for CI's Linux
 fonts: with the price column the table needed 304px of a 292px box; with the price under the name
 it fits with about 12px to spare (24px in this Mac's default fonts) and the name column is 120px
-wide. At 360px it fits at the normal text size but is 6px too wide at the larger one (18px in
-Verdana); at 320px it scrolls sideways inside its box in every case measured but English at the
-normal size in the default fonts.
-Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390px only,
-in English and Spanish, with the text sizes raised, and each again in Verdana. They check that the
+wide. Narrower phones fit because `wt-modal` gives up most of its side margin and padding there
+(see the `wt-modal` entry below): measured 2026-09-24 with the modal's full 24px margin and padding,
+the table at the larger text size needed 268px (280px in Verdana) of a 262px box at 360px, and at
+320px every Spanish case and every larger-text case overflowed a 222px box; with them shrunk, every
+case below passes at 390, 360 and 320px.
+Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390, 360
+and 320px, in English and Spanish, with the text sizes raised, and each again in Verdana. They check that the
 table does not scroll, that each row menu ends inside both the table's box and the frame, that the
 price column is hidden and each price sits on one line inside the name's cell, that the Available
 heading sits on one line, that the heading's unit select is hidden, and that the price field's unit
@@ -337,9 +340,12 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its width is the shared `--wt-dialog-max-width` token
-(`min(90vw, 48rem)`) bounded by the viewport minus its side margins, and it fills the viewport
-height with 24px top and bottom margins. The body scrolls independently, so your footer actions
+Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`48rem`) bounded by
+the viewport minus its side margins, and it fills the viewport height with 24px top and bottom
+margins. Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
+(`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
+width goes to the content; they are fluid `clamp()` values rather than a breakpoint because a media
+query cannot read a token. Unlike `wt-dialog`, it is not held to 90% of the viewport. The body scrolls independently, so your footer actions
 stay visible.
 It uses the raised surface and shadow tokens: white in the light theme, with the matching dark
 surface in the dark theme. Put `wt-form-actions` in its `footer` slot to keep Cancel on the left
@@ -951,7 +957,7 @@ stays anchored to the body's left padding, the same as a full-width `wt-data-tab
 it read as a visually different app from the wide table screens next to it; anchoring both to the
 same edge and varying only the width does not. `backup-screen.ts` and `receipt-screen.ts` already
 follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
-screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-dialog-max-width`
+screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-modal-max-width`
 like any other. The one legitimate exception among actual screens is a full-page one with no
 sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
 the normal, expected treatment there.

@@ -27,7 +27,14 @@
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
 
-  --wt-dialog-max-width: min(90vw, 48rem);
+  --wt-modal-max-width: 48rem;
+  --wt-dialog-max-width: min(90vw, var(--wt-modal-max-width));
+
+  /* A modal's side margin and inline padding shrink on a phone so the width goes to its content:
+     at their smallest up to 400px wide, at their full size from 800px. Fluid rather than a
+     breakpoint because a media query cannot read a token. */
+  --wt-modal-inline-margin: clamp(var(--wt-space-1), 5vw - var(--wt-space-4), var(--wt-space-5));
+  --wt-modal-inline-padding: clamp(var(--wt-space-3), 3vw, var(--wt-space-5));
 
   /* One sizing value for the NAME column of a table a form owns, used in BOTH directions. It is
      larger than --wt-tap-min either way, which is what structure.test.ts pins.

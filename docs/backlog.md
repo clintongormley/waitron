@@ -767,16 +767,6 @@ report shut a dialog that has been reopened. No migration: **no venue reset need
   table 30rem wide or less hides its price column, heading select included, and puts each price
   under the variant's name, so on a phone the price field's unit button is the way to the unit. A
   wider table still shows the select.)
-- **The variants table still scrolls sideways on phones narrower than 390px.** Measured 2026-09-24
-  in the product editor with a four-digit price, in English and Spanish, with each price under the
-  name: at 390px the table fits at both text sizes, with the name column 120px wide at the larger
-  one and about 12px to spare in Verdana (24px in the default fonts); at 360px it fits at the normal
-  size but is 6px too wide at the larger one (18px in Verdana); at 320px it is too wide in every
-  case measured but English at the normal size in the default fonts. The name column can shrink no
-  narrower than the widest price. The dialog around the table takes 98px of the width: the table's
-  box starts at x=49 and ends 49px short of the right edge at every width measured. **Next
-  action:** decide whether `wt-modal`'s margins and padding should shrink at phone width, which
-  would hand that room to the table.
 - **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
   browser command (`apps/dashboard/vitest.config.ts`, whose comment says it exercises the responsive
   breakpoints) resizes the outer Playwright page, not the frame a test renders in: measured

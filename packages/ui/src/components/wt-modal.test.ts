@@ -20,13 +20,27 @@ async function openModal(body = "Printer settings") {
   return modal;
 }
 
+/** Resolves a length token (or any CSS length) to pixels at the current viewport. */
+function px(length: string): number {
+  const probe = document.createElement("div");
+  probe.style.position = "fixed";
+  probe.style.width = length;
+  host.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width;
+}
+
 test.each([
   [1280, 900],
   [390, 844],
   [844, 390],
+  [360, 740],
+  [320, 568],
 ])("fits a %i × %i viewport with clear, equal margins", async (width, height) => {
   await page.viewport(width, height);
   try {
+    expect(window.innerWidth).toBe(width);
     const modal = await openModal();
     const dialog = modal.shadowRoot!.querySelector("dialog")!;
     const rect = dialog.getBoundingClientRect();
@@ -35,18 +49,52 @@ test.each([
     expect(rect.top).toBeLessThanOrEqual(32);
     expect(height - rect.bottom).toBeCloseTo(rect.top, 0);
     expect(width - rect.right).toBeCloseTo(rect.left, 0);
-    expect(rect.left).toBeGreaterThanOrEqual(16);
-    // The width is the shared dialog-max-width token bounded by the viewport minus its two
-    // margins — no portrait aspect-ratio cap. Resolve the token with a probe rather than
-    // hardcoding 48rem, so a token change stays covered.
-    const probe = document.createElement("div");
-    probe.style.position = "fixed";
-    probe.style.width = "var(--wt-dialog-max-width)";
-    host.appendChild(probe);
-    const dialogMaxWidth = probe.getBoundingClientRect().width;
-    probe.remove();
-    const space5 = parseFloat(getComputedStyle(dialog).getPropertyValue("--wt-space-5"));
-    expect(rect.width).toBeCloseTo(Math.min(dialogMaxWidth, width - 2 * space5), 0);
+    const margin = px("var(--wt-modal-inline-margin)");
+    expect(margin).toBeGreaterThanOrEqual(px("var(--wt-space-1)"));
+    expect(rect.left).toBeGreaterThanOrEqual(margin - 0.5);
+    // No 90vw cap: below the token's width the viewport minus the two side margins is the bound.
+    expect(rect.width).toBeCloseTo(
+      Math.min(px("var(--wt-modal-max-width)"), width - 2 * margin),
+      0,
+    );
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test.each([320, 360, 390])("gives its width to the content on a %ipx-wide phone", async (width) => {
+  await page.viewport(width, 800);
+  try {
+    expect(window.innerWidth).toBe(width);
+    const modal = await openModal();
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    expect(dialog.getBoundingClientRect().left).toBeCloseTo(px("var(--wt-space-1)"), 0);
+    for (const part of [body, footer]) {
+      const style = getComputedStyle(part);
+      expect(parseFloat(style.paddingLeft)).toBe(px("var(--wt-space-3)"));
+      expect(parseFloat(style.paddingRight)).toBe(px("var(--wt-space-3)"));
+    }
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test.each([800, 1280])("keeps its full margins and padding at %ipx wide", async (width) => {
+  await page.viewport(width, 900);
+  try {
+    expect(window.innerWidth).toBe(width);
+    const modal = await openModal();
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    const space5 = px("var(--wt-space-5)");
+    expect(width - dialog.getBoundingClientRect().right).toBeGreaterThanOrEqual(space5 - 0.5);
+    for (const part of [body, footer]) {
+      expect(parseFloat(getComputedStyle(part).paddingLeft)).toBe(space5);
+      expect(parseFloat(getComputedStyle(part).paddingRight)).toBe(space5);
+    }
   } finally {
     await page.viewport(1280, 900);
   }

@@ -17,7 +17,8 @@ export class WtModal extends WtDialog {
         margin: auto;
         height: calc(100dvh - 2 * var(--wt-space-5));
         max-height: calc(100dvh - 2 * var(--wt-space-5));
-        width: min(var(--wt-dialog-max-width), calc(100dvw - 2 * var(--wt-space-5)));
+        width: min(var(--wt-modal-max-width), calc(100dvw - 2 * var(--wt-modal-inline-margin)));
+        max-width: none;
         overflow: hidden;
       }
 
@@ -28,6 +29,7 @@ export class WtModal extends WtDialog {
 
       /* The body owns scrolling so the actions remain reachable on long forms. */
       .body {
+        padding-inline: var(--wt-modal-inline-padding);
         flex: 1;
         min-height: 0;
         overflow: auto;
@@ -36,6 +38,10 @@ export class WtModal extends WtDialog {
 
       .footer {
         flex-shrink: 0;
+      }
+
+      .footer.has-content {
+        padding-inline: var(--wt-modal-inline-padding);
       }
     `,
   ];

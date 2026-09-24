@@ -2063,19 +2063,21 @@ const phoneCases = [
 // the usual family. English and Spanish label the columns differently, and a product with no unit
 // gives the price field's unit button its longest name. A four-digit price is the widest amount a
 // row is likely to carry, and it must never break inside the number.
-it.each([
-  ...phoneCases.map((phone) => ({ ...phone, font: "default" })),
-  ...phoneCases.map((phone) => ({ ...phone, font: "Verdana" })),
-])(
-  "keeps every variant row's menu on screen at phone width, with no sideways scroll ($locale, larger text: $scaled, unit: $unitId, font: $font)",
-  async ({ locale, scaled, unitId, font }) => {
+it.each(
+  [390, 360, 320].flatMap((phoneWidth) => [
+    ...phoneCases.map((phone) => ({ ...phone, phoneWidth, font: "default" })),
+    ...phoneCases.map((phone) => ({ ...phone, phoneWidth, font: "Verdana" })),
+  ]),
+)(
+  "keeps every variant row's menu on screen at phone width, with no sideways scroll ($phoneWidth px, $locale, larger text: $scaled, unit: $unitId, font: $font)",
+  async ({ locale, scaled, unitId, font, phoneWidth }) => {
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
       setLocale(locale);
       // `page.viewport` resizes the frame the widget renders in; resizing the outer page does not.
-      await page.viewport(390, 844);
-      expect(window.innerWidth).toBe(390);
+      await page.viewport(phoneWidth, 844);
+      expect(window.innerWidth).toBe(phoneWidth);
       const { el, host } = await mountWidget<ProductEditor>("dashboard-product-editor", {
         open: true,
         value: {
