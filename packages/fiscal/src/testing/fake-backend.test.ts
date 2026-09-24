@@ -4,9 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
 
-// The fake keys its bookkeeping on NODE (node-id rekey, 2026-08-03: the SIF is the node). `till_id`
-// stays a required snapshot field on `SaleForFiscalRecord`, which this fake ignores — a fixed dummy
-// till satisfies the type without affecting any keying.
+// The fake keys its records on node and ignores the till.
 const NODE_A = nodeId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const NODE_B = nodeId("6ba7b810-9dad-11d1-80b4-00c04fd430c9");
 const SNAPSHOT_TILL = tillId("7ba7b810-9dad-11d1-80b4-00c04fd430c0");
@@ -30,8 +28,6 @@ function saleOn(node: typeof NODE_A, invoiceNumber: number): SaleForFiscalRecord
   };
 }
 
-// No migration set at all: the fake's own `fake_node_registrations`/`fake_fiscal_records` tables
-// are the only schema this suite touches, and `install` creates them.
 const suite = useVenueDb({ migrations: [], setup: (db) => FakeFiscalBackend.install(db) });
 
 beforeEach(async () => {
@@ -49,8 +45,6 @@ describe("registration", () => {
   });
 
   it("refuses to record a sale for a node that was never registered", async () => {
-    // A stub that recorded regardless would let packages/core skip registration entirely and
-    // every core test would still pass, right up to the point where a real backend refuses.
     await expect(
       suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1))),
     ).rejects.toThrowError(AppError);
@@ -84,8 +78,6 @@ describe("recordSale", () => {
   });
 
   it("rejects a total that is not an exact decimal string", async () => {
-    // The money boundary, asserted at the interface rather than trusted. A number arriving
-    // through an `as never` cast is exactly how a float reaches a fiscal record in practice.
     const sale = { ...saleOn(NODE_A, 1), total: 12.1 as never };
     await expect(suite.db.transaction((tx) => backend.recordSale(tx, sale))).rejects.toThrowError(
       AppError,
@@ -108,11 +100,6 @@ describe("recordSale", () => {
   });
 
   it("leaves no record behind when the transaction rolls back", async () => {
-    // The single most important test in this file. The interface takes a transaction handle
-    // BECAUSE atomicity between the sale and the fiscal record is the entire point, and a fake
-    // holding an in-memory array cannot roll back — so a core test asserting "a failed sale
-    // records nothing" would pass against the fake while the property was untested. The fake
-    // therefore writes through the same transaction as everything else.
     await expect(
       suite.db.transaction(async (tx) => {
         await backend.recordSale(tx, saleOn(NODE_A, 1));
@@ -134,8 +121,6 @@ describe("checkIntegrity", () => {
   });
 
   it("reports zero checked on a node with no records, without complaining", async () => {
-    // The start-of-chain case in generic clothing: nothing recorded is a normal state, not a
-    // failure. A backend for a regime with nothing to check answers exactly this shape.
     const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, NODE_A));
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
@@ -149,9 +134,6 @@ describe("checkIntegrity", () => {
   });
 
   it("still records the next sale after a failed check", async () => {
-    // The requirement AEAT states outright: «la facturación por este motivo NUNCA debe
-    // interrumpirse». Without an injectable failure the fake could not exercise this at all,
-    // and packages/core would ship the opposite behaviour untested.
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     backend.breakIntegrity(NODE_A, { code: "fake.tampered", params: { sequence: 1 } });
     const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 2)));
@@ -177,8 +159,7 @@ describe("pendingCount", () => {
   });
 
   it("drops when a record is acknowledged, so it is not a constant", async () => {
-    // A stub returning the record count would pass the test above and fail this one. That pair
-    // is the difference between a count and a number.
+    // A stub returning the record count would pass the test above and fail this one.
     const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 2)));
     await backend.acknowledge(ref.recordId);
@@ -210,8 +191,6 @@ describe("recordVoid", () => {
   });
 
   it("records a second record rather than editing the first", async () => {
-    // Once recorded, nothing is ever edited. A void is a new record referencing the old one,
-    // and the two interleave in generation order.
     const sale = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, sale));
     const ref = await suite.db.transaction((tx) =>
@@ -228,9 +207,6 @@ describe("recordCorrection", () => {
   beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("refuses to correct a sale that was never recorded", async () => {
-    // Mirrors recordVoid's precondition: a correction references a prior sale (spec §4), and there
-    // is nothing to correct if that sale was never recorded. A stub that recorded regardless would
-    // let a core test skip the original entirely and still pass, right up to a real backend refusing.
     const unrecorded = saleId("00000000-0000-0000-0000-000000000000");
     const corrective = { ...saleOn(NODE_A, 2), total: decimal("-12.10") };
     try {
@@ -244,10 +220,6 @@ describe("recordCorrection", () => {
   });
 
   it("records the correction as its own new record referencing the corrected sale", async () => {
-    // A correction is a NEW record carrying its own (negative) data — unlike a void, which has no
-    // data of its own — that interleaves after the original in generation order. The corrective's
-    // own saleId is recorded (not the corrected one), so it is distinguishable from the sale it
-    // corrects, and the corrected sale must exist first for it to be issued at all.
     const original = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, original));
     const corrective = {
@@ -270,9 +242,6 @@ describe("recordCorrection", () => {
   });
 
   it("leaves no record behind when the transaction rolls back", async () => {
-    // The atomicity property, for corrections too: the interface takes a transaction handle so a
-    // correction and any surrounding work commit or roll back together. A fake holding an in-memory
-    // array could not show this — it writes through the caller's own transaction instead.
     const original = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, original));
     await expect(
@@ -293,10 +262,6 @@ describe("recordSubstitution", () => {
   beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("refuses to substitute a sale that was never recorded", async () => {
-    // Mirrors recordCorrection's precondition, extended to the N:1 fan-out: a substitution replaces
-    // one or more prior sales (spec §4), and there is nothing to substitute if a named sale was
-    // never recorded. A stub that recorded regardless would let a core test skip the substituted
-    // sale entirely and still pass, right up to a real backend refusing.
     const unrecorded = saleId("00000000-0000-0000-0000-000000000000");
     try {
       await suite.db.transaction((tx) =>
@@ -309,8 +274,6 @@ describe("recordSubstitution", () => {
   });
 
   it("refuses an empty substitutedSaleIds list", async () => {
-    // An F3 substitutes at least one ticket; a list of none has nothing to substitute and would
-    // file a full invoice naming nothing it replaces.
     await expect(
       suite.db.transaction((tx) =>
         backend.recordSubstitution(tx, saleOn(NODE_A, 2), { substitutedSaleIds: [] }),
@@ -319,10 +282,6 @@ describe("recordSubstitution", () => {
   });
 
   it("records the substitution as its own new record referencing the substituted sales, without annulling them", async () => {
-    // A substitution is a NEW full-invoice record carrying its OWN (positive) data — unlike a void,
-    // which has none of its own — that interleaves after the tickets it replaces in generation
-    // order. The replaced tickets are NEITHER edited NOR annulled: only the substitution record is
-    // appended, and both original 'sale' records stay exactly where they were.
     const t1 = saleOn(NODE_A, 1);
     const t2 = saleOn(NODE_A, 2);
     await suite.db.transaction((tx) => backend.recordSale(tx, t1));
@@ -345,8 +304,6 @@ describe("recordSubstitution", () => {
   });
 
   it("leaves no record behind when the transaction rolls back", async () => {
-    // The atomicity property, for substitutions too: the interface takes a transaction handle so a
-    // substitution and any surrounding work commit or roll back together.
     const t1 = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, t1));
     await expect(
@@ -365,10 +322,6 @@ describe("filedReceiptFor", () => {
   beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("returns the sale's stored breakdown and a stable verification url", async () => {
-    // The replay read-back (Counter POS 7b, Task 14): a lost-response retry reprints the ticket from
-    // the already-filed record. The fake stores the breakdown it filed and hands it back verbatim,
-    // plus a deterministic stand-in URL — enough for a caller (the till-sale replay path) to prove it
-    // reads the filed figures rather than recomputing them.
     const sale = saleOn(NODE_A, 1);
     await suite.db.transaction((tx) => backend.recordSale(tx, sale));
 
@@ -377,8 +330,7 @@ describe("filedReceiptFor", () => {
     expect(filed!.verificationUrl.length).toBeGreaterThan(0);
     expect(filed!.vatBreakdown).toEqual(sale.vatBreakdown);
 
-    // Stable across replays: the same sale yields the same URL every time — an idempotent replay must
-    // reprint the SAME qr, never a fresh one.
+    // An idempotent replay must reprint the SAME url.
     const again = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, sale.saleId));
     expect(again!.verificationUrl).toBe(filed!.verificationUrl);
   });

@@ -5,11 +5,7 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // Only `src/testing/fake-backend.test.ts` opens a database, through `useVenueDb`
-    // (`packages/db/src/testing/venue-db.ts`), whose setup carries its own budget. Thirty seconds
-    // is margin, not a need: measured 2026-09-23 on an 18-core Mac, every test passes under
-    // `--testTimeout=2000` with that setup budget also cut to 2s; the slowest test took 2ms and the
-    // setup 5ms.
+    // Margin, not a need; the measurement is in the commit message that wrote this line.
     testTimeout: 30_000,
     coverage: {
       provider: "v8",

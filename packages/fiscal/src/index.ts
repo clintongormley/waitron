@@ -1,4 +1,3 @@
-// The entire public surface of @waitron/fiscal. Re-exports only — no logic here.
 export { createTrustedClock } from "./clock.js";
 export type {
   ClockConfidence,
@@ -32,6 +31,4 @@ export type {
   SaleForFiscalRecord,
   VatBreakdownLine,
 } from "./backend.js";
-// The fake is NOT re-exported here. packages/core imports it from
-// "@waitron/fiscal/src/testing/fake-backend.js" in test files only, so a production import of
-// the package surface cannot reach a test double by autocomplete.
+// The fake backend is deliberately not re-exported: it is a test double.
