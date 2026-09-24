@@ -1,9 +1,5 @@
-// The four booking.* codes are REGISTERED with the right param SHAPE. Each `it` typechecks solely
-// because errors.ts's `declare module` augmentation is loaded (the side-effect import below), so the
-// fail-first signal for these registration tests is `tsc --noEmit`, NOT the runtime run — AppError does
-// no runtime validation of the code, so `new AppError("booking.not_found", {})` would run green even
-// with the code undeclared. The verbs are the real throwers; the HTTP statuses live in routes.ts's
-// STATUS map.
+// These cases fail under `tsc --noEmit`, not at runtime: `AppError` does no runtime validation of
+// the code, so only errors.ts's `declare module` augmentation (the import below) makes them typecheck.
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import "./errors.js";

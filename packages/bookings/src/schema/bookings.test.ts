@@ -16,23 +16,12 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
-// The Drizzle table definition itself (the `(t) => [...]` extraConfig): evaluated in JS, so it does
-// not need a database. Pins the foreign keys' NAMES — which this engine records nowhere else — and
-// the two indexes and the checks, whose shapes the migration proofs assert at the SQL level. `getTableConfig` now comes from
-// `drizzle-orm/sqlite-core`; the `pg-core` one threw `Cannot convert undefined or null to object`
-// on a SQLite table.
 describe("the bookings Drizzle table config", () => {
   it("declares all three FKs, two indexes, no unique key and both checks", () => {
     const config = getTableConfig(bookings);
     expect(config.columns.map((c) => c.name)).not.toContain("tenant_id");
-    // THE ONLY PLACE THE THREE KEYS' NAMES ARE PINNED. SQLite does not record a foreign key's name
-    // — drizzle's generator emits all three unnamed and `pragma foreign_key_list` has no name
-    // column — so the engine can be asked for each key's SHAPE and never for what it is called.
-    // `../migrations.test.ts` asks a migrated database for the shapes and points here for the names.
-    //
-    // All three, where this list held one: the table and tab keys were hand-written `--custom`
-    // migration SQL (main's `drizzle/0001_bookings_baseline_sql.sql`) and so were absent from the
-    // drizzle object, and `./bookings.ts` now declares all three with `foreignKey({...})`.
+    // The only place the keys' names are pinned: drizzle emits the keys unnamed and
+    // `pragma foreign_key_list` reports no name, so `../migrations.test.ts` checks shapes only.
     expect(config.foreignKeys.map((fk) => fk.getName())).toEqual([
       "bookings_location_fk",
       "bookings_table_fk",
@@ -51,8 +40,6 @@ describe("the bookings Drizzle table config", () => {
         ["table_id", "status", "booking_date", "booking_time"],
       ],
     ]);
-    // `bookings_status_ck` holds `status` to its five values. A name is not a vocabulary, so the
-    // case below drives a real refusal through it.
     expect(config.checks.map((c) => c.name)).toEqual([
       "bookings_party_size_ck",
       "bookings_status_ck",
@@ -60,18 +47,9 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// WHAT THIS SUITE SHOWS: a row read back through the Drizzle export, the status default, the two
-// CHECKs and the three foreign keys. This engine has no roles, so nothing here is a claim about a
-// privilege.
-//
-// `driverErrorCode` answers `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the
-// refusal CLASS comes off `errcode` (`packages/db/src/sql-state.ts`: 275 for a CHECK, 787 for a
-// foreign key). The foreign-key MESSAGE is `FOREIGN KEY constraint failed`, the same words
-// whichever key was broken, so the three key cases below cannot tell each other apart by their
-// message; each is separated only by which parent row it made absent. The constraint NAMES are
-// asserted where the engine keeps them: on the drizzle object above.
+// The foreign-key message is the same whichever key was broken, so the three key cases below are
+// told apart only by which parent row each made absent.
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-// A dining_tables row — the target of bookings.table_id.
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
 // The identity person recorded in created_by — a plain uuid, no FK (the drawer_opens.person_id seam).
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
@@ -79,10 +57,7 @@ const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
-  // Each test seeds its own parents; the helper empties every table after each one. Written through
-  // the table definitions rather than raw SQL where the row's id is NOT being pinned —
-  // `invoiceLocales` reaches its column's JSON mapping, which `array['es']` used to do in SQL this
-  // engine has not.
+  // Each test seeds its own parents: the helper empties every table after each test.
   async function seedParents(): Promise<void> {
     await seedTenant(suite.db);
     await suite.db.insert(locations).values({
@@ -94,15 +69,12 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await suite.db.insert(diningTables).values({ id: TABLE, locationId: LOCATION, label: "A1" });
   }
 
-  // Insert a booking. Raw SQL, deliberately: the cases below write column sets a typed builder
-  // would refuse at compile time — a party size of 0, a `table_id` naming no row — and it is the
-  // database's refusal that is under test, not TypeScript's.
+  // Raw SQL, deliberately: it is the database's refusal that is under test.
   async function seedBooking(time: string, extra: Record<string, unknown> = {}): Promise<string> {
     return withTransaction(suite.db, async (tx: Transaction) => {
       const cols: Record<string, unknown> = {
         // `id` and `created_at` are `$defaultFn` generators in JavaScript, not column DEFAULTs, so a
-        // raw insert that does not name them is refused `NOT NULL constraint failed`. They are named
-        // here for that reason, where PostgreSQL supplied both server-side.
+        // raw insert must name them.
         id: crypto.randomUUID(),
         created_at: new Date().toISOString(),
         location_id: LOCATION,
@@ -130,8 +102,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   it("exposes every column through the Drizzle export, with the status default", async () => {
     await seedParents();
     const id = await seedBooking("20:00", { table_id: TABLE });
-    // Read back through the Drizzle `bookings` export (not raw SQL) — exercises the produced table
-    // export, its column mapping and the `status` default.
     const [row] = await withTransaction(suite.db, (tx: Transaction) =>
       tx.select().from(bookings).where(eq(bookings.id, id)),
     );
@@ -139,19 +109,11 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     expect(row!.locationId).toBe(LOCATION);
     expect(row!.tableId).toBe(TABLE);
     expect(row!.bookingDate).toBe("2026-09-01");
-    // DELETED, AND NO LONGER CHECKED HERE: that the COLUMN normalises `20:00` to `20:00:00`.
-    // `booking_time` was a PostgreSQL `time` and the engine did that on the way in; `timeOfDay` is
-    // plain `text` (`packages/db/src/schema/columns.ts`) and this insert is raw SQL, which reaches
-    // the column without Drizzle's mapping — so no column-level normalising is expressible here at
-    // all. The guarantee moved to the module's WRITE PATH (`storedTime` in `../bookings.ts`) and is
-    // asserted where it now lives: `../bookings.test.ts`'s ordering case and `../routes.test.ts`'s
-    // happy path each send `HH:MM` and read `HH:MM:SS` back.
     expect(row!.partySize).toBe(2);
     expect(row!.contactName).toBe("Ana");
     expect(row!.status).toBe("booked");
     expect(row!.createdBy).toBe(CREATED_BY);
-    // A booking is edited and moved through its lifecycle: move it to a terminal state and read the
-    // change back, so the mapping covers a written value as well as a default.
+    // A written status as well as the default.
     await withTransaction(suite.db, (tx: Transaction) =>
       tx.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, id)),
     );
@@ -170,8 +132,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     expect(engineErrorMessage(e)).toMatch(/bookings_party_size_ck/);
   });
 
-  // `status` is held to the five values by an ordinary CHECK that `enumCheck` builds from the
-  // `enumType` list (`./bookings.ts`); this drives a real refusal through it.
   it("rejects a status outside the five (CHECK bookings_status_ck)", async () => {
     await seedParents();
     const e = await captureError(() => seedBooking("21:00", { status: "pencilled_in" }));

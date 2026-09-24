@@ -16,14 +16,12 @@ function baseProps(overrides: Partial<BookingForm> = {}): Partial<BookingForm> {
   return { open: true, tables: TABLES, defaultDate: "2026-08-20", ...overrides };
 }
 
-/** Type into a wt-input by its data-test, via the composed `wt-change` it dispatches. */
 async function setInput(el: BookingForm, testId: string, value: string): Promise<void> {
   const input = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await el.updateComplete;
 }
 
-/** Pick a native <select>'s option by its data-test. */
 async function setSelect(el: BookingForm, testId: string, value: string): Promise<void> {
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
   select.value = value;
@@ -31,13 +29,11 @@ async function setSelect(el: BookingForm, testId: string, value: string): Promis
   await el.updateComplete;
 }
 
-/** Click a control by its data-test. */
 async function click(el: BookingForm, testId: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.click();
   await el.updateComplete;
 }
 
-/** Resolve with the next event of `type` dispatched from the form host. */
 function nextEvent<T>(el: BookingForm, type: string): Promise<CustomEvent<T>> {
   return new Promise((resolve) =>
     el.addEventListener(type, (e) => resolve(e as CustomEvent<T>), { once: true }),
@@ -88,8 +84,6 @@ describe("booking-form", () => {
     expect(options.map((o) => o.value)).toEqual(["", "t-1", "t-2"]);
   });
 
-  // The LOAD-BEARING anti-#52 assertion: the create body carries a plain local date + time, NEVER a
-  // `${day}T${time}Z` instant (the shift-dialog shortcut this must not copy — design §2b).
   it("submits plain local date+time, not a UTC instant", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
     const done = nextEvent<BookingInput>(el, "create-booking");

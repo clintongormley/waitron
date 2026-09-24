@@ -11,9 +11,6 @@ import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import "./errors.js";
 
-// The reserved-on-floor annotator is a correlated read, exercised here against a real migrated
-// SQLite venue database. The whole manifest, not [core, bookings]: the shared ordered set lands
-// bookings on top of its dependencies.
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
@@ -25,23 +22,11 @@ interface Venue {
   locationId: LocationId;
 }
 
-/** Stand up a fresh tenant + location (optionally with a pinned time zone) and its scoping ids. */
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
   await seedTenant(db);
-  // The annotator derives venue-local "today"/"now" from this column (design §2b/§4); default the schema
-  // default (Europe/Madrid) unless a test pins one.
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
-  // Two things this raw statement supplies that the PostgreSQL one did not. `id` comes from a
-  // JavaScript `$defaultFn` generator now (`newId`, `packages/db/src/schema/columns.ts:270`) and
-  // the DDL declares no SQL DEFAULT for it, so a raw insert that omits it is refused
-  // `NOT NULL constraint failed: locations.id` (the idiom is
-  // `packages/workforce/src/migrations.test.ts:43-50`). And `invoice_locales` is one TEXT column
-  // holding a JSON array (`labelList`, `packages/db/src/schema/columns.ts:255`) where it used to be
-  // `text[]`; the `array['es-ES']` literal it replaces was refused at PREPARE, which killed every
-  // case in this file in setup — running the suite before the change printed
-  // `Error: near "['es-ES']": syntax error` from `packages/store/src/node-sqlite-adapter.ts:64`.
-  // The JSON text is what the column's own CHECK counts with `json_array_length`
-  // (`packages/db/src/schema/tenants.ts:197`).
+  // Raw SQL names `id` because it has no SQL default: drizzle's `$defaultFn` fills it for builder
+  // inserts only. `invoice_locales` is a JSON array stored as text.
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (id, name, invoice_locales, operation_description, time_zone)
     values (${newId()}, 'Barra', '["es-ES"]', 'Venta en establecimiento', ${timeZone})
@@ -51,14 +36,9 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
   };
 }
 
-/** Insert an ACTIVE dining table for the venue and return its id. */
 async function makeTable(v: Venue, label: string): Promise<string> {
-  // `id` and `created_at` are `$defaultFn` generators here too — see `setupVenue`. `active` is 1
-  // rather than the JavaScript `true` this replaces: `flag` is an INTEGER column now and
-  // `node:sqlite` refuses to bind a boolean at all. Measured on node v26.7.0 —
-  // `db.prepare("insert into t (id, active) values (?, ?)").run("a", true)` against
-  // `create table t (id text primary key, active integer not null)` throws
-  // `TypeError: Provided value cannot be bound to SQLite parameter 2`.
+  // `id` and `created_at` supplied for the reason `setupVenue` gives. `active` is 1 because
+  // `node:sqlite` refuses to bind a JavaScript boolean.
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (id, created_at, location_id, label, active)
     values (${newId()}, ${nowIso()}, ${v.locationId}, ${label}, 1)
@@ -66,8 +46,7 @@ async function makeTable(v: Venue, label: string): Promise<string> {
   return row.rows[0]!.id;
 }
 
-/** Insert a booking row directly — this read test only needs rows in the table.
- *  `booking_time` is a plain venue-local `time` (§2b). */
+/** Insert a booking row directly — this read test only needs rows in the table. */
 async function insertBooking(
   v: Venue,
   fields: {
@@ -80,9 +59,7 @@ async function insertBooking(
 ): Promise<void> {
   const location = fields.locationId ?? v.locationId;
   await withTransaction(db, async (tx) => {
-    // `id` and `created_at` supplied for the same reason as in `setupVenue`: both are `$defaultFn`
-    // generators on `bookings` (`./schema/bookings.ts:50` and `:72`), which drizzle runs for a
-    // BUILDER insert and never for raw SQL.
+    // `id` and `created_at` supplied for the reason `setupVenue` gives.
     await tx.execute(sql`
       insert into bookings
         (id, created_at, location_id, table_id, booking_date, booking_time, party_size,
@@ -93,7 +70,6 @@ async function insertBooking(
   });
 }
 
-/** Run the annotator in one transaction, the shape production uses. */
 function annotate(
   v: Venue,
   now: Date,
@@ -220,9 +196,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
   });
 
   it("builds the Intl.DateTimeFormat once per timezone and reuses it across polls (memoized)", async () => {
-    // Constructing `Intl.DateTimeFormat` is expensive and the floor polls every table read; the
-    // formatter is memoized per zone so a zone builds once and later polls reuse the same instance.
-    // Novel zones (unused by other tests) so the module cache is cold when the spy is installed.
+    // Zones no other test uses, so the module cache is cold when the spy is installed.
     const tzA = "Asia/Tokyo";
     const tzB = "America/New_York";
     const va = await setupVenue({ timeZone: tzA });
@@ -230,11 +204,9 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const ta = await makeTable(va, "tz-a");
     const tb = await makeTable(vb, "tz-b");
 
-    // Return a GENUINE instance from the mock (a bare construct-through spy yields an object whose
-    // prototype chain is the spy's, so `formatToParts` throws "incompatible receiver"). The
-    // implementation must be a `function` expression, not an arrow. Measured on 4.1.11 by switching
-    // this one `mockImplementation` to an arrow: the assertion below then reads two constructions
-    // instead of one and the test fails. Why the arrow behaves differently here was not established.
+    // Return a genuine instance: a bare construct-through spy's object makes `formatToParts` throw
+    // "incompatible receiver". It must be a `function` expression: with an arrow the count below
+    // reads two constructions instead of one, for a reason not established.
     const OriginalDTF = Intl.DateTimeFormat;
     const spy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (
       ...args: ConstructorParameters<typeof Intl.DateTimeFormat>

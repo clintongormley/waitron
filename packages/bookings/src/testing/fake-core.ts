@@ -1,30 +1,10 @@
-// A test-scoped stand-in for boot's real `core.openTab` (apps/server/src/working-order.ts), which a
-// module cannot import. It reproduces openTab's OBSERVABLE behaviour so the moved seat suites keep
-// their assertions: the read of the dining table, the
-// `table.not_found`/`table.inactive`/`tab.already_open` guards, the `working_orders` insert whose id
-// IS the tab id, and the `dining_tables.tab_id` back-pointer.
-// It does NOT allocate a real per-node order number — the verbs ignore it — so a counter suffices.
+// A stand-in for boot's `core.openTab` (apps/server/src/working-order.ts), which a module cannot
+// import. It reproduces the table read, the `table.not_found`/`table.inactive`/`tab.already_open`
+// guards, the `working_orders` insert whose id is the tab id, and the `dining_tables.tab_id`
+// back-pointer. The order number is a counter; the verbs ignore it.
 //
-// The table read was a `SELECT … FOR UPDATE`, and the one thing that clause was FOR in a double is
-// named in this header's old text: it was what `bookings-cas.test.ts` parked its second backend on
-// to stage a genuine read-then-concurrent-cancel interleave. The clause is deleted, not translated
-// — SQLite has no row locks and drizzle's SQLite query builder has no `.for()`, so it is a compile
-// error here (`error TS2339: Property 'for' does not exist`, run
-// `pnpm --filter @waitron/bookings typecheck` on this branch). What the real `openTab` relies on
-// instead is that one write transaction runs on the venue file at a time; the pattern is stated
-// once, with its measurement and its control, on `assertExtraListForWrite`
-// (`packages/catalogue/src/extras.ts`).
-//
-// This double is now a WEAKER stand-in than it was, and the loss is `bookings-cas.test.ts`'s, not
-// this file's: that suite's whole staging mechanism went with the clause. Its banner records what
-// it no longer demonstrates. Nothing here can give it back — there is no interleave to stage on an
-// engine that admits one writer.
-//
-// `table.inactive`/`tab.already_open` are apps/server-owned codes this double borrows to mimic
-// openTab; declared here (a testing file, excluded from coverage) rather than in the package's prod
-// errors.ts. TypeScript merges an identical duplicate across compilations, and this augmentation is
-// unreachable from apps/server (which never imports src/testing), so there is no clash. `table.not_found`
-// is @waitron/db's (a real cross-package thrower) — no re-declaration needed.
+// `table.inactive`/`tab.already_open` are apps/server's codes, declared here so the package's
+// production errors.ts does not claim them.
 import "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -39,8 +19,7 @@ declare module "@waitron/shared" {
   }
 }
 
-/** The `TillConfig` fields the real `openTab` reads to stamp a `working_orders` row; boot binds the
- * full config into `core`, so this double captures exactly these three. */
+/** The `TillConfig` fields the real `openTab` stamps on a `working_orders` row. */
 export interface FakeCoreConfig {
   tillId: string;
   nodeId: string;
@@ -48,7 +27,6 @@ export interface FakeCoreConfig {
 
 let nextOrderNumber = 0;
 
-/** Build a {@link CoreServices} whose `openTab` behaves as the real one does (see the file header). */
 export function fakeCore(cfg: FakeCoreConfig): CoreServices {
   return {
     async openTab(tx: Transaction, req: { tableId: string }) {

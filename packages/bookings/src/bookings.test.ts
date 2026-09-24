@@ -23,22 +23,8 @@ import {
 } from "./bookings.js";
 import "./errors.js";
 
-/** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
- * tills, working_orders) still carry. */
 type VenueCfg = BookingConfig;
 
-// A real migrated SQLite venue database, which is the only target there is now. These verbs are
-// plain CRUD plus a conditional-UPDATE state machine over one table, and every read and write below
-// runs through `withTransaction`, the shape production uses, so the `party_size > 0` CHECK is
-// exercised rather than bypassed.
-//
-// WHAT IT DOES NOT SHOW, in two parts. There are no roles and no grants on this engine, so nothing
-// here is a claim about a privilege. And the CAS race is not proven anywhere: the two-backend case `bookings-cas.test.ts` used to stage was
-// DELETED rather than moved, because one write transaction runs on the venue file at a time — that
-// file's header carries the reasoning and the pointer to recover the deleted case.
-//
-// Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs into core, so it lands
-// on top of the shared ordered set.
 const suite = useVenueDb({
   migrations: BOOKINGS_TEST_MIGRATIONS,
   timeoutMs: 60_000,
@@ -56,23 +42,8 @@ interface Venue {
   createdBy: string;
 }
 
-/**
- * Inserts one location and returns its id.
- *
- * Two things this raw statement supplies that the PostgreSQL one did not.
- *
- * `id` comes from a JavaScript `$defaultFn` generator now (`newId`,
- * `packages/db/src/schema/columns.ts:270`) and the generated DDL declares no SQL DEFAULT for it, so
- * a raw insert that omits it is refused `NOT NULL constraint failed: locations.id` — the same
- * reason `packages/workforce/src/migrations.test.ts:43-50` supplies its own.
- *
- * `invoice_locales` is one TEXT column holding a JSON array (`labelList`,
- * `packages/db/src/schema/columns.ts:255`) where it used to be `text[]`. The `array['es-ES']`
- * literal this replaces was refused at PREPARE, so every case in the file died in setup: running
- * this suite before the change printed `Error: near "['es-ES']": syntax error` from
- * `packages/store/src/node-sqlite-adapter.ts:64`. The JSON text `'["es-ES"]'` is what the column's
- * own CHECK counts with `json_array_length` (`packages/db/src/schema/tenants.ts:197`).
- */
+/** Raw SQL names `id` because it has no SQL default: drizzle's `$defaultFn` fills it for builder
+ * inserts only. `invoice_locales` is a JSON array stored as text. */
 async function insertLocation(name: string): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (id, name, invoice_locales, operation_description)
@@ -81,17 +52,8 @@ async function insertLocation(name: string): Promise<string> {
   return loc.rows[0]!.id;
 }
 
-/**
- * Inserts one dining table and returns its id.
- *
- * `id` and `created_at` are `$defaultFn` generators here too (`newId` / `nowIso`), so both are
- * supplied — see {@link insertLocation}. `active` is passed as 1 or 0 rather than a JavaScript
- * boolean: `flag` is an INTEGER column now and `node:sqlite` refuses to bind a boolean at all.
- * Measured on node v26.7.0 — `db.prepare("insert into t (id, active) values (?, ?)").run("a", true)`
- * against a `create table t (id text primary key, active integer not null)` throws
- * `TypeError: Provided value cannot be bound to SQLite parameter 2`. What says 1 MEANS true is the
- * `flag` column's read mapping, which every assertion below reads the row back through.
- */
+/** `id` and `created_at` are supplied for the reason {@link insertLocation} gives. `active` is bound
+ * as 1 or 0 because `node:sqlite` refuses to bind a JavaScript boolean. */
 async function insertDiningTable(
   locationId: string,
   label: string,
@@ -104,7 +66,6 @@ async function insertDiningTable(
   return row.rows[0]!.id;
 }
 
-/** Stand up a fresh tenant + location and a `BookingConfig` scoped to them. Each test gets its own. */
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
   const locationId = await insertLocation("Barra");
@@ -114,23 +75,16 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** Insert an ACTIVE dining table for the venue and return its id (for the optional table-link path). */
 async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
   return insertDiningTable(cfg.locationId, "12", active);
 }
 
-/**
- * Insert an ACTIVE dining table in a SECOND location, and return its id. This
- * cross-LOCATION table exists in the same
- * database — the exact shape the location-scope guard must refuse (a booking in location A must
- * not be assigned a table in location B).
- */
+/** An active table in a SECOND location: the shape the location-scope guard must refuse. */
 async function makeTableInOtherLocation(): Promise<string> {
   const otherLocationId = await insertLocation("Terraza");
   return insertDiningTable(otherLocationId, "B-1");
 }
 
-/** Run `fn` in one transaction, the shape production routes use. */
 function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
@@ -138,7 +92,7 @@ function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<
   });
 }
 
-/** Insert a booking directly at an arbitrary status (to reach `seated`, which only Task 4's seat sets). */
+/** Insert a booking directly at an arbitrary status, bypassing the lifecycle verbs. */
 async function seedBooking(
   cfg: VenueCfg,
   createdBy: string,
@@ -184,10 +138,7 @@ describe("createBooking + listBookings", () => {
       }),
     );
 
-    // Two things at once: the booking_time ORDERING (13:30 before 20:00), and the seconds. The
-    // seconds used to be PostgreSQL's — a `time` column normalised `20:00` on the way in — and are
-    // now `storedTime`'s, in `./bookings.ts`, since `timeOfDay` is plain `text` here and normalises
-    // nothing. Deleting that call reddens this line and `./routes.test.ts`'s happy path.
+    // The seconds come from `storedTime` (`./bookings.ts`): the column is plain text.
     const listed = await scoped(cfg, (tx) => listBookings(tx, cfg, { date: "2026-08-20" }));
     expect(listed.map((b) => b.bookingTime)).toEqual(["13:30:00", "20:00:00"]);
 
@@ -476,8 +427,6 @@ describe("lifecycle verbs", () => {
 
   it("completeBooking: seated → completed; illegal from booked → booking.invalid_transition", async () => {
     const { cfg, createdBy } = await setupVenue();
-    // Task 4 owns seat (booked→seated via a tab); here the seated row is inserted directly as a fixture
-    // so this task can prove the seated→completed leg without depending on the unbuilt seat verb.
     const seatedId = await seedBooking(cfg, createdBy, "seated");
     await scoped(cfg, (tx) => completeBooking(tx, cfg, seatedId));
     expect((await scoped(cfg, (tx) => getBooking(tx, cfg, seatedId)))!.status).toBe("completed");
@@ -520,12 +469,8 @@ async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   return insertDiningTable(cfg.locationId, label);
 }
 
-// `seatBooking` opens a real TS-1 tab through `core.openTab` — the boundary the module reaches core's
-// tab verb across. In production boot binds the venue's full `TillConfig` into `core`; here `fakeCore`
-// stands in (testing/fake-core.ts), reproducing `openTab`'s observable behaviour (the table and tab
-// guards, the working_orders insert + back-pointer) so the assertions below are unchanged. Not the
-// row lock the real one used to take: the fake's own header records that SQLite has none.
-// The seat cfg is a plain `BookingConfig`; the till + node the tab row needs are captured by `fakeCore`.
+// `core.openTab` is `fakeCore` (`./testing/fake-core.ts`): the real verb lives in apps/server. It
+// still writes a real working_orders row.
 describe("seatBooking", () => {
   async function setupTillVenue(): Promise<{
     cfg: VenueCfg;
@@ -534,9 +479,7 @@ describe("seatBooking", () => {
   }> {
     await seedTenant(db);
     const locationId = await insertLocation("Barra");
-    // `tills.id` and `tills.created_at` are `$defaultFn` generators too — see `insertLocation`.
-    // `created_at` here is a `ts` column (read back as a Date), which stores the same ISO string
-    // `nowIso` produces (`packages/db/src/schema/columns.ts:263-272`).
+    // `id` and `created_at` supplied for the reason `insertLocation` gives.
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (id, created_at, location_id, name)
       values (${newId()}, ${nowIso()}, ${locationId}, 'Caja 1')
@@ -637,12 +580,8 @@ describe("seatBooking", () => {
     });
   });
 
-  // A booking that is no longer `booked` is refused by the check before `openTab`, with
-  // `booking.invalid_transition`; it stays `cancelled` and leaves NO open tab behind. The
-  // compare-and-swap in the final write is reached by the next case, not this one. (Removing the
-  // pre-`openTab` check leaves this green: the compare-and-swap then refuses it instead, and the
-  // rollback undoes the tab — measured 2026-09-23 on `node:sqlite`, Node v26.7.0, by deleting that
-  // check and running this case: 1 passed.)
+  // Refused by the check before `openTab`. Deleting that check leaves this green: the
+  // compare-and-swap then refuses it and the rollback removes the tab.
   it("seating a no-longer-booked booking throws invalid_transition and opens no tab", async () => {
     const { cfg, core, createdBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3");
@@ -662,18 +601,12 @@ describe("seatBooking", () => {
     });
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "cancelled", tabId: null });
-    // No `::int`: the cast only flattened PostgreSQL's bigint `count` to something the driver
-    // handed back as a number, and this engine returns a plain JavaScript number already —
-    // measured on node v26.7.0, `select count(*) as n` over a one-row table gives `{ n: 1 }` with
-    // `typeof n === "number"`.
     const tabs = await db.execute<{ n: number }>(sql`select count(*) as n from working_orders`);
     expect(tabs.rows[0]!.n).toBe(0);
   });
 
-  // The case above never reaches the compare-and-swap: the pre-`openTab` check refuses it first.
-  // This one cancels the booking INSIDE `openTab`, after that check has passed, so the final write
-  // finds it no longer `booked`. The seat must be refused, and the rollback must take the tab and
-  // the cancel with it.
+  // Cancels INSIDE `openTab`, after the pre-`openTab` check has passed, so only the final write's
+  // compare-and-swap can refuse it. The rollback must take the tab and the cancel with it.
   it("CAS guard: a booking that leaves `booked` during openTab is refused and the tab rolled back", async () => {
     const { cfg, core, createdBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "3b");
@@ -715,7 +648,6 @@ describe("seatBooking", () => {
   it("bubbles tab.already_open when the target table already has an open tab", async () => {
     const { cfg, core, createdBy } = await setupTillVenue();
     const tableId = await seedTable(cfg, "5");
-    // Open a tab directly on the table first, then a booking that would seat onto the same table.
     await scoped(cfg, (tx) => core.openTab(tx, { tableId }));
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {

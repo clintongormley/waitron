@@ -9,36 +9,10 @@ import "@waitron/ui/src/components/wt-input.js";
 import { t, bookingStatusName } from "./strings.js";
 import { codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { today } from "./date-utils.js";
-// Value import (not `import type`): pull in the widget module for its `@customElement` side effect, so
-// `<dashboard-booking-form>` is registered before this screen renders it (the purchases-screen pattern).
 import "./booking-form.js";
 import type { UpdateBookingDetail } from "./booking-form.js";
 import type { Booking, BookingInput, BookingApi, DashboardTable } from "./client.js";
 
-/**
- * The management dashboard's BOOKINGS SCREEN (Bookings-1 §6): a per-day list of staff-entered table
- * reservations with create/edit and the lifecycle actions, GATED per row on the booking's status
- * (`#renderControls`): a `booked` row offers seat / no-show / cancel / edit, a `seated` row offers only
- * Complete, and a terminal row (completed / no_show / cancelled) offers none — so the UI never presents a
- * move the server would reject with `booking.invalid_transition`. Modelled on
- * `purchases-screen` — it is the single owner of the loaded bookings, the selected day, the loaded
- * tables (for the form's picker + the seat prompt), the form's open/edit state and the error banner,
- * wiring the injected `DashboardApi` to the `<dashboard-booking-form>` dialog.
- *
- * ON CONNECT it loads the active tables (`listTables`, once) and the day's bookings
- * (`listBookings(today())`). A `<wt-input type="date">` seeded to `today()` drives the day: changing it
- * reloads. The list renders each booking as time · party · name · status, ORDERED BY TIME (defensively
- * re-sorted client-side though the server already orders), with the time shown as `HH:MM` (sliced from
- * the server's `HH:MM:SS` — the anti-#52 §2b presentation-edge normalisation) and the status localised
- * through the i18n layer (`bookingStatusName`, English source of truth), never a hardcoded literal.
- *
- * SEAT prompts for a table only when the booking has none assigned: an inline table picker arms in that
- * row and its confirm calls `seatBooking(id, { tableId })`; a booking that already has a table seats
- * straight away (`seatBooking(id)`, the server reusing its table). ERROR HANDLING mirrors
- * `purchases-screen`: every async path is `try/catch`ed, a rejection becomes an `errorKey` rendered in a
- * `role="alert"` banner (localised by `codeMessage`), and a single-flight `busy` gate drops a
- * double-fired mutation.
- */
 @customElement("dashboard-bookings-screen")
 export class BookingsScreen extends LitElement {
   static override styles = [
@@ -118,7 +92,6 @@ export class BookingsScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: BookingApi;
   readonly #queries = new QueryController(
     this,
@@ -132,14 +105,12 @@ export class BookingsScreen extends LitElement {
   @state() private tables: DashboardTable[] = [];
   @state() private date = today();
   @state() private formOpen = false;
-  /** The booking the form is open for (null for a create). */
+  /** Null for a create. */
   @state() private editingBooking: Booking | null = null;
-  /** The booking whose inline seat-table picker is armed (it has no table yet), or null. */
   @state() private seatingId: string | null = null;
-  /** The table chosen in the armed seat picker. */
   @state() private seatTableId = "";
   @state() private errorKey: string | null = null;
-  // Single-flight for the mutations, so a double-fired event files at most one call.
+  // Single-flight, so a double-fired event makes at most one call.
   @state() private busy = false;
 
   override connectedCallback(): void {
@@ -147,10 +118,7 @@ export class BookingsScreen extends LitElement {
     void this.#init();
   }
 
-  /** Load the day's bookings, then the tables (for the form picker + seat prompt). Bookings FIRST because
-   * `#load()` clears `errorKey` at its start: were the tables loaded first, a `listTables` failure would be
-   * wiped by the following bookings load and the screen would show no error while the picker/seat prompt
-   * are broken. Loading them after `#load()` lets a table-load failure survive to the banner. */
+  /** Bookings load first because `#load()` clears `errorKey`, which would hide a table-load failure. */
   async #init(): Promise<void> {
     await this.#load();
     try {
@@ -176,7 +144,6 @@ export class BookingsScreen extends LitElement {
     }
   }
 
-  /** (Re)load the selected day's bookings. A rejection becomes the `errorKey` banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -186,7 +153,7 @@ export class BookingsScreen extends LitElement {
     }
   }
 
-  /** Reload after a mutation. Throws to its caller's catch (so a reload failure surfaces the banner). */
+  /** Throws, so the mutation's own catch shows a reload failure. */
   async #reload(): Promise<void> {
     await this.#observeBookings();
   }
@@ -218,15 +185,12 @@ export class BookingsScreen extends LitElement {
     void this.#load();
   }
 
-  /** Open the create form. Clears any prior error and the edit target. */
   #openForm(): void {
     this.errorKey = null;
     this.editingBooking = null;
     this.formOpen = true;
   }
 
-  /** Edit `id` — resolve it against the list we hold (it is OURS; an unknown id is a stale event) and
-   * open the form pre-filled. */
   #onEdit(id: string): void {
     const found = this.bookings.find((b) => b.id === id);
     if (found === undefined) return;
@@ -235,7 +199,6 @@ export class BookingsScreen extends LitElement {
     this.formOpen = true;
   }
 
-  /** Create a booking from the form's detail, then close and reload. Single-flight. */
   async #onCreate(event: CustomEvent<BookingInput>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
@@ -252,7 +215,6 @@ export class BookingsScreen extends LitElement {
     }
   }
 
-  /** Update a booking from the form's edit detail, then close and reload. Single-flight. */
   async #onUpdate(event: CustomEvent<UpdateBookingDetail>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
@@ -269,11 +231,8 @@ export class BookingsScreen extends LitElement {
     }
   }
 
-  /** The Seat row action: a booking with a table seats straight away; one without arms the inline
-   * table picker (design §6 — "prompts for a table if none is assigned"). A booking with NO table AND
-   * no tables to offer cannot pick one, so seating it could only ever fail server-side with
-   * `booking.table_required`; rather than present a confirm guaranteed to fail after a round trip,
-   * surface that code locally (the screen's own error path) and arm no picker. */
+  /** With no table assigned and none to offer, seating could only fail with
+   * `booking.table_required`, so that is shown at once rather than after a round trip. */
   #onSeatClick(b: Booking): void {
     if (b.tableId !== null) {
       void this.#seat(b.id);
@@ -289,12 +248,10 @@ export class BookingsScreen extends LitElement {
     this.seatTableId = this.tables[0]?.id ?? "";
   }
 
-  /** Confirm the armed seat picker: seat with the chosen table. */
   #onSeatConfirm(id: string): void {
     void this.#seat(id, this.seatTableId === "" ? undefined : this.seatTableId);
   }
 
-  /** Seat a booking — open a tab (optionally naming the table) and reload. Single-flight. */
   async #seat(id: string, tableId?: string): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -312,7 +269,6 @@ export class BookingsScreen extends LitElement {
     }
   }
 
-  /** A lifecycle move with no body (no-show / cancel), then reload. Single-flight. */
   async #lifecycle(op: (id: string) => Promise<void>, id: string): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -327,17 +283,11 @@ export class BookingsScreen extends LitElement {
     }
   }
 
-  /** The day's bookings ordered by time (defensive re-sort though the server already orders; ties keep
-   * their relative order). */
   #ordered(): Booking[] {
     return [...this.bookings].sort((a, b) => a.bookingTime.localeCompare(b.bookingTime));
   }
 
-  /** The per-row action buttons, GATED on `b.status` (design §6): a `booked` row can be seated, edited,
-   * marked no-show or cancelled; a `seated` row's only lifecycle exit is Complete; a terminal row
-   * (`completed`/`no_show`/`cancelled`) has none. Rendering an action a booking cannot take just surfaces
-   * a `booking.invalid_transition` (or `booking.not_found` for edit) banner on click, so the UI offers
-   * only the moves the server will accept. */
+  /** Offers only the moves the server accepts from `b.status`. */
   #renderControls(b: Booking): TemplateResult | typeof nothing {
     if (b.status === "booked") {
       return html`<div class="controls">
@@ -382,7 +332,6 @@ export class BookingsScreen extends LitElement {
         >
       </div>`;
     }
-    // Terminal (completed / no_show / cancelled): no lifecycle moves remain, so no action buttons.
     return nothing;
   }
 

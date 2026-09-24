@@ -9,22 +9,12 @@ import type { LocationId } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
-/** A stored reservation row, exactly as `listBookings`/`getBooking` return it (camelCase columns). */
 export type Booking = InferSelectModel<typeof bookings>;
 
-/**
- * locationId stamps new reservations and scopes day lists and table assignments.
- */
 export interface BookingConfig {
   locationId: LocationId;
 }
 
-/**
- * Everything `createBooking` needs. `createdBy` (the identity person who took the booking) is REQUIRED
- * beyond design §3a's field list because `bookings.created_by` is NOT NULL — Task 5's route sources it
- * from `authorizeManager`'s `{ authorizedBy }`. The optional `tableId`, if given, must name an ACTIVE
- * `dining_tables` row; the location comes from `cfg`, not here.
- */
 export interface CreateBookingInput {
   bookingDate: string;
   bookingTime: string;
@@ -36,11 +26,7 @@ export interface CreateBookingInput {
   createdBy: string;
 }
 
-/**
- * The editable business fields of a `booked` reservation (design §3a "edit fields while booked"). A
- * field left `undefined` is untouched; `contactPhone`/`notes`/`tableId` accept `null` to clear them.
- * Status is NOT here — it only moves through the lifecycle verbs.
- */
+/** A field left `undefined` is untouched; `null` clears a nullable one. */
 export interface UpdateBookingPatch {
   bookingDate?: string;
   bookingTime?: string;
@@ -52,26 +38,14 @@ export interface UpdateBookingPatch {
 }
 
 /**
- * A venue-local wall-clock time in the one form the column stores: `HH:MM:SS`.
- *
- * `booking_time` was a PostgreSQL `time`, and the ENGINE normalised `20:00` to `20:00:00` on the
- * way in. `timeOfDay` is plain `text` on this engine (`packages/db/src/schema/columns.ts`), which
- * stores whatever bytes it is handed — so `20:00` and `20:00:00` would become two different stored
- * values for one wall-clock time, and `routes.ts`'s `TIME_HHMM` deliberately accepts both spellings.
- * The normalising therefore moves here, to the write path, so every row this module writes carries
- * one form and an equality read cannot miss a booking by its spelling.
- *
- * Only the seconds are supplied: `TIME_HHMM` has already refused anything that is not two-digit
- * `HH:MM` optionally followed by `:SS`, and the direct callers below are the module's own API.
+ * The column is plain text and `routes.ts`'s `TIME_HHMM` accepts `HH:MM` and `HH:MM:SS`, so every
+ * write stores `HH:MM:SS`: otherwise one time would have two stored spellings and an equality read
+ * could miss a booking.
  */
 function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
-/**
- * Require an active table in this location, otherwise table.not_found.
- * A reservation checks availability of the table definition without taking a row lock.
- */
 async function requireActiveTable(
   tx: Transaction,
   locationId: LocationId,
@@ -92,11 +66,6 @@ async function requireActiveTable(
   }
 }
 
-/**
- * Create a `booked` reservation (design §3a). Validates `partySize > 0` (`booking.invalid`, echoing the
- * offending size) BEFORE the DB CHECK would, and the optional `tableId` (`table.not_found`) before the
- * insert. `status` falls to its `'booked'` column default; `tab_id` stays NULL until Task 4's seat.
- */
 export async function createBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -125,9 +94,6 @@ export async function createBooking(
   return { id: row!.id };
 }
 
-/**
- * List every status for the location and wall-clock date, ordered by time then id.
- */
 export async function listBookings(
   tx: Transaction,
   cfg: BookingConfig,
@@ -140,10 +106,6 @@ export async function listBookings(
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 
-/**
- * Read one reservation by id, returning undefined when absent. The id
- * alone identifies the row. Lifecycle verbs translate absence into booking.not_found.
- */
 export async function getBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -154,10 +116,7 @@ export async function getBooking(
   return row;
 }
 
-/**
- * Edit business fields only while booked. Validate party size and any table assignment
- * before the conditional update; a missing or non-booked row is booking.not_found.
- */
+/** A row that is missing or no longer `booked` is refused as `booking.not_found`. */
 export async function updateBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -173,11 +132,8 @@ export async function updateBooking(
   const updated = await tx
     .update(bookings)
     .set({
-      // Only the keys the caller set are written; `undefined` is skipped by Drizzle, so an omitted
-      // field is untouched while an explicit `null` clears a nullable one.
+      // Drizzle skips an `undefined` value, leaving that column untouched.
       bookingDate: patch.bookingDate,
-      // `undefined` must stay `undefined` so Drizzle skips the column; only a supplied time is
-      // normalised.
       bookingTime: patch.bookingTime === undefined ? undefined : storedTime(patch.bookingTime),
       partySize: patch.partySize,
       contactName: patch.contactName,
@@ -192,10 +148,6 @@ export async function updateBooking(
   }
 }
 
-/**
- * Change status only from a legal predecessor. A failed conditional update is read
- * back to distinguish booking.not_found from booking.invalid_transition.
- */
 async function advanceStatus(
   tx: Transaction,
   cfg: BookingConfig,
@@ -219,7 +171,6 @@ async function advanceStatus(
   throw new AppError("booking.invalid_transition", { bookingId: id });
 }
 
-/** `booked | seated → cancelled` (design §3a). A no-show/completed/already-cancelled row is refused. */
 export async function cancelBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -228,12 +179,10 @@ export async function cancelBooking(
   await advanceStatus(tx, cfg, id, ["booked", "seated"], "cancelled");
 }
 
-/** `booked → no_show` (design §3a) — the party never arrived. Any other state is refused. */
 export async function markNoShow(tx: Transaction, cfg: BookingConfig, id: string): Promise<void> {
   await advanceStatus(tx, cfg, id, ["booked"], "no_show");
 }
 
-/** `seated → completed` (design §3a) — the seated party has left. Only a seated row may complete. */
 export async function completeBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -242,12 +191,7 @@ export async function completeBooking(
   await advanceStatus(tx, cfg, id, ["seated"], "completed");
 }
 
-/**
- * Seat a booked reservation by opening a tab and linking it in the same transaction.
- * Use the requested table or the reservation's table; require one before opening the tab.
- * `core.openTab` supplies its table checks and locking (the venue's full `TillConfig` is bound
- * into `core` by boot — the module never sees it). No fiscal record is filed here.
- */
+/** Opens a tab on the requested table, or the booking's own, and links it to the booking. */
 export async function seatBooking(
   tx: Transaction,
   cfg: BookingConfig,
@@ -266,8 +210,8 @@ export async function seatBooking(
   if (tableId === null || tableId === undefined) {
     throw new AppError("booking.table_required", {});
   }
-  // Check a newly selected table against the reservation's location. openTab handles
-  // existence and activity, preserving table.inactive for an inactive local table.
+  // Only the location is checked here: `openTab` refuses a missing or inactive table itself, keeping
+  // `table.inactive` distinct.
   if (req.tableId !== undefined) {
     const [inLocation] = await tx
       .select({ id: diningTables.id })
@@ -279,13 +223,8 @@ export async function seatBooking(
       throw new AppError("table.not_found", { tableId: req.tableId });
     }
   }
+  // A throw after `openTab` relies on the caller's transaction to roll back the tab it opened.
   const { tabId } = await core.openTab(tx, { tableId });
-  // Compare-and-swap on the `booked` predecessor (the `advanceStatus` shape), NOT a bare id write. The
-  // pre-`openTab` check above is the fast common-path error; this is the concurrency backstop for the
-  // window between that lock-free `getBooking` read and here — a concurrent cancel (would be silently
-  // overwritten back to `seated`) or a second seat onto another table (last-write-wins, orphaning a
-  // tab). An empty match means the row left `booked` under us; the throw rolls back the whole caller tx
-  // INCLUDING this `openTab`, so no orphan tab survives.
   const seated = await tx
     .update(bookings)
     .set({ tableId, tabId, status: "seated" })

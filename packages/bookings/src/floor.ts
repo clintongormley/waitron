@@ -1,17 +1,10 @@
-// The reserved-on-floor annotation (design §4): bookings' contribution to core's floor read-model.
-// Core's `listTablesWithState` calls this per floor poll and merges the result onto its rows, so the
-// timezone read + grace window + the imminent-booking scan live in the module that owns `bookings`,
-// not in the till core.
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { DEFAULT_TIME_ZONE, locations } from "@waitron/db";
 import type { FloorAnnotator } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
-/** The wall-clock formatter for a zone, built once per distinct zone and reused. Constructing an
- *  `Intl.DateTimeFormat` is expensive and both the zone validation and the wall-clock read happen on
- *  every floor poll, so a distinct zone builds its formatter once. Only a SUCCESSFUL construction is
- *  cached: an invalid zone throws `RangeError` before the `set`, so it is never memoised as valid and
- *  keeps falling back on every poll. */
+/** Built once per zone, since every floor poll needs one. An invalid zone throws before the `set`,
+ *  so it is never cached. */
 const wallClockFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
@@ -31,15 +24,11 @@ function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
   return fmt;
 }
 
-/** Resolve a stored IANA time zone, substituting the schema default for an unrecognised value.
- *  `locations.time_zone` is free-text with NO CHECK constraint (`.notNull().default("Europe/Madrid")`),
- *  so a typo or a legacy value can be anything. `Intl.DateTimeFormat({ timeZone })` throws `RangeError`
- *  on an unknown zone, which would turn the floor read into a 500 — corrupt venue config must not take
- *  out the operational floor. A zone `Intl` rejects falls back to the column's own default. */
+/** `locations.time_zone` is free text, and a zone `Intl` rejects would turn the floor read into a
+ *  500, so it falls back to the column's default. */
 function safeTimeZone(timeZone: string): string {
   try {
-    // Building the (memoised) formatter is what validates the zone; it throws RangeError for an unknown
-    // one. A valid zone is constructed here once and `venueWallClock` reuses the cached instance.
+    // Building the formatter is what validates the zone.
     wallClockFormatter(timeZone);
     return timeZone;
   } catch {
@@ -47,10 +36,7 @@ function safeTimeZone(timeZone: string): string {
   }
 }
 
-/** Venue-local wall-clock derived from an instant + IANA time zone (design §2b/§4). Computed in JS via
- *  `Intl` — never in SQL — so no offset is stored: a booking is a wall-clock intention, and "today"/"now"
- *  for the imminence check are the venue's local values at read time. Returns the local calendar date
- *  (`YYYY-MM-DD`) and time-of-day (`HH:MM`, 24-hour). */
+/** The venue-local date (`YYYY-MM-DD`) and time (`HH:MM`, 24-hour) at `now`. */
 function venueWallClock(now: Date, timeZone: string): { date: string; time: string } {
   const parts = wallClockFormatter(timeZone).formatToParts(now);
   const get = (type: Intl.DateTimeFormatPartTypes): string =>
@@ -61,16 +47,10 @@ function venueWallClock(now: Date, timeZone: string): { date: string; time: stri
   };
 }
 
-/** How long a `booked` reservation keeps surfacing on the floor AFTER its time (design §4). The floor
- *  cue is most useful exactly when a guest is due or running late, so the reserved badge lingers for this
- *  window past the booking time rather than vanishing on the minute. A per-venue configurable value is a
- *  later slice. Only ever SUBTRACTED from the venue's local "now", clamped to the start of today. */
+/** How long a `booked` reservation stays on the floor after its time, for a guest running late. */
 const RESERVATION_GRACE_MINUTES = 30;
 
-/** The earliest booking time still surfaced on the floor: the venue-local "now" (`HH:MM`) rolled back by
- *  `RESERVATION_GRACE_MINUTES`, clamped to `"00:00"` so it never crosses to the previous day (the read
- *  only scans today). Pure HH:MM minute-of-day arithmetic — the timezone math already happened in
- *  `venueWallClock`. */
+/** Clamped to `"00:00"`: the read scans only today. */
 function reservationGraceFloor(venueNow: string): string {
   const [h, m] = venueNow.split(":").map(Number);
   const floorMinutes = Math.max(0, h * 60 + m - RESERVATION_GRACE_MINUTES);
@@ -80,17 +60,11 @@ function reservationGraceFloor(venueNow: string): string {
 }
 
 /**
- * Bookings' floor annotator: the table's NEXT imminent `booked` reservation for the venue's TODAY at or
- * after the grace floor, as `HH:MM`, or `null`. The returned Map carries one entry PER input `tableId`.
+ * Each table's next `booked` reservation today at or after the grace floor, as `HH:MM`, or `null`.
  *
- * Scoped by location. A plain per-`tableIds` query (`inArray`), NOT a correlated
- * subquery, so the scalar-subquery trap does not apply. Ordered by `(tableId, bookingTime asc)`: the
- * first row seen per table is its earliest imminent booking. `booking_time` is stored `HH:MM:SS`
- * (`storedTime`, ./bookings.ts); cut to `HH:MM` at the presentation edge, as the floor renders
- * "Reserved HH:MM". The `gte` below compares TEXT on this engine rather than the `time` values
- * PostgreSQL compared, and it stays chronological only while BOTH operands keep a two-digit hour:
- * `reservationGraceFloor` pads its own, and `routes.ts`'s `TIME_HHMM` refuses a stored time without
- * one. Drop either and the comparison silently reorders the day.
+ * The `gte` below compares text, which is chronological only while both operands keep a two-digit
+ * hour: `reservationGraceFloor` pads its own, and `routes.ts`'s `TIME_HHMM` refuses a stored time
+ * without one.
  */
 export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
   async annotate(tx, cfg, now, tableIds) {
@@ -98,8 +72,6 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
     for (const id of tableIds) result.set(id, { reservedTime: null });
     if (tableIds.length === 0) return result;
 
-    // Venue-local "today"/"now" from the location's stored zone (design §2b) — never in SQL. Missing
-    // location or an invalid stored zone both fall back to the column's own default.
     const [loc] = await tx
       .select({ timeZone: locations.timeZone })
       .from(locations)
@@ -124,7 +96,7 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
 
     for (const r of rows) {
       if (r.tableId === null) continue;
-      // The map is pre-seeded null for every input table; the first (earliest) booked row per table wins.
+      // Rows are ordered by time within each table, so the first one seen wins.
       const existing = result.get(r.tableId);
       if (existing !== undefined && existing.reservedTime === null) {
         result.set(r.tableId, { reservedTime: r.bookingTime.slice(0, 5) });
