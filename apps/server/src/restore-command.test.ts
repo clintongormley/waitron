@@ -316,7 +316,7 @@ describe("waitron-restore restore", () => {
     expect(code).toBe(1);
     expect(out).toEqual([
       COLD_RESTORE_NOTICE,
-      "restore failed: provisioning.database_in_use — the Waitron server is still running; stop it first (docker compose stop app)",
+      "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",
     ]);
   });
 

@@ -180,8 +180,9 @@ FENCED ex-primary (membership rejoin R1) — it cannot sell, because the cloud i
 primary. There is no artifact input: the wipe deletes both database files and their write-ahead
 sidecars out of the venue directory (`src/db-wipe.ts` — a committed row can live in a `-wal` file
 alone, so the sidecars go too), re-migrates the directory from source, then adopts in setup mode.
-`migrations.lock` is deliberately left in place; it holds no data, and removing it would stop two
-migrators being serialised.
+The whole command runs holding the venue folder's lock (`venue.lock`). `migrations.lock` and
+`venue.lock` (with `venue.lock-journal` while it is held) are deliberately left in place: they hold no
+data, and removing either would let a second process take a fresh lock beside the one holding it.
 
 ```
 waitron-rejoin rejoin [--accept-loss]
@@ -189,11 +190,15 @@ waitron-rejoin rejoin [--accept-loss]
 
 It reads its own boot env — `WAITRON_STATE_DIR`, `WAITRON_VENUE_DIR` (both resolved exactly as
 `config.ts` resolves them, so an empty value takes the default rather than the working directory),
-`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Two ordered guards refuse LOUD rather than wipe a box that is not safe to wipe:
+`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Three ordered refusals come before the wipe:
 
+- **`provisioning.database_in_use`** — another process, usually the running server, is using the venue
+  folder. Refused before anything is read or wiped; stop the server first.
 - **`rejoin.not_fenced`** — the box is not a fenced ex-primary; only a fenced one is safe to wipe.
 - **`rejoin.no_carrier`** — the held membership chart names no serving-primary to re-adopt from, so there
   is nowhere to rejoin.
+
+The last two refuse LOUD rather than wipe a box that is not safe to wipe.
 
 **What this command no longer checks.** It used to confirm, before wiping, that every row this box
 originated had reached the carrier — a check built on PostgreSQL replication, which has been removed and

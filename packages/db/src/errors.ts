@@ -74,7 +74,7 @@ declare module "@waitron/shared" {
      */
     "deployment.not_stamped": Record<string, never>;
     /**
-     * Another process holds this venue folder: a server is running on it. Refused at once, before
+     * Another process holds this venue folder, usually the Waitron server. Refused at once, before
      * either database file is opened. The restart reset of in-flight AEAT submissions
      * (`apps/server/src/restart-reset.ts`) relies on one server process per folder. `database` is
      * the venue DIRECTORY, as in `provisioning.database_unmigrated`: operator configuration, never a

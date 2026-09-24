@@ -1152,8 +1152,11 @@ copy — as a habit whose receipt has expired, not as a rule with one.
 
 **The rule.** Opening a venue folder (`openVenueStore`, and so `openVenueDatabase`) holds
 `venue.lock` in it for as long as any open in the process is using the folder. A second PROCESS is
-refused at once with `provisioning.database_in_use`, before either database file is opened; opens
-inside one process share the hold, and the last close gives it up. A tool documented to run beside
+refused at once, before either database file is opened: `@waitron/store` (`lockVenueDirectory`,
+`openVenueStore`) throws `VenueInUseError`, and `@waitron/db` (`openVenueDatabase`,
+`lockVenueDatabase`) turns that into `AppError("provisioning.database_in_use", { database })`, the
+code every caller outside those two packages sees. Opens inside one process share the hold, and the
+last close gives it up. A tool documented to run beside
 the server opens with `exclusive: false` and takes no lock. A command that changes the folder's files
 (the cold restore, rejoin's wipe) takes `lockVenueDatabase` before its first change. The restart
 reset of in-flight AEAT submissions (`apps/server/src/restart-reset.ts`) relies on one server
@@ -1210,8 +1213,11 @@ journal tables — the same as one migrator run alone. With the migrator's `begi
 WAIT for the first instead of being refused by the first's open. It does not help when the first
 process keeps the folder open after migrating, as boot does with its long-lived store: in a race of
 two processes that each migrated and then opened the folder again, one of the pair was refused in 9
-of 20 races, which for two servers is the point. `packages/migrations/src/apply.concurrency.test.ts`
-does not cover this: its peer holds `migrations.lock` alone and never opens the store.
+of 20 races, which for two servers is the point. Guard: the "two real migrating
+processes" case in `packages/migrations/src/apply.concurrency.test.ts`, whose two child hosts run the
+real `applyMigrations`; with the migrator's `begin immediate` removed it fails with one host refused
+`provisioning.database_in_use`. The file's older peer case holds `migrations.lock` alone and never
+opens the store, so it could not see this.
 
 **What the guard does not see.** `packages/store/src/venue-lock.test.ts` proves the lock itself. It
 does not prove that every caller that should take the lock does: a new caller passing `exclusive:
@@ -1226,19 +1232,19 @@ by nothing.
 | `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it for the process's life. Between them the folder is briefly free |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | locks, one after the other, before the server opens |
-| `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while a server runs |
-| `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while a server runs |
+| `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
+| `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
-| `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while a server runs, printed as `provisioning.database_in_use {"database":…}` |
-| `apps/server/scripts/register-till.ts` | registers a node as a Veri\*Factu SIF, closing any previous chain | locks; refused while a server runs |
-| `apps/server/scripts/dev-setup.ts`, `dev-onboard` through `applyMigrations` | before a dev server starts | locks; refused while a dev server runs on the same folder |
+| `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while another process holds the folder, printed as `provisioning.database_in_use {"database":…}` |
+| `apps/server/scripts/register-till.ts` | registers a node as a Veri\*Factu SIF, closing any previous chain | locks; refused while another process holds the folder |
+| `apps/server/scripts/dev-setup.ts`, `dev-onboard` through `applyMigrations` | before a dev server starts | locks; refused while another process, such as a dev server, holds the same folder |
 | the dev server, `tsx watch` (`apps/server/scripts/dev-server.mjs`) | development | locks, as the server does. A restart waits for the old process's `exit` event before starting the new one: `killProcess` in `tsx@4.23.13`'s `dist/cli.mjs`, read, not run |
 | `apps/server/src/break-glass-command.ts` | beside the server (`deploy/README.md`) | `exclusive: false` |
 | `packages/credentials/src/bin.ts` | beside the server (`apps/server/README.md`: credentials are read fresh every pass, no restart) | `exclusive: false` |
 | `apps/server/scripts/record-one-sale.ts`, `settle-invoice-first.ts` | write sales for a running server to drain | `exclusive: false` |
-| `apps/server/scripts/cloud-backup-fixture.ts` `capture` | the Cloud repository's local-backups runner (`test-local-backups.mjs` in its scripts folder), while the fixture server on the same folder is still running (it stops the servers only after every capture) | `exclusive: false` |
-| `apps/server/scripts/cloud-backup-fixture.ts` `restore` | the same runner, on a fresh folder with no server | locks (default), through `writeValidated`, then its own open |
-| `apps/server/scripts/cloud-integration-fixture.ts` | Cloud's runners start it as the server; a restart waits for the old process to exit before relaunching on the same folder | locks (default); its first open runs before `startServer` in the same process |
+| `apps/server/scripts/cloud-backup-fixture.ts` `capture` | the Cloud repository's local-backups runner (`test-local-backups.mjs` in its scripts folder), while the fixture server on the same folder is still running (it stops the servers only after every capture: read, not run) | `exclusive: false` |
+| `apps/server/scripts/cloud-backup-fixture.ts` `restore` | the same runner, on a fresh folder with no server (read, not run) | locks (default), through `writeValidated`, then its own open |
+| `apps/server/scripts/cloud-integration-fixture.ts` | Cloud's runners start it as the server; a restart waits for the old process to exit before relaunching on the same folder (`stop` awaits the child's `exit` before `launch`: Cloud's runner scripts, read, not run) | locks (default); its first open runs before `startServer` in the same process |
 | `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
 | `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
 

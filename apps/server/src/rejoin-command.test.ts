@@ -313,7 +313,7 @@ describe("waitron-rejoin rejoin", () => {
     );
     expect(code).toBe(1);
     expect(out).toEqual([
-      "rejoin failed: provisioning.database_in_use — the Waitron server is still running; stop it first",
+      "rejoin failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first",
     ]);
     expect(openDb).not.toHaveBeenCalled();
     expect(rejoin).not.toHaveBeenCalled();

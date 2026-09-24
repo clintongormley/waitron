@@ -211,8 +211,8 @@ middle of a cold restore, so it is worth reading twice:
   The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …`, to
   `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
 
-  Restore and rejoin refuse, changing nothing, while the server is still running
-  (`provisioning.database_in_use`). Break-glass is the exception by design: it runs beside the
+  Restore and rejoin refuse, changing nothing, while another process, usually the running server,
+  is using the venue folder (`provisioning.database_in_use`). Break-glass is the exception by design: it runs beside the
   server and takes no lock.
 
 ## The box's environment — `deploy/.env`

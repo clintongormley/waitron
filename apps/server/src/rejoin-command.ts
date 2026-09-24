@@ -126,7 +126,7 @@ export async function runRejoin(deps: {
   } catch (err) {
     if (isAppError(err) && err.code === "provisioning.database_in_use") {
       deps.out(
-        "rejoin failed: provisioning.database_in_use — the Waitron server is still running; stop it first",
+        "rejoin failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first",
       );
       return 1;
     }

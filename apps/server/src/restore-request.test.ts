@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AppError } from "@waitron/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 
@@ -127,6 +128,39 @@ describe("staged restore requests", () => {
     await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("keeps the staged request when another process holds the venue folder", async () => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([9]),
+      recoveryKey: "recovery",
+      environment: "production",
+    });
+    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await expect(
+      runStagedRestore(
+        {
+          stateDir,
+          venueDir: "/var/lib/waitron/venue",
+          migrationsRoot: "/migrations",
+          log: vi.fn(),
+        },
+        async () => {
+          throw new AppError("provisioning.database_in_use", {
+            database: "/var/lib/waitron/venue",
+          });
+        },
+      ),
+    ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    // Refused before anything changed, so the request stays staged.
+    expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(Buffer.from([9]));
+    expect(await readFile(join(stateDir, "restore-request.key"), "utf8")).toBe("recovery");
+    expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toEqual({
+      version: 1,
+      environment: "production",
+    });
+    expect(await readFile(join(stateDir, "setup-operation.json"), "utf8")).toBe("restore receipt");
   });
 
   it("rejects with the read error, running no restore, when the request marker cannot be read", async () => {

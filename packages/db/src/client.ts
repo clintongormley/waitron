@@ -89,7 +89,7 @@ export async function openVenueDatabase(
 
 /**
  * Holds the venue folder without opening it, for a command that changes the folder's files and
- * must be refused before it changes anything while a server runs. Opens inside the same process
+ * must be refused before it changes anything while another process holds the folder. Opens inside the same process
  * share the hold.
  */
 export function lockVenueDatabase(directory: string): Promise<VenueLock> {

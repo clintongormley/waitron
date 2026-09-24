@@ -154,7 +154,7 @@ export async function runRestore(deps: {
     if (err instanceof AppError) {
       if (err.code === "provisioning.database_in_use") {
         deps.out(
-          "restore failed: provisioning.database_in_use — the Waitron server is still running; stop it first (docker compose stop app)",
+          "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",
         );
         return 1;
       }
