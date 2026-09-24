@@ -512,4 +512,44 @@ describe("WorkingOrderStore", () => {
       expect(lineGross(s.lines[0]!)).toBe("3.00"); // 1.50 × 2, exactly as before
     });
   });
+
+  // An unedited retrieved order is paid from its stored lines, which still bill these picks; an
+  // edited one is re-priced from what the till sends, which cannot name them.
+  describe("retrieved picks no list offers any more", () => {
+    const milk = { productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 };
+    function loaded(): WorkingOrderStore {
+      const s = new WorkingOrderStore();
+      s.loadFrom("held-1", [
+        { product: cafe, quantity: "2", notOfferedExtras: [milk] },
+        { product: cafe, quantity: "1" },
+      ]);
+      return s;
+    }
+
+    it("counts them in the total while the basket is unedited", () => {
+      // 2 × 1.50, plus 2 × 2 × 0.75, plus 1.50.
+      expect(loaded().total).toBe("7.50");
+    });
+
+    it.each([
+      ["addProduct", (s: WorkingOrderStore) => s.addProduct(cafe, "1")],
+      ["setLineQuantity", (s: WorkingOrderStore) => s.setLineQuantity(1, "2")],
+      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(1, {})],
+      ["setLineExtras", (s: WorkingOrderStore) => s.setLineExtras(1, { note: "sin azúcar" })],
+      ["removeLine", (s: WorkingOrderStore) => s.removeLine(1)],
+    ])("%s on another line drops them, and the total with them", (_, edit) => {
+      const s = loaded();
+      expect(s.total).toBe("7.50");
+      edit(s);
+      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
+      expect(lineGross(s.lines[0]!)).toBe("3.00");
+    });
+
+    it("a label change keeps them, because it is not an edit", () => {
+      const s = loaded();
+      s.label = "Mesa 9";
+      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+      expect(s.total).toBe("7.50");
+    });
+  });
 });

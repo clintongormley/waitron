@@ -13,6 +13,8 @@ import type { SaleLine, TillProduct } from "../api/client.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { unitName } from "../widgets/product-name.js";
 
+type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
+
 /**
  * Gross line total = the dish plus every extras pick, in `@waitron/shared` Decimals (never a float).
  * Callers format it for display with their own locale (`formatMoney(lineGross(line), locale)`).
@@ -20,16 +22,13 @@ import { unitName } from "../widgets/product-name.js";
  * The dish delegates to `@waitron/shared`'s `grossOf` — the ONE per-line gross primitive, which
  * MIRRORS `@waitron/catalogue`'s `priceBasket` per-line gross expression
  * (`toScale(multiplyDecimal(decimal(unitPrice), decimal(quantity)), MONEY_SCALE)`), the SAME
- * arithmetic the server prices and files with. Routing the basket preview (`till-basket`), the
- * printed ticket (`till-ticket-view`) and the tab drawer (`till-table-order-screen`) through that one
- * primitive is what keeps a rung-up row, the receipt line and the filed total from ever rounding
- * differently.
+ * arithmetic the server prices and files with.
  *
  * Each extras pick adds `price × (dishQuantity × pickQuantity)` — a pick is taken per dish AND by its
  * own count, so "extra bacon ×2" on three burgers is billed six times. The two integer counts are
  * combined through `multiplyDecimal(decimal(...))` — the SAME BigInt-decimal arithmetic `grossOf`
- * uses, never a float — before the single `grossOf` multiply and rounding. This is DISPLAY-ONLY: the
- * server re-resolves each pick's price from the offer and re-validates its count. It mirrors
+ * uses, never a float — before the single `grossOf` multiply and rounding. A not-offered pick counts
+ * like any other, because an unedited retrieved order is still billed for it. It mirrors
  * `@waitron/catalogue`'s `priceBasketWithOptions`, which prices the parent dish and every child as
  * SEPARATE rows through the same `grossOf` arithmetic (child qty = dishQty × pickQty) and sums the
  * rounded per-row grosses — so this ROUNDS EACH component then sums (never one rounding of the summed
@@ -40,7 +39,7 @@ import { unitName } from "../widgets/product-name.js";
  */
 export function lineGross(line: OrderLine): Decimal {
   const dish = dishGross(line);
-  const extras = line.extras ?? [];
+  const extras = [...(line.extras ?? []), ...(line.notOfferedExtras ?? [])];
   if (extras.length === 0) {
     return dish;
   }
@@ -54,7 +53,7 @@ export function lineGross(line: OrderLine): Decimal {
  * float — so it composes with `grossOf` the same way the server's `priceBasketWithOptions` computes a
  * child row's `dishQty × pickQty`.
  */
-function combinedPickQuantity(line: OrderLine, extra: SelectedExtra): Decimal {
+function combinedPickQuantity(line: OrderLine, extra: PricedPick): Decimal {
   return multiplyDecimal(decimal(line.quantity), decimal(String(extra.quantity)));
 }
 
@@ -74,7 +73,7 @@ export function dishGross(line: OrderLine): Decimal {
  * {@link combinedPickQuantity} (exact decimal multiply, no float) before the single `grossOf`. The
  * basket renders this indented beneath the dish; it mirrors the child sale line's filed gross.
  */
-export function extraGross(line: OrderLine, extra: SelectedExtra): Decimal {
+export function extraGross(line: OrderLine, extra: PricedPick): Decimal {
   return grossOf(extra.price, combinedPickQuantity(line, extra));
 }
 

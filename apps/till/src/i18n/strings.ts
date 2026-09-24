@@ -61,6 +61,7 @@ export const en = {
   // stepper (`modifier.*`) — this counts DISHES on a basket line, that counts a modifier per dish.
   "basket.increase": "Increase",
   "basket.decrease": "Decrease",
+  "basket.not_offered": "Not offered now",
   // Modifier picker per-option-quantity stepper (ordering modifiers): the accessible names of the −/+
   // step controls. Combined with the option's own name at render, e.g. "Increase Extra shot".
   "modifier.increase": "Increase",
@@ -427,6 +428,8 @@ export const en = {
   "drawer.error": "Could not open the cash drawer, try again",
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
+  "held.extra_not_offered":
+    "An extra on this order is no longer offered. It is still charged; changing the order removes it.",
   // A retrieved line's frozen answer no longer names anything the dish offers (the list or the
   // chosen label was renamed, or the label was withdrawn), so the till cannot re-send it and the
   // server refuses the whole edit until the question is answered again. Says what the operator has
@@ -516,6 +519,7 @@ export const es: Record<StringKey, string> = {
   "basket.empty": "La cesta está vacía",
   "basket.increase": "Aumentar",
   "basket.decrease": "Disminuir",
+  "basket.not_offered": "No se ofrece ahora",
   "modifier.increase": "Aumentar",
   "modifier.decrease": "Disminuir",
   "modifier.edit": "Modificadores",
@@ -738,6 +742,8 @@ export const es: Record<StringKey, string> = {
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
+  "held.extra_not_offered":
+    "Un extra de este pedido ya no se ofrece. Se sigue cobrando; si cambias el pedido, se quita.",
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",

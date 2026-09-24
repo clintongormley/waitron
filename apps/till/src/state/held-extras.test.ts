@@ -80,7 +80,7 @@ describe("deriveExtraSelections", () => {
       extras: [
         { listId: "list-sauces", productId: "p-ali", name: "Alioli", price: "0.40", quantity: 1 },
       ],
-      dropped: [],
+      notOffered: [],
     });
   });
 
@@ -106,16 +106,20 @@ describe("deriveExtraSelections", () => {
     expect(extras[0]!.listId).toBe("list-toppings");
   });
 
-  it("drops a pick no offered list carries any more, rather than sending a refusable one", () => {
-    const result = deriveExtraSelections([sauces], [held("p-bacon", "Bacon", "1.50", 1)]);
+  it("sets aside a pick no offered list carries any more, rather than sending a refusable one", () => {
+    const result = deriveExtraSelections([sauces], [held("p-bacon", "Bacon", "1.50", 2)]);
     expect(result.extras).toEqual([]);
-    expect(result.dropped).toEqual([held("p-bacon", "Bacon", "1.50", 1)]);
+    expect(result.notOffered).toEqual([
+      { productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 2 },
+    ]);
   });
 
-  it("drops a child line that names no product at all", () => {
+  it("sets aside a child line that names no product at all", () => {
     const result = deriveExtraSelections([toppings], [held(null, "Bacon", "1.50", 1)]);
     expect(result.extras).toEqual([]);
-    expect(result.dropped).toHaveLength(1);
+    expect(result.notOffered).toEqual([
+      { productId: null, name: "Bacon", price: "1.50", quantity: 1 },
+    ]);
   });
 
   it("matches a picked product whatever case its id arrives in", () => {
@@ -124,9 +128,9 @@ describe("deriveExtraSelections", () => {
   });
 
   it("answers nothing for a dish that offers nothing, and for a line that picked nothing", () => {
-    expect(deriveExtraSelections([], [held("p-bacon", "Bacon", "1.50", 1)]).dropped).toHaveLength(
-      1,
-    );
-    expect(deriveExtraSelections([toppings], undefined)).toEqual({ extras: [], dropped: [] });
+    expect(
+      deriveExtraSelections([], [held("p-bacon", "Bacon", "1.50", 1)]).notOffered,
+    ).toHaveLength(1);
+    expect(deriveExtraSelections([toppings], undefined)).toEqual({ extras: [], notOffered: [] });
   });
 });

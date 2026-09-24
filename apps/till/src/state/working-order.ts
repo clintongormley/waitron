@@ -32,7 +32,7 @@ import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
-import type { TillProduct } from "../api/client.js";
+import type { HeldExtra, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
@@ -60,6 +60,13 @@ export interface SelectedExtra {
   /** How many of this product the dish takes, per dish. The server multiplies by the dish count. */
   quantity: number;
 }
+
+/**
+ * A retrieved pick that no list the dish offers today carries, so no wire entry can name it
+ * (`deriveExtraSelections`, `./held-extras.ts`). An unedited order is paid from its stored lines,
+ * which still bill it, so the basket shows and counts it until the order is edited.
+ */
+export type NotOfferedExtra = Pick<HeldExtra, "productId" | "name" | "price" | "quantity">;
 
 /**
  * What a picker confirm puts on a line: the answers the wire sends, plus the frozen wording the
@@ -92,6 +99,8 @@ export interface OrderLine {
    * `priceBasketWithOptions`).
    */
   extras?: SelectedExtra[];
+  /** Never sent on the wire; ABSENT (never `[]`) when there are none. */
+  notOfferedExtras?: NotOfferedExtra[];
   /**
    * The line's answers to its dish's options lists, as the wire names them — one entry per answered
    * list. ABSENT when the dish answered none. A RETRIEVED line has these too, but not from the
@@ -211,8 +220,8 @@ export class WorkingOrderStore {
   /**
    * Whether the basket's LINES have changed since it last MATCHED the server's stored composition —
    * i.e. since the last {@link loadFrom} (retrieve), {@link markPersisted} (park) or {@link clear}. A
-   * fresh or just-loaded/just-parked basket is clean (`false`); {@link addProduct} and
-   * {@link removeLine} set it `true`. The PAY flow (`till-app`'s `#onConfirmPayment`) reads this so it
+   * fresh or just-loaded/just-parked basket is clean (`false`); every line edit sets it `true`
+   * through {@link #markDirty}. The PAY flow (`till-app`'s `#onConfirmPayment`) reads this so it
    * re-syncs a RETRIEVED order to the server ONLY when it was actually edited: an UNEDITED retrieved
    * order pays straight from its stored ADD-TIME lock with no pay-time re-price, so a catalogue change
    * between park and pay never moves the filed total. A LABEL change is deliberately NOT a line edit
@@ -315,6 +324,15 @@ export class WorkingOrderStore {
   }
 
   /**
+   * Every line edit comes through here. An edited retrieved order is re-priced from what the till
+   * sends, which cannot name a not-offered pick, so the picks leave the basket as the edit is made.
+   */
+  #markDirty(): void {
+    this.#dirty = true;
+    for (const line of this.#lines) delete line.notOfferedExtras;
+  }
+
+  /**
    * Append a line and notify. The server revalidates `quantity` against the selected unit.
    * `selection` is the whole of what a picker confirm decided — its answers AND the line's note —
    * so a confirm is ONE argument. Each of its keys attaches ONLY when it names something, so the
@@ -330,7 +348,7 @@ export class WorkingOrderStore {
     }
     this.#lines.push(line);
     this.#invalidatePricing();
-    this.#dirty = true;
+    this.#markDirty();
     this.emit("changed");
   }
 
@@ -348,7 +366,7 @@ export class WorkingOrderStore {
     delete line.optionSnapshots;
     applySelection(line, selection);
     this.#invalidatePricing();
-    this.#dirty = true;
+    this.#markDirty();
     this.emit("changed");
   }
 
@@ -369,7 +387,7 @@ export class WorkingOrderStore {
     });
     this.#lines[index]!.quantity = quantity;
     this.#invalidatePricing();
-    this.#dirty = true;
+    this.#markDirty();
     this.emit("changed");
   }
 
@@ -402,7 +420,7 @@ export class WorkingOrderStore {
       }
     }
     this.#invalidatePricing();
-    this.#dirty = true;
+    this.#markDirty();
     this.emit("changed");
   }
 
@@ -413,7 +431,7 @@ export class WorkingOrderStore {
     }
     this.#lines.splice(index, 1);
     this.#invalidatePricing();
-    this.#dirty = true;
+    this.#markDirty();
     this.emit("changed");
   }
 

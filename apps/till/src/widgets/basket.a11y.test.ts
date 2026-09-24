@@ -44,6 +44,19 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  it("a retrieved basket marking a pick as not offered has no violations", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("held-1", [
+      {
+        product: cafe,
+        quantity: "2",
+        notOfferedExtras: [{ productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 }],
+      },
+    ]);
+    const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    await expectNoA11yViolations(host);
+  });
+
   it("a line with the note editor OPEN has no violations (order-line customisation)", async () => {
     const steak: TillProduct = {
       ...cafe,

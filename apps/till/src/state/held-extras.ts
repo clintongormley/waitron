@@ -1,5 +1,5 @@
 import type { HeldExtra, OfferedModifier } from "../api/client.js";
-import type { SelectedExtra } from "./working-order.js";
+import type { NotOfferedExtra, SelectedExtra } from "./working-order.js";
 
 /**
  * Put a retrieved order's extras back into a re-sendable selection.
@@ -15,16 +15,13 @@ import type { SelectedExtra } from "./working-order.js";
  * TWO lists offering the same product is left deliberately at "the first one wins". The server cannot
  * tell which list a stored child came off either, so it refuses the pairing whichever of them the
  * till names, and the refusal re-prices the WHOLE order rather than the one line
- * (`apps/server/src/working-order.ts:3213`, `:3266`) — documented behaviour, not a decision this
- * function can improve
- * (`docs/developers/modifiers.md`, "A picked product that more than one of the dish's ACTIVE lists
+ * (`updateHeldOrder`, `apps/server/src/working-order.ts`) — documented behaviour, not a decision
+ * this function can improve (`docs/developers/modifiers.md`, "A picked product that more than one of the dish's ACTIVE lists
  * offers refuses the pairing").
  *
- * NO list offering it is a different case, and there the answer is `dropped`: no valid wire entry
- * exists at all, since `validateExtraSelections` (`packages/catalogue/src/extra-contract.ts`) refuses
- * a pick naming a product the list does not carry. Sending it would fail the whole edit, so the pick
- * leaves the basket and the caller tells the operator — the same posture the app already takes for a
- * retrieved LINE whose product is gone.
+ * NO list offering it is a different case, and there the pick goes to `notOffered`: no valid wire
+ * entry exists at all, since `validateExtraSelections` (`packages/catalogue/src/extra-contract.ts`)
+ * refuses a pick naming a product the list does not carry.
  *
  * The frozen `name` and `price` are carried through rather than re-read from today's offer: they are
  * what the order was written at, and what the basket must keep showing until the server re-prices.
@@ -32,7 +29,7 @@ import type { SelectedExtra } from "./working-order.js";
 export function deriveExtraSelections(
   offered: readonly OfferedModifier[],
   heldExtras: readonly HeldExtra[] | undefined,
-): { extras: SelectedExtra[]; dropped: HeldExtra[] } {
+): { extras: SelectedExtra[]; notOffered: NotOfferedExtra[] } {
   // Each picked product's list, resolved once for the whole line rather than re-scanned per pick.
   // Written only when the product is unseen, which is what makes "the first offering list wins"
   // above a stated rule rather than a property of whichever scan runs.
@@ -44,14 +41,19 @@ export function deriveExtraSelections(
     }
   }
   const extras: SelectedExtra[] = [];
-  const dropped: HeldExtra[] = [];
+  const notOffered: NotOfferedExtra[] = [];
   for (const held of heldExtras ?? []) {
     // Lower-cased for the reason the two contracts lower-case an answer: the stored rows come back
     // from their `uuid` columns lower-cased, so an id in any other case has to be folded first.
     const productId = held.productId?.toLowerCase() ?? null;
     const list = productId === null ? undefined : listOfProduct.get(productId);
     if (list === undefined || productId === null) {
-      dropped.push(held);
+      notOffered.push({
+        productId: held.productId,
+        name: held.name,
+        price: held.price,
+        quantity: held.quantity,
+      });
       continue;
     }
     extras.push({
@@ -62,5 +64,5 @@ export function deriveExtraSelections(
       quantity: held.quantity,
     });
   }
-  return { extras, dropped };
+  return { extras, notOffered };
 }
