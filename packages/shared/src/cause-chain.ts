@@ -6,7 +6,7 @@ export const MAX_CAUSE_DEPTH = 5;
 /**
  * The first `code` in an error's `cause` chain that `accept` recognises, or `null`.
  *
- * Nothing outside its own suite calls it: `node:sqlite` puts the fixed string `"ERR_SQLITE_ERROR"`
+ * No production code calls it: `node:sqlite` puts the fixed string `"ERR_SQLITE_ERROR"`
  * on `code` whatever the failure and the discriminating number on `errcode`, which
  * `sqliteFailureOf` (`./engine-failure.ts`) reads instead.
  *

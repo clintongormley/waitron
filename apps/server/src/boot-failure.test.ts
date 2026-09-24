@@ -140,9 +140,6 @@ describe("classifyBootFailure", () => {
     expect(classifyBootFailure(undefined)).toBe("unknown");
   });
 
-  // The walk-depth bound and the self-reference exit are `firstCodeInCauseChain`'s, pinned once in
-  // `packages/shared/src/cause-chain.test.ts`. Both classification branches reach them through it.
-
   // What the disjointness case that stood here guarded is now structural: there is one list of
   // result codes and the schema branch is a message pattern, so the two cannot overlap by a code
   // appearing in both. The pair that CAN still disagree is this file's list and

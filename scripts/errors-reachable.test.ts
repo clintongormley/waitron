@@ -54,7 +54,7 @@ import { describe, expect, it } from "vitest";
  * comment mention on a reachable non-`errors.ts` file — `reporting/record-daily-close.ts`, where
  * `import` and `"./errors.js"` are split by a `//` marker — does not match: removing that file's real
  * import drops `./errors.js` from the matched set. And the self-referential `import "./errors.js"`
- * mentions that several `errors.ts` carry in their own doc-comments (core, fiscal, shared) cannot fake
+ * mentions that some `errors.ts` files carry in their own doc-comments cannot fake
  * an edge either, because `errors.ts` is the target the walk reads only AFTER reaching it.
  * Comment-stripping was rejected: a block stripper mishandles a slash-star opener inside a string
  * literal (a glob such as a double-star path pattern), which would drop a REAL import and misfire the

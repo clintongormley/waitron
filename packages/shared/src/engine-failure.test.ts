@@ -24,7 +24,7 @@ describe("sqliteFailureOf", () => {
     });
   });
 
-  // Taking the message from the outer wrapper would hand a caller drizzle's "Failed query" text
+  // Taking the message from the outer wrapper would hand a caller the wrapper's text
   // beside the driver's number, and the callers that read the text — `classifyBootFailure` is
   // one — would then classify on the wrong sentence.
   it("takes the message from the layer that carried the code, not from the wrapper", () => {

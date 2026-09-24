@@ -16,7 +16,7 @@ export const MAX_INPUT_PIXELS = 100_000_000;
 /** The largest upload, in bytes: the route's fallback and the server's `MAX_UPLOAD_BYTES`. */
 export const DEFAULT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-/** Exported and `declare`d only for the brand below, the pattern `packages/shared/src/ids.ts` explains. */
+/** `declare`d only for the brand below, the pattern `packages/shared/src/ids.ts` explains. */
 export declare const preparedImageBrand: unique symbol;
 
 /**

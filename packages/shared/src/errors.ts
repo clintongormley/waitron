@@ -8,7 +8,7 @@
  *
  *   declare module "@waitron/shared" {
  *     interface ErrorParams {
- *       "stripe.collect_timeout": { paymentRef: string; readerId: string };
+ *       "series.not_found": { seriesId: string };
  *     }
  *   }
  *
@@ -16,10 +16,14 @@
  * because every code doubles as a translation key. Codes are never renamed once shipped; a wrong
  * one is deprecated and a new one added beside it.
  *
+ * `shared.*` is not an exception: it names the value types this package defines (ids, exact
+ * decimals and the stored counts they convert to), common to every package that parses one.
+ *
  * An augmenting `errors.ts` must be transitively reachable from its package's own `index.ts`.
  * Declaration merging only covers the files a program loads, so an unimported `errors.ts` can pass
  * the package's own typecheck and still be invisible to a consumer that loads only the barrel.
- * Guard: `scripts/errors-reachable.test.ts`.
+ * Guard: `scripts/errors-reachable.test.ts`, weaker than its name: it reads import TEXT, so such
+ * an import written in a comment or string of another file the barrel reaches fakes an edge.
  */
 export interface ErrorParams {
   /** A content language is not a recognised language identifier. */

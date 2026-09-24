@@ -36,7 +36,7 @@ export function isUuid(value: string): boolean {
  *
  * The fold is confined to UUID-shaped values on purpose: case matters in other ids this system
  * carries (a Stripe object id, an AEAT invoice number), and those get a refusal, not a fold.
- * `kind` names the id in the refusal.
+ * `kind` names the id in the refusal, and a refused value is echoed as the caller spelled it.
  */
 export function normaliseUuid(value: string, kind: string): string {
   if (!UUID_PATTERN.test(value)) {
