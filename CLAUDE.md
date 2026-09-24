@@ -104,14 +104,13 @@ formatting; machinery-only changes stop after root guards; deletion-only pushes 
 Unknown ranges keep the full local gate, including workspace typechecking. See
 [ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
-**Coverage thresholds: every package is to hold the high bar of `98/98/98/95`** (owner decision
-2026-09-23), retiring the 2026-09-05 split that reserved it for the fiscal core and the data layer.
-The `90/90/85/85` floor is where a package sits only until tests bring it to the bar; it is promoted
-in the same change, and the floor goes once none is left on it. **One place holds the high-bar
-list authoritatively**: `HIGH_BAR_PACKAGES` in `scripts/coverage-thresholds.test.ts`, which is
-also the guard that pins every config against it.
-Prose that re-enumerates the list drifts, and three places were wrong at once: two still named
-four packages after the flip made it five, and a third asserted six. More:
+**Coverage thresholds: every package, and the root project, holds `98/98/98/95`** (owner decision
+2026-09-23, retiring the 2026-09-05 split that reserved it for the fiscal core and the data layer;
+the lower floor is gone). A new package holds it from its first commit. The bar is negotiable only
+where the rest of a gap could be closed solely by tests that assert nothing useful — never by an
+excluded file or an ignore comment. Guard: `scripts/coverage-thresholds.test.ts`, weaker than its
+name — it reads each config's `thresholds` literal as TEXT, and skips the members
+`PACKAGES_WITHOUT_TESTS` names (`scripts/changed-scope.mjs`). More:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`,
@@ -747,9 +746,10 @@ browser test** — most of these rules exist because a test passed while proving
   package's report. Cost: `packages/sync` read 81.57% statements on files belonging to
   `packages/sync-enrolment`. See [testing-guide.md](docs/developers/testing-guide.md).
 - **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
-  Measured both ways for #437 (2026-09-19) on `packages/sync-enrolment/src/migration-tables.ts` under
-  `@vitest/coverage-v8@4.1.11`: with the pair the package reads 2 of 2 branches and passes; with the
-  same two guards marked `next` it reads 4 of 6 and fails the package's branch bar. Whether `next`
+  Measured both ways for #437 (2026-09-19) on `packages/sync-enrolment/src/migration-tables.ts` as
+  it stood then, with two guard pairs (#511 later added a third), under
+  `@vitest/coverage-v8@4.1.11`: with the pair the package read 2 of 2 branches and passed; with the
+  same two guards marked `next` it read 4 of 6 and failed the package's branch bar. Whether `next`
   can ever work is not established — the provider's `ast-v8-to-istanbul@1.0.6` does parse `next`
   hints — but it did not here, and it fails silently, with no message naming the marker. Nothing
   guards it.

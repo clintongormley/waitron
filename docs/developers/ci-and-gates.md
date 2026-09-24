@@ -96,32 +96,34 @@ Bypassing the hook with `--no-verify` is for emergencies; the failure still has 
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
 unfiltered `main` run, not a wrong hook.
 
-## Coverage thresholds: every package to the high bar
+## Coverage thresholds: one bar for every package
 
-**The goal is every package at `statements 98 / lines 98 / functions 98 / branches 95`** (owner
-decision 2026-09-23). That retires the split of 2026-09-05, which reserved the high bar for the
-fiscal core and the data-layer foundations on the grounds of consequence, and put every other
-package, browser packages included, at the `90/90/85/85` floor. The owner chose the whole bar over
-two narrower answers to the questions task T3 left open — raising only the floor's functions
-minimum, to 95 or to 90. The split
-stays in the code only while it is being retired: a package sits at the floor until tests bring it
-to the bar, and is promoted in the same change; the floor itself goes once no package is left on it.
+**Every package, and the root project, holds `statements 98 / lines 98 / functions 98 / branches
+95`** (owner decision 2026-09-23). That retired the split of 2026-09-05, which reserved the high bar
+for the fiscal core and the data-layer foundations on the grounds of consequence, and put every other
+package, browser packages included, at a `90/90/85/85` floor. The owner chose the whole bar over two
+narrower answers to the questions task T3 left open — raising only the floor's functions minimum, to
+95 or to 90. Lane C's campaign brought each package under it up in a pull request of its own (listed in
+`docs/backlog.md` → *Every package to the high coverage bar*), and the floor was removed from the guard and from the prose on
+2026-09-24 once none was left on it. A new package holds the bar from its first commit.
 
-One place holds the list of promoted packages authoritatively: `HIGH_BAR_PACKAGES` in
-`scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it. A
-hardcoded list is safe there only because the root project is the one gate never narrowed away.
-Promoting a package is an edit to that list and to the package's `vitest.config.ts`, in one commit.
-Historical plans and specs under `docs/superpowers/` still say there are six high-bar packages; they
-record what was true when they were written and are left alone.
+The bar is negotiable only where the rest of a package's gap could be closed solely by tests that
+assert nothing useful (owner, 2026-09-23: "we never want to add junk tests just to meet a coverage
+bar. the tests added must actually test something useful."). It is never met by excluding a file,
+an ignore comment, or moving code under `src/testing/`.
 
-Three live places repeated the list and all three were wrong at once. This file and `CLAUDE.md`
-went on naming four packages after the flip (#489) added `@waitron/store` and made it five;
-`packages/bookings/vitest.config.ts` asserted "the owner's six high-bar packages". The enumeration is
-gone from all three rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES`
-away, and a guard over prose would fail on rewording that changed nothing. Worth noting how the third
-was found: the sweep used the package names and the two bar strings as its keys, and the key that
-finds bookings is the word "six". The dated measurement subsections below name packages as the
-record of one run, not as the list.
+`scripts/coverage-thresholds.test.ts` pins it from the root project, because a package's own config
+decides whether its tests run at all. It is weaker than its name in two ways: it reads each config's
+`thresholds` literal as TEXT rather than importing the config, and it checks the members `pnpm ls`
+lists minus `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`), so a member named there is
+outside it. It fails if `pnpm ls` stops listing three named packages, which is what stops an empty
+member list from passing having read nothing.
+
+While the split stood, a hardcoded list of promoted packages lived in that guard, and prose that
+re-enumerated it drifted: three places were wrong at once, two naming four packages after the flip
+(#489) made it five and a third asserting six. There is no list to enumerate now. Historical plans
+and specs under `docs/superpowers/` still describe the split; they record what was true when they
+were written and are left alone.
 
 The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
 `packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
@@ -139,8 +141,7 @@ that run coverage, 1,066 test files and 13,811 tests. Every member's
 and were promoted together**, joining the five already there: `composition`, `country`,
 `country-es`, `country-gb`, `country-packs`, `credentials`, `dashboard-modules`, `diagnostics`,
 `fiscal`, `layouts`, `membership`, `migrations`, `module`, `purchasing`, `recipes`, `reporting`,
-`scheduler`, `shared`, `ui`, `workforce` and `workforce-es` — as measured that day;
-`HIGH_BAR_PACKAGES` is the list from here on. The nearest to its new bar is
+`scheduler`, `shared`, `ui`, `workforce` and `workforce-es` — as measured that day. The nearest to its new bar is
 `scheduler`, 1.22 points over on statements; eighteen of the 21 are at 100% on all four.
 
 The 20 still under it, with the metric furthest below its bar — `printing` (functions, 1.23 short),

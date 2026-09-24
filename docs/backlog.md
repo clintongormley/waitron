@@ -2280,14 +2280,15 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **Every package to the high coverage bar, `98/98/98/95` — OPEN (owner decision 2026-09-23).**
-  The first promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every package that
-  already cleared all four metrics on 2026-09-23 was promoted in one change, 21 of them. Each package still under the bar gets tests in a pull
-  request of its own and is promoted in the same change; when none is left at the floor, the floor
-  is retired from the guard and from every place the tree states it, prose included. Which packages
-  are still under it: `HIGH_BAR_PACKAGES` against the workspace; the starting figures
-  are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first promotion — measured
-  2026-09-23*.
+- **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
+  floor retired 2026-09-24 by **this pull request**).** Every package and the root project now hold
+  the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package
+  included from its first commit; the `90/90/85/85` floor is gone from the guard and from the prose
+  that stated it. The first promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every
+  package that already cleared all four metrics on 2026-09-23 was promoted in one change, 21 of
+  them; the starting figures are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first
+  promotion — measured 2026-09-23*, and the per-package figures at the end are in this pull
+  request's description.
   Promoted since, one pull request each: `printing` (**PR #500**, 2026-09-23 —
   tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
   100/100/100/100); `bookings` (**PR #503**, 2026-09-23 — tests for the seat refusal when a booking leaves
@@ -2396,9 +2397,7 @@ image constraints under *Detail → Box image*.
   reaches them — except the image picker's first draw with neither a request nor a live-data source,
   which does reach one but draws nothing whichever way it goes, so no test could tell the two apart;
   each is listed with its reason in the pull request; 99.82/100/100/98.46). With `media`, no
-  package is left at the floor: every `vitest.config.ts` in the workspace now states
-  `98/98/98/95`, so what is left of this entry is retiring the floor from
-  `scripts/coverage-thresholds.test.ts` and from the prose that states it (lane C's item C2).
+  package was left at the floor.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -4724,8 +4723,7 @@ it: a worker limit is still a per-package call, and the reason that is left is t
 package runs under `pnpm -r` oversubscription — `packages/payments` carries the worked reasoning.
 `packages/db` keeps `maxWorkers: 4`, which CI's `test-heavy` shards inherit because they pass no
 worker count of their own; at one and at four workers its coverage counts were the same (2026-09-23).
-Either way a new package that copies one of those configs must either hold `98/98/98/95` and be
-added to `HIGH_BAR_PACKAGES`, or set the `90/90/85/85` floor until it is promoted (CLAUDE.md §2) —
+Either way a new package that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) —
 anything else and `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
