@@ -6,7 +6,6 @@ import { putOwnBytes } from "./conditional.js";
 import { parseGenerationName, venuePrefix } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 
-/** How many deletes a prune keeps in flight at once. */
 export const PRUNE_CONCURRENCY = 8;
 
 function parsed(field: string, generation: string): { term: number; nodeId: string } {
@@ -15,7 +14,7 @@ function parsed(field: string, generation: string): { term: number; nodeId: stri
   return name;
 }
 
-/** The folder Litestream streams a generation into, relative to the configured prefix. */
+/** The folder a generation's objects live in, relative to the configured prefix. */
 export function generationPrefix(venueId: string, generation: string): string {
   parsed("generation", generation);
   return `${venuePrefix(venueId)}${generation}/`;

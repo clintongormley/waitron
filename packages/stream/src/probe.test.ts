@@ -148,8 +148,8 @@ describe("probeBucket", () => {
     });
   });
 
-  // Reconciliation N13: a bucket that gave NO answer is not a refusal. The supervisor reads a throw as
-  // "unreachable, the lag already shows it" and an answer as "unusable" (Task 7), so the two must differ.
+  // The plan's Reconciliation N13: a bucket that gave no answer is thrown, not reported, so a caller
+  // can tell an unreachable bucket from a refusing one.
   it.each(["put", "list"] as const)(
     "throws the store's own error when the bucket gives no answer at the %s step, leaving nothing behind",
     async (operation) => {

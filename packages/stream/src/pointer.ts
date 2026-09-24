@@ -6,7 +6,6 @@ import { putOwnBytes } from "./conditional.js";
 import { isKeySegment, parseGenerationName, venuePrefix } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 
-/** What `current.json` says: which generation is live, who opened it, at which term, and when. */
 export interface StreamPointer {
   venueId: string;
   term: number;
@@ -78,7 +77,7 @@ export function signPointer(body: StreamPointer, privateKeyPkcs8: string): Signe
 
 /**
  * True only for a well-formed pointer signed by `publicKeySpki`. A restore checks against the key the
- * recovery kit carries, never one read from the bucket (spec §5.1 step 3).
+ * recovery kit carries, never one read from the bucket (spec §5.1 step 2).
  */
 export function verifyPointer(pointer: SignedPointer, publicKeySpki: string): boolean {
   return (

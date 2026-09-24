@@ -89,7 +89,7 @@ export function createS3ObjectStore(
     region: config.region,
     ...(config.endpoint === undefined ? {} : { endpoint: config.endpoint }),
     // Litestream's own rule, from its configuration reference: path style "is automatically enabled
-    // if endpoint is set". MinIO refuses the other style (bench/sqlite-failover/src/store.ts).
+    // if endpoint is set".
     forcePathStyle: config.endpoint !== undefined,
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     ...(options.requestHandler === undefined ? {} : { requestHandler: options.requestHandler }),

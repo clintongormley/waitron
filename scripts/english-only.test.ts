@@ -122,6 +122,7 @@ describe("configuration", () => {
       "print-agent",
       "diagnostics",
       "sync-enrolment",
+      "stream",
       "composition",
       "fiscal-none",
       "provisioning",

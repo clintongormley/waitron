@@ -20,9 +20,10 @@ export type ProbeFailure =
 export type ProbeResult = { ok: true } | { ok: false; reason: ProbeFailure; detail: string };
 
 /**
- * The settings screen's Test (spec §4.3): write, read, list and delete one object, and prove both
- * conditional writes the stream depends on — "only if absent" refused for an object that exists, and
- * "only if unchanged" refused for a stale version. The listing step matters beyond itself: without
+ * The settings screen's Test: write, read, list and delete one object, and prove both conditional
+ * writes the stream depends on — "only if absent" refused for an object that exists, and "only if
+ * unchanged" refused for a stale version. Spec §4.3 names the write, read, delete and both refusals;
+ * the listing step is the plan's addition (Task 5), and it matters beyond itself: without
  * the list permission, S3 answers a read of a missing key with 403 rather than 404 (the client's own
  * GetObject documentation), so the pointer's "nothing written yet" would read as a failure.
  *
@@ -150,7 +151,8 @@ function failed(error: unknown, step: Step): ProbeResult {
     const detail = `${name} (${status})`;
     // A 403 on the listing is the missing list permission; it is reported as the listing's failure.
     if (status === 403 && step !== "list") return refuse("access_denied", detail);
-    // Every write the check makes is conditional, so a write the store does not implement is one.
+    // Every write the check makes carries a condition, so a 501 on a write is reported as conditional
+    // writes unsupported — as is a 501 about some other part of the write.
     if (status === 501 && step === "write") return refuse("conditional_write_unsupported", detail);
     return refuse(otherwise, detail);
   }
