@@ -1,3 +1,4 @@
+import { AsyncResource } from "node:async_hooks";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -817,7 +818,7 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(1);
   });
 
-  // A commit that changed no row writes nothing to the side file, so there is nothing for a copy
+  // A transaction that only reads writes nothing to the side file, so there is nothing for a copy
   // of the file to catch up with.
   it("does not tell listeners about a write transaction that changed no row", async () => {
     const { store, heard } = await setUp();
@@ -872,6 +873,44 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(1);
     expect(later).toHaveLength(1);
     expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 1 });
+  });
+
+  // Between the queue's `commit` and the end of its body, a write from outside the body is sent to
+  // the read connection, refused, and re-run on the writer, where no transaction is open any more.
+  it("tells listeners about a write that the read connection refused and the writer committed by itself", async () => {
+    const { store, heard } = await setUp();
+    const fromOutside = AsyncResource.bind(() => {
+      store.venue.run(sql`insert into sales (total) values (2)`);
+    });
+    let queued = false;
+    store.venue.onCommit(() => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(fromOutside);
+    });
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`insert into sales (total) values (1)`);
+    });
+    expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 2 });
+    expect(heard).toHaveLength(2);
+  });
+
+  it("keeps an async listener's rejection from escaping as an unhandled rejection", async () => {
+    const { store, heard } = await setUp();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      store.venue.onCommit(async () => {
+        throw new Error("async listener broke");
+      });
+      store.venue.run(sql`insert into sales (total) values (1)`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+    expect(heard).toHaveLength(1);
   });
 
   it("stops telling a listener that unsubscribed", async () => {

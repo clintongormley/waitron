@@ -51,10 +51,10 @@ export function createWriteQueue(connections: Connections) {
       return enqueue(() =>
         connections.asTransactionBody(async () => {
           connections.write.exec("begin immediate");
-          const before = totalChanges(connections.write);
           let result: T;
           let changed: boolean;
           try {
+            const before = totalChanges(connections.write);
             result = await body();
             changed = totalChanges(connections.write) !== before;
             connections.write.exec("commit");

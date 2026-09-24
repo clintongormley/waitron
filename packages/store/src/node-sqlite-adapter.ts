@@ -58,24 +58,30 @@ export function adaptNodeSqlite(connections: Connections) {
         if (asArrays) stmt.setReturnArrays(true);
         return stmt;
       };
-      const issue = <T>(use: (stmt: StatementSync) => T): T => {
-        const target = connections.forStatement();
-        // A statement on the writer with no transaction open commits by itself. Whether it changed
-        // a row is read off SQLite's own counter, so a read, or DDL, which the counter does not
-        // count, tells nobody.
-        const alone = target === connections.write && !target.isTransaction;
-        const before = alone ? totalChanges(target) : 0;
-        let result: T;
-        try {
-          result = use(compile(target));
-        } catch (error) {
-          if (target !== connections.read || !isReadOnlyRefusal(error)) throw error;
-          return use(compile(connections.write));
-        }
-        if (alone && !target.isTransaction && totalChanges(target) !== before) {
+      /**
+       * A statement on the writer with no transaction open commits by itself. Whether it changed a
+       * row is read off SQLite's own counter, so a read, or DDL, which the counter does not count,
+       * tells nobody.
+       */
+      const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
+        const write = connections.write;
+        const alone = !write.isTransaction && connections.listening();
+        const before = alone ? totalChanges(write) : 0;
+        const result = use(compile(write));
+        if (alone && !write.isTransaction && totalChanges(write) !== before) {
           connections.committed();
         }
         return result;
+      };
+      const issue = <T>(use: (stmt: StatementSync) => T): T => {
+        const target = connections.forStatement();
+        if (target === connections.write) return onWriter(use);
+        try {
+          return use(compile(target));
+        } catch (error) {
+          if (!isReadOnlyRefusal(error)) throw error;
+          return onWriter(use);
+        }
       };
       const api = {
         run: (...params: unknown[]) => issue((stmt) => stmt.run(...bind(params))),
@@ -130,7 +136,7 @@ export function adaptNodeSqlite(connections: Connections) {
             const write = connections.write;
             const savepoint = write.isTransaction ? nextSavepoint() : undefined;
             write.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
-            const before = savepoint === undefined ? totalChanges(write) : 0;
+            let before = 0;
             /**
              * Finish the transaction — and undo it if FINISHING is what fails. A refused `commit`
              * (a foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT) leaves
@@ -138,8 +144,9 @@ export function adaptNodeSqlite(connections: Connections) {
              * The compensating rollback's own failure is discarded so the original error is thrown.
              */
             const keep = () => {
-              const changed = savepoint === undefined && totalChanges(write) !== before;
+              let changed: boolean;
               try {
+                changed = savepoint === undefined && totalChanges(write) !== before;
                 write.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
               } catch (error) {
                 try {
@@ -160,6 +167,7 @@ export function adaptNodeSqlite(connections: Connections) {
             };
             let result: R;
             try {
+              if (savepoint === undefined) before = totalChanges(write);
               result = fn(...args);
             } catch (error) {
               undo();

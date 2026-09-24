@@ -72,8 +72,8 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
   checkpointTruncate: () => Promise<{ reclaimed: boolean }>;
   /**
    * Registers `listener` for every commit on this file that changed at least one row; returns the
-   * unsubscribe. Commits made by issuing `begin` and `commit` as statements, as Drizzle's migrator
-   * does, are not reported.
+   * unsubscribe. A commit that only changed the schema is not reported, and neither is one made by
+   * issuing `begin` and `commit` as statements, as Drizzle's migrator does.
    */
   onCommit: (listener: CommitListener) => () => void;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */

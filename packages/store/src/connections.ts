@@ -78,12 +78,17 @@ export interface Connections {
   asTransactionBody: <T>(body: () => T) => T;
   /** Which connection a statement issued at this moment belongs on. */
   forStatement: () => DatabaseSync;
-  /** Registers `listener` for every commit on the write connection; returns the unsubscribe. */
+  /**
+   * Registers `listener` for the commits the store reports; returns the unsubscribe. See
+   * `StoreHandle.onCommit` in `./index.ts` for which commits those are.
+   */
   onCommit: (listener: CommitListener) => () => void;
+  /** Whether any listener is registered. */
+  listening: () => boolean;
   /**
    * Tells every listener a commit has just happened. The commit is already durable, so a listener
-   * that throws is skipped rather than allowed to reach the caller, who would otherwise be told a
-   * committed write failed.
+   * that throws, or returns a promise that rejects, is skipped rather than allowed to reach the
+   * caller, who would otherwise be told a committed write failed.
    */
   committed: () => void;
 }
@@ -151,12 +156,14 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
         listeners.delete(listener);
       };
     },
+    listening: () => listeners.size > 0,
     committed: () => {
       if (listeners.size === 0) return;
       const at = new Date();
       for (const listener of listeners) {
         try {
-          listener(at);
+          const returned: unknown = listener(at);
+          if (isPending(returned)) returned.then(undefined, () => {});
         } catch {
           // See `committed` on the interface.
         }
