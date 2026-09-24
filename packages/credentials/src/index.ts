@@ -22,6 +22,6 @@ export type { CredentialMeta, CredentialRef, RotationResult } from "./store.js";
 
 export { CREDENTIALS_CLASSIFICATION } from "./classification.js";
 
-// Keeps errors.ts's augmentation reachable from the public barrel, per the reachability rule in
-// packages/shared/src/errors.ts.
+// Keeps errors.ts's augmentation reachable from the public barrel; guard:
+// scripts/errors-reachable.test.ts.
 import "./errors.js";

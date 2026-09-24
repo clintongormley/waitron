@@ -21,15 +21,14 @@ export const PURPOSES = {
    * declares field names and never their vocabularies. The AEAT endpoint depends on it
    * (`SOAP_ENDPOINTS_SELLO` versus `SOAP_ENDPOINTS`).
    *
-   * Editing a provisioned purpose's fields blocks `rotate` until it is re-provisioned (see
-   * `rotateCredentials`).
+   * Editing a provisioned purpose's fields blocks `rotate` whenever its row needs re-sealing, until
+   * it is re-provisioned (see `rotateCredentials`).
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
   /** DEPRECATED: nothing seals or reads it any more. Kept because a purpose name is never deleted
    * or renamed. */
   "sync.mirror_token": ["token"],
-  /** The node's own Ed25519 membership identity PRIVATE key, sealed at setup by
-   * `apps/server/src/node-identity.ts`. */
+  /** The node's own Ed25519 membership identity PRIVATE key. */
   "membership.node_key": ["privateKey"],
 } as const satisfies Record<string, readonly string[]>;
 

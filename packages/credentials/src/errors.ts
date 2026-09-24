@@ -2,8 +2,8 @@
 import "@waitron/shared";
 
 /**
- * NO PARAM HERE EVER CARRIES A SECRET: `bin.ts` prints params to stderr, and a credential's
- * plaintext must not reach a log line, a stack trace, or a test name.
+ * NO PARAM HERE EVER CARRIES A DECRYPTED VALUE: `bin.ts` prints params to stderr, and a
+ * credential's plaintext must not reach a log line, a stack trace, or a test name.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

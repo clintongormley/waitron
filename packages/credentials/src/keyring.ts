@@ -20,9 +20,11 @@ export interface KeyRing {
 
 /**
  * Validates the ring's SHAPE — present, 32 bytes once base64-decoded, a version for every key, no
- * version collision — and not that a key's bytes are the ones that sealed any stored row. A
- * different valid key under an unchanged `_VERSION` is accepted here; `rotate` then re-seals
- * nothing and every read throws `credentials.decrypt_failed`.
+ * version collision — and not that a key's bytes are the ones that sealed any stored row. Replacing
+ * `WAITRON_CREDENTIALS_KEY` with a different valid key under an unchanged
+ * `WAITRON_CREDENTIALS_KEY_VERSION` is accepted here; rows stamped with that version are then
+ * skipped by `rotate` as already current, and every read of them throws
+ * `credentials.decrypt_failed`.
  */
 export function loadKeyRing(env: Record<string, string | undefined>): KeyRing {
   const current: KeyEntry = {

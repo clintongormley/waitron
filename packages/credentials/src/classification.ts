@@ -5,7 +5,9 @@ const LOCAL =
 
 /**
  * A stored secret belongs to the node that sealed it: the blob is sealed under that node's own key
- * ring, so another node's read fails with `credentials.decrypt_failed`, never a wrong value.
+ * ring, so another node's read fails (`credentials.decrypt_failed`, or
+ * `credentials.key_version_unknown` when its ring holds no key of the row's version), never a wrong
+ * value.
  */
 export const CREDENTIALS_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("tenant_credentials", "local", LOCAL),

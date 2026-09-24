@@ -79,6 +79,9 @@ export async function tryGetCredential(
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new AppError("credentials.malformed_payload", { purpose: ref.purpose });
   }
+  // Not re-checked against `PURPOSES` (owner decision 2026-09-15, docs/backlog.md B7): a row sealed
+  // under an older list comes back without a newer field, so the reader must check the fields it
+  // uses.
   return parsed as Record<string, string>;
 }
 
@@ -175,10 +178,11 @@ export interface RotationResult {
  * run leaves a readable vault because reads select their key by the row's own version; re-running
  * finishes it.
  *
- * Re-sealing goes through `putCredential`, so every payload is re-checked against the CURRENT
- * `PURPOSES`: a field added to or renamed on a provisioned purpose makes `rotate` throw
- * `credentials.invalid_payload` at that row and stop, until the purpose is re-provisioned. Kept
- * deliberately: re-sealing a payload the package would now refuse is its own trap.
+ * Re-sealing goes through `putCredential`, so every payload it re-seals is re-checked against the
+ * CURRENT `PURPOSES` (rows already on the current version are skipped unchecked): a field added to
+ * or renamed on a provisioned purpose makes `rotate` throw `credentials.invalid_payload` at that
+ * row and stop, until the purpose is re-provisioned. Kept deliberately: re-sealing a payload the
+ * package would now refuse is its own trap.
  */
 export async function rotateCredentials(db: Database, ring: KeyRing): Promise<RotationResult> {
   const result: RotationResult = { rotated: 0, alreadyCurrent: 0 };
