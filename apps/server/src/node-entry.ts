@@ -45,7 +45,7 @@ import {
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
-import { BOOT_INCOMPLETE, recoveryApp } from "./recovery-surface.js";
+import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
@@ -585,9 +585,7 @@ async function recordRefusal(
     lockedAt: holder?.lockedAt ?? null,
     heartbeatAt: holder?.heartbeatAt ?? null,
   });
-  await persistState(deps, (current) =>
-    withFailureCode(current, "provisioning.database_holder_stalled", at, holder?.kind),
-  );
+  await persistState(deps, (current) => withFailureCode(current, HOLDER_STALLED, at, holder?.kind));
 }
 
 /* v8 ignore start -- the real process wiring: `process.env`, a timer and `process.exit`. Every

@@ -70,8 +70,6 @@ export interface OperatorText {
   es?: { title: string; action: string };
 }
 
-const HOLDER_STALLED = "provisioning.database_holder_stalled";
-
 /** Each kind's name on the page. `script` and an unknown holder share the last row. */
 const HOLDER_NAMES: Readonly<Record<VenueHolderKind, { en: string; es: string }>> = {
   server: { en: "the Waitron server", es: "el servidor de Waitron" },
@@ -127,11 +125,19 @@ function holderStalledText(kind: VenueHolderKind | undefined): OperatorText {
 export const BOOT_INCOMPLETE = "server.boot_incomplete";
 
 /**
+ * The recovery-state marker for a start refused the venue folder by a holder whose holder file was
+ * stale, missing or unreadable: `node-entry.ts` records it so the refusal counts. Like
+ * `BOOT_INCOMPLETE`, nothing throws it and it is in no registry, and it lives here for the same
+ * reason.
+ */
+export const HOLDER_STALLED = "provisioning.database_holder_stalled";
+
+/**
  * A code the recovery state can carry. `ErrorCode` is the shared registry's own union, so a typo in
  * a thrown code below is a typecheck failure rather than a page that silently renders the generic
- * line; `BOOT_INCOMPLETE` is added by hand because it is in no registry.
+ * line; `BOOT_INCOMPLETE` and `HOLDER_STALLED` are added by hand because they are in no registry.
  */
-type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE;
+type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
 /**
  * What the page says, keyed by error code.
