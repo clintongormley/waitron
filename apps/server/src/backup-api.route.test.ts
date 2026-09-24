@@ -98,7 +98,13 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
   return sup;
 }
 
-function buildApp(sup: BackupSupervisor, stateDir: string, base: NodeJS.ProcessEnv = {}): Hono {
+function buildApp(
+  sup: BackupSupervisor,
+  stateDir: string,
+  base: NodeJS.ProcessEnv = {},
+  readRecoveryKey = async (): Promise<string | undefined> =>
+    loadRecoveryKey(await loadBoxEnv(base, stateDir)),
+): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -117,7 +123,7 @@ function buildApp(sup: BackupSupervisor, stateDir: string, base: NodeJS.ProcessE
       supervisor: sup,
       db: suite.db,
       stateDir,
-      readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, stateDir)),
+      readRecoveryKey,
     },
     () => {},
   );
@@ -547,6 +553,7 @@ describe("backup admin routes", () => {
       body: JSON.stringify({ recoveryKey: KEY_2 }),
     });
     expect(rot.status).toBe(200);
+    expect(await rot.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
     expect(typeof file.WAITRON_BACKUP_KEY_ROTATED_AT).toBe("string");
@@ -626,6 +633,99 @@ describe("backup admin routes", () => {
     expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual({
       WAITRON_BACKUP_RECOVERY_KEY: KEY_1,
     });
+  }, 60_000);
+
+  it("reports a too-short key in backup.env as set, and still answers status, with no destination", async () => {
+    const stateDir = await makeStateDir();
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+    const st = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(st.status).toBe(200);
+    expect(await st.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
+    // A key no archive or lock would accept is not handed out to be recorded.
+    const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
+    expect(rk.status).toBe(400);
+    expect(await rk.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
+  }, 60_000);
+
+  it("reports a too-short key from the process env as set, and still answers status, with no destination", async () => {
+    const stateDir = await makeStateDir();
+    const sc: Scenario = {
+      stateDir,
+      base: { WAITRON_BACKUP_RECOVERY_KEY: "short" },
+      role: "primary",
+    };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+    const st = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(st.status).toBe(200);
+    expect(await st.json()).toMatchObject({
+      enabled: false,
+      managedByEnvironment: true,
+      recoveryKeySet: true,
+    });
+  }, 60_000);
+
+  it("refuses a different key when the held key comes from the supervisor's own loaded settings (archives already on)", async () => {
+    const stateDir = await makeStateDir();
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    // The box-env reader answers nothing, so only the supervisor's loaded settings hold the key.
+    const app = buildApp(sup, stateDir, sc.base, async () => undefined);
+    const cookie = await login(app);
+    const apply = (recoveryKey: string) =>
+      app.request("/api/backup/apply", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          destinationDir: makeDestDir(),
+          recoveryKey,
+          schedule: DAILY_AT_0330,
+          retention: RETENTION,
+        }),
+      });
+    expect((await apply(KEY_1)).status).toBe(200);
+    expect(sup.current().recoveryKey).toBe(KEY_1);
+    const before = await readFile(join(stateDir, "backup.env"), "utf8");
+
+    const res = await apply(KEY_2);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_exists" } });
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
+  }, 60_000);
+
+  it("accepts the SAME key again while archives are on", async () => {
+    const stateDir = await makeStateDir();
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const apply = (retention: { count: number; days: number }) =>
+      app.request("/api/backup/apply", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          destinationDir: makeDestDir(),
+          recoveryKey: KEY_1,
+          schedule: DAILY_AT_0330,
+          retention,
+        }),
+      });
+    expect((await apply(RETENTION)).status).toBe(200);
+
+    const res = await apply({ count: 3, days: 10 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ enabled: true, recoveryKeySet: true });
+    const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+    expect(file.WAITRON_BACKUP_RETAIN).toBe("3");
+    expect(sup.current().recoveryKey).toBe(KEY_1);
   }, 60_000);
 
   it("rejects malformed apply/rotate bodies and unconfigured rotate without touching disk", async () => {

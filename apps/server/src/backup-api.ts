@@ -3,7 +3,7 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { loadBackupConfig, loadRecoveryKey, type BackupSchedule } from "./backup-config.js";
 import {
@@ -230,10 +230,21 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const heldKey = async (): Promise<string | undefined> =>
     deps.supervisor.current().recoveryKey ?? (await deps.readRecoveryKey());
 
-  // `recoveryKeySet` lets the archive wizard reuse a held key rather than mint a second one.
+  // Presence, not validity: a key under the length floor still counts as held, so the status answers
+  // rather than refusing. The write routes keep refusing such a key.
+  const keyPresent = async (): Promise<boolean> => {
+    try {
+      return (await heldKey()) !== undefined;
+    } catch (err) {
+      if (isAppError(err) && err.code === "backup.recovery_key_too_short") return true;
+      throw err;
+    }
+  };
+
+  // `recoveryKeySet` reports whether the box holds a recovery key at all.
   const statusBody = async () => ({
     ...projectStatus(await deps.supervisor.status()),
-    recoveryKeySet: (await heldKey()) !== undefined,
+    recoveryKeySet: await keyPresent(),
   });
 
   // Read the live backup status (async freshness read folded in). Never carries the recovery key.
@@ -302,8 +313,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   // Rotate the recovery key: change only the key and stamp `keyRotatedAt`. With an archive destination
   // it reuses the running destination/schedule/retention, and the supervisor's immediate first tick
-  // after reload takes a fresh dump under the new key; a box holding a key and no destination has the
-  // key alone rewritten. Same guards + effective-key assertion as `apply` on both paths.
+  // after reload takes a fresh dump under the new key. A box holding a key whose supervisor has no
+  // destination LOADED — none configured, or its config dropped after the venue failed to open — has
+  // the key alone rewritten, every other setting kept. Same guards + effective-key assertion as `apply`
+  // on both paths.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       await authorize(c);

@@ -83,7 +83,7 @@ export async function writeBackupEnv(stateDir: string, input: BackupEnvInput): P
   await writeFileAtomic(join(stateDir, "backup.env"), formatEnvFile(record), 0o600);
 }
 
-/** Set the recovery key in `<stateDir>/backup.env`, keeping every other line the file holds, so a box
+/** Set the recovery key in `<stateDir>/backup.env`, keeping every other setting the file holds, so a box
  * with no archive destination can hold a key and a box with one keeps its destination, schedule and
  * retention. Round-trip guarded like `writeBackupEnv`, atomic, `0o600`. */
 export async function writeRecoveryKey(

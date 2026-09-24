@@ -1604,14 +1604,14 @@ declare module "@waitron/shared" {
     "backup.effective_mismatch": Record<string, never>;
     /**
      * A backup admin route body failed shape validation before any write — a missing/blank
-     * `destinationDir`, a blank `recoveryKey` or a missing one on a box that holds none, or a malformed
-     * `schedule`/`retention`. `field` names the offending field (our own declared name, never the
+     * `destinationDir`, a blank or missing `recoveryKey` (on `apply`, missing only when the box holds
+     * none), or a malformed `schedule`/`retention`. `field` names the offending field (our own declared name, never the
      * value, which could be the recovery key). Mapped to 400. Never renamed once shipped. */
     "backup.request_invalid": { field: string };
     /**
      * `apply` was given a recovery key different from the one this box already holds. One recovery
-     * key per venue: the recovery kit carries the held one, so a second is refused before any write
-     * rather than silently replacing it; `rotate` is the way to change it. No params — the keys are
+     * key per venue: a second is refused before any write rather than silently replacing the held
+     * one; `rotate` is the way to change it. No params — the keys are
      * secrets. Mapped to 409. Never renamed once shipped. */
     "backup.recovery_key_exists": Record<string, never>;
     /**
