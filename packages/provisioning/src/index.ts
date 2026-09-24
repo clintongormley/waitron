@@ -1,4 +1,3 @@
-// The public surface of @waitron/provisioning. Re-exports only — no logic here.
 export { runCli } from "./cli.js";
 export type { CliDeps } from "./cli.js";
 export { assertIdentifier, generatePassword, quoteIdent } from "./identifiers.js";
@@ -21,8 +20,7 @@ export {
   readTenantIdentities,
 } from "./tenant-guard.js";
 export type { TenantIdentity } from "./tenant-guard.js";
-// `findAheadSets` and `unknownHashes` stay internal: the host calls `assertNotAhead` alone, and
-// the suites reach the other two by relative path.
+// `findAheadSets` and `unknownHashes` stay internal: the host calls `assertNotAhead` alone.
 export { assertNotAhead } from "./schema-ahead.js";
 export type { AheadSet } from "./schema-ahead.js";
 import "./errors.js";

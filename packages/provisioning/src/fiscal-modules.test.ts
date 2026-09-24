@@ -32,8 +32,6 @@ describe("resolveFiscalModules", () => {
 describe("FISCAL_TERRITORIES", () => {
   it("lists the territories the registry resolves, and resolves each of them", () => {
     expect(FISCAL_TERRITORIES).toEqual(["ES-common", "GB-vat"]);
-    // Every listed territory resolves to a non-empty filing module (the id the composition root maps
-    // to a slot member); the specific values are pinned by the per-territory tests above.
     for (const t of FISCAL_TERRITORIES)
       expect(resolveFiscalModules(t).filing.length).toBeGreaterThan(0);
   });

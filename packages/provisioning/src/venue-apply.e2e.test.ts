@@ -19,22 +19,8 @@ import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
 
 /**
- * The concrete definition of "sellable" (spec §7 / this sub-project's success criterion): a venue
- * provisioned by the REAL `applyVenue` can immediately chain a sale through the real Veri*Factu
- * backend, with nothing seeded by hand between the two.
- *
- * Lives in `@waitron/provisioning` because a venue that can sell is this package's success criterion.
- * `@waitron/fiscal-verifactu` is a devDependency here — this test's real backend, and the real seed it
- * reaches through `ALL_MODULES`. This package's production code no longer imports it at all: the
- * runner takes the module list as an argument and calls whatever seed the list carries.
- *
- * A migrated venue directory is sufficient for sale chaining and login behaviour. The suite that
- * exercised provisioning as a non-superuser owner on real PostgreSQL was deleted with the
- * PostgreSQL deployment model.
- *
- * The full manifest is migrated in dependency order. The real `applyVenue` now seeds an admin
- * `persons` row, so identity's set has to be migrated here too. (`persons` no longer has a foreign
- * key onto `tenants` — the column it used to carry is gone.)
+ * "Sellable": a venue provisioned by the real `applyVenue` can immediately chain a sale through the
+ * real Veri*Factu backend, with nothing seeded by hand between the two.
  */
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -139,13 +125,10 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
       deploymentEnvironment: "preproduction",
       clock: steadyClock,
       db: suite.db,
-      // recordSale never submits (the write path stops at `envios.pendiente`), so `resolveClient`
-      // is required by the constructor but not invoked here; a fake AEAT transport satisfies it.
+      // Required by the constructor; recordSale never submits.
       resolveClient: () => Promise.resolve(createFakeAeat().client()),
     });
 
-    // seriesIds[0] is the STANDARD series — planVenue emits standard before rectificative, and
-    // applyVenue pushes in that order.
     const standardSeriesId = venue.seriesIds[0]!;
 
     const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {
@@ -160,12 +143,9 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
       );
     });
 
-    // recordSale succeeded: it handed back a sale id and a verification URL derived from the record.
     expect(saleId).toMatch(/^[0-9a-f-]{36}$/);
     expect(fiscal.verificationUrl).toContain("nif=");
 
-    // The sale is really chained: exactly one registro for this node, sequence 1, and the chain
-    // head advanced to it — the concrete proof the freshly-minted SIF and series actually work.
     const chained = await suite.db.execute<{
       registros: number;
       secuencia: number;
@@ -181,23 +161,17 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
 
 describe("the provisioned admin authenticates by id with its password", () => {
   it("loginManagerById succeeds with the provisioned password and rejects a wrong one", async () => {
-    // The mirror-bundle path authenticates the admin by id via `loginManagerById`, independently of
-    // the email the venue also requires.
-    // A distinct tax id (B33333333), which is not what keeps this test's admin its own:
-    // `useVenueDb` empties every migrated table after each test
-    // (`packages/db/src/testing/venue-db.ts`).
+    // The mirror-bundle path authenticates the admin by id, independently of the email.
     await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
-    // The admin's id is generated at seed time, so fetch it by role rather than assume one.
     const admin = await suite.db.execute<{ id: string }>(sql`
       select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
-    // The provisioned password logs in and mints a management session.
     const session = await withTransaction(suite.db, async (tx) => {
       return loginManagerById(tx, {
         personId: personId!,
@@ -206,7 +180,6 @@ describe("the provisioned admin authenticates by id with its password", () => {
     });
     expect(session.personId).toBe(personId);
 
-    // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
       withTransaction(suite.db, async (tx) => {
         return loginManagerById(tx, {
@@ -220,26 +193,17 @@ describe("the provisioned admin authenticates by id with its password", () => {
 
 describe("the onboarding-provisioned admin authenticates by email", () => {
   it("loginManager (the email path) succeeds with the provisioned email + password and rejects a wrong one", async () => {
-    // The whole-chain proof for admin-email onboarding: an admin provisioned WITH an email
-    // (captured by the onboarding UI, validated + normalized at the setup-api boundary, written by
-    // `applyVenue`'s seed-admin insert) can sign in to the dashboard by EMAIL via `loginManager` —
-    // not only by id via `loginManagerById`. A valid, already-normalized lowercase address, as the
-    // setup-api boundary produces. A distinct tax id (B44444444) again, and again it is the
-    // per-test reset rather than the tax id that keeps this admin its own.
     const adminEmail = "owner@venue.example";
     await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
-    // The admin's id is generated at seed time; fetch it so we can prove the email login resolves the
-    // SAME provisioned admin, not just some person.
     const admin = await suite.db.execute<{ id: string }>(sql`
       select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
-    // The email path mints a management session for the provisioned admin.
     const session = await withTransaction(suite.db, async (tx) => {
       return loginManager(tx, {
         email: adminEmail,
@@ -248,7 +212,6 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     });
     expect(session.personId).toBe(personId);
 
-    // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
       withTransaction(suite.db, async (tx) => {
         return loginManager(tx, {

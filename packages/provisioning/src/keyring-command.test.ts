@@ -17,10 +17,8 @@ function recordingIo(
     stdout: (line) => lines.push(line),
     stderr: (line) => lines.push(line),
     prompt: async () => queue.shift() ?? "",
-    // `runKeyring` must never reach this: it PRINTS a secret it generated and reads nothing back
-    // but an acknowledgement. Throwing rather than returning "" is what makes that assertion
-    // rather than an assumption — a future edit that read the key ring back through an echo-off
-    // prompt would fail here instead of passing quietly.
+    // Throws rather than returning "", so an edit that read a secret here fails instead of
+    // passing quietly.
     promptSecret: async () => {
       throw new Error("runKeyring must not read a secret");
     },
@@ -66,20 +64,12 @@ describe("runKeyring", () => {
     const io = recordingIo();
     await runKeyring(io, (n) => Buffer.alloc(n, 7));
     const printed = io.lines.join("\n");
-    // Spec §5: "The tool says so rather than implying the key is gone." A terminal logging to
-    // disk, or tmux's own buffer, still has it.
     expect(printed).toMatch(/scrollback|logged to disk|tmux/i);
   });
 
   it("waits for the operator before clearing", async () => {
-    // The operator's answer is a gate THIS TEST holds open, not a promise that resolves on its own.
-    // That is the whole point: a `prompt` that merely pushed its marker and returned would record
-    // the identical order whether or not `runKeyring` awaited it, because the marker is pushed
-    // before any await boundary. The earlier version of this test did exactly that and passed with
-    // `await io.prompt(...)` changed to `void io.prompt(...)` — the fire-and-forget bug that wipes
-    // an unrecoverable key off the screen before the operator has copied it. Verified by running
-    // that mutant: this version fails on the `not.toContain("clear")` assertion below, the old one
-    // stayed green.
+    // The answer is a gate this test holds open: a `prompt` that returned at once would record the
+    // same order whether or not `runKeyring` awaited it.
     const order: string[] = [];
     let answer: () => void = () => {};
     const answered = new Promise<void>((resolve) => {
@@ -99,13 +89,10 @@ describe("runKeyring", () => {
       clearScreen: () => order.push("clear"),
     };
     const running = runKeyring(io, (n) => Buffer.alloc(n, 7));
-    // Drain every microtask that CAN run. Nothing here is timer-based, so if `runKeyring` were not
-    // suspended on the prompt it would already have cleared by now.
+    // Nothing here is timer-based, so a `runKeyring` not suspended on the prompt would have cleared.
     await Promise.resolve();
     await Promise.resolve();
     expect(order).toContain("prompt");
-    // The key is unrecoverable once cleared, so the clear MUST come after an acknowledgement —
-    // clearing on a timer, or not awaiting at all, would race an operator who had not yet copied it.
     expect(order).not.toContain("clear");
 
     answer();
