@@ -103,21 +103,26 @@ unfiltered `main` run, not a wrong hook.
 for the fiscal core and the data-layer foundations on the grounds of consequence, and put every other
 package, browser packages included, at a `90/90/85/85` floor. The owner chose the whole bar over two
 narrower answers to the questions task T3 left open — raising only the floor's functions minimum, to
-95 or to 90. Lane C's campaign brought each package under it up in a pull request of its own (listed in
-`docs/backlog.md` → *Every package to the high coverage bar*), and the floor was removed from the guard and from the prose on
-2026-09-24 once none was left on it. A new package holds the bar from its first commit.
+95 or to 90. Each package under it was brought up in a pull request of its own (listed in
+`docs/backlog.md` → *Every package to the high coverage bar*), and on 2026-09-24, once none was left
+on it, the floor was removed from the guard and retired as policy: live prose mentions it only as
+retired, and dated history still records it. A new package holds the bar from its first commit.
 
 The bar is negotiable only where the rest of a package's gap could be closed solely by tests that
 assert nothing useful (owner, 2026-09-23: "we never want to add junk tests just to meet a coverage
-bar. the tests added must actually test something useful."). It is never met by excluding a file,
-an ignore comment, or moving code under `src/testing/`.
+bar. the tests added must actually test something useful."). The promotions also worked under a
+rule of their own, which stands: a gap is never closed by hiding code a test could reach — adding an
+exclude or an ignore comment over it, or moving it under `src/testing/`.
 
 `scripts/coverage-thresholds.test.ts` pins it from the root project, because a package's own config
-decides whether its tests run at all. It is weaker than its name in two ways: it reads each config's
-`thresholds` literal as TEXT rather than importing the config, and it checks the members `pnpm ls`
-lists minus `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`), so a member named there is
-outside it. It fails if `pnpm ls` stops listing three named packages, which is what stops an empty
-member list from passing having read nothing.
+decides whether its tests run at all. It is weaker than its name in four ways. It reads each
+config's `thresholds` literal as TEXT rather than importing the config. It never reads a config's
+`coverage.exclude` or any ignore comment, so a newly added exclude passes it. It checks the members
+`pnpm ls` lists minus `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`), so a member named
+there is outside it. And its check that `pnpm ls` returned the workspace is only that the names in
+`EXPECTED_MEMBERS` (one per workspace folder holding tested members) are listed and that the list
+meets `MIN_TESTED_MEMBERS`, a loose minimum well under today's count — which stops an empty list
+from passing having read nothing, but lets a listing that drops a few other members pass.
 
 While the split stood, a hardcoded list of promoted packages lived in that guard, and prose that
 re-enumerated it drifted: three places were wrong at once, two naming four packages after the flip
@@ -339,7 +344,7 @@ subtracts `*.test.ts`.
 **The coverage half.** `packages/db`'s `vitest.config.ts` deliberately does NOT exclude
 `src/testing/**`, and says why at that line: it was once excluded wholesale as "harness code, not
 product code", and that hid three helpers in it that no test executed at all. It is held to the same
-thresholds as the rest of `src/`, which for this package is the high bar — statements 98, lines 98,
+thresholds as the rest of `src/`, the same bar every package holds — statements 98, lines 98,
 functions 98, branches 95.
 
 Measured on branch `feat/module-schema-conformance-guard`, 2026-09-23, with
@@ -833,8 +838,8 @@ the three named below; wired, the root project is green. The three:
   because the message names a missing file and reads like a broken checkout rather than a missing
   registration.
 
-What to wire, for an ordinary package with tests: a `vitest.config.ts` carrying the coverage bar the
-package is assigned (which bar is pinned by `scripts/coverage-thresholds.test.ts`), and the shard lists
+What to wire, for an ordinary package with tests: a `vitest.config.ts` whose thresholds are
+`98/98/98/95` (pinned by `scripts/coverage-thresholds.test.ts`), and the shard lists
 in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that declares no
 `test:coverage` script at all — today only the two `bench/` members — additionally goes in
 `PACKAGES_WITHOUT_TESTS`.

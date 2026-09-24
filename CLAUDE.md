@@ -107,10 +107,14 @@ Unknown ranges keep the full local gate, including workspace typechecking. See
 **Coverage thresholds: every package, and the root project, holds `98/98/98/95`** (owner decision
 2026-09-23, retiring the 2026-09-05 split that reserved it for the fiscal core and the data layer;
 the lower floor is gone). A new package holds it from its first commit. The bar is negotiable only
-where the rest of a gap could be closed solely by tests that assert nothing useful — never by an
-excluded file or an ignore comment. Guard: `scripts/coverage-thresholds.test.ts`, weaker than its
-name — it reads each config's `thresholds` literal as TEXT, and skips the members
-`PACKAGES_WITHOUT_TESTS` names (`scripts/changed-scope.mjs`). More:
+where the rest of a gap could be closed solely by tests that assert nothing useful, and a gap is
+never closed by hiding code a test could reach — adding an exclude or an ignore comment over it, or
+moving it under `src/testing/`. Guard:
+`scripts/coverage-thresholds.test.ts`, weaker than its name — it reads each config's `thresholds`
+literal as TEXT; it never reads `coverage.exclude` or an ignore comment, so an added exclude passes;
+it skips the members `PACKAGES_WITHOUT_TESTS` names (`scripts/changed-scope.mjs`); and it checks the
+`pnpm ls` listing only for the names in `EXPECTED_MEMBERS` and a loose `MIN_TESTED_MEMBERS`, so a
+listing that drops a few others passes. More:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`,

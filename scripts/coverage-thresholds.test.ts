@@ -32,9 +32,19 @@ const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
 const HIGH_BAR = { statements: 98, lines: 98, functions: 98, branches: 95 };
 
-/** Packages whose absence from `pnpm ls` means the member list came back wrong, not that they left:
- *  without this, an empty list would pass every check below having read nothing. */
-const EXPECTED_MEMBERS = ["@waitron/fiscal-verifactu", "@waitron/db", "@waitron/core"];
+/** Packages whose absence from `pnpm ls` means the member list came back wrong, not that they left.
+ *  With `MIN_TESTED_MEMBERS` it fails an empty or badly short listing, which would otherwise pass
+ *  every check below having read little or nothing. One name per workspace folder that holds
+ *  tested members, because the minimum alone passes a listing that lost all of `apps/`. */
+const EXPECTED_MEMBERS = [
+  "@waitron/fiscal-verifactu",
+  "@waitron/db",
+  "@waitron/core",
+  "@waitron/server",
+];
+
+/** A loose floor well under today's count of tested members, not an exact count. */
+const MIN_TESTED_MEMBERS = 30;
 
 /** The `coverage.include` every package config declares. Read as text, like the thresholds below:
  *  a test file's own `include` never collides with it because those name `*.test.ts` patterns. */
@@ -68,16 +78,23 @@ function testedMembers(): { name: string; dir: string }[] {
   return workspaceMembers().filter(({ name }) => !PACKAGES_WITHOUT_TESTS.includes(name));
 }
 
+function assertWorkspaceListed(names: string[]): void {
+  expect(
+    EXPECTED_MEMBERS.filter((name) => !names.includes(name)),
+    "pnpm ls must list the workspace (guards against a vacuous pass)",
+  ).toEqual([]);
+  expect(
+    names.length,
+    "pnpm ls must list the whole workspace (guards against a partial listing)",
+  ).toBeGreaterThanOrEqual(MIN_TESTED_MEMBERS);
+}
+
 describe("every vitest config holds the high coverage bar", () => {
   it(
     "across the root project and every workspace member pnpm lists",
     () => {
       const members = testedMembers();
-      const names = members.map(({ name }) => name);
-      expect(
-        EXPECTED_MEMBERS.filter((name) => !names.includes(name)),
-        "pnpm ls must list the workspace (guards against a vacuous pass)",
-      ).toEqual([]);
+      assertWorkspaceListed(members.map(({ name }) => name));
 
       const configs = [
         { label: "the root project", path: "vitest.config.ts", bar: HIGH_BAR },
@@ -107,11 +124,7 @@ describe("every vitest config holds the high coverage bar", () => {
       // this case pins it for every member. The root project is not here: its own coverage table
       // is `scripts/`, not a `src` tree.
       const members = testedMembers();
-      const names = members.map(({ name }) => name);
-      expect(
-        EXPECTED_MEMBERS.filter((name) => !names.includes(name)),
-        "pnpm ls must list the workspace (guards against a vacuous pass)",
-      ).toEqual([]);
+      assertWorkspaceListed(members.map(({ name }) => name));
 
       const missing = members.filter(
         ({ dir }) =>

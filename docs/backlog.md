@@ -2283,8 +2283,9 @@ image constraints under *Detail → Box image*.
 - **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
   floor retired 2026-09-24 by **this pull request**).** Every package and the root project now hold
   the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package
-  included from its first commit; the `90/90/85/85` floor is gone from the guard and from the prose
-  that stated it. The first promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every
+  included from its first commit; the `90/90/85/85` floor is removed from the guard and retired as
+  policy (live prose mentions it only as retired; dated history still records it). The first
+  promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every
   package that already cleared all four metrics on 2026-09-23 was promoted in one change, 21 of
   them; the starting figures are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first
   promotion — measured 2026-09-23*, and the per-package figures at the end are in this pull
@@ -4368,9 +4369,10 @@ conflict.
   tests that assert nothing useful** (owner, 2026-09-23, narrowing the 2026-09-05 "negotiable with a
   reason"): "we never want to add junk tests just to meet a coverage bar. the tests added must
   actually test something useful."
-- **Every package is to hold the high coverage bar, `98/98/98/95`** (owner, 2026-09-23),
-  superseding the 2026-09-05 split that reserved it for the fiscal core and the data layer.
-  Progress: B9.
+- **Every package and the root project hold the high coverage bar, `98/98/98/95`** (owner,
+  2026-09-23, superseding the 2026-09-05 split that reserved it for the fiscal core and the data
+  layer); the lower floor was retired 2026-09-24 — see B9 → *Every package to the high coverage
+  bar*.
 
 ---
 
