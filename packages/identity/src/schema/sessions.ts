@@ -18,7 +18,8 @@ export const sessions = table(
     // (docs/backlog.md, slice-2 Task 1b). `loginWithPin` inserts only a person
     // `verifyPersonCredential` found. `authorize`'s inner join reads a session whose person is gone
     // as `session.not_open`, but `requireSession` (apps/server/src/till-session.ts) does not join
-    // `persons`, so only a route that goes on to call `authorize` refuses it. Nothing on this table
+    // `persons`, so it returns such a session as open; any other refusal comes from the route's own
+    // work, such as another table's key to `persons` on a write. Nothing on this table
     // checks the till: the till login route takes it from the signed-in device's row, whose
     // `till_id` key to `tills` refuses deleting a till a device names.
     personId: id("person_id").notNull(),
