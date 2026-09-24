@@ -871,18 +871,23 @@ it.
 
 ### Browser-mode packages run vitest in real headless Chromium
 
-Browser-mode gates may run concurrently; what is not allowed is adding one beside OTHER SESSIONS'
-browser runs or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check what else is
-testing on the machine first.
+Browser-mode gates may run concurrently, within one session or across several: a browser run may
+start beside another session's browser run when `memory_pressure` reports free memory well above
+15% (owner decision 2026-09-24). What is not allowed is adding one beside a backgrounded
+whole-workspace `pnpm -r test:coverage` — check what else is testing on the machine first.
 
-The receipt is two 65 GB RAM spikes and a force-quit on 2026-08-30, with several sessions testing
-at once; one session running its own package gates in parallel was never the problem (owner
-decision 2026-09-06, retiring "one gate at a time").
+The receipt is two 65 GB RAM spikes and a force-quit on 2026-08-30. In one, an implementer subagent
+ran the till's browser gate while the controlling session ran verification gates and other subagents
+were active; in the other, a backgrounded whole-workspace `pnpm -r test:coverage` ran beside review
+and implementer subagents, with six Claude Code sessions open at once. The owner read both incidents
+as several sessions testing at once, so one session's own package gates may still run in parallel
+(owner decision 2026-09-06, retiring "one gate at a time"), and on 2026-09-24 the owner retired the
+ban on starting beside another session's browser run too, keeping the measured-headroom check.
 
 Concurrency is decided by measured headroom, never by a count: before a heavy run check free
 memory (`memory_pressure | grep free`) and the heaviest processes
 (`ps -axo rss,command | sort -nr | head`), then scale `--workspace-concurrency` to what is free.
-Receipt: 77% of 64 GB free that night with two review sessions, four vitest workers and two
+Receipt: 77% of 64 GB free on 2026-09-06 with two review sessions, four vitest workers and two
 Chromiums running.
 
 ### Chromium's launch depends on the Codex seat's PERMISSIONS, not on Codex

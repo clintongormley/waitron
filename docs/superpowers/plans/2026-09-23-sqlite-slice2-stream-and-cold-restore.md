@@ -1157,7 +1157,9 @@ it.each([
 ```
 
 Add `codeMessage` to the file's `@waitron/dashboard-kit` import. Before running, check what else is
-testing on the machine (CLAUDE.md §2: no browser run beside another session's), then run
+testing on the machine (CLAUDE.md §2: no browser run beside another session's — relaxed
+2026-09-24: allowed when free memory is well above 15%, never beside a backgrounded
+whole-workspace run), then run
 `pnpm --filter @waitron/media exec vitest run --project browser src/dashboard/image-library.test.ts`.
 Expected: FAIL. The alert holds the generic "Something went wrong, try again", because
 `image.invalid_file` has no copy yet. `image.too_large` fails too: it has no copy today (the
