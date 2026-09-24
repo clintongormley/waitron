@@ -10,8 +10,16 @@ const overview: SalesOverview = {
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
-    { name: "Café con leche", quantity: "18", total: "36.00" },
-    { name: "Croissant", quantity: "12", total: "24.00" },
+    {
+      name: "Café con leche",
+      quantity: "18",
+      total: "36.00",
+      variants: [
+        { name: "Café con leche grande", quantity: "10", total: "22.00" },
+        { name: "Café con leche pequeño", quantity: "8", total: "14.00" },
+      ],
+    },
+    { name: "Croissant", quantity: "12", total: "24.00", variants: [] },
   ],
 };
 

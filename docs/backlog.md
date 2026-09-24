@@ -724,8 +724,8 @@ variant adds one row, with no "Regular". A variant can be opened from its produc
 variants' prices move under their names and the price column is hidden. Shared primitives changed
 with it: `wt-price-input` gained a `placeholder`, `wt-input`'s and `wt-price-input`'s hints use the
 muted text colour, `wt-switch` gained `hide-label`, and `wt-dialog` no longer lets a late close
-report shut a dialog that has been reopened. No migration: **no venue reset needed.** Next is Task
-8 (top sellers roll variants up under their parent). What Task 7 leaves open:
+report shut a dialog that has been reopened. No migration: **no venue reset needed.** Task 8
+follows the list below. What Task 7 leaves open:
 - **The product list shows "—" for a variant's allergens**, because the list's data carries none for
   a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
   whether the list should read a variant's effective allergens, and add them to that read if so.
@@ -772,6 +772,24 @@ report shut a dialog that has been reopened. No migration: **no venue reset need
   (`apps/dashboard/src/screens/catalogue-screen.ts`). `wt-edit-product` is already taken: the units
   screen sends it to `apps/dashboard/src/dashboard-app.ts`, so pick names that cannot reach that
   handler by mistake.
+
+**Task 8 (branch `feat/variants-top-sellers`, 2026-09-24): top sellers now roll variants up under
+their parent.** The top-sellers list on the dashboard's overview and sales screens ranks products by
+the parent's name — "Wine by the glass", 5 sold, 24.50 — and shows each variant sold under it on its
+own indented row beneath, under the variant's own name ("Wine 175", then "Wine 125", biggest seller
+first). A product's own figures count every line sold under its name, including any sold as the
+product itself with no variant, and the list's length counts products, not variants.
+Previously each variant was ranked as a separate seller and there was no product total. Each variant
+row's heading cell also holds the product's name as visually hidden text, so its text reads "Wine by
+the glass, Wine 175". The filed sale is unchanged: the
+report reads the two names every sale line already records. No migration: **no venue reset
+needed.** Next is Task 9 (remove the old variant table and shapes). What Task 8 leaves open:
+- **The overview's top-sellers table can reach into its card's padding at desktop width** when a
+  variant has a long one-word name and the figures run to five digits. Measured 2026-09-24 at
+  1280px: with "Café con leche pequeño descafeinado" at 1000.000 / 10000.00 the table ended 12px
+  inside the card's 17px padding (it stays inside the card's border); with three-digit figures, or
+  with no variant rows, it ended at the padding's edge. **Next action:** decide whether a long name
+  in that table may wrap mid-word.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated

@@ -128,7 +128,7 @@ Where each one surfaces:
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Printed allergen sheet | the live product's customer-facing name | `apps/till/src/screens/till-allergen-screen.ts` |
-| Top-sellers report | the frozen staff names, resolved | `packages/reporting/src/top-sellers.ts` |
+| Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 
 Two of those rows are worth reading twice.
 
@@ -147,9 +147,12 @@ to when the venue has no service zones configured (`resolveHttpOrderZone`,
 the kitchen sees the staff name however the product is configured. The paragraph above is about
 menu-offer lines; it does not hold for these, and nothing on this path closes the gap today.
 
-The top-sellers report groups on the staff names — `sale_lines.name` and `sale_lines.variant_name` —
-and returns them through `staffPresentationName`. It is a staff-facing report, so it shows the name
-staff use, not the wording a diner reads on a receipt.
+The top-sellers report ranks products by the parent's staff name, `sale_lines.name`, and lists
+under each one a row per `sale_lines.variant_name` sold with it — so "Wine by the glass" shows its
+total with "Wine 175" and "Wine 125" beneath. The product's own row counts every line under its
+name, including any sold as the product itself with no variant, and the report's row limit counts
+products, not variants. It is a staff-facing report, so it shows the names staff use, not the
+wording a diner reads on a receipt.
 
 ## The translation gap report
 

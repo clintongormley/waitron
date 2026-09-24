@@ -6,7 +6,11 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
-import { renderTopSellers, type TopSellersLabels } from "../widgets/top-sellers-table.js";
+import {
+  renderTopSellers,
+  topSellersStyles,
+  type TopSellersLabels,
+} from "../widgets/top-sellers-table.js";
 import type {
   CashUpDto,
   DailyCloseDto,
@@ -43,6 +47,7 @@ export class SalesScreen extends LitElement {
   static override styles = [
     baseStyles,
     metricStyles,
+    topSellersStyles,
     css`
       :host {
         display: block;

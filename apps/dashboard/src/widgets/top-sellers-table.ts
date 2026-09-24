@@ -1,4 +1,4 @@
-import { type TemplateResult, html } from "lit";
+import { type TemplateResult, css, html } from "lit";
 import type { TopSellerRow } from "../api/client.js";
 
 /**
@@ -22,13 +22,13 @@ export interface TopSellersLabels {
 }
 
 /**
- * A shared TOP-SELLERS TABLE — one row per product (staff name, quantity, total) or a muted
- * empty-state line when there are none — used by both reporting screens. A pure render FUNCTION
- * (see {@link renderMetric}), so the calling screen's own `table`/`th`/`td`/`.num`/`.muted` styles
- * apply and each screen keeps its own table look. The table carries a stable `data-test="top-sellers-table"`
- * hook; the overview additionally wraps it in a `wt-card data-test="top-sellers"`. `row.name` is
- * already the plain staff name a sales report shows (CLAUDE.md's three-name table) — no locale
- * lookup happens here.
+ * A shared TOP-SELLERS TABLE used by both reporting screens: one row per product (staff name,
+ * quantity, total), each followed by one indented row per variant sold under it, or a muted
+ * empty-state line when there are none. A pure render FUNCTION (see {@link renderMetric}), so the
+ * calling screen's own `table`/`th`/`td`/`.num`/`.muted` styles apply; a screen adds
+ * {@link topSellersStyles} for the variant rows. A variant row's header repeats its product's name
+ * in visually hidden text — "Wine by the glass, Wine 175" — so the nesting is not carried by the
+ * indent alone. Names are the plain staff names a sales report shows — no locale lookup.
  */
 export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels): TemplateResult {
   if (rows.length === 0) {
@@ -46,11 +46,42 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
       ${rows.map(
         (row, i) =>
           html`<tr data-test=${`seller-row-${i}`}>
-            <th scope="row" data-test="seller-name">${row.name}</th>
-            <td class="num">${row.quantity}</td>
-            <td class="num">${row.total}</td>
-          </tr>`,
+              <th scope="row" data-test="seller-name">${row.name}</th>
+              <td class="num">${row.quantity}</td>
+              <td class="num">${row.total}</td>
+            </tr>
+            ${row.variants.map(
+              (variant, j) =>
+                html`<tr data-test=${`seller-row-${i}-variant-${j}`}>
+                  <th scope="row" class="seller-variant">
+                    <span class="visually-hidden">${row.name}, </span
+                    ><span data-test="variant-name">${variant.name}</span>
+                  </th>
+                  <td class="num">${variant.quantity}</td>
+                  <td class="num">${variant.total}</td>
+                </tr>`,
+            )}`,
       )}
     </tbody>
   </table>`;
 }
+
+/** The variant rows' chrome for {@link renderTopSellers}: add it to a screen's `static styles`
+ * beside the screen's own table rules. Tokens only, so it follows the venue's theme. */
+export const topSellersStyles = css`
+  th.seller-variant {
+    padding-inline-start: calc(var(--wt-space-2) + var(--wt-space-4));
+    font-weight: normal;
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+`;

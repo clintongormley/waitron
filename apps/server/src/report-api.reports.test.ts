@@ -50,6 +50,9 @@ let staffCookie: string;
 // per rate so a mis-wired aggregation fails: DAY1 = 21% base 100 tax 21; DAY2 = 10% base 50 tax 5.
 const DAY1 = "2026-06-10";
 const DAY2 = "2026-06-11";
+// A third day whose only sale is two variants of one product, queried on its own so the DAY1/DAY2
+// figures above are untouched.
+const DAY3 = "2026-06-12";
 const SEED = {
   day1: {
     issuedAt: "2026-06-10T12:00:00Z",
@@ -147,6 +150,59 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   });
 }
 
+/** Seed DAY3's sale: "Wine by the glass" sold as two variants, each line freezing the parent's three
+ * names beside the variant's own three, all six different. */
+async function seedVariantDay(db: Database, invoiceNumber: number): Promise<void> {
+  const [sale] = await db
+    .insert(sales)
+    .values({
+      tillId,
+      nodeId,
+      seriesId,
+      invoiceNumber,
+      issuedAt: "2026-06-12T12:00:00Z",
+      issuedOffsetMinutes: 0,
+      total: stringToCents("26.95"),
+      vatBreakdown: [{ rate: "10.00", base: "24.50", tax: "2.45" }],
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "fake",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
+  const parent = {
+    name: "Wine by the glass",
+    descriptions: { "es-ES": "Vino por copas" },
+    kitchenName: "VINO",
+  };
+  await db.insert(saleLines).values([
+    {
+      saleId: sale!.id,
+      lineNo: 1,
+      ...parent,
+      variantName: "Wine 125",
+      variantDescriptions: { "es-ES": "Copa pequeña" },
+      variantKitchenName: "V125",
+      quantity: stringToThousandths("2.000"),
+      unitPrice: stringToCents("4.00"),
+      vatRate: stringToBasisPoints("10.00"),
+      lineTotal: stringToCents("8.00"),
+    },
+    {
+      saleId: sale!.id,
+      lineNo: 2,
+      ...parent,
+      variantName: "Wine 175",
+      variantDescriptions: { "es-ES": "Copa grande" },
+      variantKitchenName: "V175",
+      quantity: stringToThousandths("3.000"),
+      unitPrice: stringToCents("5.50"),
+      vatRate: stringToBasisPoints("10.00"),
+      lineTotal: stringToCents("16.50"),
+    },
+  ]);
+}
+
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -180,6 +236,7 @@ const suite = useVenueDb({
 
     await seedDay(db, 1, SEED.day1);
     await seedDay(db, 2, SEED.day2);
+    await seedVariantDay(db, 3);
 
     // A MANAGER (holds report.view AND report.export), a SUPERVISOR (holds report.view but NOT
     // report.export) and a STAFF person (holds neither), each with a live management session. The
@@ -233,18 +290,24 @@ interface VatSummaryBody {
   taxTotal: string;
   grossTotal: string;
 }
+interface TopSellerBody {
+  name: string;
+  quantity: string;
+  total: string;
+  variants: { name: string; quantity: string; total: string }[];
+}
 interface DailyCloseBody {
   businessDay: string;
   vat: VatSummaryBody;
   cash: { byTill: { tillId: string }[]; tenderTotal: string; tipTotal: string };
   counts: { sales: number; corrections: number; voids: number };
-  topSellers: { name: string; quantity: string; total: string }[];
+  topSellers: TopSellerBody[];
 }
 interface PeriodBody {
   from: string;
   to: string;
   vat: VatSummaryBody;
-  topSellers: { name: string; quantity: string; total: string }[];
+  topSellers: TopSellerBody[];
 }
 
 describe("mountReportApi — /reports/daily-close", () => {
@@ -266,7 +329,7 @@ describe("mountReportApi — /reports/daily-close", () => {
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
     // The single seeded line, keyed on its frozen STAFF name — never the customer-facing text.
     expect(body.topSellers).toEqual([
-      { name: SEED.day1.line.name, quantity: "2.000", total: "10.00" },
+      { name: SEED.day1.line.name, quantity: "2.000", total: "10.00", variants: [] },
     ]);
   });
 
@@ -328,8 +391,8 @@ describe("mountReportApi — /reports/period", () => {
     expect(body.vat.grossTotal).toBe("176.00");
     // Both lines, ranked by quantity desc: Tortilla (2.000) before Agua (1.000).
     expect(body.topSellers).toEqual([
-      { name: SEED.day1.line.name, quantity: "2.000", total: "10.00" },
-      { name: SEED.day2.line.name, quantity: "1.000", total: "2.00" },
+      { name: SEED.day1.line.name, quantity: "2.000", total: "10.00", variants: [] },
+      { name: SEED.day2.line.name, quantity: "1.000", total: "2.00", variants: [] },
     ]);
   });
 
@@ -339,7 +402,26 @@ describe("mountReportApi — /reports/period", () => {
     const body = (await res.json()) as PeriodBody;
     expect(body.vat.byRate).toEqual([{ rate: "10.00", base: "50.00", tax: "5.00" }]);
     expect(body.topSellers).toEqual([
-      { name: SEED.day2.line.name, quantity: "1.000", total: "2.00" },
+      { name: SEED.day2.line.name, quantity: "1.000", total: "2.00", variants: [] },
+    ]);
+  });
+
+  it("200 carries a product's variants nested under it, with every amount a decimal string", async () => {
+    const res = await get(mountApp(), `/management-api/reports/period?from=${DAY3}&to=${DAY3}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PeriodBody;
+    // The parent's STAFF name and its roll-up, then each variant's own staff name — never the
+    // customer text or a kitchen name.
+    expect(body.topSellers).toEqual([
+      {
+        name: "Wine by the glass",
+        quantity: "5.000",
+        total: "24.50",
+        variants: [
+          { name: "Wine 175", quantity: "3.000", total: "16.50" },
+          { name: "Wine 125", quantity: "2.000", total: "8.00" },
+        ],
+      },
     ]);
   });
 

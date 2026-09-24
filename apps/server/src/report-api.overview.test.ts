@@ -225,7 +225,12 @@ interface OverviewBody {
   takings: { tenderTotal: string; tipTotal: string; grossTotal: string };
   counts: { sales: number; corrections: number; voids: number };
   openTables: { open: number; total: number };
-  topSellers: { name: string; quantity: string; total: string }[];
+  topSellers: {
+    name: string;
+    quantity: string;
+    total: string;
+    variants: { name: string; quantity: string; total: string }[];
+  }[];
 }
 
 describe("mountReportApi — /reports/overview", () => {
@@ -259,6 +264,7 @@ describe("mountReportApi — /reports/overview", () => {
         name: SEED.name,
         quantity: SEED.lineQuantity,
         total: SEED.lineTotal,
+        variants: [],
       },
     ]);
   });

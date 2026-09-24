@@ -11,8 +11,16 @@ const overview: SalesOverview = {
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
-    { name: "Café con leche", quantity: "18", total: "36.00" },
-    { name: "Croissant", quantity: "12", total: "24.00" },
+    {
+      name: "Café con leche",
+      quantity: "18",
+      total: "36.00",
+      variants: [
+        { name: "Café con leche grande", quantity: "10", total: "22.00" },
+        { name: "Café con leche pequeño", quantity: "8", total: "14.00" },
+      ],
+    },
+    { name: "Croissant", quantity: "12", total: "24.00", variants: [] },
   ],
 };
 
@@ -97,6 +105,22 @@ describe("dashboard-overview-screen", () => {
       n.textContent?.trim(),
     );
     expect(names).toEqual(["Café con leche", "Croissant"]);
+    const variants = [...card.querySelectorAll("[data-test=variant-name]")].map(
+      (n) => n.textContent,
+    );
+    expect(variants).toEqual(["Café con leche grande", "Café con leche pequeño"]);
+    expect(card.querySelector('[data-test="seller-row-0-variant-1"]')!.textContent).toContain(
+      "14.00",
+    );
+    expect(card.querySelector('[data-test="seller-row-1-variant-0"]')).toBeNull();
+    // Painted by this screen's styles: the variant's name is indented past its product's.
+    const parentIndent = parseFloat(
+      getComputedStyle(card.querySelector("[data-test=seller-name]")!).paddingLeft,
+    );
+    const variantIndent = parseFloat(
+      getComputedStyle(card.querySelector('[data-test="seller-row-0-variant-0"] th')!).paddingLeft,
+    );
+    expect(variantIndent).toBeGreaterThan(parentIndent);
   });
 
   it("shows the empty prompt when there are no top sellers", async () => {

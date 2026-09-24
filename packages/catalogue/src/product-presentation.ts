@@ -14,7 +14,7 @@ export interface ProductPresentation {
 // naming no variant is shown under the product's names.
 
 // Takes only the two staff names, not a whole `ProductPresentation`, so a caller holding a row with
-// nothing else on it — a top-sellers row, an image-usage row, a tab line — needs no empty fields.
+// nothing else on it — an image-usage row, a tab line — needs no empty fields.
 export function staffPresentationName(
   p: Pick<ProductPresentation, "name" | "variantName">,
 ): string {

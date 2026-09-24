@@ -1507,9 +1507,6 @@ importers:
 
   packages/reporting:
     dependencies:
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../catalogue
       '@waitron/db':
         specifier: workspace:*
         version: link:../db

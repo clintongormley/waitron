@@ -12,7 +12,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@waitron/catalogue": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.2"

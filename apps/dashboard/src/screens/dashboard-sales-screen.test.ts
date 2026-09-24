@@ -34,7 +34,17 @@ const close: DailyCloseDto = {
     tipTotal: "8.00",
   },
   counts: { sales: 10, corrections: 1, voids: 2 },
-  topSellers: [{ name: "Café", quantity: "5", total: "10.00" }],
+  topSellers: [
+    {
+      name: "Café",
+      quantity: "5",
+      total: "10.00",
+      variants: [
+        { name: "Café doble", quantity: "3", total: "7.50" },
+        { name: "Café solo", quantity: "2", total: "2.50" },
+      ],
+    },
+  ],
 };
 
 const period: SalesPeriodDto = {
@@ -47,8 +57,8 @@ const period: SalesPeriodDto = {
     grossTotal: "1210.00",
   },
   topSellers: [
-    { name: "Croqueta", quantity: "40", total: "80.00" },
-    { name: "Tortilla", quantity: "12", total: "36.00" },
+    { name: "Croqueta", quantity: "40", total: "80.00", variants: [] },
+    { name: "Tortilla", quantity: "12", total: "36.00", variants: [] },
   ],
 };
 
@@ -113,6 +123,22 @@ describe("dashboard-sales-screen", () => {
     // the row's plain staff name — no locale lookup.
     expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
     expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Café");
+    // Its variants follow as their own rows, each under its own name and figures.
+    const variant0 = root.querySelector('[data-test="seller-row-0-variant-0"]')!;
+    expect(variant0.querySelector("[data-test=variant-name]")!.textContent).toBe("Café doble");
+    expect(variant0.textContent).toContain("7.50");
+    const variant1 = root.querySelector('[data-test="seller-row-0-variant-1"]')!;
+    expect(variant1.querySelector("[data-test=variant-name]")!.textContent).toBe("Café solo");
+    // Painted by this screen's styles: the variant's name is indented past its product's, and the
+    // product name repeated for screen readers takes no room on screen.
+    const parentIndent = parseFloat(
+      getComputedStyle(root.querySelector("[data-test=seller-name]")!).paddingLeft,
+    );
+    const variantIndent = parseFloat(getComputedStyle(variant0.querySelector("th")!).paddingLeft);
+    expect(variantIndent).toBeGreaterThan(parentIndent);
+    expect(
+      variant0.querySelector<HTMLElement>(".visually-hidden")!.offsetWidth,
+    ).toBeLessThanOrEqual(1);
 
     // No per-day note in single-day mode.
     expect(root.querySelector("[data-test=period-note]")).toBeNull();
