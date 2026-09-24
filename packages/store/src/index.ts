@@ -14,19 +14,12 @@ export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 export { isLocked, lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
 export type { VenueLock } from "./venue-lock.js";
-export {
-  isVenueHolderFresh,
-  readVenueHolder,
-  VENUE_HOLDER_FILE,
-  VENUE_HOLDER_KINDS,
-  VENUE_HOLDER_STALE_MS,
-} from "./venue-holder.js";
+export { isVenueHolderFresh, readVenueHolder, VENUE_HOLDER_KINDS } from "./venue-holder.js";
 export type { VenueHolder, VenueHolderKind } from "./venue-holder.js";
 export {
   setVenueCrashReportDirectory,
   setVenueHolderKind,
   setVenueWatchdogLogFile,
-  VENUE_HOLDER_FROZEN_CODE,
 } from "./venue-liveness.js";
 import { createWriteQueue } from "./write-queue.js";
 
