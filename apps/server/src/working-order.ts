@@ -64,7 +64,7 @@ import {
   resolveAttachedModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
-  resolveAccessibleCatalogueIds,
+  readInvoiceLocales,
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
@@ -280,7 +280,7 @@ async function priceOrderLines(
   // PARENT dish line only — a child modifier row carries none. Absent = NULL (not chosen); a
   // whitespace-only note folds to NULL.
   requestedLines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     courseId?: string | null;
     extras?: ExtraSelection[];
@@ -304,7 +304,7 @@ async function priceOrderLines(
   const availableById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const lines = requestedLines.map((line) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry.
-    if (line.menuItemId === undefined || Object.hasOwn(line, "productId")) {
+    if (typeof line.menuItemId !== "string" || Object.hasOwn(line, "productId")) {
       throw new AppError("management.request_invalid", { field: "lines" });
     }
     const offer = availableById.get(line.menuItemId);
@@ -314,9 +314,9 @@ async function priceOrderLines(
         menuItemId: line.menuItemId,
       });
     }
-    return { ...line, menuItemId: line.menuItemId, offer };
+    return { ...line, offer };
   });
-  const { invoiceLocales } = await resolveAccessibleCatalogueIds(tx, cfg.locationId);
+  const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
   // Read ONCE, before the line loop: the venue's default content language is what resolves a
   // product's, a variant's and a modifier's text below, and what re-keys each line's customer text
   // onto the invoice locales after pricing.
@@ -763,7 +763,7 @@ export interface ParkOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
   // `createOpenOrder`.
   lines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -779,11 +779,11 @@ export interface ParkOrderResult {
 }
 
 /**
- * Persist an OPEN working order plus its priced lines on the CALLER's transaction: re-read the
- * catalogue, re-price `lines` with `priceBasket`, allocate the next per-node order number, and INSERT
+ * Persist an OPEN working order plus its priced lines on the CALLER's transaction: read the zone's
+ * menu offers, re-price `lines` with `priceBasket`, allocate the next per-node order number, and INSERT
  * the `working_orders` row (status `open`) and its `working_order_lines`. Returns the allocated order
  * number AND the authoritative `priceBasket` result its lines were priced from — so `payWorkingOrder`'s
- * walk-up path files the sale from the SAME price this creation computed, never a second catalogue
+ * walk-up path files the sale from the SAME price this creation computed, never a second offer
  * read of the identical basket. The server never trusts a browser-computed price; `lines` carry none.
  *
  * Shared by `parkOrder` (a counter parks an order to pay later, which uses only `orderNumber`) and
@@ -803,7 +803,7 @@ export async function createOpenOrder(
   // A line MAY also carry per-line `LineExtras` (NON-FISCAL) — likewise forwarded to `priceOrderLines`,
   // which validates + persists them on the parent dish line.
   lines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -973,7 +973,7 @@ export async function openTab(
   cfg: TillConfig,
   req: {
     tableId: string;
-    lines?: { menuItemId?: string; quantity: string }[];
+    lines?: { menuItemId: string; quantity: string }[];
   },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
@@ -1070,10 +1070,9 @@ async function assertAnchoredTabOpen(
  *
  * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
  * denormalised grouping key; `working_order_line_id` is the fired line, whose `(
- * working_order_line_id)` unique makes a double-fire collide rather than duplicate. The two
- * catalogue reads (the venue default once, then all lines' product/category routes in one batched
- * `inArray`) and the insert all run on the CALLER's transaction. An
- * empty `lines` inserts nothing — the `values([])` guard `createOpenOrder` uses.
+ * working_order_line_id)` unique makes a double-fire collide rather than duplicate. Every read and
+ * the insert run on the CALLER's transaction. An empty `lines` inserts nothing — the `values([])`
+ * guard `createOpenOrder` uses.
  *
  * SIDE EFFECT (KDS-4 print-on-fire, §3b): after the insert, the newly-fired items (the insert's
  * `.returning()` filtered to `firedAt != null`) are handed to `enqueueKitchenTickets`, which INSERTs
@@ -1118,42 +1117,68 @@ export async function fireLines(
     return;
   }
   lines = parentLines;
-  // The venue's legacy fallback station (its `is_default` row, if any) — read ONCE for context-less
-  // orders; each such line falls to it when neither the product nor its category names a route. The
-  // `active` filter is required:
-  // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead station
-  // is still resolved here and lines route to a queue the till/station display (active-only) never
-  // surface — food silently dropped. Requiring `active` makes a venue whose only default is deactivated
-  // resolve `null` → the fail-loud `station.no_default` below (§2b), until a new default is set.
-  const [fallback] = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.isDefault, true),
-        eq(kitchenStations.active, true),
-      ),
-    );
-  const defaultStationId = fallback?.id ?? null;
-
-  // Read the legacy product and category station overrides in one batch. A missing category yields a
-  // null route; modifier children have already been removed from this list. A variant line routes
-  // by its EFFECTIVE station and category, so it goes where its parent would unless it sets its own.
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
   const productIds = [
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
-  const routes = await tx
-    .select({
-      productId: products.id,
-      productStationId: effectiveProductColumns.stationId,
-      categoryStationId: categories.stationId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(categories, eq(categories.id, effectiveProductColumns.categoryId))
-    .where(inArray(products.id, productIds));
-  const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
+
+  // One batched venue-service route read per fire, before the line loop, so the map body below stays
+  // pure: the route depends only on (zone, product) and the zone is fixed for the order.
+  const serviceRouteByProduct =
+    serviceContext === null
+      ? new Map<string, PreparationRoute>()
+      : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
+
+  // The lines the zone routes do not decide: every line of a context-less order, and on a zoned
+  // order a line naming no product. Only these read the legacy station chain below.
+  const legacyLines = lines.filter(
+    (line) => line.productId === null || !serviceRouteByProduct.has(line.productId),
+  );
+  let defaultStationId: string | null = null;
+  let routeByProduct = new Map<
+    string,
+    { productStationId: string | null; categoryStationId: string | null }
+  >();
+  if (legacyLines.length > 0) {
+    // The venue's legacy fallback station (its `is_default` row, if any); a legacy line falls to it
+    // when neither the product nor its category names a route. The `active` filter is required:
+    // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead
+    // station is still resolved here and lines route to a queue the till/station display
+    // (active-only) never surface — food silently dropped. Requiring `active` makes a venue whose
+    // only default is deactivated resolve `null` → the fail-loud `station.no_default` below (§2b),
+    // until a new default is set.
+    const [fallback] = await tx
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(
+        and(
+          eq(kitchenStations.locationId, cfg.locationId),
+          eq(kitchenStations.isDefault, true),
+          eq(kitchenStations.active, true),
+        ),
+      );
+    defaultStationId = fallback?.id ?? null;
+
+    // The legacy product and category station overrides, in one batch. A missing category yields a
+    // null route. A variant line routes by its EFFECTIVE station and category, so it goes where its
+    // parent would unless it sets its own.
+    const legacyProductIds = [
+      ...new Set(
+        legacyLines.map((line) => line.productId).filter((id): id is string => id !== null),
+      ),
+    ];
+    const routes = await tx
+      .select({
+        productId: products.id,
+        productStationId: effectiveProductColumns.stationId,
+        categoryStationId: categories.stationId,
+      })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .leftJoin(categories, eq(categories.id, effectiveProductColumns.categoryId))
+      .where(inArray(products.id, legacyProductIds));
+    routeByProduct = new Map(routes.map((route) => [route.productId, route]));
+  }
 
   // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
 
@@ -1209,15 +1234,6 @@ export async function fireLines(
     .map((row) => row.displayOrder);
   const earliestDisplayOrder =
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
-
-  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
-
-  // One batched venue-service route read per fire, before the line loop, so the map body below stays
-  // pure: the route depends only on (zone, product) and the zone is fixed for the order.
-  const serviceRouteByProduct =
-    serviceContext === null
-      ? new Map<string, PreparationRoute>()
-      : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
 
   // One clock reading for the whole round, so every item of it carries the same `fired_at` — which
   // is what PostgreSQL's `now()`, being transaction-start time, gave for free. `nowIso` because
@@ -1562,7 +1578,7 @@ export async function addTabRound(
   // `hold: true` — insert it HELD (no fire, no print) regardless of course; the marker is correlated onto
   // the priced PARENT row below and read by `fireLines`.
   lines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     courseId?: string | null;
     extras?: ExtraSelection[];
@@ -1830,9 +1846,34 @@ export async function unmarkLineServed(
 }
 
 /**
- * Move working-order lines from one OPEN tab to another (design §3) — the shared primitive `mergeTabs`
- * calls with ALL lines and TS-4 (transfer) will call with a subset, so it is written general now to
- * avoid a TS-4 refactor. Reads the named lines (default all), moves them onto `toTab` at the next
+ * Lines pass between two orders only when both have the same service mode, or neither has a service
+ * context.
+ */
+async function assertServiceModesMatch(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromOrderId: string,
+  toOrderId: string,
+): Promise<void> {
+  const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId);
+  const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId);
+  if (
+    (fromContext === null) !== (toContext === null) ||
+    (fromContext !== null &&
+      toContext !== null &&
+      fromContext.serviceMode !== toContext.serviceMode)
+  ) {
+    throw new AppError("service_zone.mode_incompatible", {
+      zoneId: toContext?.zoneId ?? "unscoped",
+      expected: fromContext?.serviceMode ?? "unscoped",
+      actual: toContext?.serviceMode ?? "unscoped",
+    });
+  }
+}
+
+/**
+ * Move working-order lines from one OPEN tab to another (design §3) — the checked wrapper `mergeTabs`
+ * calls with ALL lines. Reads the named lines (default all), moves them onto `toTab` at the next
  * `line_no`s while retaining every locked price column (a move NEVER re-prices — the
  * add-time `working_order_lines.unit_price_gross` column is what the filed sale is later rebuilt from),
  * their stable IDs, modifier links, service attribution and any fired preparation tickets.
@@ -1865,6 +1906,22 @@ export async function moveTabLines(
   toTabId: string,
   lineNos?: number[],
 ): Promise<void> {
+  await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, { modesChecked: false });
+}
+
+/**
+ * {@link moveTabLines}' body. `modesChecked: true` skips {@link assertServiceModesMatch}, and only a
+ * caller whose two orders are already known to share a service mode — by that check, or by
+ * construction as `splitOffCheck`'s `copyOrderContext` does — may pass it.
+ */
+async function moveOrderLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  lineNos: number[] | undefined,
+  options: { modesChecked: boolean },
+): Promise<void> {
   // Refuse a self-transfer before any read/write; mergeTabs guards this too, but callers can use this
   // primitive directly. Reuses tab.merge_self — one tab named as both ends.
   if (fromTabId === toTabId) {
@@ -1882,19 +1939,8 @@ export async function moveTabLines(
   if (to === undefined || to.status !== "open") {
     throw new AppError("tab.not_open", { tabId: toTabId });
   }
-  const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromTabId);
-  const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toTabId);
-  if (
-    (fromContext === null) !== (toContext === null) ||
-    (fromContext !== null &&
-      toContext !== null &&
-      fromContext.serviceMode !== toContext.serviceMode)
-  ) {
-    throw new AppError("service_zone.mode_incompatible", {
-      zoneId: toContext?.zoneId ?? "unscoped",
-      expected: fromContext?.serviceMode ?? "unscoped",
-      actual: toContext?.serviceMode ?? "unscoped",
-    });
+  if (!options.modesChecked) {
+    await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
   }
 
   const sourceWhere =
@@ -2327,7 +2373,7 @@ export async function mergeTabs(
   }
   // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
   //    moveTabLines re-reads and re-validates these two rows as open — a deliberate repeat of the
-  //    check above, because moveTabLines is a standalone primitive TS-4 calls directly and must
+  //    check above, because moveTabLines is an exported primitive and must
   //    self-validate; the extra round trip is accepted rather than couple the two.
   await moveTabLines(tx, cfg, fromTabId, intoTabId);
 
@@ -2378,7 +2424,7 @@ function grossLineTotal(grossUnit: string, quantity: string): Decimal {
  * `UPDATE … WHERE line_no=…` then matches zero rows and its INSERT still fabricates a destination line.
  * Neither shape folds into a cumulative decrement, so a duplicate is simply refused (a 400 request-shape
  * fault). Shared by {@link transferLines} (both ends tabs) and {@link splitOffCheck} (detached check); a
- * duplicate WHOLE-line pair — already harmless via `moveTabLines`' `inArray` set semantics — is refused
+ * duplicate WHOLE-line pair — already harmless via `moveOrderLines`' `inArray` set semantics — is refused
  * too, which is fine/stricter.
  */
 function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number }[]): void {
@@ -2431,8 +2477,9 @@ export async function transferLines(
   for (const tabId of [fromTabId, toTabId].sort()) {
     await assertAnchoredTabOpen(tx, cfg, tabId);
   }
+  // The only mode check on this path: `carveOffLines` makes none, whole lines or split.
+  await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
 
-  // Carry the items over (whole lines + partial splits).
   await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
 }
 
@@ -2442,12 +2489,14 @@ export async function transferLines(
  * core of {@link transferLines} (TS-4) and {@link splitOffCheck} (TS-5). It makes no open-order
  * check of its own: the CALLER must already have made one on both orders (`transferLines` via its
  * `assertAnchoredTabOpen` loop, requiring both ends to be TABS; `splitOffCheck` on its origin, its
- * destination being a check it has just minted). Every transfer is VALIDATED before any move or
+ * destination being a check it has just minted). Nor does it compare the two orders' service modes,
+ * on either path: `transferLines` does, and `splitOffCheck`'s check is given its origin's context,
+ * or none when the origin has none, before the carve. Every transfer is VALIDATED before any move or
  * split runs (`tab.line_not_found` for an absent `line_no`, `tab.transfer_quantity_invalid` for a
  * quantity outside `0 < q ≤ line.quantity` or a malformed literal, `tab.transfer_modifier_line` for a
  * modifier child named alone or a partial split of a dish carrying modifiers — ordering modifiers FIX
  * 2/4), so one bad entry leaves both orders untouched. The whole-line path delegates to
- * {@link moveTabLines} (which accepts any OPEN destination, so a table-less check is a valid target —
+ * {@link moveOrderLines} (which accepts any OPEN destination, so a table-less check is a valid target —
  * unlike `assertAnchoredTabOpen`) and cascades a dish's modifier children along with it; the split
  * path appends new destination lines after the moves.
  */
@@ -2539,7 +2588,7 @@ async function carveOffLines(
     const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (t.quantity === undefined) {
       // Whole-line move of a dish (or a plain line): cascade its modifier children so a parent takes
-      // them with it and `moveTabLines` remaps the child→parent link onto the destination (FIX 2).
+      // them with it and `moveOrderLines` remaps the child→parent link onto the destination (FIX 2).
       wholeLineNos.push(t.lineNo, ...childLineNos);
       continue;
     }
@@ -2577,15 +2626,15 @@ async function carveOffLines(
     }
   }
 
-  // Whole lines first: `moveTabLines` keeps each locked price and appends at the destination's next
+  // Whole lines first: `moveOrderLines` keeps each locked price and appends at the destination's next
   // `line_no`(s).
   if (wholeLineNos.length > 0) {
-    await moveTabLines(tx, cfg, fromTabId, toTabId, wholeLineNos);
+    await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true });
   }
 
   // Then the splits. Allocate destination `line_no`s AFTER the moves (so they don't collide with moved
   // rows): read the current max and hand out max+1, max+2, ... in order — the same per-tab allocation
-  // `addTabRound`/`moveTabLines` make. It cannot collide on the `(working_order_id, line_no)` unique
+  // `addTabRound`/`moveOrderLines` make. It cannot collide on the `(working_order_id, line_no)` unique
   // because no other writer can append to the destination between this read and these inserts: one
   // write transaction runs on the venue file at a time ({@link assertAnchoredTabOpen}).
   if (partials.length > 0) {
@@ -2652,7 +2701,7 @@ async function carveOffLines(
  * node/till and, at pay, `cfg.seriesId`) — that NO table points at: it is a payment unit, not a seat
  * (design §2), so unlike a tab there is no `dining_tables.tab_id` back-pointer to set. Because the check
  * is table-less, the items are carried over by {@link carveOffLines} directly (TS-4's whole/partial
- * move/split core, which delegates whole lines to `moveTabLines`) rather than by `transferLines` — whose
+ * move/split core, which delegates whole lines to `moveOrderLines`) rather than by `transferLines` — whose
  * `assertAnchoredTabOpen` loop requires BOTH ends to be tabs and would reject a detached check.
  * The move keeps each
  * unit's LOCKED `unit_price_gross` (no catalogue re-look-up) and CONSERVES quantity, so the check and the
@@ -2709,6 +2758,8 @@ export async function splitOffCheck(
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
   await createOpenOrder(tx, cfg, checkId, [], orderLabel);
+  // The check takes the origin's service mode (or, like it, has none), so `carveOffLines` needs no
+  // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
   // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
@@ -3097,7 +3148,7 @@ export interface UpdateHeldOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
   lines: ({
     workingOrderLineId?: string;
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];

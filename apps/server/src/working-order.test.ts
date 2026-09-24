@@ -2411,24 +2411,21 @@ const byProduct = (
 describe("createOpenOrder's catalogue reads (perf)", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // A lineless order (every splitOffCheck, a lineless openTab, unjoin's new tab) has nothing to
-  // price, so priceOrderLines reads nothing. Behaviour alone can't tell (an empty basket yields an
-  // empty order either way), so the location read is spied on, with a real line as the control.
-  it("reads nothing for an empty basket", async () => {
+  // Behaviour alone can't tell (an empty basket yields an empty order either way), so the read is
+  // spied on, with a real line in the next case as the control.
+  it("does not read the invoice languages for an empty basket", async () => {
     const { cfg } = await setupVenue();
-    const spy = vi.spyOn(catalogue, "resolveAccessibleCatalogueIds");
+    const spy = vi.spyOn(catalogue, "readInvoiceLocales");
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, randomUUID(), [], null);
     });
     expect(spy).not.toHaveBeenCalled();
   });
 
-  // A sale reads only the location's invoice locales from the catalogue, never the whole product
-  // list the till's product picker draws on.
-  it("reads the location once, and never the product list, for a non-empty basket", async () => {
+  it("reads the invoice languages once, and never `listAvailableProducts`, for a non-empty basket", async () => {
     const { cfg, cafeId } = await setupVenue();
     const offers = await counterOffers(cfg);
-    const locationRead = vi.spyOn(catalogue, "resolveAccessibleCatalogueIds");
+    const locationRead = vi.spyOn(catalogue, "readInvoiceLocales");
     const productList = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, randomUUID(), offers.toOfferLines([line(cafeId)]), null, {
@@ -2481,7 +2478,7 @@ describe("basket-wide modifier resolution (perf)", () => {
   //
   // What is spied on is `resolveAttachedModifiers` — the ORDER path's own way into the shared walk,
   // and the only caller of it in product code (`resolveBasketModifiers`, working-order.ts). It is
-  // NOT what the two reads a till sells from call: those reach the shared body,
+  // NOT what `listMenuOffers` and `listAvailableProducts` call: those reach the shared body,
   // `walkAttachedModifiers`, through `readOfferedModifiers`, so nothing counted here says anything
   // about what a till is offered (packages/catalogue/src/offered-modifiers.ts). The readers that
   // body calls are not reachable from here either: it calls them through its own relative imports,

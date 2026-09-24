@@ -195,9 +195,9 @@ async function post(venue: Venue, path: string, body: object): Promise<Response>
   });
 }
 
-// A line as a JSON body can still send it: naming a product, which the line types no longer carry.
-function productLine(productId: string): { productId: string; quantity: string } {
-  return { productId, quantity: "1" };
+// A JSON body can still send a line naming a product, which the line types no longer allow.
+function productLine(productId: string): { menuItemId: string; quantity: string } {
+  return { productId, quantity: "1" } as unknown as { menuItemId: string; quantity: string };
 }
 
 const ROUTES = [
@@ -245,10 +245,7 @@ describe("a venue with no service zone sells nothing", () => {
 describe("an order with no service context takes no lines", () => {
   it("parkOrder with no zone refuses order.service_context_missing, whatever the line names", async () => {
     const venue = await seedVenue(suite.db);
-    for (const line of [
-      { productId: venue.water, quantity: "1" },
-      { menuItemId: randomUUID(), quantity: "1" },
-    ]) {
+    for (const line of [productLine(venue.water), { menuItemId: randomUUID(), quantity: "1" }]) {
       const id = randomUUID();
       await expect(
         parkOrder({ db: suite.db }, venue.cfg, { id, lines: [line] }),

@@ -36,8 +36,8 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// This suite proves the WRITE behaviour of `transferLines` and
-// `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock. The
+// This suite proves the WRITE behaviour of `transferLines`, and of
+// `moveTabLines` given a subset of lines — the split arithmetic, the guards, the line renumbering, the price-lock. The
 // concurrency race and the per-tab fiscal filing are
 // `transfer-lines.filing.test.ts`'s job.
 const LOCALE = "es-ES";
@@ -273,10 +273,10 @@ describe("transferLines — whole line", () => {
     expect(await linesOf(tabA)).toHaveLength(1); // untouched
   });
 
-  // Isolates transferLines' OWN lock-loop guard from moveTabLines' backstop. The absent-destination
-  // test above passes even with the lock loop deleted, because moveTabLines' own status read throws
+  // Isolates transferLines' OWN lock-loop guard from moveOrderLines' backstop. The absent-destination
+  // test above passes even with the lock loop deleted, because moveOrderLines' own status read throws
   // tab.not_open for a missing working_orders row too. A PARKED walk-up is the discriminating case: it
-  // IS an open working order (moveTabLines would happily move lines INTO it), but NO dining_tables row
+  // IS an open working order (moveOrderLines would happily move lines INTO it), but NO dining_tables row
   // points at it, so it is not a TAB — only assertAnchoredTabOpen's back-pointer check rejects it.
   // Delete that check loop and THIS test fails (the café line lands in the parked order); keep it and
   // the transfer is refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
@@ -426,7 +426,7 @@ describe("transferLines — guards", () => {
   // deleted (`decimal(line.quantity)` on `undefined` throws, caught, reported as
   // tab.transfer_quantity_invalid — a wrong shape, not silence). A WHOLE-line transfer (`quantity`
   // omitted) takes a different path: it never reaches `decimal()` at all, so `t.lineNo` is pushed
-  // straight onto `wholeLineNos` with no check on `line`. Without the presence check, `moveTabLines`
+  // straight onto `wholeLineNos` with no check on `line`. Without the presence check, `moveOrderLines`
   // then runs with `lineNos: [99]`, matches ZERO rows on `fromTab`, inserts nothing (guarded on
   // `source.length > 0`) and deletes nothing — the whole call RESOLVES, moving nothing, silently.
   // This is the ONLY case in the suite where deleting the presence check produces a silent no-op
@@ -505,6 +505,25 @@ describe("transferLines — guards", () => {
     expect(a[1]).toMatchObject({ quantity: "2.000" });
     expect(await linesOf(tabB)).toHaveLength(1); // no new line appended
   });
+
+  it("refuses a transfer onto an empty tab on a table in no zone (service_zone.mode_incompatible), whole line or part", async () => {
+    const { cfg, cafeId, tableAId, cafeOffer } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
+    const zoneless = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "No zone" }));
+    const empty = await openTabWith(cfg, zoneless.id, []);
+    for (const transfer of [{ lineNo: 1, quantity: "1" }, { lineNo: 1 }]) {
+      await expect(
+        asApp(cfg, (tx) => transferLines(tx, cfg, tabA, empty, [transfer])),
+      ).rejects.toMatchObject({
+        code: "service_zone.mode_incompatible",
+        params: { zoneId: "unscoped", expected: "table_tab", actual: "unscoped" },
+      });
+    }
+    expect(await linesOf(tabA)).toEqual([
+      expect.objectContaining({ lineNo: 1, productId: cafeId, quantity: "2.000" }),
+    ]);
+    expect(await linesOf(empty)).toEqual([]);
+  });
 });
 
 describe("transferLines — duplicate line_no in the batch", () => {
@@ -542,7 +561,7 @@ describe("transferLines — duplicate line_no in the batch", () => {
   });
 
   // The whole-line + partial pair on one line is CONTRADICTORY ("move the whole line" AND "move part
-  // of it"), which a cumulative-decrement fold cannot express — moveTabLines DELETEs source line 1
+  // of it"), which a cumulative-decrement fold cannot express — moveOrderLines DELETEs source line 1
   // (moving it whole), then the split's `UPDATE ... WHERE line_no=1` matches ZERO rows while its
   // INSERT still fires → a fabricated destination line. The up-front duplicate guard refuses the batch
   // before EITHER path runs, which is why the guard rejects a repeated line_no uniformly rather than

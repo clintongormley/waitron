@@ -734,7 +734,8 @@ left open, besides the bullets above that it updated:
   pricing unit** — for top-level products as well as variants. Found by the review; I believe it
   predates Task 6, not checked with `git blame`. **Next action:** check whether anything still reads
   `products.pricing_unit` for a product with a unit row, and either update it on reassignment or
-  say why it does not matter.
+  say why it does not matter. No sale reads it since B4: see the B4 update on "Two different
+  signals say whether a dish is sold by weight" below.
 - **Review suggestions not taken:** split the editor's types into a product shape and a variant
   shape (removing the non-null workarounds in `saveProductEditor` and the dashboard), derive
   `InheritedValues` from the product type, and write a parent's variant republishes in one
@@ -865,8 +866,9 @@ from the menu offers of its order's service zone, and the path that priced a lin
   with `order.service_context_missing` (409), and a line that names a product instead of a menu
   offer with `management.request_invalid`, field `lines` (400). An order with no lines still opens
   without a zone.
-- Pricing reads the invoice languages through `resolveAccessibleCatalogueIds`
-  (`packages/catalogue/src/operations.ts`), no longer through `listAvailableProducts`.
+- Pricing reads the invoice languages through `readInvoiceLocales`
+  (`packages/catalogue/src/operations.ts`), one row of `locations`, no longer through
+  `listAvailableProducts`.
 - The till always sends a line's `menuItemId`; `toWireProductIdentity`
   (`apps/till/src/state/order-line.ts`) throws for a product that has none.
 - `CoreServices.openTab` (`packages/module/src/module.ts`) takes only `{ tableId }`.
@@ -878,16 +880,16 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
 - **The old station chain in `fireLines` routes nothing the till can sell now.** For an order with
   no zone, `fireLines` (`apps/server/src/working-order.ts`) takes each line's kitchen station from
   the product, then its category, then the venue's default station, and refuses
-  `station.no_default` when none is set. An order in a zone routes by the zone's preparation
-  routes, and `resolvePreparationRoutes` (`packages/venue-service/src/operations.ts`) refuses
-  `route.missing` rather than fall back to the chain. Every path that prices new lines now refuses
+  `station.no_default` when none is set. On an order in a zone, a line that names a product routes
+  by the zone's preparation routes, and `resolvePreparationRoutes`
+  (`packages/venue-service/src/operations.ts`) refuses `route.missing` rather than fall back to the
+  chain. Every path that prices new lines now refuses
   an order with no zone, so the chain is reached by orders parked with lines before B4, and by the
   tests that build such an order directly (`createOpenOrder` with no lines, a line inserted by
-  hand, then `fireLines`), which keep it covered. One possible way in, read and not run:
-  `transferLines` (through `carveOffLines`) checks no zone when it copies PART of a line onto
-  another tab, so a partial
-  transfer onto an empty tab on a table in no zone may put a line on an order with no zone;
-  `moveTabLines`, which moves whole lines, refuses that with `service_zone.mode_incompatible`. So
+  hand, then `fireLines`), which keep it covered. A transfer from a zoned tab onto an empty tab on
+  a table in no zone is refused `service_zone.mode_incompatible` for part of a line as for a whole
+  one (`transferLines`, pinned by "refuses a transfer onto an empty tab on a table in no zone" in
+  `apps/server/src/transfer-lines.test.ts`). So
   three dashboard settings no longer route anything sold today: the product editor's station
   (saved through `setProductStation`, `apps/server/src/catalogue-api.ts`), a category's station
   (`PUT /management-api/categories/:id/station`, `apps/server/src/management-api.ts`; the
@@ -902,6 +904,17 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
   scripts (`apps/server/scripts/demo-seed/seed.ts`, `apps/server/scripts/allergens-demo.ts`).
   **Next action:** decide whether to retire the route and move the till's tests onto zone-offer
   fixtures, or keep both.
+- **A location's menu list is read by no sale.** A sale takes its menus from the zone
+  (`zone_menus`, read by `listZoneOffers` in `packages/venue-service/src/operations.ts`). The
+  location's list (`locations.catalogue_id` plus `location_catalogues`) is still read and written
+  elsewhere — among them `GET /api/products`, the management API's location routes
+  (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297), configuration
+  transfer, both provisioning seeds, two dev scripts and the server's `offerProducts` test helper.
+  `git grep -n "locationCatalogues\|location_catalogues\|resolveAccessibleCatalogueIds\|listAvailableProducts\|listAccessibleCatalogues" -- apps packages ':!*.test.ts'`
+  finds the table's and its helpers' users; a read of `catalogue_id` alone, as the venue-service
+  seed and configuration transfer make, needs a separate grep for `catalogue_id`/`catalogueId`.
+  **Next action:** owner to decide whether to retire `location_catalogues` and those routes with
+  `GET /api/products`, or keep them.
 - **A table in no zone still opens a tab, and nothing can be added to it.** The till opens a tab
   with no lines (`#onOpenTable`, `apps/till/src/till-app.ts`), and a booking seated at a table does
   the same through `core.openTab` (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table

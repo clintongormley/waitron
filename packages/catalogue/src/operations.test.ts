@@ -47,6 +47,7 @@ import {
   listCategories,
   listMenuOffers,
   listProducts,
+  readInvoiceLocales,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
   renameCatalogue,
@@ -1300,6 +1301,16 @@ describe("catalogue operations", () => {
         { id: main.id, name: "Main", isDefault: true },
         { id: lunch.id, name: "Lunch", isDefault: false },
       ]);
+    });
+  });
+
+  it("readInvoiceLocales returns a location's invoice languages in order, and [] for no such location", async () => {
+    await asTenant(async (tx) => {
+      await tx.execute(
+        sql`update locations set invoice_locales = '["es-ES","en-GB"]' where id = ${locationId}`,
+      );
+      expect(await readInvoiceLocales(tx, locationId)).toEqual(["es-ES", "en-GB"]);
+      expect(await readInvoiceLocales(tx, crypto.randomUUID())).toEqual([]);
     });
   });
 

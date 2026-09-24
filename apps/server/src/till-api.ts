@@ -1057,11 +1057,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
-  // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs
+  // The menu list of this till's location. SESSION-GUARDED: `requireSession` runs
   // FIRST, so an unauthenticated request 401s (`session.required`) before any catalogue is read —
   // the operator must be logged in to see prices. The read itself runs under the till's tenant
   // (`withTransaction`), in the database holding this tenant. `menus` (the
-  // location's accessible catalogues, default flagged, for the till's menu switcher) and
+  // location's accessible catalogues, default flagged) and
   // `products` (tagged with the catalogue each came from) are read in the SAME transaction so
   // they describe one consistent snapshot of the accessible set.
   app.get("/api/products", (c) =>
@@ -1289,7 +1289,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // (NON-FISCAL) — all forwarded to `parkOrder` → `priceOrderLines`, which validates them
         // against the dish's own definitions.
         lines: ({
-          menuItemId?: string;
+          menuItemId: string;
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
@@ -1368,7 +1368,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // (NON-FISCAL) — all forwarded to `updateHeldOrder`, which compares them against what the
         // stored line froze before deciding whether the edit is quantity-only.
         lines: ({
-          menuItemId?: string;
+          menuItemId: string;
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
@@ -1931,7 +1931,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{
-        lines?: { menuItemId?: string; quantity: string }[];
+        lines?: { menuItemId: string; quantity: string }[];
       }>(c);
       const result = await withTransaction(deps.db, async (tx) => {
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
@@ -1958,7 +1958,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
         // print) regardless of course, released later by `sendLines`.
         lines: ({
-          menuItemId?: string;
+          menuItemId: string;
           quantity: string;
           courseId?: string | null;
           extras?: ExtraSelection[];

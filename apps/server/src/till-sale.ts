@@ -72,8 +72,8 @@ export interface TillTender {
 
 /**
  * A walk-up sale as the counter till captures it: a basket of `{ menuItemId, quantity }` and one
- * tender (cash or card). Deliberately carries NO price of any kind — the server re-reads the
- * catalogue and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
+ * tender (cash or card). Deliberately carries NO price of any kind — the server reads the
+ * zone's menu offers and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
  * total. `quantity` is a positive decimal string validated against the selected unit's precision.
  *
  * `workingOrderId` is the pay-idempotency key (park & retrieve, sub-project 7b). The till mints it and
@@ -94,7 +94,7 @@ export interface TillSaleRequest {
    *  never threaded into any sale/fiscal projection. Declared here because the till already sends them
    *  on this wire. */
   lines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -276,7 +276,7 @@ export interface PayWorkingOrderRequest {
    *  also carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never threaded
    *  into a fiscal projection. Declared here because the till already sends them on this wire. */
   lines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -308,7 +308,7 @@ export interface IntegratedPayRequest {
    *  all validated server-side; the customisation is never threaded into a fiscal projection. Declared
    *  here because the till already sends them on this wire. */
   lines: ({
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];

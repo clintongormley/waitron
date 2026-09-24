@@ -1108,12 +1108,11 @@ export async function assignCatalogueToLocation(
 
 /**
  * Make `catalogueId` the location's default menu (`locations.catalogue_id`) while KEEPING the old
- * default sellable — the owner-chosen "keep-sellable" behaviour: an owner picking a new default does
- * not expect the previous menu to stop being sold, so the old default is demoted to a
- * `location_catalogues` member rather than dropped. "Which menus does this location sell?" and "which
- * one opens first?" stay independent. A location with no prior default (or one already set to
- * `catalogueId`) skips the demote. The redundant member row `catalogueId` may already hold is left
- * untouched — {@link resolveAccessibleCatalogueIds} de-duplicates, so it is invisible.
+ * default in the location's menu list: it is demoted to a `location_catalogues` member rather than
+ * dropped, so membership and the default stay independent. A location with no prior default (or one
+ * already set to `catalogueId`) skips the demote. The redundant member row `catalogueId` may
+ * already hold is left untouched — {@link resolveAccessibleCatalogueIds} de-duplicates, so it is
+ * invisible.
  */
 export async function setLocationDefaultCatalogue(
   tx: Transaction,
@@ -1135,8 +1134,8 @@ export async function setLocationDefaultCatalogue(
 }
 
 /**
- * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row): the
- * location may then sell from it alongside its default `catalogue_id`. Idempotent — the primary key
+ * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row),
+ * alongside its default `catalogue_id`. Idempotent — the primary key
  * (location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
  * default assignment stays with {@link assignCatalogueToLocation}; this only adds OTHER menus.
  */
@@ -1149,8 +1148,8 @@ export async function addCatalogueToLocation(
 }
 
 /**
- * Detach a catalogue from a location's accessible set (delete its `location_catalogues` row): the
- * location stops selling from it. Idempotent — deleting a row that is not there is a no-op. This
+ * Detach a catalogue from a location's accessible set (delete its `location_catalogues` row).
+ * Idempotent — deleting a row that is not there is a no-op. This
  * NEVER touches the default (`locations.catalogue_id`), which is not stored as a member row, so it
  * cannot strip a location's default menu; call {@link assignCatalogueToLocation} to change the
  * default.
@@ -1171,7 +1170,7 @@ export async function removeCatalogueFromLocation(
 }
 
 /**
- * The catalogue ids a location may sell from: its default (`locations.catalogue_id`, when non-null)
+ * The catalogue ids in a location's menu list: its default (`locations.catalogue_id`, when non-null)
  * unioned with every `location_catalogues` member, de-duplicated (a `Set`, since the default may also
  * appear as a member). Order is not meaningful — {@link listAvailableProducts} sorts by catalogue
  * name — so `ids` is just the set's insertion order. `defaultId` is the same `locations.catalogue_id`
@@ -1198,21 +1197,29 @@ export async function resolveAccessibleCatalogueIds(
   return { ids: [...ids], defaultId: def?.id ?? null, invoiceLocales: def?.invoiceLocales ?? [] };
 }
 
+/** A location's `invoice_locales`, or `[]` when there is no such location. */
+export async function readInvoiceLocales(tx: Transaction, locationId: string): Promise<string[]> {
+  const [row] = await tx
+    .select({ invoiceLocales: locations.invoiceLocales })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  return row?.invoiceLocales ?? [];
+}
+
 export interface LocationCatalogue extends Catalogue {
   /** In this location's accessible set — its default (`locations.catalogue_id`) OR a
-   * `location_catalogues` member. The set the till sells from. */
+   * `location_catalogues` member. */
   sellable: boolean;
   /** This location's default menu (`locations.catalogue_id`); always also `sellable`. */
   isDefault: boolean;
 }
 
 /**
- * EVERY catalogue, each flagged with whether `locationId` may sell from it
- * (`sellable`) and whether it is that location's default (`isDefault`) — the dashboard's
- * location↔menu membership screen. Unlike {@link listAccessibleCatalogues} (which returns ONLY the
- * accessible set, for the till), this returns the full list so the screen can offer the not-yet-sold
- * catalogues to add. Order follows {@link listCatalogues} (creation order); the screen sorts for
- * display.
+ * EVERY catalogue, each flagged with whether it is in `locationId`'s menu list
+ * (`sellable`) and whether it is that location's default (`isDefault`), for
+ * `GET /management-api/locations/:locationId/catalogues`. Unlike {@link listAccessibleCatalogues}
+ * (which returns ONLY the location's list), this returns every catalogue. Order follows
+ * {@link listCatalogues}.
  */
 export async function listCataloguesForLocation(
   tx: Transaction,
@@ -1225,10 +1232,9 @@ export async function listCataloguesForLocation(
 }
 
 /**
- * The active catalogues (menus) `locationId` may sell from — its default plus any
- * `location_catalogues` members (see {@link resolveAccessibleCatalogueIds}) — for the till's menu
- * switcher. `isDefault` flags the one row matching `locations.catalogue_id`. Ordered default-first,
- * then by name, so the switcher's default entry always sorts to the top regardless of naming.
+ * The active catalogues (menus) in `locationId`'s menu list — its default plus any
+ * `location_catalogues` members (see {@link resolveAccessibleCatalogueIds}). `isDefault` flags
+ * the one row matching `locations.catalogue_id`. Ordered default-first, then by name.
  * Returns `[]` when the location has no accessible catalogue at all.
  */
 export async function listAccessibleCatalogues(
@@ -1249,7 +1255,7 @@ export async function listAccessibleCatalogues(
 }
 
 /**
- * The products the till can sell at `locationId`, across the WHOLE accessible catalogue set (the
+ * The products in `locationId`'s menu list, across the WHOLE accessible catalogue set (the
  * default plus any `location_catalogues` members — see {@link resolveAccessibleCatalogueIds}), each
  * row tagged with the `catalogueId`/`catalogueName` it came from. Keeps only Active and Available
  * products of an active catalogue, with the category NAME resolved via a left join (null when the product has no
