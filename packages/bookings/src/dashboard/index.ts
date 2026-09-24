@@ -2,13 +2,8 @@ import { html } from "lit";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { BookingApi } from "./client.js";
 import { BOOKINGS_STRINGS } from "./strings.js";
-import "./bookings-screen.js"; // side-effect: defines <dashboard-bookings-screen>
+import "./bookings-screen.js";
 
-// Importing `./strings.js` above runs its module-load registerCatalogue + registerCodeMessages, so the
-// booking strings and error copy are registered by the time this contribution is mounted.
-
-/** The bookings module's dashboard contribution: the Bookings screen, its nav placement + permission,
- * its strings, and a factory that wires the module context's request to a {@link BookingApi}. */
 export const BOOKINGS_DASHBOARD: DashboardContribution = {
   module: "bookings",
   screen: {

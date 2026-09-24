@@ -170,8 +170,6 @@ describe("bookings-screen", () => {
     expect(api.listBookings).toHaveBeenCalledTimes(2);
   });
 
-  // The LOAD-BEARING anti-#52 test at the screen level: fill the real form and submit; the body the
-  // API receives must carry a plain local date + time, never a `…Z` instant.
   it("submits plain local date+time, not a UTC instant", async () => {
     const api = stubApi();
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
@@ -260,7 +258,6 @@ describe("bookings-screen", () => {
     expect(api.listBookings).toHaveBeenCalledTimes(2);
   });
 
-  // ── Per-row actions gated on booking.status (design §6) ────────────────────────────────────────────
   const q = (el: BookingsScreen, testId: string): HTMLElement | null =>
     el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${testId}"]`);
 
@@ -403,9 +400,8 @@ describe("bookings-screen", () => {
   });
 
   it("surfaces table_required (no API call, no confirm) when a table-less booking has no tables to offer", async () => {
-    // A booking with NO assigned table AND no tables loaded cannot pick one, so seating it can only
-    // ever fail server-side with `booking.table_required`. The screen refuses to present a
-    // guaranteed-to-fail confirm: clicking Seat surfaces the error locally and arms no picker.
+    // With no table assigned and none to offer, seating can only fail server-side, so the screen
+    // surfaces the error locally rather than present a confirm.
     const api = stubApi({ listTables: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
     await flush(el);

@@ -2,19 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createRequest } from "@waitron/dashboard-kit";
 import { BookingApi } from "./client.js";
 
-// Wire-pin suite: the exact URLs, methods and bodies the booking routes are called with. Moved
-// byte-identical from apps/dashboard/src/api/client.test.ts — the proof the wire did not move when the
-// methods came across onto BookingApi. `new DashboardApi("", stub)` became
-// `new BookingApi(createRequest({ fetchImpl: stub }))`; every assertion in those moved cases is
-// unchanged. The `BookingApi — background` block at the end was added afterwards.
-
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-/** An empty 204 — `text()` → "" — the shape the void-returning routes answer with. Exercises the
- * request primitive's empty-body branch, which resolves `undefined` instead of `JSON.parse`-ing
- * nothing. */
+/** An empty 204, the shape the void-returning routes answer with. */
 function emptyResponse(): Response {
   return { ok: true, status: 204, json: async () => undefined, text: async () => "" } as Response;
 }
@@ -68,7 +60,6 @@ describe("BookingApi — bookings", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
     });
-    // Load-bearing (anti-#52): the body carries a plain `YYYY-MM-DD` + `HH:MM`, never a `…Z` instant.
     const sentBody = fetchImpl.mock.calls[0]![1].body as string;
     expect(sentBody).not.toContain("T20:00");
     expect(sentBody).not.toContain("Z");
@@ -159,10 +150,7 @@ describe("BookingApi — bookings", () => {
   });
 });
 
-// listTables is the core /management-api/tables read (NOT one of the seven booking routes), carried on
-// BookingApi because the screen calls it on connect to populate the form's table picker + seat prompt.
-// This wire-pin case is COPIED from the app's floor-plan suite (client.test.ts:1279) — the app keeps its
-// own copy, since floor-screen.ts still uses DashboardApi.listTables.
+// listTables is core's read, not a booking route: the screen needs it for the table picker.
 describe("BookingApi — listTables", () => {
   it("listTables GETs /management-api/tables with credentials", async () => {
     const rows = [
@@ -184,10 +172,8 @@ describe("BookingApi — listTables", () => {
   });
 });
 
-// `background` is the copy the screen's LIVE REFRESHES read through: its GETs are marked passive, so an
-// automatic poll does not count as session activity (CLAUDE.md §3, "Automatic dashboard reads are
-// passive session activity"). Built over the real request primitive like the cases above, so the
-// marker is read off what `fetch` receives: the primitive adds `x-waitron-live: 1` to a passive GET.
+// `background` is the copy live refreshes read through: its GETs are passive, so an automatic poll
+// does not count as session activity. The primitive marks a passive GET `x-waitron-live: 1`.
 describe("BookingApi — background", () => {
   it("marks the background copy's GETs passive and leaves the original's GETs active", async () => {
     const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse([]));

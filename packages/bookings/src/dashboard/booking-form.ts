@@ -8,40 +8,17 @@ import { t } from "./strings.js";
 import { codeMessage } from "@waitron/dashboard-kit";
 import type { Booking, BookingInput, BookingPatch, DashboardTable } from "./client.js";
 
-/** The `update-booking` event detail: the booking id + a patch of its edited fields. */
 export interface UpdateBookingDetail {
   id: string;
   patch: BookingPatch;
 }
 
-/** A positive whole number (`1`, `12`) — the party-size check. Deliberately integer-only: a fractional
- * or empty party size is a data-entry slip, and the server enforces `> 0` besides. */
 const POSITIVE_INT = /^\d+$/;
 
 /**
- * The management dashboard's BOOKING FORM: a `wt-dialog` (create + edit) that captures a staff-entered
- * table reservation — the wall-clock date + time, the party size, the free-text contact (name, phone,
- * notes) and an OPTIONAL table assignment picked from TS-1's loaded tables. Modelled on
- * `purchase-form`/`shift-dialog`: the screen drives it by setting `.open`, `.tables`, `.defaultDate` and
- * (for an edit) `.booking`, and hears one of two composed events — `create-booking` (a `BookingInput`)
- * or `update-booking { id, patch }`. Like `purchase-form`, it does NOT call the API and does NOT close
- * itself on confirm — the screen closes it on a successful write, so a rejected write leaves the entered
- * values in place.
- *
- * ANTI-#52 (design §2b): the submitted body carries a PLAIN LOCAL `bookingDate` (`YYYY-MM-DD`) and
- * `bookingTime` (`HH:MM`), NEVER a `${day}T${time}Z` instant. A booking is a future wall-clock intention,
- * not a moment that has occurred, so storing it as an instant is the exact bug `shift-dialog.ts:85-86`
- * accepts as a slice-1 shortcut and this form must not copy. The time input works in `HH:MM`, and an
- * edit's `HH:MM:SS` server value is sliced to `HH:MM` for the input (the presentation edge normalises).
- *
- * SEEDING mirrors `purchase-form`: `willUpdate` reseeds every field from `booking` whenever it changes
- * or the dialog opens — a create (`booking` null) seeds the date to `defaultDate` (the day the screen is
- * showing) and leaves the rest blank; an edit fills every field.
- *
- * CLIENT VALIDATION mirrors the op's checks for UX (the server stays authoritative): the date, time and
- * name must be non-empty (`booking.fields_required`), and the party size must be a positive whole number
- * (`booking.party_invalid`). A failing check blocks confirm and shows a `role="alert"`. A single-flight
- * `busy` property (set by the screen while a write round-trips) makes confirm a no-op.
+ * Does not call the API or close itself on confirm: the screen closes it after a successful write, so
+ * a refused write leaves the entered values in place. The date and time go out as plain local values
+ * (design §2b), never an instant.
  */
 @customElement("dashboard-booking-form")
 export class BookingForm extends LitElement {
@@ -63,19 +40,17 @@ export class BookingForm extends LitElement {
     `,
   ];
 
-  /** Whether the dialog is showing. The screen sets this to open the form; it clears on close. */
   @property({ type: Boolean, reflect: true }) open = false;
 
-  /** The booking being edited, or null for a create. Setting it pre-fills every field on the next open. */
+  /** Null for a create. */
   @property({ attribute: false }) booking: Booking | null = null;
 
-  /** The active tables to offer in the optional table picker (from `DashboardApi.listTables`). */
   @property({ attribute: false }) tables: DashboardTable[] = [];
 
-  /** The day the screen is showing (`YYYY-MM-DD`) — a create seeds its date here. */
+  /** The day the screen is showing; a create starts on it. */
   @property() defaultDate = "";
 
-  /** Single-flight gate: the screen sets it true while a create/update is in flight; confirm is a no-op. */
+  /** Set by the screen while a write is in flight; confirm is then a no-op. */
   @property({ type: Boolean }) busy = false;
 
   @state() private date = "";
@@ -87,12 +62,6 @@ export class BookingForm extends LitElement {
   @state() private tableId = "";
   @state() private validationError: string | null = null;
 
-  /**
-   * Reseed every field from `booking` on an open or a booking change. A create (`booking` null) seeds the
-   * date to `defaultDate` (the shown day) and leaves the rest blank; an edit fills from the loaded
-   * booking, with the `HH:MM:SS` server time sliced to `HH:MM` for the time input (the anti-#52 §2b
-   * presentation-edge normalisation).
-   */
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("booking") && !(changed.has("open") && this.open)) return;
     const b = this.booking;
@@ -115,14 +84,11 @@ export class BookingForm extends LitElement {
     if (this.validationError) this.validationError = null;
   }
 
-  // Native `change` is `composed: false`; `stopPropagation` is defensive consistency with the composed
-  // handlers (the purchase-form pattern).
   #onTableChange(event: Event): void {
     event.stopPropagation();
     this.tableId = (event.target as HTMLSelectElement).value;
   }
 
-  /** Validate the entered values against the op's checks; returns a code to show, or null when valid. */
   #validate(): string | null {
     if (this.date.trim() === "" || this.time.trim() === "" || this.contactName.trim() === "") {
       return "booking.fields_required";
@@ -133,14 +99,9 @@ export class BookingForm extends LitElement {
     return null;
   }
 
-  /**
-   * Assemble and emit the create/update event. `stopPropagation` keeps the confirm button's own composed
-   * `click` inside this shadow boundary. Blocks (no event) on a `busy` gate and on a failed validation (a
-   * `role="alert"` is shown instead). The body carries the PLAIN LOCAL date + time (§2b, anti-#52).
-   */
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return; // single-flight: a second confirm while one is in flight is ignored
+    if (this.busy) return;
     const error = this.#validate();
     if (error !== null) {
       this.validationError = error;
@@ -177,8 +138,7 @@ export class BookingForm extends LitElement {
     );
   }
 
-  /** The dialog closed. Drop `open`; like `purchase-form`, do NOT `stopPropagation` — the composed
-   * `wt-close` must bubble on to the screen (the owner of the open state). */
+  /** No `stopPropagation`: `wt-close` must reach the screen, which owns the open state. */
   #onClose(): void {
     this.open = false;
   }

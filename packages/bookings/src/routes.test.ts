@@ -18,25 +18,12 @@ import { fakeCore } from "./testing/fake-core.js";
 import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 import { BOOKINGS_ROUTES } from "./routes.js";
 
-// booking.manage is no longer in identity's static catalog (SP1 t4): a `manager` holds it only once
-// the module's permissions seat is folded into the ladder. Boot does this via
-// registerModulePermissions(ALL_MODULE_PERMISSIONS); here we register the module's OWN seat so the
-// manager happy-paths below authorize. Omitting this line flips every manager route to 403
-// authorization.not_permitted — the deletion proof for the descriptor's permissions seat.
+// A manager holds `booking.manage` only once the module's seat is registered, as boot does.
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
-// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so the GRANT half is gone and nothing
-// replaces it. The `booking.manage` gate is the module's own code and is still proven by deletion, on the block
-// below. `core.openTab` is `fakeCore` (the real verb lives in apps/server, which a module cannot
-// import); the seat still opens a real working_orders row, so the seat happy-path and read-back are
-// exercised end to end.
-//
-// The fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS) — bookings FKs into core, and
-// the routes need identity's `persons` and management sessions — where this used to clone the
-// shared `manifest` template.
+// `core.openTab` is `fakeCore`: the real verb lives in apps/server, which a module cannot import.
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
 interface Venue {
@@ -45,20 +32,12 @@ interface Venue {
   ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
+  /** A live MANAGEMENT session cookie for a `staff` person (no `booking.manage`, so the gate refuses it). */
   staffCookie: string;
 }
 
-/** Hand-seed a venue (tenant + location + till + node) and the manager/staff people and sessions this
- * route fixture needs. Not `applyVenue`: that would import `@waitron/composition`'s `ALL_MODULES`,
- * closing a composition → bookings → composition cycle.
- *
- * Every row goes through its table definition rather than raw SQL: each `id` and each timestamp is
- * supplied by a `$defaultFn` in JavaScript now, never by a column DEFAULT, so a raw insert naming
- * none of them is refused `NOT NULL constraint failed`; and `invoiceLocales` reaches its column's
- * own JSON mapping, which the `array['es-ES']` constructor used to do in SQL this engine has not.
- * The display names carry a fresh suffix because live display names are unique across the database
- * and this fixture runs once per test. */
+/** Hand-seeded rather than `applyVenue`, which would import `@waitron/composition`'s `ALL_MODULES`
+ * and close a composition → bookings → composition cycle. */
 async function setupVenue(): Promise<Venue> {
   const db: Database = suite.db;
   await seedTenant(db);
@@ -110,15 +89,12 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** One Hono app per venue — the routes bind ONE tenant via `ctx.cfg`, so each venue's routes need
- * their own app. */
 function mountApp(ctx: ModuleRouteContext): Hono {
   const app = new Hono();
   BOOKINGS_ROUTES.mount(app, ctx, noopLog);
   return app;
 }
 
-/** Insert an ACTIVE dining table for the venue, returning its id. */
 async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<string> {
   const [row] = await suite.db
     .insert(diningTables)
@@ -127,7 +103,6 @@ async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<
   return row!.id;
 }
 
-/** JSON POST/PATCH/GET helper carrying `cookie`. */
 async function send(
   app: Hono,
   method: "POST" | "PATCH" | "GET",
@@ -190,7 +165,6 @@ describe("Bookings API (routes, gates and request screens)", () => {
       notes: "Window seat",
     });
 
-    // List-by-day shows the new booking, still `booked`.
     const listed = await listOn(app, managerCookie, "2026-08-20");
     const created = listed.find((r) => r.id === id);
     expect(created).toMatchObject({ status: "booked", tabId: null, contactName: "García" });
@@ -207,16 +181,9 @@ describe("Bookings API (routes, gates and request screens)", () => {
     });
     expect(patchRes.status).toBe(204);
     const afterPatch = (await listOn(app, managerCookie, "2026-08-20")).find((r) => r.id === id);
-    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT. `booking_time` was a PostgreSQL `time`,
-    // which normalised `21:30` to `21:30:00` on the way back out; `timeOfDay` is plain `text` on
-    // this engine (`packages/db/src/schema/columns.ts`), so what is stored and returned is the
-    // `21:30` the request sent. Nothing between the route and the column rewrites it — `requireTime`
-    // (`./routes.ts`) validates and passes the string through. Changing `21:30:00` to `21:30` is a
-    // change to what this case ASSERTS, not a translation of PostgreSQL-only SQL, so it is left for
-    // the owner to decide rather than edited to pass.
+    // The seconds come from `storedTime` (`./bookings.ts`), on an update as on a create.
     expect(afterPatch).toMatchObject({ bookingTime: "21:30:00", contactName: "García party" });
 
-    // Seat: opens a real TS-1 tab on the booking's table and links it.
     const seatRes = await send(
       app,
       "POST",
@@ -228,7 +195,6 @@ describe("Bookings API (routes, gates and request screens)", () => {
     const { tabId } = (await seatRes.json()) as { tabId: string };
     expect(tabId).toEqual(expect.any(String));
 
-    // Read-back: the booking is now `seated` and carries the tab id.
     const seated = (await listOn(app, managerCookie, "2026-08-20")).find((r) => r.id === id);
     expect(seated).toMatchObject({ status: "seated", tabId });
   });
@@ -292,23 +258,9 @@ describe("Bookings API (routes, gates and request screens)", () => {
   });
 
   it("refuses every booking route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // Prove the `booking.manage` gate BY DELETION. A `staff`-role management session holds no
-    // `booking.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
-    // before any op runs on every route.
-    //
-    // GUARD-BY-DELETION (authorizeManager), re-taken on THIS engine 2026-09-22 on Node v26.7.0:
-    // removed the
-    //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: BOOKING_WRITE });`
-    // call from `routes.ts`'s `gated` helper and changed nothing else. This case then FAILED —
-    // every staff request that expected 403 instead reached its op — and it was the ONLY case in
-    // this file to change state (the happy path above is red either way, for the unrelated reason
-    // its own comment gives, and the 401 case stayed green, so the session check is a separate
-    // mechanism). Restored, this case passes again. The original reading was taken 2026-08-30
-    // against postgres:18 via Testcontainers.
     const { ctx, managerCookie, staffCookie } = await setupVenue();
     const app = mountApp(ctx);
-    // A real booking the manager owns, so the staff by-id calls target an id that DOES exist — the
-    // refusal is the gate, not a not_found masking it.
+    // An id that exists, so the refusal is the gate and not a not_found masking it.
     const id = await createBooking(app, managerCookie);
 
     const expect403 = async (res: Response) => {
@@ -471,13 +423,7 @@ describe("Bookings API (routes, gates and request screens)", () => {
   });
 
   it("400s an out-of-range but well-shaped bookingTime at the screen, never a downstream 500", async () => {
-    // `25:61` is `\d{2}:\d{2}`-shaped but out of range: it must be refused as a clean 400
-    // `management.request_invalid` by `requireTime`'s range-validating regex BEFORE it reaches the
-    // column. A valid `20:00` still creates (201), so the tightened regex has not broken the
-    // accepted shape. Under PostgreSQL the column itself was the backstop — a `time` refused `25:61`
-    // with `22007`, so a screen that let it through produced an opaque `server.internal` 500. There
-    // is NO backstop now: `timeOfDay` is plain `text` (`packages/db/src/schema/columns.ts`) and
-    // would store `25:61` without complaint, which makes the screen the only thing standing here.
+    // The screen is the only refusal: the column is plain text and would store `25:61`.
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
 
@@ -504,12 +450,8 @@ describe("Bookings API (routes, gates and request screens)", () => {
   });
 
   it("accepts an explicit null for the blank optionals a create body carries (the real-form shape)", async () => {
-    // The dashboard's booking form sends `contactPhone`/`notes`/`tableId` as explicit `null` when the
-    // field is left blank (booking-form.ts `#confirm`: `trim() === "" ? null : …`), the COMMON case. The
-    // old `screenCreate` screened each with the NON-nullable `requireString`/`requireBodyUuid` gated on
-    // `!== undefined` only, so `requireString(null)` threw `management.request_invalid` → a blank-phone
-    // booking created via the real UI 400'd. On a CREATE a `null` blank is equivalent to absent (no prior
-    // value to clear), so it must SUCCEED and store the column null.
+    // The dashboard's form sends a blank optional as explicit `null` (`./dashboard/booking-form.ts`).
+    // On a create there is no prior value to clear, so `null` means absent.
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
     const res = await send(app, "POST", "/management-api/bookings", managerCookie, {
@@ -521,7 +463,6 @@ describe("Bookings API (routes, gates and request screens)", () => {
     expect(res.status).toBe(201);
     const id = ((await res.json()) as { id: string }).id;
 
-    // Read the row back off the day list and confirm the three optional columns landed null.
     const listRes = await send(
       app,
       "GET",
@@ -539,12 +480,8 @@ describe("Bookings API (routes, gates and request screens)", () => {
   });
 });
 
-// The routes SEAT proven by deletion (CLAUDE.md §4): the descriptor is the only thing that mounts the
-// booking routes, so a module list whose bookings descriptor OMITS `routes` mounts nothing and all
-// seven paths fall through to Hono's default 404. A mounted route always answers through the `run`
-// error boundary (JSON `{ error }`) — even a lifecycle POST on an absent booking, which is a
-// booking.not_found 404 with a JSON body — so a lifecycle route's mounted 404 is distinguished from an
-// unmounted 404 by the absence of `application/json`, not by the status alone.
+// A mounted route answers through the `run` error boundary as JSON even when it 404s, so an unmounted
+// route is told apart by the absence of `application/json`, not by the status alone.
 describe("routes seat inversion — deletion proof", () => {
   const UUID = "00000000-0000-4000-8000-000000000000";
   const SEVEN: [method: "GET" | "POST" | "PATCH", path: string][] = [
@@ -559,14 +496,12 @@ describe("routes seat inversion — deletion proof", () => {
 
   it("with the bookings descriptor's `routes` omitted, all seven routes fall through to a plain 404", async () => {
     const { ctx, managerCookie } = await setupVenue();
-    // The generic boot loop over a module list whose bookings descriptor carries NO `routes` seat.
     const modules: { routes?: typeof BOOKINGS_ROUTES }[] = [{}];
     const app = new Hono();
     for (const m of modules) m.routes?.mount(app, ctx, noopLog);
     for (const [method, path] of SEVEN) {
       const res = await send(app, method, path, managerCookie, method === "GET" ? undefined : {});
       expect(res.status, `${method} ${path}`).toBe(404);
-      // Not the mounted error boundary (which answers JSON) — Hono's default not-found.
       expect(res.headers.get("content-type") ?? "", `${method} ${path}`).not.toContain(
         "application/json",
       );
@@ -580,7 +515,6 @@ describe("routes seat inversion — deletion proof", () => {
     for (const m of modules) m.routes?.mount(app, ctx, noopLog);
     for (const [method, path] of SEVEN) {
       const res = await send(app, method, path, managerCookie, method === "GET" ? undefined : {});
-      // Every mounted route answers through `run` (JSON), whatever its status — the inverse of above.
       expect(res.headers.get("content-type") ?? "", `${method} ${path}`).toContain(
         "application/json",
       );

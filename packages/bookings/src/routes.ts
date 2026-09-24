@@ -1,9 +1,3 @@
-// Side-effect only: loads this package's errors.ts augmentation for the codes the body/query screens
-// below throw directly — `management.request_invalid` (the empty-patch / malformed-field guard) —
-// under the "every file that throws one of these imports ./errors.js" convention. `shared.invalid_id`
-// (thrown by `requireUuidParam`) is declared in `@waitron/shared` and loads via the `AppError` value
-// import; the `booking.*` codes these routes answer are thrown by the `./bookings.js` verbs, whose own
-// `import "./errors.js"` registers them and which load transitively through the value imports below.
 import "./errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
@@ -36,21 +30,10 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 
-/**
- * The ONE permission that gates every booking route, taken from the module's declared permissions
- * seat (`permissions.ts`) so the route gate and the ladder registration can never name different
- * strings. `booking.manage` folds to `manager` + `admin` at boot (grantedFrom: "manager"), the same
- * shape `purchase.manage` takes.
- */
+// Read from the permissions seat so the route gate and the ladder cannot name different strings.
 const [{ permission: BOOKING_WRITE }] = BOOKINGS_PERMISSIONS;
 
-/**
- * Every AppError CODE these routes answer, and the HTTP status it maps to — the booking parallel of
- * `purchasing-api.ts`'s `STATUS`. CLIENT faults only: a genuine SERVER fault reaches `run` as a
- * NON-AppError and becomes an opaque 500. A registered code absent from this table defaults to 400 via
- * `run`. The `table.*` / `tab.*` codes appear because `seatBooking` surfaces them (a bad/inactive table
- * or an already-open tab), the same "list the codes the routes can throw" style purchasing takes.
- */
+// A code missing from this map answers 400.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -67,14 +50,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.already_open": 409,
 };
 
-// The one error boundary every booking route wraps its handler in — the shared `createErrorBoundary`
-// closed over this surface's `STATUS` map and its `booking.failed` log tag.
 const run = createErrorBoundary(STATUS, "booking.failed");
 
-/** Screen a field that must reach an `integer` column: any non-integer (a float, a string, `undefined`)
- * is refused as `management.request_invalid` naming the field, never a downstream `22P02`. The
- * `party_size > 0` business rule is the verb's (`booking.invalid`), so `0`/negatives PASS this screen
- * and reach `createBooking`/`updateBooking` to be echoed there. */
+/** Zero and negatives pass: `party_size > 0` is the verbs' rule (`booking.invalid`). */
 function requireInteger(v: unknown, field: string): number {
   if (!Number.isInteger(v)) throw new AppError("management.request_invalid", { field });
   return v as number;
@@ -82,14 +60,8 @@ function requireInteger(v: unknown, field: string): number {
 
 const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
-/** Screen a `HH:MM` / `HH:MM:SS` wall-clock time, refusing an absent/wrong-typed/mis-shaped one as
- * `management.request_invalid` naming the field. The regex validates the RANGE here — hours `00-23`,
- * minutes `00-59`, optional seconds `00-59` — because the column is plain `text` on this engine and
- * refuses nothing itself, where PostgreSQL's `time` answered an out-of-range value like `25:61` with
- * a `22007` the route could only surface as an opaque 500.
- *
- * It passes both spellings through unchanged. Choosing ONE of them is the write path's job, not this
- * screen's: `storedTime` in `./bookings.ts` normalises to `HH:MM:SS` for every caller, HTTP or not. */
+/** The column is plain text and refuses nothing, so this regex is the only range check. Both
+ * spellings pass unchanged; `storedTime` in `./bookings.ts` picks the stored one. */
 function requireTime(v: unknown, field: string): string {
   if (typeof v !== "string" || !TIME_HHMM.test(v)) {
     throw new AppError("management.request_invalid", { field });
@@ -98,16 +70,8 @@ function requireTime(v: unknown, field: string): string {
 }
 
 /**
- * Screen the create body into a `CreateBookingInput` MINUS `createdBy` (the route supplies that from
- * `authorizeManager`'s `authorizedBy`, never the body). Every required scalar present and well-typed;
- * the optional `contactPhone`/`notes`/`tableId` screened ONLY when present as a NON-null value. On a
- * CREATE there is no prior value to clear, so an explicit `null` — the shape the dashboard's booking
- * form sends for a blank optional (`contactPhone: trim === "" ? null : …`, same for notes/tableId) — is
- * equivalent to absent: the field is left unset, `createBooking` coalesces the missing key to a null
- * column. A present, non-null value is still screened with the NON-nullable `requireString`/
- * `requireBodyUuid`, so a wrong-typed one (e.g. a number) is a clean `management.request_invalid` naming
- * the field, never a downstream column 500. (PATCH differs: there `null` MEANS "clear", so `screenPatch`
- * uses the nullable screens.)
+ * On a create there is nothing to clear, so an explicit `null` — what the dashboard form sends for a
+ * blank optional field — means absent. On a PATCH, `null` clears.
  */
 function screenCreate(v: Record<string, unknown>): Omit<CreateBookingInput, "createdBy"> {
   const input: Omit<CreateBookingInput, "createdBy"> = {
@@ -124,14 +88,8 @@ function screenCreate(v: Record<string, unknown>): Omit<CreateBookingInput, "cre
   return input;
 }
 
-/**
- * Screen the PATCH body into an `UpdateBookingPatch`: any subset of the editable fields, each screened
- * ONLY when present (a PATCH touches only what it names). `contactPhone`/`notes`/`tableId` accept an
- * explicit `null` to CLEAR them (the verb's contract). An empty patch — the body names no editable
- * field — is refused as `management.request_invalid { field: "patch" }` (see the empty-patch note on the
- * PATCH route) rather than reaching `updateBooking`, whose all-`undefined` `set(...)` throws a raw
- * Drizzle error.
- */
+/** An empty patch is refused here: `updateBooking`'s all-`undefined` `set(...)` would throw a raw
+ * Drizzle error. */
 function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
   const patch: UpdateBookingPatch = {};
   if (v.bookingDate !== undefined) patch.bookingDate = requirePeriod(v.bookingDate, "bookingDate");
@@ -149,25 +107,11 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
   return patch;
 }
 
-/**
- * The bookings module's `routes` seat. The deployment holds one tenant per database. Mounts the
- * dashboard's gated booking write group on the shared Hono app boot passes — every route wraps its
- * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
- * `withTransaction`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
- * this database. The `booking.manage` gate runs on every route through one constant. No fiscal path
- * is touched: `seatBooking` opens a pre-fiscal working order only, via `ctx.core.openTab` (boot
- * bound the venue's `TillConfig` into `core`). The seven route paths are byte-identical to the
- * dashboard's requests.
- */
 export const BOOKINGS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const { db, cfg, core } = ctx;
 
-    // Open a transaction, confirm the caller's management session carries BOOKING_WRITE, then run
-    // `fn` with the tx AND the authorization result. Every route funnels its DB work through here
-    // so the gate is applied identically and in exactly one place. `fn` receives `{ authorizedBy }`
-    // (the person id the session resolved to) so the create route can stamp `bookings.created_by`
-    // from the authorized manager rather than trusting the request body.
+    // Every route's database work goes through here, so the permission check is in one place.
     const gated = <T>(
       sessionId: string,
       fn: (tx: Transaction, auth: { authorizedBy: string }) => Promise<T>,
@@ -180,10 +124,6 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
         return fn(tx, auth);
       });
 
-    // The three no-body lifecycle moves (cancel / no-show / complete) are byte-for-byte identical apart
-    // from the URL suffix and the verb — `mountCourseVerb`'s booking parallel (till-api.ts). Session gate
-    // first (→ 401), `:id` screened to a uuid (→ `shared.invalid_id` 400 before any DB work), then the verb
-    // under `gated` (BOOKING_WRITE), 204 on success. `gated`/`cfg` are captured.
     const mountBookingLifecycleVerb = (
       suffix: string,
       verb: (tx: Transaction, cfg: BookingConfig, id: string) => Promise<void>,
@@ -202,8 +142,6 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
     app.get("/management-api/bookings", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        // `date` is REQUIRED; `requirePeriod` refuses both an absent value (`undefined` is not a string)
-        // and a malformed/impossible day as `management.request_invalid { field: "date" }`.
         const date = requirePeriod(c.req.query("date"), "date");
         const rows = await gated(sessionId, (tx) => listBookings(tx, cfg, { date }));
         return c.json(rows);
@@ -214,11 +152,9 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
     app.post("/management-api/bookings", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so the field screens reject it
-        // with a specific 400 rather than an opaque 500.
         const body = await readJsonBody<Record<string, unknown>>(c);
         const input = screenCreate(body);
-        // `createdBy` is the AUTHORIZED person, taken from `authorizeManager` — never the request body.
+        // `createdBy` is the authorized person, never a value from the request body.
         const created = await gated(sessionId, (tx, { authorizedBy }) =>
           createBooking(tx, cfg, { ...input, createdBy: authorizedBy }),
         );
@@ -232,9 +168,6 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "BookingId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        // `screenPatch` throws `management.request_invalid` on an empty patch BEFORE the op — an
-        // all-`undefined` `set(...)` throws a raw Drizzle error, so the empty case is refused here as a
-        // clean 400 (the domain code the other management surfaces use for a request-shape fault).
         const patch = screenPatch(body);
         await gated(sessionId, (tx) => updateBooking(tx, cfg, id, patch));
         return c.body(null, 204);
@@ -247,8 +180,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "BookingId");
         const body = await readJsonBody<{ tableId?: unknown }>(c);
-        // `tableId` is OPTIONAL (the seat may reuse the booking's own table); screened to a uuid when
-        // present so a malformed one is a 400, not a downstream `22P02`. A `null` is treated as absent.
+        // Optional: without one the booking's own table is used. `null` means absent.
         const req: { tableId?: string } = {};
         if (body.tableId !== undefined && body.tableId !== null) {
           req.tableId = requireBodyUuid(body.tableId, "tableId");

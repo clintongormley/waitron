@@ -1,20 +1,6 @@
-// The migration SPLIT: the bookings table and all three of its foreign keys come from the MODULE's
-// set, NOT from core, and core applied ALONE carries no `bookings` relation. The core-vs-manifest
-// contrast is what pins that `bookings` left core WITH the module rather than living in the core
-// set.
-//
-// WHAT THE TRANSLATION LOST, and it is not recoverable on this engine. This suite read
-// `pg_constraint` and `pg_indexes`, so it could name each foreign key —
-// `bookings_location_fk`, `bookings_table_fk`, `bookings_tab_fk` — and read its whole definition
-// back. SQLite does not RECORD a foreign key's name: drizzle's SQLite generator emits the keys
-// unnamed (`packages/bookings/drizzle/0000_baseline.sql`, three bare `FOREIGN KEY (…) REFERENCES`
-// lines), and `pragma foreign_key_list` has no name column. So what is asserted below is each
-// key's SHAPE — child column, parent table, parent column, and its `on delete` — which is what the
-// engine keeps. The NAMES live on the drizzle table object alone and are pinned there, in
+// `pragma foreign_key_list` reports no foreign key's name, and drizzle emits these keys unnamed, so
+// the keys are checked here by shape; their names are pinned on the drizzle table object, in
 // `src/schema/bookings.test.ts`.
-//
-// It also used to prove the grants travelled with the module's set, because PGlite could not: that
-// half went with the engine, which has no roles at all.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -22,10 +8,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { BOOKINGS_MIGRATIONS } from "./migrations.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 
-/** One row of `pragma foreign_key_list`, the columns this suite reads. A `type`, not an
- * `interface`, so it satisfies `db.execute`'s `Record<string, unknown>` row constraint — an
- * interface is open and TypeScript gives it no implicit index signature (the `ClaimedJob`
- * precedent in `packages/printing/src/runtime.ts`). */
+/** A `type`, not an `interface`, so it satisfies `db.execute`'s `Record<string, unknown>` row
+ * constraint: TypeScript gives an interface no implicit index signature. */
 type ForeignKeyRow = {
   table: string;
   from: string;
@@ -33,9 +17,8 @@ type ForeignKeyRow = {
   on_delete: string;
 };
 
-/** One row of `pragma index_list`. `origin` is `c` for a `CREATE INDEX`, `u` for a UNIQUE
- * constraint and `pk` for the implicit primary-key index — the three a reader must keep apart. A
- * `type` for the reason {@link ForeignKeyRow} gives. */
+/** `origin` is `c` for a `CREATE INDEX`, `u` for a UNIQUE constraint and `pk` for the implicit
+ * primary-key index. */
 type IndexRow = {
   name: string;
   origin: string;
@@ -60,8 +43,6 @@ describe("the full manifest carries the bookings module's table and every FK", (
 
   it("installs all three FKs — one per parent, each from one column at its parent's primary key", async () => {
     const rows = await suite.db.execute<ForeignKeyRow>(sql`pragma foreign_key_list('bookings')`);
-    // `pragma foreign_key_list` reports the keys in reverse declaration order, so sort on the
-    // child column to compare against a fixed list rather than against the engine's ordering.
     expect(
       rows.rows
         .map((r) => ({ from: r.from, table: r.table, to: r.to, onDelete: r.on_delete }))
@@ -81,9 +62,6 @@ describe("the full manifest carries the bookings module's table and every FK", (
     expect(columns.rows).toEqual([]);
 
     const indexes = await suite.db.execute<IndexRow>(sql`pragma index_list('bookings')`);
-    // A UNIQUE constraint on the table would show here with `origin = 'u'`. The primary key's own
-    // implicit index (`origin = 'pk'`, named `sqlite_autoindex_bookings_1`) is not one and is
-    // excluded by name below, exactly as `bookings_pkey` was.
     expect(indexes.rows.filter((r) => r.origin === "u")).toEqual([]);
 
     const created = indexes.rows.filter((r) => r.origin === "c").map((r) => r.name);

@@ -7,15 +7,9 @@ import {
   type NameTable,
 } from "@waitron/dashboard-kit";
 
-// The bookings sub-path's OWN i18n surface: the screen/form UI strings, the lifecycle status names,
-// and the localised copy for the booking error codes the screen surfaces. English is the source of
-// truth; the Spanish is user-facing translation, not schema vocabulary (this is browser UI, out of
-// the english-only guard's scope). The module registers its catalogue + code messages at load — before
-// any t()/codeMessage() runs — so importing this module's `t` (the screen/form do) is enough to make
-// the strings resolve; the contribution also declares these strings so the app registers them on mount.
+// Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
-/** The bookings UI strings, English source of truth. Includes the shared `action.*` labels the screen
- * and form use, so this module's typed `t` resolves them without importing the app's string table. */
+/** Carries its own `action.*` labels so `t` needs nothing from the app's string table. */
 const en = {
   "nav.bookings": "Bookings",
   "booking.title": "Bookings",
@@ -66,12 +60,9 @@ const es: Record<keyof typeof en, string> = {
   "action.edit": "Editar",
 };
 
-/** The `{ en, es }` catalogue the contribution declares (the app merges it on mount). */
 export const BOOKINGS_STRINGS = { en, es };
 
-/** The booking error codes the screen surfaces, as localised copy. `table.not_found`/`tab.already_open`
- * (a seated table gone or already busy) and `server.internal` are owned by the app's own code table;
- * this module owns only the `booking.*` codes. */
+/** Only the `booking.*` codes; `table.*`, `tab.*` and `server.internal` are the app's. */
 export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "booking.not_found": {
     en: "That booking could not be found",
@@ -102,12 +93,9 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
 registerCatalogue(BOOKINGS_STRINGS);
 registerCodeMessages(BOOKINGS_CODE_MESSAGES);
 
-/** Translate a bookings key to the active locale, typed to this module's own key union so an unknown
- * key is a compile error. Resolution (region-strip, English-degrade) is the kit's. */
 export const t = makeT<keyof typeof en>();
 
-// The five booking lifecycle statuses (the `booking_status` column), shown on the day-list. English is
-// the source of truth; the Spanish agrees feminine ("reserva").
+// The Spanish agrees in the feminine, with "reserva".
 const BOOKING_STATUS_NAMES: NameTable = {
   booked: { en: "Booked", es: "Reservada" },
   seated: { en: "Seated", es: "Sentada" },
@@ -116,7 +104,6 @@ const BOOKING_STATUS_NAMES: NameTable = {
   cancelled: { en: "Cancelled", es: "Cancelada" },
 };
 
-/** The localised display name for a booking status token. */
 export function bookingStatusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(BOOKING_STATUS_NAMES, value, locale);
 }
