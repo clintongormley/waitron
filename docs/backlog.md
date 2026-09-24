@@ -2568,14 +2568,15 @@ image constraints under *Detail → Box image*.
   same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
   unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
-  comment lines to about 750). A pruning pull request cannot carry this file (the checker refuses
-  it), so each one's line lands here as a docs-only push after the merge. Found by #555 and left
-  for the package that owns each, all still OPEN:
-  - The journal-table reason in the `drizzle.config.ts` of `credentials`, `scheduler`, `payments`
-    and `fiscal-verifactu` ("`generate` would … silently re-apply its own from zero") is wrong:
+  comment lines to about 750) and `payments` (#558, about 2,000 to about 750). A pruning pull
+  request cannot carry this file (the checker refuses it), so each one's line lands here as a
+  docs-only push after the merge. Found by #555 and #558 and left for the package that owns each,
+  all still OPEN:
+  - The journal-table reason in the `drizzle.config.ts` of `credentials`, `scheduler` and
+    `fiscal-verifactu` ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
     the set with older timestamps would never run (measured by #555's review with the real
-    `runMigrations`; workforce's config now says so).
+    `runMigrations`; workforce's and payments' configs now say so).
   - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
     and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
     engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
@@ -2586,6 +2587,19 @@ image constraints under *Detail → Box image*.
     refused as a raw CHECK error instead of `shift.invalid`, and `order by starts_at` can sort
     them wrongly. Normalising the spelling on write, as `appendToChain` does for `event_at`, is
     the unmade fix; the gap is stated at `assertShiftInterval`.
+  - A `nodeId` option nothing reads: `ReconcileDeps.nodeId` in `packages/payments/src/reconcile.ts`
+    is declared and never read, `packages/payments-stripe/src/reconciler.ts` passes one in, and the
+    SumUp provider's options declare one it never reads. Comments in `payments-stripe` (`reverse.ts`,
+    `provider.ts`, `device-provider.ts`, `reconciler.ts`) and `payments-sumup/src/provider.ts` still
+    say it identifies the node; prune those with their packages, and drop the option as a code
+    change.
+  - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
+    the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
+    `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
+    rows the first resolved. The comment at `listAttempting` now says so.
+  - `apps/till/src/widgets/tender-pay.ts` points at `packages/payments/src/provider.ts:113-137` and
+    lists `PaymentProvider`'s methods without `resolvePending`; both were wrong before #558. Prune
+    with `apps/till`.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -4980,7 +4994,8 @@ database and no clone-per-test seam any more — the storage switch deleted that
 `docs/superpowers/plans/2026-08-19-shared-test-container.md` is history, not a recipe). What survives
 it: a worker limit is still a per-package call, and the reason that is left is the
 `@vitest/coverage-v8` cross-fork branch-merge artifact, which needs `maxWorkers: 1` where a small
-package runs under `pnpm -r` oversubscription — `packages/payments` carries the worked reasoning.
+package runs under `pnpm -r` oversubscription — the worked reasoning, once in `packages/payments`'
+config, is in #558's first commit message (2026-09-24).
 `packages/db` keeps `maxWorkers: 4`, which CI's `test-heavy` shards inherit because they pass no
 worker count of their own; at one and at four workers its coverage counts were the same (2026-09-23).
 Either way a new package that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) —
