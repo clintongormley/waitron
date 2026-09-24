@@ -11,9 +11,6 @@ export default defineConfig({
           globals: true,
           clearMocks: false,
           include: ["src/**/*.test.ts"],
-          // The separate `pg` project this sat beside is gone with the four `*.pg.test.ts` suites
-          // it ran, so the exclusion that kept them out of here is gone too. What remains is the
-          // split this package still needs: node work here, Chromium below.
           exclude: ["src/dashboard/**", "**/node_modules/**"],
           testTimeout: 30_000,
           hookTimeout: 60_000,

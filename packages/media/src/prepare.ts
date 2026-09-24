@@ -5,8 +5,7 @@ import "./errors.js";
 
 /**
  * The longer side, in pixels, of every photo the library stores: enough for a photo 800 CSS pixels
- * wide on a screen with two device pixels per CSS pixel. With `STORED_WEBP_QUALITY` a real photo
- * averages about 170 KiB, so 5,000 photos take about 0.9 GB of the venue database.
+ * wide on a screen with two device pixels per CSS pixel.
  */
 export const STORED_LONG_EDGE = 1600;
 /** sharp's WebP quality, on its 1–100 scale. */
@@ -37,8 +36,9 @@ let loading: Promise<Sharp> | undefined;
 
 /**
  * sharp is loaded on first use, not at import. Bundles that never prepare a photo, such as
- * `waitron-provision`, reach this module and run with no sharp installed beside them. The server
- * bundle leaves sharp out (`--external:sharp`) and the box image puts it in `/app/node_modules`.
+ * `waitron-provision`, reach this module and run with no sharp installed beside them.
+ * `scripts/bundle-node.mjs` leaves sharp out of the bundles it builds, and the box image puts it in
+ * `/app/node_modules`.
  * One libvips thread (sharp's own default on glibc Linux, the box's platform, per its
  * `dist/utility.mjs`) and no operation cache, so an upload takes neither every core nor memory it
  * keeps afterwards from the process serving sales.

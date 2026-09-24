@@ -22,20 +22,8 @@ import { sampleImage } from "./testing/sample-image.js";
 
 /**
  * Every image route refuses a caller without `image.manage`, and refusing leaves the library
- * untouched.
- *
- * Lifted from `routes.pg.test.ts`, deleted 2026-09-22 with the PostgreSQL test harness (recover it
- * with `git show aabdde6a8^:packages/media/src/routes.pg.test.ts`). `routes.test.ts` beside this
- * file already covers the manager happy path and a staff 403 on ONE route; the six-route matrix
- * and the "the library is unchanged afterwards" read are this file's, and had nothing running
- * behind them during #489.
- *
- * The authorization gate is the module's own code, and it is proven by deletion on this engine,
- * 2026-09-22 on Node v26.7.0: with the `authorizeManager` call in `MEDIA_ROUTES.mount`'s `gated`
- * helper (`packages/media/src/routes.ts`) made unreachable and nothing else changed, this case
- * FAILED on `GET /management-api/images: expected 200 to be 403`; restored, it passes. The
- * accepting control in the other direction is inside `fixture` below, where the manager's own
- * upload must answer 201.
+ * untouched. The accepting control in the other direction is inside `fixture` below, where the
+ * manager's own upload must answer 201.
  */
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
@@ -57,7 +45,7 @@ function uploadBody(bytes: Uint8Array<ArrayBuffer>): FormData {
 }
 
 /** A live management session for `role`. Through the table definition, not raw SQL: `persons.id`
- * and its timestamps are JavaScript `$defaultFn` generators now, never column DEFAULTs, so a raw
+ * and its timestamps are JavaScript `$defaultFn` generators, never column DEFAULTs, so a raw
  * insert naming none of them is refused `NOT NULL constraint failed`. A fresh display name per
  * call, because live display names are unique across the database and this fixture runs twice. */
 async function session(role: "manager" | "staff"): Promise<Record<string, string>> {
