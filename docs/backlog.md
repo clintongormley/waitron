@@ -2281,15 +2281,15 @@ image constraints under *Detail → Box image*.
 ### B9. CI and test infra
 
 - **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
-  floor retired 2026-09-24 by **this pull request**).** Every package and the root project now hold
+  floor retired 2026-09-24 by **PR #549**).** Every package and the root project now hold
   the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package
   included from its first commit; the `90/90/85/85` floor is removed from the guard and retired as
   policy (live prose mentions it only as retired; dated history still records it). The first
   promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every
   package that already cleared all four metrics on 2026-09-23 was promoted in one change, 21 of
   them; the starting figures are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first
-  promotion — measured 2026-09-23*, and the per-package figures at the end are in this pull
-  request's description.
+  promotion — measured 2026-09-23*, and the per-package figures at the end are in
+  **PR #549**'s description.
   Promoted since, one pull request each: `printing` (**PR #500**, 2026-09-23 —
   tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
   100/100/100/100); `bookings` (**PR #503**, 2026-09-23 — tests for the seat refusal when a booking leaves
