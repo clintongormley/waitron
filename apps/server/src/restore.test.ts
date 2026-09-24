@@ -243,7 +243,7 @@ describe("restoreFromArtifact", () => {
 const db = new DatabaseSync(process.argv[1]);
 db.exec("begin immediate");
 process.stdout.write("held");
-setInterval(() => {}, 1000);`;
+setInterval(() => db, 1000);`;
     const holder = spawn(
       process.execPath,
       ["--input-type=module", "-e", script, join(venueDir, "venue.lock")],
