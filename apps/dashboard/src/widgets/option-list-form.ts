@@ -15,9 +15,6 @@ import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-/** A label while it is being edited: every optional name is held as text, and every label has an
- * `id` — including one the operator has just added, which is what lets it be preselected before it
- * has ever been saved (see {@link OptionListForm}). */
 interface DraftLabel {
   id: string;
   name: string;
@@ -27,12 +24,6 @@ interface DraftLabel {
 }
 
 /**
- * Creates and edits ONE options list: its three names, whether it is offered, and its ordered
- * labels, each with three names of its own and one of them preselected.
- *
- * Writes belong to the host, which passes the server's per-field refusals back through
- * `fieldErrors`; this form owns the draft and its own refusals.
- *
  * Two things the server's validator decides, mirrored here so the operator learns them without a
  * round trip (both read from `parseOptionListInput`, packages/catalogue/src/option-contract.ts):
  * an ACTIVE list with no available label is refused, and a preselection naming a label that is not
@@ -159,7 +150,6 @@ export class OptionListForm extends LitElement {
     this.validation = {};
   }
 
-  /** A preselection is only kept while it names a label of this list that is on offer. */
   #pickable(id: string | null): string | null {
     return this.labels.some((label) => label.id === id && label.available) ? id : null;
   }
@@ -177,10 +167,8 @@ export class OptionListForm extends LitElement {
     return mapped;
   }
 
-  /** One of `parseOptionListInput`'s field paths as this form's own key. A path naming the list as
-   * a whole, a label's id or a label's availability has no input of its own, so it is shown under
-   * the labels table with the rest of the list-level refusals. An unrecognised path is kept as it
-   * came, so it still reaches the summary rather than disappearing. */
+  /** A path naming the list as a whole, a label's id or a label's availability has no input of its
+   * own, so it is shown under the labels table with the rest of the list-level refusals. */
   #formKey(field: string): string {
     const label = /^labels\.(\d+)(?:\.(.+))?$/.exec(field);
     if (label) {
@@ -191,7 +179,6 @@ export class OptionListForm extends LitElement {
     return this.#nameKey(field) ?? "labels";
   }
 
-  /** The input key for one of the three name fields, or null when the path names no input. */
   #nameKey(field: string): string | null {
     if (field === "name") return "name";
     if (field === "customerName") return `customer-name-${this.#primaryLanguage()}`;
@@ -200,8 +187,6 @@ export class OptionListForm extends LitElement {
     return null;
   }
 
-  /** Every message on screen, keyed by input name: the server's, then this form's own on top. A
-   * label's message is placed by the label's CURRENT position, so it stays on its own row. */
   #errors(): Record<string, string> {
     const errors: Record<string, string> = {};
     for (const [key, message] of Object.entries(this.serverErrors)) {
@@ -216,8 +201,6 @@ export class OptionListForm extends LitElement {
     return { ...errors, ...this.validation };
   }
 
-  /** Every draft edit goes through here: a change invalidates what the last Save complained about,
-   * and the messages are recomputed by the next Save. */
   #edit(change: () => void): void {
     change();
     this.validation = {};
@@ -279,9 +262,6 @@ export class OptionListForm extends LitElement {
     if (!this.name.trim()) validation.name = t("options.name_required");
     for (const [index, label] of this.labels.entries())
       if (!label.name.trim()) validation[`label-${index}-name`] = t("options.label_name_required");
-    // An active list is asked on every dish carrying it and answered from its available labels, so
-    // one with none is unanswerable. The server refuses the same shape; refusing it here puts the
-    // message beside the labels instead of spending a round trip on it.
     if (this.active && !this.labels.some((label) => label.available))
       validation.labels = t("options.labels_required");
     this.validation = validation;
@@ -312,8 +292,6 @@ export class OptionListForm extends LitElement {
     this.#emit(event, "wt-cancel", {});
   }
 
-  /** What the shared field builders read from this form: its busy flag, its content languages and
-   * the messages currently on screen. */
   #fields(errors: Record<string, string>): FieldContext {
     return {
       busy: this.busy,

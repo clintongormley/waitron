@@ -17,7 +17,6 @@ async function tableRoot(el: ProductList): Promise<ShadowRoot> {
   return table.shadowRoot!;
 }
 
-/** Every rendered row's key, in render order: a product's key is its id, a variant's `<product>:<variant>`. */
 function rowKeys(root: ShadowRoot): string[] {
   return [...root.querySelectorAll("tr[data-row-key]")].map((row) =>
     row.getAttribute("data-row-key")!,
@@ -35,7 +34,6 @@ function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElemen
   return [...row.querySelectorAll("td")][index]!;
 }
 
-/** Chooses `value` in the column's filter and waits for the narrowed render. */
 async function choose(el: ProductList, column: string, value: string): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
@@ -46,8 +44,6 @@ async function choose(el: ProductList, column: string, value: string): Promise<v
   await table.updateComplete;
 }
 
-/** A bun variant used by the filter tests. Of its own fields only `active` is read by a filter (the
- * Status one); the sold-on-its-own filter reads its product's answer. */
 const bunVariant = {
   id: "small",
   name: "Small",
@@ -59,15 +55,8 @@ const bunVariant = {
   active: true,
 };
 
-/**
- * A representative product carrying every field the list reads; individual tests override the one
- * field they exercise (allergens, image, active, name) via a spread so the fixture stays the
- * single source for the rest. The staff name and the customer-facing name deliberately DIFFER, so a
- * test cannot pass by reading whichever one it happened to find.
- *
- * A variant given without `effective` reads its product's values there, which is what the server
- * sends for a variant that sets none of its own.
- */
+/** The staff name and the customer-facing name deliberately DIFFER, so a test cannot pass by reading
+ * whichever one it happened to find. */
 function product(
   overrides: Omit<Partial<Product>, "variants"> & {
     variants?: (Omit<ListedVariant, "effective"> & Partial<Pick<ListedVariant, "effective">>)[];
@@ -122,8 +111,7 @@ describe("product-list", () => {
     expect(rows.length).toBe(3);
   });
 
-  // The list is a dashboard surface, so it shows the STAFF name — never the guest-facing
-  // translation, and never the id. The two fixture names differ, so this fails if either is swapped.
+  // The two fixture names differ, so this fails if either is swapped.
   it("shows the staff name, not the customer-facing one and not the id", async () => {
     const products = [
       product({
@@ -290,9 +278,6 @@ describe("product-list", () => {
     expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(3);
   });
 
-  // Spec §1.1/§9.2: `sold_alone` answers whether a product is offered in its own right, and the list
-  // carries the column so an ingredient or an extra-only product lives in this list rather than on a
-  // screen of its own — which only works if a manager can tell the two apart and narrow to either.
   it("shows a sold-on-its-own badge carrying text, not colour alone", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -330,8 +315,6 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish", "topping"]);
   });
 
-  // Sold-on-its-own is the PRODUCT's answer — a listed variant carries none of its own — so every
-  // variant row answers this filter with its product's, and the two are shown and hidden together.
   it("keeps a product and its variants together on both sides of the filter", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -350,9 +333,6 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish"]);
   });
 
-  // The answer belongs to the product, so a variant row shows the muted dash the other product-level
-  // columns show and contributes nothing to the search box — otherwise searching the badge's words
-  // would drag variant rows in beside their product.
   it("leaves a variant row's sold-on-its-own cell muted and out of the search", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -470,11 +450,10 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "on", active: true }), product({ id: "off", active: false })],
     });
-    // An Inactive product is behind the status filter (spec §15.6), so both are shown with "any".
+    // An Inactive product is behind the status filter, so both are shown with "any".
     await choose(el, "active", "");
     const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=active-badge]");
     expect(badges.length).toBe(2);
-    // Each badge names its state in text (an a11y requirement — not conveyed by colour alone).
     expect(badges[0]!.getAttribute("data-active")).toBe("true");
     expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
     expect(badges[1]!.getAttribute("data-active")).toBe("false");
@@ -482,9 +461,8 @@ describe("product-list", () => {
     expect(badges[0]!.textContent).not.toBe(badges[1]!.textContent);
   });
 
-  // Spec §15.6: Inactive (deleted) products are hidden behind a status filter that starts on
-  // Active; no product is hidden for being Unavailable (sold out for now). The fixtures give Active
-  // and Available DIFFERENT values, so a column or filter reading the wrong flag fails.
+  // The fixtures give Active and Available DIFFERENT values, so a column or filter reading the wrong
+  // flag fails.
   it("starts the status filter on Active, so an Inactive product is hidden until it is changed", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -531,10 +509,6 @@ describe("product-list", () => {
     );
   });
 
-  // Spec §15.6: a removed variant is Inactive and hidden behind the same status filter as a deleted
-  // product. A variant row answers the filter with its OWN state, and with Inactive while its
-  // product is Inactive, because the till sells neither. Under Inactive, an Active product with a
-  // removed variant stays on screen as the variant's context (the table keeps a match's ancestors).
   it("applies the status filter to variant rows, keeping an Active product as a removed variant's context", async () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
@@ -569,7 +543,6 @@ describe("product-list", () => {
         .querySelector("[data-test=active-badge]")!
         .getAttribute("data-active"),
     ).toBe("false");
-    // The Active product is there only as context, and is drawn muted so the match stands out.
     expect(
       cellUnder(root, "bun", t("product.name")).querySelector('[part~="context"]'),
     ).not.toBeNull();
@@ -591,8 +564,6 @@ describe("product-list", () => {
     ]);
   });
 
-  // Spec §15.1: a product with an Active variant is sold only as one of them, and one with none sells
-  // as itself — so the product's price is the range over its Active variants, or its own price.
   it("prices a product across its Active variants only, or at its own price when it has none", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -617,10 +588,8 @@ describe("product-list", () => {
     expect(cellUnder(root, "beer", t("product.price")).textContent!.trim()).toBe("3.00");
   });
 
-  // A variant may set its own price, VAT and categories, so its row shows the values it is sold and
-  // reported under — the server's `effective` — rather than its product's. Every field differs
-  // between Wine 175 and its product, and its three names differ from one another, so a row reading
-  // the product's values or the wrong name fails.
+  // Every field differs between Wine 175 and its product, and its three names differ from one
+  // another, so a row reading the product's values or the wrong name fails.
   it("shows a variant's own name and its effective price and categories", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -672,8 +641,6 @@ describe("product-list", () => {
     );
   });
 
-  // A variant's VAT is noted under its price only where it differs from its product's, so the list
-  // keeps no VAT column and still shows the one value that would otherwise be invisible.
   it("notes a variant's VAT under its price only where it differs from its product's", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -721,14 +688,13 @@ describe("product-list", () => {
     );
     expect(note("wine:w125")).toBeNull();
     expect(note("wine")).toBeNull();
-    // The staff name, not the customer-facing or kitchen one, heads each variant row.
     for (const [rowKey, name] of [
       ["wine:w175", "Wine 175"],
       ["wine:w125", "Wine 125"],
     ] as const)
       expect(cellUnder(root, rowKey, t("product.name")).textContent!.trim()).toBe(name);
     expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe("4.00");
-    // Cell markup lives in the table's shadow root, so only ::part reaches it: a muted, smaller line.
+    // Cell markup lives in the table's shadow root, so only ::part reaches it.
     const style = getComputedStyle(note("wine:w175")!);
     expect(style.display).toBe("block");
     expect(style.color).not.toBe(
@@ -777,8 +743,8 @@ describe("product-list", () => {
     ]);
   });
 
-  // The three-state allergen invariant (design §7): null=PENDING, {}=none, {…}=declared. PENDING and
-  // none MUST be distinguishable — fourteen blank cells must never silently claim "allergen-free".
+  // The three-state allergen invariant: null=PENDING, {}=none, {…}=declared. PENDING and none MUST
+  // be distinguishable — fourteen blank cells must never silently claim "allergen-free".
   it("renders a PENDING allergen pill when allergens is null", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ allergens: null })],
@@ -804,9 +770,6 @@ describe("product-list", () => {
     expect(pill.getAttribute("data-state")).toBe("declared");
   });
 
-  // The three states render through the i18n layer as three DISTINCT localised names (Pendiente /
-  // Ninguno / Declarado), preserving the a11y "three different words, not colour alone" requirement.
-  // `data-state` stays the raw token (asserted elsewhere); only the pill's visible text is localised.
   it("renders each allergen-state pill with its localised name", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -834,7 +797,6 @@ describe("product-list", () => {
       (pill) => pill.getAttribute("data-state"),
     );
     expect(states).toEqual(["pending", "none", "declared"]);
-    // PENDING and none are not the same rendered text (the whole point of the invariant).
     const pills = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=allergen-state]");
     expect(pills[0]!.textContent).not.toBe(pills[1]!.textContent);
   });
@@ -853,8 +815,7 @@ describe("product-list", () => {
 
   // The cell markup is parented in wt-data-table's shadow root, so a CSS class in this widget's
   // stylesheet reaches none of it: the thumbnail frame and the badges would render as bare inline
-  // spans while every attribute assertion above still passed. Measuring the painted box is the only
-  // assertion that can tell the two apart.
+  // spans while every attribute assertion above still passed.
   it("paints the thumbnail frame and the badges through ::part, not a class", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ image: null, available: false })],
@@ -910,8 +871,6 @@ describe("product-list", () => {
     expect((await detail).productId).toBe("prod-42");
   });
 
-  // edit-product must escape this widget's shadow boundary to reach the catalogue screen, so it is
-  // dispatched bubbles+composed — pinned so a future edit does not quietly drop either flag.
   it("emits edit-product as a bubbling, composed event", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "prod-9" })],

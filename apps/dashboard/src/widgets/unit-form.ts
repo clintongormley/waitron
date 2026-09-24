@@ -11,7 +11,7 @@ import { t } from "../i18n/t.js";
 
 type UnitField = "name" | "precision" | "abbreviation";
 
-/** Reusable editor for a unit definition. It owns a copy of its draft, never its host's object. */
+/** It owns a copy of its draft, never its host's object. */
 @customElement("dashboard-unit-form")
 export class UnitForm extends LitElement {
   static override styles = [

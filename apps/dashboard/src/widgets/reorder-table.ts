@@ -10,39 +10,23 @@ import { disabledStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-icon.js";
 import { t } from "../i18n/t.js";
 
-/** A host element with a queryable shadow root: the controller reaches into it to measure rows and
- * to return focus to a moved handle. */
 type ReorderHost = ReactiveControllerHost & { readonly shadowRoot: ShadowRoot | null };
 
-/** The reorder table's contract with its host. The host owns the ordered data — a move rewrites it
- * (through the pure {@link ./reorder.js reorder}) — and how a row is labelled and disabled; the
- * controller owns the drag/keyboard gesture, the row geometry and the live-region announcement. */
 export interface ReorderModel {
   /** Row ids in current display order, top to bottom. The tbody renders one `<tr>` per id in this
    * order — the invariant the pointer geometry relies on. */
   order(): readonly string[];
-  /** Move `id` to index `to`, rewriting the host's ordered data via `reorder()` and requesting an
-   * update. An out-of-range `to` is the host's to clamp; the controller never sends one. */
+  /** `to` may be out of range (the pointer-drag path can pass -1); an implementation must ignore
+   * it, as `reorder()` does. */
   move(id: string, to: number): void;
-  /** The row's human name — the handle's aria target and the subject of a move announcement. */
   label(id: string): string;
-  /** True while reordering must be inert, e.g. the form is saving. */
   busy(): boolean;
-  /** The handle's aria verb, e.g. "Drag to reorder"; the row label is appended after it. */
   readonly reorderLabel: string;
 }
 
-/**
- * The shared drag-and-keyboard reorder table, so every reorderable table reuses one implementation.
- * It is a Lit reactive controller, not a mixin:
- * the reorder state (the live drag, row geometry, refocus and the live region) is self-contained and
- * composes with a host's existing `@state`, whereas a mixin would force every reorderable table onto
- * a shared base class. The pure array math stays in `reorder.js`; the host applies it in `move`.
- */
 export class ReorderController implements ReactiveController {
   readonly #host: ReorderHost;
   readonly #model: ReorderModel;
-  /** The live pointer drag: the row being dragged and the pointer that owns the gesture. */
   #drag: { id: string; pointerId: number } | null = null;
   /** Each row's id and vertical bounds, measured from the top of the table body so scrolling the
    * host does not move them. The id is a SCREEN SNAPSHOT taken at measurement time: the i-th `<tr>`
@@ -50,13 +34,9 @@ export class ReorderController implements ReactiveController {
    * than re-reading `order()` at lookup time — keeps a mid-drag lookup on screen truth after a move
    * has advanced the data but before the next render. Null means measure again. */
   #rowBounds: { id: string; top: number; bottom: number }[] | null = null;
-  /** Set by a keyboard move so the next update returns focus to the handle that moved. */
   #refocus: string | null = null;
-  /** The polite live region's text, replaced on every keyboard move. */
   #announcement = "";
 
-  /** The handle button's CSS and the visually-hidden live region. Token-only; the host adds this to
-   * its own `static styles`. */
   static readonly styles: CSSResult = css`
     .handle {
       display: inline-flex;
@@ -95,11 +75,9 @@ export class ReorderController implements ReactiveController {
     }
   `;
 
-  /** The chrome around a reorderable table: the scroller that lets it be wider than its dialog, and
-   * the table's own grid. A host adds this beside {@link ReorderController.styles} and wraps its
-   * `<table>` in `.table-wrap`. The wrapper is focusable so a keyboard can reach the scroll, which
-   * with no rows yet is the only way to reach it — the header overflows on its own and there is no
-   * row input to tab into. Same shape as packages/ui/src/components/wt-data-table.ts. */
+  /** A host adds this beside {@link ReorderController.styles} and wraps its `<table>` in
+   * `.table-wrap`. Hosts give that wrapper `tabindex="0"` so a keyboard can reach its horizontal
+   * scroll: with no rows yet there is no row control inside to tab into. */
   static readonly tableStyles: CSSResult = css`
     .table-wrap {
       overflow-x: auto;
@@ -132,7 +110,7 @@ export class ReorderController implements ReactiveController {
   }
 
   hostUpdated(): void {
-    // A render can move rows (a committed drag step re-inserts them), so the next move re-measures.
+    // A render can move rows, so the next move re-measures.
     this.#rowBounds = null;
     const id = this.#refocus;
     if (id === null) return;
@@ -144,8 +122,7 @@ export class ReorderController implements ReactiveController {
     this.#endDrag();
   }
 
-  /** The handle button for row `id`: a drag source and an arrow-key mover. Its `data-test` also
-   * anchors the post-move refocus. */
+  /** Its `data-test` also anchors the post-move refocus. */
   handle(id: string): TemplateResult {
     const label = this.#model.label(id);
     return html`<button
@@ -161,9 +138,8 @@ export class ReorderController implements ReactiveController {
     </button>`;
   }
 
-  /** The polite live region announcing keyboard moves. A host renders it exactly once, anywhere in
-   * its own template. The text sits flush against the tags so `textContent` is exactly the
-   * announcement. */
+  /** A host renders it exactly once, anywhere in its own template. The text sits flush against the
+   * tags so `textContent` is exactly the announcement. */
   liveRegion(): TemplateResult {
     // prettier-ignore
     return html`<div role="status" aria-live="polite" class="reorder-status">${this.#announcement}</div>`;
@@ -187,8 +163,6 @@ export class ReorderController implements ReactiveController {
     this.#host.requestUpdate();
   }
 
-  /** Names the moved row and its new 1-based position in the live region, for a screen reader that
-   * cannot see the visual reorder. */
   #announce(id: string): void {
     const order = this.#model.order();
     const index = order.indexOf(id);
@@ -211,15 +185,14 @@ export class ReorderController implements ReactiveController {
 
   readonly #onPointerMove = (event: PointerEvent): void => {
     const drag = this.#drag;
-    // Ignore a stray second pointer: only the one that started the gesture moves the row.
     if (drag === null || event.pointerId !== drag.pointerId) return;
     const over = this.#rowAt(event.clientY);
     if (over === null || over === drag.id) return;
     this.#model.move(drag.id, this.#model.order().indexOf(over));
   };
 
-  /** Ends the gesture. A cancelled pointer (the OS interrupting a touch) needs no separate handler:
-   * each crossed row has already been committed, so there is nothing to commit here. */
+  /** A cancelled pointer (the OS interrupting a touch) needs no separate handler: each crossed row
+   * has already been committed, so there is nothing to commit here. */
   readonly #onPointerEnd = (event: PointerEvent): void => {
     if (this.#drag !== null && event.pointerId !== this.#drag.pointerId) return;
     this.#endDrag();
@@ -233,7 +206,6 @@ export class ReorderController implements ReactiveController {
     document.removeEventListener("pointercancel", this.#onPointerEnd);
   }
 
-  /** The id of the row whose box contains `clientY`, or null when `clientY` is outside every row. */
   #rowAt(clientY: number): string | null {
     const body = this.#host.shadowRoot?.querySelector("tbody");
     if (!body) return null;

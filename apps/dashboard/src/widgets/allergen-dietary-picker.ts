@@ -7,10 +7,7 @@ import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
 import { DIETARY_SUITABILITY, type DietaryLabel } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-/**
- * What a caller has said an option is: the allergens it CONTAINS, and the dietary preferences it is
- * SUITABLE FOR. Both are plain code lists.
- */
+/** The allergens a thing CONTAINS, and the dietary preferences it is SUITABLE FOR. */
 export interface AllergenDietaryValue {
   allergens: string[];
   dietary: DietaryLabel[];
@@ -18,12 +15,6 @@ export interface AllergenDietaryValue {
 
 const EMPTY: AllergenDietaryValue = { allergens: [], dietary: [] };
 
-/**
- * One allergen multi-select plus a caller-configured dietary checklist over the shared vocabularies.
- * It is domain-blind: it knows nothing about modifiers or products, only that a thing contains
- * allergens and is suitable for dietary preferences. Consumers bind `.value` and listen for
- * `wt-change`.
- */
 @customElement("dashboard-allergen-dietary-picker")
 export class AllergenDietaryPicker extends LitElement {
   static override styles = [

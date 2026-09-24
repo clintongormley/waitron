@@ -42,7 +42,6 @@ async function renderAll<T extends HTMLElement & { updateComplete: Promise<unkno
   return elements;
 }
 
-/** Dispatches a `wt-change` from `target` inside a parent that records whether it escaped. */
 function changeFrom(target: HTMLElement, detail: unknown): boolean {
   let escaped = false;
   const listener = () => {

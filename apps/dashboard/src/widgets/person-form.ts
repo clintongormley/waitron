@@ -18,7 +18,6 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
 
 type Field = "firstNames" | "lastNames" | "displayName" | "email";
 
-/** Collects the identity and contact details needed to invite a new user. */
 @customElement("dashboard-person-form")
 export class PersonForm extends LitElement {
   static override styles = [
@@ -69,7 +68,7 @@ export class PersonForm extends LitElement {
       if (field === "firstNames") this.firstNames = value;
       else this.lastNames = value;
       // The shared rule auto-fills only while the display name still matches the generated form,
-      // so it resumes generating after the field is cleared — an edited flag never could.
+      // so it resumes generating after the field is cleared.
       this.displayName = deriveDisplayName(
         this.displayName,
         prevFirst,

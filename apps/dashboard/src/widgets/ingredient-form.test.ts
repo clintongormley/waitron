@@ -2,40 +2,33 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-// Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
-// registers `dashboard-ingredient-form` so `mountWidget` can create it.
 import { IngredientForm } from "./ingredient-form.js";
 import type { AllergenDeclaration, DietaryOrigin, Ingredient } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
-/** The base props every mount needs: an open dialog. */
 function baseProps(overrides: Partial<IngredientForm> = {}): Partial<IngredientForm> {
   return { open: true, ...overrides };
 }
 
-/** The wt-dialog inside the form, once its own first render (which calls showModal) has settled. */
 async function openedDialog(el: IngredientForm): Promise<HTMLDialogElement> {
   const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;
   await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
   return wtDialog.shadowRoot!.querySelector("dialog")!;
 }
 
-/** Type into a wt-input by its data-test, via the composed `wt-change` it dispatches. */
 async function setInput(el: IngredientForm, testId: string, value: string): Promise<void> {
   const input = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await el.updateComplete;
 }
 
-/** Flip a wt-switch by its data-test, via the composed `wt-change` it dispatches. */
 async function setSwitch(el: IngredientForm, testId: string, checked: boolean): Promise<void> {
   const sw = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!;
   sw.dispatchEvent(new CustomEvent("wt-change", { detail: { checked } }));
   await el.updateComplete;
 }
 
-/** Announce an allergen declaration from the child picker, as the real picker's event would. */
 async function emitAllergens(el: IngredientForm, value: AllergenDeclaration): Promise<void> {
   const picker = el.shadowRoot!.querySelector("dashboard-allergen-picker")!;
   picker.dispatchEvent(
@@ -44,7 +37,6 @@ async function emitAllergens(el: IngredientForm, value: AllergenDeclaration): Pr
   await el.updateComplete;
 }
 
-/** Announce a dietary origin from the child origin picker, as the real picker's event would. */
 async function emitOrigin(el: IngredientForm, origin: DietaryOrigin | null): Promise<void> {
   const picker = el.shadowRoot!.querySelector("dashboard-dietary-origin-picker")!;
   picker.dispatchEvent(
@@ -53,12 +45,10 @@ async function emitOrigin(el: IngredientForm, origin: DietaryOrigin | null): Pro
   await el.updateComplete;
 }
 
-/** Click the footer confirm control. */
 function confirm(el: IngredientForm): void {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
 }
 
-/** Resolve with the next event of `type` dispatched from the form host. */
 function nextEvent<T>(el: IngredientForm, type: string): Promise<CustomEvent<T>> {
   return new Promise((resolve) =>
     el.addEventListener(type, (e) => resolve(e as CustomEvent<T>), { once: true }),
@@ -76,8 +66,6 @@ describe("ingredient-form", () => {
     expect((await openedDialog(el)).open).toBe(true);
   });
 
-  // The whole create round-trip: type a name, review the picker with one allergen, confirm — and
-  // assert the assembled body carries `{ name, allergens }`.
   it("emits create-ingredient with the name and the reviewed allergen map", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Harina de trigo");
@@ -92,8 +80,7 @@ describe("ingredient-form", () => {
     });
   });
 
-  // The create-vs-patch asymmetry: an explicit `allergens: null` makes the server throw
-  // `allergen.invalid_code`, so a PENDING (unreviewed) picker must OMIT the key entirely, not send null.
+  // An explicit `allergens: null` makes the server throw `allergen.invalid_code`.
   it("omits allergens from the create body when the picker is PENDING", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
@@ -105,7 +92,6 @@ describe("ingredient-form", () => {
     expect("allergens" in body).toBe(false);
   });
 
-  // A reviewed-but-none declaration ({}) is NOT PENDING — it must be sent, not omitted.
   it("includes an empty allergens map ({}) in the create body", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Agua");
@@ -117,7 +103,6 @@ describe("ingredient-form", () => {
     expect(body.allergens).toEqual({});
   });
 
-  // A selected dietary origin is threaded into the create body under `dietaryOrigin`.
   it("includes the selected dietary origin in the create body", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Ternera");
@@ -128,8 +113,6 @@ describe("ingredient-form", () => {
     expect(body).toEqual({ name: "Ternera", dietaryOrigin: "meat" });
   });
 
-  // The default (not-categorised) origin is the server default, so a create with no origin picked
-  // OMITS the key — the same minimal-body posture the PENDING allergen case takes.
   it("omits dietaryOrigin from the create body when left uncategorised", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
@@ -139,8 +122,6 @@ describe("ingredient-form", () => {
     expect("dietaryOrigin" in body).toBe(false);
   });
 
-  // A non-empty name is required client-side (the column is NOT NULL; a nameless ingredient is a UI
-  // error). An empty name blocks confirm — no event — and shows a `role="alert"` banner.
   it("blocks confirm and shows an error when the name is empty", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     let fired = false;
@@ -151,14 +132,10 @@ describe("ingredient-form", () => {
     const alert = el.shadowRoot!.querySelector("[data-test=error]");
     expect(alert).not.toBe(null);
     expect(alert!.getAttribute("role")).toBe("alert");
-    // The banner NEVER leaks the raw wire code (the codes.ts guarantee). The localised copy for
-    // `ingredient.name_required` lands in Task 9; until then codeMessage degrades it to the generic
-    // sentence — asserting via codeMessage() self-adjusts when Task 9 adds the real copy.
     expect(alert!.textContent).toContain(codeMessage("ingredient.name_required", "es-ES"));
     expect(alert!.textContent).not.toContain("ingredient.name_required");
   });
 
-  // Whitespace-only is still empty.
   it("treats a whitespace-only name as empty", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "   ");
@@ -169,19 +146,15 @@ describe("ingredient-form", () => {
     expect(fired).toBe(false);
   });
 
-  // Typing a name after a blocked confirm clears the validation banner — the operator sees the error
-  // resolve as they fix it, not linger until the next confirm.
   it("clears the name error once the operator types a name", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
-    confirm(el); // empty name → error shown
+    confirm(el);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=error]")).not.toBe(null);
     await setInput(el, "name", "Sal");
     expect(el.shadowRoot!.querySelector("[data-test=error]")).toBe(null);
   });
 
-  // create-ingredient must cross this widget's shadow boundary to reach the recipe screen, so it is
-  // dispatched bubbles+composed.
   it("emits create-ingredient as a bubbling, composed event", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
@@ -214,14 +187,12 @@ describe("ingredient-form", () => {
     )!;
     expect(name.value).toBe("Leche entera");
     expect(active.checked).toBe(false);
-    // The allergen picker is seeded via its `declaration` — its reviewed toggle reflects the ingredient.
     const picker = el.shadowRoot!.querySelector("dashboard-allergen-picker")!;
     await (picker as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     const reviewed = picker.shadowRoot!.querySelector<HTMLInputElement & { checked: boolean }>(
       "[data-test=reviewed]",
     )!;
     expect(reviewed.checked).toBe(true);
-    // The origin picker is seeded via its `value` — its select reflects the ingredient's origin.
     const origin = el.shadowRoot!.querySelector("dashboard-dietary-origin-picker")!;
     await (origin as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     const sel = origin.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=origin]")!;
@@ -249,8 +220,6 @@ describe("ingredient-form", () => {
     });
   });
 
-  // An origin-only edit (operator picks a new origin, touches nothing else) carries the new origin in
-  // the patch — the field the server threads into `updateIngredient` to fan out the product diet.
   it("reflects an origin change in the edit patch", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
@@ -263,8 +232,6 @@ describe("ingredient-form", () => {
     expect((await updated).detail.patch.dietaryOrigin).toBe("meat");
   });
 
-  // Clearing the origin (the picker's not-categorised option → null) sends `dietaryOrigin: null` in
-  // the patch — LEGAL on a patch (it uncategorises the ingredient).
   it("sends dietaryOrigin: null in an edit patch to uncategorise", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
@@ -279,8 +246,6 @@ describe("ingredient-form", () => {
     expect(patch.dietaryOrigin).toBeNull();
   });
 
-  // The active toggle is edit-only (IngredientInput has no `active`); flipping it in edit mode is
-  // reflected in the patch, which is the one route de/reactivation travels.
   it("reflects an active toggle in the edit patch", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
@@ -293,15 +258,11 @@ describe("ingredient-form", () => {
     expect((await updated).detail.patch.active).toBe(true);
   });
 
-  // The active switch does NOT render in create mode — IngredientInput has no `active`, so a control
-  // there would be dead. (It reappears in edit mode, exercised above.)
   it("does not render the active switch in create mode", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     expect(el.shadowRoot!.querySelector("[data-test=active]")).toBe(null);
   });
 
-  // An edit that clears the allergen review sends `allergens: null` in the patch — LEGAL for a patch
-  // (it resets the declaration to PENDING), unlike a create.
   it("sends allergens: null in an edit patch to clear the declaration", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
@@ -316,8 +277,6 @@ describe("ingredient-form", () => {
     expect(patch.allergens).toBe(null);
   });
 
-  // Editing an already-PENDING ingredient and leaving the picker untouched carries `allergens: null`
-  // straight through — the reseed→emit path for null (distinct from the create OMIT).
   it("carries allergens: null in the patch when editing a PENDING ingredient untouched", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", {
       open: true,
@@ -351,8 +310,6 @@ describe("ingredient-form", () => {
     expect(el.open).toBe(false);
   });
 
-  // Single-flight: while a create/update round-trip is in flight the screen sets `busy`, and a second
-  // confirm is ignored (the mutations are not server-idempotent) — the staff-screen guard shape.
   it("ignores a confirm while busy (single-flight)", async () => {
     const { el } = await mountWidget<IngredientForm>(
       "dashboard-ingredient-form",

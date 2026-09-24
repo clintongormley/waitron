@@ -1,13 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { DashboardApi, type ExtraListInput, type OptionListInput } from "./client.js";
 
-/**
- * The twelve `/management-api/modifiers/{options,extras}` methods: each unwraps the server's
- * envelope key (`optionLists`/`optionList`, `extraLists`/`extraList`, `dependants`), and each sends
- * the URL, verb and body the route expects. One queued `fetch` stub, then one `toEqual` over the
- * whole call table, so a wrong URL, a wrong verb or a dropped body field fails here rather than at
- * runtime in a screen.
- */
 it("unwraps the option- and extras-list envelopes and sends the authoring bodies", async () => {
   const optionInput: OptionListInput = {
     name: "Cooking temperature",
@@ -56,8 +49,6 @@ it("unwraps the option- and extras-list envelopes and sends the authoring bodies
   expect(await api.getOptionList("o1")).toEqual(optionList);
   expect(await api.createOptionList(optionInput)).toEqual(optionList);
   expect(await api.updateOptionList("o1", optionInput)).toEqual(optionList);
-  // The route answers `{ ok: true }`, not an empty 204 — the method swallows it and resolves to
-  // undefined, so a caller cannot come to depend on the envelope.
   expect(await api.deleteOptionList("o1")).toBeUndefined();
   expect(await api.getOptionListDependants("o1")).toEqual(optionDependants);
 

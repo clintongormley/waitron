@@ -5,14 +5,8 @@ import type { PurchaseForm } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
 
 /**
- * The purchase dialog only exposes anything to the accessibility tree once it is OPEN — a closed
- * <dialog> renders nothing — so it is mounted with `open = true` and its wt-dialog's first render
- * (which calls showModal) is settled before axe runs, in both themes. axe is run against the themed
- * host so a color-contrast check means what it means in the app.
- *
- * Two shapes are scanned: a CREATE (blank, one empty desglose line) and an EDIT pre-filled from an
- * invoice with two VAT lines — so axe sees the header inputs, the regime/kind selects, and the
- * add/remove-line controls of the desglose sub-editor in both states.
+ * A closed <dialog> renders nothing, so it is mounted with `open = true` and its wt-dialog's first
+ * render is settled before axe runs.
  */
 afterEach(cleanupWidgets);
 

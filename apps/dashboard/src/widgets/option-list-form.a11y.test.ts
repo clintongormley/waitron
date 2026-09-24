@@ -7,11 +7,8 @@ afterEach(cleanupWidgets);
 
 /**
  * The form only exposes anything to the accessibility tree once it is OPEN, so every state below is
- * mounted with `open = true` and scanned in both themes against the themed host, which is what makes
- * a colour-contrast result mean what it means in the app.
- *
- * The three names read differently on purpose (CLAUDE.md §3), and the `many` state holds a
- * withdrawn label so the disabled preselect radio and the muted row are scanned too.
+ * mounted with `open = true`. The three names read differently on purpose (CLAUDE.md §3). The `many`
+ * state holds a withdrawn label so the disabled preselect radio is scanned too.
  */
 const label = (id: string, name: string, customer: string, kitchen: string, available = true) => ({
   id,

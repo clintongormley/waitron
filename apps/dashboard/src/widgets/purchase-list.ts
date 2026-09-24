@@ -8,23 +8,8 @@ import { regimeName } from "../i18n/domain.js";
 import type { PurchaseInvoice } from "../api/client.js";
 
 /**
- * The management dashboard's PURCHASE LIST: one `wt-card` row per received supplier invoice (factura
- * recibida) showing the supplier name, the supplier's invoice number, the received date (which drives
- * the deduction period), the gross total and a localised regime badge. Per row: an Edit control that
- * emits `edit-purchase { id }` and a Delete control that emits `delete-purchase { id }`.
- *
- * The purchases screen owns the list (`DashboardApi.listPurchaseInvoices`) and hands it down as
- * `invoices`; the two controls emit composed, bubbling events carrying only the `id`, which the screen
- * turns into an edit or delete flow. The regime renders through the i18n layer at the render edge
- * (`regimeName`) — the raw token is never shown; `data-regime` keeps the raw token for tests.
- *
  * DELETE IS A TWO-STEP CONFIRM. A factura recibida is re-keyable (not an immutable fiscal record), so a
  * heavyweight dialog is disproportionate — but an accidental single click still costs a full re-entry.
- * So the first click on a row's Delete ARMS that row (its label + `aria-label` flip to the confirm
- * prompt); a second click on the same control emits `delete-purchase`. Only one row is armed at a time
- * (`armedDeleteId`), so arming another row disarms the first, and clicking Edit, clicking anywhere else
- * (a document `pointerdown` outside the armed control), or a list refresh all disarm. The widget holds
- * only this transient arm state; it still never talks to the API.
  */
 @customElement("dashboard-purchase-list")
 export class PurchaseList extends LitElement {
@@ -79,17 +64,10 @@ export class PurchaseList extends LitElement {
     `,
   ];
 
-  /** The invoices to list, straight from `DashboardApi.listPurchaseInvoices`. The screen owns and
-   * refreshes it; defaults to empty so the widget renders safely before the screen assigns the list. */
   @property({ attribute: false }) invoices: PurchaseInvoice[] = [];
 
-  /** The id of the row whose Delete control is ARMED (awaiting a confirming second click), or null.
-   * Single-valued, so arming one row disarms any other by construction. */
   @state() private armedDeleteId: string | null = null;
 
-  /** A `pointerdown` anywhere whose composed path does NOT include the armed Delete control disarms it
-   * (click-away). Bound once; installed only while a row is armed (see `updated`). The arming click's own
-   * path includes the control, so arming never self-disarms. */
   readonly #onOutsidePointerDown = (event: Event): void => {
     if (this.armedDeleteId === null) return;
     const armed = this.renderRoot.querySelector(`[data-test="delete-${this.armedDeleteId}"]`);
@@ -102,7 +80,6 @@ export class PurchaseList extends LitElement {
     if (changed.has("invoices")) this.armedDeleteId = null;
   }
 
-  /** Install the click-away listener only while a row is armed, and tear it down when disarmed. */
   override updated(changed: PropertyValues): void {
     if (!changed.has("armedDeleteId")) return;
     if (this.armedDeleteId !== null) {
@@ -117,24 +94,18 @@ export class PurchaseList extends LitElement {
     document.removeEventListener("pointerdown", this.#onOutsidePointerDown, true);
   }
 
-  /** Dispatch the semantic event bubbles+composed so it crosses this widget's shadow boundary to the
-   * screen (the house pattern — `product-list` does the same). */
   #emit(name: "edit-purchase" | "delete-purchase", id: string): void {
     this.dispatchEvent(
       new CustomEvent<{ id: string }>(name, { detail: { id }, bubbles: true, composed: true }),
     );
   }
 
-  /** Edit `id`. `stopPropagation` keeps the button's own composed `click` inside this shadow boundary;
-   * an edit also disarms any armed delete (interacting elsewhere is a click-away). */
   #onEdit(event: Event, id: string): void {
     event.stopPropagation();
     this.armedDeleteId = null;
     this.#emit("edit-purchase", id);
   }
 
-  /** The two-step delete: the first click arms `id`, a second click on the armed row confirms and emits
-   * `delete-purchase`. `stopPropagation` keeps the button's composed `click` inside the shadow boundary. */
   #onDelete(event: Event, id: string): void {
     event.stopPropagation();
     if (this.armedDeleteId === id) {
@@ -146,7 +117,7 @@ export class PurchaseList extends LitElement {
   }
 
   override render() {
-    const editLabel = t("action.edit"); // locale-invariant across rows — resolve once per render
+    const editLabel = t("action.edit");
     const deleteLabel = t("purchase.delete");
     const confirmLabel = t("purchase.delete_confirm");
     return html`

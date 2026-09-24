@@ -26,7 +26,6 @@ function rowActive({ product, variant }: ProductRow): boolean {
   return product.active && (variant?.active ?? true);
 }
 
-/** Presents the reusable product library, with each product's variants nested underneath it. */
 @customElement("dashboard-product-list")
 export class ProductList extends LitElement {
   static override styles = [
@@ -76,13 +75,9 @@ export class ProductList extends LitElement {
 
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  /** The extras and options lists a product's attachments are named from; the catalogue screen loads
-   * both and hands them down, exactly as it does to the product editor. */
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
-  /** The loaded lists' names, ready to look up. The Modifiers column resolves one per attachment
-   * per product row, and does it twice — as the cell and as the row's search text. */
   #listNames: ReadonlyMap<string, string> = new Map();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -142,8 +137,6 @@ export class ProductList extends LitElement {
       .join(", ");
   }
 
-  /** The attached extras and options lists, in the order the product carries them, by their plain
-   * STAFF names (docs/developers/products.md: one surface, one of a list's names). */
   #modifierNames(product: Product): string {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
@@ -154,8 +147,8 @@ export class ProductList extends LitElement {
     >`;
   }
 
-  /** Spec §15.1: a product with an Active variant is sold only as one of them, and one with none
-   * sells as itself at its own price. */
+  /** A product with an Active variant is sold only as one of them, and one with none sells as
+   * itself. */
   #price({ product, variant }: ProductRow): string {
     if (variant) return Number(variant.effective.unitPrice).toFixed(2);
     const sold = product.variants.filter(({ active }) => active);
@@ -173,8 +166,6 @@ export class ProductList extends LitElement {
         label: t("product.name"),
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: (row) => row.variant?.name ?? row.product.name,
-        // Under the status filter a product can be on screen only as a matching variant's context;
-        // the table says so through `ancestorOnly`, and the name is muted so the match stands out.
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
             ? html`<strong>${variant.name}</strong>`
@@ -209,8 +200,8 @@ export class ProductList extends LitElement {
         key: "price",
         label: t("product.price"),
         align: "end",
-        // The list has no VAT column (#387); a variant whose VAT differs from its product's notes
-        // it under its price, since nothing else on the row would show it.
+        // The list has no VAT column; a variant whose VAT differs from its product's notes it under
+        // its price, since nothing else on the row would show it.
         cell: (row) => {
           const vat = row.variant?.effective.vatClass;
           return html`<span data-test="price">${this.#price(row)}</span>${
@@ -234,8 +225,7 @@ export class ProductList extends LitElement {
         key: "sold-alone",
         label: t("product.sold_alone"),
         // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
-        // every row and a variant is shown or hidden together with its product. The cell still
-        // shows the muted dash and contributes nothing to search.
+        // every row and a variant is shown or hidden together with its product.
         cell: ({ product, variant }) => {
           if (variant) return html`<span part="variant-muted">—</span>`;
           return html`<span
@@ -267,11 +257,9 @@ export class ProductList extends LitElement {
       {
         key: "active",
         label: t("product.status"),
-        // Spec §15.6: Active is the row's own badge and the filter's answer. A variant of an
-        // Inactive product answers Inactive (see rowActive), so it moves with its product and never
-        // leaves it behind as an empty context row; its badge still shows its OWN flag, which is what
-        // its Remove or Restore changes. Available is shown only when it is off, as a second badge:
-        // nothing is hidden for being Unavailable.
+        // A variant of an Inactive product answers Inactive (see rowActive), so it moves with its
+        // product and never leaves it behind as an empty context row; its badge still shows its OWN
+        // flag.
         cell: ({ product, variant }) => {
           const active = variant?.active ?? product.active;
           return html`<span
@@ -313,8 +301,6 @@ export class ProductList extends LitElement {
         align: "end",
         cell: ({ product, variant }) => {
           const { id, name } = variant ?? product;
-          // Spec §15.6: removing a variant makes it Inactive, as deleting a product does, and
-          // restoring it makes it Active again.
           const restore = variant !== null && !variant.active;
           const removal = restore
             ? { event: "restore-product" as const, test: "restore", label: t("product.restore") }

@@ -20,18 +20,9 @@ import {
 } from "./form-fields.js";
 
 /**
- * The small window that adds or edits ONE variant of a product — half a ración, a large size, a
- * bottle rather than a glass.
- *
- * It edits the variant's three independent names: `name` is the plain staff-facing text the till and
- * the dashboard show; `customerName` is the translated text a guest reads on a receipt or a menu;
- * `kitchenName` is what a kitchen ticket prints. Each falls back to `name` when left blank, and the
- * fallback itself belongs to `packages/catalogue/src/product-presentation.ts`, never to a screen.
- *
  * The pricing unit is the PRODUCT's, so this window names it beside the price and offers no control
- * for it. A blank price and a blank photo follow the product's, which the fields show as their hints
- * (spec §9.1). The whole variant travels back to the product editor as one `wt-submit`; nothing here
- * writes to the server, so a variant is only saved when the product is.
+ * for it. The whole variant travels back to the product editor as one `wt-submit`, so a variant is
+ * only saved when the product is.
  */
 @customElement("dashboard-variant-form")
 export class VariantForm extends LitElement {
@@ -51,7 +42,6 @@ export class VariantForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: ProductEditorVariant | null = null;
-  /** The product's pricing unit, shown with the price. Blank until a unit has been chosen. */
   @property() unitLabel = "";
   /** The product's price, which a blank price sells at. */
   @property() basePrice = "";

@@ -21,9 +21,8 @@ import { allergenName } from "../i18n/domain.js";
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 const unit = { id: "unit-each", name: { en: "Each" }, abbreviation: { en: "ea" } };
-// Staff name and customer name differ in every fixture on purpose: one string serving as both hid a
-// real customer-facing defect on this branch, and an assertion cannot tell the two apart when they
-// hold the same text.
+// Staff name and customer name differ in every fixture on purpose: an assertion cannot tell the two
+// apart when they hold the same text.
 const product: ProductEditorDraft = {
   name: "Coffee",
   customerName: { en: "House coffee", es: "Café de la casa" },
@@ -94,7 +93,6 @@ function section(el: ProductEditor, name: string) {
     HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
   >(`[data-section="${name}"]`)!;
 }
-/** Clicks a collapsible section's own header button, the way a person opens it. */
 async function openSection(el: ProductEditor, name: string) {
   const disclosure = section(el, name);
   await disclosure.updateComplete;
@@ -1077,7 +1075,7 @@ it("saves only once and refuses a second press", async () => {
   expect(submit.mock.calls[0]![0].detail.value.variants).toEqual([small, large]);
 });
 
-// Spec §15.6: the Available switch is "sold out for now" and writes only `available`; whether the
+// The Available switch is "sold out for now" and writes only `available`; whether the
 // product exists is `active`, which the editor carries through untouched and changes only by Restore.
 it("sends the Available switch as available and leaves active as it was", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -1443,8 +1441,7 @@ it("shows the resolver's rates, including a fractional rate supplied by a contro
 // Every cell in this table holds ONE line of text or one 44px-tall control, so a row only reads as a
 // row when all four sit on the same line. The shared table block top-aligns cells and re-centres the
 // handle alone, which is right for the two modifier-list FORMS — their cells stack labelled inputs —
-// and wrong here: it left the name and the type reading 13px above their own grip and row menu.
-// Geometry is the only thing that can catch it; every attribute assertion passes either way.
+// and wrong here. Geometry is the only thing that can catch it; every attribute assertion passes either way.
 it("keeps an attached row's name, type, grip and row menu on one line", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -1474,7 +1471,7 @@ it("keeps an attached row's name, type, grip and row menu on one line", async ()
   expect(textMiddle("[data-test=modifier-kind]")).toBeCloseTo(grip, 0);
 });
 
-// --- The parent's variants section (spec §15.1, §15.3, §15.6) ---
+// --- The parent's variants section ---
 
 function tableEvent(el: ProductEditor, name: string, detail: Record<string, unknown>) {
   variantTable(el)!.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -1713,7 +1710,7 @@ it("points a refused translation at an Active variant only, as the server checks
   ).toBeNull();
 });
 
-// --- A variant's own page (spec §4.4, §9.1, §15.2) ---
+// --- A variant's own page ---
 
 // The parent's value for every inherited field, each DIFFERENT from what the variant might set, so
 // an assertion can tell a hint read from the parent from a value read from the variant.
@@ -1808,7 +1805,7 @@ it("shows a variant's inherited price and description empty, with the parent's v
   );
   expect(price.value).toBe("");
   expect(price.placeholder).toBe("9.00");
-  // A variant's price is optional: blank sells at the base price (spec §15.3).
+  // A variant's price is optional: blank sells at the base price.
   expect(price.required).toBe(false);
   const description = control<HTMLTextAreaElement>(el, "description-en");
   expect(description.value).toBe("");

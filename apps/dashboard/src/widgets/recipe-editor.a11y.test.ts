@@ -5,10 +5,8 @@ import type { RecipeEditor } from "./recipe-editor.js";
 import type { Ingredient, Product, RecipeLine } from "../api/client.js";
 
 /**
- * The recipe editor renders its full surface only once a product is chosen (with no product it renders
- * nothing), so it is mounted with a product, the ingredient list, and a PARTIAL recipe — one ingredient
- * pre-checked, the rest off — so axe sees both switch states plus the Save/Cancel footer, in both
- * themes. axe is run against the themed host so a color-contrast check means what it means in the app.
+ * With no product the editor renders nothing, so it is mounted with one, and with a PARTIAL recipe —
+ * one ingredient pre-checked, the rest off — so axe sees both switch states.
  */
 const INGREDIENTS: Ingredient[] = [
   {

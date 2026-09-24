@@ -42,8 +42,7 @@ export class ImageUpload extends LitElement {
   ];
   @property({ attribute: false }) api!: ImageUploader;
   @property() image: string | null = null;
-  /** The photo a blank `image` falls back to — a variant's parent's — shown as a hint, not stored
-   * (spec §9.1). */
+  /** The photo a blank `image` falls back to — a variant's parent's — shown as a hint, not stored. */
   @property() inheritedImage: string | null = null;
   @state() private pickerOpen = false;
   @state() private altText: Record<string, string> = {};

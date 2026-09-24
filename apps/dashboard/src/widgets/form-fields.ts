@@ -5,7 +5,6 @@ import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 
-/** What a field builder needs from the form that renders it. */
 export interface FieldContext {
   busy: boolean;
   /** The content languages a translated name is entered in. */
@@ -14,27 +13,17 @@ export interface FieldContext {
   error: (key: string) => string;
 }
 
-/**
- * A whole number written in plain digits, from `minimum` up to the largest an `integer` column
- * holds, or null when the text is not one. The ceiling is the contract's own
- * (`MAX_MODIFIER_INTEGER`, packages/catalogue/src/modifier-limits.ts): a larger value passes every
- * other check and reaches PostgreSQL as `22003`, which carries no field to put a message beside.
- * One home for that ceiling rule, so a form cannot accept what a sibling refuses.
- */
 export function wholeWithin(text: string, minimum: number): number | null {
   if (!/^\d+$/.test(text)) return null;
   const value = Number(text);
   return value >= minimum && value <= MAX_MODIFIER_INTEGER ? value : null;
 }
 
-/** A whole number from 1 to the largest quantity a modifier may store, written in plain digits. */
 export const isModifierQuantity = (text: string) => wholeWithin(text, 1) !== null;
 
-/** The price field's label, naming the product's pricing unit when there is one. */
 export const priceLabel = (unitLabel: string) =>
   unitLabel.trim() ? t("editor.price_unit").replace("{unit}", unitLabel) : t("editor.price");
 
-/** A translated name without its blank entries, so a language left blank is not submitted. */
 export const nonBlankNames = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
@@ -99,12 +88,9 @@ export function nameFields(
 }
 
 /**
- * One OPTIONAL input per content language, named `<key>-<locale>`. Unlike {@link nameFields} no
- * language is required and none is marked with an asterisk: a customer-facing name or a description
- * left blank falls back to the staff name rather than being a missing value.
- *
- * `placeholder` is what it falls back TO — the inheritance hint every fallback field carries
- * (2026-09-18-one-product-model-design.md §9.1), shown rather than stored.
+ * Unlike {@link nameFields} no language is required: a customer-facing name left blank falls back to
+ * the staff name rather than being a missing value. `placeholder` is what it falls back TO, shown
+ * rather than stored.
  */
 export function optionalTextFields(
   context: FieldContext,

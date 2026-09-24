@@ -6,14 +6,12 @@ import { AllergenPicker } from "./allergen-picker.js";
 
 afterEach(cleanupWidgets);
 
-/** Flip the "Revisado" switch by dispatching the wt-switch's own composed `wt-change`. */
 async function setReviewed(el: AllergenPicker, checked: boolean): Promise<void> {
   const sw = el.shadowRoot!.querySelector<HTMLElement>("[data-test=reviewed]")!;
   sw.dispatchEvent(new CustomEvent("wt-change", { detail: { checked } }));
   await el.updateComplete;
 }
 
-/** Set one allergen's presence via its native `<select>`. */
 async function setPresence(el: AllergenPicker, code: string, presence: string): Promise<void> {
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=presence-${code}]`)!;
   select.value = presence;
@@ -208,7 +206,6 @@ describe("allergen-picker", () => {
   });
 });
 
-/** Records every value the picker announces from the moment it is called. */
 function trackChanges(el: AllergenPicker): unknown[] {
   const values: unknown[] = [];
   el.addEventListener("wt-allergens-change", (event) => {

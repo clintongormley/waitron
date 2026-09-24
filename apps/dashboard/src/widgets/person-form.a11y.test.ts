@@ -4,7 +4,6 @@ import "./person-form.js";
 import type { PersonForm } from "./person-form.js";
 
 // Open the modal before running axe so its controls enter the accessibility tree.
-// The themed host gives the contrast checks the same background as the dashboard.
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("person-form a11y (%s theme)", (theme) => {

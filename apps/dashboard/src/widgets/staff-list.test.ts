@@ -65,16 +65,12 @@ describe("staff-list", () => {
     expect(rows[1]!.textContent).not.toContain("suspended");
   });
 
-  // The row shows the person's dashboard sign-in email so a manager can see it at a glance. A person
-  // WITH an email shows the address; one WITHOUT (email: null) shows an em-dash placeholder, never
-  // the literal "null".
   it("shows the person's email, and an em-dash when there is none", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const rows = table.shadowRoot!.querySelectorAll("tbody tr");
     expect(rows[0]!.textContent).toContain("ada@x.com");
-    // The email-less person shows the em-dash placeholder, not the raw null.
     expect(rows[1]!.textContent).toContain("—");
     expect(rows[1]!.textContent).not.toContain("null");
   });
@@ -88,9 +84,6 @@ describe("staff-list", () => {
     expect((await detail).personId).toBe("p1");
   });
 
-  // The edit-person event must escape this widget's shadow boundary to reach the app shell (a later
-  // task), so it is dispatched bubbles+composed — asserted here so a future edit does not quietly
-  // drop either flag and strand every consumer above the boundary.
   it("emits edit-person as a bubbling, composed event", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
     const seen = new Promise<Event>((resolve) => el.addEventListener("edit-person", resolve));
@@ -117,8 +110,6 @@ describe("staff-list", () => {
     expect(text).toContain("+44 20 1234");
   });
 
-  // An empty roster renders no rows (and does not throw) — the widget defaults `people` to `[]`, so
-  // it is safe to render before the app assigns the list.
   it("renders no rows for an empty people list", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: [] });
     expect(
@@ -184,7 +175,6 @@ describe("staff-list sorting", () => {
     expect(await sortedBy("displayName")).toEqual(["Carl", "Dora", "Eva"]);
   });
 
-  // A missing surname or given name sorts as empty text, never as the word "undefined".
   it("sorts by legal name, treating a missing surname or given name as empty", async () => {
     expect(await sortedBy("legalName")).toEqual(["Eva", "Carl", "Dora"]);
   });
@@ -194,7 +184,6 @@ describe("staff-list sorting", () => {
     expect(await sortedBy("role")).toEqual(["Carl", "Eva", "Dora"]);
   });
 
-  // A person with no email or telephone sorts first as empty text rather than last as a null.
   it.each(["email", "telephone"])("sorts a missing %s first as empty text", async (key) => {
     expect(await sortedBy(key)).toEqual(["Eva", "Carl", "Dora"]);
   });

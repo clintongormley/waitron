@@ -15,8 +15,7 @@ const shift: Shift = {
   rosterVersionId: "v1",
 };
 // wt-input announces edits through a composed `wt-change` CustomEvent (`detail.value`), never a
-// host-level native `input` (its internal onInput calls `event.stopPropagation()`), so the dialog
-// binds `@wt-change` and the test dispatches `wt-change` — the house pattern for these dialogs.
+// host-level native `input` (its internal onInput calls `event.stopPropagation()`).
 const setInput = (el: ShiftDialog, test: string, value: string) => {
   const input = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));

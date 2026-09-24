@@ -19,8 +19,6 @@ import {
 
 export const PANEL_LIMIT = 5;
 
-/** The banner's alerts bell: a count badge on a row-actions trigger whose popover lists the most
- * urgent open alerts. The shell owns the data and acts on this element's events. */
 @customElement("dashboard-alerts-bell")
 export class AlertsBell extends LitElement {
   static override styles = [
@@ -93,7 +91,7 @@ export class AlertsBell extends LitElement {
     this.#menu()?.show();
   }
 
-  /** Focuses the panel's first button. See all is always rendered, so there is always one. */
+  /** See all is always rendered, so there is always a button to focus. */
   focusPanel(): void {
     this.#menu()?.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
   }
