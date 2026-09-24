@@ -326,12 +326,18 @@ describe("list", () => {
     ["another folder under the configured root", "waitron/venues/v2/a"],
     ["a key outside the configured root", "elsewhere/venues/v1/a"],
     ["a key that only shares the prefix's first characters", "waitron/venues/v1"],
-  ])("refuses a listing that names %s", async (_, key) => {
-    const { store } = storeOver([
-      { status: 200, headers: xml, body: listing(entry("waitron/venues/v1/a") + entry(key)) },
-    ]);
-    expect(await rejection(store.list("venues/v1/"))).toEqual(refusal("KeyOutsidePrefix"));
-  });
+  ])(
+    "refuses a listing that names %s, as a bad name rather than a failed request",
+    async (_, key) => {
+      const { store } = storeOver([
+        { status: 200, headers: xml, body: listing(entry("waitron/venues/v1/a") + entry(key)) },
+      ]);
+      expect(await rejection(store.list("venues/v1/"))).toEqual({
+        code: "backup.stream_name_invalid",
+        params: { field: "listedKey", value: key },
+      });
+    },
+  );
 
   it.each([
     ["no time", "<Contents><Key>waitron/venues/v1/a</Key></Contents>"],
