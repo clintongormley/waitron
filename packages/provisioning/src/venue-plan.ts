@@ -10,10 +10,8 @@ import { resolveFiscalModules } from "./fiscal-modules.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
-/** The four ids that name a mirror's venue for `trading.env` (spec §3 Part 1b) — the shape a mirror
- * bundle designates. Once the row inserts (`adoptVenue`) were dropped for a native initial copy, this
- * type is all that survives that seam: `assembleMirrorBundle` fills it and the mirror's boot-time
- * finish step reads it. */
+/** The four ids that name a mirror's venue for `trading.env` — the shape a mirror bundle
+ * designates. */
 export interface AdoptResult {
   locationId: string;
   tillId: string;
@@ -41,15 +39,8 @@ export interface VenueRequest {
   tillName: string;
   seriesCode: string;
   rectificativeSeriesCode: string;
-  /** The initial ADMIN person a freshly provisioned venue needs, so someone can log in and
-   * authorize privileged actions from day one. Both secrets are already HASHED here (hashed at the CLI
-   * boundary by `hashPin` / `hashPassword`) — `pinHash` for the till, `passwordHash` for the dashboard,
-   * never a plaintext secret, so neither enters the plan or any action. `email` is required because
-   * the admin is a dashboard account as well as a till PIN holder. `firstNames`/`lastNames` are the
-   * person's real name. They are OPTIONAL because callers that do not care about the seeded person's
-   * real name build this request without them — several test fixtures do, `venue-apply.test.ts`'s
-   * among them. The two callers that do care, the setup wizard and `waitron-provision venue`, always
-   * pass both. */
+  /** The initial admin. Both secrets arrive already hashed (`hashPin` / `hashPassword`), so no
+   * plaintext secret enters the plan. */
   admin: {
     displayName: string;
     pinHash: string;
@@ -57,13 +48,8 @@ export interface VenueRequest {
     email: string;
     firstNames?: string | null;
     lastNames?: string | null;
-    /** The person's own UI language, a `SUPPORTED_LOCALE_CODES` code. OPTIONAL for the same reason
-     * the names are: callers that have no preference to offer omit it. Null or absent means the
-     * person has none of their own, and the apps fall back to the venue default
-     * (`resolveActiveLocale`, packages/shared/src/locales.ts). The setup wizard always resolves a
-     * value from the operator's browser, so in practice a null here now comes from the command-line
-     * `venue` command or from a dev/demo script. This is the DISPLAY language only — it is not
-     * `location.invoiceLocales`, which decides what language an invoice is printed in. */
+    /** The person's own UI language. Null or absent leaves them on the venue default. Not
+     * `location.invoiceLocales`, which decides the language an invoice is printed in. */
     locale?: string | null;
   };
 }
@@ -73,9 +59,8 @@ export type VenueAction =
   | {
       kind: "seed-admin";
       displayName: string;
-      // Not optional on the ACTION, unlike on the request: the applier writes all three columns
-      // unconditionally, so the planner resolves "not given" to `null` here and the applier never
-      // has to decide what an absent field means.
+      // Not optional here, unlike on the request: the planner resolves "not given" to `null`, the
+      // value the columns' `is null or length > 0` checks accept.
       firstNames: string | null;
       lastNames: string | null;
       locale: string | null;
@@ -98,10 +83,7 @@ export type VenueAction =
       dayCutover: string;
     }
   | {
-      // Non-fiscal. Seeds the tenant's starter device profiles (Counter/Kitchen/Handheld), authored
-      // under an admin management session (so seed-admin must precede it). Touches no series/SIF/chain.
-      // Names are already resolved to the venue's primary invoice locale here in the pure planner;
-      // capabilities are the form-factor defaults from DEFAULT_DEVICE_PROFILES.
+      // Needs seed-admin first: the profiles are authored under the admin's management session.
       kind: "seed-device-profiles";
       profiles: {
         name: string;
@@ -118,61 +100,39 @@ export type VenueAction =
   | { kind: "seed-module"; module: string; summary: string };
 
 /**
- * Pure: request → the flat action list applyVenue runs, or a throw. Every refusal that can be made
- * without a database is made here (spec D4's input half, the locale cardinality the DB CHECK also
- * enforces), where a unit test reaches it without a container. Mirrors planInstance.
+ * Pure: request → the flat action list applyVenue runs, or a throw.
  *
- * No ids are in the actions: they are generated at apply time and threaded by order
- * (ensure-tenant makes sure the one taxpayer row is there; create-location makes a location;
- * create-node makes the node the following actions reference).
+ * No ids are in the actions: they are generated at apply time and threaded by order.
  */
 export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
-  // Canonicalize the fiscal identity ONCE, at the top, and use these values for the stored
-  // `tenants (country, tax_id)` row. This is the functional fix for the §5 footgun: both
-  // provisioning paths go through here — setup currently sends the pack's canonical country code
-  // and normalized tax id, while the CLI accepts operator-entered casing and surrounding space.
-  // Keeping canonicalization at this generic boundary prevents a future caller from bypassing that
-  // normalization. Storing a raw (country, tax_id) row would let `es`/`ES` (or a taxId that differs
-  // only in letter case or in leading/trailing whitespace) read as a DIFFERENT business from the
-  // one already stored, so a same-venue retry would be refused as a foreign taxpayer
-  // (`provisioning.foreign_tenant`, thrown by `assertNoForeignTenant` before the apply is reached)
-  // instead of being the no-op it is.
-  // `.trim().toUpperCase()` collapses exactly those two differences; INTERNAL whitespace is
-  // deliberately left alone (a taxId's inner content is not ours to alter), so `"B123 45678"` stays
-  // a distinct identity. ISO-3166 alpha-2 is upper-case by convention.
+  // Canonicalized here, for every caller, because `assertNoForeignTenant` compares the stored
+  // `tenants (country, tax_id)` byte-for-byte: a raw `es`/`ES` or stray surrounding space would
+  // refuse a same-venue retry as a foreign taxpayer. Internal whitespace is deliberately left
+  // alone: a tax id's inner content is not ours to alter.
   const country = request.country.trim().toUpperCase();
   const taxId = request.taxId.trim().toUpperCase();
   const locales = request.location.invoiceLocales;
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
   }
-  // Equal codes collide on the series natural key (node, code): applyVenue's
-  // `ON CONFLICT DO NOTHING` would drop the second series, leaving the venue unable to issue
-  // rectificative invoices. Refuse here so no admin connection is spent on a malformed request.
+  // Equal codes collide on the series key (node, code), so applyVenue would drop the second series
+  // and leave the venue unable to issue rectificative invoices.
   if (request.seriesCode === request.rectificativeSeriesCode) {
     throw new AppError("provisioning.duplicate_series_code", { code: request.seriesCode });
   }
   const fiscal = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
-  // The territory must belong to the tenant's country. Fiscal territories are country-prefixed
-  // (`ES-common`, `GB-vat`, …), and applyVenue writes tax_id into `registro_sif.nif` (a
-  // Spanish-NIF field), so `country=PT` + `ES-common` would file under a non-NIF identity — a
-  // mis-filing under the wrong country that a hash-chained record cannot take back (spec §8). Checked
-  // AFTER resolveFiscalModules so an unimplemented territory fails first with the more specific
-  // `fiscal.regime_not_implemented`; refused here, in the pure planner, so no admin connection is
-  // spent (spec D4). Case-insensitive on the prefix, so `es`/`ES` both match `ES-common`.
+  // The territory must belong to the tenant's country: applyVenue writes tax_id into
+  // `registro_sif.nif` (a Spanish-NIF field), so `country=PT` + `ES-common` would file under a
+  // non-NIF identity, a mis-filing that a hash-chained record cannot take back. Checked after
+  // resolveFiscalModules so an unimplemented territory fails first with the more specific code.
   if (!request.location.fiscalTerritory.toUpperCase().startsWith(`${country}-`)) {
     throw new AppError("provisioning.territory_country_mismatch", {
       country,
       fiscalTerritory: request.location.fiscalTerritory,
     });
   }
-  // The admin's UI language goes straight into `persons.locale`, a plain text column whose only
-  // constraint is non-empty, so a code the apps have no catalogue for would be stored and then shown
-  // to the operator as a screen of missing strings. A person's own write boundary refuses one
-  // (`setPersonLocale`, packages/identity/src/staff.ts); refuse it here too, in the pure planner, so
-  // provisioning is not the one path that can write an unrenderable language and so the refusal
-  // costs no admin connection. `null` is "this person has no preference", a valid state that leaves
-  // them on the venue default — not an unsupported code.
+  // `persons.locale` only refuses an empty string, so a code the apps have no catalogue for would
+  // be stored. `setPersonLocale` refuses one too.
   const adminLocale =
     request.admin.locale == null ? null : assertSupportedLocale(request.admin.locale);
 
@@ -183,9 +143,6 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       taxId,
       legalName: request.legalName,
     },
-    // A person needs only the tenant scope, so the admin is seeded immediately after ensure-tenant,
-    // before the location. `pinHash` is already a hash (hashed at the CLI boundary); no plaintext PIN
-    // ever reaches an action.
     {
       kind: "seed-admin",
       displayName: request.admin.displayName,
@@ -196,18 +153,12 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       passwordHash: request.admin.passwordHash,
       email: request.admin.email,
     },
-    // Seed the starter device-profile set right after the admin: createDeviceProfile authorises a
-    // `till.configure` management session, which only the just-seeded admin can open. Names are
-    // resolved HERE to the venue's primary invoice locale (locales[0]); a re-provision is made
-    // idempotent (find-or-create by name) in applyVenue. Non-fiscal, so it precedes create-location.
     {
       kind: "seed-device-profiles",
       profiles: DEFAULT_DEVICE_PROFILES.map((profile) => ({
         name: defaultProfileName(profile, locales[0]!),
         formFactor: profile.formFactor,
         capabilities: profile.capabilities,
-        // Thread the seeded timeout through, or the store's createDeviceProfile never receives it and
-        // the phone-portrait default (300 s) is silently dropped. `?? null` normalizes an omitted seed.
         inactivityTimeoutSeconds: profile.inactivityTimeoutSeconds ?? null,
       })),
     },
@@ -234,7 +185,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     },
     { kind: "create-series", code: request.seriesCode, purpose: "standard" },
     { kind: "create-series", code: request.rectificativeSeriesCode, purpose: "rectificative" },
-    // Module seeds run LAST, once every core row exists, one per declaring module in list order.
+    // Module seeds run LAST, once every core row exists.
     ...modules.flatMap((m) =>
       m.provisioning?.seed === undefined
         ? []
@@ -243,14 +194,13 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   ];
 }
 
-/** One action as a line an operator can check in the plan summary. Mirrors describeAction. */
+/** One action as a line an operator can check in the plan summary. */
 export function describeVenueAction(action: VenueAction): string {
   switch (action.kind) {
     case "ensure-tenant":
       return `ensure tenant ${action.country}/${action.taxId} (${action.legalName})`;
     case "seed-admin": {
-      // The admin's name and language only — never a hash. This line goes into the plan summary an
-      // operator reads, and the hashes are secrets (§ SECRET DISCIPLINE).
+      // Never a hash: this line is shown to the operator.
       const realName = [action.firstNames, action.lastNames].filter(Boolean).join(" ");
       const details = [realName, action.locale].filter(Boolean).join(", ");
       return details === ""

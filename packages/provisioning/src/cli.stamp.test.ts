@@ -15,26 +15,13 @@ import { readTenantIdentities } from "./tenant-guard.js";
 import type { VenueResult } from "./venue-apply.js";
 
 /**
- * `venue`'s stamping, against a REAL migrated venue database and the REAL `stampDeployment` —
- * the primitive, not a double of it.
- *
- * `cli.test.ts` records WHETHER `venue` stamps, with what, and in what order relative to the prompt
- * and the apply; its `stampEnvironment` is a recorder, so it can say nothing about what the
- * primitive does with the value. This file is the other half: what the stamp WRITES, what it leaves
- * alone, and what it refuses. That refusal is the fiscal invariant — one database per environment,
- * and a pre-production database promoted to production leaves a permanent hole in the invoice series
- * (CLAUDE.md §5) — so it is checked here against the same function the browser setup wizard's
- * handler calls (`provisionVenue`, `apps/server/src/provision.ts`), rather than against a copy of
- * its rule.
- *
- * The full manifest is migrated because `venue` reads `tenants` through the real
- * `readTenantIdentities`. `applyVenue` stays injected: the mint has its own suite
- * (`venue-apply.e2e.test.ts`), and what is under test here is what happens to the `deployment` row.
- * The per-test reset empties `deployment` with everything else, so each case starts unstamped.
+ * `venue` against a real migrated venue database and the REAL `stampDeployment`. `cli.test.ts`'s
+ * `stampEnvironment` is a recorder, so this file is what shows what the stamp writes, leaves alone
+ * and refuses (CLAUDE.md §5). `applyVenue` stays injected: the mint has its own suite
+ * (`venue-apply.e2e.test.ts`).
  */
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-/** The ids the injected apply hands back — never read here beyond proving the apply ran. */
 const VENUE_RESULT = {
   locationId: "22222222-2222-2222-2222-222222222222",
   tillId: "33333333-3333-3333-3333-333333333333",
@@ -43,8 +30,7 @@ const VENUE_RESULT = {
   seeded: [],
 } as unknown as VenueResult;
 
-/** No fiscal-slot member: this file never mints a SIF, so the slot resolves to nothing and the
- * territory's own field rules are skipped — the same list `cli.test.ts` runs with. */
+/** No fiscal-slot member, so the territory's own field rules are skipped. */
 const MODULES: readonly WaitronModule[] = [fakeModule("core")];
 
 const VENUE_ARGS = [
@@ -96,7 +82,6 @@ interface Run {
   applyVenue: ReturnType<typeof vi.fn>;
 }
 
-/** One `venue` run against the migrated suite database, with every deployment seam REAL. */
 async function run(env: Record<string, string | undefined>): Promise<Run> {
   const lines: string[] = [];
   const applyVenue = vi.fn(async () => VENUE_RESULT);
@@ -130,7 +115,6 @@ describe("venue, stamping a real venue database", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
     const { code, applyVenue } = await run({});
     expect(code).toBe(0);
-    // Unset means preproduction — the one irreversible default (CLAUDE.md §5).
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
     expect(applyVenue).toHaveBeenCalledTimes(1);
   });
@@ -150,8 +134,7 @@ describe("venue, stamping a real venue database", () => {
   });
 
   it("REFUSES a directory stamped for the other environment, applying nothing", async () => {
-    // The live-box case: a production box provisioned by a script whose WAITRON_ENV is unset. The
-    // stamp must not move, and no venue may be minted under the disagreement.
+    // A production box provisioned by a script whose WAITRON_ENV is unset.
     await stampDeployment(suite.db, "production");
     const { code, lines, applyVenue } = await run({});
     expect(code).toBe(1);

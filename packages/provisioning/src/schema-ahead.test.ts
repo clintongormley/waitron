@@ -13,14 +13,8 @@ const PHANTOM: MigrationSetSource = {
   from: "../phantom/drizzle",
 };
 
-/**
- * A database stub answering the TWO queries `journalHashes` makes per set, in order: the
- * `sqlite_master` presence probe, then the journal read. They alternate, so a call with several
- * sets is answered set by set.
- *
- * It was one query until 2026-09-22, when `journalHashes` stopped catching PostgreSQL's `42P01` —
- * a value `node:sqlite` never produces — and started asking the catalogue instead.
- */
+/** Answers the TWO queries `journalHashes` makes per set, in order: the `sqlite_master` presence
+ * probe, then the journal read. */
 function dbWith(hashes: readonly string[]) {
   let call = 0;
   return {
@@ -40,9 +34,6 @@ describe("unknownHashes", () => {
     expect(unknownHashes(["a", "b", "c"], ["a", "b"])).toEqual(["c"]);
   });
 
-  // Control: a database BEHIND the image is not ahead. Only the ahead direction is a failure — a
-  // behind database is an ordinary upgrade. The entrypoint runs this check BEFORE anything
-  // migrates (`apps/server/src/node-entry.ts`), so the behind case is the ordinary one.
   it("reports nothing for a database behind the image", () => {
     expect(unknownHashes(["a"], ["a", "b", "c"])).toEqual([]);
   });
@@ -67,9 +58,8 @@ describe("findAheadSets", () => {
     expect(await findAheadSets(dbWithoutJournal, [PHANTOM], null)).toEqual([]);
   });
 
-  // Control for the test above, in the other direction: with a journal present the same set DOES
-  // reach the image's files, and the missing folder is what fails. Without this, "returns []" would
-  // also be what a `findAheadSets` that never reads files at all would print.
+  // Control for the test above: without it, `[]` is also what a `findAheadSets` that never reads
+  // files at all would return.
   it("reads the image's files for a set whose journal table exists", async () => {
     await expect(findAheadSets(dbWith(["a"]), [PHANTOM], null)).rejects.toMatchObject({
       code: "migrations.set_missing",
@@ -103,9 +93,7 @@ describe("assertNotAhead", () => {
     );
   });
 
-  // The FIRST ahead set, not every one: one named set with its unknown hashes is what an installer
-  // acts on. The stub answers every set with the same journal, so `core` is what a report of one
-  // must name.
+  // The stub answers every set with the same journal, so both sets are ahead.
   it("reports the first ahead set when several are ahead", async () => {
     const unknown = "f".repeat(64);
     const sets = manifestSets().filter((set) => set.name === "core" || set.name === "catalogue");

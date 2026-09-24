@@ -8,13 +8,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
 
-// This suite exercises the wiring and idempotency logic against a migrated venue directory. The run
-// as a non-superuser owner of a real PostgreSQL database that used to sit beside it
-// (`venue-apply.pg.test.ts`) was deleted with the PostgreSQL deployment model: there are no roles
-// left for it to be about.
-//
-// The full manifest is migrated. applyVenue seeds an admin `persons` row
-// (`./venue-apply.ts`), so identity's set has to be among them.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
 });
@@ -74,9 +67,6 @@ describe("applyVenue: the one taxpayer row", () => {
   });
 
   it("refuses a re-run whose tax id differs, by name", async () => {
-    // The domain code, never `toBeInstanceOf(Error)`: before this refusal existed, the second run
-    // failed on the taxpayer row's primary key, and a plain Error assertion would have passed while
-    // the operator got an unactionable driver message (CLAUDE.md §4).
     await applyVenue(planVenue(request("B10000003"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -121,8 +111,6 @@ describe("applyVenue", () => {
            where location_id = ${result.locationId} and is_default and active) as default_departments,
         (select count(*) from zone_service_policies
            where location_id = ${result.locationId} and is_counter_default) as counter_zones`);
-    // The initial kitchen station gives configuration a valid preparation target before the venue
-    // adds more specific category, product, and zone routes.
     expect(counts.rows[0]).toEqual({
       tenants: 1,
       nodes: 1,
@@ -137,13 +125,11 @@ describe("applyVenue", () => {
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
     expect(series.rows.map((r) => r.purpose)).toEqual(["rectificative", "standard"]);
 
-    // The node carries the resolved modules.
     const node = await suite.db.execute<{ filing_module: string; tax_module: string }>(sql`
       select filing_module, tax_module from nodes where id = ${result.nodeId}`);
     expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "vat" });
 
-    // registro_sif.nif came from the tenant's tax_id, never an argument. Read by NODE: the SIF row is
-    // the fiscal module's seed's doing now, and `seeded` carries only its one-line report.
+    // registro_sif.nif came from the tenant's tax_id, never an argument.
     const sif = await suite.db.execute<{ nif: string; numero_instalacion: number }>(sql`
       select nif, numero_instalacion from registro_sif where node_id = ${result.nodeId} and revocado_en is null`);
     expect(sif.rows[0]?.nif).toBe("B12345678");
@@ -165,8 +151,6 @@ describe("applyVenue", () => {
   });
 
   it("seeds exactly one admin person carrying the display name, role, and pin hash", async () => {
-    // A freshly provisioned venue must have someone who can log in and authorize privileged actions.
-    // A distinct tenant so the person count is this run's alone (the suite shares one database).
     const seedRequest = request("B55555555");
     seedRequest.admin = {
       displayName: "Alicia",
@@ -191,10 +175,6 @@ describe("applyVenue", () => {
       select display_name, role, first_names, last_names, locale, pin_hash, password_hash
       from persons `);
     expect(people.rows).toHaveLength(1);
-    // This request carries no real names and no UI-language preference, so the insert binds null for
-    // all three columns and the row stores null — the `is null or length > 0` checks accept that,
-    // which is why the planner resolves an absent value to null rather than to an empty string. A
-    // null `locale` is what leaves this person on the venue default.
     expect(people.rows[0]).toEqual({
       display_name: "Alicia",
       role: "admin",
@@ -207,12 +187,6 @@ describe("applyVenue", () => {
   });
 
   it("writes the admin's real names and UI language onto the seeded person when the request carries them", async () => {
-    // The suite migrates the real manifest (see its `useVenueDb` options), so the nullable columns
-    // and their `is null or length > 0` checks are the shipped ones — a value this test stores is a
-    // value the shipped schema accepts (`packages/identity/src/schema/persons.ts`, carried into
-    // `packages/identity/drizzle/0000_baseline.sql`). The distinct tax id is not what keeps this
-    // case off the other cases' rows: `useVenueDb` empties every migrated table after each test
-    // (`buildResetPlan`, `packages/db/src/testing/venue-db.ts`).
     const seedRequest = request("B31313131");
     seedRequest.admin = {
       displayName: "Clint",
@@ -242,19 +216,13 @@ describe("applyVenue", () => {
   });
 
   it("seeds exactly the three starter device profiles (names per the venue locale, no canvas, form-factor caps)", async () => {
-    // task-3 follow-on b: every new tenant is seeded Counter/Kitchen/Handheld at provisioning. es-ES
-    // venue → the Spanish names; each binds canvasId NULL (→ form-factor default canvas at runtime) and
-    // carries the form-factor default capabilities. A distinct tenant so the profile set is this
-    // run's alone (the suite shares one database). Proven by deletion: drop the seed-device-profiles
-    // handler in applyVenue and this reads zero rows.
     await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
-    // Read through the table definition, not raw SQL: `capabilities` is a JSON column, and a raw
-    // read hands back the ENCODED text — `"[\"act-as-kds\"]"` where the assertion below wants the
-    // list. The selection is aliased to the column names so the expected rows are unchanged.
+    // Through the table definition: a raw read of the JSON `capabilities` column returns the
+    // encoded text.
     const profiles = await suite.db
       .select({
         name: deviceProfiles.name,
@@ -264,10 +232,6 @@ describe("applyVenue", () => {
       })
       .from(deviceProfiles)
       .orderBy(deviceProfiles.name);
-    // The seeded inactivity timeout reaches the DB only through venue-plan → applyVenue: the counter
-    // till and handheld each carry 300 s, the kitchen display none. Proven by deletion: drop the
-    // `inactivityTimeoutSeconds` field from planVenue's profile mapping and the counter/handheld read
-    // null.
     expect(profiles).toEqual([
       {
         name: "Cocina",
@@ -286,9 +250,6 @@ describe("applyVenue", () => {
   });
 
   it("seeds the starter profiles only once across re-runs (idempotent find-or-create by name)", async () => {
-    // The profiles belong to the tenant, so a same-venue re-run must not duplicate
-    // them. applyVenue find-or-creates by name. Proven by deletion: drop the existing-name filter and
-    // the second run throws device_profile.name_taken (the per-tenant name unique).
     await applyVenue(planVenue(request("B20202020"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -299,7 +260,7 @@ describe("applyVenue", () => {
     });
     const count = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from device_profiles `);
-    expect(count.rows[0]?.n).toBe(3); // three, not six
+    expect(count.rows[0]?.n).toBe(3);
   });
 
   it("writes the admin's required dashboard email", async () => {
@@ -332,7 +293,7 @@ describe("applyVenue", () => {
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
-    expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant, not two
+    expect(tenants.rows[0]?.n).toBe(1);
     expect(second.locationId).toBe(first.locationId);
     expect(second.tillId).toBe(first.tillId);
     expect(second.nodeId).toBe(first.nodeId);
@@ -435,20 +396,8 @@ describe("applyVenue", () => {
   });
 
   it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error, §5)", async () => {
-    // The fiscal footgun: es/ES (or a taxId differing only in letter case or leading/trailing
-    // whitespace) for the SAME business must never be treated as two different taxpayers (§5).
-    // Internal whitespace is NOT normalized (a distinct identity).
-    //
-    // The count can no longer go above 1 whatever this test does — `tenants.id` is pinned to 1, so
-    // the second run's insert is absorbed and the row it reads back is the first run's. What the
-    // case still detects is the IDENTITY COMPARISON in `venue-apply.ts`'s ensure-tenant deciding
-    // that `es`/`ES` are different taxpayers and refusing the re-run.
-    //
-    // Proven by DELETION on 2026-09-16, and it takes BOTH of the two places that fold case, because
-    // either one alone still folds it: drop `planVenue`'s `.trim().toUpperCase()` on `taxId` AND the
-    // same fold in `venue-apply.ts`'s comparison, and this case fails with
-    // `provisioning.tenant_identity_mismatch` thrown at the second run (1 failed, 25 passed).
-    // Dropping either one on its own leaves all 26 green.
+    // The count cannot exceed 1 (`tenants.id` is pinned to 1): what this catches is ensure-tenant's
+    // identity comparison refusing the re-run.
     await applyVenue(planVenue(request("B88888888"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -461,14 +410,10 @@ describe("applyVenue", () => {
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from tenants
       where upper(country) = 'ES' and upper(tax_id) = 'B88888888'`);
-    expect(tenants.rows[0]?.n).toBe(1); // the one taxpayer row, unchanged by the second run
+    expect(tenants.rows[0]?.n).toBe(1);
   });
 
   it("seeds the admin only once across same-venue re-runs", async () => {
-    // The admin belongs to the tenant. A plain `insert into persons` would
-    // add a second role='admin' person every run; the conditional seed (insert-where-not-exists)
-    // makes the re-run a no-op, mirroring ensure-tenant. Proven by DELETION: revert seed-admin to a
-    // plain insert and this assertion reads 2.
     await applyVenue(planVenue(request("B77777777"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -481,7 +426,7 @@ describe("applyVenue", () => {
     const admins = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from persons
       where role = 'admin'`);
-    expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
+    expect(admins.rows[0]?.n).toBe(1);
   });
 
   it("does not mint another node or installation on a same-venue re-run", async () => {
@@ -501,8 +446,6 @@ describe("applyVenue", () => {
   });
 
   it("refuses a plan with no ensure-tenant — the scope it adopts must be present", async () => {
-    // The tenant scope every WITH CHECK is satisfied against comes from the ensure-tenant action;
-    // a plan lacking it has no scope to adopt, so applyVenue throws before opening a transaction.
     const withoutTenant = planVenue(request(), ALL_MODULES).filter(
       (a) => a.kind !== "ensure-tenant",
     );
@@ -512,10 +455,7 @@ describe("applyVenue", () => {
   });
 
   it("refuses a plan with no create-node — a venue that files nothing is not complete", async () => {
-    // create-node's own id is only checked by the actions that DEPEND on it (seed-module,
-    // create-series), so dropping all three together clears every ordering guard and used to return
-    // a "complete" VenueResult with `nodeId === ""`. The post-loop completeness guard names the
-    // missing step instead.
+    // Dropping create-node with everything that depends on it clears every ordering guard.
     const withoutNode = planVenue(request("B48484848"), ALL_MODULES).filter(
       (a) => a.kind !== "create-node" && a.kind !== "seed-module" && a.kind !== "create-series",
     );
@@ -525,10 +465,7 @@ describe("applyVenue", () => {
   });
 
   it("never returns a phantom series id when ON CONFLICT drops a colliding series", async () => {
-    // planVenue rejects equal codes, so this hand-builds the colliding plan directly to prove the
-    // apply-side gate: two create-series sharing (node, code), the second dropped by
-    // ON CONFLICT DO NOTHING. Its id must NOT reach the result, and the venue must end with exactly
-    // one series row — the honest reflection of what was written.
+    // Hand-built, because planVenue rejects equal codes.
     const taxId = "B22222222";
     const collidingPlan: VenueAction[] = [
       { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
@@ -550,23 +487,19 @@ describe("applyVenue", () => {
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
-      { kind: "create-series", code: "A", purpose: "rectificative" }, // same code ⇒ dropped
+      { kind: "create-series", code: "A", purpose: "rectificative" },
     ];
 
     const result = await applyVenue(collidingPlan, { db: suite.db, modules: ALL_MODULES });
-    expect(result.seriesIds).toHaveLength(1); // the dropped series' id is not returned
+    expect(result.seriesIds).toHaveLength(1);
 
     const series = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from invoice_series where node_id = ${result.nodeId}`);
-    expect(series.rows[0]?.n).toBe(1); // only one series row exists
+    expect(series.rows[0]?.n).toBe(1);
   });
 
   it("refuses a plan that omits create-till rather than returning an empty till id", async () => {
-    // The ordering guards check the ids a LATER action depends on (a till's location, a node's
-    // location, a seed/series' node). Nothing downstream depends on `tillId`, so an OMITTED create-till
-    // slips past every ordering guard, and the run used to return a "complete"
-    // VenueResult with `tillId === ""` — a venue with no real till, which fails confusingly later
-    // (recordSale needs one). A post-loop completeness guard names the missing step instead.
+    // No later action depends on `tillId`, so an omitted create-till slips past every ordering guard.
     const taxId = "B44444444";
     const planWithoutTill: VenueAction[] = [
       { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
@@ -595,12 +528,7 @@ describe("applyVenue", () => {
   });
 
   describe("guards a malformed plan whose actions arrive out of order", () => {
-    // planVenue always emits create-location before create-till/create-node, and create-node before
-    // create-series/seed-module, so these orderings are unreachable from it. A hand-built (or a
-    // future-planner) plan that runs a step early would otherwise hit the DB with an EMPTY uuid — a
-    // low-signal 22P02 — or run a module seed against an empty node id (fiscally load-bearing). Each
-    // guard turns that into a clear plan-integrity Error BEFORE any such write, not an operator-facing
-    // AppError: a malformed plan is a programming bug, not operator input.
+    // Unreachable from planVenue, so each plan is hand-built.
     const taxId = "B33333333";
     const ensure: VenueAction = {
       kind: "ensure-tenant",
@@ -710,8 +638,6 @@ describe("applyVenue", () => {
     });
 
     it("runs the seed with the node it just created and reports its line", async () => {
-      // Its own tenant: the suite shares one database, and B44444444 belongs to the create-till
-      // completeness case above.
       const modules = [...ALL_MODULES, recorder];
       const result = await applyVenue(planVenue(request("B47474747"), modules), {
         db: suite.db,
@@ -728,9 +654,8 @@ describe("applyVenue", () => {
     });
 
     it("a throwing seed rolls the whole venue back — no tenant row survives", async () => {
-      // The reason the seed runs INSIDE the venue transaction (CLAUDE.md §5): a module that cannot
-      // establish its state must leave no half-built venue behind, least of all a fiscal chain.
-      // A tax id no other test in this file provisions, so an absent tenant row is this run's answer.
+      // The reason the seed runs INSIDE the venue transaction: a module that cannot establish its
+      // state must leave no half-built venue behind, least of all a fiscal chain.
       const modules = [...ALL_MODULES, exploding];
       const taxId = "B51515151";
       await expect(
@@ -749,9 +674,7 @@ describe("applyVenue", () => {
       await expect(applyVenue(plan, { db: suite.db, modules: ALL_MODULES })).rejects.toThrow(
         refusal,
       );
-      // The guard's other half: the module IS held, but carries no seed to run. Only `deps.modules`
-      // is consulted, so a same-named descriptor without the seat is refused exactly as an absent
-      // one is — the plan alone never decides what runs.
+      // Held, but with no seed: only `deps.modules` decides what runs, never the plan.
       const seedless = fakeModule(recorder.name);
       await expect(
         applyVenue(plan, { db: suite.db, modules: [...ALL_MODULES, seedless] }),

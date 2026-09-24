@@ -30,7 +30,6 @@ describe("assertNoForeignTenant", () => {
     })();
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
-    // The refusal echoes the database name it was handed — never a secret.
     expect(isAppError(error) && error.params).toEqual({ database: "waitron_demo" });
   });
 

@@ -4,28 +4,18 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // Headroom for the suites that open and migrate a venue directory — the `useVenueDb`
-    // callers, and `schema-ahead.migrate.test.ts`, which owns its own directory. `hookTimeout`
-    // below bounds a hook that passes no timeout of its OWN; a hook given one overrides this config
-    // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). So it does not bound
-    // `schema-ahead.migrate.test.ts`, which sets a timeout at its own `beforeAll`, and it does not
-    // bound `useVenueDb` setup, which runs under the 60s default that helper passes to its
-    // own `beforeAll` (`packages/db/src/testing/venue-db.ts`).
+    // Headroom for the suites that open and migrate a venue directory. `hookTimeout` does not bound
+    // a hook given a timeout of its OWN: `schema-ahead.migrate.test.ts`'s `beforeAll`, and
+    // `useVenueDb`'s (60s by default, `packages/db/src/testing/venue-db.ts`).
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers, and this
-    // package is small enough that a handful of mis-merged branches sinks the ratio. Same finding
-    // as packages/payments and packages/scheduler.
+    // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers.
     maxWorkers: 1,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `src/bin.ts` is the process entry point: every decision it could get wrong lives in
-      // `cli.ts`, which is injected and fully tested, and what remains — a tty, a readline, a
-      // process exit code — is verifiable only by running the built bundle, which the plan does
-      // rather than a test.
       exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/index.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

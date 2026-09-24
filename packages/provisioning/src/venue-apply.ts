@@ -33,25 +33,20 @@ export interface VenueResult {
   locationId: string;
   tillId: string;
   nodeId: string;
-  /** The ids of the series actually inserted, in plan order: `[standard, rectificative]`. planVenue
-   * rejects equal standard/rectificative codes, so a valid plan always yields exactly those two, in
-   * that order; a hand-built plan whose second series collides yields only `[standard]` (the
-   * create-series gate below never returns a phantom id for a row it did not insert). */
+  /** The ids of the series actually inserted, in plan order: `[standard, rectificative]` for a plan
+   * `planVenue` built. A hand-built plan whose second series collides yields only `[standard]`. */
   seriesIds: string[];
   /** One entry per `seed-module` action run, in plan order: the module and its one-line report. */
   seeded: readonly SeedReport[];
 }
 
 /**
- * Runs one plan as ONE transaction under `withTransaction`, mirroring provisionNode. A single
- * transaction is what a partial venue must never be. (This used to contrast with `applyInstance`,
- * which ran cluster DDL outside a transaction; that path was deleted with the storage switch.)
+ * Runs one plan as ONE transaction, so no partial venue is ever left behind.
  *
  * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
  * existing location, till, node and series without rerunning module seeds. A different location is
- * refused; so is a different taxpayer. Two plans that overlap are serialised by the ENGINE, not by
- * anything this function does: SQLite admits one writer per file and `withTransaction` holds that
- * write lock for the whole plan. See the ensure-tenant case.
+ * refused; so is a different taxpayer. Two overlapping plans cannot interleave: `withTransaction`
+ * holds the file's write lock for the whole plan.
  */
 export async function applyVenue(
   actions: readonly VenueAction[],
@@ -73,28 +68,10 @@ export async function applyVenue(
     for (const action of actions) {
       switch (action.kind) {
         case "ensure-tenant": {
-          // The database holds ONE taxpayer, the row keyed `id = 1`: write it if it is not there,
-          // then read back whatever is there and decide — the same identity is nothing to do, a
-          // different identity is refused by name.
-          //
-          // Nothing here arbitrates between two concurrent plans, because the engine does it: a
-          // write transaction opens with `begin immediate`, which takes the file's write lock up
-          // front, and SQLite admits one writer per file
-          // (`packages/store/src/write-queue.ts:13-21`). `withTransaction` runs the whole plan
-          // inside that lock, so a second plan does not start until this one has committed or
-          // rolled back. The `select … for update` that used to take the lock explicitly is gone —
-          // this engine refuses it outright with `near "for": syntax error`. Measured rather than
-          // argued: put it back on this read and `venue-apply.test.ts` plus `cli.test.ts` go from
-          // 1 failing case of 159 to 28, twenty-seven of them reporting that text.
-          //
-          // `on conflict do nothing` names NO arbiter deliberately, and what it absorbs is a
-          // RE-RUN rather than a race: a second `applyVenue` with the same plan clashes on the
-          // pinned primary key, and one carrying a different identity clashes there too, so the
-          // read-back below is what tells the two apart.
-          //
-          // Comparison is on the canonical values (trimmed, upper-cased — the same normalisation
-          // `planVenue` applies before it builds the action), so `es`/`ES` and stray surrounding
-          // space are the SAME taxpayer and the re-run stays idempotent.
+          // The database holds ONE taxpayer, the row keyed `id = 1`. The untargeted
+          // `on conflict do nothing` absorbs any re-run, same identity or not, so the read-back is
+          // what tells the two apart. It compares with the same trim-and-upper-case `planVenue`
+          // applies, so `es`/`ES` are the same taxpayer.
           await tx
             .insert(tenants)
             .values({
@@ -118,35 +95,11 @@ export async function applyVenue(
           break;
         }
         case "seed-admin": {
-          // Seed the venue's admin ONCE. Like ensure-tenant's `on conflict do nothing`, this
-          // makes a re-run a no-op — the admin belongs to the taxpayer, not to a venue, so an idempotent
-          // same-venue re-run must not add a duplicate admin. A plain insert did exactly
-          // that. A read for any `role='admin'` row, then an insert only when there is none, seeds
-          // the admin once; why it goes through the table definition is at the insert itself.
-          // `pin_hash` (till) and `password_hash`
-          // (dashboard) are already scrypt hashes, hashed at the CLI boundary, never a plaintext
-          // secret. `role='admin'` is the whole point: this person can log in and authorize privileged
-          // actions from day one. `email` is the admin's required dashboard-login address, validated
-          // and normalized at the request boundary and written verbatim here.
-          // `first_names`/`last_names` are the person's real name, and `locale` the UI language they
-          // prefer — the DISPLAY language, nothing to do with the location's `invoice_locales`. All
-          // three are nullable columns carrying an `is null or length > 0` check, so the planner's
-          // `null` for "not given" is accepted and an empty string would not be. A null `locale`
-          // means this person has no preference of their own and the apps fall back to the venue
-          // default. A plan built by `planVenue` cannot carry a language the apps have no catalogue
-          // for — it refuses one — but this applier runs whatever action list it is handed, and the
-          // action's `locale` is a plain `string | null`, so a hand-built plan is not screened here.
-          //
-          // Read-then-insert, where this used to be one `insert … select … where not exists`. The
-          // two are equivalent here because the plan runs alone: `withTransaction` holds the file's
-          // write lock for its whole body (`packages/store/src/write-queue.ts:13-21`), so no second
-          // transaction can seed an admin between the read and the write. The insert goes through
-          // the table definition rather than raw SQL because `persons.id` and `persons.created_at`
-          // are `$defaultFn` generators that only the insert BUILDER runs. The generated DDL says
-          // `id text PRIMARY KEY NOT NULL` (`packages/identity/drizzle/0000_baseline.sql:46`), so a
-          // raw insert that omits it is refused `NOT NULL constraint failed: persons.id`, errcode
-          // 1299 — run on node:sqlite, Node v26.7.0, with the same insert supplying an id as the
-          // control, which succeeds.
+          // The admin belongs to the taxpayer, not to a venue, so a re-run must not add a second
+          // one. Read-then-insert is safe because the write lock is held for the whole plan. The
+          // insert goes through the table definition because `persons.id` and
+          // `persons.created_at` are `$defaultFn` generators that only the insert builder runs.
+          // `planVenue` refuses an unsupported `locale`; a hand-built plan's is not screened here.
           const seededAdmin = await tx
             .select({ id: persons.id })
             .from(persons)
@@ -161,10 +114,8 @@ export async function applyVenue(
               pinHash: action.pinHash,
               passwordHash: action.passwordHash,
               email: action.email,
-              // The login comparison folds accents and case the same way the index does, so a
-              // row stored without its folded twin falls back on an ASCII-only key and an
-              // address with a non-ASCII character would stop matching at sign-in. This is the
-              // admin account, so it is the one row where that matters most.
+              // Without the folded twin, login falls back on an ASCII-only key and an address
+              // with a non-ASCII character stops matching at sign-in.
               emailFolded: action.email === undefined ? undefined : foldForUniqueness(action.email),
               displayNameFolded: foldForUniqueness(action.displayName),
               role: "admin",
@@ -173,24 +124,9 @@ export async function applyVenue(
           break;
         }
         case "seed-device-profiles":
-          // Non-fiscal. Seed the venue's starter device profiles under an admin management session —
-          // the SAME store path the management dashboard uses (createDeviceProfile), so its
-          // capability validation and the `till.configure` gate run here too. seed-admin must have run
-          // first (the admin is the only person who can open that session); a hand-built plan that
-          // runs this before seed-admin is refused as a plan-integrity error, mirroring the ordering
-          // guards below. Idempotent: find-or-create by name, so a same-venue re-run adds no
-          // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's own
-          // transaction. Exercised by `venue-apply.test.ts`:
-          // the three seeded profiles, the re-run that adds no duplicates, and the refusal when a
-          // plan runs this before seed-admin.
           await seedDeviceProfiles(tx, action.profiles);
           break;
         case "create-location": {
-          // `day_cutover` needed a `::text` cast on PostgreSQL, where it was a `time` and came back
-          // as one; the column is text on this engine and the cast is a syntax error
-          // (`unrecognized token: ":"`). `invoice_locales` needs the builder for a different
-          // reason: it is a JSON-encoded list now, so the raw read returned the string
-          // `["es-ES"]` where the comparison below wants the array.
           const existing = await tx
             .select({
               id: locations.id,
@@ -233,8 +169,6 @@ export async function applyVenue(
             break;
           }
           locationId = randomUUID();
-          // The hand-built `array[$n, …]::text[]` literal this used to carry belonged to a `text[]`
-          // column. `invoice_locales` is JSON text now, so the builder encodes the list.
           await tx.insert(locations).values({
             id: locationId,
             name: action.name,
@@ -249,15 +183,8 @@ export async function applyVenue(
             timeZone: action.timeZone,
             dayCutover: action.dayCutover,
           });
-          // KDS-1: seed this location's DEFAULT kitchen station so a context-less legacy order has a
-          // fallback. Service-context orders use explicit preparation routes instead. Spec §2a ("one
-          // default") + §2b: a location with NO default station makes legacy firing a fail-loud
-          // `station.no_default` misconfiguration, so a fresh venue must ship one. The owner inserts it
-          // in the location's transaction. The operator can rename it later via updateStation;
-          // `station.no_default` then guards any venue
-          // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
-          // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
-          // this one.
+          // A line with no more specific route fires to the default station; with no active
+          // default, firing fails with `station.no_default`. So a fresh venue ships one.
           await tx.insert(kitchenStations).values({
             locationId,
             name: "Cocina",
@@ -268,10 +195,8 @@ export async function applyVenue(
           break;
         }
         case "create-till":
-          // planVenue always emits create-location first, so `locationId` is set here. A malformed
-          // or future-planner plan that runs create-till early would insert an EMPTY location_id — a
-          // low-signal 22P02 (invalid uuid). Refuse it as a plan-integrity error instead. A plain
-          // Error, NOT an operator-facing AppError code: this is a programming/plan bug, not input.
+          // Ordering guards throw a plain Error, not an AppError: a malformed plan is a programming
+          // bug, not operator input.
           if (locationId === "") throw new Error("applyVenue: create-till before create-location");
           if (reusingVenue) {
             const existing = await tx
@@ -290,7 +215,6 @@ export async function applyVenue(
           await tx.insert(tills).values({ id: tillId, locationId, name: action.name });
           break;
         case "create-node":
-          // As create-till: create-node before create-location would insert an empty location_id.
           if (locationId === "") throw new Error("applyVenue: create-node before create-location");
           if (reusingVenue) {
             const existing = await tx
@@ -325,8 +249,6 @@ export async function applyVenue(
           });
           break;
         case "seed-module": {
-          // A seed before create-node would run against an EMPTY node id; refuse it as a plan-integrity
-          // error like the other ordering guards.
           if (nodeId === "") throw new Error("applyVenue: seed-module before create-node");
           const seed = deps.modules.find((m) => m.name === action.module)?.provisioning?.seed;
           if (seed === undefined) {
@@ -343,7 +265,6 @@ export async function applyVenue(
           break;
         }
         case "create-series": {
-          // create-series before create-node would insert an empty node_id.
           if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
           if (reusingVenue) {
             const existing = await tx
@@ -373,24 +294,16 @@ export async function applyVenue(
             })
             .onConflictDoNothing({ target: [invoiceSeries.nodeId, invoiceSeries.code] })
             .returning({ id: invoiceSeries.id });
-          // Push ONLY when a row was actually inserted. `ON CONFLICT DO NOTHING` returns no rows on
-          // a collision, and returning the un-inserted id would put a PHANTOM id in the result — a
-          // row that does not exist. planVenue now rejects equal standard/rectificative codes
-          // up front, so a valid plan never collides here; this keeps VenueResult honest even for a
-          // hand-built plan that does (exercised by venue-apply.test.ts).
+          // A collision returns no row; pushing `seriesId` anyway would name a row that does not
+          // exist.
           if (inserted.length > 0) seriesIds.push(seriesId);
           break;
         }
       }
     }
 
-    // Completeness guards for ids the ordering guards above cannot cover. Those guards only fire when
-    // a DEPENDENT action runs, so a plan that omits create-node (and therefore every seed and series
-    // that depends on it) reaches here with an empty nodeId, and a plan that omits create-till reaches
-    // here with an empty tillId — nothing downstream reads it at all. Either way the venue would be
-    // returned as "complete" with an empty id: a node that files nothing, or a shop that cannot sell
-    // (recordSale needs a real till). Named here rather than left to fail confusingly later. Plain
-    // Errors, NOT operator-facing AppError codes: a plan bug, not input.
+    // The ordering guards fire only when a dependent action runs, so a plan that omits create-node
+    // (with everything depending on it) or create-till reaches here with an empty id.
     if (nodeId === "") throw new Error("applyVenue: plan is missing create-node");
     if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
     const result = { locationId, tillId, nodeId, seriesIds, seeded };
@@ -400,11 +313,9 @@ export async function applyVenue(
 }
 
 /**
- * Seed the venue's starter device profiles idempotently (find-or-create by name). Looks up the admin
- * seed-admin created — the only person who can open a `till.configure` management session the store's
- * `createDeviceProfile` authorises against — opens one, and creates each missing profile with
- * `canvasId: null` (→ the form-factor default canvas at runtime). Names + capabilities are already
- * resolved by the planner. Runs on the caller's tx.
+ * Creates each missing profile through `createDeviceProfile`, the dashboard's own store path, so its
+ * capability validation and `till.configure` gate apply here too. That needs a management session,
+ * which only the admin seed-admin created can open.
  */
 async function seedDeviceProfiles(
   tx: Transaction,
@@ -415,17 +326,11 @@ async function seedDeviceProfiles(
     inactivityTimeoutSeconds: number | null;
   }[],
 ): Promise<void> {
-  // Find-or-create is NAME-based, so idempotency is scoped to a SAME-LOCALE, same-names re-provision: a
-  // different-locale re-run would seed a second, differently-named set, and an owner who renamed a
-  // seeded profile would have it re-created. Acceptable because profiles are owner-editable AND the
-  // double-provision latch makes a re-provision unreachable in practice.
+  // Find-or-create by NAME, so a re-run re-creates a seeded profile the owner has since renamed.
   const existing = new Set((await listDeviceProfiles(tx)).map((p) => p.name));
   const toCreate = profiles.filter((p) => !existing.has(p.name));
-  if (toCreate.length === 0) return; // a re-provision whose profiles all exist: nothing to do
+  if (toCreate.length === 0) return;
 
-  // The admin seed-admin created (role='admin') authors the profiles; a plan that reaches here without
-  // one ran seed-device-profiles before seed-admin — a plan-integrity bug, refused like the ordering
-  // guards in the apply loop.
   const admin = await tx
     .select({ id: persons.id })
     .from(persons)

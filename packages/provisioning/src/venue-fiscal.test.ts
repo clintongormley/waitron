@@ -25,7 +25,6 @@ function contribution(id: string): FiscalContribution {
   };
 }
 
-/** The real ALL_MODULES shape: a non-fiscal member plus BOTH fiscal-slot members. */
 const MODULES: readonly WaitronModule[] = [
   fakeModule("core"),
   fakeModule("fiscal-verifactu", { fiscal: contribution("verifactu") }),
@@ -59,8 +58,6 @@ describe("venueFiscalSelection", () => {
     const noSlotMembers: readonly WaitronModule[] = [fakeModule("core")];
     const { config, contribution: resolved } = venueFiscalSelection(noSlotMembers, "ES-common");
     expect(resolved).toBeUndefined();
-    // Empty slot — every fiscal member (there are none here) would be `false`; the caller's
-    // `fiscalSlot` refuses it downstream.
     expect(config.overrides.size).toBe(0);
   });
 
