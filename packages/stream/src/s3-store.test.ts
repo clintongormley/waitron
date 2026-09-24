@@ -271,6 +271,15 @@ describe("list", () => {
     ]);
   });
 
+  it("answers an empty list for a prefix that holds nothing", async () => {
+    const body =
+      `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>owner-bucket</Name>` +
+      `<KeyCount>0</KeyCount><IsTruncated>false</IsTruncated></ListBucketResult>`;
+    const { store, sent } = storeOver([{ status: 200, headers: xml, body }]);
+    await expect(store.list("venues/v1/")).resolves.toEqual([]);
+    expect(sent).toHaveLength(1);
+  });
+
   it("skips an entry the store lists without a time, rather than inventing one", async () => {
     const body =
       `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated>` +
