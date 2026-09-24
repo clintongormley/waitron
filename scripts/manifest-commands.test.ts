@@ -11,47 +11,33 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * Two properties of how this workspace declares the commands its bundles produce.
  *
  * A `bin` target must be a file GIT TRACKS. pnpm links `bin` into every dependent's
- * `node_modules/.bin` during `pnpm install` and warns — more than once per declaration — when the
- * target is not there yet. No member builds at install time (`main` points at TypeScript source),
- * so a `bin` under `dist/` is absent exactly when pnpm reads it, and building it afterwards does
- * not link it until the NEXT install. Tracked-or-not rather than exists-or-not because a build
- * output is git-ignored: on a machine where someone ran `pnpm --filter … build` an existence check
- * is green for everyone else's broken install — both answers look alike (CLAUDE.md §1). Operator
- * commands are declared under `waitron.commands` instead, which pnpm ignores; restoring a `bin`
- * entry is only correct alongside something that puts the file there before the link.
+ * `node_modules/.bin` during `pnpm install` and warns when the target is not there yet. No member
+ * builds at install time, so a `bin` under `dist/` is absent exactly when pnpm reads it. Tracked
+ * rather than merely existing, because a build output is git-ignored: on a machine where someone
+ * ran the build an existence check is green for everyone else's broken install. Operator commands
+ * are declared under `waitron.commands` instead, which pnpm ignores.
  *
  * A `waitron.commands` target must be NAMED as the outfile of an `<entry>=<outfile>` pair its own
- * member's `build` script hands to `scripts/bundle-node.mjs`, which builds every Node bundle.
- * Only `apps/server`'s copy is read anywhere (`scripts/deploy-image-env.test.ts`), so the rest would
- * otherwise be a hardcoded list nothing checks (CLAUDE.md §2). One-directional: a build may write
+ * member's `build` script hands to `scripts/bundle-node.mjs`. One-directional: a build may write
  * files that are no command.
  *
- * LIMITATION, stated because this half reads TEXT: it reads those pairs from the build script's
- * STRING and never observes what a build writes. A build that put the file there another way — an
- * esbuild call of its own, a different wrapper, a quoted value — is reported unbuilt, and a build
- * script that merely MENTIONS a pair after the shared script's name passes. Same shape, and same
- * reason, as the disclosures in scripts/dashboard-browser-purity.test.ts and
- * scripts/module-graph-honesty.test.ts.
- *
- * Lives in the ROOT project (CLAUDE.md §4): it reads every member's manifest, and a
- * package-resident guard only runs when its own package is in scope.
+ * LIMITATION, because this half reads TEXT: it reads those pairs from the build script's STRING and
+ * never observes what a build writes. A build that put the file there another way — an esbuild call
+ * of its own, a different wrapper, a quoted value — is reported unbuilt, and a build script that
+ * merely MENTIONS a pair after the shared script's name passes.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 
-// Two bounds per child, for the reasons scripts/ci-workflow.test.mjs records above its own pair:
-// the kernel-level kill for a hung child (Vitest's timer cannot interrupt a blocked `spawnSync`)
-// and the larger per-test bound for a slow-but-completing cold CI runner. The per-test bound covers
-// whichever child the test spawns, `pnpm ls` or `git`; the `pnpm ls` kill is
-// scripts/workspace-members.mjs's own.
+// A kernel-level kill for a hung child (Vitest's timer cannot interrupt a blocked `spawnSync`), and
+// a larger per-test bound for a slow-but-completing cold CI runner.
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 const SPAWN_TEST_TIMEOUT_MS = 60_000;
 
 /**
  * Git's own location overrides, each of which outranks the `cwd` a child is spawned in. Git exports
  * `GIT_DIR` to every hook and `.husky/pre-push` runs this suite, so an inherited one sends
- * `git ls-files` to another repository's index, where a committed file reads as untracked. Same
- * list, and same reason, as scripts/check-signoff.test.mjs, whose header carries the receipt.
+ * `git ls-files` to another repository's index, where a committed file reads as untracked.
  */
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
@@ -65,7 +51,7 @@ const GIT_LOCATION_OVERRIDES = [
 
 /**
  * The caller's environment minus anything that relocates the repository. The caller's git CONFIG
- * stays: unlike check-signoff's throwaway fixtures, this suite asks about THIS repository.
+ * stays: this suite asks about THIS repository.
  */
 function isolatedGitEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
@@ -85,10 +71,8 @@ type Spawn = (
  * Runs `git` isolated from whoever is running the suite, and throws unless it exits 0 or with a
  * status the caller declared `expected`. EVERY git in this file goes through here, the fixtures
  * included: a location override outranks `cwd`, and an unisolated child fails by answering the
- * wrong question rather than by failing. Measured, git 2.55.0: with `GIT_DIR` exported,
- * `git init --quiet <dir>` exits 0, leaves `<dir>/.git` absent and reinitialises the repository
- * `GIT_DIR` names. A status nobody expected is likewise an error rather than a "no" (CLAUDE.md §1).
- * `spawn` is injected only so a test can redirect the child or assert the kill timeout is passed.
+ * wrong question rather than by failing. `spawn` is injected only so a test can redirect the child
+ * or assert the kill timeout is passed.
  */
 function git(
   args: string[],
@@ -164,13 +148,10 @@ const GIT_CHECK_IGNORE_NOT_IGNORED = 1;
 
 /**
  * Whether git tracks `path` as a file of ITS OWN — false for a build output, which is ignored, and
- * false for a DIRECTORY, which `--error-unmatch` also exits 0 for once any descendant is tracked
- * (`git ls-files --error-unmatch -- scripts` exits 0 here) while pnpm refuses such a bin target:
- * a pnpm 9.15.0 install of a workspace whose `bin` named `./src` printed `EISDIR: illegal operation
- * on a directory, read`. `-z` rather than a byte comparison against git's default output, which
- * QUOTES a path carrying a non-ASCII byte (`"caf\303\251/bin.js"`) and would read a tracked file as
- * untracked. `spawn` is injected only so a test can redirect the child or assert the kill timeout is
- * passed (CLAUDE.md §4).
+ * false for a DIRECTORY, which `--error-unmatch` also exits 0 for once any descendant is tracked,
+ * while pnpm refuses a directory as a bin target. `-z` because git's default output QUOTES a path
+ * carrying a non-ASCII byte, which a byte comparison would read as untracked. `spawn` is injected
+ * only so a test can redirect the child or assert the kill timeout is passed.
  */
 function trackedByGit(path: string, spawn: Spawn = spawnSync): boolean {
   const target = relative(REPO_ROOT, path);
@@ -326,10 +307,8 @@ describe("asking git rather than the filesystem", () => {
   it(
     "still refuses a build output that is sitting on disk",
     () => {
-      // The control for this guard: a machine where someone ran `pnpm --filter … build` has the file
-      // there, and a plain existence check would go green for everyone else's broken install. So the
-      // fixture is a real build output at a real git-ignored path inside the repository. The name is
-      // unique per run because the cleanup must never remove a path this test did not create.
+      // A plain existence check would go green on a machine where someone ran the build. The name
+      // is unique per run because the cleanup must never remove a path this test did not create.
       const fixture = join(
         REPO_ROOT,
         "packages/credentials",
@@ -351,8 +330,7 @@ describe("asking git rather than the filesystem", () => {
     "refuses a directory whose descendants are tracked",
     () => {
       // `git ls-files --error-unmatch -- scripts` exits 0 on the descendants, so the directory
-      // answers like a tracked file. Measured: a pnpm 9.15.0 install of a workspace whose `bin`
-      // named `./src` printed `EISDIR: illegal operation on a directory, read`.
+      // answers like a tracked file; pnpm refuses a directory as a bin target.
       expect(existsSync(join(REPO_ROOT, "scripts"))).toBe(true);
       expect(trackedByGit(join(REPO_ROOT, "scripts"))).toBe(false);
     },
@@ -398,10 +376,8 @@ describe("asking git rather than the filesystem", () => {
       try {
         withSavedGitEnv(() => {
           // Poisoned BEFORE the fixture is built, which is the shape `.husky/pre-push` hands this
-          // suite. An unisolated `git init` would exit 0, create the decoy and leave the fixture's
-          // own `.git` absent — the control would quietly become "not a git repository at all",
-          // which is the weaker half of the question this test asks. The decoy sits inside the
-          // temporary directory so a regression here still leaves nothing behind.
+          // suite: an unisolated `git init` would exit 0, create the decoy and leave the fixture's
+          // own `.git` absent.
           process.env.GIT_DIR = join(elsewhere, "decoy.git");
           git(["init", "--quiet", elsewhere]);
           expect(existsSync(join(elsewhere, ".git"))).toBe(true);

@@ -4,21 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-// `scripts/main-tag-guard.sh` decides whether the commit being published may take the `:main` image
-// tag, and ci.yml's publish job asks it before adding that tag. Two pushes to `main` run at the same
-// time (the workflow's concurrency block gives every push a group of its own), so the run that
-// finishes LAST is not always the run carrying the newest commit — and a registry tag is
-// last-write-wins. Without this the older run retags `:main` and every box following that tag is
-// pulled backwards.
+// The script is run for real, by its own path so the executable bit and the shebang are exercised
+// the way ci.yml invokes it. Only `docker` and `gh` are faked: stubs on PATH that print a fixture and
+// record their arguments.
 //
-// The script is run for real here, by its own path so the executable bit and the shebang are
-// exercised the way ci.yml invokes it. What is faked is only the world outside it: `docker` and `gh`
-// are stubs on PATH that print a fixture and record their arguments, so each case asserts the
-// script's own decision rather than a model of it.
-//
-// The fixtures are not invented. Each was taken from the real registry on 2026-09-16 and the
-// command that produced it is named beside it, because a stub whose shape is wrong makes every case
-// here pass against a script that fails in CI.
+// Where a fixture was taken from the real registry, the command is named beside it: a stub whose
+// shape is wrong makes every case here pass against a script that fails in CI.
 
 const script = join(import.meta.dirname, "main-tag-guard.sh");
 const IMAGE = "ghcr.io/example/waitron:main";
@@ -26,17 +17,12 @@ const REPOSITORY = "example/waitron";
 const SHA = "1c57940203777e2a408258d34e363718c3d89181";
 const OLDER = "d0e0923c5da1b576505e45e39e195906681e2ebc";
 
-// A registry read that hangs cannot be interrupted by Vitest's own timer, because `spawnSync` blocks
-// the worker's event loop — the hazard `scripts/ci-workflow.test.mjs` documents at length. Nothing
-// here touches the network, so the trigger this is here for is a stub that will not exit.
+// Vitest's own timer cannot interrupt a `spawnSync` (it blocks the event loop), so this kill is the
+// only bound on a stub that will not exit.
 const SPAWN_TIMEOUT_MS = 30_000;
-// Vitest's per-test timeout is kept above it for a separate reason: it does not shorten the kill
-// above, but a test it fails for its duration alone is a healthy run reported as broken, and the
-// default is 5s. Each case here makes one `runGuard()` call, so this covers the Vitest side. On the
-// spawn side, the script performs no wait of its own — no sleep, no retry loop — so a healthy child's
-// duration is its stubs' duration; the bound is here for a stub that does not exit, not for a retry
-// budget like `deploy/waitron.sh`'s.
-// Guard: `scripts/spawn-timeout-budget.test.ts`.
+// Vitest fails a healthy run that outlasts its per-test timeout, whose default is 5s. Each case here
+// makes one `runGuard()` call, so a per-test bound above the spawn timeout covers it. The script performs no
+// wait of its own — no sleep, no retry loop — so a healthy child's duration is its stubs' duration.
 vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 10_000 });
 
 const temporaryDirectories = [];
@@ -47,28 +33,19 @@ afterAll(() => {
 });
 
 /**
- * The published image's environment, as `docker buildx imagetools inspect` prints it under the
- * script's Go template — one `NAME=value` per line. Shape confirmed against the real image:
+ * The published image's environment, one `NAME=value` per line, as
  * `docker buildx imagetools inspect ghcr.io/clintongormley/waitron:main --format
- * '{{range .Image.Config.Env}}{{println .}}{{end}}'` printed 15 such lines, `WAITRON_BUILD_ID`
- * among them. That variable is the only thing THIS IMAGE records about the commit it was built
- * from; the print-agent image records nothing at all, which is why the guard reads the app image.
+ * '{{range .Image.Config.Env}}{{println .}}{{end}}'` prints it. `WAITRON_BUILD_ID` is the only
+ * thing this image records about its commit; the print-agent image records nothing at all, which is
+ * why the guard reads the app image.
  */
 function imageEnv(buildId) {
   const env = ["PATH=/usr/local/bin", ...(buildId === null ? [] : [`WAITRON_BUILD_ID=${buildId}`])];
   return `${env.join("\n")}\n`;
 }
 
-/**
- * Runs the real script with `docker` and `gh` stubbed. Each stub appends its arguments to a file, so
- * a case can assert what the script asked the outside world for — including asking nothing at all.
- */
-// The two stubs are written ONCE for the whole file. Executing a freshly written file costs about
-// 120ms on macOS against about 12ms to execute the same file again, and this suite wrote both stubs
-// again for every case. What each case wants to vary — the output and exit status the outside world
-// hands the script, and where the arguments are recorded — now travels in the environment, so the
-// files themselves never change. A value carrying a quote is safe this way too, which it was not
-// when the stdout was interpolated into a single-quoted shell string.
+// The two stubs are written ONCE for the whole file, because executing a freshly written file is
+// much slower on macOS than executing it again. What each case varies travels in the environment.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "main-tag-guard-bin-"));
 temporaryDirectories.push(STUB_BIN);
 for (const name of ["docker", "gh"]) {
@@ -126,8 +103,7 @@ describe("main-tag-guard.sh", () => {
     });
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("move");
-    // What it asked the registry for, pinned: a wrong ref or a dropped template would still have
-    // produced a decision here.
+    // A wrong ref or a dropped template would still have produced a decision here.
     expect(result.dockerArgs).toContain(IMAGE);
     expect(result.dockerArgs).toContain("{{range .Image.Config.Env}}{{println .}}{{end}}");
   });

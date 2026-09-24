@@ -12,49 +12,24 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
  * Every table a module declared `appendOnly()` refuses an update and a delete — checked against a
  * database the PRODUCT migrated, by trying both, not by reading SQL as text.
  *
- * The enforcement moved from the schema to the runtime with the storage switch. PostgreSQL carried
- * `reject_mutation()` triggers written into each migration, and the guard that stood here before
- * (`append-only-enable-always.test.ts`) paired each one with an `ENABLE ALWAYS`, because the
- * replication apply worker skipped ordinary triggers. SQLite has neither an apply worker nor
- * `ENABLE ALWAYS`; `applyMigrations` installs the pair after each set migrates, from the names the
- * owning module declared.
+ * **It migrates through `applyMigrations` rather than installing the triggers itself**: a guard
+ * that supplies the step under test cannot see that step missing.
  *
- * **It migrates through `applyMigrations` rather than installing the triggers itself.** The version
- * of this file that stood here before built its own database and called `installAppendOnlyTriggers`
- * on it, which proved the INSTALLER works and said nothing about whether the product ever runs it —
- * and at the time the product did not, on any path. A guard that supplies the step under test
- * cannot see that step missing.
- *
- * **The declared set is NOT the `ledger` class**, and the pin below is what holds the difference.
- * Measured on this tree: with the trigger set derived from the class instead, nine tables ordinary
- * product code updates or deletes came back refusing both — `payments`, `cadenas`, `registro_sif`,
- * `ticket_items`, `daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat`,
- * `workforce_chains`, `envios` — and `order_amendments`, which PostgreSQL DID protect, came back
- * with no trigger at all, because it is classified `state`.
- *
- * WHY A TREE-WIDE ROOT-PROJECT PROGRAM. The declarations are assembled in one package
- * (`@waitron/composition`), the tables are created by every domain package's `drizzle/` directory,
- * and the install happens in a third (`@waitron/migrations`). No package suite can see all three,
- * so this sits in the root Vitest project beside `classification-complete.test.ts` — and, like
- * everything under `scripts/`, it is NOT typechecked, so it stays plain.
+ * **The declared set is NOT the `ledger` class**: ordinary product code updates or deletes several
+ * `ledger` tables, and `order_amendments` is classified `state`. `EXPECTED` pins the difference.
  *
  * WHAT IT DOES NOT COVER. It proves the refusal for a plain `UPDATE` and a plain `DELETE` only.
  * The other two shapes a row can be rewritten through — `INSERT OR REPLACE` and
  * `INSERT … ON CONFLICT DO UPDATE` — need a conflicting key, which is per-table, so they are proven
  * once against the trigger pair in `packages/store/src/append-only.test.ts` instead. It also goes
- * through the DESCRIPTOR path (`orderedMigrationSets`); the manifest-JSON path that
- * `rejoin-command`, `dev-setup` and `dev-onboard` take is pinned equal to it by
- * `packages/composition/src/composition.test.ts` and driven end to end by
+ * through the DESCRIPTOR path (`orderedMigrationSets`); the manifest-JSON path is pinned equal to
+ * it by `packages/composition/src/composition.test.ts` and driven end to end by
  * `packages/migrations/src/apply-append-only.test.ts`.
  */
 
 /**
- * Every table the modules declare append-only, pinned by name.
- *
- * A pin rather than a floor: this is the list of tables whose contents can never be corrected
- * (CLAUDE.md §5), so adding one or dropping one is a decision that should cost an edit here. It is
- * exactly the set PostgreSQL's hand-written triggers protected, read out of `origin/main`'s
- * baselines before the switch.
+ * Every table the modules declare append-only, pinned by name rather than a floor: adding or
+ * dropping one is a decision that should cost an edit here.
  */
 const EXPECTED = [
   "daily_closes",
@@ -89,20 +64,12 @@ function realTables(connection) {
 }
 
 /**
- * One row in every table, so that a row trigger has something to fire on.
+ * One row in every table, so that a row trigger has something to fire on: SQLite's triggers are
+ * FOR EACH ROW only, so on an empty table an update and a delete succeed and change nothing.
  *
- * This matters more than it looks: a `BEFORE UPDATE`/`BEFORE DELETE` trigger is FOR EACH ROW — the
- * only kind SQLite has — so on an empty table both statements succeed and change nothing, and a
- * guard that skipped the seeding would pass whether the triggers existed or not.
- *
- * Foreign keys and check constraints are both turned off for the seeding, which is what lets one
- * generic row satisfy every table: measured on this tree, 64 of 108 tables take the row with checks
- * on and all 108 take it with them off. Neither pragma touches triggers, which is the thing under
- * test — and the "a table nobody declared append-only still takes both statements" case below is
- * the control that says so, because it runs under exactly the same two.
- *
- * An INSERT is what the triggers permit, so seeding AFTER the product installed them is safe; the
- * cases below are what prove the two statements it forbids are forbidden.
+ * Foreign keys and check constraints are turned off for the seeding so one generic row satisfies
+ * every table. Neither pragma touches triggers; the `payments` control below runs under the same
+ * two. An INSERT is what the triggers permit, so seeding after they are installed is safe.
  */
 function seedOneRowEverywhere(connection) {
   for (const table of realTables(connection)) {
@@ -127,24 +94,10 @@ function seedOneRowEverywhere(connection) {
 }
 
 /**
- * Takes off every trigger that is NOT one of the append-only pair.
- *
- * `applyMigrations` leaves the append-only pair this suite is about on a venue file, and beside it
- * every trigger a migration file writes: the BEHAVIOURAL rules
- * `packages/db/drizzle/0001_behavioural_triggers.sql` restores — a settlement's tender coverage, a
- * tender after settlement, a working order's status transitions, and the rest — core's variant rules
- * on `products`, and media's image references. The seeding below writes one generic row into EVERY
- * table in alphabetical order, and those rules refuse some of those rows: measured on this tree, the
- * `sale_settlements` row lands before the `tenders` one, so the tender is refused with "tender
- * rejected: the sale is already settled" and the whole suite fails to load.
- *
- * Dropping them here rather than seeding around them, because seeding around them would mean this
- * suite encoding another suite's rules and re-encoding them every time one changes. Nothing is lost:
- * the behavioural triggers are proven, name by name and refusal by refusal, in
- * `scripts/behavioural-triggers.test.ts` beside this file, and removing a trigger can only make an
- * append-only refusal harder to observe, never easier.
- *
- * Derived from the catalogue rather than listed, so a new behavioural trigger needs no edit here.
+ * Takes off every trigger that is NOT one of the append-only pair. The behavioural rules a
+ * migration writes refuse some of the generic seed rows (a tender after its sale's settlement, for
+ * one); they are proven in `scripts/behavioural-triggers.test.ts`, and removing a trigger can only
+ * make an append-only refusal harder to observe, never easier.
  */
 function dropNonAppendOnlyTriggers(connection) {
   const triggers = connection
@@ -158,15 +111,12 @@ function dropNonAppendOnlyTriggers(connection) {
 }
 
 /**
- * A venue file migrated by `applyMigrations`, reopened raw, with one row in every table.
+ * A venue file migrated by `applyMigrations`, reopened raw, with one row in every table. Raw
+ * `node:sqlite` because the seeding needs two pragmas the product does not offer; a trigger belongs
+ * to the file, so this connection fires the triggers the product created.
  *
- * Raw `node:sqlite` rather than the store's handle, because the seeding needs two pragmas the
- * product deliberately does not offer. The product's own connection is the one that CREATED the
- * triggers; this one only has to fire them, and a trigger belongs to the file.
- *
- * `seeded` is counted before any case runs and not re-read afterwards. The cases share this one
- * connection, so a table whose triggers are MISSING has its row deleted by its own failing case,
- * and a live count taken later would report the seeding as the thing that went wrong.
+ * `seeded` is counted before any case runs: the cases share this connection, so a table whose
+ * triggers are MISSING has its row deleted by its own failing case.
  */
 async function migratedDatabase() {
   const directory = mkdtempSync(join(tmpdir(), "wt-append-only-guard-"));
@@ -224,9 +174,8 @@ describe("every table declared append-only refuses an update and a delete", () =
     expect(refusalFor(connection, `delete from "payments"`)).toBeUndefined();
   });
 
-  // Vacuous-pass anchors. `it.each([])` reports NOTHING and exits 0, so an empty declaration set, a
-  // migrate that created nothing, or a schema with no tables would all look identical to a fully
-  // protected tree.
+  // `it.each([])` reports NOTHING and exits 0, so an empty declaration set, a migrate that created
+  // nothing, or a schema with no tables would all look identical to a fully protected tree.
   it("declares exactly the tables whose rows can never be corrected", () => {
     expect([...tables].sort()).toEqual(EXPECTED);
   });

@@ -98,8 +98,7 @@ describe("aggregate", () => {
   it("keeps two mutants that start at the same place and end at different ones", () => {
     // `a && b` gives Stryker two ConditionalExpression mutants that both replace with `true` and
     // both start at the left operand's column: the whole condition, and the operand. Only the END
-    // of the span tells them apart, and on run 35504169506's real reports 21 mutants were a pair
-    // of this shape.
+    // of the span tells them apart.
     const result = aggregate([
       report(
         "src/a.ts",
@@ -113,8 +112,6 @@ describe("aggregate", () => {
   });
 
   it("gives a mutant two shards disagree about its UNDETECTED status, whichever is read first", () => {
-    // Merging must never be able to RAISE the score, so a disagreement resolves downwards and the
-    // answer does not depend on the order the artifacts happen to be listed in.
     const survived = report("src/a.ts", { status: "Survived", line: 7 });
     const killed = report("src/a.ts", { status: "Killed", line: 7 });
 
@@ -125,9 +122,7 @@ describe("aggregate", () => {
   it("never lets a merge drop a survivor out of the ratio", () => {
     // `ignoreStatic: true` makes Stryker report a static mutant `Ignored`, which is outside the
     // ratio. Keeping an `Ignored` over a `Survived` would remove a survivor from the denominator
-    // and RAISE the score, so undetected wins over a status that does not count at all. (The
-    // other way round — `Killed` over `Ignored` — raises it too, and is kept deliberately: see
-    // the rule's own comment.)
+    // and RAISE the score, so undetected wins over a status that does not count at all.
     const survived = report("src/a.ts", { status: "Survived", line: 7 });
     const ignored = report("src/a.ts", { status: "Ignored", line: 7 });
 
@@ -197,8 +192,6 @@ describe("the command", () => {
   });
 
   it("refuses when a shard is missing, however many json files are lying around", () => {
-    // The hole this closes: nine real reports plus one unrelated json used to count as ten shards,
-    // and a shard whose job failed takes its own survivors with it, so the nine read too high.
     const root = shardDirectory([
       report("src/a.ts", { status: "Killed" }),
       report("src/b.ts", { status: "Killed" }),
@@ -222,9 +215,6 @@ describe("the command", () => {
   });
 
   it("refuses to score a run that is missing a shard's report", () => {
-    // A shard that crashed publishes nothing, and the mutants it would have reported are usually
-    // the ones nobody has written tests for — scoring the rest would report a number that is too
-    // high and call the package green.
     const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
 
     const result = run(root, "--shards", "10", "--break", "90");
@@ -250,7 +240,7 @@ describe("the command", () => {
 });
 
 // The shard COUNT is written twice in `.github/workflows/mutation.yml`: once as the matrix list the
-// ten shard jobs come from, and once as the `--shards` argument the aggregate job uses to refuse a
+// shard jobs come from, and once as the `--shards` argument the aggregate job uses to refuse a
 // run with a report missing. The shard SCRIPT avoids that by reading `strategy.job-total`, which a
 // separate job cannot see. This reads the workflow as TEXT, so it checks those two numbers and
 // nothing else about the file — it cannot tell you the aggregate job runs, only that if it does it

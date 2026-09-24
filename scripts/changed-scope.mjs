@@ -1,58 +1,31 @@
 import { readFileSync } from "node:fs";
 
 // Two jobs, both of them answers ABOUT a scope rather than derivations OF one (that is
-// changed-packages.mjs, which imports `classify` and `isInertPath` from here):
+// changed-packages.mjs): whether a change can affect a test, build or type-check result
+// (`isInertPath` and `classify`), and which gated jobs a resolved scope gives work to (`SCOPE_GATES`
+// and `gateOutputs`). Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md.
 //
-//   * whether a change can affect a test, build or type-check result, so CI can skip the expensive
-//     jobs when it cannot — `isInertPath` and `classify`, design §3.4;
-//   * which gated jobs a resolved scope gives work to — `SCOPE_GATES` and `gateOutputs`, §3.6.
-//
-// Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md.
-//
-// The rule is an ALLOWLIST OF PATHS, never a file extension. A `**/*.md` rule looks equivalent and
-// is not: a package-nested README can be a test fixture — a primary source whose bytes a test
-// asserts against — so treating it as inert documentation by its extension would let an edit to it
-// skip the very test whose purpose is to catch that edit. The concrete case this was written for
-// was the now-extracted `packages/verifactu`'s schemas README, whose bytes a conformance test hashed.
+// The rule is an ALLOWLIST OF PATHS, never a file extension: a package-nested README can be a test
+// fixture whose bytes a test asserts against, so treating it as inert by its extension would let an
+// edit to it skip the very test whose purpose is to catch that edit.
 
 /**
  * Root directories and root files that no `code`-gated job reads — the typecheck, test, build and
- * mutation jobs the documentation route skips. An editor's or another agent's own config: changing
- * one cannot change what any of those jobs produce.
+ * mutation jobs the documentation route skips.
  *
- * NOT "no gate at all", and CI's ungated `lint` job is why it does not need to be. `format:check`
- * reads `.editorconfig`, the root `.gitignore` and `.vscode/*.json` (prettier honours all three), and
- * `lint` reads a `.vscode/*.mjs` (eslint's base config lints every `.mjs`) — but CI runs both on
- * EVERY push, ungated, so a formatting or lint regression in one of these is caught there regardless
- * of this classification. Only the LOCAL pre-push fast-path skips lint, exactly as it already skips it
- * for a `.ts` file under `docs/`; `.husky/pre-push` records that tradeoff and CI's ungated lint as its
- * backstop.
+ * NOT "no gate at all": `format:check` and `lint` read some of these, but CI runs both on EVERY push,
+ * ungated. Only the LOCAL pre-push documentation route skips lint.
  *
- * ROOT-ONLY, and the prefixes below carry that. The same names inside a package stay code — the
- * conservative route, since the classifier cannot read a package's config to prove it inert. (tsc and
- * vitest read the filesystem, not `.gitignore`, so a nested one never actually reaches a build or a
- * test; classifying it code is insurance, not a claim that it could.)
- *
- * Root config a `code`-gated job reads is deliberately absent and stays code: `.github/`, `.husky/`,
- * `scripts/`, the lockfile, the root manifests, `eslint.config.js`, `.prettierrc*`, `tsconfig*.json`
- * and `pnpm-workspace.yaml` can each affect a package's typecheck or tests. The first three of those
- * are ROOT SCOPE rather than global — `isRootScopePath` below.
+ * ROOT-ONLY. The same names inside a package stay code — the conservative route, since the
+ * classifier cannot read a package's config to prove it inert.
  */
 const INERT_ROOT_PREFIXES = [".codex/", ".vscode/"];
 const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
 
 /**
- * The repository's own machinery: the two classifiers and the guards under `scripts/`, the pre-push
- * hook, and the workflows. Code — `isInertPath` says so, and a wrong classifier breaks every gating
- * decision — but it gives the root Vitest project work and gives no package any, unless
- * ROOT_SCOPE_CONSUMERS lists it.
- *
- * The files under `scripts/` that members DO read are in ROOT_SCOPE_CONSUMERS below. `.husky/` is
- * run by git alone; `.github/` is read by `scripts/ci-workflow.test.mjs` and
- * `scripts/check-signoff.test.mjs`, which are themselves in the root project.
- *
- * ROOT-ONLY, the same rule INERT_ROOT_PREFIXES carries: `packages/db/scripts/x.ts` is that
- * package's, and its own suite is what covers it.
+ * The repository's own machinery. Code — a wrong classifier breaks every gating decision — but it
+ * gives the root Vitest project work and gives no package any, unless ROOT_SCOPE_CONSUMERS lists it.
+ * ROOT-ONLY, like INERT_ROOT_PREFIXES: `packages/db/scripts/x.ts` is that package's.
  */
 const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
 
@@ -75,64 +48,42 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
 ]);
 
 /**
- * True for the repository's own machinery, a path under ROOT_SCOPE_PREFIXES, which gives the ROOT
- * Vitest project work. That includes the files ROOT_SCOPE_CONSUMERS lists: for those,
- * scopeForPaths also selects the members that read them; any other gives no workspace member work.
+ * True for a path under ROOT_SCOPE_PREFIXES. For the files ROOT_SCOPE_CONSUMERS lists,
+ * scopeForPaths also selects the members that read them.
  *
- * The complement inside root config is what stays GLOBAL, because each of these can change what
- * every package builds, lints or tests: `pnpm-lock.yaml` and the root `package.json` (what is
- * installed), `pnpm-workspace.yaml` (which members exist), `tsconfig*.json` (how every package
- * compiles), `eslint.config.js`, `.prettierrc*` and `.prettierignore` (what lint and format:check
- * accept), and `vitest.config.ts`. None is under a prefix here, so each falls through
- * `scopeForPaths`'s "belongs to no package" branch and forces a global run — the fail-closed
- * default that also catches a root file nobody has thought about yet.
+ * The other root config — the lockfile, the root manifests, `tsconfig*.json`, the lint and format
+ * config, `vitest.config.ts` — is deliberately not here: each can change what every package builds,
+ * lints or tests, so it falls through `scopeForPaths`'s "belongs to no package" branch and forces a
+ * global run — the fail-closed default that also catches a root file nobody has thought about yet.
  */
 export function isRootScopePath(path) {
   return ROOT_SCOPE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 /**
- * True when `path` is one of the box image's build/runtime inputs — everything under `deploy/`: the
- * Dockerfile compose builds, `compose.yml` itself, the operator script `waitron.sh`, the `.env.example`
- * template.
- *
- * This is the ONE thing ci.yml's `image` smoke actually exercises — it builds `deploy/Dockerfile`
- * and brings `deploy/compose.yml` up — so a change here is what must re-run that smoke on a pull
- * request, where it is otherwise skipped (the job's `if` reads the `deploy` output this feeds; a
- * push to `main` still runs it on `code` alone, because `publish` ships off it). It is the WHOLE
- * directory rather than a named-file allowlist on purpose: matching too broadly only re-runs a
- * ~2-minute smoke on a `deploy/README.md` edit, while a named list would silently SKIP the smoke on
- * a new image-input file nobody remembered to add — the dangerous direction §2 keeps paying for.
- *
- * The trailing slash is not decoration: `deploy/` must not match a sibling like `deployment/`.
+ * True for everything under `deploy/`, the box image's build and runtime inputs, whose change is what
+ * re-runs ci.yml's `image` smoke on a pull request. The WHOLE directory on purpose: matching too
+ * broadly only re-runs the smoke on a `deploy/README.md` edit, while a named-file list would silently
+ * SKIP it on a new input file nobody remembered to add. The trailing slash keeps out `deployment/`.
  */
 export function isImageInputPath(path) {
   return path.startsWith("deploy/");
 }
 
-/**
- * True when a change to `path` cannot affect any test, build or type-check result.
- *
- * Inert means: anywhere under `docs/`, a Markdown file at the repository root, or the root config
- * above that no `code`-gated job reads. Everything else — including Markdown inside a package, and
- * those same config names inside a package — is code.
- */
+/** True when a change to `path` cannot affect any test, build or type-check result. */
 export function isInertPath(path) {
   if (path.startsWith("docs/")) return true;
   if (INERT_ROOT_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
   if (INERT_ROOT_FILES.includes(path)) return true;
-  // No slash means repository root. CLAUDE.md, README.md, CONTRIBUTING.md.
+  // No slash means repository root.
   if (path.endsWith(".md") && !path.includes("/")) return true;
   return false;
 }
 
 /**
- * Classifies a list of changed paths.
- *
- * `code: false` is what both gates call `documentation` — a name narrower than the set, which is
- * every inert path: prose AND the root config no `code`-gated job reads. The name is the consumers'
- * contract (ci.yml gates on `code`, .husky/pre-push compares its scope to the literal
- * `documentation`), so it stays.
+ * `code: false` is what both gates call `documentation` — a name narrower than the set, which also
+ * holds the inert root config. The name is the consumers' contract (ci.yml gates on `code`,
+ * .husky/pre-push compares its scope to the literal `documentation`), so it stays.
  *
  * Fails closed: an empty list means the diff could not be worked out (a force-push, a new branch,
  * an all-zero `github.event.before`), which is a reason to run everything rather than nothing.
@@ -151,129 +102,61 @@ export function classify(paths) {
     : { code: true, reason: `${firstCodePath} is not documentation` };
 }
 
-/** The package the heavy shard exists for: 189s of the old 387s test step, on its own runner. */
 export const HEAVY_PACKAGE = "@waitron/db";
 
 /**
- * The package the `test-ui` shard exists for: the workspace's only Chromium consumer.
- *
- * It is split out because `test-light` HUNG on it, twice, reproducibly enough to name both runs.
- * Read back on 2026-08-01 with `gh api repos/clintongormley/waitron/actions/runs/<id>/…`:
- *
- *   run 30692329110 attempt 1 (PR #32, head e695a44)   test-light 08:44:09 → cancelled 09:13:22
- *   run 30697414129 (PR #35, head add4097)             test-light 11:18:11 → cancelled 11:38:08
- *
- * Both jobs' logs tell the same story: `playwright install --with-deps chromium` had already
- * finished (the step's group closed and the next step opened, 08:44:29→08:44:41 and
- * 11:18:31→11:18:43), TWELVE packages printed `test:coverage: Done`, and `@waitron/ui` printed
- * individual passing test files and then stopped — last output 08:47:04 and 11:21:23, roughly 26
- * and 17 minutes before the cancellation. In BOTH, the runner's shutdown named
- * `chrome-headless-shell` among the orphan processes it had to terminate. Attempt 2 of the first
- * run, same commit, went green in 3m58s, so it is intermittent rather than a hard break.
- *
- * What that does NOT establish is the CAUSE. Nothing here proves contention between the thirteen
- * packages `test-light` starts at once is what wedged Chromium, and a shard of its own is therefore
- * a mitigation whose effect can only be read off future runs — not something this file's presence
- * demonstrates. docs/backlog.md carries it as such.
+ * The package the `test-ui` shard exists for. It was split out of `test-light` after that shard HUNG
+ * on it twice (run 30692329110 attempt 1, and run 30697414129): both times `@waitron/ui` printed
+ * passing test files and then stopped, and the runner's shutdown named `chrome-headless-shell` among
+ * the orphan processes it terminated; attempt 2 of the first run, same commit, went green. That does
+ * NOT establish the cause, so a shard of its own is a mitigation whose effect can only be read off
+ * future runs.
  */
 export const UI_PACKAGE = "@waitron/ui";
 export const UI_CORE_PACKAGE = "@waitron/ui-core";
 
 /**
- * The `test-till` shard's package: the Counter POS browser app, the workspace's SECOND Chromium
- * consumer after @waitron/ui.
- *
- * It gets a shard of its own for the SAME reason @waitron/ui does, applied before the fact rather
- * than after it. apps/till drives Chromium through Vitest's browser mode and its Playwright provider exactly as
- * @waitron/ui does, and the receipt for what a Chromium consumer does to the shared `test-light`
- * shard is on UI_PACKAGE above: test-light HUNG on the workspace's only other browser package,
- * twice, reproducibly enough to name both runs. This split is therefore a MITIGATION taken on that
- * precedent — apps/till has never run in test-light and so has never hung it, and nothing here
- * proves it would; the claim is only that putting a second browser package into the shard that
- * already hung on the first is the shape worth avoiding. Whether isolation is what fixes the hang
- * can only be read off future runs, as UI_PACKAGE notes for itself.
+ * The `test-till` shard's package, a Chromium browser-mode app. Its own shard is a PREEMPTIVE
+ * mitigation on UI_PACKAGE's precedent: apps/till has never run in `test-light` and so has never hung
+ * it, and nothing here proves it would.
  */
 export const TILL_PACKAGE = "@waitron/till";
 
 /**
- * The `test-dashboard` shard's package: the admin/reporting dashboard app, the workspace's THIRD
- * Chromium consumer after @waitron/ui and apps/till.
- *
- * It gets a shard of its own for the SAME reason apps/till does, and on the same precedent rather
- * than on a hang of its own. apps/dashboard drives Chromium through Vitest's browser mode and its Playwright
- * provider exactly as @waitron/ui and apps/till do (its package.json carries
- * @vitest/browser-playwright and a
- * `test:coverage` that runs Vitest in the browser), and the receipt for what a Chromium consumer
- * does to the shared `test-light` shard is on UI_PACKAGE above: test-light HUNG on the workspace's
- * first browser package, twice, reproducibly enough to name both runs. This split is therefore a
- * MITIGATION taken on that precedent — apps/dashboard has never run in test-light and so has never
- * hung it, and nothing here proves it would; the claim is only that adding a third browser package
- * to the shard that already hung on the first is the shape worth avoiding. Whether isolation is what
- * fixes the hang can only be read off future runs, as UI_PACKAGE notes for itself.
+ * The `test-dashboard` shard's package, a Chromium browser-mode app. Its own shard is a PREEMPTIVE
+ * mitigation on UI_PACKAGE's precedent: apps/dashboard has never run in `test-light` and so has never
+ * hung it, and nothing here proves it would.
  */
 export const DASHBOARD_PACKAGE = "@waitron/dashboard";
 
 /**
- * The `test-setup` shard's package: apps/setup, the setup-wizard browser app and the workspace's
- * FOURTH Chromium consumer after @waitron/ui, apps/till and apps/dashboard.
- *
- * It gets a shard of its own for the SAME reason apps/dashboard does, and on the same precedent
- * rather than on a hang of its own. apps/setup drives Chromium through Vitest's browser mode and its Playwright
- * provider exactly as the other three do (its package.json carries @vitest/browser-playwright and a
- * `test:coverage` that
- * runs Vitest in the browser), and the receipt for what a Chromium consumer does to the shared
- * `test-light` shard is on UI_PACKAGE above: test-light HUNG on the workspace's first browser
- * package, twice, reproducibly enough to name both runs. This split is therefore a MITIGATION taken
- * on that precedent — apps/setup has never run in test-light and so has never hung it, and nothing
- * here proves it would; the claim is only that adding a fourth browser package to the shard that
- * already hung on the first is the shape worth avoiding. Whether isolation is what fixes the hang can
- * only be read off future runs, as UI_PACKAGE notes for itself.
+ * The `test-setup` shard's package, a Chromium browser-mode app. Its own shard is a PREEMPTIVE
+ * mitigation on UI_PACKAGE's precedent: apps/setup has never run in `test-light` and so has never hung
+ * it, and nothing here proves it would.
  */
 export const SETUP_PACKAGE = "@waitron/setup";
 
-/**
- * The venue configuration module splits into two Vitest projects: a `node` one whose suites open a
- * venue database through `useVenueDb`, and a `browser` one that drives its dashboard panel in real
- * headless Chromium. It is the Chromium half that earns it a shard.
- */
+/** Of its two Vitest projects, `node` and `browser`, it is the Chromium one that earns it a shard. */
 export const VENUE_SERVICE_PACKAGE = "@waitron/venue-service";
 
 /**
- * The two card-payment provider modules. Each splits into a `node` project whose suites open a
- * venue database through `useVenueDb` and a Chromium dashboard-panel project — the same shape as
- * bookings and venue-service — so each gets a shard of its own rather than sharing a light bin: a
- * browser package in the shared light shard is the shape UI_PACKAGE's receipt warns against, and
- * its Chromium install would also weigh down its bin-mates.
+ * Each has a Chromium dashboard-panel project, so each gets a shard of its own rather than sharing a
+ * light bin: a browser package in a shared light shard is the shape UI_PACKAGE's receipt warns
+ * against.
  */
 export const PAYMENTS_STRIPE_PACKAGE = "@waitron/payments-stripe";
 export const PAYMENTS_SUMUP_PACKAGE = "@waitron/payments-sumup";
 
 /**
- * The `test-server` shard's package: apps/server, the workspace's largest suite.
- *
- * Unlike the browser packages above, this split is a MEASURED PERFORMANCE one, not a hang
- * mitigation. On the unfiltered `main` run 32417600304 (`gh run view 32417600304 --json jobs`)
- * apps/server was 341.7s of test-light's 358s wall-clock — its 63-file suite, 277s of that test
- * execution — so on its own it set test-light's floor, and no amount of re-sharding the other twenty
- * packages could drop the shard below it. On a dedicated runner it stops being that floor, AND it
- * runs in SEVERAL workers there rather than one: the @vitest/coverage-v8 branch under-merge that held
- * apps/server to a single worker is a `pnpm -r` CONTENTION artifact, and apps/server never runs under that
- * contention — it is terminal in the workspace graph so `pnpm -r` runs it alone, and the only
- * `--no-sort` shards (the two light ones) exclude it. The receipt for why the flip is safe is on
+ * The `test-server` shard's package. A measured PERFORMANCE split, not a hang mitigation: apps/server
+ * alone set `test-light`'s floor. Why it may run several workers there is on
  * apps/server/vitest.config.ts's `maxWorkers`.
  */
 export const SERVER_PACKAGE = "@waitron/server";
 
 /**
- * The `test-fiscal-verifactu` shard's package: packages/fiscal-verifactu. It is a `maxWorkers: 4`
- * suite — thousands of real AEAT fixtures across 33 files — so, like the workspace's two other
- * `maxWorkers: 4` suites (packages/db → test-heavy, apps/server → test-server), it wants all four of a
- * runner's cores to itself and belongs on a runner of its own. It was the LAST `maxWorkers: 4` package
- * still sharing, in the light shards, where it oversubscribed its bin-mates: measured on the
- * two-shard run 32425078097, fiscal-verifactu ran 219s inside test-light-a's 270s while the lighter
- * test-light-b packed ten packages into 127s. Its own runner lets its `maxWorkers: 4` run uncontended AND
- * stops it inflating whatever it shared a bin with. Unlike apps/server (whose split took it from one
- * worker to four), no config change here — it already runs several; see its vitest.config.ts.
+ * The `test-fiscal-verifactu` shard's package: a `maxWorkers: 4` suite, which oversubscribed its
+ * bin-mates when it shared a light shard.
  */
 export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
 
@@ -285,12 +168,6 @@ export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
  * added here without a shard of its own stops being tested altogether, and a shard added without an
  * entry here runs its package twice. `scripts/ci-workflow.test.mjs` checks both directions against
  * ci.yml's real `--filter` arguments and the real workspace, so neither drift can land silently.
- *
- * The light gate used to read "the scope holds something other than HEAVY_PACKAGE", which was the
- * same sentence as this list while the list had one entry. Generalising it rather than special-casing
- * a second name is what stops a scope of exactly {@waitron/ui} answering true — a runner and a
- * `pnpm install` for a selection that would then contain nothing to run, which is the shape the
- * `runnable` guard in scripts/changed-packages.mjs was added to refuse.
  */
 export const OWN_SHARD_PACKAGES = [
   HEAVY_PACKAGE,
@@ -365,12 +242,9 @@ export const LIGHT_B_PACKAGES = [
  * and the guard in scripts/changed-packages.mjs lets a selection of nothing but these pass. A
  * member NOT listed here that declares no such script is a mistake, and that guard fails on it.
  *
- * Both entries are bench members, and each README records that its package defines no `test`
- * script and holds no `*.test.ts`, both deliberate. `changed-scope.test.mjs` pins this list against
- * the real workspace in both directions rather than leaving it to be remembered. What a listed
- * member does to a scoped run, measured in this workspace — `@waitron/bench-pglite` on 2026-08-01,
- * `@waitron/bench-sqlite-failover` on 2026-09-16: `pnpm --filter "...<member>" test:coverage`
- * prints `None of the selected packages has a "test:coverage" script` on STDOUT and exits **0**.
+ * `changed-scope.test.mjs` pins this list against the real workspace in both directions. A scoped
+ * `pnpm --filter "...<member>" test:coverage` over a listed member prints `None of the selected
+ * packages has a "test:coverage" script` on STDOUT and exits **0**.
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite", "@waitron/bench-sqlite-failover"];
 
@@ -385,48 +259,18 @@ const membership = (packageName) => (inScope) => inScope.has(packageName);
 const runsInLightShard = (bin) => (name) =>
   bin.includes(name) && !PACKAGES_WITHOUT_TESTS.includes(name);
 
-/**
- * A gate that fires when the resolved scope holds a package in `bin` that declares tests — the two
- * light shards' predicate, the counterpart to `membership` for the single-package gates. The other
- * two gates in this list.
- */
+/** The two light shards' predicate, the counterpart to `membership`. */
 const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin));
 
 /**
  * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
  *
- * `heavy` was the first, and the mutation jobs joined it on a measurement rather than a
- * principle. Read off run 30650089655 (`gh run view 30650089655 --json createdAt,updatedAt,jobs`,
- * head 4926cf5): the run spanned 4m8s, the mutation jobs were 3m26s of it, and every other job
- * had finished 1m39s in — with both mutation jobs gated on `code` alone, so both ran on any code
- * change at all, however far from `packages/shared` (`mutation-shared` is the survivor of that
- * pair). That made mutation the critical path for the common case, which is most of what the
- * scoping was for.
+ * `light_a` and `light_b` are the two gates that are NOT membership of a named package: each light
+ * shard subtracts OWN_SHARD_PACKAGES and the other bin, so it has work exactly when the scope holds a
+ * member of its own bin that is not in PACKAGES_WITHOUT_TESTS.
  *
- * `ui` joined them on a reproducible CI HANG rather than on cost — see UI_PACKAGE above for both
- * runs and what their logs do and do not show.
- *
- * `light_a` and `light_b` joined them for the same kind of reason as the mutation pair, and are the
- * two gates that are NOT membership of a named package, which is why each holds a PREDICATE. The
- * "everything else" shard is split into two balanced halves (LIGHT_A_PACKAGES / LIGHT_B_PACKAGES)
- * run on separate runners. test-light-a runs one `--filter "...<pkg>"` per changed package and then
- * one `--filter "!<pkg>"` per package in OWN_SHARD_PACKAGES ∪ LIGHT_B_PACKAGES — its bin's whole
- * complement — so it has work exactly when the resolved scope holds a package in LIGHT_A that has a
- * `test:coverage` script, and test-light-b is the mirror. Each is false when its bin's share of the
- * scope is empty, and false when that share is entirely in PACKAGES_WITHOUT_TESTS.
- *
- * Read off run 30653487133 (`gh run view 30653487133 --json jobs`), from when this was a single
- * `light` gated on `code` alone: test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s —
- * and its "Run the light shard" step printed `None of the selected packages has a "test:coverage"
- * script`. A runner, a `pnpm install` and a `playwright install --with-deps chromium` for zero test
- * execution, reported as success — which is what a light gate exists to prevent, now once per half.
- *
- * The `inScope === null` fail-closed case is NOT a gate's business: `gateOutputs` applies it before
- * calling any predicate, so a predicate only ever sees a real Set and cannot forget the check.
- *
- * This list is the single source of truth for the gate names: ci.yml's `changes` job reads them
- * from here (including for the unscoped `main` run), so adding a gate is one edit here plus the job
- * that consumes it.
+ * The `inScope === null` fail-closed case is applied by `gateOutputs` before any predicate is called,
+ * so a predicate only ever sees a real Set.
  */
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
@@ -451,12 +295,10 @@ export const SCOPE_GATES = [
  * `pnpm --filter "<scope>" ls --depth -1 --json`, or `null` when that output cannot be parsed.
  *
  * `null` and the empty set are deliberately different answers. Empty is definite — `pnpm ls` emits
- * zero bytes on BOTH streams, and exits 0, when its filter matches nothing (measured on pnpm 9.15.0:
- * `pnpm --filter "@waitron/nope" ls --depth -1 --json` gives exit 0, 0 stdout bytes, 0 stderr bytes)
- * — while `null` is "we do not know", which `gateOutputs` turns into running everything.
+ * zero bytes on BOTH streams, and exits 0, when its filter matches nothing — while `null` is "we do
+ * not know", which `gateOutputs` turns into running everything.
  *
- * The input that makes the `Array.isArray` check worth writing: `pnpm ls --json` reports its OWN
- * ERRORS as valid JSON on STDOUT, not as a diagnostic on stderr. Measured on pnpm 9.15.0:
+ * `pnpm ls --json` reports its OWN ERRORS as valid JSON on STDOUT, not as a diagnostic on stderr:
  *
  *   $ pnpm --filter "" ls --json 2>/dev/null
  *   {"error":{"code":"pnpm","message":"Unsupported package selector: …"}}
@@ -464,23 +306,6 @@ export const SCOPE_GATES = [
  * That parses cleanly, so the shape — not the parse — is what separates a pnpm failure from a real
  * result. Getting it wrong reads a failure as "no packages in scope" and SKIPS every gated job,
  * which is the silent direction.
- *
- * Proven by deletion, on the code as it stands: remove the `Array.isArray` line and `pnpm vitest
- * run` fails exactly TWO tests, both of them the ones naming this input — `packagesInScope >
- * returns null for pnpm's own error object, which is valid JSON` (`TypeError: parsed.map is not a
- * function`) and `the CLI > fails closed when pnpm reports its own error as JSON on stdout` (the
- * child process exits 1 on that TypeError). The `try` wraps `JSON.parse` ONLY, so `parsed.map` on
- * the error object throws outside it and propagates instead of reaching `null`.
- *
- * Re-run on 2026-08-01, where the suite is 114 tests. Deliberately not restated as a pass/fail
- * total: this comment carried `2 failed | 42 passed (44)` from a tree with two thirds fewer tests,
- * still reading as a fresh measurement. The load-bearing part is which two fail, not the total they
- * fail out of.
- *
- * An earlier version of this comment claimed the opposite — "expressive, not load-bearing" — from
- * an experiment that deleted the line AND moved `.map` back inside the `try`. That shape does land
- * on `null`, and did pass 42/42. Two different mutations, one of them written up as a result about
- * the other, which is the §1 shape this repository keeps paying for. State the experiment.
  */
 export function packagesInScope(scopedPackagesJson) {
   const raw = scopedPackagesJson.trim();
@@ -506,25 +331,14 @@ export function packagesInScope(scopedPackagesJson) {
  * needed costs runner time while skipping one that was needed ships an untested package. That check
  * lives HERE rather than in the gates, so no gate can be written without it.
  *
- * The RESOLVED SCOPE is the only thing worth asking about, and the two obvious alternatives are
- * both wrong. The design spec §3.6 measured this for `@waitron/db`; the mechanism is the same
- * whichever package a gate is about, so the receipt below is quoted in db's own terms rather than
- * restated as a general claim nobody ran:
+ * The RESOLVED SCOPE — changed packages and their dependents — is the only thing worth asking about.
+ * The design spec §3.6 measured the two obvious alternatives for `@waitron/db`:
  *
  *   - a second inclusion filter (`--filter "<scope>" --filter "@waitron/db"`) is OR-ed, not
- *     intersected, so it runs the 189s suite on every code change whether or not db is involved;
+ *     intersected, so it runs db's suite on every code change whether or not db is involved;
  *   - `@waitron/db[<base>]` intersects with the CHANGED set rather than changed-plus-dependents,
  *     so it selects NOTHING when one of db's own dependencies changed — a false skip, which is the
  *     dangerous direction.
- *
- * The scope is changed-packages-and-their-dependents, so a membership gate fires when its package
- * changed OR when its package depends on something that changed. For the mutation gate the
- * second half is inert today and will not stay that way by itself. Run in this workspace on
- * 2026-07-31,
- * `pnpm --filter "@waitron/shared..." ls --depth -1` prints exactly one line, that package
- * itself, so it has no workspace dependency to inherit a change from. Nothing enforces that,
- * and it is one package.json edit from being false — which is why the gate resolves membership
- * instead of matching the package name against the diff.
  */
 export function gateOutputs(inScope) {
   return SCOPE_GATES.map(
@@ -533,31 +347,15 @@ export function gateOutputs(inScope) {
 }
 
 // CLI: one `pnpm ls --json` result on stdin → one `<gate>=<bool>` line per gate. With `--unscoped`
-// (main, where there is no scope to resolve) stdin is ignored and every gate is true.
+// (main, where there is no scope to resolve) stdin is never read and every gate is true.
 //
-// ONE invocation answers every gate, which is why it emits the whole list rather than taking a gate
-// name: the alternative was running the same workspace query once per gated job. Kept to the
-// smallest possible body: every decision worth testing lives in the exported functions above. What
-// is left is the stream split — stdout is appended verbatim to `$GITHUB_OUTPUT`, so it carries the
-// output lines and nothing else, while the reason goes to stderr for whoever reads the job log. No
-// exported function can show that, so changed-scope.test.mjs spawns this file with `spawnSync` and
-// reads the two streams apart.
+// stdout is appended verbatim to `$GITHUB_OUTPUT`, so it carries the output lines and nothing else,
+// while the reason goes to stderr for whoever reads the job log.
 //
-// It used to carry a second, argument-less subcommand that answered ci.yml's `code` gate by calling
-// `classify` on a list of changed paths. That gate is now one of the five lines
-// scripts/changed-packages.mjs emits, from the same `classify` call that decides the scope, so CI
-// and the pre-push hook classify a diff exactly once and by exactly one route.
-//
-// Ignored for coverage because those tests run it in a CHILD process, and the v8 provider only
-// measures the module graph loaded into the test process — so this block reads as 0% however
-// thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
-// `describe("the CLI")` suite and eight assertions about this block's behaviour go with it.
+// Ignored for coverage because its tests run it in a CHILD process, which the v8 provider does not
+// measure.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("changed-scope.mjs")) {
-  // `--unscoped` is invoked with nothing piped into it, and its whole point is that stdin is
-  // irrelevant — so it does not touch fd 0 at all rather than reading an fd whose contents it would
-  // discard. (Whether reading it there would block was not tested; not reading it makes the
-  // question moot.)
   const unscoped = process.argv.includes("--unscoped");
   const lines = gateOutputs(unscoped ? null : packagesInScope(readFileSync(0, "utf8")));
   console.error(`changed-scope: ${lines.split("\n").join(" ")}`);

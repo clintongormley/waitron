@@ -155,7 +155,6 @@ describe("compareSources", () => {
     expect(compareSources(base, head, "j.tsx")).toBe(null);
   });
 
-  // Each is a comment a compiler, linter, formatter, coverage tool, bundler or test runner reads.
   const TOOL_COMMENTS = [
     ["@ts-expect-error", "// @ts-expect-error a string is not a number\n", "t.ts"],
     ["@ts-ignore", "/* @ts-ignore */\n", "t.ts"],

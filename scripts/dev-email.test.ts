@@ -11,9 +11,8 @@ describe("development account email", () => {
   };
 
   it("declares the mailpit service, pinned, with SMTP and its inbox only on loopback", () => {
-    // The service KEY, not just the image: every dev script names `mailpit` on the command line, so
-    // a renamed or removed key fails all four with "no such service" — a failure the image and port
-    // lines below would not catch, since they stay right under any key.
+    // The service KEY, not just the image: every dev script names `mailpit`, and the image and port
+    // lines below would stay right under a renamed key.
     expect(compose).toMatch(/^ {2}mailpit:$/m);
     expect(compose).toContain("image: axllent/mailpit:v1.31.1");
     expect(compose).toContain('"127.0.0.1:1025:1025"');
@@ -21,12 +20,7 @@ describe("development account email", () => {
   });
 
   it("starts no database server for the dev stack, and needs no database secret", () => {
-    // A dev venue is a DIRECTORY of SQLite files on the host — `resetVenueDir` in
-    // `apps/server/scripts/dev-setup.ts` removes it — so the dev stack runs no cluster and holds no
-    // database credential. Pinned as absences, the same shape and for the same reason as the box
-    // file's guard in `scripts/deploy-image-env.test.ts`: the mailpit case above still passes with a
-    // `db:` service pasted back in beside it, so only an explicit absence fails. The service key is
-    // spelled at mailpit's own indent, which is what the first pattern matches.
+    // Pinned as absences: the mailpit case above still passes with a `db:` service pasted back in.
     expect(compose).not.toMatch(/^ {2}db:$/m);
     expect(compose).not.toContain("POSTGRES_PASSWORD");
     expect(compose).not.toContain("postgres");
@@ -44,17 +38,11 @@ describe("development account email", () => {
   it.each(["dev:setup", "dev:reset", "dev:onboard", "dev:reset:onboard"])(
     "starts Mailpit in %s",
     (script) => {
-      // A failure means this entry point stopped bringing the inbox up, so every invitation and
-      // password reset it triggers goes to a refused SMTP port with nowhere to read it.
       expect(manifest.scripts[script]).toContain("docker compose up -d --wait mailpit");
     },
   );
 
   it("can reset directly to a fresh onboarding target", () => {
-    // The RESET itself is no longer a Compose concern: the dev venue is a directory on the host, so
-    // `docker compose down -v` resets nothing and the server script owns the wipe
-    // (`dev-setup.ts`'s `--reset`). What this case still holds is the route — this entry reaches
-    // the onboarding reset and not the seeded one, which is the mix-up it was written for.
     expect(manifest.scripts["dev:reset:onboard"]).toContain(
       "pnpm --filter @waitron/server dev:reset:onboard",
     );
@@ -62,13 +50,8 @@ describe("development account email", () => {
 
   it("never starts Mailpit from the worktree-specific app process", () => {
     // `dev` runs per worktree, and Compose names its project after the directory, so a compose call
-    // here would start a SECOND Mailpit per checkout, competing for the fixed 1025/8025 ports. The
-    // setup entry points above are the only ones that may touch Compose.
-    //
-    // The half of this case that pinned the mechanism keeping Mailpit ONE container — the `db`
-    // service's `depends_on: - mailpit` — went with that service; what enforces it now is
-    // `COMPOSE_PROJECT_NAME=waitron`, set by `wa-wt` outside this repository, so nothing here can
-    // assert it.
+    // here would start a SECOND Mailpit per checkout, competing for the fixed 1025/8025 ports.
+    // `COMPOSE_PROJECT_NAME=waitron`, set by `wa-wt` outside this repository, is not asserted here.
     expect(manifest.scripts.dev).not.toContain("docker compose");
   });
 });

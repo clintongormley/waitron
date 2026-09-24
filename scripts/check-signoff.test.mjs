@@ -5,27 +5,18 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The sign-off (DCO) predicate, and the walk over a push's commits, in ONE place both gates call:
-// `.husky/pre-push`'s `check_signoff` and licence.yml's `dco` job. They kept byte-identical copies
-// of `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it, and "the way to keep them
-// agreeing is one script both call" is docs/backlog.md's own conclusion about that.
+// `.husky/pre-push`'s `check_signoff` and licence.yml's `dco` job.
 //
-// Shell rather than `.mjs`, decided on how the two callers invoke it rather than on taste:
+// Shell rather than `.mjs`, decided on how the two callers invoke it:
 //
-//   * The hook runs this step FIRST, before `pnpm install` and before the classifier, and it is
-//     documented as working with no node on PATH — .husky/pre-push carries the run where the
-//     interpreter was taken away (`env -i HOME=$HOME PATH=/usr/bin:/bin:...`), the classifier
-//     printed `node: command not found`, and the sign-off step still named the offending commit
-//     and still exited 1. A node script would retire that property for the cheapest step in the
-//     gate.
+//   * The hook runs this step FIRST, before `pnpm install` and before the classifier.
 //   * licence.yml's `dco` job is `actions/checkout` plus one `run:` step — no pnpm, no setup-node,
-//     nothing installed. A `.mjs` script would make a REQUIRED status check ("Every commit is
-//     signed off", ruleset 19899160) depend either on whatever node the runner image happens to
-//     ship or on a setup step added to the fastest job in the file.
+//     nothing installed. A `.mjs` script would make a REQUIRED status check depend either on
+//     whatever node the runner image happens to ship or on a setup step.
 //
 // So it is exercised the way both callers exercise it: spawned as a program, against throwaway git
 // repositories built here. Nothing measures its coverage — v8 sees JavaScript in this process, and
-// this is `sh` in a child — so these assertions are the whole of the evidence, and deleting them
-// deletes it.
+// this is `sh` in a child — so these assertions are the whole of the evidence.
 const script = join(import.meta.dirname, "check-signoff.sh");
 
 /**
@@ -33,19 +24,11 @@ const script = join(import.meta.dirname, "check-signoff.sh");
  * in, so any that survive into a fixture's `git commit` send it to whatever repository the variable
  * names — not the temporary one this suite built.
  *
- * `GIT_DIR` is the one that bites, and it bites in exactly one situation: **git sets it for every
- * hook it runs**, and `.husky/pre-push` runs this suite on every push. Measured on this branch, same
- * command, the only difference being the variable:
+ * `GIT_DIR` is the one that bites: **git sets it for every hook it runs**, and `.husky/pre-push`
+ * runs this suite. Measured, the only difference being the variable:
  *
  *   $ pnpm vitest run scripts/check-signoff.test.mjs                  # HEAD unchanged
- *   $ GIT_DIR=$(git rev-parse --absolute-git-dir) pnpm vitest run …   # HEAD moved by 7 commits,
- *                                                                     # named signed, unsigned,
- *                                                                     # lowercase, indented, …
- *
- * That is not hypothetical: it put those seven fixtures on this branch and pushed them three times
- * before the mechanism was found, and five of them fail the DCO check the script exists to enforce —
- * so a suite testing the sign-off gate was breaking it. The failure is invisible when the suite is
- * run by hand, which is the only way it had been run.
+ *   $ GIT_DIR=$(git rev-parse --absolute-git-dir) pnpm vitest run …   # HEAD moved by 7 commits
  */
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
@@ -65,11 +48,10 @@ function isolatedGitEnv() {
 }
 
 /**
- * Runs `git` in `cwd`, isolated from whoever is running the suite. `GIT_CONFIG_GLOBAL` and
- * `GIT_CONFIG_SYSTEM` point at /dev/null so a developer's `commit.gpgsign = true` (or their name, or
- * a `format.signoff = true` that would make every fixture pass) cannot reach these fixtures, and the
- * location overrides above are dropped so `cwd` is what decides which repository is written.
- * Throws on failure rather than returning a status nobody reads.
+ * `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` point at /dev/null so a developer's
+ * `commit.gpgsign = true` (or their name, or a `format.signoff = true` that would make every fixture
+ * pass) cannot reach these fixtures, and the location overrides above are dropped so `cwd` is what
+ * decides which repository is written.
  */
 function git(cwd, ...args) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8", env: isolatedGitEnv() });
@@ -80,9 +62,8 @@ function git(cwd, ...args) {
 }
 
 /**
- * Runs the script under test with `input` on stdin, from `cwd`. Same environment isolation as
- * `git()`: the script shells out to `git log`, so an inherited `GIT_DIR` would point it at the
- * caller's repository and it would report on commits the fixtures never made.
+ * Same environment isolation as `git()`: the script shells out to `git log`, so an inherited
+ * `GIT_DIR` would point it at the caller's repository.
  */
 function checkSignoff(cwd, input) {
   return spawnSync(script, [], { cwd, encoding: "utf8", input, env: isolatedGitEnv() });
@@ -121,7 +102,7 @@ describe("check-signoff.sh", () => {
 
   afterAll(() => {
     // Guarded because a `mkdtempSync` that threw leaves `repo` undefined, and an unguarded teardown
-    // then reports a second, spurious failure on top of the real one (CLAUDE.md §4).
+    // then reports a second, spurious failure on top of the real one.
     if (repo !== undefined) rmSync(repo, { recursive: true, force: true });
   });
 
@@ -142,12 +123,9 @@ describe("check-signoff.sh", () => {
     expect(result.stdout).toContain("unsigned");
   });
 
-  // The near-misses — count them off the list rather than from this sentence, which is why it does
-  // not carry a number (CLAUDE.md §2 records the same trap on its own list). Each is a message that
-  // CONTAINS the words and is still not a sign-off, and each pins one property of the regex: `^`
-  // against leading whitespace, `<.+@.+>` against a missing address and again against empty angle
-  // brackets, and `^` from the other side against the words mid-line. A guard that passed any of
-  // them would accept a commit GitHub's own DCO app rejects.
+  // Each is a message that CONTAINS the words and is still not a sign-off, and each pins one
+  // property of the regex: `^` against leading whitespace, `<.+@.+>` against a missing address and
+  // again against empty angle brackets, and `^` from the other side against the words mid-line.
   it.each([
     ["an indented trailer", "indented"],
     ["a trailer with no email", "no-email"],
@@ -179,11 +157,7 @@ describe("check-signoff.sh", () => {
 
   // The one branch in the script that no other assertion here reaches: `read` returns non-zero at
   // EOF but has ALREADY assigned what it read, so a final line with no trailing newline is only
-  // processed because of the loop's `|| [ -n "$sha" ]`. Proven by deletion on 2026-08-01 — with
-  // that guard removed and this exact input, the script printed nothing and exited **0**, a silent
-  // pass on an unsigned commit; with it, the two assertions below. Every other fixture in this file
-  // ends in `\n`, and both callers build their list with `printf '%s\n'`, so nothing else here
-  // would fail if the guard were dropped.
+  // processed because of the loop's `|| [ -n "$sha" ]`.
   it("processes a final sha with no trailing newline", () => {
     const result = checkSignoff(repo, `${sha.signed}\n${sha.unsigned}`);
     expect(result.status).toBe(1);
@@ -213,11 +187,10 @@ describe("check-signoff.sh", () => {
     expect(result.stdout.trim().split("\n")).toHaveLength(1);
   });
 
-  // The CI half, run rather than read. The step's shell is EXTRACTED FROM licence.yml rather than
-  // transcribed here — a transcription tests this file's copy of a workflow, which is the shape of
-  // duplication this whole change exists to remove. What cannot be run locally is the `${{ }}`
-  // interpolation, so the extraction refuses a block that has any: both shas reach that step as
-  // environment variables, and this asserts they still do.
+  // The step's shell is EXTRACTED FROM licence.yml rather than transcribed here — a transcription
+  // tests this file's copy of a workflow. What cannot be run locally is the `${{ }}` interpolation,
+  // so the extraction refuses a block that has any: both shas reach that step as environment
+  // variables, and this asserts they still do.
   describe("licence.yml's dco step", () => {
     let step;
 
@@ -227,8 +200,7 @@ describe("check-signoff.sh", () => {
         "utf8",
       );
       // Anchored on the STEP NAME, not on the first `run: |` in the file — that one belongs to the
-      // licence-integrity job, and taking it would run a `sha256sum` check against three shas and
-      // report whatever it felt like.
+      // licence-integrity job.
       const lines = workflow.split("\n");
       const named = lines.findIndex((line) => line.includes("name: Check Signed-off-by trailers"));
       expect(named).toBeGreaterThan(-1);
@@ -260,16 +232,13 @@ describe("check-signoff.sh", () => {
      * environment, and `bash -e <file>`. That is GitHub's default shell for a `run:` step with no
      * `shell:` key of its own — not `sh -c`, and not the `-o pipefail` that an explicit
      * `shell: bash` would add. `-e` is the part that matters here: a command failing outside a
-     * conditional would end the step early, which is how a `run:` block quietly stops half way.
+     * conditional would end the step early.
      */
     const runStep = (base, head) => {
       const file = join(repo, "dco-step.sh");
       writeFileSync(file, step);
       // `isolatedGitEnv()` rather than `process.env` for the same reason as `git()` — this step
-      // shells out to `git rev-list`, so an inherited `GIT_DIR` sends it to the caller's repository,
-      // where the fixture shas do not exist and it reports "Could not enumerate" instead of what it
-      // was asked about. Measured: with `GIT_DIR` set and this spread left as `process.env`, both
-      // tests in this block fail that way while the rest of the suite passes.
+      // shells out to `git rev-list`, so an inherited `GIT_DIR` sends it to the caller's repository.
       return spawnSync("bash", ["-e", file], {
         cwd: repo,
         encoding: "utf8",
@@ -302,14 +271,8 @@ describe("check-signoff.sh", () => {
     });
   });
 
-  // The regression this suite caused. `.husky/pre-push` runs it on every push, and git sets `GIT_DIR`
-  // for every hook it runs; `GIT_DIR` outranks a child's `cwd`, so before `isolatedGitEnv` the
-  // fixtures below were committed to the REAL repository — seven of them, pushed three times, five
-  // failing the very check this script enforces.
-  //
   // Asserted against a second throwaway repository rather than the developer's own, so a failure
-  // reports rather than damages: the bug writes to whatever `GIT_DIR` names, so pointing it at a
-  // sacrificial repo reproduces the mechanism exactly without risking the checkout the suite runs in.
+  // reports rather than damages.
   describe("isolation from the caller's repository", () => {
     it("writes to cwd even when GIT_DIR names another repository", () => {
       const bystander = mkdtempSync(join(tmpdir(), "waitron-signoff-bystander-"));
@@ -317,11 +280,10 @@ describe("check-signoff.sh", () => {
       try {
         for (const dir of [bystander, fixtures]) {
           git(dir, "init", "-q", "-b", "main");
-          // Set explicitly, as the main fixture repo above does. `isolatedGitEnv` points
-          // GIT_CONFIG_GLOBAL at /dev/null, so git has no configured identity and falls back to
-          // deriving one from the OS user — which works on a developer's machine and FAILS on a
-          // GitHub runner: `fatal: empty ident name (for <runner@...>) not allowed`, exit 128.
-          // Omitting these passed locally and failed CI, which is the shape CLAUDE.md §2 is about.
+          // `isolatedGitEnv` points GIT_CONFIG_GLOBAL at /dev/null, so git has no configured
+          // identity and falls back to deriving one from the OS user — which works on a developer's
+          // machine and FAILS on a GitHub runner:
+          // `fatal: empty ident name (for <runner@...>) not allowed`.
           git(dir, "config", "user.name", "Fixture Author");
           git(dir, "config", "user.email", "fixture@example.com");
           git(dir, "commit", "--allow-empty", "-q", "-m", "base");

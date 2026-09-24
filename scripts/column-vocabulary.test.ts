@@ -4,60 +4,36 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Contract: `packages/db/src/schema/columns.ts` is the only file that names the storage engine's
- * column and table types. Every other file gets them from that vocabulary, so the SQLite switch
- * (task F1) replaces one file rather than every column declaration in the tree.
+ * column and table types. Every other file gets them from that vocabulary, so the next engine
+ * change replaces one file rather than every column declaration in the tree.
  *
- * It lives in the ROOT Vitest project rather than beside the vocabulary in `packages/db`, which is
- * where the plan first put it, because CI expands a changed package to its DEPENDENTS: measured
- * 2026-09-18, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists seven packages and
- * `@waitron/db` is not among them, so a pull request adding a table file in `packages/bookings`
- * would never have run the check meant to read it. The repo-root `vitest.config.ts` header carries
- * the same reasoning and the 2026-08-01 measurements behind it.
+ * The forbidden set is DERIVED from the vocabulary's own `drizzle-orm/sqlite-core` import block
+ * rather than written down here: whatever that file imports from the engine is what no other file
+ * may import from it. If the vocabulary ever imports a CONSTRAINT builder (`check`, `index`,
+ * `foreignKey`, …) to build a helper, this guard starts reporting every table file that imports
+ * that same name directly. That is a decision to make then, not a case to except quietly.
  *
- * The forbidden set is DERIVED from the vocabulary's own `drizzle-orm/sqlite-core` import block rather
- * than written down here, because a list written down here is stale the moment a helper is added:
- * whatever that file imports from the engine is, by definition, what no other file may import from
- * it. A consequence worth knowing before it surprises someone: if the vocabulary ever imports a
- * CONSTRAINT builder (`check`, `index`, `foreignKey`, …) to build a helper, this guard starts
- * reporting every table file that imports that same name directly. That is a decision to make then
- * — either the vocabulary owns the builder and the table files move onto it, or the helper is
- * written without the import — not a case to except quietly.
+ * `customType` (a builder FACTORY) and `sqliteTable` (the TABLE builder, which the vocabulary
+ * re-exports as `table`) are in that set deliberately: a table file calling either is doing what
+ * this guard exists to stop.
  *
- * Two names in that set are not column builders, and both are there deliberately rather than by
- * omission. `customType` is a builder FACTORY: the three hand-rolled `bytea` blocks the
- * vocabulary's `binary` helper replaced (in `print-jobs.ts`, `tenant-credentials.ts` and
- * `images.ts`, all three now gone) were each written with it, so a table file calling `customType(`
- * is doing the very thing this guard exists to stop — and the vocabulary itself is written with two
- * of them, for `ts` and `binary`. `sqliteTable` is the TABLE builder, and the vocabulary re-exports
- * it as `table`; a table file naming `sqliteTable` directly is a file the NEXT engine change would
- * have to visit, which is what this whole arrangement exists to avoid. Nothing outside the
- * vocabulary imports either one today.
- *
- * **The module it reads is the engine's, and the engine changed** (task F1, 2026-09-21): it was
- * `drizzle-orm/pg-core` and is now `drizzle-orm/sqlite-core`. That swap is why the anti-vacuity
- * case below asks for the DERIVED names alone — with the old specifier against the new vocabulary
- * the derived set is empty, and the suite reported 24 passed while checking nothing.
- *
- * Four gaps, stated here because a failing test can never restore a missing hedge:
+ * Four gaps:
  *
  * 1. **It reads TEXT, not code.** It matches an import SPECIFIER, so a builder reached through a
- *    namespace import (`import * as pg from "drizzle-orm/sqlite-core"`, then `pg.text(…)`) is invisible
- *    to it. Pinned as a control below rather than only claimed. A namespace import is not itself
- *    reported, because `check`, `index` and the other constraint builders are imported from that
- *    module legitimately all over the tree and a namespace import of them would be a false report.
- *    An import renamed on the way in (`text as t`) IS caught — the specifier still spells `text`.
+ *    namespace import (`import * as pg from "drizzle-orm/sqlite-core"`, then `pg.text(…)`) is
+ *    invisible to it. A namespace import is not itself reported, because the constraint builders
+ *    are imported from that module legitimately all over the tree. An import renamed on the way in
+ *    (`text as t`) IS caught.
  * 2. **It reads the import, not the call.** A file that imports nothing from the engine but builds
  *    a column some other way is not seen.
  * 3. **Its scope is `packages/` and `apps/`, and it includes their test files.** `bench/`,
  *    `deploy/` and `scripts/` are outside it. A test that declares a probe table with a builder
- *    imported straight from the engine IS reported, which is deliberate — a probe table is a table
- *    — but it is a failure the next author will meet without warning. Four shapes of import are
- *    also outside it, the first two of which a reader might assume are covered because named
- *    re-exports ARE read: a star re-export (`export * from "drizzle-orm/sqlite-core"`), a dynamic
- *    `await import(…)` or `require(…)`, a subpath (`drizzle-orm/sqlite-core/…`), and a side-effect
- *    import. And the price of not requiring the word `import`, stated rather than papered over:
- *    prose in a COMMENT shaped like `{ text } from "drizzle-orm/sqlite-core"` is reported as an
- *    offender. Nothing in the tree trips it (checked 2026-09-18).
+ *    imported straight from the engine IS reported, which is deliberate — a probe table is a table.
+ *    Four shapes of import are also outside it: a star re-export
+ *    (`export * from "drizzle-orm/sqlite-core"`), a dynamic `await import(…)` or `require(…)`, a
+ *    subpath (`drizzle-orm/sqlite-core/…`), and a side-effect import. And because it does not
+ *    require the word `import`, prose in a COMMENT shaped like
+ *    `{ text } from "drizzle-orm/sqlite-core"` is reported as an offender.
  * 4. **The allowance is a hand-written pair of file and builder.** It is scoped to the builder, not
  *    the file, so an `integer("cuota_total")` added to the same file later is still reported — but
  *    nothing stops a future entry being added to the list instead of fixing the file. The list
@@ -71,19 +47,13 @@ const ROOTS = ["packages", "apps"];
 const VOCABULARY = "packages/db/src/schema/columns.ts";
 
 /**
- * The driver adapter, which sits BELOW the vocabulary and exists to name the engine.
+ * The driver adapter, which sits BELOW the vocabulary and exists to name the engine: `@waitron/db`
+ * imports `@waitron/store`, so the store cannot import the vocabulary back, and its suites declare
+ * their probe tables straight from the engine.
  *
- * `@waitron/store` is what teaches Drizzle to drive `node:sqlite`; `@waitron/db` imports it, so it
- * cannot import the vocabulary back — its `package.json` declares one dependency, `drizzle-orm`,
- * and nothing from this workspace, and `scripts/workspace-cycles.test.ts` is what would fail if
- * that were added. Its suites therefore declare their probe tables with `sqliteTable`, `text` and
- * `integer` straight from the engine, because there is no other way for them to reach a column at
- * all.
- *
- * This exemption is WIDER than `ALLOWED` below: that one is a hand-written pair of file and
- * builder, this one is a whole directory and every builder in it. What narrows it is the package
- * itself — a PRODUCT table declared there would be in the wrong package before it was an exempted
- * import. Nothing outside `src/` of that package is exempt.
+ * WIDER than `ALLOWED` below: a whole directory and every builder in it. Nothing in this file
+ * narrows it: a product table declared there would pass this guard, though it would already be in
+ * the wrong package. Nothing outside `src/` of that package is exempt.
  */
 const ENGINE_ADAPTER = "packages/store/src/";
 
@@ -91,24 +61,18 @@ const ENGINE_ADAPTER = "packages/store/src/";
  * The one legitimate direct import in the tree, scoped to the single builder.
  *
  * `registros_facturacion.cuota_total` and `importe_total` store the exact bytes that went into the
- * Veri*Factu huella, so they must not pass through a helper that could ever re-render them — the
- * reasoning is written out in that file, in the comment above the two declarations
- * (`grep -n cuotaTotal`). Scoped to `text` on purpose: a different builder appearing in that file is a new
- * decision, not something this entry covers.
+ * Veri*Factu huella, so they must not pass through a helper that could ever re-render them (the
+ * comment above the two declarations in that file). Scoped to `text` on purpose: a different
+ * builder appearing in that file is a new decision.
  */
 const ALLOWED: ReadonlyArray<{ readonly file: string; readonly name: string }> = [
   { file: "packages/fiscal-verifactu/src/schema/registros.ts", name: "text" },
 ];
 
 /**
- * Every `.ts` file under `dir`, discovered rather than listed.
- *
- * The shape to keep is that the DIRECTORY branch is taken first: a failing browser test writes its
- * screenshot into a directory named after the test file, and a walk that dispatched on the
- * extension would hand that directory to `readFileSync` and die with `EISDIR` instead of reporting
- * on the repository (root `CLAUDE.md` §4). The `isFile()` call then only has to drop an entry
- * `statSync` reports as neither file nor directory — a socket, a fifo, a device node. A symlink to
- * a real source file is followed and kept, `statSync` being the dereferencing one.
+ * Every `.ts` file under `dir`. The DIRECTORY branch is taken first: a failing browser test writes
+ * its screenshot into a directory named after the test file, and a walk that dispatched on the
+ * extension would hand that directory to `readFileSync` and die with `EISDIR`.
  */
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
@@ -130,13 +94,9 @@ function allSources(): string[] {
 }
 
 /**
- * A block comment, written so it cannot match ACROSS two of them.
- *
- * The lazy `[\s\S]*?` this replaced could: one alternative swallowed several comments at once,
- * which both allows a false match and backtracks exponentially when the pattern around it fails.
- * Measured 2026-09-18 on the lazy form — a brace followed by N block comments and no `from` took
- * 253ms at N=24, 1.25s at N=30 and 5.3s at N=32. The whole scan of the real tree takes ~75ms either
- * way; this is about the shape being wrong, not about today's runtime.
+ * A block comment, written so it cannot match ACROSS two of them: a lazy `[\s\S]*?` could swallow
+ * several comments at once, which allows a false match and backtracks exponentially when the
+ * pattern around it fails.
  */
 const BLOCK_COMMENT = String.raw`/\*(?:[^*]|\*(?!/))*\*/`;
 
@@ -153,23 +113,16 @@ const GAP = `(?:\\s|${BLOCK_COMMENT}|${LINE_COMMENT})*`;
 
 /**
  * The text between an import's braces: names, commas, and comments that may themselves CONTAIN a
- * brace.
- *
- * A plain `[^{}]*` is the version a review seat broke on 2026-09-18, by writing a closing brace
- * INSIDE the comment: the capture ends there rather than at the real brace, nothing matches, and the
- * offender is reported by nothing. Prettier leaves that shape byte-for-byte alone, so
- * `format:check` does not undo it. Both halves of the trick — a `}` in the comment and a `{` in the
- * comment — are controls below.
+ * brace. A plain `[^{}]*` ends the capture at a `}` inside a comment, nothing matches, and the
+ * offender is reported by nothing; prettier leaves that shape alone.
  */
 const SPECIFIERS = `\\{((?:[^{}/]|${BLOCK_COMMENT}|${LINE_COMMENT})*)\\}`;
 
 /**
  * An import (or re-export) of named bindings from the engine's module, in any of the shapes the
  * tree can hold: wrapped over several lines by prettier, quoted either way, with comments between
- * the tokens. It deliberately does not require the word `import`, so
- * `export { text } from "drizzle-orm/sqlite-core"` is read too — a re-export smuggles a builder just as
- * well as an import. The price of dropping that word is stated in the gap list: prose in a comment
- * of the same shape would be reported (nothing in the tree trips it, checked 2026-09-18).
+ * the tokens. It deliberately does not require the word `import`, so a re-export is read too; the
+ * price is stated in the gap list.
  */
 const NAMED_FROM_ENGINE = new RegExp(
   SPECIFIERS + GAP + "from" + GAP + String.raw`["']drizzle-orm/sqlite-core["']`,
@@ -190,18 +143,9 @@ function withoutComments(source: string): string {
  * The names a file imports from `drizzle-orm/sqlite-core`, as they are spelled in that module.
  *
  * A renamed import yields the IMPORTED name (`text as t` → `text`), which is the name the rule is
- * about. Comments inside the braces are removed first, and that is not hypothetical: a review seat
- * on 2026-09-18 planted a block comment between the opening brace and the name, and an earlier
- * version of this function read the whole thing — comment and name together — as the specifier,
- * matched nothing, and let the offender through with the suite still reporting 14 passed. A second
- * seat then broke the repair the same way with a brace INSIDE the comment; both shapes are controls
- * below.
- *
- * Where a comment can sit, measured 2026-09-18 with `pnpm exec prettier --parser typescript`:
- * prettier moves one written on either side of the braces to INSIDE them, so in a formatted tree —
- * and `pnpm format:check` gates every push — that is the position that arises. One it leaves alone
- * is between `from` and the module's name; the second `GAP` covers that, and a comment before the
- * `import` keyword is outside the match entirely.
+ * about. Comments inside the braces are removed first: prettier moves a comment written on either
+ * side of the braces to INSIDE them. One it leaves alone is between `from` and the module's name,
+ * which the second `GAP` covers; a comment before the `import` keyword is outside the match.
  */
 function importedFromEngine(text: string): string[] {
   const names: string[] = [];
@@ -224,23 +168,13 @@ function importedFromEngine(text: string): string[] {
  * The derived set has one failure mode, and it is the quiet one: when the vocabulary stops using a
  * builder, that builder leaves the forbidden set, so it becomes legal in every table file on the
  * same day it stops being used in the vocabulary. This list is what holds such a name forbidden by
- * hand; it GROWS as builders are retired, where `ALLOWED` above only shrinks.
+ * hand; it GROWS as builders are retired, where `ALLOWED` above only shrinks. It is per-ENGINE, and
+ * nothing has yet been retired from `drizzle-orm/sqlite-core`. This guard does not read imports
+ * from `drizzle-orm/pg-core` at all.
  *
- * It is EMPTY, and that is a consequence of the storage swap rather than an oversight. The list is
- * per-ENGINE: its one entry was `numeric`, a `drizzle-orm/pg-core` builder retired by task P6, and
- * a name imported from a module this guard no longer reads can never be reported by it. Nothing
- * has yet been retired from `drizzle-orm/sqlite-core`. The separate rule that no file may import
- * from the PostgreSQL module AT ALL is not stated here and is not enforced by anything today. It
- * also has nothing left to catch: measured 2026-09-23,
- * `grep -rn "drizzle-orm/pg-core" --include='*.ts' packages apps` exits 1 with no output, and so
- * does the same grep for `pgTable`. The only mentions left in the repository are prose in this
- * header and a fixture string in `scripts/catalogue-engine-neutral.test.ts`.
- *
- * It cannot cover the names the vocabulary never imported at all — root `CLAUDE.md` §3 states that
- * gap, and the standing example is now `blob`, a real `drizzle-orm/sqlite-core` column builder the
- * vocabulary does not use. Measured the same day, with two throwaway files added side by side
- * under `packages/fiscal-verifactu/src` — one importing `blob`, one importing `text` — this suite
- * reported the `text` one alone.
+ * It cannot cover the names the vocabulary never imported at all — `blob`, a real
+ * `drizzle-orm/sqlite-core` column builder the vocabulary does not use, is in no
+ * forbidden set here.
  */
 const RETIRED: ReadonlySet<string> = new Set([]);
 
@@ -279,10 +213,8 @@ describe("the column vocabulary is the only place the engine's column and table 
 
   it("the rule it reads is not empty — the vocabulary still imports from the engine", () => {
     // Without this, renaming the vocabulary or reshaping its import block empties the forbidden set
-    // and the check above passes while asserting nothing. It asks for the DERIVED half alone: a
-    // hand-written `RETIRED` entry is enough to keep `engineNames()` non-empty, so asserting on the
-    // union would have let the derivation break silently — which is exactly what the SQLite switch
-    // did to it, the vocabulary's import moving to another module while this assertion stayed green.
+    // and the check above passes while asserting nothing. It asks for the DERIVED half alone,
+    // because a `RETIRED` entry would keep `engineNames()` non-empty while the derivation broke.
     expect(importedFromEngine(readFileSync(join(repoRoot, VOCABULARY), "utf8"))).not.toEqual([]);
   });
 
@@ -294,12 +226,9 @@ describe("the column vocabulary is the only place the engine's column and table 
   });
 
   it("still forbids a builder a future `RETIRED` entry names", () => {
-    // `RETIRED` is empty today (see its note: the list is per-engine and the storage swap changed
-    // the engine), so there is no real name to ask `engineNames()` for. What this pins is the
-    // MECHANISM the next retirement will rely on: a name in the forbidden set is reported from a
-    // real import line, by the same function the tree-wide check at the top of this block uses. It
-    // is the import that is read — `offendingImports` never looks at the declaration below it,
-    // which is there only to show what the import was for.
+    // `RETIRED` is empty, so this pins the MECHANISM the next retirement will rely on: a name in
+    // the forbidden set is reported from a real import line. Only the import is read; the
+    // declaration below it shows what the import was for.
     const fixture = [
       `import { blob } from "drizzle-orm/sqlite-core";`,
       `export const bytes = blob("bytes", { mode: "buffer" });`,
@@ -359,14 +288,12 @@ describe("negative controls", () => {
   });
 
   it("reports one hidden behind a comment inside the braces", () => {
-    // The shape a review seat planted on 2026-09-18 that an earlier version of the parser missed.
     expect(
       report(`import { /* keep the exact bytes */ text } from "drizzle-orm/sqlite-core";`),
     ).toEqual([`${other} imports text`]);
   });
 
   it("reports one behind a comment that itself contains a closing brace", () => {
-    // The shape the second review seat broke the first repair with, on the same day.
     expect(report(`import { /* } */ text } from "drizzle-orm/sqlite-core";`)).toEqual([
       `${other} imports text`,
     ]);
@@ -428,10 +355,8 @@ describe("negative controls", () => {
   });
 
   it("does not exempt a package whose name merely starts the same way", () => {
-    // `startsWith` on a prefix with no trailing separator would swallow a sibling: root
-    // `CLAUDE.md` §4 records `packages/sync` reading coverage for files belonging to
-    // `packages/sync-enrolment` for exactly that reason. The constant carries the separator, and
-    // this is the control that says so.
+    // `startsWith` on a prefix with no trailing separator would swallow a sibling package; the
+    // constant carries the separator.
     const file = "packages/store-x/src/a.ts";
     expect(report(`import { text } from "drizzle-orm/sqlite-core";`, file)).toEqual([
       `${file} imports text`,

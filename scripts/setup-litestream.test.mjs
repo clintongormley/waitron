@@ -26,7 +26,6 @@ const tempDir = () => {
   return dir;
 };
 
-/** A shell script standing in for the binary: it prints `reports` for `litestream version`. */
 const fakeBinary = (reports) => `#!/bin/sh\necho ${reports}\n`;
 
 /** A real `.tar.gz` holding one `litestream` that prints `reports`, as the release archive does. */
@@ -40,7 +39,6 @@ function releaseArchive(reports) {
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-/** A `fetch` answering every URL with `bytes`, recording what it was asked for. */
 function fakeFetch(bytes, { ok = true, status = 200, statusText = "OK" } = {}) {
   const urls = [];
   const fetch = async (url) => {
@@ -50,7 +48,6 @@ function fakeFetch(bytes, { ok = true, status = 200, statusText = "OK" } = {}) {
   return { fetch, urls };
 }
 
-/** The real runner, recording each program it starts. */
 function recordingRun() {
   const calls = [];
   const run = (file, args) => {

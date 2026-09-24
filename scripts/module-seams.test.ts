@@ -7,35 +7,20 @@ import { COUNTRY_PACKS } from "../packages/country-packs/src/index.js";
 import { FISCAL_TERRITORIES, resolveFiscalModules } from "../packages/provisioning/src/index.js";
 
 /**
- * The module seams (SP-3c): the swappable fiscal regime is reached only through the descriptor's
- * seats. Generic provisioning code imports neither regime package nor the composition list (its
- * `bin.ts` is the CLI's composition root and may); no file under `apps/server/src` imports a regime
- * package outside the deferred runtime pass below. There is no `modules.ts` exception — the
- * composition list lives in `packages/composition`, which this guard does not scan because naming
- * every module is that package's job. Provisioning's imports of `@waitron/identity` and
- * `@waitron/layouts` are legitimate — those modules are not swappable slots — so the boundary is
- * the REGIME, not "any module".
+ * The swappable fiscal regime is reached only through the descriptor's seats. Generic provisioning
+ * code imports neither regime package nor the composition list (its `bin.ts` is the CLI's
+ * composition root and may), and no file under `apps/server/src` imports a regime package outside
+ * this allowlist. The boundary is the REGIME, not "any module": provisioning's imports of
+ * `@waitron/identity` and `@waitron/layouts` are legitimate.
  *
- * Reads text, like `module-graph-honesty` — a `from "@waitron/…"` inside a comment counts; stated
- * rather than papered over. The match is on the PREFIX `from "<pkg>` with no closing quote, so a
- * subpath import (`from "@waitron/fiscal-verifactu/src/registro-sif.js"`) counts too; no regime
- * package's name is a prefix of another's, so the prefix cannot cross-match. What is still NOT
- * seen: a side-effect `import "<pkg>"` (no `from`), a dynamic `import("<pkg>")`, and any file
- * reaching the regime indirectly through another module of the app.
+ * Reads text, so a `from "@waitron/…"` inside a comment counts. The match is on the PREFIX
+ * `from "<pkg>`, so a subpath import counts too; no regime package's name is a prefix of another's.
+ * NOT seen: a side-effect `import "<pkg>"` (no `from`), a dynamic `import("<pkg>")`, a file
+ * reaching the regime indirectly through another module, and any directory other than
+ * `packages/provisioning/src` and `apps/server/src`, which are the only two checked for regime
+ * imports. `*.test.ts` and every `testing/` directory are out of scope.
  *
- * OUT OF SCOPE, by `sourceFiles`: `*.test.ts` and every `testing/` directory. The seam this guard
- * protects is what the SHIPPED code depends on; a suite may name the regime to assert against it
- * (`packages/provisioning/src/venue-apply.e2e.test.ts` does), and a `testing/` file is a fixture for
- * such a suite, not composition. No `testing/` file imports a regime package today — the exclusion
- * is the rule, not a carve-out for an existing violation. `apps/server/src/testing/
- * fiscal-fixtures.ts` is the fixture nearest the line: it seeds `registros_facturacion` rows with
- * raw SQL and imports no regime package at all.
- *
- * The allowlist is now EMPTY. The `fiscal-none` slice moved the runtime drain behind the fiscal
- * contribution's `drain` seat, relocated the AEAT transport into the regime, and finally moved the
- * cert validate/seal into the regime behind the `provisioningSecret` seat — so no file under
- * `apps/server/src` reaches a regime package. It is kept as a Map (not deleted) so a future deferral
- * has to name itself and its reason here; shrink this list, never grow it.
+ * EMPTY; shrink this list, never grow it.
  */
 const DEFERRED_RUNTIME_PASS = new Map<string, string>([]);
 
@@ -112,10 +97,8 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
     expect(imports(file, REGIME_PACKAGES)).toEqual([]);
   });
   it("the deferred-runtime-pass allowlist is EMPTY (the fiscal-none slice's end state)", () => {
-    // Task 5 relocated the last regime-reaching file (aeat-credential.ts) into
-    // packages/fiscal-verifactu, so nothing under apps/server/src imports a regime package. Asserted
-    // as an empty list rather than deleted so a future entry has to justify itself; and, should the
-    // list ever regrow, each entry must still GENUINELY import the regime (no stale entries).
+    // Asserted empty rather than deleted so a future entry has to justify itself, and a regrown
+    // entry must still genuinely import the regime.
     expect([...DEFERRED_RUNTIME_PASS.keys()]).toEqual([]);
     for (const rel of DEFERRED_RUNTIME_PASS.keys()) {
       expect(imports(join(REPO_ROOT, rel), REGIME_PACKAGES).length, rel).toBeGreaterThan(0);
@@ -124,18 +107,9 @@ describe("apps/server imports the Spanish regime only from the deferred runtime 
 });
 
 /**
- * The dashboard module-UI seam (bookings SP2): the admin app reaches a UI module only TRANSITIVELY,
- * through `@waitron/dashboard-modules` (the browser-safe registry). So no file under `apps/dashboard/src`
- * imports the composition list, the module contract, or a UI module package directly. `@waitron/bookings`
- * is forbidden as a bare PREFIX (the `imports()` helper matches `from "<pkg>`), which also catches the
- * browser sub-path `@waitron/bookings/dashboard` — the app must import NEITHER; the registry, a different
- * specifier (`@waitron/dashboard-modules`), is the only path in. The app imports none of these today.
- *
- * The card-provider PANELS (Task 14) join the rule: `@waitron/payments-sumup` and
- * `@waitron/payments-stripe` are reached only through `@waitron/dashboard-modules`'s
- * `CARD_PROVIDER_PANELS` (the browser twin of the server card-provider seam below). The `/dashboard`
- * subpath is what `dashboard-modules` imports; `apps/dashboard` imports neither the subpath nor the
- * root — the prefix match catches both.
+ * `apps/dashboard` reaches a UI module or a card-provider panel only through
+ * `@waitron/dashboard-modules`. The prefix match also catches a subpath such as
+ * `@waitron/bookings/dashboard`.
  */
 const APP_FORBIDDEN = [
   "@waitron/composition",
@@ -175,14 +149,9 @@ describe("apps/dashboard reaches UI modules only via the registry, never a modul
 });
 
 /**
- * The card-provider seam (Task 9): `packages/composition/src/card-providers.ts` is the registry
- * (the server twin of `ALL_MODULES`) — new code that needs a card-payment provider goes through
- * `CARD_PROVIDERS`, not a direct import of a provider package. Unlike the regime allowlist above,
- * this one is ADVISORY, not exhaustive: it only refuses a NEW, non-allowlisted import — it does not
- * assert that every allowlisted file still needs to be there. The Task 12 cutover pulled the
- * reader-collect construction out of `boot.ts` (readers now come from the pool via the seat), but
- * `boot.ts` still names `@waitron/payments-stripe` for the hosted-payment reconciler + webhook
- * wiring, so it stays allowlisted.
+ * `packages/composition/src/card-providers.ts` is the card-provider registry. Unlike the regime
+ * allowlist above, this one is ADVISORY: it refuses a NEW, non-allowlisted import but does not
+ * assert that every allowlisted file still needs to be there.
  */
 const PROVIDER_PACKAGES = ["@waitron/payments-sumup", "@waitron/payments-stripe"];
 

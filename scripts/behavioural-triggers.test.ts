@@ -7,6 +7,9 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { applyMigrations } from "../packages/migrations/src/apply.js";
 import { migrationOptionsFor } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
+// The exact words each refusing trigger raises, imported from the one place that declares them:
+// `packages/core` matches one of them (`settle-sale.ts`), and a local copy would test the
+// triggers against this file instead of against what the product reads.
 import {
   COVERAGE_REFUSAL,
   FORM_FACTOR_REFUSAL,
@@ -24,27 +27,20 @@ import {
 } from "../packages/db/src/trigger-refusals.js";
 
 /**
- * The nine BEHAVIOURAL rules `packages/db` carried under PostgreSQL still refuse — or still act —
- * against a database the PRODUCT migrated.
- *
- * These are the database-level backstops that are not append-only: a settlement's tender coverage,
- * a tender after settlement, a working order's status transitions, lines written against an order
- * that is not open, a line's description maps matching the venue's invoice locales, a device
- * profile's form factor while an active device uses it, and a device's station-or-register binding
- * against its profile's form factor — plus the one that ACTS rather than refuses, clearing a dining
- * table's service status when its tab closes. They were hand-written
- * `--custom` SQL, a trigger has never been declarable in TypeScript, and regenerating every
- * migration set from the schema for the storage switch dropped all of them. They are restored by
- * `packages/db/drizzle/0001_behavioural_triggers.sql`.
+ * The nine BEHAVIOURAL rules of `packages/db/drizzle/0001_behavioural_triggers.sql` still refuse —
+ * or still act — against a database the PRODUCT migrated: a settlement's tender coverage, a tender
+ * after settlement, a working order's status transitions, lines written against an order that is
+ * not open, a line's description maps matching the venue's invoice locales, a device profile's form
+ * factor while an active device uses it, and a device's station-or-register binding against its
+ * profile's form factor — plus the one that ACTS rather than refuses, clearing a dining table's
+ * service status when its tab closes. A trigger cannot be declared in the TypeScript schema, so a
+ * regenerated migration set does not carry it.
  *
  * It also holds `packages/db/drizzle/0004_variant_one_level.sql`'s three triggers on `products`: a
  * variant is one level deep, keeps the parent it was created with, and no product's id changes.
  *
- * **It migrates through `applyMigrations`, like `scripts/append-only-triggers.test.ts` beside it,
- * and for the same reason**: a guard that installs the thing under test cannot see the product
- * failing to install it. Here the migration is the product's own path by construction, but the
- * property that matters is the same one — the triggers are read out of a file drizzle produced
- * from the journal, not out of SQL text this file supplies.
+ * **It migrates through `applyMigrations`**: a guard that installs the thing under test cannot see
+ * the product failing to install it.
  *
  * **Reading `sqlite_master` is not enough, and most of this file is the other half.** A trigger
  * SQLite RECORDS is not a trigger SQLite ENFORCES: a `WHEN` clause that is never true, a body
@@ -52,13 +48,6 @@ import {
  * name in the catalogue. So every refusing trigger has a real offending write with its message
  * asserted, and each has an ACCEPTING control in the other direction — without the control, a
  * trigger that refused EVERY write would pass the refusal cases.
- *
- * WHERE THE HALVES LIVE. Both halves are here: the name pin and the behaviour. Nothing about these
- * triggers is proven in `packages/db`, so a reader looking there will find nothing and should look
- * here. (`packages/db`'s own `schema/orders.transition.test.ts`,
- * `schema/device-profiles.trigger.test.ts` and `schema/park-retrieve.test.ts` exercise the same
- * rules through the product's write paths; they are a different claim — that the CALLER is refused
- * — and they do not establish that the database refuses a caller that goes around them.)
  *
  * WHAT IT DOES NOT COVER. `INSERT … ON CONFLICT DO UPDATE` is not tried against any of these
  * triggers, though a `BEFORE INSERT` trigger fires on it and a `BEFORE UPDATE` one on its conflict
@@ -69,26 +58,10 @@ import {
  */
 
 /**
- * Every behavioural trigger the migration creates, pinned by name.
- *
- * FOURTEEN names for the NINE rules of `0001_behavioural_triggers.sql`. SQLite has no `BEFORE
- * INSERT OR UPDATE` — one trigger takes exactly one event — so the three that covered more than one
- * event are split, and the suffix names the event. That split is the engine's; the rules are
- * unchanged. The binding rule's two names are PostgreSQL's own: it split that one itself, so that an
- * UPDATE touching no binding column never pays for the profile lookup.
- *
- * Plus the three `products_*` names of `0004_variant_one_level.sql`. They live on `products`, so a
- * later migration that RECREATES that table drops them silently — this list is what notices.
- */
-/**
- * The other triggers a fully migrated venue carries, and why they are named here.
- *
- * These are not behavioural rules: they are the two foreign keys `products.image` and
- * `category_details.image` carried, which SQLite cannot express as keys added to a table another
- * migration set already created. `packages/media/drizzle/0001_image_references.sql` carries the
- * reasoning and `packages/media/src/image-references.test.ts` proves each one by deletion. They
- * appear here only because the assertion below is an EQUALITY over every non-append-only trigger,
- * and an equality that quietly grew an exception would stop being one.
+ * The other triggers a fully migrated venue carries: they stand in for the two foreign keys
+ * `products.image` and `category_details.image` (`packages/media/drizzle/0001_image_references.sql`
+ * carries the reasoning). Named here only because the assertion below is an EQUALITY over every
+ * non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [
   "category_details_media_image_fk_insert",
@@ -101,6 +74,13 @@ const IMAGE_REFERENCE_TRIGGERS = [
   "products_media_image_fk_update",
 ];
 
+/**
+ * Every behavioural trigger the migrations create, pinned by name: fourteen for the nine rules of
+ * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
+ * than one event is split and the suffix names the event), plus the three `products_*` names of
+ * `0004_variant_one_level.sql`. Those live on `products`, so a later migration that RECREATES that
+ * table drops them silently — this list is what notices.
+ */
 const EXPECTED_TRIGGERS = [
   "device_binding_rule_insert",
   "device_binding_rule_update",
@@ -120,16 +100,6 @@ const EXPECTED_TRIGGERS = [
   "working_orders_clear_table_status",
   "working_orders_enforce_transition",
 ];
-
-/**
- * The exact words each refusing trigger raises, read from the ONE place that declares them
- * (`packages/db/src/trigger-refusals.ts`) rather than copied here.
- *
- * That import is what binds the migration's SQL to the callers that translate its refusals — the
- * words are a SQLite trigger's whole identity, and `packages/core`'s `settleSale` matches one of
- * them by equality. Reword the SQL alone and the cases below fail; change a constant alone and they
- * fail the same way. A local copy here would have asserted this file against itself.
- */
 
 const scratch = [];
 afterAll(() => {
@@ -159,12 +129,9 @@ function errcodeFor(connection, statement) {
 const STAMP = "2026-09-22T10:00:00.000Z";
 
 /**
- * Unique-index fodder.
- *
- * `working_order_lines` is unique on (`working_order_id`, `line_no`) and `sales` on
- * (`series_id`, `invoice_number`), and neither is the thing under test — a case that collided on
- * one would report `SQLITE_CONSTRAINT_UNIQUE` where it meant to report a trigger. A counter per
- * shape keeps every fixture row distinct; a REFUSED insert burns a number, which is harmless.
+ * Unique-index fodder: `working_order_lines` is unique on (`working_order_id`, `line_no`) and
+ * `sales` on (`series_id`, `invoice_number`), and a case that collided on one would report a unique
+ * violation where it meant to report a trigger. A REFUSED insert burns a number, which is harmless.
  */
 let nextLineNo = 0;
 let nextInvoiceNumber = 0;
@@ -216,15 +183,12 @@ function tender(id, saleId, amount, tip = 0) {
 /**
  * The fixture rows the cases below need, written straight into a migrated venue file.
  *
- * Foreign keys and check constraints are both OFF, exactly as `append-only-triggers.test.ts` runs
- * its own seeding, and for the same two reasons: one row can then stand for a parent this file
- * does not care about (`invoice_series`, `nodes`, `catalogues`), and — the reason that matters
- * here — a refusal cannot be a CHECK constraint or a foreign key wearing a trigger's clothes. On
- * this engine an `ON DELETE RESTRICT` refusal arrives with the SAME numeric class as
- * `RAISE(ABORT, …)` (1811, `SQLITE_CONSTRAINT_TRIGGER`), so the code alone could not tell them
- * apart; with foreign keys off, and with every message asserted in full rather than by class,
- * neither can be mistaken for the trigger. Neither pragma touches triggers, and the accepting
- * controls below are what say so — they run under exactly the same two.
+ * Foreign keys and check constraints are both OFF, as `append-only-triggers.test.ts` runs its own
+ * seeding: one row can then stand for a parent this file does not care about, and a refusal cannot
+ * be a CHECK constraint or a foreign key wearing a trigger's clothes. On this engine an
+ * `ON DELETE RESTRICT` refusal arrives with the SAME numeric class as `RAISE(ABORT, …)`, so every
+ * message is asserted in full rather than by class. Neither pragma touches triggers; the accepting
+ * controls below run under the same two.
  */
 function seed(connection) {
   const statements = [
@@ -398,9 +362,8 @@ describe("sale_settlements_check_coverage", () => {
     ).toBeUndefined();
   });
 
-  // PostgreSQL's `sales_assert_tenders_cover` returned without raising when the sale row was gone —
-  // "the sale itself was rolled back; nothing left to reconcile". Kept, and pinned here because it
-  // is the one branch a straight port would most easily turn into a refusal.
+  // The rule says nothing when the sale row is gone. Pinned because it is the branch a rewrite
+  // would most easily turn into a refusal.
   it("says nothing about a settlement whose sale row does not exist", () => {
     expect(
       refusalFor(
@@ -473,11 +436,9 @@ describe("working_order_lines_require_open_parent", () => {
     );
   });
 
-  // TWO rules refuse this write, not one: an order that does not exist is also an order whose
-  // location cannot be resolved, so `check_locales` refuses it as well. SQLite does not fix the
-  // order several triggers on one event fire in, so which of the two messages comes back is not a
-  // property this file may pin — measured on SQLite 3.53.4 it was the locale one. What IS pinned is
-  // that the write is refused, with one of the two messages and nothing else.
+  // TWO rules refuse this write: an order that does not exist is also an order whose location
+  // cannot be resolved. SQLite does not fix the order several triggers on one event fire in, so
+  // which message comes back is not pinned — only that the write is refused with one of the two.
   it("refuses a line inserted under an order that does not exist", () => {
     expect([OPEN_PARENT_REFUSAL, LOCALES_REFUSAL]).toContain(
       refusalFor(connection, line("line-ghost", "ghost-order", '{"es":"a","ca":"b"}')),
@@ -536,10 +497,8 @@ describe("working_order_lines_check_locales", () => {
     ).toBeUndefined();
   });
 
-  // PostgreSQL raised a SEPARATE message here ("working order % has no resolvable location"). On
-  // this engine it folds into the same refusal: `raise` takes a literal, so a second message would
-  // be a second trigger, and the two cases are the same fault from a caller's side — the line's
-  // locales could not be shown to match the venue's.
+  // A line whose order resolves to no location deliberately gets the same refusal: from a caller's
+  // side it is the same fault.
   it("refuses a line whose order resolves to no location, in the same words", () => {
     expect(refusalFor(connection, line("line-orphan", "wo-orphan", '{"es":"a","ca":"b"}'))).toBe(
       LOCALES_REFUSAL,
@@ -734,9 +693,8 @@ describe("device_binding_rule_update", () => {
     );
   });
 
-  // `requireDevice` touches `last_seen_at` on every authenticated request. The row it runs against
-  // here is one the rule WOULD refuse, so an ungated trigger would refuse this write too — which is
-  // what makes this an assertion about the gate rather than about a row that was fine anyway.
+  // The row here is one the rule WOULD refuse, so an ungated trigger would refuse this write too —
+  // which makes this an assertion about the gate rather than about a row that was fine anyway.
   it("says nothing about an update that touches no binding column", () => {
     expect(
       refusalFor(connection, `update devices set last_seen_at = '${STAMP}' where id = 'dev-off'`),

@@ -16,8 +16,7 @@ const member = (name, dir) => ({ name, version: "0.0.0", path: `${ROOT}/${dir}`,
 
 /**
  * A `pnpm ls -r --depth -1 --json` result. The workspace ROOT is always the first entry — that is
- * what the real command emits (run in this workspace: 16 entries, the first named `waitron` with a
- * `path` equal to the repository root), and excluding it is the first thing workspacePackages does.
+ * what the real command emits.
  */
 const ls = (...members) =>
   JSON.stringify([{ name: "waitron", path: ROOT, private: true }, ...members]);
@@ -60,9 +59,7 @@ describe("workspacePackages", () => {
   });
 
   // Every caller treats null as "we could not read the workspace", which is a reason to run
-  // everything. The empty ARRAY would be the definite answer "this workspace has no members", and
-  // nothing produces it today — but the two must not be conflated, for the same reason
-  // packagesInScope keeps them apart in scripts/changed-scope.mjs.
+  // everything. The empty ARRAY would be the definite answer "this workspace has no members".
   it("returns null when pnpm emitted nothing at all", () => {
     expect(workspacePackages("", ROOT)).toBeNull();
     expect(workspacePackages("   ", ROOT)).toBeNull();
@@ -72,8 +69,7 @@ describe("workspacePackages", () => {
     expect(workspacePackages("ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND", ROOT)).toBeNull();
   });
 
-  // `pnpm ls --json` reports its OWN failures as valid JSON on stdout (measured on pnpm 9.15.0 and
-  // recorded in scripts/changed-scope.mjs's packagesInScope). It parses, so only the shape
+  // `pnpm ls --json` reports its OWN failures as valid JSON on stdout. It parses, so only the shape
   // check tells it apart from a real result.
   it("returns null for pnpm's own error object, which is valid JSON", () => {
     expect(
@@ -112,7 +108,6 @@ const loader = (packages) => {
   return load;
 };
 
-/** The common case: a workspace that is there when asked for. */
 const workspace = (packages = WORKSPACE) => loader(packages);
 
 describe("scopeForPaths", () => {
@@ -149,8 +144,6 @@ describe("scopeForPaths", () => {
     });
   });
 
-  // The whole point of the `global` outcome: these paths can affect anything, so nothing may be
-  // narrowed away on account of them.
   it.each([
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
@@ -164,9 +157,6 @@ describe("scopeForPaths", () => {
     expect(scopeForPaths([path], workspace()).kind).toBe("global");
   });
 
-  // The repository's own machinery is ROOT scope, not global, so it gives the repo-level Vitest
-  // project work and gives no package any. The files members do read are in ROOT_SCOPE_CONSUMERS,
-  // covered by the "a root file that workspace members read" block.
   it.each([
     ".github/workflows/ci.yml",
     "scripts/changed-scope.mjs",
@@ -180,7 +170,6 @@ describe("scopeForPaths", () => {
     });
   });
 
-  // Root and package work COMPOSE: the root project runs and the packages are still narrowed to.
   it("keeps narrowing to packages when a root path changed too", () => {
     expect(
       scopeForPaths(["scripts/changed-scope.mjs", "packages/db/src/y.ts"], workspace()),
@@ -282,7 +271,6 @@ describe("scopeForPaths", () => {
     });
   });
 
-  // Prose does not stop a root push being one, the same way it does not widen a package push.
   it("reports a root run when the rest of the push is documentation", () => {
     expect(scopeForPaths(["docs/backlog.md", ".husky/pre-push"], workspace())).toMatchObject({
       kind: "root",
@@ -303,18 +291,12 @@ describe("scopeForPaths", () => {
     });
   });
 
-  // Documentation must NOT force a global run. CLAUDE.md §7 tells every branch to update CLAUDE.md
-  // and docs/backlog.md in the same change that makes them stale, so a rule that widened on any
-  // docs/ path would widen on nearly every branch in this repository.
   it("does not let a documentation path widen the run", () => {
     expect(
       scopeForPaths(["docs/backlog.md", "CLAUDE.md", "packages/db/src/index.ts"], workspace()),
     ).toMatchObject({ kind: "packages", packages: ["@waitron/db"] });
   });
 
-  // Root config no code-gated job reads takes the documentation route rather than the global one. A
-  // push of `.codex/config.toml` alone belongs to no package, so it landed on `global` and ran the
-  // whole workspace.
   it("does not let inert root config widen the run", () => {
     expect(scopeForPaths([".codex/config.toml"], workspace())).toMatchObject({
       kind: "documentation",
@@ -322,12 +304,6 @@ describe("scopeForPaths", () => {
     });
   });
 
-  // THE distinction this function exists for. Its predecessor, packagesForPaths, returned the same
-  // object for both — `{packages: [], global: true, reason: "no changed code path could be
-  // determined — running everything"}` — so a documentation-only push read as "run everything", and
-  // was only narrowed because the hook happened to consult a SECOND classifier first and exit. That
-  // ordering contract lived in the shell, not here, so any other caller got it wrong by default.
-  // The reason string was false in the docs case too: the paths WERE determined, they were prose.
   it("gives a documentation-only push its own outcome, distinct from an undetermined one", () => {
     const docs = scopeForPaths(["docs/backlog.md", "CLAUDE.md"], workspace());
     const undetermined = scopeForPaths([], workspace());
@@ -346,9 +322,8 @@ describe("scopeForPaths", () => {
     );
   });
 
-  // The measured reason for computing the documentation verdict FIRST: resolving the workspace
-  // means `pnpm ls -r --depth -1 --json`, which cost 195ms of a 5.5s docs-path budget. A thunk, not
-  // a value, is what lets this be asserted rather than reasoned about.
+  // Resolving the workspace means running `pnpm ls -r --depth -1 --json`. A thunk, not a value, is
+  // what lets this be asserted rather than reasoned about.
   it("does not read the workspace at all for a documentation-only push", () => {
     const load = workspace();
     expect(scopeForPaths(["docs/backlog.md", "CLAUDE.md"], load).kind).toBe("documentation");
@@ -361,9 +336,6 @@ describe("scopeForPaths", () => {
     expect(load.called).toBe(false);
   });
 
-  // The same property the documentation path has, for the same reason: `pnpm ls -r --depth -1
-  // --json` is 191-200ms (timed in scripts/changed-packages.mjs's own comment) and a push with no
-  // package path to attribute has no use for it.
   it("does not read the workspace at all for a root-only push", () => {
     const load = loader(WORKSPACE);
     expect(scopeForPaths([".husky/pre-push"], load).kind).toBe("root");
@@ -389,8 +361,8 @@ describe("scopeForPaths", () => {
     expect(scopeForPaths(code, workspace()).kind).toBe("global");
   });
 
-  // Fails CLOSED, the same principle as classify() and as the hook's own deletion guard: an empty
-  // list means we could not work out what is being pushed, not that nothing is.
+  // Fails CLOSED: an empty list means we could not work out what is being pushed, not that nothing
+  // is.
   it("fails closed when no changed path could be determined", () => {
     expect(scopeForPaths([], workspace())).toMatchObject({ kind: "global", packages: [] });
     expect(scopeForPaths([""], workspace())).toMatchObject({
@@ -407,13 +379,9 @@ describe("scopeForPaths", () => {
     });
   });
 
-  // The sibling directory must NOT be a workspace member for this to test anything. The first
-  // version of this test listed both `packages/db` and `packages/db-extra`, and proving it by
-  // deletion (CLAUDE.md §4) showed it passing with the directory boundary removed entirely:
-  // `startsWith("packages/db")` matches both members, and the innermost-wins rule then picks the
-  // longer one, so the right answer came out for the wrong reason. With db alone in the workspace
-  // there is nothing to mask it — a bare prefix attributes the path to @waitron/db, whose suite
-  // passes, and the run never widens.
+  // The sibling directory must NOT be a workspace member for this to test anything: with both
+  // listed, a bare `startsWith("packages/db")` matches both members, and the innermost-wins rule
+  // then picks the longer one, so the right answer comes out for the wrong reason.
   it("does not attribute a path whose directory merely shares a prefix with a package", () => {
     const dbOnly = workspacePackages(ls(member("@waitron/db", "packages/db")), ROOT);
     expect(scopeForPaths(["packages/db-extra/src/a.ts"], workspace(dbOnly))).toMatchObject({
@@ -457,9 +425,6 @@ describe("scopeForPaths", () => {
     );
   });
 
-  // The `deploy` flag is orthogonal to `kind`, exactly like `root`: it answers "did the box image's
-  // inputs change?" so ci.yml's `image` job can re-run its smoke on a pull request only then. A
-  // deploy-only change is `kind: global` (deploy/ belongs to no package) AND `deploy: true`.
   it("flags a change to the box image's inputs, independently of the scope kind", () => {
     expect(scopeForPaths(["deploy/Dockerfile"], workspace())).toMatchObject({
       kind: "global",
@@ -503,10 +468,9 @@ describe("formatScope", () => {
     );
   });
 
-  // The FOURTH outcome. `code=false` is what makes a `scope=root` pull request skip every
-  // code-gated job in ci.yml — the ungated `lint` job runs the repo-level project there — and
-  // `scope=root` is what makes the hook skip package typechecks while still running the root
-  // guards.
+  // `code=false` is what makes a `scope=root` pull request skip every code-gated job in ci.yml —
+  // the ungated `lint` job runs the repo-level project there — and `scope=root` is what makes the
+  // hook skip package typechecks while still running the root guards.
   it("emits its own line for a root-only push", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
       "code=false\nscope=root\npackages=\nroot=true\ndeploy=false",
@@ -536,9 +500,9 @@ describe("formatScope", () => {
     expect(classify(paths).code).toBe(expected);
   });
 
-  // The one place the two part company, and the reason `code` is not simply `classify`'s verdict
-  // any more. A root path ROOT_SCOPE_CONSUMERS does not list IS code — `isInertPath` says so, and
-  // it can break the repo-level suite — but gives no `code`-gated job in ci.yml anything to do.
+  // The one place the two part company. A root path ROOT_SCOPE_CONSUMERS does not list IS code —
+  // `isInertPath` says so, and it can break the repo-level suite — but gives no `code`-gated job in
+  // ci.yml anything to do.
   it("emits code=false for a root-only push, where classify says code", () => {
     expect(classify([".husky/pre-push"]).code).toBe(true);
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace())).split("\n")[0]).toBe(
@@ -559,8 +523,7 @@ describe("formatScope", () => {
   });
 
   // The fifth line, which ci.yml's `changes` job reads into its `deploy` output so the `image` job
-  // can scope its smoke to deploy changes on a pull request. Last, so the four the hook already
-  // reads keep their positions.
+  // can scope its smoke to deploy changes on a pull request.
   it("emits deploy=true as its own line when the box image's inputs changed", () => {
     expect(formatScope(scopeForPaths(["deploy/Dockerfile"], workspace()))).toBe(
       "code=true\nscope=global\npackages=\nroot=false\ndeploy=true",
@@ -594,10 +557,8 @@ describe("scriptRunCheck", () => {
     expect(reason).toContain("2");
   });
 
-  // THE case this exists for, and the shape of the defect it closes. ci.yml used to resolve its
-  // scope with `pnpm --filter "...[origin/$BASE_REF]"`, which answers a root-config change with the
-  // workspace ROOT — and `pnpm --filter "waitron" --no-sort test:coverage` then selects nothing and
-  // exits 0. workspacePackages drops the root by path, so the guard sees an empty selection.
+  // `pnpm --filter "waitron" --no-sort test:coverage` selects nothing and exits 0.
+  // workspacePackages drops the root by path, so the guard sees an empty selection.
   it("fails when the filter selected no workspace member at all", () => {
     expect(scriptRunCheck([], "test:coverage", bothDeclare)).toMatchObject({ ok: false });
     expect(scriptRunCheck([], "test:coverage", bothDeclare).reason).toMatch(/no workspace member/i);
@@ -605,7 +566,7 @@ describe("scriptRunCheck", () => {
 
   // Fails CLOSED, but in the opposite direction from scopeForPaths: there, not knowing means run
   // everything; here, not knowing means we cannot claim anything ran, and a guard that cannot tell
-  // must not report success. Both are the same principle — never be quietly green.
+  // must not report success.
   it("fails when the workspace layout could not be read", () => {
     expect(scriptRunCheck(null, "test:coverage", bothDeclare)).toMatchObject({ ok: false });
   });
@@ -624,8 +585,8 @@ describe("scriptRunCheck", () => {
     expect(check.reason).toContain("could not be read");
   });
 
-  // The enforcement docs/backlog.md asked for: a member that declares no test script is a decision
-  // someone has to make deliberately, not something that silently costs a shard its whole run.
+  // A member that declares no test script is a decision someone has to make deliberately, not
+  // something that silently costs a shard its whole run.
   it("fails when a selected package declares no such script and is not exempt", () => {
     const check = scriptRunCheck(
       members,
@@ -640,9 +601,6 @@ describe("scriptRunCheck", () => {
     expect(check.reason).toContain("PACKAGES_WITHOUT_TESTS");
   });
 
-  // @waitron/bench-pglite defines no test script and holds no *.test.ts, deliberately and for
-  // documented reasons (bench/pglite-throughput/README.md). A push touching only it must not be
-  // blocked by a guard whose whole purpose is elsewhere.
   it("passes when an exempt package declares no such script", () => {
     const withBench = [...members, { name: PACKAGES_WITHOUT_TESTS[0], dir: "bench/x" }];
     const check = scriptRunCheck(
@@ -709,8 +667,6 @@ describe("the CLI", () => {
     );
   });
 
-  // The whole pipeline, end to end: a Dockerfile change is code, belongs to no package (global),
-  // and sets deploy=true \u2014 the line ci.yml's `image` job reads to re-run its smoke on a PR.
   it("flags deploy=true for a change to the box image's inputs", () => {
     expect(run("deploy/Dockerfile\n").stdout).toBe(
       "code=true\nscope=global\npackages=\nroot=false\ndeploy=true\n",
@@ -723,9 +679,6 @@ describe("the CLI", () => {
     );
   });
 
-  // What ci.yml's `changes` job reads: `code=true` is what runs `bundle-smoke`, the workspace
-  // typecheck, and the tests of the selected members and their dependents on a pull request that
-  // changes only the shared build script.
   it("selects the real members that build through scripts/bundle-node.mjs", () => {
     expect(run("scripts/bundle-node.mjs\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/credentials @waitron/print-agent-app " +
@@ -785,11 +738,6 @@ describe("the runnable CLI", () => {
     expect(result.stderr).toContain("test:coverage");
   });
 
-  // The defect this branch closes, end to end: `pnpm --filter "...[origin/main]"` answered a
-  // root-config-only pull request with the workspace root alone, and the light shard's
-  // `pnpm --filter "waitron" --no-sort test:coverage` then printed `No projects matched the filters`
-  // and exited 0. Run in this workspace on 2026-08-01 — `pnpm --filter "waitron" --no-sort
-  // format:check` prints exactly that and exits 0.
   it("exits 1 for a selection that is the workspace root and nothing else", () => {
     const result = runnable([{ name: "waitron", version: "0.0.0", path: repoRoot }]);
     expect(result.status).toBe(1);

@@ -8,14 +8,6 @@ import { workspaceMembers } from "./workspace-members.mjs";
 /**
  * The container image's environment, checked against the server that has to boot on it.
  *
- * Lives in the ROOT project deliberately (CLAUDE.md §4): it pins files under `deploy/`, and a
- * package-resident guard only runs when its package is in scope. It ran from `apps/server` at
- * first, which worked only because `deploy/**` currently scopes GLOBAL — narrowing that scope
- * (design §10 calls it an optimisation) would have switched this guard off for exactly the change
- * class it exists to catch. The cost of living here, stated because nothing else says it: the root
- * project is not typechecked (CLAUDE.md §2), so type errors in this file surface only as runtime
- * ones.
- *
  * It reads TEXT for everything outside the server's own module graph — the Dockerfile's `ENV`
  * block, compose's two defaults, the shell's `BOX_URL`, and `boot.ts`'s hostname literal. So these
  * are PINS between four copies of one string, not a single source anything derives from; the guard
@@ -34,9 +26,7 @@ const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
 // operator follows for a variable nothing reads.
 const ENV_EXAMPLE = read("deploy/.env.example");
 const CONFIG_SOURCE = read("apps/server/src/config.ts");
-// The operator commands the server bundle produces. Declared under `waitron.commands` rather than
-// `bin` because nothing builds at install time, so a `bin` target under `dist/` is a command pnpm
-// cannot link — see scripts/manifest-commands.test.ts.
+// Declared under `waitron.commands` rather than `bin`; see scripts/manifest-commands.test.ts.
 const SERVER_MANIFEST = JSON.parse(read("apps/server/package.json")) as {
   waitron: { commands: Record<string, string> };
 };
@@ -148,7 +138,7 @@ describe("the container image's environment", () => {
       [...DOCKERFILE.matchAll(/\/src\/apps\/server\/dist\/([\w.-]+)/g)].map((m) => m[1]),
     );
     const commands = Object.values(SERVER_MANIFEST.waitron.commands);
-    // An empty declaration would satisfy the loop below without checking anything (CLAUDE.md §2).
+    // An empty declaration would satisfy the loop below without checking anything.
     expect(commands.length).toBeGreaterThan(0);
     for (const target of commands) {
       expect(copied).toContain(target.replace("./dist/", ""));
@@ -183,8 +173,7 @@ describe("the print-agent image and its compose wiring", () => {
     expect(COMPOSE).toContain(
       "image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}",
     );
-    // The hot-plug-safe device shape, pinned so a subdirectory mount or a hard `devices:` line
-    // (both of which the box receipts rejected, spec §5) fails here.
+    // The hot-plug-safe device shape, so a subdirectory mount or a hard `devices:` line fails here.
     expect(COMPOSE).toContain("/dev:/dev:ro");
     expect(COMPOSE).toContain('"c 180:* rwm"');
     expect(COMPOSE).not.toMatch(/^\s*devices:/m);
@@ -230,10 +219,8 @@ describe("the waitron.sh box command", () => {
   });
 
   // The DELAY default is pinned here because `scripts/waitron-sh.test.mjs` overrides it in every
-  // case, so no behaviour anywhere would notice a typo: a box would give up in two seconds instead
-  // of three minutes and every test would still pass. The try count is pinned here too, though that
-  // suite also asserts it behaviourally. Closing braces are part of both patterns — without them
-  // `:-5` matches `:-50` and `:-36` matches `:-360`, which is the likeliest slip of all.
+  // case, so no behaviour anywhere would notice a typo. Closing braces are part of both patterns —
+  // without them `:-5` matches `:-50` and `:-36` matches `:-360`.
   it("ships a health wait of 36 tries, five seconds apart", () => {
     expect(WAITRON_SH).toMatch(/WAITRON_SH_MAX_HEALTH_TRIES:-36\}/);
     expect(WAITRON_SH).toMatch(/WAITRON_SH_HEALTH_DELAY:-5\}/);
@@ -289,10 +276,9 @@ describe("every copy of the box's hostname", () => {
 
 it("starts no database server on the box, and needs no secret before the box boots", () => {
   // A venue is a directory of SQLite files inside the `state` volume, so the box runs no cluster and
-  // holds no database credential. Pinned as absences because both are one line away from returning:
-  // the service and the named volume are spelled the same way at the same indent, so one pattern
-  // covers both, and a `${POSTGRES_PASSWORD:?...}` interpolation makes compose refuse to read the
-  // file at all — including for a `down`, which is how a box gets torn down.
+  // holds no database credential. Pinned as absences because both are one line away from returning;
+  // a `${POSTGRES_PASSWORD:?...}` interpolation makes compose refuse to read the file at all,
+  // including for a `down`.
   expect(COMPOSE).not.toMatch(/^ {2}db:$/m);
   expect(COMPOSE).not.toContain("POSTGRES_PASSWORD");
   expect(COMPOSE).not.toContain("postgres");
@@ -313,9 +299,7 @@ it("stores image-library bytes in the database without a separate image volume",
 /**
  * sharp is a native addon with a shared library beside it, and esbuild does not refuse to bundle
  * it. Without `--external:sharp` the build exits 0 and the bundle cannot even be loaded: bundled
- * sharp declares `createRequire` a second time beside the banner `scripts/bundle-node.mjs` adds,
- * and `node --check dist/server.js` reports `SyntaxError: Identifier 'createRequire' has already
- * been declared`. Measured 2026-09-23 on esbuild 0.28.2.
+ * sharp declares `createRequire` a second time beside the banner `scripts/bundle-node.mjs` adds.
  *
  * Every Node bundle is built by `scripts/bundle-node.mjs`, and the flag is taken from that
  * script's own argument builder. The rest reads package.json TEXT: it sees a workspace script that
@@ -370,13 +354,10 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
 /**
  * The `@img/sharp-libvips-*` release pnpm-lock.yaml resolves, and the libvips version it carries.
  *
- * The package version comes from the lockfile, which names every platform's package. The libvips
- * version is not in the lockfile, so it comes from the `versions.json` of the package installed for
- * THIS machine. That stands for the box's linux packages only because one sharp-libvips release
- * carries one libvips version on every platform: checked 2026-09-24 for 1.3.3, where darwin-arm64's
- * `versions.json` and the `./binary` export `npm view` printed for linux-x64 and linux-arm64 all
- * name 8.18.6. So the check needs that release installed on the machine running it, and throws where
- * none is.
+ * The libvips version is not in the lockfile, so it comes from the `versions.json` of the package
+ * installed for THIS machine. That stands for the box's linux packages only because one
+ * sharp-libvips release carries one libvips version on every platform. So the check needs that
+ * release installed on the machine running it, and throws where none is.
  */
 function libvipsRelease(): { packageVersion: string; libvips: string } {
   const lockfile = read("pnpm-lock.yaml");

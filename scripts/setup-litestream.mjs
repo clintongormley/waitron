@@ -1,9 +1,7 @@
 /**
  * `pnpm setup:litestream` — downloads the pinned Litestream for this machine into `.bin/litestream`
- * at the repository root (gitignored), checks the download against the release's published SHA-256
- * and checks the binary reports the pinned version. Start a server that streams with
- * `WAITRON_LITESTREAM_BIN=<that path>`. The box image fetches its own copy (`deploy/Dockerfile`);
- * `packages/stream`'s tests drive a fake child process and need none.
+ * at the repository root (gitignored). Start a server that streams with
+ * `WAITRON_LITESTREAM_BIN=<that path>`. The box image fetches its own copy (`deploy/Dockerfile`).
  */
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";

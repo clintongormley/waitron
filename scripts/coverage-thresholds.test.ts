@@ -5,20 +5,12 @@ import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
- * Every package holds 98/98/98/95, and so does the root project (owner decision 2026-09-23); a new
- * package holds it from its first commit. The root project's table is the root `scripts/*.mjs` plus
- * the vocabulary module, and two of those scripts are the classifiers that decide what CI and the
- * pre-push hook run, whose failure mode is a scoped run that selects nothing and reports success
- * (CLAUDE.md §2).
+ * Every package, and the root project, holds 98/98/98/95. A package's own config decides whether
+ * its tests run at all, so no per-package suite can check its bar.
  *
- * A package's own config decides whether its tests run at all, so no per-package suite can check
- * its bar; this guard pins it from the root project (CLAUDE.md §4), where a one-line diff lowering
- * one config fails.
- *
- * Members come from `pnpm ls` through `workspaceMembers` (scripts/workspace-members.mjs), the same
- * source the hook and CI scope from, minus `PACKAGES_WITHOUT_TESTS`. Like the other guards here it
- * reads the configs as TEXT and never imports them. What the text parse can and cannot see is pinned
- * by `describe("the detector itself")` below: a `//` comment line never matches; a block-comment
+ * Members come from `pnpm ls` through `workspaceMembers`, minus `PACKAGES_WITHOUT_TESTS`. It reads
+ * the configs as TEXT and never imports them. What the text parse can and cannot see is pinned by
+ * `describe("the detector itself")` below: a `//` comment line never matches; a block-comment
  * interior line would, and the exactly-one check then fails the config rather than reading the
  * comment's numbers; a spread, a computed value or an extra key such as `perFile` is left over and
  * fails the equality instead of being read around.
@@ -26,8 +18,7 @@ import { workspaceMembers } from "./workspace-members.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 
-// The per-test bound for the one `pnpm ls` spawn, larger than workspace-members.mjs's kill for a
-// slow-but-completing cold CI runner (scripts/ci-workflow.test.mjs records the pair).
+// Above workspace-members.mjs's spawn kill, for a slow-but-completing cold CI runner.
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
 const HIGH_BAR = { statements: 98, lines: 98, functions: 98, branches: 95 };
@@ -116,13 +107,9 @@ describe("every vitest config holds the high coverage bar", () => {
   it(
     "and every member measures its whole src tree, not only the files a test happened to load",
     () => {
-      // Vitest 4 counts a file only when a test loaded it, where Vitest 3's `all: true` counted
-      // every source file. An untested file is therefore invisible rather than a zero in the
-      // denominator: it cannot pull the percentage down, so the gate reads HIGHER for the same
-      // code, which is the wrong direction for a gate to move. Naming the tree in `coverage.include` puts the untested file back in the
-      // table. Deleting that line from a config is a one-word diff nothing else would catch, so
-      // this case pins it for every member. The root project is not here: its own coverage table
-      // is `scripts/`, not a `src` tree.
+      // Vitest 4 counts a file only when a test loaded it, so without `coverage.include` naming the
+      // tree an untested file is invisible and cannot pull the percentage down. The root project is
+      // not here: it has no `src` tree.
       const members = testedMembers();
       assertWorkspaceListed(members.map(({ name }) => name));
 

@@ -3,17 +3,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Contract: every package whose test source runs the `parkPointer` browser command MUST register
- * that command in its vitest config, or the `beforeEach(() => commands.parkPointer())` those tests
- * run throws `TypeError: commands.parkPointer is not a function` at runtime — a failure invisible
- * until that package's own browser job actually runs (it hid on a branch that added the hook to the
- * shared `packages/ui/src/a11y-helpers.ts` but only ran the ui/till/dashboard jobs).
+ * Every package whose test source runs the `parkPointer` browser command must register it in its
+ * vitest config, or `commands.parkPointer()` throws `TypeError` at runtime, seen only when that
+ * package's own browser job runs.
  *
- * This guard reads TEXT, not the module graph: it looks for an IMPORT of `a11y-helpers` or a literal
- * `commands.parkPointer` call in a package's source, and for the `...parkPointerCommands` spread —
- * the single registration path this repo uses (packages/ui/src/vitest-park-pointer.ts) — in its
- * vitest config. It checks the spread, not a bare `parkPointer` substring, so an import left unspread
- * cannot satisfy it. A rename of the command or the shared fragment, or a helper reached under a
+ * Reads TEXT, not the module graph: it looks for an IMPORT of `a11y-helpers` or a literal
+ * `commands.parkPointer` call in a package's source, and for the `...parkPointerCommands` spread in
+ * its vitest config. A rename of the command or the shared fragment, or a helper reached under a
  * different spelling, would slip past.
  */
 

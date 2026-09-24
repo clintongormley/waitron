@@ -10,60 +10,35 @@ import {
   SCOPE_GATES,
 } from "./changed-scope.mjs";
 
-// Two properties of .github/workflows/ci.yml that nothing else can check, both of them invisible
-// until the day they are wrong:
+// Two properties of .github/workflows/ci.yml that nothing else can check:
 //
-//   * every job reports to `ci`. `ci` is the ONLY context branch protection requires (that file's
-//     own header has the ruleset read-back), so a job missing from its `needs` can fail while the
-//     pull request stays green.
-//   * the test shards PARTITION the workspace. Each shard is a `pnpm --filter` selection, and the
-//     three are written in three different places — a package can fall through all of them and
-//     never be tested, or land in two and be tested twice. Neither shows up as a failure anywhere.
+//   * every job reports to `ci`. `ci` is the ONLY context branch protection requires, so a job
+//     missing from its `needs` can fail while the pull request stays green.
+//   * the test shards PARTITION the workspace. A package can fall through every shard's
+//     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
-// The second is what this file was written for. Splitting `packages/ui` out of `test-light` into a
-// `test-ui` shard meant adding `--filter "!@waitron/ui"` in one place and a whole job in another,
-// and getting only the first of those would have silently stopped testing packages/ui altogether.
+// EVERYTHING HERE IS EXTRACTED FROM ci.yml, never transcribed: a transcription tests this file's
+// copy of a workflow rather than the workflow. Each extraction carries a guard that it found
+// something, because a silently-empty extraction makes every assertion below pass against nothing.
+// Nor are the SELECTIONS modelled: each shard's filters are handed to the real `pnpm ls` and the
+// answer is read back.
 //
-// EVERYTHING HERE IS EXTRACTED FROM ci.yml, never transcribed — the same rule
-// check-signoff.test.mjs follows for licence.yml's `dco` step, and for the same reason: a
-// transcription tests this file's copy of a workflow rather than the workflow. Each extraction
-// carries a guard that it found something, because a silently-empty extraction makes every
-// assertion below pass against nothing.
-//
-// And the SELECTIONS are not modelled either. Rather than reimplementing what `pnpm --filter`
-// means, each shard's filters are handed to the real `pnpm ls` in the real workspace and the answer
-// is read back — the same mechanism each shard's own `runnable` guard uses.
-//
-// WHY LINE MATCHING RATHER THAN A YAML PARSER: there is no YAML library in this workspace, and the
-// root project is the one place a dependency would have to be added for a test (`node -e 'import
-// ("yaml")'` here on 2026-08-01 gives ERR_MODULE_NOT_FOUND). So the parsing below is checked
-// AGAINST one instead of trusted: on 2026-08-01 the three extractions were run side by side with
-// PyYAML's `safe_load` over the same file, and the job list, `ci`'s `needs` and the `changes` job's
-// `outputs` came out element-for-element identical. Redo that comparison rather than reasoning
-// about the regexes if this file ever starts disagreeing with the workflow. The `concurrency`
-// extraction added on 2026-09-16 was checked the same way: `yaml.safe_load`'s `concurrency`
-// mapping and this file's two values came out equal, group and cancel-in-progress alike.
+// Line matching rather than a YAML parser, because there is no YAML library in this workspace.
+// Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
+// file ever starts disagreeing with the workflow.
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
-// The two `describe("the test shards")` cases below hand ci.yml's real filters to the real `pnpm ls`
-// (see `selects`/`membersDeclaringTests`, both via `pnpmLs`) rather than modelling `--filter` — the
-// whole point of this file. The coverage-partition case alone is ~9 sequential `pnpm ls` spawns (one
-// per shard, plus the members sweep), all with distinct filters so none can be deduped. That measured
-// ~1.5s warm here on 2026-08-22, but the same case timed out past Vitest's 5000ms default on the lint
-// job on PRs #128 and #129 — a cold CI runner has no warm pnpm store — so on that runner it took at
-// least ~3.3x the warm time.
-//
-// TWO failure modes, TWO timeouts, because one cannot cover the other:
-//   * SLOW-BUT-COMPLETING cold run — the flake above. `pnpmLs` runs SYNCHRONOUSLY (`spawnSync`), so
-//     between calls the worker's event loop turns and Vitest's per-test timer can fire; with the
-//     default 5000ms it fires mid-run and fails a healthy test. `PNPM_LS_TEST_TIMEOUT_MS` raises that
-//     per-test bound above the whole case's cold wall-clock so a healthy run finishes first.
-//   * GENUINE HANG in one `pnpm ls` — a `spawnSync` BLOCKS the event loop for its whole duration, so
-//     the Vitest timer above CANNOT fire while a child is stuck (this is what an earlier version of
-//     this comment got wrong). Only the kernel-level `timeout` option on `spawnSync` itself kills a
-//     hung child; `PNPM_LS_SPAWN_TIMEOUT_MS` is that per-call kill, and `pnpmLs` turns the killed
+// The shard cases below make many sequential `pnpm ls` spawns, which on a cold CI runner (no warm
+// pnpm store) outlast Vitest's 5000ms default. TWO failure modes, TWO timeouts, because one cannot
+// cover the other:
+//   * SLOW-BUT-COMPLETING cold run. `spawnSync` blocks the event loop, so Vitest's timer does not
+//     fire mid-case; the case runs to the end and is then failed for its duration alone.
+//     `PNPM_LS_TEST_TIMEOUT_MS` raises that per-test bound above the whole case's cold wall-clock.
+//   * GENUINE HANG in one `pnpm ls` — the Vitest timer CANNOT interrupt a stuck child (an earlier
+//     version of this comment said it could). Only the `timeout` option on `spawnSync` itself kills
+//     a hung child; `PNPM_LS_SPAWN_TIMEOUT_MS` is that per-call kill, and `pnpmLs` turns the killed
 //     result into a thrown error. It is smaller than the per-test bound so the clear per-call throw
 //     wins over a bare Vitest timeout.
 const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
@@ -74,8 +49,7 @@ const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
  *
  * A job id is the only KEY at two-space indent below `jobs:`: job bodies start at four, and
  * comments and `run: |` blocks go deeper still. Scanning from `jobs:` rather than from the top of
- * the file is what keeps `on:`'s own `push:` and `pull_request:` out — they sit at that same indent
- * (ci.yml lines 29 and 31 on 2026-08-01).
+ * the file is what keeps `on:`'s own `push:` and `pull_request:` out — they sit at that same indent.
  */
 const jobs = (() => {
   const jobsKey = lines.indexOf("jobs:");
@@ -161,10 +135,7 @@ function gatesRead(body) {
  * The lines of a job's `Run the … shard` step, or undefined when it has none.
  *
  * Anchored on the step NAME rather than on the job's last `run:`, so the checkout, the install and
- * (in test-ui) the three Playwright steps cannot be mistaken for the one that runs the tests. Same
- * anchoring rule as check-signoff.test.mjs's extraction of licence.yml's `dco` step, and for the
- * same reason — that one notes it must not take the first `run: |` in the file because it belongs
- * to a different job.
+ * the Playwright steps cannot be mistaken for the one that runs the tests.
  */
 function shardStep(body) {
   const at = body.findIndex((line) => /^ {6}- name: Run the .* shard\s*$/.test(line));
@@ -177,17 +148,13 @@ function shardStep(body) {
 /**
  * The literal `--filter "<value>"` arguments in a step, deduped, in file order.
  *
- * Two kinds of line are dropped first, and both would otherwise make this measure the wrong thing:
+ * Two kinds of line are dropped first:
  *
- *   COMMENTS. ci.yml's prose quotes filter spellings that were tried and REJECTED — on 2026-08-01
- *   `grep -n -- '--filter' .github/workflows/ci.yml` returns 20 lines, of which 10 are comment
- *   text, including `--filter "...@waitron/db"` and `--filter "...[<base>]"` inside test-light's
- *   own commentary. Reading those as arguments would have this suite assert against a filter list
- *   nothing runs.
+ *   COMMENTS. ci.yml's prose quotes filter spellings that were tried and REJECTED; reading those as
+ *   arguments would assert against a filter list nothing runs.
  *
  *   ANYTHING HOLDING A `$`. The scoped path builds `--filter "...$pkg"` in a shell loop, one per
- *   changed package. On a GLOBAL scope — `main`, an unattributable path, a diff that could not be
- *   worked out — that loop runs zero times and contributes nothing, and a global scope is the case
+ *   changed package. On a GLOBAL scope that loop runs zero times, and a global scope is the case
  *   this suite is about: it is the run that has to cover every package.
  */
 function literalFilters(step) {
@@ -207,24 +174,12 @@ const shards = jobs
   .filter(({ step }) => step !== undefined)
   .map(({ id, step }) => ({ id, filters: literalFilters(step) }));
 
-// ---- Sharded jobs (test-heavy / test-server) ----
+// ---- Sharded jobs ----
 //
-// A single package too big for one runner is split across parallel runners by sharding its test
-// FILES with vitest's `--shard=i/N` (a matrix job), each shard emitting a PARTIAL-coverage `blob`; a
-// paired merge job then merges the blobs and enforces the coverage thresholds on the TOTAL. None of
-// that is visible to the partition checks above — a sharded job still selects its one package, once —
-// so the helpers and cases below cover the properties that keep the split from breaking SILENTLY:
-//
-//   * the matrix's shard list is exactly 1..N and the `--shard=i/N` denominator equals N, or a bucket
-//     of files runs twice or never — a coverage HOLE the merge then gates on without noticing;
-//   * the numerator is the matrix variable, not a constant, or every leg runs the same shard;
-//   * each sharded package has exactly one merge job, for the SAME package, that `needs` the shard job
-//     and gates on the SAME output — otherwise the gate runs on missing blobs, skips while the shards
-//     ran, or is absent;
-//   * the upload artifact name and the download pattern share a prefix, or the merge downloads nothing.
-//
-// Extraction, never transcription, exactly as the rest of this file: everything is read back out of
-// ci.yml so a real edit there is what these assert against.
+// A package too big for one runner shards its test FILES with vitest's `--shard=i/N` (a matrix
+// job), each shard emitting a PARTIAL-coverage `blob`; a paired merge job merges the blobs and
+// enforces the coverage thresholds on the TOTAL. None of that is visible to the partition checks
+// above — a sharded job still selects its one package, once.
 
 /** A job's `needs:` in EITHER inline (`needs: [a, b]`) or block (`needs:\n  - a`) form. */
 function allNeedsOf(body) {
@@ -284,8 +239,6 @@ function artifactDownloadBase(body) {
   return line === undefined ? undefined : /pattern: (\S+?)-\*/.exec(line)?.[1];
 }
 
-// Jobs that shard a package (`test:shard`) and jobs that merge the shards' coverage (`test:merge`),
-// each carrying the package it acts on so the cases below read `job.pkg` rather than re-scanning.
 const shardedJobs = jobs
   .map(({ id, body }) => ({ id, body, pkg: packageRunning(body, "test:shard") }))
   .filter(({ pkg }) => pkg !== undefined);
@@ -293,11 +246,7 @@ const mergeJobs = jobs
   .map(({ id, body }) => ({ id, body, pkg: packageRunning(body, "test:merge") }))
   .filter(({ pkg }) => pkg !== undefined);
 
-/**
- * Assert a job's `if:` gates read exactly `code` plus one SCOPE_GATES-defined gate — the invariant a
- * shard gated on `code` alone (running on every code change) breaks. Shared by the shard and merge
- * gate cases so the meaning of "properly gated" lives in one place.
- */
+/** A job's `if:` gates read exactly `code` plus one SCOPE_GATES-defined gate. */
 function expectGatedOnCodePlusOneScope(read) {
   const names = SCOPE_GATES.map((gate) => gate.output);
   expect(read).toContain("code");
@@ -320,12 +269,8 @@ function scriptsByPackage() {
 }
 
 /**
- * The default runner behind `pnpmLs`: `pnpm <args>` under the per-call kill timeout.
- *
- * The `timeout` is the ONLY thing that bounds a hung child — `spawnSync` blocks the event loop, so
- * Vitest's per-test timer cannot interrupt it (see the two-timeout note above). Node kills the child
- * on timeout and sets `result.error`. `spawn` is injected only so a test can assert this function
- * actually passes the `timeout` — otherwise deleting it here would leave the suite green (§4).
+ * The default runner behind `pnpmLs`: `pnpm <args>` under the per-call kill timeout (see the
+ * two-timeout note above). `spawn` is injected only so a test can assert the `timeout` is passed.
  */
 function spawnPnpm(args, spawn = spawnSync) {
   return spawn("pnpm", args, {
@@ -336,12 +281,8 @@ function spawnPnpm(args, spawn = spawnSync) {
 }
 
 /**
- * Run `pnpm <args>` via `run` and return its parsed-JSON stdout, or throw a clear Error.
- *
- * `run` is injected so the timeout/error path has an executable assertion without a real hang (see
- * the `pnpmLs` suite): a killed or un-spawnable child sets `result.error`; a non-zero exit sets
- * `result.status`. Both become a thrown Error naming the command, so a hang or failure fails the
- * test loudly rather than surfacing as `expected null to be 0` — or, for a hang, never at all.
+ * Run `pnpm <args>` via `run` and return its parsed-JSON stdout, or throw an Error naming the
+ * command, so a killed child fails loudly rather than as `expected null to be 0`.
  */
 function pnpmLs(args, run = spawnPnpm) {
   const result = run(args);
@@ -363,12 +304,7 @@ function pnpmLs(args, run = spawnPnpm) {
  * (scripts/changed-packages.mjs) drops it, because a member's name is a manifest field anyone can
  * change while its path is a fact about the tree.
  *
- * Dropping it is not cosmetic: `pnpm ls` LISTS the root and `pnpm run` does NOT RUN it. Measured
- * here on 2026-08-05, using the one script only the root declares —
- * `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" --filter "!@waitron/till" prepare` printed
- * `Scope: 18 of 22 workspace projects` and then `None of the selected packages has a "prepare"
- * script`, exit 0, while the same filters through `pnpm ls --depth -1 --json` returned 19 entries,
- * the extra one being the root.
+ * Dropping it is not cosmetic: `pnpm ls` LISTS the root and `pnpm run` does NOT RUN it.
  */
 function selects(filters) {
   return pnpmLs([
@@ -395,9 +331,7 @@ function membersDeclaringTests() {
     .map((pkg) => pkg.name);
 }
 
-/** Every workspace member that declares the Vitest browser provider. Vitest 4 moved the provider
- *  out of `@vitest/browser` into its own package (`@vitest/browser-playwright`, first published in
- *  the 4.0.0 betas), so the Playwright one is what a browser package declares now. */
+/** Every workspace member that declares the Vitest browser provider. */
 function browserPackages() {
   return pnpmLs(["ls", "-r", "--depth", "-1", "--json"])
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
@@ -408,10 +342,6 @@ function browserPackages() {
     .map((pkg) => pkg.name);
 }
 
-// `pnpmLs`'s timeout/error path is the regression fix for the hang above, so it carries its own
-// assertions — otherwise deleting the `timeout` or a throw leaves the suite green (CLAUDE.md §4,
-// "prove a guard by deletion"). A fake `run` exercises each branch deterministically; one real case
-// proves spawnSync's `timeout` genuinely kills a hung child.
 describe("pnpmLs (the subprocess guard)", () => {
   it("returns parsed stdout on a clean exit", () => {
     const ok = () => ({
@@ -440,9 +370,6 @@ describe("pnpmLs (the subprocess guard)", () => {
   });
 
   it("the default runner passes the per-call kill timeout to spawnSync", () => {
-    // Proves spawnPnpm ITSELF wires `timeout` — the two tests below use their own runners, so without
-    // this, deleting `timeout: PNPM_LS_SPAWN_TIMEOUT_MS` in spawnPnpm would leave every test green
-    // while the real `pnpm ls` calls run unbounded again (the gap Copilot flagged).
     let opts;
     const spy = (_cmd, _args, options) => {
       opts = options;
@@ -453,9 +380,6 @@ describe("pnpmLs (the subprocess guard)", () => {
   });
 
   it("really kills a hung child via spawnSync's own timeout", () => {
-    // The other half: proves the `timeout` option is not a no-op — a child that would sleep a minute,
-    // killed by a 500ms timeout (small so the test is fast; the spy above proves the real 30s value is
-    // the one spawnPnpm passes). status null, error set → pnpmLs throws.
     const hang = () =>
       spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
     expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
@@ -468,10 +392,9 @@ describe("the workflow's concurrency group", () => {
     expect(concurrency.cancelInProgress).not.toBe("");
   });
 
-  // The property: no push may cost another push its run. GitHub allows only one PENDING run per
-  // group and a newer arrival cancels the one already waiting, which `cancel-in-progress` does not
-  // reach — it governs a run that has already started. So a push is given a group of its own.
-  // Receipt, including what it cost: `docs/developers/ci-and-gates.md`.
+  // GitHub allows only one PENDING run per group and a newer arrival cancels the one already
+  // waiting, which `cancel-in-progress` does not reach. Receipt: `docs/developers/ci-and-gates.md`.
+  // These cases pin how the expression is written, not what GitHub evaluates it to.
   //
   // The operand ORDER is pinned, not just the names: `push && github.ref || github.run_id` reads
   // plausibly, mentions both, and puts every push back into one group per branch.
@@ -481,35 +404,28 @@ describe("the workflow's concurrency group", () => {
     );
   });
 
-  // The other half, kept: a pull request's runs DO share a group, so a force-push supersedes the
-  // run it made stale. Anchored at both ends, so an appended `|| true` — which would cancel pushes
-  // again — fails here.
+  // Anchored at both ends, so an appended `|| true` — which would cancel pushes again — fails here.
   it("still lets a pull request's newer run supersede its own older one", () => {
     expect(concurrency.cancelInProgress).toMatch(
       /^\$\{\{\s*github\.event_name\s*!=\s*'push'\s*\}\}$/,
     );
   });
 
-  // What the separation costs, and the answer to it. Two pushes to `main` now build at the same
-  // time, and a registry tag is last-write-wins, so the publish job asks whether a newer commit
-  // already holds `:main` before moving it. That script's own behaviour is
-  // `scripts/main-tag-guard.test.mjs`; what this case pins is that the job still ASKS.
+  // The script's own behaviour is `scripts/main-tag-guard.test.mjs`; this pins that the job ASKS.
   it("has the publish job ask before it moves the `:main` tag, and obey the answer", () => {
     const body = job("publish").body;
     const text = body.join("\n");
     expect(text).toMatch(/decision=\$\(scripts\/main-tag-guard\.sh[^)]*\)/);
 
     // Asking is not obeying: a `tags=` line that added `:main` unconditionally would leave the call
-    // above in place and still publish the backwards tag. So every line that puts `:main` into a tag
-    // list must sit under the `move` arm — which here means after it and before the arm ends.
+    // above in place and still publish the backwards tag.
     const moveArm = body.findIndex((line) => /^\s*move\)\s*$/.test(line));
     const armEnd = body.findIndex((line, index) => index > moveArm && /^\s*;;\s*$/.test(line));
     expect(moveArm).toBeGreaterThan(-1);
     expect(armEnd).toBeGreaterThan(moveArm);
 
-    // Any assignment to a tag list that carries `:main` — however it is spelled — must sit under
-    // the `move` arm. Matching the VARIABLE and the tag, rather than one exact line, is what makes
-    // this catch a `:main` appended somewhere else in the step.
+    // Matching the VARIABLE and the tag, rather than one exact line, catches a `:main` appended
+    // somewhere else in the step.
     const setsMainTag = (line) => /[a-z_]*tags="[^"]*repo:main"/.test(line);
     const setters = body
       .map((line, index) => ({ line, index }))
@@ -521,51 +437,32 @@ describe("the workflow's concurrency group", () => {
 
 describe("ci.yml's job graph", () => {
   it("was parsed at all", () => {
-    // The guard the whole file leans on. A regex that stopped matching would leave `jobs` empty and
-    // every assertion below vacuously true.
     expect(jobs.length).toBeGreaterThan(1);
     expect(jobs.map((entry) => entry.id)).toContain("ci");
   });
 
-  // The one rule ci.yml's header states about itself: "every other job in this file must appear in
-  // `ci`'s needs. A job that does not is reporting to nothing — it could fail while the pull
-  // request stays green." Asserted here rather than trusted, because the failure is silent in the
-  // direction that matters.
-  //
-  // `publish` is the ONE deliberate exception: it runs AFTER `ci` (it `needs: ci`), so it is a
-  // post-gate leaf that reports no required status and cannot be in `ci`'s needs without a cycle.
-  // The next case pins its safety positively rather than leaving it a silent hole.
+  // `publish` is the ONE deliberate exception: it runs AFTER `ci` (it `needs: ci`), so it cannot be
+  // in `ci`'s needs without a cycle. The next case pins its safety instead.
   it("names every other job in `ci`'s needs, except the post-`ci` publish leaf", () => {
     const others = jobs.map((entry) => entry.id).filter((id) => id !== "ci" && id !== "publish");
     expect(others.length).toBeGreaterThan(0);
     expect([...needsOf(job("ci").body)].sort()).toEqual([...others].sort());
   });
 
-  // The exception's safety, pinned. `publish` must exist, `needs` `ci` (so it fires only after the
-  // whole aggregate), and gate its `if:` on `needs.ci.result` — so an edit that let it publish
-  // without `ci` green fails here rather than shipping `:main` off a red suite (CLAUDE.md §2). This
-  // is what earns `publish`'s absence from `ci`'s needs above.
   it("gates the publish job downstream of the full `ci` aggregate", () => {
     const body = job("publish").body;
     expect(allNeedsOf(body)).toContain("ci");
     const ifLine = body.find((line) => /^ {4}if:/.test(line)) ?? "";
-    // Not merely that it MENTIONS `needs.ci.result` — that a mutation to `== 'failure'` (or dropping
-    // the comparison) would leave pass. Require the success comparison itself, so the guard fails on
-    // anything that would let `:main` ship off a red suite (CLAUDE.md §2).
+    // The success comparison itself, not a mention: `== 'failure'` also mentions `needs.ci.result`.
     expect(ifLine).toMatch(/needs\.ci\.result\s*==\s*'success'/);
   });
 
-  // The print-agent image ships from the SAME publish job, so it inherits the ci-green gate above
-  // rather than opening a second, ungated publish path.
   it("publishes the print-agent image from the gated publish job", () => {
     const body = job("publish").body.join("\n");
     expect(body).toContain("target: print-agent");
     expect(body).toContain("tags: ${{ steps.tags.outputs.agent_tags }}");
   });
 
-  // The other direction. A `needs` entry naming a job that does not exist is not a silent failure —
-  // GitHub rejects the workflow — but it is a five-minute round trip through a push, and the same
-  // extraction answers it for free.
   it("needs nothing that is not a job in this file", () => {
     const ids = jobs.map((entry) => entry.id);
     const needs = needsOf(job("ci").body);
@@ -638,18 +535,10 @@ describe("the test shards", () => {
   });
 
   it("were found, each with at least one filter", () => {
-    // Extraction guard again: `shards` is derived from a step-name regex, and an empty list would
-    // make the partition below hold trivially.
     expect(shards.length).toBeGreaterThan(1);
     for (const shard of shards) expect(shard.filters.length).toBeGreaterThan(0);
   });
 
-  // THE PROPERTY THIS FILE EXISTS FOR. On a global scope — `main`, and any pull request whose diff
-  // touches something outside every package — the shards between them must run every package's
-  // suite, and none of them twice.
-  //
-  // Selections come from the real `pnpm ls` with ci.yml's real filters, so this measures what the
-  // shards would actually select rather than what a model of `--filter` says they would.
   it(
     "cover every package declaring test:coverage exactly once, on a global scope",
     () => {
@@ -663,16 +552,11 @@ describe("the test shards", () => {
         }
       }
 
-      // Nothing runs twice — two shards selecting one package burns a runner and doubles a suite.
       expect([...runs].filter(([, shardIds]) => shardIds.length > 1)).toEqual([]);
 
-      // Nothing falls through. This is the direction that ships an untested package.
       expect(declaring.filter((name) => !runs.has(name))).toEqual([]);
 
-      // And the only selected members that declare no `test:coverage` are the ones declared test-less
-      // on purpose. Without this a package could be "covered" by a shard that then runs nothing for
-      // it — which is exactly what PACKAGES_WITHOUT_TESTS and the `runnable` guard exist to separate
-      // from a mistake.
+      // Without this a package could be "covered" by a shard that then runs nothing for it.
       expect([...runs.keys()].filter((name) => !declaring.includes(name)).sort()).toEqual(
         [...PACKAGES_WITHOUT_TESTS].sort(),
       );
@@ -680,11 +564,9 @@ describe("the test shards", () => {
     PNPM_LS_TEST_TIMEOUT_MS,
   );
 
-  // The two light shards partition the non-own-shard packages: each subtracts its bin's COMPLEMENT
-  // — every package in OWN_SHARD_PACKAGES plus every package in the OTHER bin — so what it selects is
-  // its own bin. Written as literal `!` filters in ci.yml and as the bin lists in changed-scope.mjs,
-  // and nothing but this makes them agree. The drift is invisible: a package in neither exclusion
-  // set runs in BOTH shards, and one in both exclusion sets stops being tested.
+  // Written as literal `!` filters in ci.yml and as the bin lists in changed-scope.mjs, and nothing
+  // but this makes them agree: a package in neither exclusion set runs in BOTH shards, and one in
+  // both exclusion sets stops being tested.
   it("subtract from each light shard exactly the own-shard packages and the other bin", () => {
     const excludedBy = (id) => {
       const shard = shards.find((candidate) => candidate.id === id);
@@ -717,39 +599,29 @@ describe("the test shards", () => {
 });
 
 describe("the scope gates", () => {
-  // SCOPE_GATES is the single source of truth for gate names, including the `--unscoped` path that
-  // `main` takes. A gate the `changes` job never declares as an output is a gate every consumer
-  // reads as the empty string — which is not `'true'`, so the job it gates never runs. On `main`
-  // that is a package silently never tested, and nothing else reports it.
+  // A gate the `changes` job never declares as an output is read as the empty string — not
+  // `'true'` — so the job it gates silently never runs.
   it("are each declared as a `changes` job output", () => {
     const declared = outputsOf(job("changes").body);
     expect(declared).toContain("code");
     for (const gate of SCOPE_GATES) expect(declared).toContain(gate.output);
   });
 
-  // The other direction: a gate that gates nothing. Harmless at runtime, but it means a shard was
-  // planned and not wired, which is the state this change would have been left in had `test-ui`
-  // been forgotten after `ui` was added to SCOPE_GATES.
+  // A gate that gates nothing means a shard was planned and not wired.
   it("are each read by some job's `if:`", () => {
     const read = new Set(jobs.flatMap((entry) => gatesRead(entry.body)));
     for (const gate of SCOPE_GATES) expect([...read]).toContain(gate.output);
   });
 
-  // Every shard is gated, and gated on a name SCOPE_GATES defines. A shard gated on `code` alone
-  // runs on every code change — which is what both mutation jobs did until they were measured as
-  // the critical path (ci.yml's own comments on them carry that receipt).
+  // A shard gated on `code` alone runs on every code change.
   it("gate every shard on `code` plus one gate of its own", () => {
     for (const shard of shards) expectGatedOnCodePlusOneScope(gatesRead(job(shard.id).body));
   });
 });
 
 describe("the image smoke's scoping", () => {
-  // The `image` job's build + smoke is the only proof a non-root process binds 443 under host
-  // networking — worth running when the box image's inputs change, wasteful on the many PRs that
-  // cannot touch them. It reads a `deploy` output (fed by `isImageInputPath` in
-  // scripts/changed-packages.mjs) so a pull request runs it only when `deploy/` changed. These pin
-  // the wiring, and — the half that matters — that a push to `main` still smokes on `code` alone,
-  // because `publish` ships the image off this smoke passing.
+  // A pull request runs the image smoke only when `deploy/` changed; a push to `main` still smokes
+  // on `code` alone, because `publish` ships the image off this smoke passing.
   it("declares a `deploy` output on the `changes` job", () => {
     expect(outputsOf(job("changes").body)).toContain("deploy");
   });
@@ -760,23 +632,15 @@ describe("the image smoke's scoping", () => {
     expect(gates).toContain("deploy");
   });
 
-  // The fail-safe half, pinned positively. The `deploy` narrowing must apply to pull requests ONLY:
-  // a push to `main` (or a `v*` tag) still runs the smoke on `code`, gating `publish` behind it. A
-  // mutation dropping this event guard — scoping main pushes to `deploy` too — would publish images
-  // no smoke ever booted; this fails on it. (Written as one `if:` line so the line-based `gatesRead`
-  // above reads it, exactly as the `publish` gate is.)
   it("scopes the `deploy` narrowing to pull requests, so every main push is still smoked", () => {
     const ifLine = job("image").body.find((line) => /^ {4}if:/.test(line)) ?? "";
     expect(ifLine).toMatch(/github\.event_name != 'pull_request'/);
   });
 
-  // Pin the gating BEHAVIOUR, not just the field names above. The run-it reviewer showed that
-  // flipping the inner `||` to `&&` — which breaks BOTH required paths (a deploy PR and a code push
-  // both stop running) — survived every other assertion here, because they check that `code` and
-  // `deploy` and the event guard are PRESENT, not how they combine. So evaluate the real extracted
-  // `if:` as a truth table. GitHub's `==`/`!=`/`&&`/`||` match JS once `==`→`===` and `!=`→`!==`
-  // (in that order: `!=`→`!==` first would then be hit by `==`→`===` and become `!===`), and the
-  // three operands are plain string comparisons, so the whole expression evaluates to a boolean.
+  // The cases above check that `code`, `deploy` and the event guard are PRESENT, not how they
+  // combine, so the real extracted `if:` is also evaluated as a truth table. GitHub's
+  // `==`/`!=`/`&&`/`||` match JS once `==`→`===` and `!=`→`!==` (in that order: `!=`→`!==` first
+  // would then be hit by `==`→`===` and become `!===`).
   const imageIf = () => {
     const line = job("image").body.find((entry) => /^ {4}if:/.test(entry)) ?? "";
     return line.replace(/^ {4}if:\s*/, "").trim();
@@ -789,7 +653,7 @@ describe("the image smoke's scoping", () => {
       .replace(/==/g, "===")
       .replace(/!=/g, "!==");
     // `new Function` evaluates our OWN workflow's boolean, extracted from the repo file — not
-    // untrusted input. It is how the truth table pins behaviour rather than the expression's text.
+    // untrusted input.
     return Boolean(new Function(`return (${js});`)());
   };
 
@@ -830,9 +694,7 @@ describe("the image smoke's scoping", () => {
     expect(runsWhen(imageIf(), ctx)).toBe(run);
   });
 
-  // The negative control: prove this suite is actually sensitive to the mutation the run-it seat
-  // flagged. Flipping the inner `||` to `&&` must change at least one row — otherwise the truth
-  // table above measures nothing (CLAUDE.md §1).
+  // The negative control: otherwise the truth table above could measure nothing.
   it("would catch the inner || being flipped to &&", () => {
     const real = imageIf();
     const mutated = real.replace("||", "&&");
@@ -844,18 +706,13 @@ describe("the image smoke's scoping", () => {
 
 describe("the sharded jobs", () => {
   it("were found, and each has a matching merge job", () => {
-    // Extraction guard: an empty `shardedJobs` would make every case below vacuous. There are two
-    // sharded packages today (packages/db → test-heavy, apps/server → test-server), each with one
-    // merge job, so the two lists are non-empty and equal in length.
     expect(shardedJobs.length).toBeGreaterThan(0);
     expect(mergeJobs.length).toBe(shardedJobs.length);
   });
 
-  // THE property a sharded coverage gate turns on. If the matrix legs and the `--shard=i/N`
-  // denominator disagree, a bucket of files runs twice or never — and because the merge job gates on
-  // whatever the blobs happen to contain, a missing bucket is a coverage HOLE that still reports
-  // green. `matrixShards` must be exactly the strings "1".."N" (so no leg is skipped or doubled) and
-  // `shardDenominator` — which only matches when the numerator is `${{ matrix.shard }}` — must equal N.
+  // If the matrix legs and the `--shard=i/N` denominator disagree, a bucket of files runs twice or
+  // never — and because the merge job gates on whatever the blobs contain, a missing bucket is a
+  // coverage HOLE that still reports green.
   it("run a matrix of exactly 1..N shards whose N equals the --shard denominator", () => {
     for (const { id, body } of shardedJobs) {
       const matrix = matrixShards(body);
@@ -866,14 +723,10 @@ describe("the sharded jobs", () => {
     }
   });
 
-  // How the per-shard flags reach vitest, and the trap that cost run 33906337559 (all six shards). The
-  // shard step must append `--shard=${{ matrix.shard }}/N` and `--outputFile=…` to the `test:shard`
-  // invocation with NO `--` separator: `pnpm --filter X test:shard -- <args>` forwards the `--`
-  // LITERALLY into the vitest command, and vitest (cac) treats every option after a bare `--` as
-  // positional — so both flags were silently dropped, each shard ran the full suite and wrote the
-  // default `blob.json`, and only `if-no-files-found: error` on the upload caught it. The regex fails
-  // on `test:shard --` followed by a space/backslash/end (a bare separator) but not on `--shard`/
-  // `--outputFile` (letters follow the `--`).
+  // `pnpm --filter X test:shard -- <args>` forwards the `--` LITERALLY into the vitest command, and
+  // vitest (cac) treats every option after a bare `--` as positional, so both flags are silently
+  // dropped. The regex fails on `test:shard --` followed by a space/backslash/end (a bare separator)
+  // but not on `--shard`/`--outputFile` (letters follow the `--`).
   it("forward --shard and --outputFile to test:shard without a bare `--` separator", () => {
     for (const shard of shardedJobs) {
       const step = shardStep(shard.body);
@@ -888,10 +741,7 @@ describe("the sharded jobs", () => {
     }
   });
 
-  // Each sharded package's coverage gate: exactly one merge job, for the SAME package, that `needs`
-  // the shard job (so it waits for the blobs and skips if a shard failed) and reads the SAME gate (so
-  // it runs and skips in lockstep with its shards). Any of these wrong runs the gate on missing or
-  // stale blobs, or skips it while the shards ran.
+  // Any of these wrong runs the gate on missing or stale blobs, or skips it while the shards ran.
   it("each pair to one merge job for the same package that needs it and shares its gate", () => {
     for (const shard of shardedJobs) {
       const shardGate = gatesRead(shard.body).filter((name) => name !== "code");
@@ -902,9 +752,6 @@ describe("the sharded jobs", () => {
     }
   });
 
-  // The blob has to actually travel from the shards to the merge job. A typo in either the upload
-  // `name:` or the download `pattern:` leaves the merge job with no blobs — so their base names, read
-  // out of the two `actions/*-artifact` steps, must match per package.
   it("upload a blob artifact the merge job downloads by matching prefix", () => {
     for (const shard of shardedJobs) {
       const merge = mergeJobs.find((candidate) => candidate.pkg === shard.pkg);
@@ -916,33 +763,20 @@ describe("the sharded jobs", () => {
     }
   });
 
-  // Every merge job is gated, like every shard, on `code` plus exactly one scope gate — a merge job
-  // gated on `code` alone would run its (no-test, but real install + download) job on every code
-  // change, the same waste the mutation jobs were scoped to avoid.
   it("gate every merge job on `code` plus exactly one scope gate", () => {
     for (const merge of mergeJobs) expectGatedOnCodePlusOneScope(gatesRead(merge.body));
   });
 });
 
 describe("the sharded packages' scripts", () => {
-  // The sharding MECHANISM lives half in ci.yml (guarded above) and half in each sharded package's
-  // `test:shard` / `test:merge` scripts, which ci.yml only NAMES — so the guards above cannot see them.
-  // Some drift there fails LOUD: dropping `--reporter=blob` writes no blob, so `if-no-files-found: error`
-  // fails the upload; dropping a `--coverage.thresholds.<m>=0` makes the shard enforce a threshold on
-  // its 1/Nth of the files, so the shard fails red. But TWO drifts are SILENT, and these cases are the
-  // ONLY thing catching them — no runtime backstop does. Both were run on vitest 3.2.7 (2026-09-04)
-  // rather than reasoned about:
-  //   * a `test:shard` that lost `--coverage` writes a blob with NO coverage map; `--merge-reports
-  //     --coverage` over it reports `All files 0 0 0 0` and passes thresholds VACUOUSLY over the empty
-  //     map — exit 0, green (NOT the "0/0/0/0 fails" an earlier version of this comment claimed);
-  //   * a `test:merge` that lost `--coverage` merges the blobs, checks NO thresholds, and passes green.
-  // Either way the coverage gate is silently gone — exactly the class this repo guards. So the script
-  // shapes are pinned here.
+  // The sharding MECHANISM lives half in each sharded package's `test:shard` / `test:merge` scripts,
+  // which ci.yml only NAMES. Two drifts there are SILENT, and nothing but these cases catches them:
+  // a `test:shard` without `--coverage` writes a blob with no coverage map, which the merge passes
+  // vacuously; a `test:merge` without `--coverage` checks no thresholds and passes green.
   const scripts = scriptsByPackage();
   const shardedPackages = [...new Set(shardedJobs.map((shard) => shard.pkg))];
 
   it("were found", () => {
-    // Extraction guard: an empty list makes every case below vacuous.
     expect(shardedPackages.length).toBeGreaterThan(0);
   });
 
@@ -968,7 +802,6 @@ describe("the sharded packages' scripts", () => {
       const merge = scripts.get(pkg)?.["test:merge"];
       expect(merge, `${pkg} has no test:merge script`).toBeDefined();
       expect(merge).toContain("--merge-reports");
-      // The silent hole: `--merge-reports` WITHOUT `--coverage` checks no thresholds and passes green.
       expect(merge, `${pkg} test:merge must pass --coverage or the gate checks nothing`).toContain(
         "--coverage",
       );
@@ -976,26 +809,18 @@ describe("the sharded packages' scripts", () => {
   });
 
   it("share one test:shard and one test:merge across every sharded package", () => {
-    // They are hand-copied across packages; keeping them identical stops the mechanism drifting between
-    // db and server, or a third package added later.
+    // They are hand-copied across packages.
     expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:shard"])).size).toBe(1);
     expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:merge"])).size).toBe(1);
   });
 });
 
 /**
- * A workflow step must not capture the SERVER bundle's output in a `$(…)`.
+ * A workflow step must not capture the SERVER bundle's output in a `$(…)`: the bundle SERVES, so a
+ * capture never returns and the step runs until the job's own limit kills it.
  *
- * The bundle used to fail fast: with no database reachable it threw `server.config_missing` and
- * exited, so capturing it and grepping the output was a fair way to smoke-test it. It does not fail
- * any more — it opens a venue directory and SERVES — so a capture never returns. That is not a
- * failing step, it is a step that runs until the job's own limit kills it, and it happened: 15m14s
- * on this branch's first push, cancelled, with a `bash` and a `node-MainThread` named as orphans in
- * the job log's closing lines.
- *
- * TWO steps had this shape and only one was found by reading. This check is why the second one is
- * not the last. It reads the workflow as TEXT, so it sees a `node …server.js` written literally and
- * nothing reached through a variable or a script.
+ * It reads the workflow as TEXT, so it sees a `node …server.js` written literally and nothing
+ * reached through a variable or a script.
  *
  * The credentials CLI is deliberately outside it: `packages/credentials/dist/bin.js` refuses and
  * exits when `WAITRON_VENUE_DIR` is unset, so a capture of THAT one returns.

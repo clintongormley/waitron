@@ -2,9 +2,7 @@
  * `node scripts/litestream-notices.mjs <out> <go version -m output>...` — writes the licence and
  * notice texts of everything compiled into the pinned Litestream binary. Litestream is a statically
  * linked Go program, so it carries every Go module it was built from plus the Go standard library
- * and runtime; each module's notice files are copied from its zip on proxy.golang.org unchanged,
- * except that a text with no final newline is given one.
- * The inputs are `go version -m` run on the pinned linux binaries the box image installs
+ * and runtime. The inputs are `go version -m` run on the pinned linux binaries the box image installs
  * (`deploy/Dockerfile`, the `litestream` stage).
  */
 import { Buffer } from "node:buffer";
@@ -32,8 +30,6 @@ const TOOLCHAIN_SKIP = ["src/cmd/"];
  */
 
 /**
- * Reads `go version -m` output for one binary.
- *
  * @param {string} text
  * @returns {BuildInfo}
  */
@@ -67,11 +63,7 @@ export function parseBuildInfo(text) {
   return { go, main, goos, goarch, deps };
 }
 
-/**
- * The module proxy's case encoding: each capital becomes `!` and its lower case.
- *
- * @param {string} s
- */
+/** The module proxy's case encoding. @param {string} s */
 export function escapeModulePath(s) {
   return s.replace(/[A-Z]/g, (c) => `!${c.toLowerCase()}`);
 }
@@ -83,9 +75,6 @@ const MAX16 = 0xffff;
 const MAX32 = 0xffffffff;
 
 /**
- * Lists a zip archive's entries and reads their bytes. It handles stored and deflated entries in
- * an archive without zip64 extensions, and refuses anything else.
- *
  * @param {Buffer} buffer
  * @returns {{ names: string[], read(name: string): Buffer }}
  */
@@ -146,10 +135,6 @@ export function readZip(buffer) {
 }
 
 /**
- * The notice files under `root` in an archive's entry names, relative to `root` and sorted.
- * Test fixtures, hidden tooling directories such as `.github` and anything under a `skip` prefix
- * are left out.
- *
  * @param {string[]} names
  * @param {string} root ends with `/`
  * @param {{ skip?: string[] }} [options]
@@ -227,8 +212,6 @@ export function renderNotices({ litestream, go, platforms, modules }) {
 }
 
 /**
- * Runs `task` over `items`, at most `limit` at a time, keeping the results in order.
- *
  * @template T, R
  * @param {T[]} items
  * @param {number} limit
@@ -250,8 +233,6 @@ async function mapBounded(items, limit, task) {
 }
 
 /**
- * The notices file for the binaries whose `go version -m` output is `buildinfos`.
- *
  * @param {object} options
  * @param {string[]} options.buildinfos
  * @param {(url: string) => Promise<{ ok: boolean, status: number, statusText: string, arrayBuffer(): Promise<ArrayBuffer> }>} [options.fetch]

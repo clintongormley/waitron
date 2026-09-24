@@ -3,20 +3,11 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Splits the mutation targets across N CI shards so each fits GitHub's 6h job limit.
+ * Splits @waitron/db's mutation targets across N CI shards so each fits GitHub's 6h job limit.
  *
- * Stryker over @waitron/db was ~10h on one 2-vCPU runner because it mutates thousands of
- * database-backed mutants serially-ish; sharded across a matrix, each job mutates only its slice
- * and runs in parallel. `assignShards` decides the slices, `--mutate`d one list per shard. That
- * ~10h is a FLOOR rather than a current figure — it was Stryker's ETA at 749 mutants and the set
- * has grown since — which is why the counts live in dated receipts in
- * `.github/workflows/mutation.yml` rather than in this sentence.
- *
- * The unit of a slice is usually a whole file, but a single file can dominate a shard when its
- * mutants are covered by ~the whole suite (measured: src/schema/sales.ts alone ran 186min while
- * every other N=10 shard finished <=90min). Such a file is split into line-range slices — Stryker's
- * `file.ts:startLine-endLine` mutation-range syntax — by `splitRanges`, so its cost spreads across
- * shards too. HEAVY_FILES (in the CLI below) names them and into how many parts.
+ * The unit of a slice is usually a whole file, but a file whose mutants are covered by nearly the
+ * whole suite can dominate a shard alone, so HEAVY_FILES (in the CLI below) names such files and
+ * `splitRanges` cuts each into Stryker `file.ts:startLine-endLine` ranges.
  */
 
 /**
@@ -25,26 +16,14 @@ import { fileURLToPath } from "node:url";
  * measures only mutants a test written here could kill.
  *
  * `src/english-only.ts`: its suite is `scripts/english-only.test.ts` in the ROOT vitest project, and
- * nothing under `packages/db` imports it — `grep -rn english-only packages/db --include="*.ts"`
- * matches that file and comments alone — so `packages/db`'s vitest config never loads a test that
- * touches it and every one of its mutants survives by construction. All 119 did in weekly run
- * 34808295788. It is excluded from this package's coverage report for the same reason, stated in
- * `packages/db/vitest.config.ts`.
+ * nothing under `packages/db` imports it, so `packages/db`'s vitest config never loads a test that
+ * touches it and every one of its mutants survives by construction.
  *
  * @type {string[]}
  */
 export const NOT_MUTATED = ["src/english-only.ts"];
 
-/**
- * Splits `path` into `parts` contiguous Stryker mutation ranges (`path:startLine-endLine`) covering
- * lines 1..`lineCount`, as evenly as possible (the first `lineCount % parts` ranges get one extra
- * line). No gaps, no overlaps — every line lands in exactly one range.
- *
- * @param {string} path
- * @param {number} lineCount
- * @param {number} parts
- * @returns {string[]}
- */
+/** Contiguous ranges covering lines 1..`lineCount` with no gaps or overlaps. */
 export function splitRanges(path, lineCount, parts) {
   const base = Math.floor(lineCount / parts);
   const extra = lineCount % parts;
@@ -59,14 +38,8 @@ export function splitRanges(path, lineCount, parts) {
 }
 
 /**
- * Partitions `files` into `totalShards` groups, balanced by size so no shard gets all the heavy
- * files (file size is a proxy for mutant count). Greedy bin-packing: largest file first, each onto
- * the currently-lightest shard. Deterministic — files sort by size desc then path, and each shard's
- * paths are returned sorted — so a given (files, totalShards) always yields the same split.
- *
- * @param {{path: string, size: number}[]} files
- * @param {number} totalShards
- * @returns {string[][]} one path array per shard, length === totalShards
+ * Greedy bin-packing by file size, a proxy for mutant count. Deterministic, because every CI shard
+ * computes the whole split independently and takes only its own slice.
  */
 export function assignShards(files, totalShards) {
   const shards = Array.from({ length: totalShards }, () => ({ paths: [], weight: 0 }));
@@ -82,17 +55,14 @@ export function assignShards(files, totalShards) {
 }
 
 // CLI: `node scripts/mutation-shard.mjs <shard> <totalShards>` prints the comma-separated
-// `--mutate` file list for that shard (1-based), as `src/`-relative paths a `stryker run` launched
-// from `packages/db` consumes directly. Ignored for coverage because scripts/mutation-shard.test.mjs
-// exercises it in a CHILD process, which the v8 provider does not see; the unit suite covers
-// assignShards in-process.
+// `--mutate` list for that 1-based shard, as paths relative to `packages/db`. Ignored for coverage
+// because its suite runs it in a CHILD process, which the v8 provider does not see.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("mutation-shard.mjs")) {
   const shardIndex = Number(process.argv[2]);
   const totalShards = Number(process.argv[3]);
 
-  // Fail loudly rather than crash with a TypeError or, worse, print an empty list that would make
-  // the workflow run `stryker run --mutate ""` — a confusing no-op. Raised by Copilot on PR #115.
+  // An empty list would make the workflow run `stryker run --mutate ""`, a confusing no-op.
   const die = (message) => {
     console.error(`mutation-shard: ${message}`);
     process.exit(1);
@@ -102,10 +72,9 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-shard.mjs")) {
   if (!Number.isInteger(shardIndex) || shardIndex < 1 || shardIndex > totalShards)
     die(`shard must be an integer in 1..${totalShards}, got "${process.argv[2]}"`);
 
-  // A file whose mutants are covered by ~the whole suite dominates its shard even alone: measured on
-  // run 32384997149, src/schema/sales.ts ran 186min while every other N=10 shard finished <=90min
-  // (it is the most-covered fiscal table). Split it into line-range slices so its cost spreads. The
-  // guard below fails loudly if a named file no longer exists — a rename must not silently un-split.
+  // `src/schema/sales.ts` alone ran 186min while every other N=10 shard finished <=90min
+  // (run 32384997149).
+  // A rename must not silently un-split a file, hence the check after the walk.
   const HEAVY_FILES = { "src/schema/sales.ts": 3 };
   const seenHeavy = new Set();
 
@@ -122,10 +91,8 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-shard.mjs")) {
         if (parts) {
           seenHeavy.add(path);
           const lineCount = readFileSync(full, "utf8").split("\n").length;
-          // Weight each range by the WHOLE file's size, not its share: heavy enough that the packer
-          // places the (equal-weight) ranges early, while shards are still near-empty, so each lands
-          // in a distinct shard. A per-share weight is too light — the ranges get placed late and a
-          // single light shard can absorb two of them (observed).
+          // Weight each range by the WHOLE file's size, not its share, so the packer places the
+          // ranges early, while shards are still near-empty, and each lands in a distinct shard.
           for (const range of splitRanges(path, lineCount, parts))
             files.push({ path: range, size: statSync(full).size });
         } else {
