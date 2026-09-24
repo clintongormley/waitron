@@ -30,8 +30,7 @@ export function wholeWithin(text: string, minimum: number): number | null {
 /** A whole number from 1 to the largest quantity a modifier may store, written in plain digits. */
 export const isModifierQuantity = (text: string) => wholeWithin(text, 1) !== null;
 
-/** The price field's label, naming the product's pricing unit when there is one. The variants table
- * puts the same text in its price column header, so the two never disagree about the unit. */
+/** The price field's label, naming the product's pricing unit when there is one. */
 export const priceLabel = (unitLabel: string) =>
   unitLabel.trim() ? t("editor.price_unit").replace("{unit}", unitLabel) : t("editor.price");
 

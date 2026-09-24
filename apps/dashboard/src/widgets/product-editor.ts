@@ -228,10 +228,13 @@ export class ProductEditor extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
-      /* At phone width the group's own inset is room the variants table needs for its row menu. */
+      /* At phone width the box's sides and inset are room the variants table needs, so the group
+         keeps only its top and bottom rules. */
       @media (max-width: 30rem) {
         .bordered-group {
-          padding-inline: var(--wt-space-2);
+          padding-inline: 0;
+          border-inline: 0;
+          border-radius: 0;
         }
       }
       .bordered-group legend {

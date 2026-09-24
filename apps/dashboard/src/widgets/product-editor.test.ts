@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { commands } from "vitest/browser";
+import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -12,14 +12,8 @@ import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.j
 import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
-
-declare module "vitest/browser" {
-  interface BrowserCommands {
-    setViewportSize: (width: number, height: number) => Promise<void>;
-  }
-}
 
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
@@ -1962,40 +1956,62 @@ it("paints a variant's description hint from the muted-text token", async () => 
   expect(getComputedStyle(description, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
-it("keeps every variant row's menu on screen at phone width, with no sideways scroll", async () => {
-  const width = window.innerWidth,
-    height = window.innerHeight;
-  try {
-    await commands.setViewportSize(390, 844);
-    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-      open: true,
-      value: {
-        ...product,
-        variants: [
-          { ...small, name: "Vino 125 ml", unitPrice: null },
-          { ...large, name: "Vino 175 ml" },
-          { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "12.00" },
-        ],
-      },
-      locales: ["en"],
-      units: [unit],
-      taxChoices: reduced,
-    });
-    const table = variantTable(el)!;
-    await table.updateComplete;
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    const wrap = table.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
-    // A table that fits never needs its own scroller; the row menu is then inside the visible box.
-    expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
-    const edge = wrap.getBoundingClientRect().right;
-    for (const index of [0, 1, 2]) {
-      const menu = table.shadowRoot!.querySelector(`[data-test="actions-${index}"]`)!;
-      expect(menu.getBoundingClientRect().right, `row ${index}`).toBeLessThanOrEqual(edge);
+// A wider font and a longer language are what CI's Linux fonts and a real phone bring, so each case
+// is also run with every text size raised to a larger token. English and Spanish label the columns
+// differently, and a product with no unit shows the longest unit name.
+it.each([
+  { locale: "en-GB", scaled: false, unitId: unit.id },
+  { locale: "es-ES", scaled: false, unitId: unit.id },
+  { locale: "es-ES", scaled: false, unitId: null },
+  { locale: "en-GB", scaled: true, unitId: null },
+  { locale: "es-ES", scaled: true, unitId: unit.id },
+  { locale: "es-ES", scaled: true, unitId: null },
+])(
+  "keeps every variant row's menu on screen at phone width, with no sideways scroll ($locale, larger text: $scaled, unit: $unitId)",
+  async ({ locale, scaled, unitId }) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      setLocale(locale);
+      // `page.viewport` resizes the frame the widget renders in; resizing the outer page does not.
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      const { el, host } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: {
+          ...product,
+          unitId,
+          variants: [
+            { ...small, name: "Vino tinto de la casa, copa grande 125 ml", unitPrice: null },
+            { ...large, name: "Vino 175 ml" },
+            { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "12.00" },
+          ],
+        },
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+      });
+      if (scaled) {
+        host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
+        host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+      }
+      const table = variantTable(el)!;
+      await table.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const wrap = table.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
+      // A table that fits never needs its own scroller; the row menu is then inside the visible box.
+      expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+      const edge = wrap.getBoundingClientRect().right;
+      for (const index of [0, 1, 2]) {
+        const menu = table.shadowRoot!.querySelector(`[data-test="actions-${index}"]`)!;
+        expect(menu.getBoundingClientRect().right, `row ${index}`).toBeLessThanOrEqual(edge);
+      }
+    } finally {
+      setLocale("es-ES");
+      await page.viewport(width, height);
     }
-  } finally {
-    await commands.setViewportSize(width, height);
-  }
-});
+  },
+);
 
 it("holds Open, saying why, while the product has changes not yet saved, and frees it once they match", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {

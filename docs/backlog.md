@@ -714,9 +714,13 @@ What Task 7 (`feat/variants-editor-screen`, the dashboard's variant page) leaves
 - **Each variants-table row's Available switch is named only "Available"** to a screen reader, not
   with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). `main` at `5add727d7`
   already labelled it the same way. **Next action:** name the switch after its variant.
-- **Not yet looked at on a phone (390px wide):** the variants table's price heading may show only
-  its unit select's arrow, and a variant's name may sit a few pixels low in its product-list row.
-  **Next action:** open both at that width, in both themes, and look.
+- **Not yet looked at on a phone (390px wide):** a variant's name may sit a few pixels low in its
+  product-list row. **Next action:** open it at that width, in both themes, and look. The variants
+  table was looked at there on 2026-09-24: its price heading reads the price word above a select
+  showing only the unit, and in Spanish a product with no unit shows that select cut to "Unid",
+  because the column is bounded so the row fits. **Next action:** decide whether the unit select
+  belongs in the price heading at phone width at all, since the base price field above the table
+  already shows and changes the same unit.
 - **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
   (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one

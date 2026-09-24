@@ -3,7 +3,6 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
 import { reorder } from "./reorder.js";
-import { priceLabel } from "./form-fields.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -92,7 +91,10 @@ it("lists one row per variant with its staff name and price, and changes the uni
   await el.updateComplete;
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
   expect(select.value).toBe("kg");
-  expect(select.selectedOptions[0]!.textContent!.trim()).toBe(priceLabel("kg"));
+  // The heading names the price once, and the select shows only the unit, so a narrow column
+  // still has room to read it.
+  expect(select.selectedOptions[0]!.textContent!.trim()).toBe("kg");
+  expect(select.closest("th")!.textContent).toContain(t("product.price"));
   const changed = listen(el, "wt-unit-change");
   select.value = "l";
   select.dispatchEvent(new Event("change", { bubbles: true }));

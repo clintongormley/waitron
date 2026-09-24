@@ -7,7 +7,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
-import { priceLabel } from "./form-fields.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -42,9 +41,9 @@ export class VariantTable extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
       }
-      /* The table may be wider than the form around it; its own scroller keeps the page from
-         scrolling sideways at phone width. */
+      /* A last resort only: the phone-width rules below keep the table inside its box. */
       .wrap {
         overflow-x: auto;
       }
@@ -63,24 +62,57 @@ export class VariantTable extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
       th {
+        font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
       }
       /* The grip and the row menu are each a tap-target-wide button that already centres its icon,
-         so the outer cells need no padding of their own; at phone width that room is what keeps
-         the row menu on screen. */
+         so their cells need no inline padding. */
       th:first-child,
-      td:first-child {
-        padding-inline-start: 0;
-      }
+      td:first-child,
       th:last-child,
       td:last-child {
-        padding-inline-end: 0;
+        padding-inline: 0;
       }
-      /* The name is the widest cell; capping it keeps the switch and the row menu on screen at
-         phone width instead of pushing the row into a horizontal scroll. Guard: the phone-width
-         case in product-editor.test.ts. */
+      /* The name is the one column that may break inside a word, so it is what gives way when a
+         row is short of room. */
+      th:nth-child(2),
+      td:nth-child(2) {
+        overflow-wrap: anywhere;
+      }
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
+      }
+      .price-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+      /* As wide as the chosen unit's name, up to the width of its column. */
+      .price-heading select {
+        field-sizing: content;
+        width: auto;
+        min-width: var(--wt-tap-min);
+        max-width: 100%;
+        padding-inline: var(--wt-space-1);
+      }
+      /* At phone width the name takes whatever the other columns leave, and each of those is
+         bounded by a token rather than by its words, so a wider font or a longer language makes
+         the rows taller rather than wider. Guard: the phone-width cases in
+         product-editor.test.ts. */
+      @container (max-width: 30rem) {
+        th:nth-child(2) {
+          width: 100%;
+        }
+        th:nth-child(3),
+        td:nth-child(3) {
+          max-width: calc(var(--wt-tap-min) + var(--wt-space-4));
+          overflow-wrap: break-word;
+        }
+        th:nth-child(4) {
+          max-width: calc(var(--wt-tap-min) + var(--wt-space-5));
+          overflow-wrap: break-word;
+        }
       }
       /* A rejected row is marked in the row itself: a message in the summary alone does not say
          WHICH variant is wrong, and these rows have no field of their own to attach it to. */
@@ -371,35 +403,37 @@ export class VariantTable extends LitElement {
               </th>
               <th scope="col">${t("editor.name")}</th>
               <th scope="col">
-                <select
-                  name="pricing-unit"
-                  aria-label=${t("product.unit")}
-                  .disabled=${this.busy}
-                  @change=${(event: Event) => {
-                    event.stopPropagation();
-                    const select = event.target as HTMLSelectElement;
-                    const value = select.value;
-                    if (value === "__add__") {
-                      select.value = this.unitId ?? "";
-                      this.#emit("wt-add-unit", {});
-                    } else this.#emit("wt-unit-change", { unitId: value || null });
-                  }}
+                <span class="price-heading"
+                  >${t("product.price")}<select
+                    name="pricing-unit"
+                    aria-label=${t("product.unit")}
+                    .disabled=${this.busy}
+                    @change=${(event: Event) => {
+                      event.stopPropagation();
+                      const select = event.target as HTMLSelectElement;
+                      const value = select.value;
+                      if (value === "__add__") {
+                        select.value = this.unitId ?? "";
+                        this.#emit("wt-add-unit", {});
+                      } else this.#emit("wt-unit-change", { unitId: value || null });
+                    }}
+                  >
+                    ${this.unitOptions.map(
+                      (option) =>
+                        html`<option
+                          value=${option.value ?? ""}
+                          .selected=${option.value === this.unitId}
+                        >
+                          ${option.label}
+                        </option>`,
+                    )}
+                    ${
+                      this.addUnitLabel
+                        ? html`<option value="__add__">${this.addUnitLabel}</option>`
+                        : nothing
+                    }
+                  </select></span
                 >
-                  ${this.unitOptions.map(
-                    (option) =>
-                      html`<option
-                        value=${option.value ?? ""}
-                        .selected=${option.value === this.unitId}
-                      >
-                        ${priceLabel(option.label)}
-                      </option>`,
-                  )}
-                  ${
-                    this.addUnitLabel
-                      ? html`<option value="__add__">${this.addUnitLabel}</option>`
-                      : nothing
-                  }
-                </select>
               </th>
               <th scope="col">${t("editor.available")}</th>
               <th scope="col">
