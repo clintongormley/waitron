@@ -2302,7 +2302,7 @@ image constraints under *Detail → Box image*.
   and option list forms, the API client's routes and refusals, and the staff, profile, roster,
   schedule and purchases screens; no source file changed; none added to the files lane B's variants
   work is changing; 99.2/99.58/99.42/97.73 statements/lines/functions/branches, 97.71 branches on a
-  second run); `venue-service` (**PR #TBD**, 2026-09-24 — tests for the opening-hours,
+  second run); `venue-service` (**PR #546**, 2026-09-24 — tests for the opening-hours,
   zone-menu display-order and product-route bodies the management routes refuse, a device's own
   default zone winning over the counter default, moving an order to another zone's department and
   service mode with its line snapshots kept, an empty round, one menu-item read per round,
