@@ -2974,13 +2974,17 @@ image constraints under *Detail → Box image*.
     there). `claimGap` uses an untargeted `.onConflictDoNothing()` on a table with two unique
     constraints (the `id` primary key and `scheduled_runs_key`); CLAUDE.md §3 asks for a named
     target there, though `id` is freshly generated (read, not run).
-  - Found by #579 (`packages/shared`). A money amount can pass the twelve-integer-digit bound on its
-    way into cents: `assertMoney` checks the integer digits before rounding, so `decimalToCents`
-    turns `999999999999.999` into 100000000000000 cents, and `centsToDecimal` turns that back into
-    `1000000000000.00` without refusing it (measured 2026-09-24 with a throwaway vitest case in
-    `packages/shared`; control: `999999999999.99` round-trips unchanged).
-    `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) still
-    gives 99999999999999 cents as the bound, and has only the PostgreSQL raw-read table, not the
+  - Found by #579 (`packages/shared`). **DONE 2026-09-24 (`fix/conversion-edges`)** for the way
+    in — see the P6 entry's DONE items: `decimalToCents` now rounds to cents first and then refuses
+    an amount that, once rounded to cents, has more than twelve integer digits, so 99999999999999 cents, the bound
+    `docs/developers/conventions-data.md` gives, is now the bound enforced. The receipt: `assertMoney`
+    checked the integer digits before rounding, so `decimalToCents` turned `999999999999.999` into
+    100000000000000 cents, and `centsToDecimal` turned that back into `1000000000000.00` without
+    refusing it (measured 2026-09-24 with a throwaway vitest case in `packages/shared`; control:
+    `999999999999.99` round-trips unchanged). Still open: `centsToDecimal` itself has no digit
+    bound, so a count past 99999999999999 cents that reaches it by another route is still turned
+    into an amount without refusal. `docs/developers/conventions-data.md` (the "no column width left
+    to measure" paragraph) has only the PostgreSQL raw-read table, not the
     SQLite one #579's commit message now carries. `packages/core/src/errors.ts` points at
     `errors.reachability.test.ts` files in `packages/core` and `packages/db` that no longer exist
     (the check is `scripts/errors-reachable.test.ts`). Comments saying drizzle wraps a failed query
@@ -4999,18 +5003,18 @@ What the preparation tasks left, with F1's own answers where it found them:
     migration would say `?`. Only `sql.raw(String(n))` renders the number, and a constant that
     works only through `sql.raw` is a trap for the next tidy-up, so the literals stay.
     **DONE 2026-09-24 (`fix/conversion-edges`, owner decision):** `rawThousandthsToDecimal` now
-    reads a total past nine integer digits and, like `rawCentsToDecimal`, refuses only a count past
-    what a number holds exactly, with `shared.invalid_thousandths`; one quantity is still bounded at
-    nine. Found 2026-09-23 in #529's review: the quantity raw reader refused any value past nine
-    integer digits, although `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of
+    reads a total past nine integer digits: its only width limit is what a JavaScript number holds
+    exactly, refused with `shared.invalid_thousandths` (like `rawCentsToDecimal`); one quantity is
+    still bounded at nine. Found 2026-09-23 in #529's review: the quantity raw reader refused any
+    value past nine integer digits, although `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of
     quantities. That is the
     opposite choice to money's raw reader, which deliberately admits a total wider than any one
     amount.
     **DONE 2026-09-24 (`fix/conversion-edges`)** — the same edge as the #531 entry above, fixed
     there. The receipt (same review): `decimalToCents` checked the money bound BEFORE rounding to
     cents, so `decimalToCents("999999999999.995")` returned `100000000000000`, an amount with thirteen integer
-    digits that `assertMoney` refuses (measured 2026-09-23 on this branch). `main` checks in the same
-    order (`toScale(assertMoney(value), MONEY_SCALE)`), so this predated the branch.
+    digits that `assertMoney` refuses (measured 2026-09-23 on #529's branch). `main` then checked in
+    the same order (`toScale(assertMoney(value), MONEY_SCALE)`), so it predated #529.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
     **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
     contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,

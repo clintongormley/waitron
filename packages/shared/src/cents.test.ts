@@ -145,8 +145,8 @@ describe("rawCentsToDecimal", () => {
   });
 
   it("reads a total wider than any one amount may be", () => {
-    // Raw money reads are often totals — `cast(sum(...) as text)` — and amounts that each pass
-    // `assertMoney` can sum past its twelve integer digits. So this reader's bound is what a
+    // Raw money reads are often totals — `cast(sum(...) as text)` — and amounts that each fit
+    // the money bound can sum past its twelve integer digits. So this reader's bound is what a
     // number counts exactly, not the money bound.
     expect(rawCentsToDecimal("123456789012345")).toBe("1234567890123.45");
   });

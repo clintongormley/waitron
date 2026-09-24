@@ -368,7 +368,8 @@ catalogue, payments, reporting and `apps/server`, reaches the same storage with 
 change and a live risk of rounding drift in the arithmetic the hash chain depends on.
 
 The converters live alone in `packages/shared/src/cents.ts` (which also uses
-`packages/shared/src/scales.ts`'s literal renderer and raw pattern) rather than beside the arithmetic.
+`packages/shared/src/scales.ts`'s `scaledCount` for the rounding and the bound, its literal renderer
+and its raw pattern) rather than beside the arithmetic.
 `money.ts` is read as TEXT by `packages/shared/src/conventions.test.ts` and fails on any
 float-shaped operation in it, including the number constructor; keeping that check that strict is
 worth more than one module. `cents.ts` has its own version of the check, which allows the number
@@ -515,9 +516,10 @@ whenever a money column is added:
   refusal survives — an out-of-range filed amount is summed now rather than rejected.
   `packages/fiscal-verifactu/src/monetary-columns.test.ts` states the twelve-TOTAL-digits against
   twelve-INTEGER-digits split in its own comment but does not hold it down: it neither imports
-  `assertMoney` nor reads `MAX_MONEY_INTEGER_DIGITS`, and what it would catch is those two fiscal
-  columns ceasing to be `text`. The bound itself is pinned in `packages/shared/src/money.test.ts`
-  (`assertMoney`) and `packages/shared/src/cents.test.ts` (`decimalToCents`, after rounding).
+  `decimalToCents` nor reads `MAX_MONEY_INTEGER_DIGITS`, and what it would catch is those two fiscal
+  columns ceasing to be `text`. The bound on the write path is pinned in
+  `packages/shared/src/cents.test.ts` (`decimalToCents`, after rounding); `money.test.ts` pins
+  `assertMoney`, which no product code calls.
 
 **Every document written before 2026-09-20 that states a money column as `numeric(12, 2)`
 describes the old storage.** There are dozens, nearly all dated plans and specs recording what was
@@ -604,9 +606,10 @@ nine integer digits with a `22003` and `numeric(5, 2)` refused a rate past three
 takes both silently. `MAX_QUANTITY_INTEGER_DIGITS` and `MAX_RATE_INTEGER_DIGITS` are where those
 refusals live now. The raw RATE reader carries the same bound; the raw QUANTITY reader,
 `rawThousandthsToDecimal`, does not (owner decision 2026-09-24). Its caller, `top-sellers.ts`, reads
-sums, which can be wider than any one quantity, so like `rawCentsToDecimal` it refuses only a count
-past what a JavaScript number holds exactly, with `shared.invalid_thousandths`. `top-sellers.ts`'s old
-`sum(sl.quantity)::numeric(12, 3)::text` cast refused such a sum; nothing does now.
+sums, which can be wider than any one quantity, so its only width limit is what a JavaScript number
+holds exactly, refused with `shared.invalid_thousandths` (like `rawCentsToDecimal`).
+`top-sellers.ts`'s old `sum(sl.quantity)::numeric(12, 3)::text` cast refused such a sum; nothing
+does now.
 
 **A rate's CHECK constraint does not follow the column.** Four of them compared a rate against 100.
 `ALTER COLUMN ... SET DATA TYPE` keeps a check and CASTS it, so left alone every one of them would
