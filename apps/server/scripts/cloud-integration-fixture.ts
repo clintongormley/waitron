@@ -5,6 +5,9 @@ import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
+import { ensureBoxSecrets } from "../src/box-secrets.js";
+import { parseEnvFile } from "../src/env-file.js";
+import { writeTradingEnv } from "../src/trading-config.js";
 import { openVenueDatabase } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, hashPassword } from "@waitron/identity";
@@ -86,6 +89,28 @@ if (savedEnv !== undefined) {
   const address = reserve.address();
   if (!address || typeof address === "string") throw new Error("No port");
   await new Promise<void>((r) => reserve.close(() => r()));
+  let boxSecrets: Record<string, string> = {
+    WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  };
+  if (process.env.CLOUD_TEST_BACKUP_STATE === "1") {
+    await ensureBoxSecrets({
+      stateDir: root,
+      hostnames: ["localhost"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    boxSecrets = parseEnvFile(await readFile(join(root, "secrets.env"), "utf8"));
+    await writeTradingEnv(root, {
+      tillId: result.tillId,
+      nodeId: result.nodeId,
+      seriesId: result.seriesIds[0]!,
+      locationId: result.locationId,
+      environment: "preproduction",
+      developmentMode: true,
+      onboardingIntent: "demo",
+    });
+  }
   env = {
     WAITRON_ENV: "dev",
     WAITRON_ONBOARDING_INTENT: "demo",
@@ -96,9 +121,9 @@ if (savedEnv !== undefined) {
     WAITRON_HTTP_PORT: String(address.port),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MANAGEMENT_RP_ID: "127.0.0.1",
-    WAITRON_MANAGEMENT_ORIGIN: `http://127.0.0.1:${address.port}`,
-    WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    WAITRON_MANAGEMENT_ORIGIN: `${process.env.CLOUD_TEST_BACKUP_STATE === "1" ? "https" : "http"}://127.0.0.1:${address.port}`,
+    WAITRON_CREDENTIALS_KEY: boxSecrets.WAITRON_CREDENTIALS_KEY,
+    WAITRON_CREDENTIALS_KEY_VERSION: boxSecrets.WAITRON_CREDENTIALS_KEY_VERSION,
     WAITRON_TILL_LOCATION_ID: result.locationId,
     WAITRON_TILL_NODE_ID: result.nodeId,
     WAITRON_TILL_TILL_ID: result.tillId,
