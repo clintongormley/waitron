@@ -5,9 +5,7 @@ export {
   openVenueDatabase,
   readVenueHolder,
   readVenueHolderAsync,
-  setVenueCrashReportDirectory,
   setVenueHolderKind,
-  setVenueWatchdogLogFile,
   VENUE_HOLDER_KINDS,
 } from "./client.js";
 export {

@@ -64,7 +64,7 @@ export interface OperatorText {
   title: string;
   /** What they should do about it. */
   action: string;
-  /** The same two, in Spanish. Only `HOLDER_STALLED`'s text has them; the older rows are English-only. */
+  /** The same two, in Spanish. Only `HOLDER_STALLED`'s text has them. */
   es?: { title: string; action: string };
 }
 

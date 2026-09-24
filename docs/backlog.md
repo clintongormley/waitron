@@ -4879,8 +4879,8 @@ decided the first two on 2026-09-24, and A18d (branch `feat/venue-lock-liveness`
 page. Every holder now keeps `venue.holder.json` beside `venue.lock` with a heartbeat. A refused
 start counts, as `provisioning.database_holder_stalled`, when that heartbeat is 30 s old or more
 or the file is missing, and the recovery page names the holder's kind. A holder whose main thread has not run
-for 120 s is killed by its own watchdog thread, which first records the main thread's stack when it can read it (it cannot while that thread
-is inside one long synchronous database statement) ([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
+for 120 s is killed by its own watchdog thread, which first records the main thread's stack when it can read it (in a test it could not, while that thread
+was inside one long synchronous database statement) ([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
 (2) `recovery.json` had no lock of its own, so a refused start could put back a count the running
 server had cleared, or erase a failure another start recorded. Every change to it now holds
 `recovery.lock`, and a clear count in the file stops a refused start's undo taking off a failure
@@ -5555,7 +5555,8 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
     - `lockedAt`, `lastTickAt`, `killedAt`;
     - `version`: the build's own version, which on a box is `WAITRON_BUILD_ID`.
 
-    The server, restore, rejoin and the provisioning command write them. The development scripts set
+    The server, restore and rejoin write them, and the provisioning command does when
+    `WAITRON_LOG_DIR` or `WAITRON_STATE_DIR` is set. The development scripts set
     no folder, so they write none. Nothing reads or deletes them yet.
 
 ### KDS operations — low priority (A9)

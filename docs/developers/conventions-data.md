@@ -1281,7 +1281,7 @@ opens the store, so it could not see this.
 itself), `pid`, `host`, `lockedAt` and `heartbeatAt`. A main-thread timer rewrites the heartbeat
 every 5 s, and the last release removes the file before it lets the lock go. A program names itself
 with `setVenueHolderIdentity` (`packages/db/src/venue-holder-identity.ts`), which also gives its
-watchdog the report folder, the log file and the version. Four do: the server (`apps/server/src/bin.ts`
+watchdog the report folder, the log file and the version. These do: the server (`apps/server/src/bin.ts`
 and `node-entry.ts`), restore and rejoin (`bin-restore.ts`, `bin-rejoin.ts`, through
 `apps/server/src/holder-identity.ts`), and the provisioning command (`packages/provisioning/src/bin.ts`).
 The development and demo scripts under `apps/server/scripts` name nothing and report `script`, and
@@ -1320,7 +1320,7 @@ process:
 - Control: a main thread awaiting a 4 s timer was not killed.
 
 The report file holds exactly `code`, `stack`, `kind`, `pid`, `host`, `lockedAt`, `lastTickAt`,
-`killedAt` and `version`: no environment, no command line, no venue data. The four programs that
+`killedAt` and `version`: no environment, no command line, no venue data. The programs that
 name themselves put these files in `<logDir>/crash-reports`, where `<logDir>` is `WAITRON_LOG_DIR`,
 else `logs` under the state directory, an empty value counting as unset (`resolveLogDir`); on a box
 that is the `logs` volume. The provisioning command has no state-directory default, so with neither
@@ -1333,10 +1333,10 @@ retry) is one read and one write while holding `recovery.lock` in the state fold
 (`apps/server/src/recovery-lock.ts`). It is the same `begin immediate` technique, but it polls
 instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
 connection in one process with `busy_timeout = 1500` blocked for 4093 ms with a 50 ms timer firing 0
-times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`. Three
-of its races run real child processes twice: with the lock, where no write is lost, and with the
+times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`. Each
+of its races but the undo-after-clear one runs real child processes twice: with the lock, where no write is lost, and with the
 lock held around the write alone, where the test requires that a write IS lost — another start's
-counted failure in the two counting races, the running server's clear in the clear-versus-undo race.
+counted failure in the counting races, the running server's clear in the clear-versus-undo race.
 That second run is what shows each schedule races at all. The lock around the write stays in it because two writers
 without one clash on `recovery.json.tmp` and crash, which is not the failure being tested.
 
@@ -1345,7 +1345,7 @@ The lock orders the writes; it does not decide what a refused start's undo takes
 stayed-up clear and the recovery page's retry) moves it on by one. An undo whose own count was made
 before the latest clear takes nothing off, because the clear already removed it; without that, a
 start refused after a clear took off the failure a later start had counted
-(`apps/server/src/recovery-state.ts`, `withoutAttempt`). The fourth race in the same file runs that
+(`apps/server/src/recovery-state.ts`, `withoutAttempt`). The undo-after-clear race in the same file runs that
 schedule once, with the lock, in separate processes; against the code before `clears` existed it
 ended with a count of 0 where 1 is right.
 

@@ -16,9 +16,7 @@ export {
   isVenueHolderFresh,
   readVenueHolder,
   readVenueHolderAsync,
-  setVenueCrashReportDirectory,
   setVenueHolderKind,
-  setVenueWatchdogLogFile,
   VENUE_HOLDER_KINDS,
 } from "@waitron/store";
 
