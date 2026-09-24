@@ -232,11 +232,12 @@ hook, or how tests are scheduled:
   the actual changed packages; run any missing typechecks and verify the PR’s CI scope and results.
 - **The pre-push log file can be days stale.** Reproduce; do not read it.
 - **Every package whose vitest config enables browser mode runs in real headless Chromium.**
-  Concurrency is decided by
-  measured headroom, never by a count: check free memory and the heaviest processes first, then scale
-  `--workspace-concurrency` to what is free. What is NOT allowed is adding a browser run beside ANOTHER
-  SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
-  what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
+  Concurrency is decided by measured headroom, never by a count: check free memory
+  (`memory_pressure | grep free`) and the heaviest processes first, then scale
+  `--workspace-concurrency` to what is free. A browser run may start beside ANOTHER SESSION's
+  browser run when `memory_pressure` reports free memory well above 15% (owner decision
+  2026-09-24). What is NOT allowed is adding one beside a backgrounded whole-workspace
+  `pnpm -r test:coverage` — check what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
 - **No test applies a shipped migration to a database already at an earlier point**, so a green
   gate is no evidence that any set can upgrade a box. See
