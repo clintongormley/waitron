@@ -239,35 +239,39 @@ describe("curated operator text", () => {
     }
   });
 
-  // The CONVERSE of the test above. Its scope is the ENTRYPOINT's OWN vocabulary — the codes
-  // `classifyBootFailure` produces and the codes `runEntry` throws before `startServer` — and it is
-  // NOT every code that can reach the page: the entrypoint persists `classifyBootFailure(error)` for
-  // any error out of `startServer`, and that returns an `AppError`'s OWN code, so the whole of
-  // `boot.ts` lands here. `provisioning.second_venue` (thrown by `assertSingleOperationalVenue` during
-  // boot) and the `credentials.*` family (thrown by `loadKeyRing`) both do fall to the generic line —
-  // neither is a key of `OPERATOR_TEXT`, and `operatorText` (`recovery-surface.ts`) answers
-  // `GENERIC_TEXT` for any code that is not a key of it. The name says "the entrypoint" for that reason.
+  // The CONVERSE of the test above, over a hand-kept list: the codes `classifyBootFailure`
+  // produces, and codes `runEntry` persists — the `server.boot_incomplete` marker it writes before
+  // its steps, and codes those steps and `startServer` raise, `server.config_missing` (thrown by
+  // `loadConfig`) among them. It is NOT every code that can reach the page: the entrypoint persists
+  // `classifyBootFailure(error)` for any error out of `startServer`, and that returns an
+  // `AppError`'s OWN code, so the whole of `boot.ts` lands here. `provisioning.second_venue`
+  // (thrown by `assertSingleOperationalVenue` during boot) and the `credentials.*` family (thrown
+  // by `loadKeyRing`) both do fall to the generic line — neither is a key of `OPERATOR_TEXT`, and
+  // `operatorText` (`recovery-surface.ts`) answers `GENERIC_TEXT` for any code that is not a key of
+  // it.
   //
   // `deployment.environment_mismatch` is listed by hand as the one exception, because it is the
   // `boot.ts` code a generic line fails worst: a box running against the OTHER environment's
   // database is CLAUDE.md §5 territory (a pre-production sale burns a hole in the production
   // series), and "Waitron could not start." would leave its operator pressing Retry.
-  it("has an entry for every code the entrypoint itself classifies or throws", () => {
+  //
+  // Codes `runEntry` throws without persisting need no page text, among them
+  // `server.entry_arguments_refused` and `provisioning.database_in_use`.
+  it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
       "provisioning.schema_mismatch",
       "unknown",
     ];
-    const thrownByRunEntry = [
+    const persistedByRunEntry = [
       "server.config_missing",
       "provisioning.database_ahead",
-      "provisioning.database_in_use",
       "migrations.set_missing",
       "migrations.incomplete",
       "server.boot_incomplete",
     ];
     const fromBootByHand = ["deployment.environment_mismatch"];
-    const missing = [...classified, ...thrownByRunEntry, ...fromBootByHand].filter(
+    const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
     );
     expect(missing).toEqual([]);
