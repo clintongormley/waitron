@@ -771,7 +771,8 @@ report shut a dialog that has been reopened. No migration: **no venue reset need
   browser test frame at 320px, light theme (`packages/media/src/dashboard/image-library.ts`, the
   Upload photo dialog): each language's fieldset and its Name and Alt text fields run past the
   dialog's right edge, both with `wt-modal`'s old 24px side margins and padding and with the phone
-  spacing that replaced them; at 360px, dark theme, it fits. The cause was not investigated. **Next
+  spacing that replaced them. At 360px, dark theme, it fits with the phone spacing; with the old
+  spacing it ran past the dialog's right edge there too. The cause was not investigated. **Next
   action:** find what sets the form's minimum width, and add a 320px case to the library's tests.
 - **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
   browser command (`apps/dashboard/vitest.config.ts`, whose comment says it exercises the responsive

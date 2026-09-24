@@ -110,10 +110,8 @@ export class VariantTable extends LitElement {
          heading's unit select with it; the price field above the table has a unit button for the
          same unit. The name column takes what the grip, Available and row menu columns leave, and
          is never narrower than its widest price. An Available heading longer than its cap runs on
-         into the row menu's empty heading. Measured 2026-09-24 in the product editor at 390px with
-         a four-digit price, larger text and Verdana standing in for CI's Linux fonts: with a price
-         column the table needed 304px of a 292px box; this way it fits with about 12px to spare.
-         Guard: the phone-width cases in product-editor.test.ts, at 390px only. */
+         into the row menu's empty heading. Receipt: the --wt-cell-name-max-width entry in
+         docs/developers/design-system.md; guard: the phone-width cases in product-editor.test.ts. */
       @container (max-width: 30rem) {
         th:nth-child(2) {
           width: 100%;

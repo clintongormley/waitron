@@ -152,7 +152,10 @@ buttons" under "Page composition" below for the pattern this exists for.
 `--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
-through a token.
+through a token. It is written `min(90vw, var(--wt-modal-max-width))`, so overriding
+`--wt-modal-max-width` on the theme root also resizes every `wt-dialog` and `wt-help-tooltip`
+that does not set `--wt-dialog-max-width` itself (the till's device chooser does); overriding it on
+an element below the root does not, because the dialog token is resolved where it is declared.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -165,30 +168,32 @@ controls after it (a switch, a row menu) on screen at phone width instead of pus
 sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
 the product editor, on the earlier phone layout that still showed a price column, removing it
 changed no column at a 390px-wide frame, while in a 1280px frame it held the name column to 231px
-against 342px without it. It has not been re-measured since the price moved under the name. At phone width it relies instead on its
-own rule for a table 30rem wide or less: the price column goes, each price moves onto its own line
-under the variant's name, and the name column takes whatever width the grip, Available and row
-menu columns leave. The unit select in the price heading goes with its column; the price field
+against 342px without it. It has not been re-measured since the price moved under the name or
+since `wt-modal`'s phone spacing shrank. At phone width it relies instead on its own rule for a
+table 30rem wide or less: the price column goes, each price moves onto its own line under the
+variant's name, and the name column takes whatever width the grip, Available and row menu
+columns leave. The unit select in the price heading goes with its column; the price field
 above the table keeps a unit button that changes the same unit. The name is the one column that
 may break inside a word; an amount never breaks, so the name column is never narrower than the
 widest price. The Available heading is capped by `--wt-tap-min` plus a spacing token, and a longer
 heading runs on into the row menu's empty heading. Measured 2026-09-24 in the product editor at
-390px with a four-digit price, the text sizes raised a step and Verdana standing in for CI's Linux
-fonts: with the price column the table needed 304px of a 292px box; with the price under the name
-it fits with about 12px to spare (24px in this Mac's default fonts) and the name column is 120px
-wide. Narrower phones fit because `wt-modal` gives up most of its side margin and padding there
-(see the `wt-modal` entry below): measured 2026-09-24 with the modal's full 24px margin and padding,
-the table at the larger text size needed 268px (280px in Verdana) of a 262px box at 360px, and at
-320px every Spanish case and every larger-text case overflowed a 222px box; with them shrunk, every
-case below passes at 390, 360 and 320px.
-Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390, 360
-and 320px, in English and Spanish, with the text sizes raised, and each again in Verdana. They check that the
-table does not scroll, that each row menu ends inside both the table's box and the frame, that the
-price column is hidden and each price sits on one line inside the name's cell, that the Available
-heading sits on one line, that the heading's unit select is hidden, and that the price field's unit
-button is a tap target on both axes. There was a third, the old modifier form's choices table,
-until Task 13 of the extras-and-options plan deleted that form. That deleted table was the ONLY one
-that ever spelled the literal out for itself:
+390px, with `wt-modal`'s old 24px side margin and padding, with a four-digit price, the text sizes
+raised a step and Verdana standing in for CI's Linux fonts: with the price column the table needed
+304px of a 292px box; with the price under the name it fits with about 12px to spare (24px in this
+Mac's default fonts) and the name column is 120px wide. Narrower phones fit because `wt-modal` gives
+up most of its side margin and padding there (see the `wt-modal` entry below): measured 2026-09-24
+with the modal's full 24px margin and padding, the table at the larger text size needed 268px (280px
+in Verdana) of a 262px box at 360px, and at 320px every case but English at the normal size in the
+default fonts overflowed a 222px box; with them shrunk, every case below passes at 390, 360 and
+320px.
+Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390, 360 and
+320px, in English and Spanish, with the text sizes raised, and each again in Verdana. They check
+that the table does not scroll, that each row menu ends inside both the table's box and the frame,
+that the price column is hidden and each price sits on one line inside the name's cell, that the
+Available heading sits on one line, that the heading's unit select is hidden, and that the price
+field's unit button is a tap target on both axes. There was a third, the old modifier form's choices
+table, until Task 13 of the extras-and-options plan deleted that form. That deleted table was the
+ONLY one that ever spelled the literal out for itself:
 `git log -S140px --oneline --all -- apps packages` returns two commits, and
 between them the only files they write the number into are `modifier-form.ts` (added, then removed
 by the change that created this token) and `packages/ui-core/src/tokens/structure.css` (the token's own
@@ -340,17 +345,19 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`48rem`) bounded by
-the viewport minus its side margins, and it fills the viewport height with 24px top and bottom
-margins. Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
+Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`48rem`) bounded by the
+viewport minus its side margins, and it fills the viewport height with 24px top and bottom margins.
+Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
-width goes to the content; they are fluid `clamp()` values rather than a breakpoint because a media
-query cannot read a token. Unlike `wt-dialog`, it is not held to 90% of the viewport. The body scrolls independently, so your footer actions
-stay visible.
-It uses the raised surface and shadow tokens: white in the light theme, with the matching dark
-surface in the dark theme. Put `wt-form-actions` in its `footer` slot to keep Cancel on the left
-and Save on the right. The one standing exception is the setup wizard, which uses a non-dismissible
-`wt-modal` as its whole page and keeps Back and Next in the scrolling body (see the Decisions in
+width goes to the content. They are fluid `clamp()` values rather than a breakpoint because a media
+query cannot read a custom property, and the no-hardcoded-chrome guard
+(`packages/ui/src/no-hardcoded-chrome.test.ts`) refuses a literal `px` or `rem` breakpoint in a
+`packages/ui` primitive. Unlike `wt-dialog`, it is not held to 90% of the viewport. The body scrolls
+independently, so your footer actions stay visible. It uses the raised surface and shadow tokens:
+white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
+its `footer` slot to keep Cancel on the left and Save on the right. The one standing exception is
+the setup wizard, which uses a non-dismissible `wt-modal` as its whole page and keeps Back and Next
+in the scrolling body (see the Decisions in
 `docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md`):
 
 ```html
