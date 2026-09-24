@@ -255,8 +255,8 @@ export async function tryReadDevice(
   const deviceId = raw.slice(0, dot);
   const token = raw.slice(dot + 1);
   // Screen the selector's SHAPE before the DB: `devices.id` is plain `text`, so a non-UUID id would
-  // be looked up without complaint and simply match nothing (the `isUuid` reasoning in
-  // `till-session.ts`). This screen is what keeps a forged cookie a clean miss.
+  // be looked up without complaint and simply match nothing (the `shared.invalid_id` note in
+  // `till-api.ts`). This screen is what keeps a forged cookie a clean miss.
   if (!isUuid(deviceId)) return null;
 
   return withTransaction(deps.db, async (tx) => {

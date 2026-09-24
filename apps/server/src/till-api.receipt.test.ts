@@ -327,8 +327,7 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
   return res.headers.get("set-cookie")!;
 }
 
-/** `POST /api/sales` resolves its till from the enrolled device, and this device's till IS the venue
- *  till, so the filed record is unchanged. */
+/** `POST /api/sales` resolves its till from the enrolled device. */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   // A login plus a sale both enrol a till device in the SAME database, so the profile name AND the

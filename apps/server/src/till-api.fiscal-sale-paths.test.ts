@@ -978,9 +978,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   });
 
   it("a reader whose provider has NO sealed credential is reader.provider_disconnected (not a decline)", async () => {
-    // The provider is NOT connected (no `connectStripe`). Both adapters swallow a deferred
-    // credential-read failure into a DECLINE, so the pay path PRE-CHECKS the credential and answers the
-    // actionable `reader.provider_disconnected` (409) instead of a misleading 200 declined.
+    // The provider is NOT connected (no `connectStripe`).
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();

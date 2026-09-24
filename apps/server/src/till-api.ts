@@ -113,7 +113,7 @@ import {
   tryReadDevice,
 } from "./device-session.js";
 import { requireUuidParam } from "@waitron/server-kit";
-// Side-effect only: this file throws `working_order.*` codes, so it imports their registry.
+// Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
 export interface TillApiDeps {

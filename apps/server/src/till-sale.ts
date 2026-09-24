@@ -546,6 +546,7 @@ async function fileImmediateSale(
   });
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
+  // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
   if (isCard) {
     const { provider, paymentRef } = await recordManualCardPayment(tx, {
       workingOrderId,
@@ -847,7 +848,7 @@ async function finalizeCapture(
         qr: fiscal.verificationUrl ?? "",
       };
       // Card: a receipt and no drawer. A throw here would roll back a sale whose card P2 already
-      // charged. The replay below prints nothing, so each filed sale gets one receipt.
+      // charged.
       await enqueueSaleReceipt(tx, cfg, ticket);
       return ticket;
     });
@@ -886,7 +887,8 @@ async function finalizeRecovery(
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
-    // A concurrent recovery won: replay, filing and associating nothing.
+    // A concurrent winner filed the sale and settled the order before this transaction started:
+    // replay, filing and associating nothing.
     if (locked?.status === "settled") {
       return {
         outcome: "captured",
@@ -1100,7 +1102,8 @@ async function finalizeSettleRecovery(
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
-    // A concurrent recovery won: replay, settling and associating nothing.
+    // A concurrent winner settled the invoice and moved the order before this transaction started:
+    // replay, settling and associating nothing.
     if (locked?.status === "settled") {
       return {
         outcome: "captured",
