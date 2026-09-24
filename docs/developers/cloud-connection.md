@@ -197,10 +197,11 @@ Upload uses a conditional PUT. If a retry finds an existing object, publication 
 actual bytes; upload credentials do not need read permission. Publication starts pending
 verification. A trusted Cloud worker checks the restored archive separately.
 
-Retain the same UUID, archive bytes and metadata until publication succeeds. The transport
-methods do not schedule captures or persist that archive for you. Durable local spooling
-and automatic daily/monthly capture are the next integration task. These methods refuse
-production installations; the local proof has not established production storage behavior.
+Retain the same UUID, archive bytes and metadata until publication succeeds. The scheduled
+worker keeps one encrypted archive in a durable local spool and retries publication after a
+restart. It schedules daily captures using the venue clock, with the first capture of each
+month retained as monthly. The transport methods remain callable separately. Managed capture
+refuses production installations; the local proof has not established production storage behavior.
 
 Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
 installed checkout. It calls `apps/server/scripts/cloud-capture-client-fixture.ts` only on disposable
@@ -208,9 +209,8 @@ roots and exercises actual signatures, temporary storage access and Waitron rest
 The fixture is not an operator command for a real venue.
 
 
-The local uploader buffers at most 512 MiB and has a 30-second total request deadline.
-It makes one attempt per call. Before using scheduled uploads on real venue uplinks,
-add a deadline based on transfer size or idle time, bounded retry/backoff and streamed
-object I/O. Preserve the same archive across retries. A cancelled call currently returns
-`cloud.unavailable`, matching the connection client; the scheduler must check its abort
-signal and avoid recording an outage when it deliberately stops work.
+The byte-array uploader accepts at most 512 MiB and has a 30-second request deadline.
+Scheduled captures use `uploadCloudCaptureFile`, which streams the saved archive with a
+deadline capped at fourteen minutes and the temporary credentials’ expiry. Each upload call
+makes one attempt; the scheduler retries from the durable spool with backoff. It checks its
+abort signal so deliberate shutdown does not record a service outage.
