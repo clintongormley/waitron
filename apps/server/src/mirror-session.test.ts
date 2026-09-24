@@ -9,6 +9,7 @@ import { authorizeManager, resolveManagementSession, verifyPin } from "@waitron/
 import { isAppError } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, requireManagementSession } from "@waitron/server-kit";
 import {
+  endMirrorViewer,
   ensureMirrorViewer,
   MIRROR_VIEWER_PERSON_ID,
   MIRROR_VIEWER_SESSION_ID,
@@ -322,5 +323,35 @@ describe("mirror ambient viewer session", () => {
     expect(res.status).toBe(200);
     // Proven by deletion: dropping `or ended_at is not null` leaves ended_at set and this reddens.
     expect(await isEnded(db)).toBe(false);
+  });
+
+  it("endMirrorViewer ends the viewer's session, and a later ensureMirrorViewer revives it", async () => {
+    const kept = await ensureMirrorViewer(db);
+    await endMirrorViewer(db);
+    expect(await isEnded(db)).toBe(true);
+    await expect(
+      withTransaction(db, (tx) => resolveManagementSession(tx, kept)),
+    ).rejects.toMatchObject({ code: "management_session.required" });
+
+    const revived = await ensureMirrorViewer(db);
+    expect(await isEnded(db)).toBe(false);
+    await expect(
+      withTransaction(db, (tx) => resolveManagementSession(tx, revived)),
+    ).resolves.toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID });
+  });
+
+  it("endMirrorViewer leaves an already-ended session's ended_at as it was", async () => {
+    await ensureMirrorViewer(db);
+    await endMirrorViewer(db);
+    const readEndedAt = (): Promise<string | null> =>
+      withTransaction(db, (tx) =>
+        tx.execute<{ ended_at: string | null }>(
+          sql`select ended_at from management_sessions where id = ${MIRROR_VIEWER_SESSION_ID}`,
+        ),
+      ).then((r) => r.rows[0]!.ended_at);
+    const first = await readEndedAt();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await endMirrorViewer(db);
+    expect(await readEndedAt()).toBe(first);
   });
 });

@@ -89,6 +89,28 @@ export async function ensureMirrorViewer(db: Database): Promise<string> {
 }
 
 /**
+ * Ends the mirror viewer's session. Boot calls it on a trading boot whose deployment mode is not
+ * `mirror` (an adoption-pending boot returns before that read and serves no dashboard), because
+ * {@link mirrorSession} is mounted only on a mirror boot: without this, a promoted mirror that
+ * restarts, or a mirror's database booted as a primary, would still resolve a visitor's kept cookie as
+ * this admin. An already-ended session keeps its `ended_at`; a later mirror boot's
+ * {@link ensureMirrorViewer} revives it.
+ */
+export async function endMirrorViewer(db: Database): Promise<void> {
+  await withTransaction(db, (tx) =>
+    tx
+      .update(managementSessions)
+      .set({ endedAt: nowIso() })
+      .where(
+        and(
+          eq(managementSessions.id, MIRROR_VIEWER_SESSION_ID),
+          isNull(managementSessions.endedAt),
+        ),
+      ),
+  );
+}
+
+/**
  * Per-request ambient auth for the mirror's dashboard. `token` is the value this process's
  * {@link ensureMirrorViewer} call returned. Keeps the ambient session live (so
  * `resolveManagementSession`'s sliding-window expiry never turns an idle mirror's first request into a

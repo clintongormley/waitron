@@ -18,16 +18,19 @@ import {
   stampDeployment,
   tenants,
   tills,
+  withTransaction,
   writeMirrorConfig,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
+import { resolveManagementSession } from "@waitron/identity";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
+import { ensureMirrorViewer } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
@@ -515,6 +518,39 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         acceptingSales: true,
       });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("a primary boot ends the mirror viewer's session, so a cookie a browser kept from the mirror is refused", async () => {
+    // A promoted mirror that restarts, or a mirror's database booted as a primary: the viewer's row
+    // is still live and a visitor's browser still holds its token. Resolving it before the boot is
+    // the control — without it, a refusal afterwards would look the same whether or not boot acted.
+    const token = await ensureMirrorViewer(db.primary);
+    await expect(
+      withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
+    ).resolves.toMatchObject({ role: "admin" });
+
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.primary,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    const base = `http://127.0.0.1:${port}`;
+    try {
+      const read = await fetch(`${base}/management-api/catalogues`, {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+      });
+      expect(read.status).toBe(401);
+      expect(await read.json()).toEqual({
+        error: { code: "management_session.required", params: {} },
+      });
+      await expect(
+        withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
+      ).rejects.toMatchObject({ code: "management_session.required" });
     } finally {
       await server.close();
     }
