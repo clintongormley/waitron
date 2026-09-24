@@ -54,6 +54,7 @@ import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { classifyBootFailure } from "./boot-failure.js";
+import { nameVenueHolder } from "./holder-identity.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
@@ -595,6 +596,7 @@ async function recordRefusal(
 function bootThisProcess(): Promise<void> {
   // A snapshot of `process.env` at start-up; `runEntry` passes it on as the unmerged base env.
   const env = { ...process.env };
+  nameVenueHolder("server", env);
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   // `config.ts`'s own expression for `venueDir` (`config.ts:746`), repeated rather than reached
   // through `loadConfig`: the entrypoint never loads the config, because a broken config is what

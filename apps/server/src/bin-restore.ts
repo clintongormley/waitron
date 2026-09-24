@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { nameVenueHolder } from "./holder-identity.js";
 import { runRestore } from "./restore-command.js";
 
 /* v8 ignore start -- process wiring, exercised by an operator not a unit test */
+nameVenueHolder("restore", process.env);
 runRestore({
   argv: process.argv.slice(2),
   env: process.env,

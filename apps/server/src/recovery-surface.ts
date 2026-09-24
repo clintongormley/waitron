@@ -8,7 +8,8 @@ import type { VenueHolderKind } from "@waitron/db";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
 const MAX_LOG_LINES = 200;
-const LOG_FILE_NAME = "waitron.log";
+/** The file under the log directory whose tail the page shows. */
+export const LOG_FILE_NAME = "waitron.log";
 
 export interface RecoveryDeps {
   state: RecoveryState;

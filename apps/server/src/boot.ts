@@ -74,6 +74,7 @@ import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { withDevMigrationHint } from "./dev-migration-hint.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
+import { applicationVersion } from "./app-version.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
@@ -1104,8 +1105,7 @@ export async function startServer(
               contribution,
               secret,
               moduleVersions,
-              applicationVersion:
-                process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
+              applicationVersion: applicationVersion(process.env),
             });
             return createFiscalReadinessStore(
               config.stateDir,
@@ -1140,8 +1140,7 @@ export async function startServer(
                 contribution,
                 secret,
                 moduleVersions,
-                applicationVersion:
-                  process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
+                applicationVersion: applicationVersion(process.env),
               }),
             );
           },

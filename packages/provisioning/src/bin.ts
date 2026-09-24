@@ -9,6 +9,7 @@ import {
   deploymentTableExists,
   openVenueDatabase,
   readDeploymentEnvironment,
+  setVenueHolderKind,
   stampDeployment,
 } from "@waitron/db";
 import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
@@ -116,4 +117,5 @@ function isAbort(error: unknown): boolean {
   );
 }
 
+setVenueHolderKind("provisioning");
 process.exitCode = await main();
