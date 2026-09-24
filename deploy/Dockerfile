@@ -89,6 +89,7 @@ CMD ["node", "/app/print-agent.js"]
 # checksums.txt for the tag; scripts/litestream-pin.test.ts holds them and the
 # version equal to scripts/setup-litestream.mjs and packages/stream. BuildKit
 # sets TARGETARCH; the classic builder leaves it empty, which `*)` refuses.
+# A new version also needs its notice file regenerated (deploy/third-party/README.md).
 # ---------------------------------------------------------------------------
 FROM node:26 AS litestream
 ARG TARGETARCH

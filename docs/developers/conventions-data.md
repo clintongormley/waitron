@@ -121,6 +121,32 @@ runbook's dated note (`docs/superpowers/plans/2026-07-28-first-aeat-submission.m
 `build` script hands to `scripts/bundle-node.mjs`, which is a text match) and
 `scripts/deploy-image-env.test.ts` (the image ships every name the server declares).
 
+## A change adding third-party code or a binary to the image carries its licence notices
+
+Owner decision 2026-09-24: a change that adds third-party code or a binary to the box image carries
+its licence notices in the same change. They ship in the image's `/app/third-party/`, either
+committed under `deploy/third-party/` or copied there by the build (libvips's notices come out of
+its npm package in `deploy/Dockerfile`); `deploy/third-party/README.md` says what each file is.
+
+What it cost. Litestream 0.5.17 landed in the image (#590) with its own Apache 2.0 licence alone,
+while the binary is a statically linked Go program carrying the Go standard library and runtime
+and 97 Go modules (`go version -m` on each of the two pinned linux binaries lists 97 `dep` lines).
+`deploy/third-party/litestream/NOTICES.txt` now prints 68 distinct texts; counted 2026-09-24 over
+those printed blocks with whitespace collapsed and case ignored, 23 contain MIT's "shall be
+included in all copies" and 28 BSD's "Redistributions in binary form must reproduce the above
+copyright notice" (29 counting the toolchain's `src/crypto/internal/boring/LICENSE`, where ` * `
+comment markers break the phrase). That file is produced by `scripts/litestream-notices.mjs` from the
+`go version -m` output of both pinned binaries, fetching each module's archive, and one
+golang.org/toolchain archive per platform, from proxy.golang.org; `deploy/third-party/README.md`
+has the steps to regenerate it.
+
+What the guards leave open. The two third-party blocks in `scripts/deploy-image-env.test.ts` read
+text and cover libvips and Litestream only; for Litestream they compare `NOTICES.txt`'s
+`Litestream version:` line with the pin, never the module list with the binary. The npm packages
+bundled into the server, the web apps and the print-agent have no notice file; the print-agent
+image (`deploy/Dockerfile`'s `print-agent` stage) copies in its bundle alone and has no
+`/app/third-party/` at all (`docs/backlog.md`).
+
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
 
 Every entry is written out one by one in `packages/db/package.json` — the main entry, plus one per
