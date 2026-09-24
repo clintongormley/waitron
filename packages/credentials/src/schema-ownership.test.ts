@@ -9,15 +9,13 @@ import * as schema from "./schema/index.js";
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = ["tenant_credentials"];
 
-/** Core tables this package's migrations reference. None of these may ever appear in this
- * package's generated SQL as a CREATE TABLE. */
+/** Core tables this package reads (`credentialProvisioned` reads `tenants`). None of these may
+ * ever appear in this package's generated SQL as a CREATE TABLE. */
 const CORE = ["tenants"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
-/** How drizzle-kit writes a table name in this package's generated SQL. SQLite quotes an
- * identifier with backticks where PostgreSQL used double quotes, measured by reading this
- * package's own `drizzle/*.sql` on 2026-09-22. */
+/** How drizzle-kit writes a table name in this package's generated SQL. */
 function createTable(table: string): string {
   return `create table \`${table}\``;
 }

@@ -11,8 +11,8 @@ import {
   type RotationResult,
 } from "./store.js";
 
-/** Everything the CLI does to the outside world, injected — so the tests need no process, no real
- * stdin and no temp files, and nothing here can print a secret behind the suite's back. */
+/** Everything the CLI does to the outside world, injected, so nothing here can print behind a
+ * test's back. */
 export interface CliIo {
   stdout(line: string): void;
   stderr(line: string): void;
@@ -39,11 +39,6 @@ const USAGE = [
   "There is no `get`: this tool never prints a decrypted credential.",
 ].join("\n");
 
-/**
- * Returns the exit code rather than calling `process.exit`, so every path is reachable from a test
- * that does not have to kill the runner to observe it. `bin.ts` is the only thing that touches the
- * process.
- */
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -61,9 +56,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-/** `strict: true` is what makes the "never accepts a payload as an argument" test pass: an unknown
- * flag such as `--value` is a parse error, not something silently ignored. If a future maintainer
- * adds a `--value` option, cli.test.ts goes red — which is the point. */
+/** `strict: true`: an unknown flag such as `--value` is a parse error, so a payload can never be
+ * passed as an argument. */
 function parse<T extends NonNullable<Parameters<typeof parseArgs>[0]>["options"]>(
   argv: string[],
   options: T,
@@ -90,9 +84,6 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
   }
 
   if (!isPurpose(purpose)) {
-    // The structured code, not an ad-hoc sentence: `credentials.unknown_purpose` exists precisely
-    // for this boundary — the store below takes a typed `Purpose` and so cannot raise it — and
-    // `known` is what lets the operator see the legal set without reading the source.
     return reportFailure(
       new AppError("credentials.unknown_purpose", { purpose, known: Object.keys(PURPOSES) }),
       deps,
@@ -106,10 +97,8 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
         ? await deps.readFile(values.file)
         : await deps.io.readStdin();
   } catch {
-    // Neither underlying error is safe to print verbatim: a filesystem error can embed
-    // platform-specific text, and a stdin failure (`bin.ts` refusing to wait on an interactive
-    // terminal) is not this package's message to format. `path` is the argument the operator
-    // typed, never file content, so it carries no payload either way.
+    // Neither underlying error is printed. `path` is the argument the operator typed, never file
+    // content.
     return reportFailure(
       new AppError("credentials.payload_unreadable", {
         source: typeof values.file === "string" ? "file" : "stdin",
@@ -155,8 +144,7 @@ async function list(argv: string[], deps: CliDeps): Promise<number> {
 
   const rows = await withTransaction(deps.db, (tx) => listCredentials(tx));
   for (const row of rows) {
-    // Metadata only — purpose, key version, when it was last written. Never a field name, never a
-    // value.
+    // Never a field name, never a value.
     deps.io.stdout(`${row.purpose}\tv${row.keyVersion}\t${row.updatedAt}`);
   }
   return 0;
@@ -186,13 +174,6 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
   return 0;
 }
 
-/**
- * `rotateCredentials` throws `credentials.key_version_unknown` for the single likeliest operator
- * mistake — running `rotate` after `WAITRON_CREDENTIALS_KEY_PREVIOUS` was already dropped, while
- * rows still need it — and every other command in this file routes its own errors through
- * `reportFailure` rather than letting them escape `runCli`. `rotate` did not; this wraps it the
- * same way.
- */
 async function rotate(deps: CliDeps): Promise<number> {
   let result: RotationResult;
   try {

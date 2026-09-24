@@ -36,13 +36,6 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS]
 
 /** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
-  // `delete`, not `truncate ... cascade`: this engine has no TRUNCATE at all, and the statement
-  // did not even reach execution — running this suite before the change printed
-  // `Error: near "truncate": syntax error` from `packages/store/src/node-sqlite-adapter.ts:64`,
-  // which killed every case in the file in its `beforeEach`. Nothing is lost with `cascade`:
-  // no table references `tenant_credentials` (it is classified `local`, `./classification.ts`,
-  // and `packages/db/src/schema` declares no foreign key into it), so the cascade had nothing to
-  // follow. It carries no append-only trigger either, so the delete is not refused.
   await suite.db.execute(sql`delete from tenant_credentials`);
 });
 
@@ -82,15 +75,10 @@ describe("rotateCredentials", () => {
   });
 
   it("finishes a rotation that was interrupted half-way", async () => {
-    // The scenario key_version exists for: some rows on the old key, some already on the new one.
-    // This pins rotateCredentials's own SKIP logic — that it discriminates row by row rather than
-    // assuming the whole batch shares one state, so an interrupted run's leftover mix (some
-    // rotated, some not) gets finished correctly rather than either re-rotating everything or
-    // bailing out. It does NOT pin per-row key SELECTION for more than two key versions: with only
-    // `current`/`previous` in the ring, any row not already on `current` is necessarily on
-    // `previous`, so this test cannot distinguish "select the key by the row's own key_version"
-    // from "always try `previous`". That per-row selection property is pinned separately by
-    // store.test.ts's "serves a row on either ring member" test.
+    // Some rows on the old key, some already on the new one. This pins the row-by-row SKIP logic,
+    // not per-row key SELECTION: with only `current`/`previous` in the ring, a row not on `current`
+    // is necessarily on `previous`, so this cannot tell "select by the row's key_version" from
+    // "always try `previous`". store.test.ts's "serves a row on either ring member" pins that.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
@@ -105,9 +93,6 @@ describe("rotateCredentials", () => {
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(1);
 
-    // No `::int`: the cast only flattened PostgreSQL's bigint `count` to a JavaScript number, and
-    // this engine returns one already — measured on node v26.7.0, `select count(*) as n` over a
-    // one-row table gives `{ n: 1 }` with `typeof n === "number"`.
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from tenant_credentials where key_version = 2`);
     expect(rows.rows[0]!.n).toBe(2);
@@ -122,15 +107,10 @@ describe("rotateCredentials", () => {
   });
 
   it("propagates — rather than swallows — an undecryptable row instead of silently leaving it on the retiring key", async () => {
-    // Mutation check #3: if rotateCredentials caught tryGetCredential's throw and treated it as
-    // "nothing to rotate here", this row would stay sealed under a key about to be retired FOREVER,
-    // while `rotated`/`alreadyCurrent` still reported an ordinary, successful run — exactly the
-    // failure mode that makes retiring the old key unsafe. Sealed directly with `seal()`, bypassing
-    // `putCredential` (same technique as store.test.ts's `sealRawRow`), under a key neither ring
-    // member matches — the row exists and its OWN key_version (1) IS one the ring carries
-    // (RING_BOTH.previous), so this is `credentials.decrypt_failed` (wrong key material), not
-    // `credentials.key_version_unknown` — a different one of tryGetCredential's three throw codes
-    // than the "refuses to run without a previous key" case above.
+    // If rotateCredentials swallowed tryGetCredential's throw, this row would stay sealed under a
+    // key about to be retired while the run reported success. Sealed under a key neither ring
+    // member matches, but stamped with a version the ring carries (RING_BOTH.previous), so this is
+    // `credentials.decrypt_failed`, not `credentials.key_version_unknown`.
     const strangerKey = Buffer.alloc(32, 9);
     const sealed = seal(strangerKey, aadFor("payments.stripe"), JSON.stringify(STRIPE));
     await withTransaction(suite.db, (tx) =>
@@ -153,14 +133,9 @@ describe("rotateCredentials", () => {
   });
 
   it("skips a row whose purpose the registry no longer knows, rather than crashing on it", async () => {
-    // `listCredentials` has no notion of Purpose — it selects every row the vault holds, known or
-    // not (unlike `putCredential`'s WRITE side, which is typed `Purpose` and so cannot reach an
-    // unknown one — see store.ts's own comment on why THAT check is deliberately absent). Rotation
-    // reads back untyped rows off the same table, so a purpose the registry has since retired (or
-    // a row seeded outside the registry entirely) is a real, reachable case here. Sealed directly
-    // with raw bytes, bypassing `putCredential` — the same technique as
-    // credentials.test.ts's "ordering-probe" row — since this row is never meant to be
-    // decrypted; only the iv/auth-tag LENGTH constraints need satisfying, not real ciphertext.
+    // `listCredentials` selects every row the vault holds, known purpose or not, so a purpose the
+    // registry has since retired reaches rotation. The row is raw bytes, never decrypted: only the
+    // iv/auth-tag LENGTH checks need satisfying.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
@@ -193,18 +168,10 @@ describe("rotateCredentials", () => {
     );
     let transactions = 0;
     const db = suite.db;
-    // The proxy intercepts `withWriteLock`, not `transaction`: `withTransaction` now opens its
-    // transaction by handing the body to the file's write lock
-    // (`packages/db/src/tenancy.ts:44`) rather than by calling `db.transaction`. Intercepting the
-    // old seam counted nothing — the case failed `expected +0 to be 2` — so the delete never
-    // landed and what the case is about was never exercised. Only the interception point moved;
-    // both assertions below are unchanged, and `withWriteLock` is called exactly where
-    // `transaction` used to be: once for the listing, once for the row's re-seal
-    // (`./store.ts`'s `rotateCredentials`).
-    //
-    // The delete runs on `target` OUTSIDE the lock, so it commits in its own autocommit statement
-    // before the re-seal's `begin immediate` is taken (`packages/store/src/write-queue.ts`) —
-    // which is the ordering the case needs.
+    // `withTransaction` opens each transaction through `withWriteLock`: once for the listing, once
+    // for the row's re-seal. The delete runs on `target` OUTSIDE the lock, so it commits in its own
+    // autocommit statement before the re-seal's `begin immediate` is taken
+    // (`packages/store/src/write-queue.ts`) — which is the ordering the case needs.
     const deletingDb = new Proxy(db, {
       get(target, property, receiver) {
         if (property !== "withWriteLock") return Reflect.get(target, property, receiver) as unknown;

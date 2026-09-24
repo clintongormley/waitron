@@ -2,19 +2,14 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 /**
- * What each purpose's payload must contain — FIELD NAMES ONLY, as plain data. This is the one place
- * this package comes close to knowing about a provider, and the line it does not cross is an
- * import: `"secretKey"` is a string here, and a Stripe key only to the host that reads it. Nothing
- * in `@waitron/payments` or `@waitron/fiscal-verifactu` is referenced, so this package stays a leaf
- * (eslint enforces it) while still rejecting a typo at provisioning time rather than at 3am.
- *
- * `fiscal.aeat` is PROVISIONAL: whether an FNMT sello de entidad certificate can be exported for
- * unattended server use at all is unverified (getting-to-production.md §4). Because the payload is
- * an opaque blob, learning the real answer changes this list — not a migration.
+ * What each purpose's payload must contain — FIELD NAMES ONLY, as plain data. `"secretKey"` is a
+ * string here and a Stripe key only to the host that reads it: this package imports no provider,
+ * so it stays a leaf (`eslint.config.js` enforces it) while still rejecting a typo at provisioning
+ * time.
  */
 export const PURPOSES = {
   /** Outbound account email. `url` is an SMTP connection URL (and may contain credentials); `from`
-   * is the RFC 5322 sender shown to recipients. Both remain sealed in the vault. */
+   * is the RFC 5322 sender shown to recipients. */
   "email.smtp": ["url", "from"],
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
   /** SumUp Cloud API. `affiliateAppId`/`affiliateKey` come from the developer portal's Affiliate
@@ -23,27 +18,18 @@ export const PURPOSES = {
   "payments.sumup": ["apiKey", "merchantCode", "affiliateAppId", "affiliateKey"],
   /**
    * `certKind` is `"sello"` or `"representante"` — validated by the READER, not here: this package
-   * declares field names and never their vocabularies, which is the line that keeps it a leaf.
-   * It exists because `SOAP_ENDPOINTS_SELLO` is a different AEAT host from `SOAP_ENDPOINTS`, so the
-   * endpoint depends on the certificate's kind and nothing else knows it.
+   * declares field names and never their vocabularies. The AEAT endpoint depends on it
+   * (`SOAP_ENDPOINTS_SELLO` versus `SOAP_ENDPOINTS`).
    *
-   * Still PROVISIONAL — the FNMT export question remains unresolved. Also note the cost of editing
-   * this list: `rotate` re-runs `validatePayload`, so a row sealed under an older list aborts a
-   * rotation sweep, and a read returns a payload missing the new field. The host validates what it
-   * reads for exactly that reason (see the server design §5.1); adding a field remains cheap only
-   * while nothing is provisioned.
+   * Editing a provisioned purpose's fields blocks `rotate` until it is re-provisioned (see
+   * `rotateCredentials`).
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
-  /** DEPRECATED: the pull worker this token authenticated is gone and nothing has taken over from it;
-   * the key stays in this persisted contract (never deleted/renamed), unset on new nodes.
-   * The per-peer sync bearer token a cloud mirror presented when it pulled (sync cloud-mirror C2b).
-   * Sealed under the mirror's OWN box key at adopt; a mirror-local operational secret, one field. */
+  /** DEPRECATED: nothing seals or reads it any more. Kept because a purpose name is never deleted
+   * or renamed. */
   "sync.mirror_token": ["token"],
-  /** The node's own Ed25519 membership identity PRIVATE key (base64 PKCS8 DER), sealed under the box
-   * key at setup (design §4 — apps/server/src/node-identity.ts). A box-local operational secret, one
-   * field, the exact shape of `sync.mirror_token`. Never leaves the box: a value sealed under one box
-   * key cannot be opened under another (GCM auth fails). Set only on the PROVISION path — a cloud
-   * mirror runs as the primary's nodeId and never signs, so it seals none. */
+  /** The node's own Ed25519 membership identity PRIVATE key, sealed at setup by
+   * `apps/server/src/node-identity.ts`. */
   "membership.node_key": ["privateKey"],
 } as const satisfies Record<string, readonly string[]>;
 
@@ -54,16 +40,12 @@ export function isPurpose(value: string): value is Purpose {
 }
 
 /**
- * EXACT field match, both directions. Rejecting extras is not pedantry: a mistyped `webhook_secret`
- * shows up as a missing `webhookSecret` AND an unexpected `webhook_secret`, and an implementation
- * that only checked for missing fields would report half the truth to an operator who is certain
- * they set it.
+ * EXACT field match, both directions: a mistyped `webhook_secret` shows up as a missing
+ * `webhookSecret` AND an unexpected field.
  *
- * `missing` and `expected` are field names THIS PACKAGE declares in `PURPOSES` — safe to echo
- * verbatim. The unexpected fields' own NAMES are never echoed, only their count: a field name here
- * is arbitrary caller input, not this package's data, and an operator who piped a raw secret in as a
- * bare JSON key by mistake (`{"sk_live_51LEAKED": "x"}`) would otherwise have it land straight in an
- * AppError's params — the same class of leak `credentials.key_version_invalid`'s `value` was.
+ * `missing` and `expected` are names `PURPOSES` declares, safe to echo. Unexpected fields are only
+ * COUNTED: their names are caller input, and a secret pasted in as a JSON key
+ * (`{"sk_live_51LEAKED": "x"}`) must never reach an AppError's params.
  */
 export function validatePayload(
   purpose: Purpose,

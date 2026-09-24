@@ -98,10 +98,8 @@ describe("isPurpose", () => {
   });
 
   it("rejects an inherited Object.prototype key, never mistaking it for an own one", () => {
-    // Task 5's CLI runs this on raw argv. `value in PURPOSES` would return `true` for `"toString"`
-    // (inherited from Object.prototype) even though `PURPOSES` has no own property by that name —
-    // `Object.prototype.hasOwnProperty.call` is what tells the two apart, and this is the one test
-    // that would notice if a future edit swapped it for the shorter `in` form.
+    // The CLI runs this on raw argv. `value in PURPOSES` would return `true` for `"toString"`
+    // (inherited from Object.prototype) even though `PURPOSES` has no own property by that name.
     expect(isPurpose("toString")).toBe(false);
   });
 });
@@ -154,10 +152,8 @@ describe("validatePayload", () => {
   });
 
   it("never echoes an unexpected field's own NAME either — only a count (M7)", () => {
-    // Distinct from the value-leak test above: here the SENSITIVE text is the extra field's own
-    // key, not its value — the shape an operator produces by piping a raw secret in as a bare JSON
-    // object key by mistake. Before this fix, `unexpected` carried the actual supplied field names
-    // verbatim, so this exact string would have appeared in the thrown AppError's params.
+    // Here the SENSITIVE text is the extra field's own key, not its value — the shape an operator
+    // produces by piping a raw secret in as a bare JSON object key by mistake.
     const error = captured(() =>
       validatePayload("payments.stripe", { ...ok, sk_live_51LEAKED: "x" }),
     );

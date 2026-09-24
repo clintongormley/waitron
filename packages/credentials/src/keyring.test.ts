@@ -114,12 +114,10 @@ describe("loadKeyRing", () => {
   });
 
   it("never echoes the offending value for an invalid current version — C1", () => {
-    // The exact reproduction from the final review: an operator transposes
-    // WAITRON_CREDENTIALS_KEY_VERSION and WAITRON_CREDENTIALS_KEY (a plausible .env/systemd typo),
-    // handing this function real key material where a small integer was expected. `Number(leaked)`
-    // is NaN — not an integer — so this takes the "not-an-integer" branch; the point of the test is
-    // that neither branch may carry `leaked` itself, because bin.ts prints an AppError's params
-    // verbatim to stderr and that reaches scrollback, shell history and log capture.
+    // An operator transposes WAITRON_CREDENTIALS_KEY_VERSION and WAITRON_CREDENTIALS_KEY (a
+    // plausible .env/systemd typo), handing this function real key material where a small integer
+    // was expected. The params may not carry `leaked`, because bin.ts prints an AppError's params
+    // verbatim to stderr, and that reaches scrollback and log capture.
     const leaked = Buffer.alloc(32, 7).toString("base64");
     const error = captured(() =>
       loadKeyRing({ WAITRON_CREDENTIALS_KEY: K1, WAITRON_CREDENTIALS_KEY_VERSION: leaked }),
@@ -129,8 +127,6 @@ describe("loadKeyRing", () => {
   });
 
   it("never echoes the offending value for an invalid previous version — C1", () => {
-    // Same reproduction against WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION — the finding names this
-    // variant explicitly as leaking the retiring key identically.
     const leaked = Buffer.alloc(32, 8).toString("base64");
     const error = captured(() =>
       loadKeyRing({
@@ -144,15 +140,10 @@ describe("loadKeyRing", () => {
   });
 
   it("refuses a ring whose two members share a version", () => {
-    // `keyForVersion` checks `current` before `previous`, so a collision would permanently shadow
-    // `previous`'s key for that version — not merely "order-dependent" but ALWAYS `current`, for
-    // every lookup on that version, for the life of the ring. A hand-built ring with this collision
-    // (loadKeyRing itself refuses it, which is exactly what this test proves) would also make
-    // `rotateCredentials` treat every row on the shared version as already current, re-sealing
-    // NOTHING while reporting the whole vault clean — not, as an earlier version of this comment
-    // claimed, re-sealing every row under one key while reporting success. A dedicated code, not
-    // `key_ring_incomplete`: both variables WERE supplied here, so telling the operator one of them
-    // is "missing" would be false — see credentials.key_ring_version_collision in errors.ts.
+    // `keyForVersion` checks `current` before `previous`, so a collision would shadow `previous`'s
+    // key for that version for the life of the ring, and `rotateCredentials` would treat every row
+    // on the shared version as already current, re-sealing NOTHING while reporting the vault clean.
+    // A dedicated code, not `key_ring_incomplete`: both variables WERE supplied here.
     const error = captured(() =>
       loadKeyRing({
         WAITRON_CREDENTIALS_KEY: K2,
