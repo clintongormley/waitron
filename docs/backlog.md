@@ -2625,7 +2625,7 @@ image constraints under *Detail → Box image*.
 
 - **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (the
   owner's answer (a), 2026-09-24, to the note lane B's campaign queue item B8 raised about #580 —
-  not §B8 above; branch `fix/ci-root-script-consumers`).** `scripts/changed-scope.mjs` now carries
+  not §B8 above; **PR #593**, main `97467c013`; checked on real CI with the throwaway draft #595, whose one-line change to `scripts/bundle-node.mjs` selected the four members and ran `bundle-smoke`, run 36045110201).** `scripts/changed-scope.mjs` now carries
   `ROOT_SCOPE_CONSUMERS`, which maps `scripts/bundle-node.mjs` to the four members whose `build`
   runs it (server, print-agent, credentials, provisioning) and `scripts/dev-server-proxy.ts` to the
   three front-ends whose `vite.config.ts` imports it; `scopeForPaths` selects those members, so a
