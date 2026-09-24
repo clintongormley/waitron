@@ -85,7 +85,7 @@ export async function writeBackupEnv(stateDir: string, input: BackupEnvInput): P
 
 /** Set the recovery key in `<stateDir>/backup.env`, keeping every other setting the file holds, so a box
  * with no archive destination can hold a key and a box with one keeps its destination, schedule and
- * retention. Round-trip guarded like `writeBackupEnv`, atomic, `0o600`. */
+ * retention. */
 export async function writeRecoveryKey(
   stateDir: string,
   input: { recoveryKey: string; keyRotatedAt: string | undefined },

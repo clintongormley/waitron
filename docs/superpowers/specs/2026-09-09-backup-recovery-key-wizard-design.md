@@ -134,6 +134,10 @@ scheduler that "sleeps to the next fire" (§3.3) would otherwise leave a just-en
 So on enable and on rotate, `reload` produces an archive at once. A reload is **latched one-at-a-time**
 (like provision) so two concurrent applies cannot race two sweeps onto the same staging dir.
 
+> 2026-09-24: Task 2a (branch `feat/sqlite-slice2-recovery-key`) changed this — the `apply` and
+> `rotate` routes now queue their writes, so a concurrent apply waits its turn instead of being
+> refused. The supervisor's reload latch remains, and no route reaches it today.
+
 Boot calls `reload(loadBackupConfig(env))` once at startup. This is the **same start behaviour** as
 today (build → probe → immediate first dump → loop), now expressed through the supervisor — not a
 claim that nothing changed, since the loop's cadence itself changes (§3.3). The apply route calls
@@ -202,6 +206,10 @@ not as a hand-config feature**:
   archive is unrecoverable** while the surface reports success. Reading the effective key closes it,
   and after any `reload` the route **asserts effective == requested** or fails the request.
 - Otherwise `backup.env` is authoritative and editable — the normal on-prem box.
+
+> 2026-09-24: Task 2a (branch `feat/sqlite-slice2-recovery-key`) changed this — the status's
+> `recoveryKeySet` and the key re-view read the running key when there is one, and otherwise the key
+> in the box env files (`backup.env` merged under the process environment).
 
 *(Decision to challenge, §9: this honesty check could be dropped entirely — then a cloud-injected
 override would defeat a wizard edit with no explanation. Kept, because that silent-override case is
@@ -349,6 +357,13 @@ disk, so the surface never contradicts what the duty is actually doing:
 - **`POST /api/backup/rotate`** → body `{ recoveryKey }` (a freshly minted or operator-supplied key).
   Applies it as a new key, taking an immediate dump under it (§3.1). See §8 for the archive-safety
   contract this route carries.
+
+> 2026-09-24: Task 2a (branch `feat/sqlite-slice2-recovery-key`) changed this — `apply`'s
+> `recoveryKey` is optional, a box that holds a key keeps it (a different one is refused with
+> `backup.recovery_key_exists`), and the effective key is compared with that held key;
+> `GET recovery-key` answers from the box env files when no key is running. `rotate` on a box with no
+> destination loaded rewrites only the key, with no reload and no immediate dump. Both routes now
+> queue their writes, so a concurrent apply waits its turn instead of being refused.
 
 Validation runs **before** any write, and `apply`/`rotate` never leave `backup.env` half-written (the
 atomic write is all-or-nothing) — so a rejected request leaves the running duty exactly as it was.
@@ -499,6 +514,10 @@ Because §6 touches the recovery posture, this spec gets a **Fable fresh-context
   first-run nudge shows in a live box and is suppressed in demo mode; a11y tests per the screen
   conventions.
 
+> 2026-09-24: Task 2a (branch `feat/sqlite-slice2-recovery-key`) changed this — the `apply` and
+> `rotate` routes now queue their writes, so a concurrent apply waits its turn instead of being
+> refused. The supervisor's reload latch remains, and no route reaches it today.
+
 Guards that read the whole tree (the compose-env guard above; any capture-completeness guard) live in
 the root Vitest project.
 
@@ -522,6 +541,10 @@ the carry-forward in §10. The honest guarantee (the earlier "never leaves the b
 key** (step 3), the old archives remain decryptable with the old key the operator was just shown and
 told to keep, and `status` reports `keyRotatedAt` and a key fingerprint so "which key does this
 archive need" is answerable rather than guessed.
+
+> 2026-09-24: Task 2a (branch `feat/sqlite-slice2-recovery-key`) changed this — `rotate` on a box with
+> no destination loaded writes only the new key and does not reload, so it takes no immediate dump
+> and the "at least one archive under the new key" guarantee does not hold for it.
 
 ---
 

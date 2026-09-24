@@ -658,8 +658,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // Backup admin (backup-recovery-key-wizard). The apply/rotate routes reject with these when the
   // environment owns the config, this node is not the primary, the recovery key cannot be stored
   // verbatim / is too short / is missing, the destination or schedule is malformed, the request shape
-  // is wrong, or the effective key ended up different from the one supplied. The screen RENDERS these
-  // (it also reuses `backup.recovery_key_too_short` as its own client-side floor message for a pasted key).
+  // is wrong, the box already holds a different key, or the effective key ended up different from the
+  // one it should hold. The screen RENDERS these (it also reuses `backup.recovery_key_too_short` as its
+  // own client-side floor message for a pasted key).
   "backup.managed_by_environment": {
     en: "Backups on this box are managed by its environment — there is nothing to change here",
     es: "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar",
@@ -695,6 +696,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "backup.effective_mismatch": {
     en: "The saved key didn't take effect — try again",
     es: "La clave guardada no se aplicó; inténtalo de nuevo",
+  },
+  "backup.recovery_key_exists": {
+    en: "This box already has a different recovery key — use that key; changing it needs a key rotation",
+    es: "Esta caja ya tiene otra clave de recuperación; usa esa clave o rótala para cambiarla",
   },
   // Card payments (providers + readers). The connect/pairing forms live in each provider's panel, but
   // the human copy for every code the payments feature throws lives centrally here (a panel falls back

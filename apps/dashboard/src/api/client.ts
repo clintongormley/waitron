@@ -3140,14 +3140,17 @@ export class DashboardApi {
     return this.#request<BackupStatusView>("/api/backup/apply", "POST", body);
   }
 
-  /** `GET /api/backup/recovery-key` — the EFFECTIVE running recovery key so an admin can re-record it
-   * (the rotate screen re-shows the OLD key before changing it). `null` when the box holds no key. */
+  /** `GET /api/backup/recovery-key` — the recovery key the box holds (the running one when backups
+   * run) so an admin can re-record it (the rotate screen re-shows the OLD key before changing it).
+   * `null` when the box holds none; a held key under the length floor is refused with
+   * `backup.recovery_key_too_short`. */
   getBackupRecoveryKey(): Promise<{ key: string | null }> {
     return this.#request<{ key: string | null }>("/api/backup/recovery-key", "GET");
   }
 
   /** `POST /api/backup/rotate` — change the recovery key, reusing the running destination/schedule/
-   * retention, or changing the key alone on a box with no destination; returns the fresh status.
+   * retention, or changing the key alone on a box that holds a key and has no destination loaded;
+   * returns the fresh status.
    * Archives taken before the rotate still need the OLD key. */
   rotateBackupKey(body: { recoveryKey: string }): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/rotate", "POST", body);

@@ -1596,17 +1596,19 @@ declare module "@waitron/shared" {
     "backup.recovery_key_unstorable": { reason: string };
     /**
      * After `apply`/`rotate` wrote `backup.env` and the supervisor reloaded, the EFFECTIVE recovery key
-     * (`current().recoveryKey`, what the box will actually encrypt under) does not equal the key the
-     * operator requested. The guard against a partial env override silently orphaning archives: if
-     * anything (an env var, a merge) made the effective key differ from the requested one, the route
-     * fails LOUD rather than leave the operator recording a key the box will not use. No params — the
-     * keys are secrets. Mapped to 400. Never renamed once shipped. */
+     * (`current().recoveryKey`, what the box will actually encrypt under) does not equal the key that
+     * was written — on `apply`, the key the box already held or, holding none, the one supplied. On
+     * `rotate` with no destination loaded there is no reload: the key re-read from the box env files is
+     * compared with the requested one. The guard against a partial env override silently orphaning
+     * archives: the route fails LOUD rather than leave the operator recording a key the box will not
+     * use. No params — the keys are secrets. Mapped to 400. Never renamed once shipped. */
     "backup.effective_mismatch": Record<string, never>;
     /**
      * A backup admin route body failed shape validation before any write — a missing/blank
      * `destinationDir`, a blank or missing `recoveryKey` (on `apply`, missing only when the box holds
-     * none), or a malformed `schedule`/`retention`. `field` names the offending field (our own declared name, never the
-     * value, which could be the recovery key). Mapped to 400. Never renamed once shipped. */
+     * none), or a malformed `schedule`/`retention`; or `field: "config"` when `rotate` finds no
+     * destination loaded and no key held. `field` names the offending field (our own declared name,
+     * never the value, which could be the recovery key). Mapped to 400. Never renamed once shipped. */
     "backup.request_invalid": { field: string };
     /**
      * `apply` was given a recovery key different from the one this box already holds. One recovery
