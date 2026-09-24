@@ -107,3 +107,65 @@ describe("serve(buildServeOptions(base, tls)) over a real TLS handshake", () => 
     }
   });
 });
+
+it("reloads a renewed certificate for fresh TLS connections and keeps serving after an invalid update", async () => {
+  const { watchTlsFiles } = await import("./tls.js");
+  const { Server } = await import("node:https");
+  const { once } = await import("node:events");
+  const first = mintMtlsMaterial(),
+    second = mintMtlsMaterial();
+  const root = await mkdtemp(join(tmpdir(), "waitron-tls-renew-"));
+  const files = { certFile: join(root, "cert.pem"), keyFile: join(root, "key.pem") };
+  let errors = 0;
+  const server = new Server({ key: first.serverKeyPem, cert: first.serverCertPem }, (_, res) =>
+    res.end("ok"),
+  );
+  try {
+    await writeFile(files.certFile, first.serverCertPem);
+    await writeFile(files.keyFile, first.serverKeyPem);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const port = (server.address() as AddressInfo).port;
+    watchTlsFiles(
+      server,
+      files,
+      "localhost",
+      () => {
+        errors++;
+      },
+      20,
+    );
+    const serial = (ca = second.caPem) =>
+      new Promise<string>((resolve, reject) => {
+        const req = httpsGet(
+          {
+            host: "127.0.0.1",
+            port,
+            servername: "localhost",
+            ca,
+            agent: false,
+          },
+          (res) => {
+            const value = (res.socket as import("node:tls").TLSSocket).getPeerCertificate()
+              .fingerprint256;
+            res.resume();
+            res.on("end", () => resolve(value));
+          },
+        );
+        req.on("error", reject);
+      });
+    const before = await serial(first.caPem);
+    await writeFile(files.certFile, second.serverCertPem);
+    await writeFile(files.keyFile, second.serverKeyPem);
+    await expect.poll(() => serial()).not.toBe(before);
+    const after = await serial();
+    const previousErrors = errors;
+    await writeFile(files.certFile, "broken");
+    await expect.poll(() => errors).toBeGreaterThan(previousErrors);
+    expect(await serial()).toBe(after);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});

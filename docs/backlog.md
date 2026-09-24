@@ -94,7 +94,11 @@ lost replies and restarts; the real two-server runner proves renewal and revocat
 recovery without changing fiscal authority. Both languages show service configuration
 and observed health separately. Observations are synthetic until service adapters exist.
 
-Next on this integration track: local remote access, then SQLite/Litestream backup
+The local remote-access integration now covers venue-owned staff certificate keys,
+CSR/install commands, live TLS reload and the minimal public availability endpoint.
+Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway
+replacement and revocation. Customer remote setup UI and production deployment remain
+open. Next on this integration track: SQLite/Litestream backup
 and replacement recovery. Connected does not
 mean those services are configured. Cloud service ownership stays in the Cloud
 backlog; this repository owns its adapter, screen and node-side behavior. Public

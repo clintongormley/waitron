@@ -1,3 +1,4 @@
+import { mountCloudPublic } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
@@ -180,7 +181,8 @@ import type { TillConfig } from "./till-config.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
-import { buildServeOptions } from "./tls.js";
+import { buildServeOptions, watchTlsFiles } from "./tls.js";
+import { Server as HttpsServer } from "node:https";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
 // them again here would be a second source of truth for the same five numbers.
@@ -530,6 +532,11 @@ function startListening(
       failure.params,
     );
   });
+  if (config.tls && server instanceof HttpsServer) {
+    watchTlsFiles(server, config.tls, new URL(config.managementOrigin).hostname, () =>
+      log("error", "cloud.certificate_reload_failed"),
+    );
+  }
   return server;
 }
 
@@ -2145,6 +2152,7 @@ export async function startServer(
     : undefined;
   const cloudPrimary = () =>
     holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
+  mountCloudPublic(app, cloudPrimary);
   mountCloudApi(
     app,
     {

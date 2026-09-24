@@ -10,7 +10,8 @@ the organisation and business, then choose **Connect this venue**. The server ch
 your local permission and its primary role again before signing the final request.
 
 Connected means the installation is registered. Remote access and backups remain
-unconfigured until their service setup is implemented. The screen shows configuration
+unconfigured until provisioned. Local remote-access operator setup is implemented;
+managed backup setup follows separately. The screen shows configuration
 and observed health separately; a five-minute-old observation reads Health unknown.
 No account or Cloud call is
 added to the sale path.
@@ -31,8 +32,8 @@ Choose **Stop Cloud access**, read the consequences, then confirm. You need a li
 local manager session. You can stop access even after this node loses its primary
 role. This stops new Cloud control requests and credential grants, preserves the venue
 and stored backups, and leaves local trading and subscriptions alone. It does not
-cancel billing. The remote-access and backup adapters will enforce their own scoped
-credentials when those services are implemented.
+cancel billing. The local remote-access gateway now enforces revocation and expiring signed route
+authority. Storage credentials are part of the separate backup adapter.
 
 ## Configure the Cloud destination
 
@@ -79,8 +80,7 @@ not an actual tunnel or restorable backup. The fixture uses
 demo mode and does not configure fiscal/payment providers or create invoices.
 
 The local Cloud write routes accept only the configured management origin. Open the
-screen at `WAITRON_MANAGEMENT_ORIGIN`; the later remote-access integration must
-configure its staff hostname consistently. An automatic status read leaves your
+screen at `WAITRON_MANAGEMENT_ORIGIN`; remote-access setup must configure its staff hostname consistently. An automatic status read leaves your
 session idle time unchanged. Clicking Check connection or Refresh status counts as your activity.
 
 Version 1 returns exactly three services. Adding services requires a negotiated protocol
@@ -88,3 +88,52 @@ version before changing that response. Stopping access permanently retires the k
 the replacement flow is not implemented yet. Do not delete the state file to reconnect:
 a new key does not take over the existing venue. A stop request waits for the local
 worker, rechecks your permission, and saves the stop intent before contacting Cloud.
+
+## Local remote-access integration
+
+Cloud's [local remote-access runner](https://github.com/waitron-io/waitron-cloud/blob/main/docs/local-remote-access.md)
+now provisions two actual Waitron servers behind one WireGuard/HAProxy gateway.
+Staff HTTPS ends at the venue. Public HTTPS ends at the gateway, where a browser
+challenge and an exact path allowlist protect the onward encrypted connection.
+The only public endpoint in this milestone is `GET /public/availability`, which
+returns `{ "available": true }` or a 503 with `false` according to the serving gate.
+Menus, bookings and the customer-facing remote setup screen remain separate work.
+
+Your staff certificate private key stays in `WAITRON_STATE_DIR/cloud-staff.key`.
+Generate a certificate signing request, the public request a certificate authority
+needs, in the Waitron checkout:
+
+```sh
+pnpm --filter @waitron/server exec tsx scripts/cloud-certificate.ts csr \
+  /path/to/node-state staff-v-venue-id.example.com /tmp/staff.csr
+```
+
+Pass the CSR to the Cloud operator certificate command. After it returns a chain,
+install that chain against the existing local key:
+
+```sh
+pnpm --filter @waitron/server exec tsx scripts/cloud-certificate.ts install \
+  /path/to/node-state staff-v-venue-id.example.com /tmp/staff-chain.pem
+```
+
+Set `WAITRON_TLS_KEY_FILE` and `WAITRON_TLS_CERT_FILE` to the resulting
+`cloud-staff.key` and `cloud-staff.crt`, and set `WAITRON_MANAGEMENT_ORIGIN` to the
+HTTPS staff origin and `WAITRON_MANAGEMENT_RP_ID` to its hostname. The initial
+HTTP-to-HTTPS change needs a restart. Subsequent certificate updates are checked
+every ten seconds and applied to new TLS connections without restarting Waitron.
+An invalid replacement leaves the loaded context intact and logs
+`cloud.certificate_reload_failed`. Fix the certificate file before the valid
+certificate expires; the watcher does not obtain certificates itself.
+
+Use the same hostname on your LAN by configuring your local DNS resolver to return
+the server's LAN address. Keep that address reserved in DHCP. Devices using a
+separate secure-DNS resolver may bypass the override; test each device with the
+internet disconnected and a fresh browser session. The Cloud runner proves this
+with an isolated DNS resolver and a new TLS client, without changing your router
+or installing a global certificate authority.
+
+The gateway removes revoked installations on its next signed configuration update.
+Its cached authority lasts at most ten minutes during a Cloud management outage;
+a restart cannot extend it. Expiry closes remote connections while local HTTPS
+continues. The local peer container grants no access to the rest of your LAN and
+has no SSH support feature.

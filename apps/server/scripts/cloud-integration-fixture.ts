@@ -1,3 +1,4 @@
+import { createStaffCsr, installStaffCertificate } from "../src/cloud-remote.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
@@ -91,7 +92,7 @@ if (savedEnv !== undefined) {
     WAITRON_STATE_DIR: root,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_HTTP_HOST: "127.0.0.1",
+    WAITRON_HTTP_HOST: process.env.CLOUD_TEST_EXTERNAL === "1" ? "0.0.0.0" : "127.0.0.1",
     WAITRON_HTTP_PORT: String(address.port),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MANAGEMENT_RP_ID: "127.0.0.1",
@@ -112,6 +113,7 @@ await writeFile(
   join(root, "ready.json"),
   JSON.stringify({
     origin: env.WAITRON_MANAGEMENT_ORIGIN,
+    port: Number(env.WAITRON_HTTP_PORT),
     localVenueId: env.WAITRON_TILL_LOCATION_ID,
   }),
   { mode: 0o600 },
@@ -124,6 +126,40 @@ const cloud = createCloudConnection({
   environment: "test",
 });
 process.on("message", (message: unknown) => {
+  if (
+    message &&
+    typeof message === "object" &&
+    "csrHostname" in message &&
+    typeof message.csrHostname === "string"
+  ) {
+    void createStaffCsr(root, message.csrHostname).then(
+      (csr) => process.send?.({ csr }),
+      () => process.send?.({ error: "csr_failed" }),
+    );
+    return;
+  }
+  if (
+    message &&
+    typeof message === "object" &&
+    "certificate" in message &&
+    "hostname" in message &&
+    typeof message.certificate === "string" &&
+    typeof message.hostname === "string"
+  ) {
+    const hostname = message.hostname;
+    void installStaffCertificate(root, hostname, message.certificate)
+      .then(async () => {
+        env.WAITRON_TLS_CERT_FILE = join(root, "cloud-staff.crt");
+        env.WAITRON_TLS_KEY_FILE = join(root, "cloud-staff.key");
+        env.WAITRON_MANAGEMENT_ORIGIN = "https://" + hostname;
+        env.WAITRON_MANAGEMENT_RP_ID = hostname;
+        await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });
+        process.send?.({ installed: true });
+      })
+      .catch(() => process.send?.({ error: "certificate_failed" }));
+    return;
+  }
+
   if (
     !message ||
     typeof message !== "object" ||
