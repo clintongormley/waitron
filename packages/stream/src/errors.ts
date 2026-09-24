@@ -2,6 +2,8 @@
 // (the idiom packages/credentials/src/errors.ts uses).
 import "@waitron/shared";
 
+export type BucketOperation = "get" | "put" | "list" | "delete";
+
 /**
  * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
  * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
@@ -16,7 +18,7 @@ declare module "@waitron/shared" {
     /** Any other failure talking to the bucket, after conflict retries are spent. `status` is the HTTP
      * status, or null when no answer arrived at all. */
     "backup.stream_request_failed": {
-      operation: "get" | "put" | "list" | "delete";
+      operation: BucketOperation;
       key: string;
       status: number | null;
       name: string;

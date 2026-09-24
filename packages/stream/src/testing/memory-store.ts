@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import "../errors.js";
+import type { BucketOperation as Operation } from "../errors.js";
 import type { ListedObject, ObjectStore, PutCondition, StoredObject } from "../object-store.js";
 
-type Operation = "get" | "put" | "list" | "delete";
 type Entry = { body: Uint8Array; etag: string; lastModified: Date };
 
 export type Fault = {

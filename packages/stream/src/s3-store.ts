@@ -11,8 +11,10 @@ import type {
   PutObjectCommandOutput,
   S3ClientConfig,
 } from "@aws-sdk/client-s3";
+import { setTimeout as sleep } from "node:timers/promises";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
+import type { BucketOperation } from "./errors.js";
 import type { ListedObject, ObjectStore, PutCondition } from "./object-store.js";
 
 export interface BucketConfig {
@@ -61,7 +63,7 @@ function nameOf(error: unknown): string {
 }
 
 function requestFailed(
-  operation: "get" | "put" | "list" | "delete",
+  operation: BucketOperation,
   key: string,
   status: number | null,
   name: string,
@@ -92,15 +94,16 @@ export function createS3ObjectStore(
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     ...(options.requestHandler === undefined ? {} : { requestHandler: options.requestHandler }),
   });
-  const sleep =
-    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const wait = options.sleep ?? sleep;
+  const bucket = config.bucket;
   const root = normalisePrefix(config.prefix);
+  const at = (key: string) => root + key;
 
   return {
     async get(key) {
       let out: GetObjectCommandOutput;
       try {
-        out = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: root + key }));
+        out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: at(key) }));
       } catch (error) {
         // By name: a missing bucket also answers 404, and must never read as "nothing written yet".
         if (nameOf(error) === "NoSuchKey") return null;
@@ -123,8 +126,8 @@ export function createS3ObjectStore(
         try {
           out = await client.send(
             new PutObjectCommand({
-              Bucket: config.bucket,
-              Key: root + key,
+              Bucket: bucket,
+              Key: at(key),
               Body: body,
               ...conditionHeaders(condition),
             }),
@@ -136,7 +139,7 @@ export function createS3ObjectStore(
           // with the caller's condition unchanged. Re-reading the version first would turn
           // "only if unchanged since I read it" into "whatever is there now".
           if (status === 409 && attempt < CONFLICT_ATTEMPTS) {
-            await sleep(CONFLICT_BACKOFF_MS * attempt);
+            await wait(CONFLICT_BACKOFF_MS * attempt);
             continue;
           }
           throw requestFailed("put", key, status, nameOf(error));
@@ -150,7 +153,7 @@ export function createS3ObjectStore(
     // Pruning deletes what this answers, so an answer that cannot be complete, or names a key outside
     // the prefix asked for, is refused whole rather than trimmed.
     async list(prefix) {
-      const wanted = root + prefix;
+      const wanted = at(prefix);
       const found: ListedObject[] = [];
       const followed = new Set<string>();
       let token: string | undefined;
@@ -159,7 +162,7 @@ export function createS3ObjectStore(
         try {
           page = await client.send(
             new ListObjectsV2Command({
-              Bucket: config.bucket,
+              Bucket: bucket,
               Prefix: wanted,
               ContinuationToken: token,
             }),
@@ -188,7 +191,7 @@ export function createS3ObjectStore(
 
     async delete(key) {
       try {
-        await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: root + key }));
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }));
       } catch (error) {
         throw requestFailed("delete", key, statusOf(error), nameOf(error));
       }

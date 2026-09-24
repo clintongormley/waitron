@@ -288,6 +288,55 @@ describe("pruneGenerations", () => {
     expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
   });
 
+  it(`deletes several old generations through one pool of ${PRUNE_CONCURRENCY}, every marker after every file`, async () => {
+    const inner = createMemoryObjectStore({ now: () => T0 });
+    for (const term of [1, 3]) {
+      await inner.put(markerKey(VENUE, gen(term)), new Uint8Array([1]));
+      for (let i = 0; i < 5; i += 1)
+        await inner.put(`venues/${VENUE}/${gen(term)}/0000/${i}.ltx`, new Uint8Array([1]));
+    }
+    const order: string[] = [];
+    let inFlight = 0;
+    let most = 0;
+    const store: ObjectStore = {
+      ...inner,
+      async delete(key) {
+        order.push(key);
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        await new Promise((resolve) => setImmediate(resolve));
+        inFlight -= 1;
+        await inner.delete(key);
+      },
+    };
+    await expect(
+      pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+    ).resolves.toEqual([gen(1), gen(3)]);
+    expect(inner.snapshot().size).toBe(0);
+    expect(most).toBe(PRUNE_CONCURRENCY);
+    expect(order.slice(-2).sort()).toEqual([markerKey(VENUE, gen(1)), markerKey(VENUE, gen(3))]);
+  });
+
+  it("keeps every old generation's marker when a file delete in any of them fails", async () => {
+    const inner = createMemoryObjectStore({ now: () => T0 });
+    for (const term of [1, 3]) {
+      await inner.put(markerKey(VENUE, gen(term)), new Uint8Array([1]));
+      await inner.put(`venues/${VENUE}/${gen(term)}/0000/a.ltx`, new Uint8Array([1]));
+    }
+    const store: ObjectStore = {
+      ...inner,
+      async delete(key) {
+        if (key === `venues/${VENUE}/${gen(3)}/0000/a.ltx`) throw new Error("delete refused");
+        await inner.delete(key);
+      },
+    };
+    await expect(
+      pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+    ).rejects.toThrow("delete refused");
+    expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
+    expect(inner.snapshot().has(markerKey(VENUE, gen(3)))).toBe(true);
+  });
+
   it("starts no further deletes once one has failed, and none after it has answered", async () => {
     const inner = createMemoryObjectStore({ now: () => T0 });
     for (let i = 0; i < 50; i += 1)

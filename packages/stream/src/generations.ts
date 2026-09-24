@@ -64,8 +64,9 @@ export async function pruneGenerations(
     });
   }
   const root = venuePrefix(venueId);
-  const newest = new Map<string, number>();
-  const keys = new Map<string, string[]>();
+  type Folder = { name: string; newest: number; marker: string; claimed: boolean; files: string[] };
+  // null for a folder whose name is not a generation's.
+  const folders = new Map<string, Folder | null>();
   for (const object of await store.list(root)) {
     if (!object.key.startsWith(root)) {
       throw new AppError("backup.stream_name_invalid", { field: "listedKey", value: object.key });
@@ -74,32 +75,43 @@ export async function pruneGenerations(
     const slash = rest.indexOf("/");
     if (slash <= 0) continue;
     const name = rest.slice(0, slash);
-    if (parseGenerationName(name) === null) continue;
-    newest.set(
-      name,
-      Math.max(newest.get(name) ?? Number.NEGATIVE_INFINITY, object.lastModified.getTime()),
-    );
-    let list = keys.get(name);
-    if (list === undefined) keys.set(name, (list = []));
-    list.push(object.key);
+    if (name === live) continue;
+    let folder = folders.get(name);
+    if (folder === undefined) {
+      folder =
+        parseGenerationName(name) === null
+          ? null
+          : {
+              name,
+              newest: Number.NEGATIVE_INFINITY,
+              marker: markerKey(venueId, name),
+              claimed: false,
+              files: [],
+            };
+      folders.set(name, folder);
+    }
+    if (folder === null) continue;
+    folder.newest = Math.max(folder.newest, object.lastModified.getTime());
+    if (object.key === folder.marker) folder.claimed = true;
+    else folder.files.push(object.key);
   }
   const cutoff = now.getTime() - windowMs;
-  const doomed = [...newest]
-    .filter(([name, time]) => name !== live && time < cutoff)
-    .map(([name]) => name)
-    .sort();
-  for (const name of doomed) {
-    // The marker goes last, so a prune interrupted partway leaves a generation that had a marker still
-    // claimed.
-    const marker = markerKey(venueId, name);
-    const all = keys.get(name)!;
-    await deleteAll(
-      store,
-      all.filter((key) => key !== marker),
-    );
-    if (all.includes(marker)) await store.delete(marker);
+  const doomed: Folder[] = [];
+  for (const folder of folders.values()) {
+    if (folder !== null && folder.newest < cutoff) doomed.push(folder);
   }
-  return doomed;
+  doomed.sort((a, b) => (a.name < b.name ? -1 : 1));
+  // Markers go last, so a prune interrupted partway leaves every generation that had a marker still
+  // claimed.
+  await deleteAll(
+    store,
+    doomed.flatMap((folder) => folder.files),
+  );
+  await deleteAll(
+    store,
+    doomed.filter((folder) => folder.claimed).map((folder) => folder.marker),
+  );
+  return doomed.map((folder) => folder.name);
 }
 
 /** Stops starting deletes at the first failure, and answers only once those in flight have settled. */
