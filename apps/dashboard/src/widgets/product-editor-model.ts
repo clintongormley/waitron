@@ -3,6 +3,7 @@ import { t } from "../i18n/t.js";
 import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
 export type { DietaryLabel };
 import type {
+  InheritedValues,
   ProductEditorBody,
   ProductModifierRef,
   ProductVariantInput,
@@ -16,11 +17,14 @@ export type EditorVariant = ProductVariantInput;
 /** The product editor's DRAFT: the wire body the editor sends (`ProductEditorBody`), plus an optional
  * `id` for an existing product. `stationId`/`courseId` are re-required here even though the wire body's
  * `ProductRouting` allows omission — both travel in the product's own save, and the form always carries
- * an explicit value, so an absent key and a cleared one must not collapse to the same submitted body. */
+ * an explicit value, so an absent key and a cleared one must not collapse to the same submitted body.
+ * `inherited` is what the editor READ carries for a variant — its parent's values, shown as hints —
+ * and is never sent back. */
 export type ProductEditorDraft = ProductEditorBody & {
   id?: string;
   stationId: string | null;
   courseId: string | null;
+  inherited?: InheritedValues | null;
 };
 /** A modifier list as the product editor's Modifiers section reads one: its id and its plain STAFF
  * name. `ExtraList` and `OptionList` (packages/catalogue/src/modifier-list-types.ts) both satisfy
@@ -67,6 +71,33 @@ export function modifierListName(
   names: ReadonlyMap<string, string>,
 ): string {
   return names.get(modifierKey(ref)) ?? t("editor.missing_choice");
+}
+
+/**
+ * Whether two draft values hold the same data, whatever order their keys are in: a variant edited in
+ * its window comes back as a new object with its keys in that window's order. A key holding
+ * `undefined` counts as absent, as it does on the wire. Array order counts — it is the variant order
+ * and the modifier order the product saves.
+ */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b))
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((item, index) => sameValue(item, b[index]))
+    );
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = (value: Record<string, unknown>) =>
+    Object.keys(value).filter((key) => value[key] !== undefined);
+  const leftKeys = keys(left);
+  return (
+    leftKeys.length === keys(right).length &&
+    leftKeys.every((key) => sameValue(left[key], right[key]))
+  );
 }
 
 export interface EditorChoice {

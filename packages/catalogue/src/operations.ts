@@ -31,7 +31,6 @@ import type { PricingUnit, VatClass } from "./pricing.js";
 import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
-import { variantsOfProducts, type ProductVariant } from "./variants.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import {
   assignProductUnit,
@@ -52,7 +51,7 @@ import {
   productWithId,
   unitOwnerJoin,
 } from "./variant-fallback.js";
-import type { Product } from "./product-types.js";
+import type { ListedVariant, Product } from "./product-types.js";
 import type {
   AccessibleCatalogue,
   AvailableProduct,
@@ -71,7 +70,7 @@ export type {
   OfferedModifier,
   OfferedOptionsList,
 } from "./menu-types.js";
-export type { Product } from "./product-types.js";
+export type { ListedVariant, Product } from "./product-types.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
@@ -249,7 +248,7 @@ interface RawProduct {
 function toProduct(
   row: RawProduct,
   categoryIds: string[],
-  variants: ProductVariant[] = [],
+  variants: ListedVariant[] = [],
 ): Product {
   const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, ...product } = row;
   const unit = sellableUnit(row.unitId, unitName, unitPrecision, hardwareUnit, unitAbbreviation);
@@ -927,19 +926,69 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     tx,
     rows.map((row) => row.id),
   );
-  // A variant is listed under its parent, never on its own, and only while it is Active.
-  const variantsByProduct = await variantsOfProducts(
+  // A variant is listed under its parent, never on its own; Inactive ones too, for the dashboard.
+  const variantsByProduct = await listedVariantsOfProducts(
     tx,
     rows.map((row) => row.id),
   );
   return rows.map((row) => ({
-    ...toProduct(
-      row,
-      row.categoryIds,
-      (variantsByProduct.get(row.id) ?? []).filter((variant) => variant.active),
-    ),
+    ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
   }));
+}
+
+/** Every variant of each product in `productIds`, Inactive ones included, in variant order, with
+ * the values it carries once its blanks read as its parent's — in ONE query (CLAUDE.md §3). */
+async function listedVariantsOfProducts(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<Map<string, ListedVariant[]>> {
+  const rows = await tx
+    .select({
+      parentId: products.parentId,
+      id: products.id,
+      name: products.name,
+      customerName: products.customerName,
+      kitchenName: products.kitchenName,
+      image: products.image,
+      ownPrice: products.unitPrice,
+      available: products.available,
+      active: products.active,
+      unitPrice: effective.unitPrice,
+      vatClass: effective.vatClass,
+      primaryCategoryId: effective.categoryId,
+      categoryIds: categoryIdArray,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productCategories, categoryOwnerJoin)
+    .where(inArray(products.parentId, [...productIds]))
+    .groupBy(products.id)
+    .orderBy(products.parentId, products.variantOrder, products.id);
+  const grouped = new Map<string, ListedVariant[]>();
+  for (const {
+    parentId,
+    ownPrice,
+    unitPrice,
+    vatClass,
+    primaryCategoryId,
+    categoryIds,
+    ...row
+  } of rows) {
+    const held = grouped.get(parentId!) ?? [];
+    held.push({
+      ...row,
+      unitPrice: priceOrNull(ownPrice),
+      effective: {
+        unitPrice: centsToDecimal(unitPrice),
+        vatClass: vatClass as VatClass,
+        primaryCategoryId,
+        categoryIds,
+      },
+    });
+    grouped.set(parentId!, held);
+  }
+  return grouped;
 }
 
 export async function updateProduct(

@@ -170,6 +170,7 @@ export function parseProductEditorInput(
       // Every listed entry is a variant, so a blank price follows the product's (spec §15.3).
       unitPrice: inheritable(variant.unitPrice, `${field}.unitPrice`, true, price),
       available: boolean(variant.available, `${field}.available`),
+      active: boolean(variant.active, `${field}.active`),
     };
   });
   const allergens =

@@ -16,6 +16,11 @@ describe.each(["light", "dark"] as const)("wt-switch a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  test("hidden label", async () => {
+    await mountThemed('<wt-switch label="Disponible" hide-label checked></wt-switch>', theme);
+    await expectNoA11yViolations(host);
+  });
+
   test("disabled", async () => {
     await mountThemed('<wt-switch label="Activado" disabled></wt-switch>', theme);
     await expectNoA11yViolations(host);

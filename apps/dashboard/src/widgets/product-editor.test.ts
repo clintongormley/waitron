@@ -1,12 +1,19 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { ProductEditor, productEditorField } from "./product-editor.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  ProductEditor,
+  productEditorField,
+  productEditorTranslationField,
+} from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.js";
 import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
+import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/domain.js";
 
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
@@ -46,6 +53,7 @@ const small: EditorVariant = {
   image: null,
   unitPrice: "2.00",
   available: true,
+  active: true,
 };
 const large: EditorVariant = {
   id: "large",
@@ -55,6 +63,7 @@ const large: EditorVariant = {
   image: null,
   unitPrice: "3.00",
   available: false,
+  active: true,
 };
 // Named in the venue's own content language (the harness mounts a Spanish venue), so a chip shows
 // a real word rather than falling back to its id.
@@ -109,7 +118,6 @@ function variantTable(el: ProductEditor) {
   return el.shadowRoot!.querySelector<
     HTMLElement & {
       variants: EditorVariant[];
-      unitLabel: string;
       errors: Record<number, string>;
       updateComplete: Promise<unknown>;
     }
@@ -173,18 +181,63 @@ it("uses the shared compact nutritional picker without a reviewed switch", async
   );
 });
 
+/** Runs `body` with the test frame at a desktop width, where the variants table keeps its price
+ * column and the unit select in that column's heading. */
+async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    expect(window.innerWidth).toBe(1280);
+    await body();
+  } finally {
+    await page.viewport(width, height);
+  }
+}
+
 it("puts the variant pricing unit chooser in the table header, not below the table", async () => {
+  await atDesktopWidth(async () => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, variants: [small, large] },
+      locales: ["en"],
+      units: [unit, { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+      taxChoices: reduced,
+    });
+    const table = variantTable(el)!;
+    await table.updateComplete;
+    const select = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+    expect(select.getClientRects().length).toBeGreaterThan(0);
+    expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
+  });
+});
+
+// A phone hides the variants table's price column and the unit select in its heading, so the price
+// field's own unit button has to reach everything that select offered.
+it("changes a product's unit from the price field when the table's heading select is hidden", async () => {
+  const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, variants: [small, large] },
     locales: ["en"],
-    units: [unit, { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+    units: [unit, litre],
     taxChoices: reduced,
   });
   const table = variantTable(el)!;
+  table.style.width = "20rem";
   await table.updateComplete;
-  expect(table.shadowRoot!.querySelector('select[name="pricing-unit"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const heading = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+  expect(heading.getClientRects()).toHaveLength(0);
+  await openUnits(el);
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  expect(select.getClientRects().length).toBeGreaterThan(0);
+  expect([...select.options].map((option) => option.value)).toEqual(["", unit.id, litre.id]);
+  expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).not.toBeNull();
+  select.value = litre.id;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBe(litre.id);
 });
 
 it("applies variant-table unit changes and forwards its add-unit action", async () => {
@@ -854,103 +907,6 @@ it("associates server and client errors with native selects", async () => {
   );
 });
 
-it("turns the plain price into a Regular variant on the first Add variant and opens the new one", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: product,
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
-  expect(variantTable(el)).toBeNull();
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
-  await el.updateComplete;
-  expect(el.currentValue.variants).toEqual([
-    {
-      name: t("editor.variant_regular"),
-      customerName: null,
-      kitchenName: null,
-      image: null,
-      unitPrice: "9.00",
-      available: true,
-    },
-  ]);
-  // The window that opens is for the SECOND variant, not for the one the price just became.
-  expect(variantForm(el).open).toBe(true);
-  expect(variantForm(el).value).toBeNull();
-  variantForm(el).dispatchEvent(
-    new CustomEvent("wt-submit", {
-      detail: { value: { ...small, id: undefined } },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await el.updateComplete;
-  expect(el.currentValue.variants.map((variant) => variant.name)).toEqual([
-    t("editor.variant_regular"),
-    "Small",
-  ]);
-  expect(variantForm(el).open).toBe(false);
-  expect(variantTable(el)!.variants).toHaveLength(2);
-});
-
-it("folds the lone variant back into the plain price when the second one is cancelled", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: product,
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
-  await el.updateComplete;
-  variantForm(el).dispatchEvent(
-    new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  // A draft never holds exactly one variant.
-  expect(el.currentValue.variants).toEqual([]);
-  expect(el.currentValue.unitPrice).toBe("9.00");
-  expect(variantTable(el)).toBeNull();
-});
-
-it("folds a removed second variant's sibling price back into the plain price field", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, variants: [small, large] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
-  const table = variantTable(el)!;
-  expect(table.variants).toEqual([small, large]);
-  table.dispatchEvent(
-    new CustomEvent("wt-remove", { detail: { index: 1 }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(el.currentValue.variants).toEqual([]);
-  expect(el.currentValue.unitPrice).toBe("2.00");
-  expect(
-    (el.shadowRoot!.querySelector("[name=unit-price]") as HTMLElement & { value: string }).value,
-  ).toBe("2.00");
-});
-
-it("keeps the product's own price when the variant left alone has no price of its own", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, variants: [{ ...small, unitPrice: null }, large] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
-  variantTable(el)!.dispatchEvent(
-    new CustomEvent("wt-remove", { detail: { index: 1 }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(el.currentValue.variants).toEqual([]);
-  expect(el.currentValue.unitPrice).toBe("9.00");
-});
-
 it("saves a variant with no price of its own, which sells at the product's", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -1007,14 +963,22 @@ it("applies a reorder, an availability toggle and an edit from the variants tabl
 });
 
 it("names the product's unit in the variants table's price column", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, variants: [small, large] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
+  await atDesktopWidth(async () => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, variants: [small, large] },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+    const table = variantTable(el)!;
+    await table.updateComplete;
+    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[name="pricing-unit"]',
+    )!;
+    expect(select.getClientRects().length).toBeGreaterThan(0);
+    expect(select.selectedOptions[0]!.textContent!.trim()).toBe("ea");
   });
-  expect(variantTable(el)!.unitLabel).toBe("ea");
 });
 
 it("saves station and course with a new product, without a separate routing event", async () => {
@@ -1216,6 +1180,32 @@ it("summarises each collapsed section so nothing filled in is invisible", async 
   expect(section(el, "nutrition").getAttribute("summary")).toBe("Vegano");
 });
 
+it("reports a Cancel when its window is dismissed, never when the screen shuts it", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const cancelled = vi.fn();
+  el.addEventListener("wt-cancel", cancelled);
+  el.open = false;
+  await el.updateComplete;
+  await closeReportsDelivered();
+  expect(cancelled).not.toHaveBeenCalled();
+
+  el.open = true;
+  await el.updateComplete;
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const dismissed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  modal.shadowRoot!.querySelector("dialog")!.close();
+  await dismissed;
+  expect(cancelled).toHaveBeenCalledOnce();
+});
+
 it("suspends Save and Cancel while a nested window is open", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -1244,31 +1234,6 @@ it("suspends Save and Cancel while a nested window is open", async () => {
   expect(cancelled).toHaveBeenCalledOnce();
 });
 
-it("refuses the first Add variant while the price it would copy is invalid", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: product,
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-  });
-  await input(el, "unit-price", "-1");
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
-  await el.updateComplete;
-  // Folding it would carry the bad price into a variant and take the field it lives in off screen,
-  // leaving a save nobody can fix: the plain price is no longer checked once variants exist.
-  expect(el.currentValue.variants).toEqual([]);
-  expect(el.currentValue.unitPrice).toBe("-1");
-  expect(variantForm(el).open).toBe(false);
-  const price = el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=unit-price]")!;
-  expect(price.error).toBe(t("editor.price_invalid"));
-  await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("unit-price");
-  await input(el, "unit-price", "4.00");
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
-  await el.updateComplete;
-  expect(el.currentValue.variants.map((variant) => variant.unitPrice)).toEqual(["4.00"]);
-});
-
 it("marks the variant row a reported problem belongs to", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -1284,6 +1249,41 @@ it("marks the variant row a reported problem belongs to", async () => {
   expect(submit).not.toHaveBeenCalled();
   // The summary alone cannot say WHICH variant is wrong, and a variant has no field in this form.
   expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
+});
+
+// The server names a variant by its place in the whole list it was sent, Inactive rows included,
+// while the table hides an Inactive row by default: the refusal has to reach the row it names.
+it("puts a server refusal of variants.2 on the third variant's row, past a hidden Inactive one", async () => {
+  const medium: EditorVariant = {
+    id: "medium",
+    name: "Medium",
+    customerName: { en: "Medium cup", es: "Taza mediana" },
+    kitchenName: "MD",
+    image: null,
+    unitPrice: "2.50",
+    available: true,
+    active: true,
+  };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, { ...large, active: false }, medium] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const message = t("editor.field_rejected");
+  el.fieldErrors = { [productEditorField("variants.2.unitPrice", "en")!]: message };
+  await el.updateComplete;
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  expect(table.errors).toEqual({ 2: message });
+  expect(table.shadowRoot!.querySelector("[data-test=row-1]")).toBeNull();
+  const row = table.shadowRoot!.querySelector("[data-test=row-2]")!;
+  expect(row.textContent).toContain("Medium");
+  expect(row.querySelector("[data-test=error-2]")!.textContent!.trim()).toBe(message);
+  await expect
+    .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("actions-2");
 });
 
 it("keeps a variant's mark on that variant when the rows are reordered", async () => {
@@ -1472,4 +1472,739 @@ it("keeps an attached row's name, type, grip and row menu on one line", async ()
   expect(middle("wt-row-actions")).toBeCloseTo(grip, 0);
   expect(textMiddle("[data-test=modifier-name]")).toBeCloseTo(grip, 0);
   expect(textMiddle("[data-test=modifier-kind]")).toBeCloseTo(grip, 0);
+});
+
+// --- The parent's variants section (spec §15.1, §15.3, §15.6) ---
+
+function tableEvent(el: ProductEditor, name: string, detail: Record<string, unknown>) {
+  variantTable(el)!.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  return el.updateComplete;
+}
+
+it("adds the first variant as one row of its own, with no Regular variant made from the price", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await el.updateComplete;
+  expect(el.currentValue.variants).toEqual([]);
+  expect(variantForm(el).open).toBe(true);
+  expect(variantForm(el).value).toBeNull();
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { ...small, id: undefined } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.variants.map((variant) => variant.name)).toEqual(["Small"]);
+  expect(el.currentValue.unitPrice).toBe("9.00");
+  expect(variantTable(el)!.variants).toHaveLength(1);
+});
+
+it("adds nothing when the first Add variant is cancelled", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await el.updateComplete;
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.variants).toEqual([]);
+  expect(el.currentValue.unitPrice).toBe("9.00");
+  expect(variantTable(el)).toBeNull();
+});
+
+it("keeps the price field beside the variants, labelled as the base price", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const price = el.shadowRoot!.querySelector<
+    HTMLElement & { value: string; label: string; required: boolean }
+  >("[name=unit-price]")!;
+  expect(price.value).toBe("9.00");
+  expect(price.required).toBe(true);
+  expect(price.label).toBe(t("editor.base_price_unit").replace("{unit}", "ea"));
+  // Without variants the same field is the product's plain price.
+  const { el: plain } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  expect(
+    plain.shadowRoot!.querySelector<HTMLElement & { label: string }>("[name=unit-price]")!.label,
+  ).toBe(t("editor.price_unit").replace("{unit}", "ea"));
+});
+
+it("still requires a valid base price while the product has variants", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await input(el, "unit-price", "-1");
+  save(el);
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=unit-price]")!.error,
+  ).toBe(t("editor.price_invalid"));
+});
+
+it("makes a removed variant Inactive rather than dropping it, and saves it so", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await tableEvent(el, "wt-remove", { index: 1 });
+  expect(el.currentValue.variants).toEqual([small, { ...large, active: false }]);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  const sent = submit.mock.calls[0]![0].detail.value.variants;
+  expect(sent.map((variant: EditorVariant) => [variant.id, variant.active])).toEqual([
+    ["small", true],
+    ["large", false],
+  ]);
+});
+
+it("drops a removed variant that was never saved, since there is nothing to make Inactive", async () => {
+  const fresh: EditorVariant = { ...small, id: undefined, name: "Fresh" };
+  delete fresh.id;
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, fresh] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await tableEvent(el, "wt-remove", { index: 1 });
+  expect(el.currentValue.variants).toEqual([small]);
+});
+
+it("puts focus on Add variant when Remove drops the only variant and the table goes with it", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await el.updateComplete;
+  const fresh: EditorVariant = { ...small, name: "Fresh" };
+  delete fresh.id;
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", { detail: { value: fresh }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  // Remove from the row's menu, the way a keyboard user reaches it.
+  table
+    .shadowRoot!.querySelector<HTMLElement & { show(): void }>('[data-test="actions-0"]')!
+    .show();
+  const remove = table.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-0"]')!;
+  remove.focus();
+  remove.click();
+  await el.updateComplete;
+  expect(el.currentValue.variants).toEqual([]);
+  expect(variantTable(el)).toBeNull();
+  await expect
+    .poll(() => el.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("add-variant");
+});
+
+it("restores an Inactive variant from the variants section", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, { ...large, active: false }] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await tableEvent(el, "wt-restore", { index: 1 });
+  expect(el.currentValue.variants[1]).toEqual(large);
+});
+
+it("never reactivates an Inactive variant on a save that did not restore it", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, { ...large, active: false }] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  // A restore of the PRODUCT is not a restore of its variants.
+  await input(el, "name", "Coffee to go");
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.variants[1].active).toBe(false);
+});
+
+it("asks the screen to open a saved variant's own page", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const opened = vi.fn();
+  el.addEventListener("wt-open-product", opened);
+  await tableEvent(el, "wt-open", { index: 1 });
+  expect(opened).toHaveBeenCalledOnce();
+  expect(opened.mock.calls[0]![0].detail).toEqual({ productId: "large" });
+  expect(opened.mock.calls[0]![0].composed).toBe(true);
+});
+
+it("hands the variants section and window the base price and photo a blank one falls back to", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, image: "coffee.png", variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await input(el, "unit-price", "9.50");
+  const table = variantTable(el) as unknown as { basePrice: string };
+  expect(table.basePrice).toBe("9.50");
+  const form = variantForm(el) as unknown as { basePrice: string; inheritedImage: string | null };
+  expect(form.basePrice).toBe("9.50");
+  expect(form.inheritedImage).toBe("coffee.png");
+});
+
+it("points a refused translation at an Active variant only, as the server checks only those", () => {
+  const value = {
+    customerName: { en: "Coffee", es: "Café" },
+    variants: [
+      { customerName: { es: "Taza" }, active: false },
+      { customerName: { es: "Vaso" }, active: true },
+    ],
+  };
+  expect(productEditorTranslationField(value, "en")).toBe("variant-1-name");
+  expect(
+    productEditorTranslationField({ ...value, variants: [value.variants[0]!] }, "en"),
+  ).toBeNull();
+});
+
+// --- A variant's own page (spec §4.4, §9.1, §15.2) ---
+
+// The parent's value for every inherited field, each DIFFERENT from what the variant might set, so
+// an assertion can tell a hint read from the parent from a value read from the variant.
+const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
+const parentValues: InheritedValues = {
+  description: { en: "Roasted in house" },
+  image: "coffee.png",
+  unitPrice: "9.00",
+  vatClass: "reduced",
+  unitId: litre.id,
+  categoryIds: ["drinks", "snacks"],
+  primaryCategoryId: "drinks",
+  stationId: "bar",
+  courseId: "mains",
+  allergens: { milk: { presence: "contains" } },
+  dietaryDeclarations: ["vegetarian"],
+};
+const glass: ProductEditorDraft = {
+  ...product,
+  id: "glass",
+  parentId: "coffee",
+  inherited: parentValues,
+  name: "Glass of coffee",
+  customerName: { en: "A glass", es: "Un vaso" },
+  kitchenName: "GLS",
+  description: null,
+  image: null,
+  unitId: null,
+  unitPrice: null,
+  vatClass: null,
+  categoryIds: [],
+  primaryCategoryId: null,
+  allergens: null,
+  dietaryDeclarations: null,
+  stationId: null,
+  courseId: null,
+};
+const stations = [
+  { id: "bar", name: "Bar" },
+  { id: "grill", name: "Grill" },
+];
+const courses = [
+  { id: "mains", name: "Mains" },
+  { id: "desserts", name: "Desserts" },
+];
+const taxes = [
+  { id: "reduced" as const, rate: "10.00", label: "Reduced" },
+  { id: "general" as const, rate: "21.00", label: "General" },
+];
+
+async function mountVariant(value: ProductEditorDraft = glass) {
+  return (
+    await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value,
+      locales: ["en"],
+      units: [unit, litre],
+      taxChoices: taxes,
+      categories,
+      stations,
+      courses,
+      api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
+    })
+  ).el;
+}
+function control<T = HTMLElement>(el: ProductEditor, name: string) {
+  return el.shadowRoot!.querySelector(`[name="${name}"]`) as unknown as T;
+}
+function firstOption(el: ProductEditor, name: string) {
+  return control<HTMLSelectElement>(el, name).options[0]!;
+}
+function hint(el: ProductEditor, name: string) {
+  return el.shadowRoot!.querySelector(`[data-test="${name}"]`)?.textContent?.trim();
+}
+const sameAs = (value: string) => t("editor.same_as").replace("{value}", value);
+
+it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
+  const el = await mountVariant();
+  expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
+    t("editor.edit_variant"),
+  );
+  expect(section(el, "modifiers")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=add-variant]")).toBeNull();
+  expect(variantTable(el)).toBeNull();
+});
+
+it("shows a variant's inherited price and description empty, with the parent's value as the hint", async () => {
+  const el = await mountVariant();
+  const price = control<{ value: string; placeholder: string; required: boolean }>(
+    el,
+    "unit-price",
+  );
+  expect(price.value).toBe("");
+  expect(price.placeholder).toBe("9.00");
+  // A variant's price is optional: blank sells at the base price (spec §15.3).
+  expect(price.required).toBe(false);
+  const description = control<HTMLTextAreaElement>(el, "description-en");
+  expect(description.value).toBe("");
+  expect(description.placeholder).toBe("Roasted in house");
+});
+
+// Storage inherits a variant's description as ONE value across every language
+// (`packages/catalogue/src/variant-fallback.ts`), so a language left blank beside one with text reads
+// blank, not the parent's.
+async function mountBilingualVariant(description: ProductEditorDraft["description"] = null) {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...glass,
+      description,
+      inherited: {
+        ...parentValues,
+        description: { en: "Roasted in house", es: "Tostado en casa" },
+      },
+    },
+    locales: ["en", "es"],
+    units: [unit, litre],
+    taxChoices: taxes,
+    categories,
+  });
+  return el;
+}
+const placeholders = (el: ProductEditor) =>
+  ["en", "es"].map(
+    (locale) => control<HTMLTextAreaElement>(el, `description-${locale}`).placeholder,
+  );
+
+it("hints a variant's description in every language only while every language is blank", async () => {
+  const el = await mountBilingualVariant();
+  expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
+  await input(el, "description-en", "Served in a glass");
+  expect(placeholders(el)).toEqual(["", ""]);
+  await input(el, "description-en", "  ");
+  expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
+});
+
+it("shows no description hint on a variant that already describes itself in one language", async () => {
+  const el = await mountBilingualVariant({ es: "Servido en vaso" });
+  expect(placeholders(el)).toEqual(["", ""]);
+});
+
+it("saves a variant's description as null once every language is blanked again", async () => {
+  const el = await mountBilingualVariant({ en: "Served in a glass", es: "Servido en vaso" });
+  await input(el, "description-en", "");
+  await input(el, "description-es", " ");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.description).toBeNull();
+});
+
+it("never hints a variant's names from the parent's", async () => {
+  const el = await mountVariant({ ...glass, customerName: null, kitchenName: null });
+  for (const name of ["name", "customer-name-en", "kitchen-name"])
+    expect(control<{ placeholder: string }>(el, name).placeholder, name).toBe("");
+});
+
+it("offers each inherited choice first as 'Same as' the parent's value, with an empty value", async () => {
+  const el = await mountVariant();
+  await openUnits(el);
+  const expected = {
+    tax: sameAs("Reduced (10%)"),
+    unit: sameAs("Litre (l)"),
+    "product-station": sameAs("Bar"),
+    "product-course": sameAs("Mains"),
+  };
+  for (const [name, text] of Object.entries(expected)) {
+    const option = firstOption(el, name);
+    expect(option.value, name).toBe("");
+    expect(option.textContent!.trim(), name).toBe(text);
+    expect(control<HTMLSelectElement>(el, name).value, name).toBe("");
+  }
+  // "Each" stands for NO unit on a product of its own; on a variant no unit means the parent's, so
+  // the synthetic Each choice would say one thing and save another.
+  expect([...control<HTMLSelectElement>(el, "unit").options].map((option) => option.value)).toEqual(
+    ["", unit.id, litre.id],
+  );
+  // The price field's unit button names the unit the variant sells in: the parent's.
+  expect(control<{ unit: string }>(el, "unit-price").unit).toBe(
+    t("editor.per_unit").replace("{unit}", "l"),
+  );
+});
+
+it("marks a variant's own choice selected over the 'Same as' option", async () => {
+  const el = await mountVariant({
+    ...glass,
+    vatClass: "general",
+    stationId: "grill",
+    courseId: "desserts",
+  });
+  expect(control<HTMLSelectElement>(el, "tax").value).toBe("general");
+  expect(control<HTMLSelectElement>(el, "product-station").value).toBe("grill");
+  expect(control<HTMLSelectElement>(el, "product-course").value).toBe("desserts");
+});
+
+it("hints the parent's categories, allergens, dietary declarations and photo beside their controls", async () => {
+  const el = await mountVariant();
+  expect(hint(el, "categories-hint")).toBe(
+    `${sameAs("Bebidas, Aperitivos")} · ${t("editor.reporting_category")}: Bebidas`,
+  );
+  expect(hint(el, "allergens-hint")).toBe(
+    `${t("modifiers.allergens")}: ${sameAs(allergenName("milk"))}`,
+  );
+  expect(hint(el, "dietary-hint")).toBe(
+    `${t("modifiers.dietary_preferences")}: ${sameAs(t("editor.diet.vegetarian"))}`,
+  );
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  expect(upload.inheritedImage).toBe("coffee.png");
+  expect(upload.image).toBeNull();
+});
+
+it("drops a hint once the variant sets that field itself", async () => {
+  const el = await mountVariant({
+    ...glass,
+    categoryIds: ["plates"],
+    primaryCategoryId: "plates",
+    allergens: { gluten: { presence: "contains" } },
+    dietaryDeclarations: ["vegan"],
+  });
+  expect(hint(el, "categories-hint")).toBeUndefined();
+  expect(hint(el, "allergens-hint")).toBeUndefined();
+  expect(hint(el, "dietary-hint")).toBeUndefined();
+});
+
+it("saves every field a variant left blank as null, so it keeps reading the parent's", async () => {
+  const el = await mountVariant();
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  const value = submit.mock.calls[0]![0].detail.value;
+  expect(value).toMatchObject({
+    name: "Glass of coffee",
+    unitPrice: null,
+    vatClass: null,
+    unitId: null,
+    stationId: null,
+    courseId: null,
+    description: null,
+    image: null,
+    allergens: null,
+    dietaryDeclarations: null,
+    categoryIds: [],
+    primaryCategoryId: null,
+    variants: [],
+    modifiers: [],
+    parentId: "coffee",
+  });
+  // The parent's values are a hint for this screen, not part of what it saves.
+  expect("inherited" in value).toBe(false);
+});
+
+it("saves a value typed into a variant's field, and null once it is cleared again", async () => {
+  const el = await mountVariant();
+  await input(el, "unit-price", "4.50");
+  const tax = control<HTMLSelectElement>(el, "tax");
+  tax.value = "general";
+  tax.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value).toMatchObject({
+    unitPrice: "4.50",
+    vatClass: "general",
+  });
+  // A second save needs the first one settled.
+  el.busy = true;
+  await el.updateComplete;
+  el.busy = false;
+  await el.updateComplete;
+  await input(el, "unit-price", "");
+  tax.value = "";
+  tax.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  save(el);
+  expect(submit.mock.calls[1]![0].detail.value).toMatchObject({ unitPrice: null, vatClass: null });
+});
+
+it("reads an emptied allergen or dietary choice on a variant as inheriting, never as 'none'", async () => {
+  const el = await mountVariant({
+    ...glass,
+    allergens: { gluten: { presence: "contains" } },
+    dietaryDeclarations: ["vegan"],
+  });
+  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: { allergens: [], dietary: [] } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  // An empty overlay would declare the glass free of the milk its parent contains.
+  expect(submit.mock.calls[0]![0].detail.value).toMatchObject({
+    allergens: null,
+    dietaryDeclarations: null,
+  });
+});
+
+it("refuses a variant's price that is not a plain amount", async () => {
+  const el = await mountVariant();
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await input(el, "unit-price", "-1");
+  save(el);
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+  expect(control<{ error: string }>(el, "unit-price").error).toBe(t("editor.price_invalid"));
+});
+
+it("paints a variant's description hint from the muted-text token", async () => {
+  const el = await mountVariant();
+  el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  const description = control<HTMLTextAreaElement>(el, "description-en");
+  expect(getComputedStyle(description, "::placeholder").color).toBe("rgb(7, 8, 9)");
+});
+
+/** How many lines `text` takes up inside `cell`: one rectangle per line the browser wrapped it onto. */
+function linesOf(cell: Element, text: string): number {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const at = node.textContent!.indexOf(text);
+    if (at < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + text.length);
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  }
+  throw new Error(`"${text}" is not in the cell`);
+}
+
+const phoneCases = [
+  { locale: "en-GB", scaled: false, unitId: unit.id },
+  { locale: "es-ES", scaled: false, unitId: unit.id },
+  { locale: "es-ES", scaled: false, unitId: null },
+  { locale: "en-GB", scaled: true, unitId: null },
+  { locale: "es-ES", scaled: true, unitId: unit.id },
+  { locale: "es-ES", scaled: true, unitId: null },
+];
+
+// A wider font and a longer language are what CI's Linux fonts and a real phone bring, so each case
+// is also run with every text size raised to a larger token, and each again in Verdana, whose widths
+// are close to CI's Linux fonts, so a Mac sees what CI sees; a machine without Verdana falls back to
+// the usual family. English and Spanish label the columns differently, and a product with no unit
+// gives the price field's unit button its longest name. A four-digit price is the widest amount a
+// row is likely to carry, and it must never break inside the number.
+it.each([
+  ...phoneCases.map((phone) => ({ ...phone, font: "default" })),
+  ...phoneCases.map((phone) => ({ ...phone, font: "Verdana" })),
+])(
+  "keeps every variant row's menu on screen at phone width, with no sideways scroll ($locale, larger text: $scaled, unit: $unitId, font: $font)",
+  async ({ locale, scaled, unitId, font }) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      setLocale(locale);
+      // `page.viewport` resizes the frame the widget renders in; resizing the outer page does not.
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      const { el, host } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: {
+          ...product,
+          unitId,
+          variants: [
+            { ...small, name: "Vino tinto de la casa, copa grande 125 ml", unitPrice: null },
+            { ...large, name: "Vino 175 ml" },
+            { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "1250.00" },
+          ],
+        },
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+      });
+      if (scaled) {
+        host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
+        host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+      }
+      if (font === "Verdana") {
+        const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+      }
+      const table = variantTable(el)!;
+      await table.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const wrap = table.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
+      // A table that fits never needs its own scroller. That alone does not put the menus on the
+      // screen: a table forced wider widens the box around it too, so each menu is also held to
+      // the frame's own right edge.
+      expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+      const edge = wrap.getBoundingClientRect().right;
+      for (const index of [0, 1, 2]) {
+        const menu = table.shadowRoot!.querySelector(`[data-test="actions-${index}"]`)!;
+        const right = menu.getBoundingClientRect().right;
+        expect(right, `row ${index}`).toBeLessThanOrEqual(edge);
+        expect(right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+      }
+      // On a phone each price sits under its variant's name, and the price column is gone.
+      const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
+      for (const row of rows) expect(row.children[2]!.getClientRects()).toHaveLength(0);
+      const cells = rows.map((row) => row.children[1]!);
+      expect(linesOf(cells[0]!, "9.00"), "the base price the first row falls back to").toBe(1);
+      expect(linesOf(cells[1]!, "3.00")).toBe(1);
+      expect(linesOf(cells[2]!, "1250.00")).toBe(1);
+      // Kept on one line, an amount wider than the name column would run over the switch beside it.
+      for (const cell of cells) {
+        const amount = cell.querySelector(".amount")!.getBoundingClientRect();
+        expect(amount.width).toBeGreaterThan(0);
+        expect(amount.right).toBeLessThanOrEqual(cell.getBoundingClientRect().right);
+      }
+      const available = table.shadowRoot!.querySelectorAll("thead th")[3]!;
+      expect(linesOf(available, t("editor.available")), "the Available heading").toBe(1);
+      // The heading's unit select goes with the price column. The unit stays one tap away on the
+      // price field above the table, whose unit button changes the same unit.
+      const unitSelect = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+      expect(unitSelect.getClientRects()).toHaveLength(0);
+      const unitButton = el
+        .shadowRoot!.querySelector('wt-price-input[name="unit-price"]')!
+        .shadowRoot!.querySelector("button.unit")!
+        .getBoundingClientRect();
+      const tapMin = parseFloat(getComputedStyle(table).getPropertyValue("--wt-tap-min"));
+      expect(tapMin).toBeGreaterThan(0);
+      expect(unitButton.height).toBeGreaterThanOrEqual(tapMin);
+      expect(unitButton.width).toBeGreaterThanOrEqual(tapMin);
+      expect(unitButton.right).toBeLessThanOrEqual(window.innerWidth);
+    } finally {
+      setLocale("es-ES");
+      await page.viewport(width, height);
+    }
+  },
+);
+
+it("holds Open, saying why, while the product has changes not yet saved, and frees it once they match", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const table = () => variantTable(el) as unknown as { openBlocked: boolean };
+  const opened = vi.fn();
+  el.addEventListener("wt-open-product", opened);
+  expect(table().openBlocked).toBe(false);
+  await input(el, "name", "Coffee to go");
+  expect(table().openBlocked).toBe(true);
+  // The row's own guard is not the only one: an Open that reaches the editor anyway is ignored.
+  await tableEvent(el, "wt-open", { index: 0 });
+  expect(opened).not.toHaveBeenCalled();
+  await input(el, "name", "Coffee");
+  expect(table().openBlocked).toBe(false);
+  await tableEvent(el, "wt-open", { index: 0 });
+  expect(opened).toHaveBeenCalledOnce();
+});
+
+it("counts a variant edit that ends where it started as no change, whatever order its fields come in", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await tableEvent(el, "wt-remove", { index: 1 });
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(true);
+  await tableEvent(el, "wt-restore", { index: 1 });
+  // The window hands a variant back as a NEW object with its keys in its own order.
+  const reordered = Object.fromEntries(Object.entries(small).reverse()) as EditorVariant;
+  await tableEvent(el, "wt-edit", { index: 0 });
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", { detail: { value: reordered }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(false);
+});
+
+it("frees Open once a save hands the editor the saved product back", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await input(el, "name", "Coffee to go");
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(true);
+  el.value = { ...product, name: "Coffee to go", variants: [small, large] };
+  await el.updateComplete;
+  expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(false);
 });

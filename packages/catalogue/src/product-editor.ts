@@ -107,9 +107,7 @@ export async function readProductEditor(
     // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
     // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],
-    // Active variants only: a save sends back every variant it received and makes each Active, so
-    // listing an Inactive one here would restore it on the parent's next save.
-    variants: (await listProductVariants(tx, productId)).filter((variant) => variant.active),
+    variants: await listProductVariants(tx, productId),
   };
 }
 
@@ -137,10 +135,12 @@ export async function saveProductEditor(
   if (value.parentId !== undefined && value.parentId !== storedParentId)
     throw new AppError("product.invalid", { field: "parentId" });
   // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
-  // must satisfy the enabled languages. A blank one is legal (it falls back to `name`), so only a
-  // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
-  // default-language entry.
-  if (value.customerName !== null)
+  // must satisfy the default content language. A blank one is legal (it falls back to `name`), so
+  // only a supplied customer name is validated — validateContentTranslations({}) would wrongly
+  // demand a default-language entry. A variant saved Inactive is skipped, as its product's save
+  // skips it (`setProductVariants`), so removing it is never refused for its customer name; it is
+  // checked on every save as Active.
+  if (value.customerName !== null && (!isVariant || value.active))
     await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId === null) {
     const [catalogue] = await tx

@@ -167,3 +167,14 @@ test("a switch given no name leaves its native input unnamed", async () => {
   const el = await mount("<wt-switch></wt-switch>");
   expect(el.shadowRoot!.querySelector("input")!.hasAttribute("name")).toBe(false);
 });
+
+test("a hidden label still names the switch but draws no text beside it", async () => {
+  const el = await mount('<wt-switch label="Disponible" hide-label></wt-switch>');
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.getAttribute("aria-label")).toBe("Disponible");
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Disponible");
+  // Only the control is left, so the switch takes no more room than its own tap target.
+  const tap = parseFloat(getComputedStyle(el).minWidth);
+  expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(tap);
+});

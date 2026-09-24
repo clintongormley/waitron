@@ -161,9 +161,32 @@ As a **cap** (`max-width`) it is in the variants table (`apps/dashboard/src/widg
 and the product editor's attached-lists table (`apps/dashboard/src/widgets/product-editor.ts`). The
 name is the one cell whose text can be long, so capping it makes the text wrap and keeps the
 controls after it (a switch, a row menu) on screen at phone width instead of pushing the row into a
-sideways scroll. There was a third, the old modifier form's choices table, until Task 13 of the
-extras-and-options plan deleted that form. That deleted table was the ONLY one that ever spelled the
-literal out for itself: `git log -S140px --oneline --all -- apps packages` returns two commits, and
+sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
+the product editor, on the earlier phone layout that still showed a price column, removing it
+changed no column at a 390px-wide frame, while in a 1280px frame it held the name column to 231px
+against 342px without it. It has not been re-measured since the price moved under the name. At phone width it relies instead on its
+own rule for a table 30rem wide or less: the price column goes, each price moves onto its own line
+under the variant's name, and the name column takes whatever width the grip, Available and row
+menu columns leave. The unit select in the price heading goes with its column; the price field
+above the table keeps a unit button that changes the same unit. The name is the one column that
+may break inside a word; an amount never breaks, so the name column is never narrower than the
+widest price. The Available heading is capped by `--wt-tap-min` plus a spacing token, and a longer
+heading runs on into the row menu's empty heading. Measured 2026-09-24 in the product editor at
+390px with a four-digit price, the text sizes raised a step and Verdana standing in for CI's Linux
+fonts: with the price column the table needed 304px of a 292px box; with the price under the name
+it fits with about 12px to spare (24px in this Mac's default fonts) and the name column is 120px
+wide. At 360px it fits at the normal text size but is 6px too wide at the larger one (18px in
+Verdana); at 320px it scrolls sideways inside its box in every case measured but English at the
+normal size in the default fonts.
+Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390px only,
+in English and Spanish, with the text sizes raised, and each again in Verdana. They check that the
+table does not scroll, that each row menu ends inside both the table's box and the frame, that the
+price column is hidden and each price sits on one line inside the name's cell, that the Available
+heading sits on one line, that the heading's unit select is hidden, and that the price field's unit
+button is a tap target on both axes. There was a third, the old modifier form's choices table,
+until Task 13 of the extras-and-options plan deleted that form. That deleted table was the ONLY one
+that ever spelled the literal out for itself:
+`git log -S140px --oneline --all -- apps packages` returns two commits, and
 between them the only files they write the number into are `modifier-form.ts` (added, then removed
 by the change that created this token) and `packages/ui-core/src/tokens/structure.css` (the token's own
 value). So neither the variants table nor the attached-lists table has ever carried the number. The
@@ -216,8 +239,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
-| `wt-price-input` | `value`, `label`, `name`, `unit`, `required` (reflected), `disabled` (reflected), `error`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
-| `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
+| `wt-price-input` | `value`, `label`, `name`, `unit`, `placeholder`, `required` (reflected), `disabled` (reflected), `error`. `placeholder` shows on the amount only while it is empty, painted `--wt-color-text-muted`. A money field joined to a trailing `<button>` whose visible text is `unit` (which is also that button's accessible name, so supply one). `disabled` locks the amount AND the unit button, so a form that suspends itself while saving cannot be edited through the price. `error` marks the field `aria-invalid` and links the message | `wt-change` — `detail: { value: string }` (on input); `wt-unit-click` — `detail: {}` (the unit button was pressed) |
+| `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (names the switch for assistive technology with `label` but draws no text beside it — for a switch in a table column whose heading already says what it is) | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors` | — |
@@ -362,6 +385,13 @@ See `apps/dashboard/src/screens/profile-screen.ts` (`#closeModal`) for the full 
 `profile-screen.test.ts`'s "a stale close from the previous modal never reopens or reverts a newer
 one" for how to reproduce the race deterministically (dispatch the delayed `wt-close` by hand
 rather than depending on timing luck).
+
+Since 2026-09-24 `wt-dialog` itself drops a close report that arrives while its native dialog is
+open again, so a modal reopened before the report lands no longer emits `wt-close` at all
+(`packages/ui/src/components/wt-dialog.test.ts`, "stays open, and reports no close, when shut and
+reopened within one task"). A report for a dialog that is still shut does arrive, so a handler that
+turns `wt-close` into a Cancel checks that it is still meant to be open, as
+`apps/dashboard/src/widgets/product-editor.ts` does.
 
 Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
 to handle dismissal, including Escape. The native dialog keeps focus inside while open and
@@ -544,6 +574,42 @@ Give its question-mark button a localized `aria-label`. It opens on click, stays
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
 `wt-input`'s `help` slot to align it beside that field's label.
 
+#### A field that falls back to another value
+
+Some fields store a value only to override one they would otherwise take from somewhere else — a
+variant's VAT, unit, station or photo from its parent product, an extra's price from its product's
+(spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §9.1). Such a field is
+**empty while it falls back**, and shows the value it falls back to as a hint, so the operator sees
+what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
+a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
+required. A translated field inherited as ONE value across its languages (a variant's description)
+shows its hints only while every language is blank; once any language has text, the record's own
+value applies and its blank languages show no hint.
+
+- **Text and price fields** (`wt-input`, `wt-price-input`, a `<textarea>`): the fallback value is the
+  field's `placeholder`. Both primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`
+  needs its own `::placeholder` rule with that token, because Chromium's default grey measured
+  3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the 4.5:1 text needs. axe does not check placeholder
+  contrast, so an a11y test for a new hinted field measures the ratio itself
+  (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
+- **A `<select>`**: the FIRST option has an empty value and reads "Same as &lt;fallback value&gt;"
+  (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
+  product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
+  like every option built from an expression. A choice that means "none" on a record of its own
+  (in the product editor: `editor.unit_each` for the unit, `product.no_station` for the kitchen
+  station, `product.no_course` for the course) is left out where the empty value already means
+  "fall back": offering both would read as one thing and save as another.
+- **Any other control** (a category picker, the allergen and dietary picker, an image): a muted
+  hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
+  goes away once the record sets its own. An image shows the fallback picture itself under the hint
+  (`dashboard-image-upload`'s `inheritedImage`), with no Remove action, because there is nothing of
+  the record's own to remove. A control whose empty state could also mean "none" (an allergen set,
+  a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
+  would declare the record free of what the fallback contains.
+
+A name is never hinted this way: a variant's names are its own (§15.2), and a blank one falls back
+to the record's own staff name, which the catalogue owns.
+
 ### Fold a long form into collapsible sections with summaries
 
 A form that shows everything an entity can carry becomes one long stack of cards, and the fields
@@ -584,9 +650,12 @@ Two notes on the primitives this pattern uses, both in the table above:
   attributes, so a host can style or query the state from outside.
 - `wt-price-input` is the money field a priced form wants: an amount joined to a trailing unit
   button. The button's visible text is its accessible name, so `unit` must never be empty. It emits
-  `wt-change` on input and `wt-unit-click` when the button is pressed. A plain product's editor swaps
-  that button for the unit dropdown on `wt-unit-click`; a product with variants keeps the unit
-  dropdown in the variants table's price heading instead.
+  `wt-change` on input and `wt-unit-click` when the button is pressed. The product editor draws its
+  price field with that button whether or not the product has variants, and opens the unit dropdown
+  under the field on `wt-unit-click`. A product with variants also has a unit select (`pricing-unit`)
+  in the variants table's price heading. Both change the same product unit, on purpose. A table
+  30rem wide or less hides its price column and that select with it, so on a phone the price
+  field's button is the only way to the unit.
 
 ### Dashboard banner
 
@@ -1159,9 +1228,12 @@ On the products screens (spec §15.6), **Active / Inactive** says whether a prod
 venue, and **Available / Unavailable** says whether it is sold out for now. Delete makes a product
 Inactive, and Restore makes it Active again; never label either of them "unavailable". The products
 list's Status filter starts on Active, so an Inactive product is hidden until the filter is changed,
-while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. Other
-screens' words for "switched off, kept for the record" are still being settled in
-`docs/backlog.md`.
+while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. A
+variant's Remove makes it Inactive and its Restore makes it Active, on the products list and in the
+product editor's variants section; an Inactive variant is hidden behind the list's same Status
+filter, and in the editor behind the variants section's own "Show variants" filter, which also
+starts on Active. Other screens' words for "switched off, kept for the record" are still being
+settled in `docs/backlog.md`.
 
 ### Navigation and language controls
 

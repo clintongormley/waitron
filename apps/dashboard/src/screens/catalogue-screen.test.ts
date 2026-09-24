@@ -14,7 +14,7 @@ import type {
 } from "../api/client.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
@@ -588,6 +588,7 @@ describe("catalogue-screen", () => {
         image: null,
         unitPrice: "4.50",
         available: true,
+        active: true,
       },
       {
         name: "Entera",
@@ -596,6 +597,7 @@ describe("catalogue-screen", () => {
         image: null,
         unitPrice: "8.50",
         available: true,
+        active: true,
       },
     ];
     // The product's own customer name is complete, so the only value missing English is the second
@@ -721,5 +723,221 @@ describe("catalogue-screen", () => {
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
+  });
+  describe("a variant's own page", () => {
+    // Listed under its parent only: the list read nests variants, and nothing lists one at the top.
+    const withVariant: Product[] = [
+      {
+        ...products[0]!,
+        variants: [
+          {
+            id: "v1",
+            name: "Media ración",
+            customerName: { es: "Media ración de croquetas" },
+            kitchenName: "1/2 CROQ",
+            image: null,
+            unitPrice: null,
+            available: true,
+            active: true,
+            effective: {
+              unitPrice: "8.50",
+              vatClass: "reduced",
+              primaryCategoryId: "c1",
+              categoryIds: ["c1"],
+            },
+          },
+        ],
+      },
+    ];
+    const variantValue: ProductEditorValue = {
+      ...value,
+      id: "v1",
+      parentId: "p1",
+      name: "Media ración",
+      customerName: { es: "Media ración de croquetas" },
+      kitchenName: "1/2 CROQ",
+      description: null,
+      unitId: null,
+      unitPrice: null,
+      vatClass: null,
+      categoryIds: [],
+      primaryCategoryId: null,
+      modifiers: [],
+      allergens: null,
+      dietaryDeclarations: null,
+      inherited: {
+        description: { es: "Cremosas" },
+        image: null,
+        unitPrice: "8.50",
+        vatClass: "reduced",
+        unitId: "u1",
+        categoryIds: ["c1"],
+        primaryCategoryId: "c1",
+        stationId: null,
+        courseId: null,
+        allergens: {},
+        dietaryDeclarations: ["vegetarian"],
+      },
+    };
+    const variantApi = () =>
+      stubApi({
+        listProducts: vi
+          .fn()
+          .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? withVariant : [])),
+        getProductEditor: vi
+          .fn()
+          .mockImplementation((id: string) => Promise.resolve(id === "v1" ? variantValue : value)),
+      });
+
+    it("opens the variant named in the address", async () => {
+      history.replaceState(null, "", "/manage/catalogue/product/v1");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      expect(api.getProductEditor).toHaveBeenCalledWith("v1");
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).value).toEqual(variantValue);
+    });
+
+    it("opens a variant's page from its parent's variants section, and saves to the variant", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await flush(el);
+      expect(editor(el).value).toEqual(variantValue);
+      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+      emit(editor(el), "wt-submit", { value: variantValue });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", variantValue);
+    });
+
+    // Opening the variant shuts the parent's window first, and the browser reports that shut a task
+    // later. Neither a report that lands while the variant is still loading, nor one that lands
+    // after the variant's window is already showing, is the person cancelling.
+    it("keeps a variant opened from its parent when its load outlasts the parent's window closing", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      let release!: () => void;
+      const loaded = new Promise<ProductEditorValue>((resolve) => {
+        release = () => resolve(variantValue);
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      vi.mocked(api.getProductEditor).mockReturnValue(loaded);
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await flush(el);
+      await closeReportsDelivered();
+      release();
+      await flush(el);
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).value).toEqual(variantValue);
+      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+    });
+
+    it("keeps a variant opened from its parent when it loads before the closed window reports", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      // Long enough for the parent's window to have shut, short enough to finish inside the task.
+      vi.mocked(api.getProductEditor).mockImplementation(async () => {
+        for (let turn = 0; turn < 30; turn++) await Promise.resolve();
+        return variantValue;
+      });
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await flush(el);
+      await closeReportsDelivered();
+      await el.updateComplete;
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).value).toEqual(variantValue);
+      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+    });
+
+    // Spec §15.6: removing a variant makes it Inactive, through its own page's write, and leaves
+    // its availability and every other stored value as they were.
+    it("confirms a variant's Remove and makes the variant Inactive through its own write", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      // Sold out as well, so a write that resets availability while removing is caught.
+      vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
+        Promise.resolve(id === "v1" ? { ...variantValue, available: false } : value),
+      );
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "delete-product", { productId: "v1" });
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+      expect(dialog.getAttribute("heading")).toBe(
+        t("product.remove_variant_named").replace("{name}", "Media ración"),
+      );
+      expect(dialog.textContent).toContain(t("product.remove_variant_warning"));
+      const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+      expect(confirm.textContent!.trim()).toBe(t("action.remove"));
+      confirm.click();
+      await flush(el);
+      expect(api.getProductEditor).toHaveBeenCalledWith("v1");
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
+        ...variantValue,
+        active: false,
+        available: false,
+      });
+      expect(dialog.getAttribute("open")).toBeNull();
+    });
+
+    it("restores a removed variant through its own write, then refreshes the list", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      vi.mocked(api.getProductEditor).mockImplementation((id: string) =>
+        Promise.resolve(id === "v1" ? { ...variantValue, active: false } : value),
+      );
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      vi.mocked(api.listProducts).mockClear();
+      emit(list(el), "restore-product", { productId: "v1" });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", { ...variantValue, active: true });
+      expect(api.listProducts).toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    // A restore that was written and then could not reload the list is a load failure: the banner
+    // says why the list is stale, and the restore is not attempted again.
+    it("reports a failed reload after a written restore as a load failure", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      vi.mocked(api.listProducts).mockRejectedValue({ code: "catalogue.not_found" });
+      emit(list(el), "restore-product", { productId: "v1" });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        codeMessage("catalogue.not_found"),
+      );
+      expect((el as unknown as { busy: boolean }).busy).toBe(false);
+    });
+
+    it("reports a refused restore on the screen", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      vi.mocked(api.updateProductEditor).mockRejectedValue({ code: "server.internal" });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "restore-product", { productId: "v1" });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        codeMessage("server.internal"),
+      );
+    });
   });
 });

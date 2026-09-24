@@ -20,6 +20,11 @@ import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
 export type { ProductVariant, ProductVariantInput } from "./product-types.js";
 
+/** What {@link setProductVariants} takes: the editor's {@link ProductVariantInput}, whose `active`
+ * the editor body always carries, with `active` optional for a caller in code — absent creates a new
+ * variant Active and leaves one sent by `id` Active or Inactive as it already is. */
+export type VariantWrite = Omit<ProductVariantInput, "active"> & { active?: boolean };
+
 /** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
 export interface MenuVariant {
   variantId: string;
@@ -90,9 +95,8 @@ export async function listProductVariants(
 }
 
 /**
- * Every variant of each product in `productIds`, Inactive ones included, in ONE query — the product
- * list reads its variants through this rather than once per product (CLAUDE.md §3). Left out of the
- * package's exports (`index.ts`): what a menu SELLS is decided from the offer
+ * Every variant of each product in `productIds`, Inactive ones included, in ONE query. Left out of
+ * the package's exports (`index.ts`): what a menu SELLS is decided from the offer
  * (`MenuOffer.variants`), never from this read.
  */
 export async function variantsOfProducts(
@@ -115,34 +119,47 @@ export async function variantsOfProducts(
 }
 
 /**
- * Save a product's variants: each one in the input is Active, in the input's order; each current
- * variant the input leaves out is made Inactive and kept (spec §15.6), ordered after the Active
- * ones. The caller owns the transaction, including product fields and supporting associations.
+ * Save a product's variants: each one in the input is written Active or Inactive as its `active`
+ * says — with `active` absent, a new variant is created Active and one sent by `id` keeps its
+ * current state — in the input's order; each current variant the input leaves out is made Inactive and kept
+ * (spec §15.6), ordered after the ones sent. The caller owns the transaction, including product
+ * fields and supporting associations.
  */
 export async function setProductVariants(
   tx: Transaction,
   productId: string,
-  inputs: readonly ProductVariantInput[],
+  inputs: readonly VariantWrite[],
   fallbackLanguage: string,
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
-  const normalized: (ProductVariantInput & { cents: number | null })[] = [];
+  const checked: (VariantWrite & { cents: number | null })[] = [];
   for (const input of inputs) {
     if (input.id !== undefined) {
       if (seen.has(input.id)) throw new AppError("product.variant_invalid", { field: "id" });
       seen.add(input.id);
     }
     validateFlag(input.available, "available");
+    if (input.active !== undefined) validateFlag(input.active, "active");
     const price = validatePrice(input.unitPrice, "unitPrice");
-    // The staff `name` is plain text and needs no translation check; the customer-facing map is what
-    // must satisfy the enabled languages. A null customer name is legal — it falls back to `name`.
-    if (input.customerName != null)
-      await validateContentTranslations(tx, input.customerName, fallbackLanguage);
-    normalized.push({ ...input, cents: price === null ? null : decimalToCents(price) });
+    checked.push({ ...input, cents: price === null ? null : decimalToCents(price) });
   }
   const parent = await assertProductForWrite(tx, productId);
   const current = await listProductVariants(tx, productId);
-  const currentIds = new Set(current.map((v) => v.id));
+  const currentActive = new Map(current.map((variant) => [variant.id, variant.active]));
+  const normalized: (VariantWrite & { active: boolean; cents: number | null })[] = [];
+  for (const input of checked) {
+    const active =
+      input.active ?? (input.id === undefined ? true : (currentActive.get(input.id) ?? true));
+    // The staff `name` is plain text and needs no translation check; the customer-facing map is what
+    // must satisfy the venue's default content language. A null customer name is legal — it falls
+    // back to `name`. An Inactive variant is on no menu offer and in no translation-gap report, so
+    // it is checked when next saved Active; checking it here would let a change of default content
+    // language after its removal block every save of its parent.
+    if (active && input.customerName != null)
+      await validateContentTranslations(tx, input.customerName, fallbackLanguage);
+    normalized.push({ ...input, active });
+  }
+  const currentIds = new Set(currentActive.keys());
   for (const id of seen) {
     if (!currentIds.has(id)) throw new AppError("product.variant_not_found", { variantId: id });
   }
@@ -154,7 +171,7 @@ export async function setProductVariants(
       image: input.image,
       unitPrice: input.cents,
       available: input.available,
-      active: true,
+      active: input.active,
       variantOrder: index,
       updatedAt: now(),
     };

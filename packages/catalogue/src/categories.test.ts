@@ -18,6 +18,9 @@ import { writeContentLanguages, listContentTranslationGaps } from "./content-lan
 // Authoring results. The two transactions started together, and the cases that used to sit in a
 // real-PostgreSQL sibling, are in categories.db.test.ts.
 const fx = useCatalogueDb();
+const byId = <T extends { id: string }>(rows: readonly T[]): T[] =>
+  [...rows].sort((a, b) => a.id.localeCompare(b.id));
+
 async function fixture() {
   await seedTenant(fx.db);
   await seedLegacySellingUnits(fx.db);
@@ -67,7 +70,9 @@ describe("category authoring", () => {
           categoryIds: [food.id, drinks.id].sort(),
         },
       ]);
-    expect(await app((tx) => listCategories(tx))).toEqual([food, drinks]);
+    // Sorted by id: two rows written in one millisecond tie on `created_at`, and the random id then
+    // decides their order (operations.test.ts, "settles a created_at tie").
+    expect(byId(await app((tx) => listCategories(tx)))).toEqual(byId([food, drinks]));
   });
   it("validates replacement primaries and rolls back invalid saves", async () => {
     const { app, food, drinks, product } = await fixture();
@@ -221,15 +226,19 @@ it("returns each product's own membership set when reading the unfiltered librar
   );
   await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [food.id] }));
   expect(
-    (await app((tx) => listProducts(tx))).map(({ id, categoryIds, primaryCategoryId }) => ({
-      id,
-      categoryIds,
-      primaryCategoryId,
-    })),
-  ).toEqual([
-    { id: product.id, categoryIds: [food.id], primaryCategoryId: food.id },
-    { id: second.id, categoryIds: [drinks.id], primaryCategoryId: drinks.id },
-  ]);
+    byId(
+      (await app((tx) => listProducts(tx))).map(({ id, categoryIds, primaryCategoryId }) => ({
+        id,
+        categoryIds,
+        primaryCategoryId,
+      })),
+    ),
+  ).toEqual(
+    byId([
+      { id: product.id, categoryIds: [food.id], primaryCategoryId: food.id },
+      { id: second.id, categoryIds: [drinks.id], primaryCategoryId: drinks.id },
+    ]),
+  );
 });
 
 it("rejects an image reference with a category error when media is not installed", async () => {

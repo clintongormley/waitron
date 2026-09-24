@@ -1389,8 +1389,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, productId);
         // A customer-facing name is optional: absent or wholly blank, the staff name is what a
-        // receipt shows, so there is nothing to hold to the enabled languages. A PARTIAL one is a
-        // translation gap and is refused.
+        // receipt shows, so there is nothing to hold to the venue's default content language. One
+        // with no text in that language is a translation gap and is refused.
         if (patch.customerName != null)
           await validateContentTranslations(
             tx,

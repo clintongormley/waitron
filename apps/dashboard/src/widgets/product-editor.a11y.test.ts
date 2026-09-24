@@ -54,6 +54,7 @@ const variants: ProductEditorDraft = {
       image: null,
       unitPrice: "2.00",
       available: true,
+      active: true,
     },
     {
       name: "Large",
@@ -62,9 +63,67 @@ const variants: ProductEditorDraft = {
       image: null,
       unitPrice: "3.50",
       available: false,
+      active: true,
+    },
+    {
+      id: "medium",
+      name: "Medium",
+      customerName: { en: "Medium cup" },
+      kitchenName: "MD",
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: false,
     },
   ],
 };
+// A variant's own page with every inherited field left blank, so each one draws its hint.
+const variantPage: ProductEditorDraft = {
+  ...coffee,
+  id: "glass",
+  parentId: "coffee",
+  inherited: {
+    description: { en: "Roasted in house" },
+    image: "coffee.png",
+    unitPrice: "3.00",
+    vatClass: "reduced",
+    unitId: "each",
+    categoryIds: ["drinks"],
+    primaryCategoryId: "drinks",
+    stationId: "bar",
+    courseId: "starters",
+    allergens: { milk: { presence: "contains" } },
+    dietaryDeclarations: ["vegan"],
+  },
+  name: "Glass",
+  customerName: { en: "A glass" },
+  kitchenName: "GLS",
+  unitId: null,
+  unitPrice: null,
+  vatClass: null,
+  allergens: null,
+  dietaryDeclarations: null,
+  categoryIds: [],
+  primaryCategoryId: null,
+  stationId: null,
+  courseId: null,
+};
+
+// axe does not score a placeholder's contrast, so a test of a hinted field measures its own ratio.
+// The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
+function contrastRatio(a: string, b: string): number {
+  const luminance = (rgb: string) => {
+    expect(rgb).toMatch(/^rgba?\(/);
+    const [r, g, bl] = rgb
+      .match(/\d+(\.\d+)?/g)!
+      .slice(0, 3)
+      .map((part) => Number(part) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
 
 describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (theme) => {
   it.each([
@@ -77,6 +136,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "categories",
     "variant-window",
     "inactive",
+    "variant-page",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -94,7 +154,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                 ? withModifiers
                 : state === "inactive"
                   ? { ...coffee, active: false, available: false }
-                  : coffee,
+                  : state === "variant-page"
+                    ? variantPage
+                    : coffee,
         extraLists,
         optionLists,
         categories: [
@@ -130,7 +192,17 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       )!;
       expect(form.open).toBe(true);
     }
-    if (state === "open-sections") {
+    if (state === "variants") {
+      // Every status at once, so the scan covers an Inactive row and a row priced by its hint.
+      const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+      await table.updateComplete;
+      const filter = table.shadowRoot!.querySelector<HTMLSelectElement>("[name=variant-status]")!;
+      filter.value = "all";
+      filter.dispatchEvent(new Event("change"));
+      await table.updateComplete;
+      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(3);
+    }
+    if (state === "open-sections" || state === "variant-page") {
       for (const name of ["kitchen", "descriptors", "nutrition"]) {
         const disclosure = el.shadowRoot!.querySelector<
           HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
@@ -142,6 +214,20 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       }
     }
     await el.updateComplete;
+    if (state === "variant-page") {
+      // Without these the scan could pass on a page that drew none of its hints.
+      for (const name of ["categories-hint", "allergens-hint", "dietary-hint"])
+        expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).not.toBeNull();
+      const description =
+        el.shadowRoot!.querySelector<HTMLTextAreaElement>("[name=description-en]")!;
+      expect(description.placeholder).toBe("Roasted in house");
+      expect(
+        contrastRatio(
+          getComputedStyle(description, "::placeholder").color,
+          getComputedStyle(description).backgroundColor,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
     await expectNoA11yViolations(host);
   });
 });

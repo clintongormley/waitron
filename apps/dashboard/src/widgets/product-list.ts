@@ -5,20 +5,25 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
-import { allergenState, allergenStateName } from "../i18n/domain.js";
+import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
 import {
   modifierListName,
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, Product, ProductEditorVariant } from "../api/client.js";
+import type { CategorySummary, Product } from "../api/client.js";
 
 interface ProductRow {
   key: string;
   parentKey: string | null;
   product: Product;
-  variant: ProductEditorVariant | null;
+  variant: Product["variants"][number] | null;
+}
+
+/** The till sells a variant only while it AND its product are Active, so that is its status. */
+function rowActive({ product, variant }: ProductRow): boolean {
+  return product.active && (variant?.active ?? true);
 }
 
 /** Presents the reusable product library, with each product's variants nested underneath it. */
@@ -56,8 +61,15 @@ export class ProductList extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
       }
-      wt-data-table::part(variant-muted) {
+      wt-data-table::part(variant-muted),
+      wt-data-table::part(context) {
         color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(vat-note) {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        white-space: nowrap;
       }
     `,
   ];
@@ -78,7 +90,11 @@ export class ProductList extends LitElement {
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
   }
 
-  #emit(event: Event, name: "edit-product" | "delete-product", productId: string): void {
+  #emit(
+    event: Event,
+    name: "edit-product" | "delete-product" | "restore-product",
+    productId: string,
+  ): void {
     event.stopPropagation();
     this.dispatchEvent(
       new CustomEvent<{ productId: string }>(name, {
@@ -109,9 +125,18 @@ export class ProductList extends LitElement {
       : t("editor.missing_choice");
   }
 
-  #otherCategories(product: Product): string {
-    return product.categoryIds
-      .filter((id) => id !== product.primaryCategoryId)
+  /** A variant's row reads the values it is reported under, which the server resolves. */
+  #values({ product, variant }: ProductRow): {
+    primaryCategoryId: string | null;
+    categoryIds: string[];
+  } {
+    return variant?.effective ?? product;
+  }
+
+  #otherCategories(row: ProductRow): string {
+    const { categoryIds, primaryCategoryId } = this.#values(row);
+    return categoryIds
+      .filter((id) => id !== primaryCategoryId)
       .map((id) => this.#category(id))
       .filter(Boolean)
       .join(", ");
@@ -129,9 +154,13 @@ export class ProductList extends LitElement {
     >`;
   }
 
-  #price(product: Product): string {
-    if (product.variants.length === 0) return Number(product.unitPrice).toFixed(2);
-    const prices = product.variants.map(({ unitPrice }) => Number(unitPrice ?? product.unitPrice));
+  /** Spec §15.1: a product with an Active variant is sold only as one of them, and one with none
+   * sells as itself at its own price. */
+  #price({ product, variant }: ProductRow): string {
+    if (variant) return Number(variant.effective.unitPrice).toFixed(2);
+    const sold = product.variants.filter(({ active }) => active);
+    if (sold.length === 0) return Number(product.unitPrice).toFixed(2);
+    const prices = sold.map(({ effective }) => Number(effective.unitPrice));
     const low = Math.min(...prices).toFixed(2);
     const high = Math.max(...prices).toFixed(2);
     return low === high ? low : `${low}–${high}`;
@@ -144,10 +173,12 @@ export class ProductList extends LitElement {
         label: t("product.name"),
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: (row) => row.variant?.name ?? row.product.name,
-        cell: ({ product, variant }) =>
+        // Under the status filter a product can be on screen only as a matching variant's context;
+        // the table says so through `ancestorOnly`, and the name is muted so the match stands out.
+        cell: ({ product, variant }, { ancestorOnly }) =>
           variant
             ? html`<strong>${variant.name}</strong>`
-            : html`<span part="product-cell">
+            : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
                 ${
                   product.image === null
                     ? html`<span
@@ -165,30 +196,32 @@ export class ProductList extends LitElement {
       {
         key: "reporting-category",
         label: t("product.reporting_category"),
-        cell: ({ product, variant }) =>
-          variant
-            ? html`<span part="variant-muted">—</span>`
-            : this.#category(product.primaryCategoryId),
-        searchValue: ({ product, variant }) =>
-          variant ? "" : this.#category(product.primaryCategoryId),
+        cell: (row) => this.#category(this.#values(row).primaryCategoryId),
+        searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
       },
       {
         key: "other-categories",
         label: t("product.other_categories"),
-        cell: ({ product, variant }) =>
-          variant ? html`<span part="variant-muted">—</span>` : this.#otherCategories(product),
-        searchValue: ({ product, variant }) => (variant ? "" : this.#otherCategories(product)),
+        cell: (row) => this.#otherCategories(row),
+        searchValue: (row) => this.#otherCategories(row),
       },
       {
         key: "price",
         label: t("product.price"),
         align: "end",
-        cell: ({ product, variant }) =>
-          variant ? (variant.unitPrice ?? product.unitPrice) : this.#price(product),
-        sortValue: ({ product, variant }) =>
-          Number(
-            variant ? (variant.unitPrice ?? product.unitPrice) : this.#price(product).split("–")[0],
-          ),
+        // The list has no VAT column (#387); a variant whose VAT differs from its product's notes
+        // it under its price, since nothing else on the row would show it.
+        cell: (row) => {
+          const vat = row.variant?.effective.vatClass;
+          return html`<span data-test="price">${this.#price(row)}</span>${
+              vat === undefined || vat === row.product.vatClass
+                ? nothing
+                : html`<span part="vat-note" data-test="vat-note"
+                    >${t("product.vat")}: ${vatClassName(vat)}</span
+                  >`
+            }`;
+        },
+        sortValue: (row) => Number(this.#price(row).split("–")[0]),
       },
       {
         key: "modifiers",
@@ -200,12 +233,9 @@ export class ProductList extends LitElement {
       {
         key: "sold-alone",
         label: t("product.sold_alone"),
-        // A variant is a way of buying its product, so the answer is the PRODUCT's for every row:
-        // read in packages/ui/src/components/wt-data-table.ts, `#visibleRows` judges every row
-        // against the chosen value and `#treeVisible` restores a match's ancestors but never its
-        // children, so a variant answering anything else would either strand its product as a
-        // childless row or render it as an ancestor-only ghost. The CELL still shows the muted dash,
-        // and contributes nothing to search, like the other product-level columns.
+        // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
+        // every row and a variant is shown or hidden together with its product. The cell still
+        // shows the muted dash and contributes nothing to search.
         cell: ({ product, variant }) => {
           if (variant) return html`<span part="variant-muted">—</span>`;
           return html`<span
@@ -237,27 +267,26 @@ export class ProductList extends LitElement {
       {
         key: "active",
         label: t("product.status"),
-        // Spec §15.6: the product's Active state is its own cell and the filter's answer — for its
-        // variant rows too, for the reason the sold-on-its-own column gives. Available is shown
-        // only when it is off, as a second badge: no product is hidden for being Unavailable.
+        // Spec §15.6: Active is the row's own badge and the filter's answer. A variant of an
+        // Inactive product answers Inactive (see rowActive), so it moves with its product and never
+        // leaves it behind as an empty context row; its badge still shows its OWN flag, which is what
+        // its Remove or Restore changes. Available is shown only when it is off, as a second badge:
+        // nothing is hidden for being Unavailable.
         cell: ({ product, variant }) => {
-          if (variant)
-            return variant.available
-              ? html`<span part="variant-muted">—</span>`
-              : this.#unavailableBadge();
+          const active = variant?.active ?? product.active;
           return html`<span
               part="badge"
               data-test="active-badge"
-              data-active=${product.active ? "true" : "false"}
-              >${product.active ? t("product.active_badge") : t("product.inactive_badge")}</span
+              data-active=${active ? "true" : "false"}
+              >${active ? t("product.active_badge") : t("product.inactive_badge")}</span
             >
-            ${product.available ? nothing : this.#unavailableBadge()}`;
+            ${(variant ?? product).available ? nothing : this.#unavailableBadge()}`;
         },
-        sortValue: ({ product }) => (product.active ? 0 : 1),
+        sortValue: (row) => (rowActive(row) ? 0 : 1),
         filter: {
           label: t("product.status"),
           allLabel: t("product.filter_status_all"),
-          value: ({ product }) => (product.active ? "active" : "inactive"),
+          value: (row) => (rowActive(row) ? "active" : "inactive"),
           options: [
             { value: "active", label: t("product.active_badge") },
             { value: "inactive", label: t("product.inactive_badge") },
@@ -282,27 +311,37 @@ export class ProductList extends LitElement {
         key: "actions",
         label: t("staff.actions"),
         align: "end",
-        cell: ({ product, variant }) =>
-          variant
-            ? nothing
-            : html`<wt-row-actions
-                align="end"
-                data-test=${`actions-${product.id}`}
-                label=${`${t("staff.actions")}: ${product.name}`}
-                ><wt-button
-                  align="start"
-                  variant="secondary"
-                  data-test=${`edit-${product.id}`}
-                  @click=${(event: Event) => this.#emit(event, "edit-product", product.id)}
-                  >${t("action.edit")}</wt-button
-                ><wt-button
-                  align="start"
-                  variant="danger"
-                  data-test=${`delete-${product.id}`}
-                  @click=${(event: Event) => this.#emit(event, "delete-product", product.id)}
-                  >${t("action.delete")}</wt-button
-                ></wt-row-actions
-              >`,
+        cell: ({ product, variant }) => {
+          const { id, name } = variant ?? product;
+          // Spec §15.6: removing a variant makes it Inactive, as deleting a product does, and
+          // restoring it makes it Active again.
+          const restore = variant !== null && !variant.active;
+          const removal = restore
+            ? { event: "restore-product" as const, test: "restore", label: t("product.restore") }
+            : {
+                event: "delete-product" as const,
+                test: "delete",
+                label: variant ? t("action.remove") : t("action.delete"),
+              };
+          return html`<wt-row-actions
+            align="end"
+            data-test=${`actions-${id}`}
+            label=${`${t("staff.actions")}: ${name}`}
+            ><wt-button
+              align="start"
+              variant="secondary"
+              data-test=${`edit-${id}`}
+              @click=${(event: Event) => this.#emit(event, "edit-product", id)}
+              >${t("action.edit")}</wt-button
+            ><wt-button
+              align="start"
+              variant=${restore ? "secondary" : "danger"}
+              data-test=${`${removal.test}-${id}`}
+              @click=${(event: Event) => this.#emit(event, removal.event, id)}
+              >${removal.label}</wt-button
+            ></wt-row-actions
+          >`;
+        },
       },
     ];
   }

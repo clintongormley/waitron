@@ -229,6 +229,12 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         unitPrice: null,
         available: true,
         active: true,
+        effective: {
+          unitPrice: "4.00",
+          vatClass: "reduced",
+          primaryCategoryId: f.wines,
+          categoryIds: [f.wines],
+        },
       },
       {
         id: f.wine175,
@@ -239,8 +245,80 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         unitPrice: "5.50",
         available: true,
         active: true,
+        effective: {
+          unitPrice: "5.50",
+          vatClass: "general",
+          primaryCategoryId: f.bottles,
+          categoryIds: [f.bottles],
+        },
       },
     ]);
+  });
+
+  it("lists an Inactive variant too, in variant order, with its effective values", async () => {
+    await fx.db.update(products).set({ active: false }).where(eq(products.id, f.wine125));
+    const [parent] = await run((tx) => listProducts(tx, f.catalogueId));
+    expect(
+      parent!.variants.map(({ id, active, effective }) => ({ id, active, effective })),
+    ).toEqual([
+      {
+        id: f.wine125,
+        active: false,
+        effective: {
+          unitPrice: "4.00",
+          vatClass: "reduced",
+          primaryCategoryId: f.wines,
+          categoryIds: [f.wines],
+        },
+      },
+      {
+        id: f.wine175,
+        active: true,
+        effective: {
+          unitPrice: "5.50",
+          vatClass: "general",
+          primaryCategoryId: f.bottles,
+          categoryIds: [f.bottles],
+        },
+      },
+    ]);
+  });
+
+  it("reads every product's variants in as many queries for three products as for one", async () => {
+    const selects = async () => {
+      let count = 0;
+      await run((tx) => {
+        const counting = new Proxy(tx, {
+          get(target, key, receiver) {
+            if (key === "select") count += 1;
+            return Reflect.get(target, key, receiver) as unknown;
+          },
+        });
+        return listProducts(counting, f.catalogueId);
+      });
+      return count;
+    };
+    const one = await selects();
+    await run(async (tx) => {
+      for (const name of ["Cider", "Beer"]) {
+        const parent = await createProduct(tx, {
+          catalogueId: f.catalogueId,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice: "3.00",
+          vatClass: "general",
+        });
+        await tx
+          .insert(products)
+          .values({ catalogueId: f.catalogueId, parentId: parent.id, name: `${name} pint` });
+      }
+    });
+    const listed = await run((tx) => listProducts(tx, f.catalogueId));
+    expect(Object.fromEntries(listed.map(({ name, variants }) => [name, variants.length]))).toEqual(
+      { "Wine by the glass": 2, Cider: 1, Beer: 1 },
+    );
+    expect(await selects()).toBe(one);
   });
 });
 
@@ -618,8 +696,8 @@ describe("dietary declarations on a variant", () => {
     expect(await effectiveDeclarations(f.wine125)).toEqual(["vegan"]);
   });
 
-  /** A variant is not a row of `listProducts` (it is nested there by its names alone), so its
-   * effective declarations are read through the fallback itself. */
+  /** A variant is not a row of `listProducts`, and the variant nested there carries no dietary
+   * declarations, so its effective ones are read through the fallback itself. */
   async function effectiveDeclarations(id: string) {
     const [row] = await run((tx) =>
       tx

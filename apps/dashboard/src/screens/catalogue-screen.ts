@@ -84,7 +84,8 @@ export class CatalogueScreen extends LitElement {
   @state() private busy = false;
   @state() private errorKey: string | null = null;
   @state() private languageSettingsOpen = false;
-  @state() private deletingProduct: Product | null = null;
+  /** The product or variant the Delete confirmation is open for. */
+  @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
   /** The modifier list the nested extras or options form is EDITING, or null while it is creating
    * one. The same form does both, and this is what decides which write its Save performs; one state
@@ -213,8 +214,17 @@ export class CatalogueScreen extends LitElement {
     this.editorOpen = true;
   }
 
+  /** Whether a loaded product, or a variant nested under one, has this id: a variant has its own
+   * page, and the list read carries it only under its parent. */
+  #knows(productId: string): boolean {
+    return this.products.some(
+      ({ id, variants }) =>
+        id === productId || variants.some((variant) => variant.id === productId),
+    );
+  }
+
   async #openProduct(productId: string): Promise<void> {
-    if (!this.products.some(({ id }) => id === productId)) return;
+    if (!this.#knows(productId)) return;
     this.#resetEditorState();
     this.editorOpen = false;
     this.editorValue = null;
@@ -233,13 +243,20 @@ export class CatalogueScreen extends LitElement {
 
   async #openLinkedProduct(): Promise<void> {
     const id = this.#linkedProduct;
-    if (id === null || !this.products.some((product) => product.id === id)) return;
+    if (id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
     await this.#openProduct(id);
   }
 
   #openDelete(productId: string): void {
-    this.deletingProduct = this.products.find(({ id }) => id === productId) ?? null;
+    const product = this.products.find(({ id }) => id === productId);
+    const variant = this.products
+      .flatMap(({ variants }) => variants)
+      .find(({ id }) => id === productId);
+    const found = product ?? variant;
+    this.deletingProduct = found
+      ? { id: found.id, name: found.name, isVariant: product === undefined }
+      : null;
     this.deleteErrorKey = null;
     this.errorKey = null;
   }
@@ -264,6 +281,29 @@ export class CatalogueScreen extends LitElement {
       return;
     }
     this.#closeDelete();
+    try {
+      await this.#reloadProducts();
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Makes a removed variant Active again through its own page's write, the same write Delete
+   * uses to make it Inactive. */
+  async #restoreProduct(productId: string): Promise<void> {
+    if (this.busy || !this.#knows(productId)) return;
+    this.busy = true;
+    this.errorKey = null;
+    try {
+      const value = await this.api.getProductEditor(productId);
+      await this.api.updateProductEditor(productId, { ...value, active: true });
+    } catch (error) {
+      this.errorKey = codeOf(error);
+      this.busy = false;
+      return;
+    }
     try {
       await this.#reloadProducts();
     } catch (error) {
@@ -407,8 +447,8 @@ export class CatalogueScreen extends LitElement {
    * produces a SECOND `wt-cancel` later: the `<dialog>` this screen just closed delivers its native
    * `close` event a task afterwards, `wt-dialog.ts` turns that into `wt-close`, and the form answers
    * with another cancel. By then a different form can be open, and an unchecked handler closes that
-   * one. What this check does NOT separate is the same kind reopened inside that one task — for that
-   * it would need a generation counter, as `modifiers-screen.ts` uses for its own reopen case.
+   * one. The same kind reopened inside that task needs no check here: `wt-dialog.ts` drops the late
+   * report for a dialog that is open again.
    */
   #cancelList(kind: "extras" | "options"): void {
     if (this.#child.kind !== kind) return;
@@ -459,6 +499,10 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 this.#openDelete(event.detail.productId);
               }}
+              @restore-product=${(event: CustomEvent<{ productId: string }>) => {
+                event.stopPropagation();
+                void this.#restoreProduct(event.detail.productId);
+              }}
             ></dashboard-product-list>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
@@ -487,17 +531,29 @@ export class CatalogueScreen extends LitElement {
           this.#child.open(event.detail.kind);
         }}
         @wt-edit-related=${this.#editRelated}
+        @wt-open-product=${(event: CustomEvent<{ productId: string }>) => {
+          event.stopPropagation();
+          void this.#openProduct(event.detail.productId);
+        }}
       ></dashboard-product-editor>
       <wt-modal
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}
-        heading=${t("product.delete_named").replace("{name}", this.deletingProduct?.name ?? "")}
+        heading=${t(
+          this.deletingProduct?.isVariant ? "product.remove_variant_named" : "product.delete_named",
+        ).replace("{name}", this.deletingProduct?.name ?? "")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (!this.busy) this.#closeDelete();
         }}
       >
-        <p>${t("product.delete_warning")}</p>
+        <p>
+          ${t(
+            this.deletingProduct?.isVariant
+              ? "product.remove_variant_warning"
+              : "product.delete_warning",
+          )}
+        </p>
         ${
           this.deleteErrorKey
             ? html`<p class="error" role="alert">${codeMessage(this.deleteErrorKey)}</p>`
@@ -515,7 +571,7 @@ export class CatalogueScreen extends LitElement {
             variant="danger"
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
-            >${t("action.delete")}</wt-button
+            >${t(this.deletingProduct?.isVariant ? "action.remove" : "action.delete")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

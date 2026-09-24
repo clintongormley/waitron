@@ -974,8 +974,8 @@ describe("staff-screen — row actions, filters and edit races", () => {
       const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
       await flush(el);
       await openEdit(el, "p1");
-      // The saved dialog's native close lands a task later; opening the next one before it would
-      // let that stale close shut the new dialog.
+      // The saved dialog's native close lands a task later; waiting for it keeps this test about
+      // the next open alone.
       const closed = new Promise((resolve) =>
         editForm(el).addEventListener("wt-close", resolve, { once: true }),
       );

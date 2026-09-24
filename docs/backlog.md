@@ -559,11 +559,19 @@ every menu.** A menu now stores something for a variant only to override its pri
 there (`menu_item_variant_overrides`), and the price charged is the most specific one set: the
 variant's price on that menu, then its own, then its product's price on that menu. Every dev venue
 needs `wa-wt reset demo <name>` (see above). What it left open:
-- **A removed variant's photo cannot be deleted.** Removing a variant makes it Inactive and keeps
-  its row, photo included, so the image library counts the photo as used and the database refuses
-  the delete, while the product editor does not show Inactive variants. Accepted until Task 7, which
-  shows them behind a filter; the translation-gap check skips Inactive variants for the same reason
-  (`packages/catalogue/src/content-languages.ts`) and Task 7 must revisit it.
+- **A removed variant can be reached again, and its photo cleared (resolved by Task 7).**
+  Removing a variant makes it Inactive and keeps its row, photo included. Since Task 7 a removed
+  variant is shown behind the status filter in the products list and in its product's variants
+  section, and its own page opens from either; that page's Remove image clears the variant's photo,
+  after which the image library no longer counts it for that variant (`countUsages`,
+  `packages/media/src/images.ts`, counts a variant's photo only through the variant's own
+  `products` row). The translation-gap report skips
+  Inactive variants (`packages/catalogue/src/content-languages.ts`). A variant's customer name is
+  checked against the venue's default content language only when the variant is saved Active —
+  through its product's save (`setProductVariants`, `packages/catalogue/src/variants.ts`) and
+  through its own page (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`) alike — so
+  removing a variant is never refused because its own customer name lacks that language, and
+  restoring one is checked.
 - **A variant's id is refused by the management routes that read or write a product by id**, each
   answering as it does for an id naming no product (the recipe route answers `product.not_found`) —
   except the product editor's two routes, which since Task 6 are a variant's own page. The
@@ -590,9 +598,9 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   product's variants list, so a product whose variant has no price of its own can be saved back
   unchanged. The dashboard's variant form shows such a price as an empty field and saves it back
   blank (`apps/dashboard/src/widgets/variant-form.ts`); the price field is no longer marked
-  required. What is still missing: the empty field shows no hint of the price it falls back to,
-  and a NEW variant's form still starts at `0.00`. **Next action (Task 7):** show the product's
-  price as the empty field's hint, and decide whether a new variant starts blank.
+  required. Since Task 7 an empty variant price shows the price it falls back to: the variant form's
+  price field and the variant's own page carry the product's price as the field's hint, and the
+  variants list reads "Same as" that price. A new variant's form starts blank, not at `0.00`.
 - **The units screen lists variants too, and offers them a target labelled as Each.**
   `productsUsingUnit` (`packages/catalogue/src/units.ts`) does not limit itself to top-level
   products, so a variant with its own unit appears in the screen's list of products using a unit.
@@ -696,10 +704,60 @@ left open, besides the bullets above that it updated:
   predates Task 6, not checked with `git blame`. **Next action:** check whether anything still reads
   `products.pricing_unit` for a product with a unit row, and either update it on reassignment or
   say why it does not matter.
-- **Review suggestions not taken, because they reshape the contract Task 7 consumes:** split the
-  editor's types into a product shape and a variant shape (removing the non-null workarounds in
-  `saveProductEditor` and the dashboard), derive `InheritedValues` from the product type, and write
-  a parent's variant republishes in one statement. **Next action:** reconsider once Task 7 lands.
+- **Review suggestions not taken:** split the editor's types into a product shape and a variant
+  shape (removing the non-null workarounds in `saveProductEditor` and the dashboard), derive
+  `InheritedValues` from the product type, and write a parent's variant republishes in one
+  statement. Task 7 consumed the contract as it stands and did not take them. **Next action:**
+  reconsider on their own; nothing waits on them. Task 9's cleanup removes the old variant table
+  and its shapes, not the editor's types, so it does not cover them.
+
+What Task 7 (`feat/variants-editor-screen`, the dashboard's variant page) leaves open:
+- **The product list shows "—" for a variant's allergens**, because the list's data carries none for
+  a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
+  whether the list should read a variant's effective allergens, and add them to that read if so.
+- **Each variants-table row's Available switch is named only "Available"** to a screen reader, not
+  with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). `main` at `5add727d7`
+  already labelled it the same way. **Next action:** name the switch after its variant.
+- **Not yet looked at on a phone (390px wide):** a variant's name may sit a few pixels low in its
+  product-list row. **Next action:** open it at that width, in both themes, and look. (The variants
+  table's unit select, once cut to "Unid" in Spanish at that width, is no longer shown there: a
+  table 30rem wide or less hides its price column, heading select included, and puts each price
+  under the variant's name, so on a phone the price field's unit button is the way to the unit. A
+  wider table still shows the select.)
+- **The variants table still scrolls sideways on phones narrower than 390px.** Measured 2026-09-24
+  in the product editor with a four-digit price, in English and Spanish, with each price under the
+  name: at 390px the table fits at both text sizes, with the name column 120px wide at the larger
+  one and about 12px to spare in Verdana (24px in the default fonts); at 360px it fits at the normal
+  size but is 6px too wide at the larger one (18px in Verdana); at 320px it is too wide in every
+  case measured but English at the normal size in the default fonts. The name column can shrink no
+  narrower than the widest price. The dialog around the table takes 98px of the width: the table's
+  box starts at x=49 and ends 49px short of the right edge at every width measured. **Next
+  action:** decide whether `wt-modal`'s margins and padding should shrink at phone width, which
+  would hand that room to the table.
+- **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
+  browser command (`apps/dashboard/vitest.config.ts`, whose comment says it exercises the responsive
+  breakpoints) resizes the outer Playwright page, not the frame a test renders in: measured
+  2026-09-24, `window.innerWidth` read 414 before and after `setViewportSize(390, 800)`, and 390
+  after `page.viewport(390, 800)` from `vitest/browser`. Its callers are two drawer cases in
+  `apps/dashboard/src/dashboard-app.test.ts` (one asking for 400px, one described as a 390px case)
+  and one in `apps/dashboard/src/dashboard-app.a11y.test.ts`, so each runs at 414px. It predates
+  the variants branch: `git log -S setViewportSize` over those files names #172 and #333, and the
+  branch changes none of the three. **Next action:** switch them to
+  `page.viewport`, assert `window.innerWidth` after resizing, and delete the command if nothing else
+  uses it.
+- **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
+  (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
+  `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one
+  grouping helper.
+- **A variant image usage's `productId` has no reader in the dashboard any more**
+  (`packages/media/src/dashboard/client.ts`): the image library now links a variant's use to the
+  variant's own page by its `id`. **Next action:** drop the field, or say what it is kept for.
+- **The product list's events are not named `wt-*`:** `edit-product`, `delete-product` and the new
+  `restore-product` (`apps/dashboard/src/widgets/product-list.ts`), against CLAUDE.md §3's event
+  rule. **Next action:** rename the three together, with the catalogue screen that listens to them
+  (`apps/dashboard/src/screens/catalogue-screen.ts`). `wt-edit-product` is already taken: the units
+  screen sends it to `apps/dashboard/src/dashboard-app.ts`, so pick names that cannot reach that
+  handler by mistake.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated

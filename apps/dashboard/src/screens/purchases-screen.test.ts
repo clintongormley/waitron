@@ -300,8 +300,8 @@ describe("purchases-screen — single-flight and dismissal", () => {
     add.click();
     await el.updateComplete;
     expect(form(el).open).toBe(true);
-    // Closing the form closes its native dialog, whose own close lands a task later; reopening
-    // before it would let that stale close shut the reopened form.
+    // Closing the form closes its native dialog, whose own close lands a task later; waiting for
+    // it keeps this test about the reopen alone.
     const nativeClose = new Promise((resolve) =>
       form(el).shadowRoot!.querySelector("wt-dialog")!.addEventListener("wt-close", resolve, {
         once: true,

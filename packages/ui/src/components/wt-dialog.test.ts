@@ -2,6 +2,23 @@ import { expect, test, afterEach, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-dialog.js";
 
+/**
+ * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
+ * close in a later task, which a zero-delay timer can run ahead of, so this closes a throwaway
+ * dialog and waits for ITS report, queued behind the rest.
+ */
+async function closeReportsDelivered(): Promise<void> {
+  const probe = document.createElement("dialog");
+  document.body.append(probe);
+  probe.show();
+  const reported = new Promise((resolve) =>
+    probe.addEventListener("close", resolve, { once: true }),
+  );
+  probe.close();
+  await reported;
+  probe.remove();
+}
+
 afterEach(cleanup);
 
 type Openable = HTMLElement & { open: boolean; updateComplete: Promise<unknown> };
@@ -279,6 +296,24 @@ test("emits wt-close once when the dialog is closed, not twice", async () => {
 
   expect(closes).toHaveBeenCalledTimes(1);
   expect(el.open).toBe(false);
+});
+
+test("stays open, and reports no close, when shut and reopened within one task", async () => {
+  const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  await closeReportsDelivered();
+
+  expect(closes).not.toHaveBeenCalled();
+  expect(el.open).toBe(true);
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
 });
 
 test("stays shut when another property changes just after the dialog was closed", async () => {

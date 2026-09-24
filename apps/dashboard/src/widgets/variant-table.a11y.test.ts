@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
@@ -16,6 +16,7 @@ const variants: ProductEditorVariant[] = [
     image: null,
     unitPrice: "6.50",
     available: true,
+    active: true,
   },
   {
     name: "Entera",
@@ -24,15 +25,20 @@ const variants: ProductEditorVariant[] = [
     image: null,
     unitPrice: "12.00",
     available: false,
+    active: true,
   },
 ];
 
-async function mount(busy: boolean, theme: "light" | "dark") {
+async function mount(
+  busy: boolean,
+  theme: "light" | "dark",
+  rows: ProductEditorVariant[] = variants,
+) {
   return mountWidget<VariantTable>(
     "dashboard-variant-table",
     {
-      variants,
-      unitLabel: "kg",
+      variants: rows,
+      basePrice: "9.00",
       unitId: "kg",
       unitOptions: [
         { value: null, label: "Each" },
@@ -53,6 +59,21 @@ describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
 
   it("is accessible while the product is saving", async () => {
     const { host } = await mount(true, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("is accessible showing an Inactive variant and a price hint, every status at once", async () => {
+    const { el, host } = await mount(false, theme, [
+      { ...variants[0]!, active: false },
+      { ...variants[1]!, unitPrice: null },
+    ]);
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=variant-status]")!;
+    select.value = "all";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await el.updateComplete;
+    // Without these the scan could pass on a table that drew neither state.
+    expect(el.shadowRoot!.querySelector("[data-test=inactive-0]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
 

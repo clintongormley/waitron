@@ -16,6 +16,7 @@ const halfPortion: ProductEditorVariant = {
   image: "half.png",
   unitPrice: "6.50",
   available: true,
+  active: true,
 };
 
 function stubApi(): ImageUploader {
@@ -25,7 +26,14 @@ function stubApi(): ImageUploader {
 async function mount(value: ProductEditorVariant | null, theme: "light" | "dark") {
   const mounted = await mountWidget<VariantForm>(
     "dashboard-variant-form",
-    { open: true, locales: ["es", "en"], value, unitLabel: "kg", api: stubApi() },
+    {
+      open: true,
+      locales: ["es", "en"],
+      value,
+      unitLabel: "kg",
+      basePrice: "9.00",
+      api: stubApi(),
+    },
     theme,
   );
   await mounted.el.shadowRoot!.querySelector("wt-modal")!.updateComplete;

@@ -93,6 +93,23 @@ export function cleanupWidgets(): void {
   document.documentElement.style.background = "";
 }
 
+/**
+ * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
+ * close in a later task, which a zero-delay timer can run ahead of, so this closes a throwaway
+ * dialog and waits for ITS report, queued behind the rest.
+ */
+export async function closeReportsDelivered(): Promise<void> {
+  const probe = document.createElement("dialog");
+  document.body.append(probe);
+  probe.show();
+  const reported = new Promise((resolve) =>
+    probe.addEventListener("close", resolve, { once: true }),
+  );
+  probe.close();
+  await reported;
+  probe.remove();
+}
+
 /** Formats axe violations into a readable message: rule id, impact, help text, and node targets. */
 export function formatViolations(violations: axe.Result[]): string {
   return violations

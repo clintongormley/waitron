@@ -12,7 +12,10 @@ import type { Product } from "../api/client.js";
  * The fixture covers all THREE allergen states (null=PENDING, {}=none, {…}=declared), both
  * active/inactive badges, the Unavailable badge, and both a product WITH a decorative image and one
  * WITHOUT (the placeholder) — so axe sees the whole rendered surface, every branch of the row
- * template. The Inactive product sits behind the status filter, so one case shows every status.
+ * template. The Inactive product sits behind the status filter, so one case shows every status. A
+ * product with an Active variant (its own VAT, noted under its price) and a removed one covers the
+ * variant rows, and under the Inactive filter the muted row its product is drawn as while it is
+ * there only as the removed variant's context.
  */
 const products: Product[] = [
   {
@@ -99,6 +102,65 @@ const products: Product[] = [
     image: null,
     variants: [],
   },
+  {
+    id: "p4",
+    modifiers: [],
+    catalogueId: "c1",
+    categoryId: "cat-1",
+    categoryIds: ["cat-1"],
+    primaryCategoryId: "cat-1",
+    name: "Vino por copa",
+    customerName: { es: "Vino de la casa por copa" },
+    unitId: "u1",
+    unit: { id: "u1", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    description: null,
+    kitchenName: null,
+    dietaryDeclarations: [],
+    pricingUnit: "each",
+    unitPrice: "3.00",
+    vatClass: "reduced",
+    active: true,
+    available: true,
+    soldAlone: true,
+    allergens: {},
+    dietOverride: null,
+    manualAllergens: {},
+    image: null,
+    variants: [
+      {
+        id: "v1",
+        name: "Vino 175",
+        customerName: { es: "Copa grande" },
+        kitchenName: "V175",
+        image: null,
+        unitPrice: "4.50",
+        available: false,
+        active: true,
+        effective: {
+          unitPrice: "4.50",
+          vatClass: "general",
+          primaryCategoryId: "cat-2",
+          categoryIds: ["cat-2", "cat-1"],
+        },
+      },
+      {
+        id: "v2",
+        name: "Vino 250",
+        customerName: { es: "Copa doble" },
+        kitchenName: "V250",
+        image: null,
+        unitPrice: null,
+        available: true,
+        active: false,
+        effective: {
+          unitPrice: "3.00",
+          vatClass: "reduced",
+          primaryCategoryId: "cat-1",
+          categoryIds: ["cat-1"],
+        },
+      },
+    ],
+  },
 ];
 
 afterEach(cleanupWidgets);
@@ -126,7 +188,29 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     select.value = "";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelectorAll("[data-test=active-badge]")).toHaveLength(3);
+    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll("[data-test=active-badge]")).toHaveLength(6);
+    expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with a removed variant shown under its Active product", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[data-filter="active"]',
+    )!;
+    select.value = "inactive";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('[part~="context"]')).not.toBeNull();
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="p4:v2"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

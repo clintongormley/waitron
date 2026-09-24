@@ -1,9 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
 import { reorder } from "./reorder.js";
-import { priceLabel } from "./form-fields.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -23,6 +23,7 @@ const threeVariants = (): ProductEditorVariant[] => [
     image: null,
     unitPrice: "6.50",
     available: true,
+    active: true,
   },
   {
     id: "2f2f2f2f-2f2f-4f2f-8f2f-2f2f2f2f2f2f",
@@ -32,6 +33,7 @@ const threeVariants = (): ProductEditorVariant[] => [
     image: null,
     unitPrice: "12.00",
     available: false,
+    active: true,
   },
   {
     name: "Doble",
@@ -40,6 +42,7 @@ const threeVariants = (): ProductEditorVariant[] => [
     image: null,
     unitPrice: "20.00",
     available: true,
+    active: true,
   },
 ];
 
@@ -47,7 +50,6 @@ async function mountTable(props: Partial<VariantTable> = {}) {
   return (
     await mountWidget<VariantTable>("dashboard-variant-table", {
       variants: threeVariants(),
-      unitLabel: "kg",
       ...props,
     })
   ).el;
@@ -57,7 +59,24 @@ function rows(el: VariantTable) {
   return [...el.shadowRoot!.querySelectorAll("tbody tr")];
 }
 function cells(el: VariantTable, column: number) {
-  return rows(el).map((row) => row.children[column]!.textContent!.trim());
+  return rows(el).map((row) => {
+    // The copy of the price a narrow table shows under the name is not part of the name.
+    const cell = row.children[column]!.cloneNode(true) as Element;
+    cell.querySelector(".stacked-price")?.remove();
+    return cell.textContent!.trim();
+  });
+}
+/** Runs `body` with the test frame at a desktop width, where the table keeps its price column. */
+async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    expect(window.innerWidth).toBe(1280);
+    await body();
+  } finally {
+    await page.viewport(width, height);
+  }
 }
 function handles(el: VariantTable) {
   return rows(el).map((row) => row.querySelector<HTMLButtonElement>("button.handle")!);
@@ -89,7 +108,10 @@ it("lists one row per variant with its staff name and price, and changes the uni
   await el.updateComplete;
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
   expect(select.value).toBe("kg");
-  expect(select.selectedOptions[0]!.textContent!.trim()).toBe(priceLabel("kg"));
+  // The heading names the price once, and the select shows only the unit, so a narrow column
+  // still has room to read it.
+  expect(select.selectedOptions[0]!.textContent!.trim()).toBe("kg");
+  expect(select.closest("th")!.textContent).toContain(t("product.price"));
   const changed = listen(el, "wt-unit-change");
   select.value = "l";
   select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -113,6 +135,54 @@ it("returns the unit chooser to its saved value after Add unit is chosen", async
   select.dispatchEvent(new Event("change", { bubbles: true }));
   expect(added).toHaveBeenCalledOnce();
   expect(select.value).toBe("kg");
+});
+
+it("keeps the unit chooser in the price heading a tap target on both axes", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable({
+      unitId: "kg",
+      unitOptions: [
+        { value: null, label: "Each" },
+        { value: "kg", label: "kg" },
+      ],
+    });
+    const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+    expect(tapMin).toBeGreaterThan(0);
+    const box = el
+      .shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!
+      .getBoundingClientRect();
+    expect(box.height).toBeGreaterThanOrEqual(tapMin);
+    expect(box.width).toBeGreaterThanOrEqual(tapMin);
+  });
+});
+
+// Each width shows the price exactly once, so neither a sighted person nor a screen reader meets it
+// twice: in its own column on a wide table, under the name on a narrow one.
+it("moves each price under its name on a narrow table, and back to its own column on a wide one", async () => {
+  const shown = (element: Element | null) => (element?.getClientRects().length ?? 0) > 0;
+  const el = await mountTable({ basePrice: "9.00" });
+  el.variants = [{ ...threeVariants()[0]!, unitPrice: null }, ...threeVariants().slice(1)];
+  await el.updateComplete;
+  el.style.width = "20rem";
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (const row of rows(el)) {
+    expect(shown(row.children[2]!)).toBe(false);
+    expect(shown(row.querySelector(".stacked-price"))).toBe(true);
+  }
+  expect(shown(el.shadowRoot!.querySelector("thead th:nth-child(3)"))).toBe(false);
+  const stacked = (index: number) =>
+    el.shadowRoot!.querySelector(`[data-test="stacked-price-${index}"]`)!.textContent!;
+  expect(stacked(0).replace(/\s+/g, " ").trim()).toBe(
+    `${t("product.price")} ${t("editor.same_as").replace("{value}", "9.00")}`,
+  );
+  expect(stacked(2).replace(/\s+/g, " ").trim()).toBe(`${t("product.price")} 20.00`);
+  el.style.width = "40rem";
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (const row of rows(el)) {
+    expect(shown(row.children[2]!)).toBe(true);
+    expect(shown(row.querySelector(".stacked-price"))).toBe(false);
+  }
+  expect(cells(el, 2)).toEqual([t("editor.same_as").replace("{value}", "9.00"), "12.00", "20.00"]);
 });
 
 it("caps the name cell with the shared sizing token, not a literal width", async () => {
@@ -214,6 +284,7 @@ it("gives a variant with no name yet a spoken name, so its handle and menu are n
         image: null,
         unitPrice: "1.00",
         available: true,
+        active: true,
       },
       {
         name: "Entera",
@@ -222,6 +293,7 @@ it("gives a variant with no name yet a spoken name, so its handle and menu are n
         image: null,
         unitPrice: "2.00",
         available: true,
+        active: true,
       },
     ],
   });
@@ -242,6 +314,7 @@ it("takes a variant the host adds without renaming the rows already there", asyn
       image: null,
       unitPrice: "30.00",
       available: true,
+      active: true,
     },
   ];
   await el.updateComplete;
@@ -267,4 +340,223 @@ it("marks the row a reported problem belongs to, and leaves the others alone", a
     getComputedStyle(rows(el)[index]!.children[0]!).borderInlineStartWidth;
   expect(border(1)).not.toBe(border(0));
   expect(border(1)).toBe("2px");
+});
+
+/** The three variants with the middle one removed: Inactive, and saved, as only a saved variant can
+ * be (a new one that is removed leaves the draft instead). */
+const withRemoved = (): ProductEditorVariant[] =>
+  threeVariants().map((variant, index) => (index === 1 ? { ...variant, active: false } : variant));
+
+async function showStatus(el: VariantTable, status: string) {
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="variant-status"]')!;
+  select.value = status;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+}
+
+it("shows a variant with no price of its own as the base price it sells at", async () => {
+  const el = await mountTable({
+    basePrice: "9.00",
+    variants: threeVariants().map((variant, index) =>
+      index === 0 ? { ...variant, unitPrice: null } : variant,
+    ),
+  });
+  expect(cells(el, 2)).toEqual([t("editor.same_as").replace("{value}", "9.00"), "12.00", "20.00"]);
+});
+
+it("hides Inactive variants until the status filter asks for them", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  expect(cells(el, 1)).toEqual(["Media", "Doble"]);
+  const names = () => cells(el, 1).map((text) => text.replace(/\s+/g, " "));
+  await showStatus(el, "inactive");
+  expect(names()).toEqual([`Entera ${t("product.inactive_badge")}`]);
+  await showStatus(el, "all");
+  expect(names()).toEqual(["Media", `Entera ${t("product.inactive_badge")}`, "Doble"]);
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="variant-status"]')!;
+  expect(select.selectedOptions[0]!.textContent!.trim()).toBe(t("product.filter_status_all"));
+});
+
+it("says so when no variant has the chosen status", async () => {
+  const el = await mountTable();
+  expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')).toBeNull();
+  await showStatus(el, "inactive");
+  expect(rows(el)).toHaveLength(0);
+  expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')!.textContent!.trim()).toBe(
+    t("editor.no_variants_status"),
+  );
+});
+
+it("names each row by its place in the whole list, hidden rows included", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  const edit = listen(el, "wt-edit");
+  const remove = listen(el, "wt-remove");
+  // Doble is the second row on screen and the THIRD variant the host holds.
+  await click(el, "edit-2");
+  await click(el, "remove-2");
+  expect(edit.mock.calls[0]![0].detail).toEqual({ index: 2 });
+  expect(remove.mock.calls[0]![0].detail).toEqual({ index: 2 });
+});
+
+it("offers Restore instead of Remove on an Inactive variant", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  await showStatus(el, "inactive");
+  expect(el.shadowRoot!.querySelector('[data-test="remove-1"]')).toBeNull();
+  const restore = listen(el, "wt-restore");
+  await click(el, "restore-1");
+  expect(restore.mock.calls[0]![0].detail).toEqual({ index: 1 });
+  expect(restore.mock.calls[0]![0].composed).toBe(true);
+});
+
+it("opens a saved variant's own page, and offers nothing to open for one never saved", async () => {
+  const el = await mountTable();
+  const open = listen(el, "wt-open");
+  await click(el, "open-1");
+  expect(open.mock.calls[0]![0].detail).toEqual({ index: 1 });
+  expect(open.mock.calls[0]![0].composed).toBe(true);
+  // Doble has no id yet, so there is no page to open until the product is saved.
+  expect(el.shadowRoot!.querySelector('[data-test="open-2"]')).toBeNull();
+});
+
+it("moves a row among the rows on screen and reports the move in the whole list", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  const reordered = listen(el, "wt-reorder");
+  handles(el)[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  await el.updateComplete;
+  expect(cells(el, 1)).toEqual(["Doble", "Media"]);
+  // Media lands where Doble was, past the hidden Entera, so the host's list reads Entera, Doble,
+  // Media — the same order among the visible rows as the screen shows.
+  expect(reordered.mock.calls[0]![0].detail).toEqual({ from: 0, to: 2 });
+  expect(reorder(withRemoved(), 0, 2).map((variant) => variant.name)).toEqual([
+    "Entera",
+    "Doble",
+    "Media",
+  ]);
+  expect(announcement(el)).toBe(
+    t("action.reordered")
+      .replace("{item}", "Media")
+      .replace("{index}", "2")
+      .replace("{total}", "2"),
+  );
+});
+
+it("shows every row when a problem is reported against one the filter hides", async () => {
+  const el = await mountTable({ variants: withRemoved(), errors: { 1: "Introduce un nombre" } });
+  expect(cells(el, 1)[1]).toContain("Entera");
+  expect(el.shadowRoot!.querySelector('[data-test="error-1"]')).not.toBeNull();
+});
+
+it("changes nothing from Open or Restore while the product is being saved", async () => {
+  const el = await mountTable({ variants: withRemoved(), busy: true });
+  await showStatus(el, "all");
+  const seen = ["wt-open", "wt-restore"].map((name) => listen(el, name));
+  await click(el, "open-0");
+  await click(el, "restore-1");
+  for (const listener of seen) expect(listener).not.toHaveBeenCalled();
+});
+
+it("shows every row when a variant is added while the filter shows only Inactive ones", async () => {
+  const el = await mountTable({ variants: withRemoved().slice(0, 2) });
+  await showStatus(el, "inactive");
+  expect(cells(el, 1)).toHaveLength(1);
+  el.variants = [...el.variants, threeVariants()[2]!];
+  await el.updateComplete;
+  expect(cells(el, 1).map((text) => text.split(/\s/)[0])).toEqual(["Media", "Entera", "Doble"]);
+  // Choosing the filter again is honoured: the new row forced it open once, not for good.
+  await showStatus(el, "inactive");
+  expect(cells(el, 1)).toHaveLength(1);
+});
+
+it("shows no price hint at all while the product has no base price yet", async () => {
+  const el = await mountTable({
+    basePrice: "",
+    variants: threeVariants().map((variant, index) =>
+      index === 0 ? { ...variant, unitPrice: null } : variant,
+    ),
+  });
+  expect(cells(el, 2)).toEqual(["", "12.00", "20.00"]);
+});
+
+it("disables Open and says why while the product has changes not yet saved", async () => {
+  const el = await mountTable({ openBlocked: true });
+  const open = listen(el, "wt-open");
+  const button = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    '[data-test="open-0"]',
+  )!;
+  expect(button.disabled).toBe(true);
+  button.click();
+  expect(open).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector('[data-test="open-blocked"]')!.textContent!.trim()).toBe(
+    t("editor.open_variant_blocked"),
+  );
+  // Edit and Remove act on the draft itself, so they stay available.
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>('[data-test="edit-0"]')!
+      .disabled,
+  ).toBe(false);
+  el.openBlocked = false;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="open-blocked"]')).toBeNull();
+  await click(el, "open-0");
+  expect(open).toHaveBeenCalledOnce();
+});
+
+it("names each row's availability switch without repeating the column heading beside it", async () => {
+  const el = await mountTable();
+  const toggle = el.shadowRoot!.querySelector('[data-test="available-0"]')!;
+  expect(toggle.hasAttribute("hide-label")).toBe(true);
+  expect(toggle.getAttribute("label")).toBe(t("editor.available"));
+});
+
+/** Applies Remove and Restore the way the product editor does: the variant is handed back as a NEW
+ * object, or — one never saved — dropped. */
+function applyRemoveAndRestore(el: VariantTable) {
+  const set = (index: number, active: boolean) =>
+    el.variants.map((variant, i) => (i === index ? { ...variant, active } : variant));
+  el.addEventListener("wt-remove", (event) => {
+    const { index } = (event as CustomEvent<{ index: number }>).detail;
+    el.variants =
+      el.variants[index]!.id === undefined
+        ? el.variants.filter((_, i) => i !== index)
+        : set(index, false);
+  });
+  el.addEventListener("wt-restore", (event) => {
+    el.variants = set((event as CustomEvent<{ index: number }>).detail.index, true);
+  });
+}
+/** Chooses a row's action from its menu, the way a keyboard user does. */
+async function chooseFromMenu(el: VariantTable, action: string, index: number) {
+  el.shadowRoot!.querySelector<HTMLElement & { show(): void }>(
+    `[data-test="actions-${index}"]`,
+  )!.show();
+  const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}-${index}"]`)!;
+  button.focus();
+  button.click();
+  await el.updateComplete;
+}
+const focused = (el: VariantTable) => {
+  const active = el.shadowRoot!.activeElement;
+  return active?.getAttribute("data-test") ?? active?.getAttribute("name") ?? null;
+};
+
+it("keeps focus on a row's actions when Remove or Restore leaves the row on screen", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  applyRemoveAndRestore(el);
+  await showStatus(el, "all");
+  await chooseFromMenu(el, "restore", 1);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  await chooseFromMenu(el, "remove", 1);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  expect(el.variants[1]!.active).toBe(false);
+});
+
+it("moves focus to the next row on screen when Remove hides the row, and to the filter when none is left", async () => {
+  const el = await mountTable();
+  applyRemoveAndRestore(el);
+  await chooseFromMenu(el, "remove", 0);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  // Doble was never saved, so it leaves the list and there is no row after it: focus goes back up.
+  await chooseFromMenu(el, "remove", 2);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  await chooseFromMenu(el, "remove", 1);
+  await expect.poll(() => focused(el)).toBe("variant-status");
 });

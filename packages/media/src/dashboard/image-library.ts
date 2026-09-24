@@ -24,11 +24,10 @@ import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } fr
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { t } from "./strings.js";
 
-/** Where a blocking use sends the operator: a variant is edited inside its product's editor. */
+/** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
   if (use.kind === "category") return `/manage/categories?category=${encodeURIComponent(use.id)}`;
-  const productId = use.kind === "variant" ? use.productId : use.id;
-  return `/manage/catalogue/product/${encodeURIComponent(productId)}`;
+  return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }
 
 @customElement("dashboard-image-library")

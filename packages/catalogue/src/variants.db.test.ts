@@ -16,7 +16,7 @@ import {
   setMenuVariants,
   setProductVariants,
   selectMenuVariant,
-  type ProductVariantInput,
+  type VariantWrite,
 } from "./variants.js";
 import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
 import { createUnit, EACH_UNIT } from "./units.js";
@@ -35,11 +35,12 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
+/** Leaves `active` out, as a caller in code may: a new variant is then created Active. */
 const wine = (
   name: string,
   unitPrice: string | null,
-  extra: Partial<ProductVariantInput> = {},
-): ProductVariantInput => ({
+  extra: Partial<VariantWrite> = {},
+): VariantWrite => ({
   name,
   customerName: null,
   kitchenName: null,
@@ -218,6 +219,100 @@ describe("setProductVariants stores each variant as a product under its parent",
     ]);
   });
 
+  it("writes each sent variant's active as sent, in the order sent, the left-out ones after", async () => {
+    const f = await fixture();
+    const [w125, w175, w250] = await app((tx) =>
+      setProductVariants(
+        tx,
+        f.parentId,
+        [wine("Wine 125", null), wine("Wine 175", "5.50"), wine("Wine 250", "7.00")],
+        "en",
+      ),
+    );
+    await app((tx) => setProductVariants(tx, f.parentId, [w125!, w250!], "en"));
+    const flags = async () =>
+      (await storedVariants(f.parentId)).map(({ id, variant_order, active }) => ({
+        id,
+        variant_order,
+        active,
+      }));
+
+    // Wine 175 was removed; sent back Inactive it stays Inactive, at the place it was sent.
+    const saved = await app((tx) =>
+      setProductVariants(tx, f.parentId, [{ ...w175!, active: false }, w125!], "en"),
+    );
+    expect(await flags()).toEqual([
+      { id: w175!.id, variant_order: 0, active: 0 },
+      { id: w125!.id, variant_order: 1, active: 1 },
+      { id: w250!.id, variant_order: 2, active: 0 },
+    ]);
+    expect(saved.map(({ id, active }) => ({ id, active }))).toEqual([
+      { id: w175!.id, active: false },
+      { id: w125!.id, active: true },
+      { id: w250!.id, active: false },
+    ]);
+
+    await app((tx) =>
+      setProductVariants(
+        tx,
+        f.parentId,
+        [{ ...w250!, active: false }, { ...w175!, active: true }, w125!],
+        "en",
+      ),
+    );
+    expect(await flags()).toEqual([
+      { id: w250!.id, variant_order: 0, active: 0 },
+      { id: w175!.id, variant_order: 1, active: 1 },
+      { id: w125!.id, variant_order: 2, active: 1 },
+    ]);
+  });
+
+  it("creates a new variant sent Inactive as Inactive", async () => {
+    const f = await fixture();
+    await app((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null, { active: false })], "en"),
+    );
+    expect(
+      (await storedVariants(f.parentId)).map(({ active, available }) => ({ active, available })),
+    ).toEqual([{ active: 0, available: 1 }]);
+  });
+
+  // Only an absent `active` is defaulted: an explicit null is refused like any other non-boolean.
+  it.each([["yes"], [null]])("refuses an active of %j, writing nothing", async (active) => {
+    const f = await fixture();
+    await expect(
+      app((tx) =>
+        setProductVariants(
+          tx,
+          f.parentId,
+          [wine("Wine 125", null, { active: active as unknown as boolean })],
+          "en",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "product.variant_invalid", params: { field: "active" } });
+    expect(await storedVariants(f.parentId)).toEqual([]);
+  });
+
+  // A re-save that leaves `active` out must not restore a removed variant without saying so.
+  it("keeps a variant sent by id with no active as it already is, Active or Inactive", async () => {
+    const f = await fixture();
+    const saved = await app((tx) =>
+      setProductVariants(
+        tx,
+        f.parentId,
+        [wine("Wine 125", null, { active: false }), wine("Wine 175", "5.50")],
+        "en",
+      ),
+    );
+    const withoutActive = saved.map((variant) => {
+      const sent: VariantWrite = { ...variant };
+      delete sent.active;
+      return sent;
+    });
+    await app((tx) => setProductVariants(tx, f.parentId, withoutActive, "en"));
+    expect((await storedVariants(f.parentId)).map(({ active }) => active)).toEqual([0, 1]);
+  });
+
   it("refuses an id that is not a variant of this parent", async () => {
     const f = await fixture();
     const [foreign] = await app((tx) =>
@@ -293,7 +388,7 @@ describe("setProductVariants stores each variant as a product under its parent",
 });
 
 describe("the product editor", () => {
-  it("reads Active variants only, so saving the parent back cannot restore a removed one", async () => {
+  it("reads a removed variant as Inactive, so saving the parent back cannot restore it", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>
       setProductVariants(
@@ -306,7 +401,10 @@ describe("the product editor", () => {
     await app((tx) => setProductVariants(tx, f.parentId, [w125!], "en"));
 
     const value = await app((tx) => readProductEditor(tx, f.parentId));
-    expect(value.variants.map((variant) => variant.id)).toEqual([w125!.id]);
+    expect(value.variants.map(({ id, active }) => ({ id, active }))).toEqual([
+      { id: w125!.id, active: true },
+      { id: w175!.id, active: false },
+    ]);
 
     await app((tx) => saveProductEditor(tx, f.parentId, f.catalogueId, value, "en"));
     expect((await storedVariants(f.parentId)).map(({ id, active }) => ({ id, active }))).toEqual([
