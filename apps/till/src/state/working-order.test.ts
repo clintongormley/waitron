@@ -513,8 +513,8 @@ describe("WorkingOrderStore", () => {
     });
   });
 
-  // An unedited retrieved order is paid from its stored lines, which still bill these picks; an
-  // edited one is re-priced from what the till sends, which cannot name them.
+  // An unedited retrieved order is paid from its stored lines, which still bill these picks. An edit
+  // sends the lines without them, so the server replaces the whole order and re-prices it.
   describe("retrieved picks no list offers any more", () => {
     const milk = { productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 };
     function loaded(): WorkingOrderStore {

@@ -97,8 +97,7 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
  *    billed.
  *  - A frozen answer matching no offered list is simply left out. Nothing requires it (the list is
  *    no longer active or no longer attached) and sending it would be refused as `options.invalid`,
- *    so leaving it out is the only sendable shape — the same posture `deriveExtraSelections`
- *    (`./held-extras.ts`) takes for a pick no list offers any more.
+ *    so leaving it out is the only sendable shape.
  *
  * The frozen wording itself is carried through untouched by the caller: it is what the order holds
  * and what the basket must keep showing until the server re-prices — which, as above, is the whole

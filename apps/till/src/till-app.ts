@@ -1636,7 +1636,8 @@ export class TillApp extends LitElement {
         // Symmetric with `#onPlaceOrder`'s and `#onConfirmPayment`'s ready-the-order re-sync. The Hold
         // field opens BLANK (`event.detail.label` is undefined unless the operator types one), and
         // `updateWorkingOrder` writes `label ?? null`, so fall back to the STORED label — a blank re-hold
-        // must keep the retrieved order's name (e.g. "Mesa 4"), not wipe it; a typed value renames.
+        // must keep the retrieved order's name (e.g. "Mesa 4"), not wipe it. A typed value renames only
+        // when a line was also edited, because `#syncIfDirty` sends nothing otherwise (docs/backlog.md).
         await this.#syncIfDirty(id, lines, label ?? this.#store.label);
       } else {
         await this.api.parkOrder({ id, lines, label });
@@ -1658,13 +1659,9 @@ export class TillApp extends LitElement {
    * into the shared store under the retrieved order's own id, and refresh the list. The stored id keeps
    * later payment in the same idempotency slot. Stays on the counter with the basket ready to edit or pay.
    *
-   * A contextual line uses the server's stored offer snapshot, so deactivation does not remove it.
-   * A legacy product-only line that can no longer resolve is dropped and surfaces `held.product_gone`.
    * A line's extras picks and its options answers both come back as VALUES carrying none of the ids
    * the wire names, so both are matched back to the dish's live offer here (`deriveExtraSelections`
-   * and `deriveOptionSelections`, `./state/`). A still-offered options list that nothing matched
-   * surfaces `held.options_changed`: the operator has to choose again, and the list's own default is
-   * never substituted for what the diner asked for.
+   * and `deriveOptionSelections`, `./state/`).
    *
    * Each `quantity` arrives as a three-place decimal string ("2.000"); {@link displayQuantity} cleans a
    * precision-zero count's trailing zeros without touching re-pricing.

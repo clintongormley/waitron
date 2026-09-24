@@ -328,8 +328,10 @@ export class WorkingOrderStore {
   }
 
   /**
-   * Every line edit comes through here. An edited retrieved order is re-priced from what the till
-   * sends, which cannot name a not-offered pick, so the picks leave the basket as the edit is made.
+   * Every line edit comes through here. An edit sends each line without its not-offered picks, so the
+   * server replaces the whole order and re-prices it; the picks leave the basket now to match. Dropped
+   * silently, unlike the modifier picker's stale picks, by owner decision (2026-09-24): the retrieve
+   * banner (`held.extra_not_offered`) is the notice.
    */
   #markDirty(): void {
     this.#dirty = true;

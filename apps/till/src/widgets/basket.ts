@@ -141,7 +141,7 @@ export class TillBasket extends LitElement {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
         font-size: var(--wt-font-size-sm);
-        font-weight: 600;
+        font-weight: var(--wt-font-weight-bold);
       }
 
       /* The line's AS-SERVED allergen profile (modifier↔allergen, Task 7) — indented under the dish

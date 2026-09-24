@@ -263,10 +263,12 @@ such a product; a pick of a variant itself sells. That refusal comes from one re
 basket's picks (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). A product whose
 variants are all Inactive sells as itself.
 
-A held order keeps a line whose product, or one of whose extras, has since gained an Active
-variant, and lowering or keeping its quantity is allowed; raising it is refused
-`product.variant_required`, as a raise of a line whose product has become Inactive or Unavailable
-is refused (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
+On the server, a held order keeps its stored lines — including one whose product, or one of whose
+extras, has since gained an Active variant — only when an edit re-sends every line as stored,
+changing at most their quantities, which a till cannot do for such an extra (below). Lowering or
+keeping such a line's quantity is allowed; raising it is refused `product.variant_required`, as a
+raise of a line whose product has become Inactive or Unavailable is refused. Any other edit
+replaces and re-prices the whole order (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
 re-check them (`priceStoredOrder`, same file). On the till, retrieving the order keeps such an extra
 in the basket, marked "Not offered now" and counted in the total, as it keeps a sold-out one,
 because the extras lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
