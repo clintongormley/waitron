@@ -2569,15 +2569,16 @@ image constraints under *Detail → Box image*.
   unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
   comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
-  2,000 to about 640) and `provisioning` (#561, about 1,740 to about 400). A pruning pull request
+  2,000 to about 640), `provisioning` (#561, about 1,740 to about 400) and `fiscal-verifactu` (#562,
+  about 3,250 to about 1,550). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only push
-  after the merge. Found by #555, #558, #559 and #561 and left for the package that owns each, all
+  after the merge. Found by #555, #558, #559, #561 and #562 and left for the package that owns each, all
   still OPEN:
-  - The journal-table reason in the `drizzle.config.ts` of `credentials`, `scheduler` and
-    `fiscal-verifactu` ("`generate` would … silently re-apply its own from zero") is wrong:
+  - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
+    ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
     the set with older timestamps would never run (measured by #555's review with the real
-    `runMigrations`; workforce's and payments' configs now say so).
+    `runMigrations`; workforce's, payments' and fiscal-verifactu's configs now say so).
   - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
     and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
     engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
@@ -2601,7 +2602,7 @@ image constraints under *Detail → Box image*.
   - `apps/till/src/widgets/tender-pay.ts` points at `packages/payments/src/provider.ts:113-137` and
     lists `PaymentProvider`'s methods without `resolvePending`; both were wrong before #558. Prune
     with `apps/till`.
-  - Ten comments in `apps/server` and `packages/fiscal-verifactu` tests cite
+  - Comments in `apps/server` tests cite
     `packages/identity/src/schema/persons.ts:26` and `:67`, already wrong before #559; name the
     column instead of the line when those packages are pruned.
   - `apps/server/src/management-api.ts` still says an unregistered credential gets
@@ -2612,9 +2613,12 @@ image constraints under *Detail → Box image*.
     display-name index as `lower(trim(display_name))`, which is no longer how it is built.
   - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
     measured false in identity (2026-09-24: `sessions.ts`'s function of the same kind, with no
-    ignore, read 1 of 1 covered) and still stands in about 15 schema files in `packages/db` and
-    `packages/fiscal-verifactu`. Four identity schema files keep the ignore pair with no reason;
-    removing a pair is a code change, for whoever next changes identity's code.
+    ignore, read 1 of 1 covered) and again by #562's review (making the foreign-key callback in
+    `packages/fiscal-verifactu/src/schema/acks.ts` throw failed `schema-conformance.test.ts`;
+    making a table's extra-config callback throw failed the file as it loaded). The reason still
+    stands in `packages/db/src/schema` (`grep -rln "vitest run" packages/db/src/schema`). Four
+    identity schema files and six in `packages/fiscal-verifactu/src/schema` keep the ignore pairs
+    with no reason; removing a pair is a code change, for whoever next changes that package's code.
   - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `catalogue`, `media`,
     `venue-service`, `workforce-es` and `db` say an unnamed unique constraint reaches the factory's
     refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
@@ -2650,6 +2654,29 @@ image constraints under *Detail → Box image*.
     out with no reason stated any more, which may hide code a test could reach; and `cli.test.ts`
     test titles still say "before connecting" and "before opening a connection", and one title
     ("rather than opening the working directory") rests on the false reason above.
+  - `packages/fiscal-verifactu` code, found by #562 and not changed:
+    - `drain.ts`'s Route B lookup (`client.consultar`) runs inside the transaction that saves AEAT's
+      reply, so it holds the venue's single writer across an AEAT round trip (#562's review held a
+      second writer blocked while the lookup was paused), and a failed lookup rolls back the other
+      CSVs saved from that reply, which AEAT does not send again. The comment at the call now says
+      so. Moving the lookup out of the transaction is the fix, and a fiscal-adjacent change.
+    - The inner try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead: with it
+      removed, the "LOGGER fails" case still passed, because `Promise.allSettled` absorbs the
+      rejection.
+    - Removing `appendToChain`'s nested `tx.transaction` makes no test fail (`chain.test.ts`'s
+      header says so); the protection it gives a losing attempt has no test holding it.
+    - `chain.ts` raises `fiscal.record_totals_disagree` for every warning the validator returns.
+      `@waitron/verifactu@0.1.0` emits two, both totals checks, so it is right today; nothing
+      fails if the library adds a warning of another kind.
+    - The frozen `write-path.e2e.test.ts` points at `test/fixtures.ts:249-256` and
+      `test/write-path-fixtures.ts:37-44`, which have moved; the receipt they cite is back in
+      `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
+  - The same false comments #562 removed from `fiscal-verifactu` survive elsewhere: a nonexistent
+    `errors.reachability.test.ts` cited in `packages/core` (`incidents.ts`, `record-sale.ts`), a
+    "chain-head lock" in `packages/core` (`record-sale.ts`, `settle-sale.ts`,
+    `record-substitution.ts`) and `apps/server/src/till-sale.ts` (the head read takes no lock), and
+    `boot.ts` named as the owner of the AEAT certificate resolver in `apps/server/src/boot.test.ts`
+    (`packages/fiscal-verifactu/src/slot.ts` builds and closes it). Prune with those packages.
   - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
     to another", which #561 deleted from provisioning (`tenants` holds one row). Prune with
     `apps/server`.
@@ -2915,7 +2942,11 @@ image constraints under *Detail → Box image*.
   `grep -rln 'const pg = useVenueDb\|pg\.db' --include='*.test.ts' packages apps` for the current
   set rather than trusting a number written here.
 
-- **Two fiscal-package comments that need a probe, not a reword — OPEN (T2, 2026-09-23).**
+- **Two fiscal-package comments that need a probe, not a reword — DONE by #562 (2026-09-24).**
+  #562 deleted the stale "out of scope" and shared-database prose from `chain.test.ts` and
+  `drain.test.ts` (`useVenueDb`'s `resetPerTest` defaults to true,
+  `packages/db/src/testing/venue-db.ts`) and the `VerifactuBackend.drain` description; a grep of
+  `write-path.e2e.test.ts` for the reseed wording finds none. The original entry follows.
   `packages/fiscal-verifactu/src/chain.test.ts`'s header says a previous test's committed rows are
   simply out of scope rather than something to clean up, and that nothing there could truncate
   `registros_facturacion` anyway because the append-only trigger blocks it. Both look stale against
