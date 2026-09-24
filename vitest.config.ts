@@ -13,7 +13,7 @@ import { defineConfig } from "vitest/config";
 //   `packages/*/drizzle` SQL creates against other modules' tables, module-seams reads every
 //   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
 //   "<regime package>"` prefix, coverage-thresholds pins
-//   which package holds which coverage bar, column-vocabulary reads every `.ts` file under both
+//   every package's coverage bar, column-vocabulary reads every `.ts` file under both
 //   roots for a column builder imported straight from `drizzle-orm/sqlite-core` — which only
 //   `packages/db/src/schema/columns.ts` may do, so that the NEXT engine change replaces one file —
 //   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, a retired helper no

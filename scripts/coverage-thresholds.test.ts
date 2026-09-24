@@ -5,20 +5,15 @@ import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
- * Every package is to hold 98/98/98/95 (owner decision 2026-09-23, retiring the 2026-09-05 split
- * that reserved it for the fiscal core and the data layer). Until each gets there it sits at the
- * 90/90/85/85 floor; `HIGH_BAR_PACKAGES` below is the list of those that have been promoted, and a
- * package joins it in the same change that brings it to the bar. The root project holds the high
- * bar too: its coverage table is the root `scripts/*.mjs` plus the vocabulary module, and two of
- * those scripts are the classifiers that decide what CI and the pre-push hook run, whose failure
- * mode is a scoped run that selects nothing and reports success (CLAUDE.md §2).
+ * Every package holds 98/98/98/95, and so does the root project (owner decision 2026-09-23); a new
+ * package holds it from its first commit. The root project's table is the root `scripts/*.mjs` plus
+ * the vocabulary module, and two of those scripts are the classifiers that decide what CI and the
+ * pre-push hook run, whose failure mode is a scoped run that selects nothing and reports success
+ * (CLAUDE.md §2).
  *
- * Which package holds which bar is a decision no per-package suite can check — a package's own
- * config decides whether its tests run at all — so this guard pins it from the root project
- * (CLAUDE.md §4): a new package that copies a sibling's `vitest.config.ts` inherits whichever bar
- * the sibling had, and a one-line diff could lower a fiscal package's bar unnoticed. The list is
- * hardcoded, which CLAUDE.md §2 warns goes stale under scoped CI; it is safe here because the root
- * project is the one gate never narrowed away.
+ * A package's own config decides whether its tests run at all, so no per-package suite can check
+ * its bar; this guard pins it from the root project (CLAUDE.md §4), where a one-line diff lowering
+ * one config fails.
  *
  * Members come from `pnpm ls` through `workspaceMembers` (scripts/workspace-members.mjs), the same
  * source the hook and CI scope from, minus `PACKAGES_WITHOUT_TESTS`. Like the other guards here it
@@ -36,57 +31,20 @@ const REPO_ROOT = join(import.meta.dirname, "..");
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
 const HIGH_BAR = { statements: 98, lines: 98, functions: 98, branches: 95 };
-const FLOOR = { statements: 90, lines: 90, functions: 85, branches: 85 };
 
-const HIGH_BAR_PACKAGES = [
+/** Packages whose absence from `pnpm ls` means the member list came back wrong, not that they left.
+ *  With `MIN_TESTED_MEMBERS` it fails an empty or badly short listing, which would otherwise pass
+ *  every check below having read little or nothing. One name per workspace folder that holds
+ *  tested members, because the minimum alone passes a listing that lost all of `apps/`. */
+const EXPECTED_MEMBERS = [
   "@waitron/fiscal-verifactu",
-  "@waitron/core",
   "@waitron/db",
-  "@waitron/payments",
-  "@waitron/store",
-  "@waitron/bookings",
-  "@waitron/catalogue",
-  "@waitron/composition",
-  "@waitron/country",
-  "@waitron/country-es",
-  "@waitron/country-gb",
-  "@waitron/country-packs",
-  "@waitron/credentials",
-  "@waitron/dashboard",
-  "@waitron/dashboard-kit",
-  "@waitron/dashboard-modules",
-  "@waitron/diagnostics",
-  "@waitron/fiscal",
-  "@waitron/fiscal-none",
-  "@waitron/identity",
-  "@waitron/layouts",
-  "@waitron/media",
-  "@waitron/membership",
-  "@waitron/migrations",
-  "@waitron/module",
-  "@waitron/payments-stripe",
-  "@waitron/payments-sumup",
-  "@waitron/print-agent",
-  "@waitron/print-agent-app",
-  "@waitron/printing",
-  "@waitron/provisioning",
-  "@waitron/purchasing",
-  "@waitron/recipes",
-  "@waitron/reporting",
-  "@waitron/scheduler",
+  "@waitron/core",
   "@waitron/server",
-  "@waitron/server-kit",
-  "@waitron/setup",
-  "@waitron/shared",
-  "@waitron/sync-enrolment",
-  "@waitron/till",
-  "@waitron/tunnel",
-  "@waitron/ui",
-  "@waitron/ui-core",
-  "@waitron/venue-service",
-  "@waitron/workforce",
-  "@waitron/workforce-es",
 ];
+
+/** A loose floor well under today's count of tested members, not an exact count. */
+const MIN_TESTED_MEMBERS = 30;
 
 /** The `coverage.include` every package config declares. Read as text, like the thresholds below:
  *  a test file's own `include` never collides with it because those name `*.test.ts` patterns. */
@@ -120,23 +78,30 @@ function testedMembers(): { name: string; dir: string }[] {
   return workspaceMembers().filter(({ name }) => !PACKAGES_WITHOUT_TESTS.includes(name));
 }
 
-describe("every vitest config holds the coverage bar its package was assigned", () => {
+function assertWorkspaceListed(names: string[]): void {
+  expect(
+    EXPECTED_MEMBERS.filter((name) => !names.includes(name)),
+    "pnpm ls must list the workspace (guards against a vacuous pass)",
+  ).toEqual([]);
+  expect(
+    names.length,
+    "pnpm ls must list the whole workspace (guards against a partial listing)",
+  ).toBeGreaterThanOrEqual(MIN_TESTED_MEMBERS);
+}
+
+describe("every vitest config holds the high coverage bar", () => {
   it(
     "across the root project and every workspace member pnpm lists",
     () => {
       const members = testedMembers();
-      const names = members.map(({ name }) => name);
-      expect(
-        HIGH_BAR_PACKAGES.filter((name) => !names.includes(name)),
-        "every high-bar package must be a workspace member (guards against a vacuous pass)",
-      ).toEqual([]);
+      assertWorkspaceListed(members.map(({ name }) => name));
 
       const configs = [
         { label: "the root project", path: "vitest.config.ts", bar: HIGH_BAR },
         ...members.map(({ name, dir }) => ({
           label: name,
           path: `${dir}/vitest.config.ts`,
-          bar: HIGH_BAR_PACKAGES.includes(name) ? HIGH_BAR : FLOOR,
+          bar: HIGH_BAR,
         })),
       ];
       const actual = configs.map(({ label, path }) => ({
@@ -159,11 +124,7 @@ describe("every vitest config holds the coverage bar its package was assigned", 
       // this case pins it for every member. The root project is not here: its own coverage table
       // is `scripts/`, not a `src` tree.
       const members = testedMembers();
-      const names = members.map(({ name }) => name);
-      expect(
-        HIGH_BAR_PACKAGES.filter((name) => !names.includes(name)),
-        "every high-bar package must be a workspace member (guards against a vacuous pass)",
-      ).toEqual([]);
+      assertWorkspaceListed(members.map(({ name }) => name));
 
       const missing = members.filter(
         ({ dir }) =>
@@ -183,10 +144,10 @@ describe("every vitest config holds the coverage bar its package was assigned", 
       expect(parseThresholds(literal, "x")).toEqual(HIGH_BAR);
       expect(
         parseThresholds(
-          "  thresholds: {\n    statements: 90,\n    lines: 90,\n    functions: 85,\n    branches: 85,\n  },\n",
+          "  thresholds: {\n    statements: 91,\n    lines: 92,\n    functions: 93,\n    branches: 94,\n  },\n",
           "x",
         ),
-      ).toEqual(FLOOR);
+      ).toEqual({ statements: 91, lines: 92, functions: 93, branches: 94 });
     });
 
     it("ignores a `//` comment line but counts a block-comment interior line as a second literal", () => {
@@ -204,10 +165,10 @@ describe("every vitest config holds the coverage bar its package was assigned", 
       });
       expect(
         parseThresholds(
-          "  thresholds: { perFile: true, statements: 90, lines: 90, functions: 85, branches: 85 },\n",
+          "  thresholds: { perFile: true, statements: 98, lines: 98, functions: 98, branches: 95 },\n",
           "x",
         ),
-      ).toEqual({ ...FLOOR, unparsed: "perFile:true" });
+      ).toEqual({ ...HIGH_BAR, unparsed: "perFile:true" });
     });
   });
 });

@@ -96,32 +96,39 @@ Bypassing the hook with `--no-verify` is for emergencies; the failure still has 
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
 unfiltered `main` run, not a wrong hook.
 
-## Coverage thresholds: every package to the high bar
+## Coverage thresholds: one bar for every package
 
-**The goal is every package at `statements 98 / lines 98 / functions 98 / branches 95`** (owner
-decision 2026-09-23). That retires the split of 2026-09-05, which reserved the high bar for the
-fiscal core and the data-layer foundations on the grounds of consequence, and put every other
-package, browser packages included, at the `90/90/85/85` floor. The owner chose the whole bar over
-two narrower answers to the questions task T3 left open — raising only the floor's functions
-minimum, to 95 or to 90. The split
-stays in the code only while it is being retired: a package sits at the floor until tests bring it
-to the bar, and is promoted in the same change; the floor itself goes once no package is left on it.
+**Every package, and the root project, holds `statements 98 / lines 98 / functions 98 / branches
+95`** (owner decision 2026-09-23). That retired the split of 2026-09-05, which reserved the high bar
+for the fiscal core and the data-layer foundations on the grounds of consequence, and put every other
+package, browser packages included, at a `90/90/85/85` floor. The owner chose the whole bar over two
+narrower answers to the questions task T3 left open — raising only the floor's functions minimum, to
+95 or to 90. Each package under it was brought up in a pull request of its own (listed in
+`docs/backlog.md` → *Every package to the high coverage bar*), and on 2026-09-24, once none was left
+on it, the floor was removed from the guard and retired as policy: live prose mentions it only as
+retired, and dated history still records it. A new package holds the bar from its first commit.
 
-One place holds the list of promoted packages authoritatively: `HIGH_BAR_PACKAGES` in
-`scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it. A
-hardcoded list is safe there only because the root project is the one gate never narrowed away.
-Promoting a package is an edit to that list and to the package's `vitest.config.ts`, in one commit.
-Historical plans and specs under `docs/superpowers/` still say there are six high-bar packages; they
-record what was true when they were written and are left alone.
+The bar is negotiable only where the rest of a package's gap could be closed solely by tests that
+assert nothing useful (owner, 2026-09-23: "we never want to add junk tests just to meet a coverage
+bar. the tests added must actually test something useful."). The promotions also worked under a
+rule of their own, which stands: a gap is never closed by hiding code a test could reach — adding an
+exclude or an ignore comment over it, or moving it under `src/testing/`.
 
-Three live places repeated the list and all three were wrong at once. This file and `CLAUDE.md`
-went on naming four packages after the flip (#489) added `@waitron/store` and made it five;
-`packages/bookings/vitest.config.ts` asserted "the owner's six high-bar packages". The enumeration is
-gone from all three rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES`
-away, and a guard over prose would fail on rewording that changed nothing. Worth noting how the third
-was found: the sweep used the package names and the two bar strings as its keys, and the key that
-finds bookings is the word "six". The dated measurement subsections below name packages as the
-record of one run, not as the list.
+`scripts/coverage-thresholds.test.ts` pins it from the root project, because a package's own config
+decides whether its tests run at all. It is weaker than its name in four ways. It reads each
+config's `thresholds` literal as TEXT rather than importing the config. It never reads a config's
+`coverage.exclude` or any ignore comment, so a newly added exclude passes it. It checks the members
+`pnpm ls` lists minus `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`), so a member named
+there is outside it. And its check that `pnpm ls` returned the workspace is only that the names in
+`EXPECTED_MEMBERS` (one per workspace folder holding tested members) are listed and that the list
+meets `MIN_TESTED_MEMBERS`, a loose minimum well under today's count — which stops an empty list
+from passing having read nothing, but lets a listing that drops a few other members pass.
+
+While the split stood, a hardcoded list of promoted packages lived in that guard, and prose that
+re-enumerated it drifted: three places were wrong at once, two naming four packages after the flip
+(#489) made it five and a third asserting six. There is no list to enumerate now. Historical plans
+and specs under `docs/superpowers/` still describe the split; they record what was true when they
+were written and are left alone.
 
 The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
 `packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
@@ -139,8 +146,7 @@ that run coverage, 1,066 test files and 13,811 tests. Every member's
 and were promoted together**, joining the five already there: `composition`, `country`,
 `country-es`, `country-gb`, `country-packs`, `credentials`, `dashboard-modules`, `diagnostics`,
 `fiscal`, `layouts`, `membership`, `migrations`, `module`, `purchasing`, `recipes`, `reporting`,
-`scheduler`, `shared`, `ui`, `workforce` and `workforce-es` — as measured that day;
-`HIGH_BAR_PACKAGES` is the list from here on. The nearest to its new bar is
+`scheduler`, `shared`, `ui`, `workforce` and `workforce-es` — as measured that day. The nearest to its new bar is
 `scheduler`, 1.22 points over on statements; eighteen of the 21 are at 100% on all four.
 
 The 20 still under it, with the metric furthest below its bar — `printing` (functions, 1.23 short),
@@ -338,7 +344,7 @@ subtracts `*.test.ts`.
 **The coverage half.** `packages/db`'s `vitest.config.ts` deliberately does NOT exclude
 `src/testing/**`, and says why at that line: it was once excluded wholesale as "harness code, not
 product code", and that hid three helpers in it that no test executed at all. It is held to the same
-thresholds as the rest of `src/`, which for this package is the high bar — statements 98, lines 98,
+thresholds as the rest of `src/`, the same bar every package holds — statements 98, lines 98,
 functions 98, branches 95.
 
 Measured on branch `feat/module-schema-conformance-guard`, 2026-09-23, with
@@ -832,8 +838,8 @@ the three named below; wired, the root project is green. The three:
   because the message names a missing file and reads like a broken checkout rather than a missing
   registration.
 
-What to wire, for an ordinary package with tests: a `vitest.config.ts` carrying the coverage bar the
-package is assigned (which bar is pinned by `scripts/coverage-thresholds.test.ts`), and the shard lists
+What to wire, for an ordinary package with tests: a `vitest.config.ts` whose thresholds are
+`98/98/98/95` (pinned by `scripts/coverage-thresholds.test.ts`), and the shard lists
 in `scripts/changed-scope.mjs` and `.github/workflows/ci.yml`. A package that declares no
 `test:coverage` script at all — today only the two `bench/` members — additionally goes in
 `PACKAGES_WITHOUT_TESTS`.
