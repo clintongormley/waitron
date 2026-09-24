@@ -25,13 +25,8 @@ describe("the public surface", () => {
 });
 
 /**
- * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
- * runs it, which is why scheduled-runs.ts's FK/index/check block shows as uncovered even though
- * every other test in this package imports the table. Calling `getTableConfig` forces the callback
- * to run, and the assertions below are the meaningful check that scheduled_runs' constraints
- * actually exist under the names the runner's claim-by-INSERT and the migration
- * depend on — not a coverage stunt. Mirrors packages/payments/src/index.test.ts, and reached here
- * through the package root, which is the surface a host actually gets.
+ * drizzle runs a table's extraConfig callback lazily; `getTableConfig` forces it. Reached through
+ * the package root, the surface a host gets.
  */
 describe("scheduled_runs constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares scheduled_runs' unique index and check constraints, and no foreign key", () => {

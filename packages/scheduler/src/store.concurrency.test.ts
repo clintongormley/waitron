@@ -13,47 +13,12 @@ const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");
 
 /**
- * Three runners arriving at once on ONE venue file.
+ * Runners arriving at once on one venue file. `withTransaction` serialises them, so the second sees
+ * the first's committed state rather than racing it, and nothing here observes two runners holding
+ * one row at the same moment. Serialised, `enqueueSuccessor`'s guard refuses before its insert can
+ * collide, so its unique-violation catch is reached below only through a stub.
  *
- * ## What this file used to be
- *
- * It opened three PostgreSQL backends — two writers and a read-only probe — and forced each race
- * by holding one transaction open and polling `pg_locks` until the other backend was demonstrably
- * blocked. None of that exists here: a venue file has one write connection, and `pg_locks` has no
- * counterpart, so `waitForABlockedBackend` is gone with it. What replaces the forcing is the
- * write queue itself: two `withTransaction` calls started together are serialised, so the second
- * runner sees the first's COMMITTED state rather than racing it.
- *
- * ## The loss, and what was done about it
- *
- * **`enqueueSuccessor`'s unique-violation catch is no longer reachable through the public verb.**
- * The old third case worked only because the loser could see a state the winner had written but
- * not committed: its `unfinished > 0` guard passed on a stale read and its INSERT then collided.
- * Serialised, the loser's SELECT sees the winner's `pending` row, the guard returns `false` first,
- * and the catch never runs. That catch — and the SAVEPOINT around the insert it depends on — is
- * the regression guard `CLAUDE.md` §3 names on this file, so it is not left uncovered: it is
- * reached two ways below instead of one.
- *
- * - `reads a genuine SQLite unique violation as already-enqueued, not as an error` drives the
- *   catch with a stub whose refusal carries `errcode: 2067` and SQLite's own message. `errcode`,
- *   not `code`: `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike
- *   (`packages/db/src/sql-state.ts`), so a stub forging a SQLSTATE-shaped `code` would stage no
- *   collision at all and `isUniqueViolation` would return false — the branch under test would
- *   never run and the case would pass for the wrong reason.
- * - `leaves the transaction usable after a refusal inside it` drives a REAL refusal on a real
- *   database, inside one `withTransaction`, and shows the work written before and after it both
- *   commit. That is the half the old case's `loserKeptGoing` asserted.
- *
- * **What is genuinely gone and is replaced by nothing:** the observation that a second runner had
- * actually reached the contended row while the first still held it. With one writer there is no
- * such moment to observe.
- *
- * Migration sets: CORE then SCHEDULER, the pair the deleted `core_scheduler` template this file
- * cloned was built from (`git show aabdde6a8^:packages/scheduler/src/testing/global-setup.ts`).
- *
- * `resetPerTest: false` is kept for the reason it was always kept: each case claims a DISTINCT
- * period, so accumulating rows never collide on `scheduled_runs_key`, and every read is scoped to
- * the row id or period it just wrote.
+ * Each case claims a distinct period, so rows accumulating under `resetPerTest: false` never collide.
  */
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
@@ -97,8 +62,7 @@ describe("two runners starting together on one failed row", () => {
     ]);
     expect([first, second].filter((r) => r !== null)).toHaveLength(1);
 
-    // The loser must not have inflated the attempt count — a conditional UPDATE that matched
-    // nothing changes nothing, which is what bounds retries.
+    // The loser must not have inflated the attempt count, which is what bounds retries.
     const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
@@ -108,17 +72,16 @@ describe("two runners starting together on one failed row", () => {
 
 describe("enqueueSuccessor's duplicate-key catch", () => {
   it("reads a genuine SQLite unique violation as already-enqueued, not as an error", async () => {
-    // A stub, because the branch is unreachable from a real database with one writer (this file's
-    // header says why). The stub's job is to make the SELECT pass the `unfinished > 0` guard and
-    // the nested insert refuse, so `enqueueSuccessor`'s own catch decides what happens.
+    // Passes the `unfinished > 0` guard and makes the nested insert refuse, so `enqueueSuccessor`'s
+    // own catch decides what happens.
     const refusal = Object.assign(
-      // SQLite's own words for this table's key, and the only identity a unique refusal has here.
+      // SQLite's own message for this table's key.
       new Error(
         "UNIQUE constraint failed: scheduled_runs.duty, scheduled_runs.period_from, " +
           "scheduled_runs.generation",
       ),
-      // 2067, the extended result code for a unique INDEX (a primary key would be 1555) —
-      // `packages/db/src/sql-state.ts`'s `UNIQUE_VIOLATION`. On `errcode`, never on `code`.
+      // 2067, a unique index. On `errcode`, never `code`: `node:sqlite` puts `"ERR_SQLITE_ERROR"` on
+      // `code` for every failure, so a stub forging `code` would stage no collision at all.
       { errcode: 2067 },
     );
     const fakeTx = {
@@ -143,9 +106,6 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
   });
 
   it("rethrows a refusal that is not a unique violation", async () => {
-    // The control for the case above, and the half that stops the catch swallowing everything. A
-    // NOT NULL refusal (1299) is a real refusal of a DIFFERENT class, so `isUniqueViolation` must
-    // decline it and the error must reach the caller unchanged.
     const other = Object.assign(new Error("NOT NULL constraint failed: scheduled_runs.duty"), {
       errcode: 1299,
     });
@@ -164,23 +124,8 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
   });
 
   it("leaves the transaction usable after a refusal inside it", async () => {
-    // The half the deleted race case asserted with `loserKeptGoing`: a refusal absorbed inside one
-    // transaction must not cost that transaction the work written beside it. On PostgreSQL a
-    // refused statement aborted the WHOLE transaction, so without the savepoint the enqueue that
-    // came after would have failed with `25P02` and `completeRun`'s own already-written row would
-    // have been rolled back — the incident `CLAUDE.md` §3 records against this file.
-    //
-    // Driven with a REAL refusal, not a stub, and inside ONE `withTransaction`: an insert that
-    // duplicates the row written moments earlier in the same transaction, caught at a nested
-    // `tx.transaction` savepoint, with real work either side of it.
-    //
-    // MEASURED 2026-09-22, and the finding is worth stating rather than implying: with the nested
-    // `tx.transaction` replaced by a bare `tx.insert`, this case STILL PASSES. SQLite backs out
-    // the refused statement alone and leaves the transaction open, so on this engine the savepoint
-    // is not what rescues the transaction — `packages/scheduler/src/store.ts:293-307` says the
-    // same and cites `bench/sqlite-failover/README.md`. So this case pins the OUTCOME (the work
-    // either side of a refusal commits) and NOT the savepoint's necessity, which no longer holds
-    // on this engine and which nothing here should be read as proving.
+    // Pins the outcome — work either side of a refusal commits — not the savepoint's necessity:
+    // SQLite backs out only the refused statement, so this passes with a bare `tx.insert` too.
     const first = dayPeriod(new Date("2026-07-16T00:00:00Z"));
     const second = dayPeriod(new Date("2026-07-15T00:00:00Z"));
     const dueAt = new Date("2026-07-26T00:00:00Z");
@@ -207,14 +152,12 @@ describe("enqueueSuccessor's duplicate-key catch", () => {
       }
       // The refusal has to have HAPPENED, or everything below is vacuous.
       expect(refused).toBe(true);
-      // And the transaction still takes writes.
       const after = await enqueueSuccessor(tx, { duty: DUTY, period: second, dueAt });
       return { enqueued, after };
     });
 
     expect(kept).toEqual({ enqueued: true, after: true });
 
-    // Both committed, and the refused duplicate left no second row behind.
     const rows = await suite.db
       .select()
       .from(scheduledRuns)

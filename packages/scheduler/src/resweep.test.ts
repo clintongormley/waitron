@@ -40,20 +40,12 @@ describe("resweepAfter", () => {
     const snapshot = await snapshotOf();
     const pending = snapshot.rows.filter((r) => r.state === "pending");
     expect(pending).toHaveLength(1);
-    // The store hands back the string the column holds — `period.from.toISOString()` went in, and
-    // `CLAIMED` selects the column and nothing else (store.ts). Parsed before comparing anyway, as
-    // packages/payments/src/store.test.ts's convention does, so this pins the MOMENT and leaves
-    // the store free to change how it renders one without a test having to be edited.
     expect(new Date(pending[0]!.periodFrom).toISOString()).toBe("2026-07-24T00:00:00.000Z");
     expect(pending[0]).toMatchObject({ generation: 1 });
   });
 
-  // The re-sweep row this tick just enqueued is the earliest work the ledger now carries — but
-  // derivation answered from a snapshot taken BEFORE the duty ran, where that row did not exist,
-  // so on its own it reports the next day boundary (2026-07-26T00:00:00Z). SOON is deliberately
-  // earlier than that boundary: without folding the enqueue in, a host sleeping on `nextDueAt`
-  // would miss the re-sweep by 19 hours, and the self-healing loop §7 promises would run a day
-  // late every time.
+  // Derivation answered from a snapshot taken before the duty ran, where the re-sweep row did not
+  // exist, so on its own it reports the next day boundary; `soon` is earlier than that boundary.
   it("reports the re-sweep it just enqueued as the next due time", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {}, resweepAfter: soon }));
@@ -61,11 +53,8 @@ describe("resweepAfter", () => {
     expect(result.nextDueAt).toEqual(soon);
   });
 
-  // The other half of that fold: a re-sweep time is reported only when a successor row was
-  // actually INSERTED. Here a concurrent runner (simulated inside the duty's own run(), which
-  // executes outside every transaction) has already enqueued a successor for this period, so the
-  // enqueue guard refuses ours — and that row's due time is not this run's to report. Reporting
-  // `soon` regardless would be a guess about a row this tick never wrote.
+  // A concurrent runner, played inside the duty's own run(), which executes outside every
+  // transaction, has already enqueued a successor, so the guard refuses ours.
   it("does not report a re-sweep time for a successor the guard refused", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new FakeDuty(DUTY, async (call) => {
@@ -90,13 +79,10 @@ describe("resweepAfter", () => {
     expect(result.nextDueAt).toEqual(new Date("2026-07-26T00:00:00Z"));
 
     const snapshot = await snapshotOf();
-    // Exactly two rows for the period — the completed generation 0 and the competing generation 7.
-    // No generation 8 alongside them.
     expect(snapshot.rows.map((r) => r.generation).sort()).toEqual([0, 7]);
   });
 
-  // Without this the period would never be re-derived: it has no gap. This is the whole mechanism
-  // that makes a gated drift orphan self-healing rather than merely re-reported once.
+  // Without this the period would never be re-derived: it has no gap.
   it("runs the same period again once its due time arrives", async () => {
     const duty = new FakeDuty(DUTY, (_call, index) =>
       Promise.resolve(index === 0 ? { summary: {}, resweepAfter: TOMORROW } : { summary: {} }),
@@ -119,13 +105,8 @@ describe("resweepAfter", () => {
   });
 
   it("keeps the chain linear — one unresolved finding cannot fan out", async () => {
-    // Every run asks for a re-sweep. After three ticks there must be exactly one pending row and
-    // three completed ones — a chain that stays ONE deep, never a fan-out. What this does NOT
-    // observe is the enqueue guard refusing anything: each tick completes its own chain row before
-    // enqueueing the next, so the guard sees zero non-terminal rows every time and inserts. The
-    // guard's refusal is covered directly by store.test.ts's "refuses when the period already has
-    // a non-terminal row"; what is covered here is that the runner's own call pattern never asks
-    // it to.
+    // Each tick completes its own row before enqueueing the next, so the guard never refuses here;
+    // store.test.ts covers the refusal.
     const duty = new FakeDuty(DUTY, (call) =>
       Promise.resolve({ summary: {}, resweepAfter: new Date(call.now.getTime() + 60_000) }),
     );
@@ -140,8 +121,8 @@ describe("resweepAfter", () => {
   });
 
   it("survives a period older than the horizon", async () => {
-    // A re-sweep is EXPLICIT work, so the gap horizon must not bury it. Seeded by hand at a period
-    // 90 days back, which no gap derivation would ever reach.
+    // A re-sweep is EXPLICIT work, so the gap horizon must not bury it. Seeded by hand below the
+    // horizon, which no gap derivation would reach.
     const old = new Date("2026-04-20T00:00:00Z");
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {} }));
     await withTransaction(suite.db, async (tx) => {
@@ -161,13 +142,8 @@ describe("resweepAfter", () => {
     );
   });
 
-  // The interface-change guard from Task 5: `runOne` must enqueue a successor only when its OWN
-  // `completeRun` call actually won the ownership fence. This scenario is deliberately built so the
-  // store's OWN "no non-terminal row" guard could NOT have caught a missing gate on its own: the
-  // reclaiming runner finishes and completes the row to `succeeded` (terminal) BEFORE the original,
-  // stale attempt's own (losing) `completeRun` call runs — so if `enqueueSuccessor` ran regardless
-  // of `completed`, it would see zero unfinished rows and insert a spurious successor anyway. Only
-  // gating on the fence's own boolean return stops it.
+  // The reclaiming runner leaves the row `succeeded` before the stale attempt completes, so the
+  // store's own non-terminal guard would let a successor through; only the fence's result stops it.
   it("does not enqueue a successor off a completion the ownership fence rejected", async () => {
     const duty = new FakeDuty(DUTY, async (call) => {
       const snapshot = await snapshotOf();

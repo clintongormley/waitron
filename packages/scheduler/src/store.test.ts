@@ -32,10 +32,6 @@ describe("claimGap", () => {
       claimGap(tx, { duty: DUTY, period: PERIOD, now: NOW }),
     );
     expect(claimed).toMatchObject({ generation: 0, attempts: 1 });
-    // The store hands back the string the column holds — `period.from.toISOString()` went in, and
-    // `CLAIMED` selects the column and nothing else (store.ts). Parsed before comparing anyway, as
-    // packages/payments/src/store.test.ts's convention does, so this pins the MOMENT and leaves
-    // the store free to change how it renders one without a test having to be edited.
     expect(new Date(claimed!.periodFrom).toISOString()).toBe("2026-07-24T00:00:00.000Z");
   });
 
@@ -49,10 +45,6 @@ describe("claimGap", () => {
 });
 
 describe("readSnapshot", () => {
-  // Closes a branch the other readSnapshot tests never reach: every one of them shares `DUTY`,
-  // which already has rows by the time it is read. A duty with none exercises `bounds?.earliest`
-  // actually being SQL NULL (no `min()` match), not merely absent — the same "never run" case
-  // `derive.test.ts`'s "starts from the most recent complete period, not the horizon" depends on.
   it("returns an empty snapshot for a duty with no rows", async () => {
     const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, {
@@ -131,9 +123,7 @@ describe("claimRow", () => {
     expect(claimed).toMatchObject({ attempts: 2 });
   });
 
-  // Pins the exact-equality boundary: `next_attempt_at` equal to `now` must be claimable, matching
-  // `derive()`'s own `due <= nowMs`. A stray `lt()` here would silently defer this row a whole
-  // tick while `derive` had already reported it as due — the mismatch Resolution 1 warns about.
+  // Matches `derive()`'s own `due <= nowMs`, or a row derivation reports as due is not claimable.
   it("claims a failed row whose backoff elapses at exactly `now`", async () => {
     const period = dayPeriod(new Date("2026-07-18T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -157,13 +147,7 @@ describe("claimRow", () => {
     expect(reclaimed).toMatchObject({ attempts: 2 });
   });
 
-  // The schema declares `next_attempt_at` "Null unless `pending` or `failed`". Claiming is the one
-  // write that could leave it set on a `running` row, so it is the one write that has to clear it.
-  // Nothing in `derive` depends on this — it dispatches on `running` first — which is exactly why
-  // an unenforced invariant would rot unnoticed until something else read the column.
   it("clears next_attempt_at when it claims, so a running row never carries a stale one", async () => {
-    // 07-21: every other period in this file is already claimed by a sibling test, and this suite
-    // shares one duty, so reusing one makes `claimGap` return null on the unique key.
     const period = dayPeriod(new Date("2026-07-21T00:00:00Z"));
     const gap = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { duty: DUTY, period, now: NOW }),
@@ -201,10 +185,6 @@ describe("claimRow", () => {
     expect(claimed).toBeNull();
   });
 
-  // Deleting the `next_attempt_at <= now` predicate outright left every other test in this suite
-  // green: the row each of them happens to find already satisfies the time guard on its own. This
-  // is the one that cannot pass without it — a retry storm is exactly what `backoffBaseMs` exists
-  // to prevent.
   it("returns null for a failed row whose backoff has not yet elapsed", async () => {
     const period = dayPeriod(new Date("2026-07-17T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -228,10 +208,7 @@ describe("claimRow", () => {
     expect(tooSoon).toBeNull();
   });
 
-  // The only coverage `state = 'pending'` gets at all: every other test reaches `claimRow` via a
-  // `failed` row, so without this, half of "retry and re-sweep share ONE statement" is unverified.
-  // Inserted directly because `enqueueSuccessor` (Task 6) does not exist yet — this is the shape a
-  // re-sweep row will have once it does: `pending`, no `next_attempt_at` set yet.
+  // Inserted by hand: `enqueueSuccessor` always sets `next_attempt_at`.
   it("returns null for a pending row with no next_attempt_at set", async () => {
     const [inserted] = await withTransaction(suite.db, (tx) =>
       tx
@@ -277,9 +254,6 @@ describe("reclaimStale", () => {
     expect(reclaimed).toBeNull();
   });
 
-  // The state guard, isolated from the time guard: this row's `started_at` is well past any
-  // `staleAfterMs`, so only `state = 'running'` stands between it and a reclaim it must not get —
-  // a completed run is not "stranded", and reclaiming it would resurrect a finished attempt.
   it("refuses a row that is no longer running, however stale its started_at", async () => {
     const period = dayPeriod(new Date("2026-06-01T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -308,10 +282,8 @@ describe("reclaimStale", () => {
 });
 
 describe("completeRun's ownership fence", () => {
-  // The exact scenario the fence exists for: A claims, hangs past staleAfterMs, B reclaims (which
-  // bumps attempts and stamps a NEW started_at), and A — still holding its OWN, now-stale
-  // startedAt — finally calls completeRun. Without the fence this overwrites the row B is still
-  // executing; with it, A's call is rejected and the row is left exactly as B's reclaim set it.
+  // A claims and hangs past staleAfterMs, B reclaims (stamping a new started_at), then A completes
+  // with its own stale startedAt — which, unfenced, would overwrite the row B is still running.
   it("rejects a completion from an attempt a reclaim has since superseded", async () => {
     const period = dayPeriod(new Date("2026-05-01T00:00:00Z"));
     const original = await withTransaction(suite.db, (tx) =>
@@ -323,7 +295,6 @@ describe("completeRun's ownership fence", () => {
     );
     expect(reclaimed).toMatchObject({ attempts: 2 });
 
-    // A wakes up late and completes using ITS OWN claim's startedAt — stale by now.
     const won = await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: original!.id,
@@ -337,8 +308,6 @@ describe("completeRun's ownership fence", () => {
     );
     expect(won).toBe(false);
 
-    // The row must still read exactly as B's reclaim left it: running, at B's attempt count — not
-    // overwritten by A's (rejected) outcome.
     const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
@@ -346,11 +315,7 @@ describe("completeRun's ownership fence", () => {
     expect(row).toMatchObject({ state: "running", attempts: 2 });
   });
 
-  // Isolates the fence's OTHER conjunct: `reclaimStale` never touches `state`, so the test above
-  // is decided entirely by the `startedAt` mismatch and leaves `eq(state, "running")` untested. A
-  // duplicate or retried completeRun — same id, same startedAt, nothing about ownership changed —
-  // is the one scenario only the `state` conjunct guards: by the second call the row is no longer
-  // `running`, so `startedAt` alone would still match here.
+  // The fence's `state` conjunct: same id and same startedAt, so `startedAt` alone would still match.
   it("rejects a duplicate completion once the row has already reached a terminal state", async () => {
     const period = dayPeriod(new Date("2026-04-01T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -382,7 +347,6 @@ describe("completeRun's ownership fence", () => {
     );
     expect(second).toBe(false);
 
-    // The row's recorded outcome must still be the FIRST completion's — untouched by the second.
     const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
@@ -392,12 +356,6 @@ describe("completeRun's ownership fence", () => {
 });
 
 describe("enqueueSuccessor", () => {
-  // Neither resweep.test.ts's tests nor store.concurrency.test.ts's race exercise this branch
-  // directly: in the runner's own call pattern, enqueueSuccessor only runs right after a WINNING
-  // completeRun in the same transaction, so the row it just saw is already terminal. Called
-  // directly, as any other caller of this exported function could, a `failed` row awaiting its own
-  // retry must block a successor exactly as the doc comment promises — deleting the `unfinished > 0`
-  // half of the guard would let this insert through with no unique-key collision to catch it.
   it("refuses when the period already has a non-terminal row, even one merely awaiting retry", async () => {
     const period = dayPeriod(new Date("2026-03-01T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -432,11 +390,6 @@ describe("enqueueSuccessor", () => {
     ).toHaveLength(1);
   });
 
-  // The other side of that guard, and the reason it is expressed with derivation's own `TERMINAL`
-  // list rather than a second hardcoded `not in (...)`: `parked` is terminal EXACTLY as
-  // `succeeded` is, so a parked row must not block a successor. The `failed` case above passes
-  // just as happily against a guard that had drifted to `not in ('succeeded')` — this one does
-  // not, so between them the two pin the whole list.
   it("treats a parked row as terminal, exactly as derivation does", async () => {
     const period = dayPeriod(new Date("2026-03-03T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -464,12 +417,7 @@ describe("enqueueSuccessor", () => {
     expect(inserted).toBe(true);
   });
 
-  // Isolates the generation computation from the linear-chain behaviour: resweep.test.ts's "keeps
-  // the chain linear" test would also fail if `generation` were hardcoded (e.g. always 1) instead
-  // of `max(generation) + 1`, but only because a hardcoded value eventually collides with a
-  // generation already used and gets silently absorbed by the unique-violation catch — the chain
-  // just stalls, which is a weaker signal than asserting the actual number. Driven through TWO
-  // completed generations so a mutant fixed at "1" is distinguishable from the real max+1.
+  // Two generations deep, so a generation fixed at 1 cannot pass.
   it("computes the next generation as max(generation) + 1, not a fixed value", async () => {
     const period = dayPeriod(new Date("2026-03-02T00:00:00Z"));
     const gen0 = await withTransaction(suite.db, (tx) =>

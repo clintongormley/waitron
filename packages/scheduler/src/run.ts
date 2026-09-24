@@ -21,9 +21,7 @@ export interface SchedulerDeps {
   maxAttempts: number;
   backoffBaseMs: number;
   staleAfterMs: number;
-  /** How long after a skipped duty to report work due again. `DEFAULTS.skipRetryMs` owns the
-   * default and its reasoning; required here so a caller that forgets is a compile error rather
-   * than a silent cadence. */
+  /** How long after a skipped duty to report work due again (`DEFAULTS.skipRetryMs`). */
   skipRetryMs: number;
 }
 
@@ -47,9 +45,8 @@ export interface TickResult {
    * rather than by the duty failing. A duty failure has a ledger row to carry it; this does not,
    * so it is reported here rather than swallowed.
    *
-   * NOT "before any run could be recorded": the due-item loop runs inside the same `try`, so a
-   * throw on the third of five items leaves the first two in `ran` AND this duty here. What is
-   * reported is the duty that was abandoned, not necessarily the whole of its work.
+   * The due-item loop runs inside the same `try`, so a throw on the third of five items leaves the
+   * first two in `ran` AND this duty here.
    */
   skipped: { duty: string; errorCode: string }[];
   /**
@@ -58,20 +55,16 @@ export interface TickResult {
    * FUTURE time work appears as the ledger stands at the END of this tick: the derivation's own
    * answer, together with the backoff and re-sweep times this tick's own runs just wrote.
    *
-   * Null only when there is no duty at all — which stays true only because a skipped duty
-   * reports an interval rather than nothing. Mirrors `DrainResult.nextDueAt`, which folds its own
-   * skip time the same way and for the same reason.
+   * Null only when there is no duty at all.
    */
   nextDueAt: Date | null;
 }
 
 /**
- * One pass. No loop and no timer: the host decides cron versus long-running, and `now` is injected
- * on exactly the contract `drain(now)` / `forward(now)` / `reconcile(…, now)` already use.
+ * One pass. No loop and no timer: the host decides cron versus long-running.
  *
-
- * Transaction discipline mirrors `reconcilePayments`: a short read, then the duty OUTSIDE every
- * transaction because it makes network calls, then a short write.
+ * A short read, then the duty OUTSIDE every transaction because it makes network calls, then a
+ * short write.
  */
 export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult> {
   const result: TickResult = {
@@ -81,9 +74,6 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
     skipped: [],
     nextDueAt: null,
   };
-  // The SAME expression `derive` uses for its gap window — one function, called twice, rather than
-  // two copies: this decides which rows the snapshot returns, that decides which days count as
-  // gaps, and a divergence would have derivation reasoning about a window it did not read.
   const horizonStart = horizonStartFor(now, deps.horizonDays);
   let earliestFuture = Number.POSITIVE_INFINITY;
 
@@ -103,9 +93,7 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
         result.ran.push(completed.record);
         // The derivation above was computed from a snapshot taken BEFORE any duty ran, so it
         // cannot know about the backoff a failure just wrote or the re-sweep a success just
-        // enqueued. Folding them in is what makes `nextDueAt` mean what it says — the earliest
-        // time `runDue` would find work again — rather than the earliest time it would have
-        // found work had this tick done nothing.
+        // enqueued.
         if (completed.nextDueAt !== null) {
           earliestFuture = Math.min(earliestFuture, completed.nextDueAt.getTime());
         }
@@ -115,38 +103,15 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
     }
   }
 
-  // NOT "a skipped duty has nothing in `earliestFuture` of its own" (F4 of the 2026-07-27
-  // pre-merge review corrected this claim; see lines 52-54 above for why): the due-item loop for a
-  // duty runs INSIDE the same `try` as the duty's own `catch`, so a throw on the third of five due
-  // items still leaves the first two claimed, in `ran`, and already folded into `earliestFuture`
-  // above — a duty that ends up in `skipped` can still have contributed to `earliestFuture` before
-  // the throw. What is genuinely true, and what this fold exists for, is the part that did NOT get
-  // that far: the items this duty's due-item loop never reached have no claim and no backoff, so
-  // nothing else in this tick reports them. Reporting only the derivation's future answer — or,
-  // when every pair threw before claiming anything, `null` — would tell a long-running host that
-  // nothing is due, and one transient database blip would stop it polling for good.
-  //
-  // The consequence worth stating plainly: those never-reached, genuinely-due items of a
-  // partially-failed duty now wait up to `skipRetryMs`, not one `MIN_TICK` the way an unclaimed
-  // item used to be retried near-immediately. That is acceptable here — this is a daily duty with
-  // a 26-hour staleness budget (`DUTY_BUDGET_MS`, `apps/server/src/health.ts`), so a few minutes'
-  // extra delay on a partial failure costs nothing that budget was not already built to absorb.
-  //
-  // FOLDED AS A MINIMUM, not assigned. This used to assign `now`, which was safe only because
-  // `now` is earlier than every real future answer; `now + skipRetryMs` is not, and assigning it
-  // would mask a successful pair's genuinely earlier backoff.
-  //
-  // Folded into `earliestFuture` — the same accumulator the loop above already builds with
-  // `Math.min` — BEFORE the branch below rather than inside it. That is what makes the
-  // every-pair-skipped case structural rather than a trick to be re-derived: `earliestFuture` is
-  // still `Infinity` when nothing ran, so this line makes it finite, and the `null` branch below
-  // becomes unreachable whenever anything was skipped. `null` therefore keeps meaning exactly what
-  // `TickResult.nextDueAt` says it means — no due duty at all.
+  // The items a skipped duty's loop never reached have no claim and no backoff, so nothing else in
+  // this tick reports them; without this fold a tick in which every duty's snapshot read threw
+  // would report `null`.
+  // Folded as a MINIMUM, not assigned, so it cannot mask a successful duty's earlier backoff.
   if (result.skipped.length > 0) {
     earliestFuture = Math.min(earliestFuture, now.getTime() + deps.skipRetryMs);
   }
-  // `deferred > 0` is untouched and still reports `now`: capped work is immediately runnable, and
-  // draining that backlog fast is the intent — unlike a skip, which is often waiting on a human.
+  // `deferred > 0` reports `now`: capped work is immediately runnable, and draining that backlog
+  // fast is the intent.
   result.nextDueAt =
     result.deferred > 0
       ? now
@@ -193,7 +158,6 @@ async function runOne(
     to: new Date(claimed.periodTo),
   };
 
-  // OUTSIDE every transaction: a duty makes network calls.
   let summary: Record<string, unknown> | null = null;
   let errorCode: string | null = null;
   let resweepAfter: Date | undefined;
@@ -261,8 +225,7 @@ function backoff(deps: SchedulerDeps, claimed: ClaimedRun, now: Date): Date {
   return new Date(now.getTime() + deps.backoffBaseMs * 2 ** (claimed.attempts - 1));
 }
 
-/** A structured code, never prose: the AppError's own code, or the literal "unknown". The same
- * convention `reconcilePayments`'s `remediate()` uses. */
+/** A structured code, never prose: the AppError's own code, or the literal "unknown". */
 function codeOf(error: unknown): string {
   return isAppError(error) ? error.code : "unknown";
 }
