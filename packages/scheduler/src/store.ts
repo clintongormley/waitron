@@ -234,10 +234,9 @@ export async function enqueueSuccessor(
   if (state === undefined || Number(state.unfinished) > 0) return false;
 
   try {
-    // A savepoint (the adapter's nested `tx.transaction`), so a losing attempt's own writes are
-    // backed out with it. Its body is one insert, which SQLite backs out by itself when refused,
-    // leaving the transaction usable, so today it changes nothing
-    // (`bench/sqlite-failover/README.md`).
+    // The adapter's nested `tx.transaction` is a savepoint. Its body is one insert, which SQLite
+    // backs out by itself when refused, leaving the transaction usable, so today it changes nothing
+    // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need").
     await tx.transaction(async (attempt) => {
       await attempt.insert(scheduledRuns).values({
         duty: params.duty,

@@ -2985,21 +2985,23 @@ image constraints under *Detail → Box image*.
     records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
     says the descriptor is the only place bookings is named, while
     `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
-  - Found by #581 (`packages/scheduler`). CLAUDE.md §3 says the nested `tx.transaction(...)` in
-    `enqueueSuccessor` confines a losing attempt's own writes; its body is one insert, which SQLite
-    backs out by itself, so there it changes nothing today — #581's review replaced the nested call
-    with a bare insert and `store.test.ts` and `store.concurrency.test.ts` still passed (24 tests).
-    `store.ts` now says so; CLAUDE.md §3 needs the same narrowing through a pull request (lane C
-    item C3.12c). `insertClose` in `packages/reporting/src/record-daily-close.ts` may be the same
-    single-insert case (read, not run). The reason "v8 reports phantom uncovered branches" given
-    for excluding barrel `index.ts` files from coverage did not hold in scheduler: with the
-    exclusion removed, both barrels reported 0 branches at 100% and the totals did not move. So
-    scheduler's two barrel excludes in `vitest.config.ts` can go (a config change, not made), and
-    the same reason is still given in the configs of workforce, credentials, bookings,
-    payments-sumup, workforce-es, server-kit, dashboard-kit and fiscal-none (not re-measured
-    there). `claimGap` uses an untargeted `.onConflictDoNothing()` on a table with two unique
-    constraints (the `id` primary key and `scheduled_runs_key`); CLAUDE.md §3 asks for a named
-    target there, though `id` is freshly generated (read, not run).
+  - Found by #581 (`packages/scheduler`). The nested `tx.transaction(...)` in `enqueueSuccessor`
+    wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today —
+    #581's review replaced it with a bare insert and reported `store.test.ts` and
+    `store.concurrency.test.ts` passing (24 tests); a re-run on 2026-09-24 needed two stubs that
+    offered `insert` only inside `transaction` to offer it outside too before all 24 passed (22
+    without). `insertClose` in `packages/reporting/src/record-daily-close.ts` is the same case,
+    run 2026-09-24 (`docs/developers/conventions-data.md` has the probe); CLAUDE.md §3 and both
+    sites now say so. Whether to remove these two nested calls, or say why they stay, is open (a
+    code change, not made). The reason "v8 reports phantom uncovered branches" given for excluding
+    barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
+    both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
+    excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
+    given in the configs of workforce, credentials, bookings, payments-sumup, workforce-es,
+    server-kit, dashboard-kit and fiscal-none (not re-measured there). `claimGap` uses an untargeted
+    `.onConflictDoNothing()` on a table with two unique constraints (the `id` primary key and
+    `scheduled_runs_key`); CLAUDE.md §3 asks for a named target there, though `id` is freshly
+    generated (read, not run).
   - Found by #579 (`packages/shared`). **DONE 2026-09-24 (PR #583)** for the way
     in — see the P6 entry's DONE items: `decimalToCents` now rounds to cents first and then refuses
     an amount that, once rounded to cents, has more than twelve integer digits, so 99999999999999 cents, the bound
