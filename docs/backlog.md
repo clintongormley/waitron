@@ -2692,10 +2692,10 @@ image constraints under *Detail → Box image*.
   2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
   about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
   (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080
-  to about 270, tests included) and `packages/printing` (#572, about 1,040 to about 350, tests
-  included). A pruning pull request cannot carry this file (the checker refuses
+  to about 270, tests included), `packages/printing` (#572, about 1,040 to about 350, tests
+  included) and `packages/bookings` (#574, about 1,020 to about 270, tests included). A pruning pull request cannot carry this file (the checker refuses
   it), so each one's line lands here as a docs-only push after the merge. Found by #555, #558, #559,
-  #561, #562, #567, #568, #570 and #572 and left for the package that owns each, all still OPEN:
+  #561, #562, #567, #568, #570, #572 and #574 and left for the package that owns each, all still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2852,6 +2852,31 @@ image constraints under *Detail → Box image*.
     propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
     `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
+  - `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
+    table in a zone that is not a table-tab zone has no bookings test: the real `openTab` refuses
+    it with `service_zone.mode_incompatible`, the fake core in `src/testing/fake-core.ts` does not,
+    and `routes.ts`'s `STATUS` map has no entry for that code, so it answers 400 by default.
+    Editing a booking that is already seated answers `booking.not_found`, which the dashboard shows
+    as "could not be found". The server accepts an empty contact name; only the dashboard form
+    refuses one. `seatBooking`'s `status = 'booked'` condition on its final update cannot fire
+    while every caller goes through `withTransaction` (read, not run). Test titles in
+    `bookings.test.ts` and `migrations.test.ts` still say "tenant", and `floor.test.ts` inserts
+    `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
+    `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
+    commit message; `docs/developers/testing-guide.md` has no paragraph holding it, and
+    `payments-sumup` and `venue-service` still carry it in their configs.
+  - The same false comments outside bookings, found by #574: "the lanes run in parallel" in
+    `packages/fiscal-none/drizzle.config.ts`, `packages/fiscal-none/src/migrations.ts` and
+    `packages/workforce-es/drizzle.config.ts`; "a mismatch surfaces as a runtime shape error a view
+    test catches" (no test compares client and server shapes) in about 15 places in
+    `apps/dashboard/src/api/client.ts`; "client validation mirrors the op's checks" in
+    `apps/dashboard/src/widgets/purchase-form.ts`; "per-venue timezone is a later slice" in
+    `apps/dashboard/src/date-utils.ts` (`locations.time_zone` exists); PostgreSQL's `22P02`
+    described as current in `apps/server`'s `print-api.printer-wiring.test.ts`, `print-api.test.ts`
+    and `recipe-api.test.ts`; `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
+    records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
+    says the descriptor is the only place bookings is named, while
+    `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -4686,7 +4711,7 @@ it; and a correction must not decrement a count where it should drop it.
   `aabdde6a8^:<path>`, the parent of the commit that deleted it, and each resolves. The pointers in
   `packages/bookings/src/bookings-cas.test.ts` and `packages/media/src/images.test.ts` name files
   that still exist but no longer hold the deleted cases, so they were repointed to `aabdde6a8^:` as
-  well. Also left: the
+  well (2026-09-24: #574 moved bookings' pointer into its commit message). Also left: the
   pointers in shipped `drizzle/` SQL, such as `packages/media/drizzle/0001_image_references.sql`
   and `packages/db/drizzle/0001_behavioural_triggers.sql`, for the hash reason above.
 - **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
