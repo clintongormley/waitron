@@ -62,7 +62,7 @@
 - Real-Postgres suites need `TESTCONTAINERS_RYUK_DISABLED=true` and Docker; run `pnpm reap` first if a previous run was interrupted (CLAUDE.md §4).
 - Setup/status page: published on the LAN by default; shows no secret, carries no job (spec §2.2/§5).
 - Shared files (spec §8): `apps/server/src/boot.ts` (one dep at the `mountPrintApi` call), `packages/db` schema + one regenerated migration, `packages/db/src/classification.ts`, the dashboard printers screen + client + strings. Rebase per CLAUDE.md §3's migration recipe if `main` moves under them.
-- Comments state the invariant and the non-obvious why, never the history (CLAUDE.md §1); thin on touch, no sweeps.
+- Comments state the invariant and the non-obvious why, never the history (CLAUDE.md §1); thin on touch, no sweeps. (2026-09-24: superseded — CLAUDE.md §1 now wants deliberate pruning sweeps too.)
 
 ---
 

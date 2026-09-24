@@ -83,11 +83,15 @@ wide margin. This section stays in full deliberately: it applies to every change
   edge case per changelog entry, found one difference of four and missed that version 5 had stopped
   decoding `&#38;` — because the case standing for "numeric entity" was `&#233;`, which NEITHER
   version decodes. Instance in [writing-claims.md](docs/developers/writing-claims.md).
-- **A comment carries the invariant, not the history.** The receipt lives in the commit message and
-  the PR thread, with at most a one-line pointer. Thin on touch; do not sweep. Cost: comment lines
-  measured 43–48% of non-test source in four packages, nearly all narrative, which doubles the tokens
-  of every read and goes stale exactly the way this section documents (`apps/server`, `packages/db`,
-  `packages/core`).
+- **The code is what matters; comments go stale.** Keep a comment only for an invariant, or a
+  non-obvious why, that the code cannot show — never history, narrative, or a restatement of the
+  code. The receipt lives in the commit message and the PR thread, with at most a one-line pointer.
+  Cut on touch, and deliberate pruning sweeps are wanted (owner decision 2026-09-23). Prefer deleting
+  to rewording: a rewording is a new claim. A sweep shows it changed nothing but comments with
+  `node scripts/comments-only.mjs <base>`, weaker than its name: it compares the syntax tree of each
+  TypeScript or JavaScript file COMMITTED since the branch left `<base>`, and reads no other file
+  type and no uncommitted edit. Cost: on 2026-09-24, 59,713 of the 198,596 non-blank lines in the
+  tree's non-test `.ts`, `.mjs` and `.js` files held only a comment, and every read pays for them.
 
 ---
 
