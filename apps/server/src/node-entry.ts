@@ -36,8 +36,8 @@ import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
-  FRESH,
   afterFailure,
+  cleared,
   readRecoveryState,
   updateRecoveryState,
   withFailureCode,
@@ -263,8 +263,7 @@ const DEFAULT_EXIT = (code: number): void => process.exit(code);
 
 /**
  * One change to `recovery.json`, read and written under the recovery lock, so no change is computed
- * from a count read before another process wrote. The lock orders the writes; it does not make
- * every sequence count right (`withoutAttempt` states the case it gets wrong).
+ * from a count read before another process wrote.
  */
 function changeState(
   deps: EntryDeps,
@@ -471,7 +470,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
         // so a zero count IS "normal" and a hand-written level could not pin a box either way. The
         // exit is the whole retry — Docker's restart policy performs the restart (spec §9.3).
         onRetry: async () => {
-          await persistState(deps, () => FRESH);
+          await persistState(deps, cleared);
           exit(0);
         },
       }),
@@ -550,7 +549,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   deps.installShutdownHandlers(server);
-  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, () => FRESH));
+  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, cleared));
 }
 
 /**

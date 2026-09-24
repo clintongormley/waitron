@@ -71,7 +71,29 @@ switch (role) {
   }
   case "clearing": {
     await waitFor("undoing-reading");
-    await state.updateRecoveryState(store, dir, () => state.FRESH);
+    await state.updateRecoveryState(store, dir, state.cleared);
+    break;
+  }
+  case "undone-after-clear": {
+    const { before, after } = await state.updateRecoveryState(store, dir, count);
+    mark("a-counted");
+    await waitFor("c-counted");
+    await state.updateRecoveryState(store, dir, (s) => state.withoutAttempt(s, before, after));
+    mark("a-undone");
+    break;
+  }
+  case "clearing-after-count": {
+    await waitFor("a-counted");
+    await state.updateRecoveryState(store, dir, state.cleared);
+    mark("cleared");
+    break;
+  }
+  case "failing-after-undo": {
+    await waitFor("cleared");
+    await state.updateRecoveryState(store, dir, count);
+    mark("c-counted");
+    await waitFor("a-undone");
+    await state.updateRecoveryState(store, dir, (s) => state.withFailureCode(s, "migrations.set_missing", new Date()));
     break;
   }
   case "many": {
@@ -161,6 +183,7 @@ const oneFailure: RecoveryState = {
   level: "normal",
   lastErrorCode: "migrations.set_missing",
   lastFailureAt: "2026-09-20T10:00:00.000Z",
+  clears: 0,
 };
 
 const finishedCleanly = (outcomes: Outcome[]) =>
@@ -196,10 +219,30 @@ describe("two starts racing on recovery.json", () => {
         { code: 0, stdout: "done" },
         { code: 0, stdout: "done" },
       ]);
-      expect(locked.final).toStrictEqual(FRESH);
+      expect(locked.final).toStrictEqual({ ...FRESH, clears: 1 });
 
       const unlocked = await race(oneFailure, ["undoing", "clearing"], true);
       expect(unlocked.final).toStrictEqual(oneFailure);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a refused start's undo after a clear leaves the failure a later start counted",
+    async () => {
+      // A counts, the running server clears, C counts, A is refused and undoes, C then fails for
+      // real. The clear already removed A's count, so A's undo must take nothing off C's.
+      const { final, outcomes } = await race(
+        oneFailure,
+        ["undone-after-clear", "clearing-after-count", "failing-after-undo"],
+        false,
+      );
+      expect(finishedCleanly(outcomes)).toEqual([
+        { code: 0, stdout: "done" },
+        { code: 0, stdout: "done" },
+        { code: 0, stdout: "done" },
+      ]);
+      expect(final).toMatchObject({ failures: 1, lastErrorCode: "migrations.set_missing" });
     },
     TEST_TIMEOUT_MS,
   );

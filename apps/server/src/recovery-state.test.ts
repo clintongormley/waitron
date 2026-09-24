@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FRESH,
   afterFailure,
+  cleared,
   levelFor,
   readRecoveryState,
   updateRecoveryState,
@@ -81,14 +82,32 @@ describe("readRecoveryState", () => {
     const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
     await writeFile(
       join(dir, "recovery.json"),
-      JSON.stringify({ failures: 1, level: "recovery", lastErrorCode: 7, lastFailureAt: false }),
+      JSON.stringify({
+        failures: 1,
+        level: "recovery",
+        lastErrorCode: 7,
+        lastFailureAt: false,
+        clears: "2",
+      }),
     );
     expect(await readRecoveryState(dir)).toEqual({
       failures: 1,
       level: "normal",
       lastErrorCode: null,
       lastFailureAt: null,
+      clears: 0,
     });
+  });
+
+  it.each([
+    ["no clear count, as a file from before the field existed", {}, 0],
+    ["a negative clear count", { clears: -1 }, 0],
+    ["a fractional clear count", { clears: 1.5 }, 0],
+    ["a clear count", { clears: 4 }, 4],
+  ])("reads %s", async (_label, fields, clears) => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(join(dir, "recovery.json"), JSON.stringify({ failures: 2, ...fields }));
+    expect(await readRecoveryState(dir)).toMatchObject({ failures: 2, clears });
   });
 });
 
@@ -117,12 +136,31 @@ describe("the holder's kind", () => {
       level: "recovery",
       lastErrorCode: "x",
       lastFailureAt: null,
+      clears: 0,
     });
   });
 
   it("is dropped by the next failure of any other kind", () => {
     const stalled: RecoveryState = { ...FRESH, failures: 1, holderKind: "server" };
     expect(afterFailure(stalled, "boom", new Date())).not.toHaveProperty("holderKind");
+  });
+});
+
+describe("cleared", () => {
+  it("empties the count and moves the clear count on by one", () => {
+    const stalled: RecoveryState = {
+      ...afterFailure({ ...FRESH, clears: 4 }, "x", new Date()),
+      holderKind: "server",
+    };
+    expect(cleared(stalled)).toStrictEqual({ ...FRESH, clears: 5 });
+  });
+});
+
+describe("the clear count", () => {
+  it("is carried through a failure and a failure code", () => {
+    const counted = afterFailure({ ...FRESH, clears: 2 }, "x", new Date());
+    expect(counted.clears).toBe(2);
+    expect(withFailureCode(counted, "y", new Date()).clears).toBe(2);
   });
 });
 
@@ -136,6 +174,7 @@ describe("withFailureCode", () => {
       level: "recovery",
       lastErrorCode: "migrations.set_missing",
       lastFailureAt: at.toISOString(),
+      clears: 0,
     });
   });
 
@@ -152,6 +191,7 @@ describe("withFailureCode", () => {
       level: "normal",
       lastErrorCode: "provisioning.database_holder_stalled",
       lastFailureAt: at.toISOString(),
+      clears: 0,
       holderKind: "server",
     });
   });
@@ -163,6 +203,7 @@ describe("withoutAttempt", () => {
     level: "normal",
     lastErrorCode: "migrations.set_missing",
     lastFailureAt: "2026-09-20T10:00:00.000Z",
+    clears: 0,
   };
   const wrote = afterFailure(before, "server.boot_incomplete", new Date("2026-09-24T10:00:00Z"));
 
@@ -180,7 +221,13 @@ describe("withoutAttempt", () => {
   });
 
   it("keeps a clear the running server made", () => {
-    expect(withoutAttempt(FRESH, before, wrote)).toStrictEqual(FRESH);
+    expect(withoutAttempt(cleared(wrote), before, wrote)).toStrictEqual(cleared(wrote));
+  });
+
+  it("takes nothing off a failure another start counted after a clear", () => {
+    const counted = afterFailure(cleared(wrote), "server.boot_incomplete", new Date());
+    expect(counted.failures).toBe(1);
+    expect(withoutAttempt(counted, before, wrote)).toStrictEqual(counted);
   });
 
   it("takes the level down with the count", () => {

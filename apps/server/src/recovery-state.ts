@@ -13,6 +13,9 @@ export interface RecoveryState {
   level: RecoveryLevel;
   lastErrorCode: string | null;
   lastFailureAt: string | null;
+  /** How many times the count has been cleared. An attempt that takes its own failure back uses it
+   *  to tell whether a clear has already removed that failure (`withoutAttempt`). */
+  clears: number;
   /** Which kind of program held the venue folder when a start was refused by a holder that had
    *  stopped writing its heartbeat. Absent when unknown, and for every other failure. */
   holderKind?: VenueHolderKind;
@@ -23,6 +26,7 @@ export const FRESH: RecoveryState = {
   level: "normal",
   lastErrorCode: null,
   lastFailureAt: null,
+  clears: 0,
 };
 
 const RECOVERY_AT = 3;
@@ -36,6 +40,7 @@ export function levelFor(failures: number): RecoveryLevel {
  * program holding the folder, and a later failure of any other kind must not show that name.
  */
 function failureRecord(
+  state: RecoveryState,
   failures: number,
   errorCode: string,
   at: Date,
@@ -46,13 +51,14 @@ function failureRecord(
     level: levelFor(failures),
     lastErrorCode: errorCode,
     lastFailureAt: at.toISOString(),
+    clears: state.clears,
   };
   if (holderKind !== undefined) record.holderKind = holderKind;
   return record;
 }
 
 export function afterFailure(state: RecoveryState, errorCode: string, at: Date): RecoveryState {
-  return failureRecord(state.failures + 1, errorCode, at);
+  return failureRecord(state, state.failures + 1, errorCode, at);
 }
 
 /**
@@ -75,6 +81,7 @@ export async function readRecoveryState(stateDir: string): Promise<RecoveryState
       level: levelFor(failures),
       lastErrorCode: typeof raw.lastErrorCode === "string" ? raw.lastErrorCode : null,
       lastFailureAt: typeof raw.lastFailureAt === "string" ? raw.lastFailureAt : null,
+      clears: Number.isSafeInteger(raw.clears) && (raw.clears as number) >= 0 ? raw.clears! : 0,
     };
     // The page turns the kind into wording through a closed table, so only a member of the set
     // is kept.
@@ -103,12 +110,18 @@ export function withFailureCode(
   at: Date,
   holderKind?: VenueHolderKind,
 ): RecoveryState {
-  return failureRecord(current.failures, errorCode, at, holderKind);
+  return failureRecord(current, current.failures, errorCode, at, holderKind);
+}
+
+/** The count back to nothing, one clear on from `current`. */
+export function cleared(current: RecoveryState): RecoveryState {
+  return { ...FRESH, clears: current.clears + 1 };
 }
 
 function sameState(a: RecoveryState, b: RecoveryState): boolean {
   return (
     a.failures === b.failures &&
+    a.clears === b.clears &&
     a.lastErrorCode === b.lastErrorCode &&
     a.lastFailureAt === b.lastFailureAt &&
     a.holderKind === b.holderKind
@@ -118,11 +131,9 @@ function sameState(a: RecoveryState, b: RecoveryState): boolean {
 /**
  * Takes back the one failure an attempt counted before it started (`wrote`, made from `before`).
  * If the file still holds exactly `wrote`, nothing else changed it since and `before` goes back
- * whole. Otherwise another process changed it — a clear by the running server, a failure another
- * start recorded — and only the one failure comes off.
- *
- * Taking one off can take off another start's: A counts, the server clears, C counts, A undoes
- * (removing C's), and C's failure is then recorded with a count of 0 where 1 is right.
+ * whole. If the count has been cleared since, the clear already took this attempt's failure away
+ * and nothing changes. Otherwise other starts have counted since, and only the one failure comes
+ * off.
  */
 export function withoutAttempt(
   current: RecoveryState,
@@ -130,6 +141,7 @@ export function withoutAttempt(
   wrote: RecoveryState,
 ): RecoveryState {
   if (sameState(current, wrote)) return before;
+  if (current.clears !== wrote.clears) return current;
   const failures = Math.max(0, current.failures - 1);
   return { ...current, failures, level: levelFor(failures) };
 }

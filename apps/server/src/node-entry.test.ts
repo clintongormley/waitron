@@ -187,6 +187,7 @@ describe("runEntry", () => {
       level: "normal",
       lastErrorCode: "migrations.set_missing",
       lastFailureAt: "2026-09-20T10:00:00.000Z",
+      clears: 0,
     };
     const volume = recoveryVolume(before);
     const inUse = () =>
@@ -597,7 +598,7 @@ describe("runEntry", () => {
     // `await`ed through `waitFor`: with no Node response to hang the exit on (`app.request()` has
     // none), the route fires `onRetry` without awaiting it.
     await vi.waitFor(() => {
-      expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", FRESH);
+      expect(d.writeRecoveryState).toHaveBeenCalledWith("/state", { ...FRESH, clears: 1 });
       expect(exit).toHaveBeenCalledWith(0);
     });
   });
@@ -1069,7 +1070,7 @@ describe("every change to recovery.json happens inside the recovery lock", () =>
     const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
     await runEntry(deps({ ...volume.deps, scheduleStayedUp }));
     scheduleStayedUp.mock.calls[0]![1]();
-    await vi.waitFor(() => expect(volume.current()).toStrictEqual(FRESH));
+    await vi.waitFor(() => expect(volume.current()).toStrictEqual({ ...FRESH, clears: 1 }));
     expect(volume.outside).toEqual([]);
   });
 
@@ -1089,7 +1090,7 @@ describe("every change to recovery.json happens inside the recovery lock", () =>
     );
     await served!.request("/recovery-api/retry", { method: "POST" });
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
-    expect(volume.current()).toStrictEqual(FRESH);
+    expect(volume.current()).toStrictEqual({ ...FRESH, clears: 1 });
     expect(volume.outside).toEqual([]);
   });
 });
@@ -1194,6 +1195,7 @@ describe("a start refused the venue folder by a holder with an injected heartbea
       level: "normal",
       lastErrorCode: "provisioning.database_holder_stalled",
       lastFailureAt: at.toISOString(),
+      clears: 0,
       holderKind: "provisioning",
     });
     expect(log).toHaveBeenCalledWith("warn", "recovery.venue_holder_stalled", {
@@ -1299,6 +1301,7 @@ setInterval(() => {}, 1000);`;
     level: "normal",
     lastErrorCode: "migrations.set_missing",
     lastFailureAt: "2026-09-20T10:00:00.000Z",
+    clears: 0,
   };
 
   it(

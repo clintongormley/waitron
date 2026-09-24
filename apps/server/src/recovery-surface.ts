@@ -318,7 +318,11 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     return c.html(renderPage(deps.state, logLines));
   });
 
-  app.get("/recovery-api/status", (c) => c.json(deps.state));
+  // Named one by one: the state also carries the entrypoint's clear count, which is bookkeeping.
+  app.get("/recovery-api/status", (c) => {
+    const { failures, level, lastErrorCode, lastFailureAt, holderKind } = deps.state;
+    return c.json({ failures, level, lastErrorCode, lastFailureAt, holderKind });
+  });
 
   app.post("/recovery-api/retry", (c) => {
     const outgoing = outgoingOf(c);

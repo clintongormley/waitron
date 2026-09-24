@@ -4883,7 +4883,8 @@ for 120 s is killed by its own watchdog thread, which records its stack first
 ([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
 (2) `recovery.json` had no lock of its own, so a refused start could put back a count the running
 server had cleared, or erase a failure another start recorded. Every change to it now holds
-`recovery.lock`. Still open from (2): the level is read before that lock, so the pre-boot count
+`recovery.lock`, and a clear count in the file stops a refused start's undo taking off a failure
+another start counted after a clear. Still open from (2): the level is read before that lock, so the pre-boot count
 another start writes can still push a server restarting at that moment onto the page (older than
 #573). Still open, the owner's call: (3) only an unwrapped `provisioning.database_in_use` is
 recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path wraps

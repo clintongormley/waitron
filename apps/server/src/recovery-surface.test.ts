@@ -81,6 +81,7 @@ describe("recoveryApp", () => {
       level: "normal",
       lastErrorCode: `<script>alert(1)</script>"'&`,
       lastFailureAt: new Date().toISOString(),
+      clears: 0,
     };
     const app = recoveryApp({
       state: xssState,
@@ -202,6 +203,7 @@ async function pageFor(
       level: "recovery",
       lastErrorCode,
       lastFailureAt: new Date().toISOString(),
+      clears: 0,
       ...(holderKind === undefined ? {} : { holderKind }),
     },
     logDir: "/nonexistent",
