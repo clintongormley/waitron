@@ -151,9 +151,11 @@ export interface CashUp {
 }
 
 export interface CloseCounts {
-  /** Ordinary altas issued in the business day (corrects_sale_id NULL), excl. voided + F3 substitutes. */
+  /** Ordinary altas issued in the business day (corrects_sale_id NULL), excl. F3 substitutes and
+   * sales voided in the same business day. */
   sales: number;
-  /** Rectificativas issued in the business day (corrects_sale_id set), excl. voided. */
+  /** Rectificativas issued in the business day (corrects_sale_id set), excl. those voided in the
+   * same business day. */
   corrections: number;
   /** Void events (`sale_voids`) whose voided_at falls in the business day, for this node. */
   voids: number;

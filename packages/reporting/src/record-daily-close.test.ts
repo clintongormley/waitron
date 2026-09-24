@@ -11,8 +11,8 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
-import type { TillId } from "@waitron/shared";
-import { seedSale, seedTender, seedTill, seedVenue } from "../test/fixtures.js";
+import type { SaleId, TillId } from "@waitron/shared";
+import { seedSale, seedTender, seedTill, seedVenue, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
@@ -54,7 +54,7 @@ function runCompute(businessDay: string) {
 /** A cash sale settled at `till` on the business day, so the close's `cashTakings` for that till
  * equals `amount`. Distinct invoice numbers keep the per-series unique constraint happy. */
 let invoiceNo = 0;
-async function seedCashSale(till: TillId, amount: string): Promise<void> {
+async function seedCashSale(till: TillId, amount: string): Promise<SaleId> {
   invoiceNo += 1;
   const at = "2026-08-04T10:00:00Z"; // 12:00 Madrid, after the 05:00 cutover → business day 2026-08-04
   const saleId = await seedSale(
@@ -72,6 +72,7 @@ async function seedCashSale(till: TillId, amount: string): Promise<void> {
     { saleId },
     { method: "cash", amount, tipAmount: "0.00", settledAt: at },
   );
+  return saleId;
 }
 
 async function captureCloseError(fn: () => Promise<unknown>): Promise<AppError> {
@@ -112,6 +113,21 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     expect(a).toMatchObject({ openingFloat: "50.00", payouts: "0.00", countedCash: "175.00" });
     // Σ per-till variance = 1.55 − 3.00 + 0.00.
     expect(rec.snapshot.cashReconciliation.nodeVariance).toBe("-1.45");
+  });
+
+  it("re-derives a closed day equal to its snapshot after a void made the next day", async () => {
+    const saleId = await seedCashSale(venue.tillId, "121.00");
+    const rec = await record("2026-08-04", [
+      { tillId: venue.tillId, openingFloat: "0.00", payouts: "0.00", countedCash: "121.00" },
+    ]);
+    await seedVoid(suite.db, { saleId }, "2026-08-05T10:00:00.000Z");
+
+    expect(await runCompute("2026-08-04")).toEqual(rec.snapshot.close);
+    const voidDay = await runCompute("2026-08-05");
+    expect(voidDay.vat.grossTotal).toBe(`-${rec.snapshot.close.vat.grossTotal}`);
+    expect(voidDay.counts).toEqual({ sales: 0, corrections: 0, voids: 1 });
+    // A void writes no tender, so the cash settled on 2026-08-04 stays there.
+    expect(voidDay.cash).toEqual({ byTill: [], tenderTotal: "0.00", tipTotal: "0.00" });
   });
 
   it("assigns sequence 1 then 2 across two business days and chains prev_entry_hash", async () => {

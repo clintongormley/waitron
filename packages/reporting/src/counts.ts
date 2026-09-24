@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { activeSalesClause, businessDayClause, nodeScopeClause } from "./business-day.js";
+import { businessDayClause, issuedSalesClause, nodeScopeClause } from "./business-day.js";
 import type { CloseCounts, DailyCloseInput } from "./types.js";
 
 /**
  * Operational record counts for one node — or the whole venue when `input.nodeId` is omitted — over
- * one business day. `sales` and `corrections` are issued in the day, with the VAT summary's
- * exclusions (`activeSalesClause`). `voids` counts void EVENTS whose voided_at falls in the day.
+ * one business day. `sales` and `corrections` are issued in the day, selected as the VAT summary
+ * selects them (`issuedSalesClause`), so a sale voided on a later day still counts on its own.
+ * `voids` counts void EVENTS whose voided_at falls in the day.
  */
 export async function computeCloseCounts(
   tx: Transaction,
@@ -17,9 +18,8 @@ export async function computeCloseCounts(
       count(*) filter (where s.corrects_sale_id is null) as sales,
       count(*) filter (where s.corrects_sale_id is not null) as corrections
     from sales s
-    where ${businessDayClause(sql`s.issued_at`, input)}
+    where ${issuedSalesClause((column) => businessDayClause(column, input))}
       ${nodeScopeClause(input.nodeId)}
-      and ${activeSalesClause()}
   `);
 
   const voided = await tx.execute<{ voids: number }>(sql`

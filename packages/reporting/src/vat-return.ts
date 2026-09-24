@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { subtractDecimal } from "@waitron/shared";
+import { activeSalesClause } from "./business-day.js";
 import { aggregateVatByRate } from "./vat-summary.js";
 import { computeInputVat } from "./input-vat.js";
 import { periodDateFilter, validatePeriod } from "./period.js";
@@ -34,7 +35,9 @@ export async function computeVatReturn(tx: Transaction, input: VatReturnInput): 
   const filedDate = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
   const dateFilter = periodDateFilter(filedDate, input.year, input.period);
 
-  const summary = await aggregateVatByRate(tx, { dateFilter });
+  const summary = await aggregateVatByRate(tx, {
+    counted: sql`${dateFilter} and ${activeSalesClause()}`,
+  });
   const deducible = await computeInputVat(tx, {
     year: input.year,
     period: input.period,

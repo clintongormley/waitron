@@ -12,10 +12,10 @@ const noon = new Date("2026-08-04T10:00:00Z").toISOString();
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
-function run(): Promise<CloseCounts> {
+function run(businessDay = "2026-08-04"): Promise<CloseCounts> {
   const input: DailyCloseInput = {
     nodeId: venue.nodeId,
-    businessDay: "2026-08-04",
+    businessDay,
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
   };
@@ -49,6 +49,18 @@ describe("computeCloseCounts", () => {
     await seedVoid(suite.db, { saleId: s1 }, noon);
     // s1 is voided → not in sales count; s2 remains; the corrective counts; one void.
     expect(await run()).toEqual({ sales: 1, corrections: 1, voids: 1 });
+  });
+
+  it("counts a sale on its issue day and a later void on the void's day", async () => {
+    const s = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noon,
+      total: "12.10",
+      lines: [line],
+    });
+    await seedVoid(suite.db, { saleId: s }, new Date("2026-08-05T10:00:00Z").toISOString());
+    expect(await run()).toEqual({ sales: 1, corrections: 0, voids: 0 });
+    expect(await run("2026-08-05")).toEqual({ sales: 0, corrections: 0, voids: 1 });
   });
 
   it("excludes an F3 substitute from the sales count", async () => {

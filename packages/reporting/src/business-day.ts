@@ -201,14 +201,47 @@ export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL 
   return businessDayWindow(column, input.fromBusinessDay, input.toBusinessDay, input);
 }
 
+/** A timestamp column's business-day window predicate: `businessDayClause` or its range form. */
+export type WindowClause = (column: SQL) => SQL;
+
+/** F3-canje substitutes are never counted: their VAT is already in the F2 tickets they replace. */
+function notSubstituteClause(): SQL {
+  return sql`not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)`;
+}
+
 /**
- * Excludes the sales a fiscal aggregate must not count: voided sales (annulled) and F3-canje
- * substitutes (their VAT is already in the F2 tickets they substitute). Assumes the outer query
- * aliases `sales` as `s`. No leading `and` — the caller writes `and ${activeSalesClause()}`.
+ * Excludes every voided sale, whenever the void was made, and F3-canje substitutes. Only the
+ * modelo 303 still reads voids this way, until the asesor answers
+ * `docs/compliance/asesor-questions.md` Q25. Assumes the outer query aliases `sales` as `s`. No
+ * leading `and`.
  */
 export function activeSalesClause(): SQL {
   return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
-      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)`;
+      and ${notSubstituteClause()}`;
+}
+
+/**
+ * The sales a day-scoped report counts on their ISSUE day: issued in the window, not an F3-canje
+ * substitute, and not voided inside the same window — a sale and its void in one window cancel, so
+ * neither is listed. A void made after the window leaves the sale counted, which is what keeps a
+ * closed day's re-derived figures equal to its frozen close. Assumes `sales` is aliased `s`. No
+ * leading `and`.
+ */
+export function issuedSalesClause(window: WindowClause): SQL {
+  return sql`${window(sql`s.issued_at`)}
+      and ${notSubstituteClause()}
+      and not exists (select 1 from sale_voids vd where vd.sale_id = s.id and ${window(sql`vd.voided_at`)})`;
+}
+
+/**
+ * The sales a day-scoped report REVERSES: voided in the window, issued outside it, and not an
+ * F3-canje substitute (never counted, so never reversed). Assumes the outer query joins `sale_voids`
+ * as `sv` to `sales` as `s`. No leading `and`.
+ */
+export function reversedSalesClause(window: WindowClause): SQL {
+  return sql`${window(sql`sv.voided_at`)}
+      and not (${window(sql`s.issued_at`)})
+      and ${notSubstituteClause()}`;
 }
 
 /**
