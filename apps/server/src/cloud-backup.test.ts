@@ -260,3 +260,39 @@ it("cancels an oversized response stream before it finishes", async () => {
     await f.close();
   }
 });
+it("cancels a capture waiting behind another connection operation without waiting for that operation", async () => {
+  const f = await installationFixture();
+  let release!: () => void, entered!: () => void;
+  const hold = new Promise<void>((r) => {
+      release = r;
+    }),
+    ready = new Promise<void>((r) => {
+      entered = r;
+    });
+  const blocking = f.client.revoke(async () => {
+    entered();
+    await hold;
+  });
+  await ready;
+  const c = new AbortController();
+  const capture = f.client.reserveCapture(randomUUID(), c.signal);
+  const result = capture.then(
+    () => "completed",
+    () => "aborted",
+  );
+  c.abort();
+  try {
+    expect(
+      await Promise.race([
+        result,
+        new Promise<string>((r) => setTimeout(() => r("still waiting"), 50)),
+      ]),
+    ).toBe("aborted");
+    expect(f.requests.filter((v) => v[2] === "backup-reserve")).toHaveLength(0);
+  } finally {
+    release();
+    await blocking;
+    await result;
+    await f.close();
+  }
+});

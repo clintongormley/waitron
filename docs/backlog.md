@@ -106,10 +106,19 @@ settings on the test replacement. It never starts the restored server. This chan
 the local restore fixture only. The signed capture client now reserves upload authority,
 uploads directly with scoped credentials, and publishes exact snapshot metadata through Cloud.
 It renews the current control lease, rejects unbound replies and keeps upload secrets out
-of connection state. Scheduled capture, durable local archive spooling, production
-deployment and customer recovery UI remain open. Before scheduled uploads reach real
-venue uplinks, replace the local 30-second total upload deadline with a measured transfer
-budget, add bounded retries/streaming, and avoid reporting shutdown cancellation as an outage.
+of connection state. The serving-primary test installation now schedules daily snapshots,
+keeps one encrypted archive for exact retries across restart and assigns monthly retention
+to the first successful capture in each venue-local calendar month. The file uploader
+streams with a 14-minute/credential-expiry deadline and bounded retry backoff; shutdown
+cancellation does not record an outage. The Cloud local proof crashes after upload and
+restores the resumed archive without recapture. Production deployment and customer recovery
+UI remain open. Confirmed uploads retry publication without retransferring; an acknowledged
+object lost by storage waits until the 24-hour expiry before recapture. Capture requests
+waiting on the Cloud client can be cancelled. Shutdown waits for an in-progress local
+database copy or encryption step. Next: measure that shutdown latency, real venue uplink
+budgets and spool disk use, and stream
+archive assembly beyond its current in-memory 512 MiB format limit. Cloud documentation:
+`docs/authenticated-captures.md` in waitron-cloud.
 Cloud's independent Litestream storage proof does not supply the sealed state row,
 stream supervisor or cold-restore activation still owned by SQLite slice 2. Next,
 connect those landed interfaces to Cloud's scoped storage and owner recovery flow;

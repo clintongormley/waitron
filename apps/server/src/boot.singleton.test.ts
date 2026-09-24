@@ -19,6 +19,8 @@ import {
 } from "@waitron/db";
 import { runTunnelClient } from "@waitron/tunnel";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
+import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { startServer } from "./boot.js";
 
 /**
@@ -50,6 +52,14 @@ import { startServer } from "./boot.js";
  * 2026-09-22, after the PostgreSQL test harness was deleted).
  */
 
+vi.mock("./cloud-snapshot-worker.js", async (original) => {
+  const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
+  return { ...actual, createCloudSnapshotWorker: vi.fn(actual.createCloudSnapshotWorker) };
+});
+vi.mock("./cloud-snapshot-loop.js", async (original) => {
+  const actual = await original<typeof import("./cloud-snapshot-loop.js")>();
+  return { ...actual, runCloudSnapshotLoop: vi.fn(actual.runCloudSnapshotLoop) };
+});
 vi.mock("@waitron/tunnel", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/tunnel")>();
   return {
@@ -63,6 +73,8 @@ vi.mock("@waitron/tunnel", async (importOriginal) => {
 // `vi.fn(actual.*)` call-through implementation, resetting only `mock.calls`.
 beforeEach(() => {
   vi.mocked(runTunnelClient).mockClear();
+  vi.mocked(createCloudSnapshotWorker).mockClear();
+  vi.mocked(runCloudSnapshotLoop).mockClear();
 });
 
 // The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode (a secondary is
@@ -297,6 +309,7 @@ function dutyEnv(port: number) {
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
+    WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_TUNNEL_BOX_ID: "box-secondary",
     WAITRON_TUNNEL_TOKEN: "tunnel-secret",
   };
@@ -350,6 +363,8 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
 
       // 2. Tunnel client — not dialed (the primary control dials it once).
       expect(runTunnelClient).not.toHaveBeenCalled();
+      expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(false);
 
       // The secondary still SELLS: its fiscal pass runs as the trivial empty pass (singletonPass resolves a
       // non-singleton), so /health advances rather than draining/reconciling — the sell-only posture.
@@ -358,6 +373,7 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
     } finally {
       await server.close();
     }
+    expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 
   it("the singleton primary (primary, primary) of the same identity DOES run both (control: the secondary's absence is real)", async () => {
@@ -384,8 +400,12 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
 
       // 2. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);
+      expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(true);
+      expect(runCloudSnapshotLoop).toHaveBeenCalledTimes(1);
     } finally {
       await server.close();
     }
+    expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 });
