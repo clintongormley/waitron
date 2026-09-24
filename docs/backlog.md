@@ -2802,12 +2802,22 @@ image constraints under *Detail → Box image*.
   count, tests included; comments inside `css` and `html` template literals are strings and were
   left) and `packages/module` (#606, about 363 to about 200 counted with the parse-tree walk, tests
   included) and `apps/dashboard/src/screens` (#607, about 3,170 to about 1,110 counted with the
-  parse-tree walk, tests included; the rest of `apps/dashboard` follows in two more pull requests).
+  parse-tree walk, tests included; the rest of `apps/dashboard` follows in two more pull requests)
+  and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
+  `drizzle/` SQL untouched).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606 and #607 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607 and #609 and left for the package that owns each, all
   still OPEN:
+  - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
+    `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
+    characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
+    the NUL; closing it needs a migration. Read only, not run: configuration import refuses an
+    image whose default-language alt text is blank (`src/configuration-transfer.ts`, pinned by the
+    `"alt"` case in its test), while an upload leaves alt text optional, so a venue holding such a
+    photo may export a bundle it cannot import. Outside the package:
+    `apps/server/src/configuration-transfer.ts` carries an "on this branch" history line.
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder, left for the next
     parts. "The #70 rule" for keeping a runtime import out of the browser bundle appears 29 times
     in `apps/dashboard/src/api/client.ts` and is defined nowhere in the repository; #607 replaced it
@@ -3200,9 +3210,9 @@ image constraints under *Detail → Box image*.
     `apps/dashboard/src/i18n/codes.test.ts:92`. `packages/printing/src/errors.test.ts:5` says the
     error construction typechecks "ONLY because" of one import — #588's review measured the same
     claim false for printing and layouts; `apps/server/src/errors.test.ts:8` makes it too, not
-    measured. `packages/media/src/image-references.test.ts:123` says `canvas-store.ts` tells 787
-    from 1811; it reads only 1811 (`device-profile-store.ts` reads both), and the same wording is
-    in the shipped `packages/media/drizzle/0001_image_references.sql`. Both layouts database
+    measured. The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
+    tells 787 from 1811; it reads only 1811 (`device-profile-store.ts` reads both). #609 removed
+    the same claim from `packages/media/src/image-references.test.ts`. Both layouts database
     suites create a manager session in `beforeAll`, while `useVenueDb` empties every table after
     each test by default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a
     suite's first test can use that session; they pass today because only the first does.
@@ -3824,8 +3834,8 @@ On PostgreSQL this was a GIN-indexed `tsvector` query with SQL `order by`, `limi
 route (`GET /management-api/images`) runs through `withTransaction`, which on this engine is the
 venue's exclusive write lock — so the scan blocks every writer on the file, a sale included. `limit`
 is capped at 100 but the READ is unbounded. `listImageLabels` and `listImageTranslationGaps` have
-the same shape. **What can and cannot go back to SQL:** the relevance ranking genuinely cannot, and
-`images.ts` argues why at the site; the label filter, the date and name sorts and the paging can —
+the same shape. **What can and cannot go back to SQL:** the relevance ranking was argued not to, in a
+comment #609 deleted as partly false, so that is untested; the label filter, the date and name sorts and the paging can —
 `labels` is a JSON text column and this SQLite has `json_each`, and a page with no search term needs
 no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
 path is a separate decision.
@@ -4622,7 +4632,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 
 **Reads the database does not need:**
 
-- **`readImage` asks the database for the same row twice** (`packages/media/src/images.ts:199`). It
+- **`readImage` asks the database for the same row twice** (`readImage`, `packages/media/src/images.ts`). It
   selects the image row, then calls `listImageUsages` only to take the `.length` of what comes back,
   and that function opens by re-reading the same row by id just to get its filename. Handing it the
   filename `readImage` already holds would turn five queries into four.
@@ -5155,7 +5165,8 @@ it; and a correction must not decrement a count where it should drop it.
   `aabdde6a8^:<path>`, the parent of the commit that deleted it, and each resolves. The pointers in
   `packages/bookings/src/bookings-cas.test.ts` and `packages/media/src/images.test.ts` name files
   that still exist but no longer hold the deleted cases, so they were repointed to `aabdde6a8^:` as
-  well (2026-09-24: #574 moved bookings' pointer into its commit message). Also left: the
+  well (2026-09-24: #574 moved bookings' pointer into its commit message, and #609 deleted
+  media's). Also left: the
   pointers in shipped `drizzle/` SQL, such as `packages/media/drizzle/0001_image_references.sql`
   and `packages/db/drizzle/0001_behavioural_triggers.sql`, for the hash reason above.
 - **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
