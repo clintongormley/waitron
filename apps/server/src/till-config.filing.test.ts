@@ -7,7 +7,6 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { readFilingModule } from "./till-config.js";
 
-// This proves the column read and the null case.
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -18,12 +17,7 @@ let bare: NodeId;
 
 beforeAll(async () => {
   await seedTenant(suite.db);
-  // Through the table definitions: `locations.id`, `nodes.id` and `nodes.created_at` are JavaScript
-  // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
-  // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
-  // error here. The two `nodes` rows keep exactly the columns they carried: `stamped` names both
-  // module columns and `bare` names neither, which is what the null case under test turns on. No
-  // chain, series or `registros_facturacion` row is touched by this fixture.
+  // `stamped` names both module columns and `bare` names neither, which is what the null case turns on.
   const [loc] = await suite.db
     .insert(locations)
     .values({

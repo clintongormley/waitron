@@ -14,9 +14,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-// A real test-double backend that writes through the caller's transaction but whose records carry NO
-// `verificationUrl` — the one way to exercise the ticket's empty-QR default (VerifactuBackend always
-// sets one). Same double `till-sale.test.ts` uses for `fileImmediateSale`'s identical branch.
+// Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -47,31 +45,13 @@ import { bytesInclude } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// The integrated (split-transaction) card-pay orchestration, end to end on one migrated venue file.
-//
-// Named `till-sale-integrated.db.test.ts` because opening a database is exactly what separates it
-// from its sibling: `grep -c useVenueDb apps/server/src/till-sale-integrated.test.ts` prints 0 (run
-// 2026-09-22), because that file covers `toPayOutcome` — the pure mapper over a provider result —
-// and nothing else, while every case here drives `payWorkingOrderIntegrated` itself against a
-// provisioned venue.
-//
-// Every call runs on the one venue handle, kept under the name `app` at each call site so it still
-// reads as "the handle the provider and the orchestrator share".
-//
-// What the engine change does NOT narrow, because each belongs to the three-transaction SPLIT
-// rather than to the number of connections staging it:
-//  - the P1(commit)→collect→P3 ordering, which every walk-up case below drives;
-//  - the FK-before-attempting invariant — the provider's `insertAttempting` FKs `working_orders`,
-//    which the walk-up's tx A must COMMIT before the network `collect`. That key is in the SQLite
-//    baseline (`packages/payments/drizzle/0000_baseline.sql:65`) and this engine enforces it, which
-//    is stated rather than inherited (`pragma foreign_keys = on`, `openConnection` in
-//    `packages/store/src/index.ts`);
-//  - `finalizeCapture`'s duplicate backstop, measured on this engine at the concurrent-winner case.
-// `FakeStripe` drives the reader deterministically.
+// The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
+// walk-up before `collect`, because the provider's payment row has a foreign key to
+// `working_orders`; P3's duplicate backstop; and recovery of a capture P3 never filed. `FakeStripe`
+// drives the reader deterministically.
 const LOCALE = "es-ES";
 
-// The accountable operator a placing amendment is attributed to — a fixed fixture uuid standing in for
-// the session's `personId` (no FK on `order_amendments.actor_id`), the shape `working-order.pay-and-dispatch.test.ts` uses.
+// The operator a placing amendment is attributed to.
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const suite = useVenueDb({
@@ -82,7 +62,7 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/** The system wall clock, reported confident/anchored — the stub `working-order.pay-and-dispatch.test.ts` uses. */
+/** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -102,9 +82,7 @@ function systemClock(): TrustedClock {
   };
 }
 
-// `tenants_country_tax_id_key` is unique. The reset between tests empties the table, so a repeat NIF
-// would in fact be accepted now; the counter is kept because two venues inside ONE test (none today)
-// would still collide, and a per-venue NIF costs nothing.
+// `tenants_country_tax_id_key` is unique, so each venue gets its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -132,9 +110,8 @@ interface SeededVenue {
   cafe: OfferedProduct;
 }
 
-/** A fresh chained venue + registered SIF, with one "Café" (each, 1.50 gross, general 21%) product
- * seeded and offered in the counter zone under `orderFlow`. Each test gets its OWN tenant so counts
- * are order-independent (CLAUDE.md §4). */
+/** A fresh venue with one "Café" (each, 1.50 gross, general 21%) product offered in the counter
+ * zone under `orderFlow`. */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   const venue = await applyVenue(
     planVenue(
@@ -195,22 +172,15 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   };
 }
 
-/** Flip the location's `order_flow` AND the in-memory cfg to `mode`, the way boot wires them — so
- * `placeOrder`/`payWorkingOrderIntegrated` dispatch on the same value the DB carries. */
+/** Set the location's `order_flow` AND the in-memory cfg to `mode`, so both agree. */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue(mode);
   suite.db.run(sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`);
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
 
-/**
- * Build the split-flow deps + a real `StripeTerminalProvider` over `FakeStripe`, sharing ONE
- * handle for both the provider's writes and the orchestrator's P1/P3 — which is now the ONLY handle
- * there is (see the file header; the role that made "shared" a claim is gone). Tips are driven by
- * `cfg.tipsEnabled` (the sibling `TillConfig` every caller passes to `payWorkingOrderIntegrated`
- * alongside these deps), not a deps-level flag — `IntegratedPayDeps` carries no `tipsEnabled` of
- * its own; a "tips on" test overrides `cfg` instead (see the two below).
- */
+/** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
+ * overrides `cfg.tipsEnabled`. */
 function integratedDeps(
   cfg: TillConfig,
   app: Database,
@@ -306,7 +276,7 @@ async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uin
   });
 }
 
-/** The count of `drawer_opens` rows for this tenant — an integrated card sale records NONE. */
+/** The count of `drawer_opens` rows. */
 async function drawerOpenCount(cfg: TillConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
@@ -316,19 +286,14 @@ async function drawerOpenCount(cfg: TillConfig): Promise<number> {
 }
 
 async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
-  // `settled` arrives as the NUMBER 1 or 0: this engine has no boolean storage class, and a raw read
-  // reaches no drizzle mapper, so an `is not null` comparison yields an integer. Same conversion as
-  // `paymentsFor`'s `linked` below; every assertion on `settledAtSet` still reads `true`/`false`.
+  // A raw comparison arrives as the number 1 or 0: this engine has no boolean type.
   const rows = suite.db.all<{ status: string; settled: number }>(sql`
     select status, (settled_at is not null) as settled from working_orders where id = ${id}
   `);
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled === 1 };
 }
 
-/** Whether this order's `collected_at` customer-handover marker is set. The witness that an
- *  integrated CARD collect at the collect stage stamped the ORDER-level marker `listStationQueue`
- *  excludes on (KDS-1 §3e): a placed order fired to a station leaves that station's queue once
- *  collected; a walk-up (open→settle, never fired) leaves it NULL. */
+/** Whether this order's `collected_at` handover marker is set. */
 async function collectedAtSet(id: string): Promise<boolean> {
   const rows = suite.db.all<{ collected: number }>(sql`
     select (collected_at is not null) as collected from working_orders where id = ${id}
@@ -346,8 +311,7 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
   return rows[0]!.id;
 }
 
-/** The order ids on a station's queue (`listStationQueue`), read the way the till runs it. A COLLECTED
- *  order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
+/** The order ids on a station's queue (`listStationQueue`); a collected order drops out. */
 async function stationQueueOrderIds(stationId: string): Promise<string[]> {
   return withTransaction(suite.db, async (tx) => {
     const groups = await listStationQueue(tx, stationId);
@@ -359,8 +323,6 @@ async function stationQueueOrderIds(stationId: string): Promise<string[]> {
 async function tendersFor(
   workingOrderId: string,
 ): Promise<{ method: string; amount: string; tipAmount: string }[]> {
-  // Both count whole cents, read raw and converted by `rawCentsToDecimal`; the helper hands its
-  // callers the AMOUNTS, so their assertions read the same decimal literals they always did.
   const rows = suite.db.all<{ method: string; amount: string; tip: string }>(sql`
     select t.method, cast(t.amount as text) as amount, cast(t.tip_amount as text) as tip
     from tenders t join sales s on s.id = t.sale_id
@@ -376,8 +338,6 @@ async function tendersFor(
 
 /** The filed `sales.total` (ex-tip) for this order's sale. */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
-  // returns the amount its callers assert on.
   const rows = suite.db.all<{ total: string }>(
     sql`select cast(total as text) as total from sales where working_order_id = ${workingOrderId}`,
   );
@@ -403,11 +363,7 @@ async function paymentsFor(
     where p.working_order_id = ${workingOrderId}
     order by p.provider, p.external_ref
   `);
-  // `linked` arrives as the NUMBER 1 or 0, not a boolean: this engine has no boolean storage class
-  // and a comparison yields an integer. Measured 2026-09-22 on Node v26.7.0 —
-  // `node --experimental-sqlite -e "…select (a is not null and a = b) as linked…"` returns
-  // `{"linked":1}` with `typeof` number. The `=== 1` is where that now converts; every assertion
-  // on `linkedToSale` still reads `true`/`false`.
+  // 0/1, not a boolean — see `orderState`.
   return rows.map((r) => ({
     provider: r.provider,
     state: r.state,
@@ -423,8 +379,7 @@ async function paymentCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/** The `sales.id` filed for this order — the witness that `listOutstandingSales` lists (or no longer
- *  lists) the invoice-first sale, and the seed target for a lost-T2 recovery. */
+/** The `sales.id` filed for this order. */
 async function saleIdFor(workingOrderId: string): Promise<string> {
   const rows = suite.db.all<{ id: string }>(
     sql`select id from sales where working_order_id = ${workingOrderId}`,
@@ -432,8 +387,7 @@ async function saleIdFor(workingOrderId: string): Promise<string> {
   return rows[0]!.id;
 }
 
-/** This tenant's outstanding (issued-but-unsettled) sales — the "what is owed?" list a decline must
- *  leave intact. Each test owns its tenant, so it lists only this test's sales. */
+/** The outstanding (issued-but-unsettled) sales. */
 async function outstandingSalesFor(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await listOutstandingSales(tx);
@@ -523,14 +477,11 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(out.ticket.total).toBe("1.50");
     expect(out.ticket.tender.method).toBe("card"); // a card is charged the exact total — no cash change block
 
-    // Settled, exactly one sale + registro; one card tender at the total; one captured stripe
-    // payment carrying the PaymentIntent id and linked to the filed sale.
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1);
-    // The prepay walk-up has entered preparation, but its handover marker stays NULL until somebody
-    // collects it. Only a counter COLLECT of an already-placed order stamps `collected_at` here.
+    // A walk-up is not a collect, so its handover marker stays NULL.
     expect(await collectedAtSet(id)).toBe(false);
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
     const payments = await paymentsFor(id);
@@ -556,12 +507,10 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
 
     expect(out.outcome).toBe("declined");
-    // No sale filed; the working order exists and is still `open` (retryable); a `failed` audit row
-    // exists (the provider's T2 wrote it) but is unlinked.
+    // Nothing filed; the order stays `open`, so the till can retry.
     expect(await saleCount(id)).toBe(0);
     expect(await registroCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-    // The provider's T2 wrote a `failed` audit row (no sale to link to).
     expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
   });
 
@@ -580,8 +529,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(first.outcome).toBe("captured");
     if (first.outcome !== "captured") throw new Error("unreachable");
 
-    // Pay again with the SAME id → replays the same ticket, files nothing, and never re-collects:
-    // the reader's PaymentIntent creation fired exactly once, and there is still one payment row.
+    // Same id → replays, files nothing, and never drives the reader again.
     const firstIntent = client.lastCreateIntent;
     const second = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(second.outcome).toBe("captured");
@@ -596,11 +544,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("auto-prints the customer receipt on an integrated card sale (no kick, no drawer), and a REPLAY does not double-print", async () => {
-    // The primary counter-card flow (Stripe Terminal, `/api/pay`) must auto-print like cash and manual
-    // card do — `finalizeCapture` (P3) enqueues the receipt POST-filing, INSERT-only on its own tx.
-    // Integrated is CARD-ONLY, so the receipt carries NO drawer kick and records NO `drawer_opens`. The
-    // never-block guarantee is the shared hook's (proven in `receipt-print.test.ts`); here the proof
-    // is that filing lands (one registro) and a REPLAY enqueues NO second job.
+    // A card receipt carries no drawer kick and records no `drawer_opens` row; a replay prints
+    // nothing more.
     const { cfg, cafe } = await setupVenue();
     const printerId = await makeReceiptPrinter(cfg);
     const app = suite.db;
@@ -615,8 +560,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(first.outcome).toBe("captured");
 
-    // Exactly ONE receipt job, carrying the customer ticket (the legend) with NO drawer kick (card),
-    // and NO drawer_opens row.
     const afterFirst = await printJobPayloads(cfg, printerId);
     expect(afterFirst).toHaveLength(1);
     const payload = new Uint8Array(afterFirst[0]!);
@@ -625,8 +568,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(await drawerOpenCount(cfg)).toBe(0);
     expect(await registroCount(id)).toBe(1);
 
-    // Pay again with the SAME id → P1 sees the order `settled` and REPLAYS (the unhooked path): still
-    // exactly ONE registro AND ONE print job. A lost-response retry never double-prints the receipt.
+    // A lost-response retry replays and never prints a second receipt.
     const second = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(second.outcome).toBe("captured");
     expect(await registroCount(id)).toBe(1);
@@ -636,8 +578,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("tips on: charges total+tip, files the sale at the total, records the tip on the tender", async () => {
     const { cfg: baseCfg, cafe } = await setupVenue();
-    // Tips are read off `cfg.tipsEnabled` (the single source), not a deps-level flag — override it
-    // here rather than passing a `tipsEnabled` argument to `integratedDeps`.
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
     const { deps, client } = integratedDeps(cfg, app);
@@ -651,10 +591,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
 
     expect(out.outcome).toBe("captured");
-    // The reader was charged the GROSS 1.80 (total + tip)…
     expect(client.lastCreateIntent?.amount).toBe("1.80");
-    // …while the FISCAL sale.total is the ex-tip 1.50, and the tender carries amount 1.80 / tip 0.30
-    // (the coverage identity sum(amount) = total + sum(tip) holds).
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
   });
@@ -713,9 +650,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       zoneId: cafe.zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    // Place it: open → placed, NO fiscal document filed yet (ticket_then_pay issues at pay). Placing
-    // FIRES one ticket item to the default station, so the order shows on that station's queue,
-    // uncollected.
+    // Placing files no fiscal document under ticket_then_pay, and fires the order to the default
+    // station.
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     expect(await saleCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
@@ -726,7 +662,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("captured");
-    // Issue-at-pay: exactly one sale now exists, filed at pay from the frozen lines, and placed → settled.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await filedSaleTotal(id)).toBe("1.50");
@@ -734,8 +669,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const payments = await paymentsFor(id);
     expect(payments).toHaveLength(1);
     expect(payments[0]!.linkedToSale).toBe(true);
-    // This IS a counter collect (a placed card collect over the terminal): `collected_at` is stamped in
-    // the settle UPDATE, so the order leaves its station queue.
+    // A placed card collect stamps `collected_at`, so the order leaves its station queue.
     expect(await collectedAtSet(id)).toBe(true);
     expect(await stationQueueOrderIds(station)).toEqual([]);
   });
@@ -787,15 +721,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
-    // The provider, mid-`collect` (i.e. AFTER P1 committed tx A and read the order `open`, BEFORE P3),
-    // simulates a concurrent winner paying this same id by cash — settling it and filing its sale.
-    // P3's `recordSale` then collides on `sales_working_order_id_key` and REPLAYS the winner's ticket
-    // rather than filing a second unrepairable record. The backstop keys on the refusal CLASS, not on
-    // a spelling. Measured in this suite on 2026-09-22 by copying the filed row back into `sales`
-    // under a new id: the refusal is `UNIQUE constraint failed: sales.working_order_id`, result code
-    // 2067 one level down the cause chain, and `isUniqueViolation` answers true
-    // (`UNIQUE_VIOLATION` in `packages/db/src/sql-state.ts`). The index
-    // itself is in the SQLite baseline unchanged (`packages/db/drizzle/0000_baseline.sql:618`).
+    // Mid-`collect` (after P1 committed, before P3) a concurrent cash pay settles this id. P3's
+    // `recordSale` is refused by `sales_working_order_id_key` and replays the winner's ticket.
     const provider = cannedProvider(async () => {
       await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
         id,
@@ -821,9 +748,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
     const id = randomUUID();
-    // A provider that reports `captured` but wrote NO `payments` row — so `associatePaymentWithSale`
-    // finds nothing and throws the domain `payment.not_found` (a non-unique error). P3 must re-raise
-    // it, NOT swallow it as a replay, and the sale it half-filed must roll back with the transaction.
+    // The provider reports `captured` but wrote no `payments` row, so the association throws
+    // `payment.not_found`: P3 must re-raise it, and the sale must roll back.
     const provider = cannedProvider(() => Promise.resolve(), "captured");
     const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
@@ -835,18 +761,15 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       }),
     ).rejects.toMatchObject({ code: "payment.not_found" });
 
-    // The sale + settle rolled back; the walk-up order row created in tx A remains `open` (retryable).
+    // Rolled back; the walk-up order committed in P1 stays `open`.
     expect(await saleCount(id)).toBe(0);
     expect(await registroCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
   });
 
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
-    // `TillSaleResult.qr` defaults to "" when the regime offers no verification link
-    // (`FiscalRecordRef.verificationUrl` is optional). `VerifactuBackend` always sets one, so — exactly
-    // as `till-sale.test.ts` does for `fileImmediateSale` — this drives the SAME `recordSale` write path
-    // through a `FakeFiscalBackend` whose records carry none, so the integrated ticket's empty-QR default
-    // is exercised rather than assumed.
+    // `FakeFiscalBackend`'s records carry no verification link, so the ticket's `qr` default of ""
+    // is exercised.
     const { cfg, cafe } = await setupVenue();
     await FakeFiscalBackend.install(suite.db);
     const fake = new FakeFiscalBackend(suite.db);
@@ -880,16 +803,11 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 });
 
-// The §4 capture-idempotency guard: a lost-response retry where `collect` COMMITTED its capture
-// (T2) but P3 never ran (the sale was never filed) must NOT re-charge. The lost-T2 state is seeded
-// directly (`createOpenOrder` + `insertCapturedPayment` with `sale_id` NULL), exactly the row
-// `provider.collect`'s T2 leaves behind before P3. The two concurrency cases below used to race TWO
-// DISTINCT connections; there is one writer now, and what each still stages — and what it no longer
-// does — is stated at the case itself.
+// A captured payment with no sale (P2 committed, P3 never ran) must be finished WITHOUT charging
+// again. The state is seeded directly, as the row `collect` leaves behind.
 describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
-  /** Seed the lost-T2 state: an OPEN order with a locked café line, plus a captured stripe payment for
-   *  it whose `sale_id` is still NULL (collect committed, P3 never ran). `amount` is the GROSS the card
-   *  was charged (total, or total+tip). Returns the order id. */
+  /** Seed an OPEN order with a locked café line and a captured stripe payment whose `sale_id` is
+   *  NULL. `capturedAmount` is the gross the card was charged. */
   async function seedLostCapture(
     cfg: TillConfig,
     cafe: OfferedProduct,
@@ -897,10 +815,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     capturedAmount: string,
   ): Promise<{ id: string; externalRef: string }> {
     const id = randomUUID();
-    // `payments_provider_ref_key` and `payments_provider_external_ref_key` are both unique per
-    // provider across the database. The reset between tests empties `payments`, so the uniqueness
-    // that still bites is WITHIN one test — the concurrent-recovery cases seed once and retry twice.
-    // Kept per seed for the same reason as `nextNif`.
+    // Payment refs are unique per provider across the database.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
       await createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
@@ -929,10 +844,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
-    // Recovered at the locked total — filed, NOT re-charged.
     expect(out.ticket.total).toBe("1.50");
-    // collect was NEVER driven (recovery skips P2 entirely): no PaymentIntent was created, so there
-    // is no second charge, and there is still exactly ONE payment row — the lost capture, now linked.
+    // Recovery skips P2: no second PaymentIntent, and still ONE payment row, now linked.
     expect(client.lastCreateIntent).toBeUndefined();
     expect(await paymentCount(id)).toBe(1);
     expect(await saleCount(id)).toBe(1);
@@ -941,8 +854,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-    // The recovered OPEN walk-up has entered preparation, but its handover marker stays NULL until
-    // collection — a recovered walk-up is still a walk-up (the `wasPlaced` guard).
+    // A recovered walk-up is still a walk-up: its handover marker stays NULL.
     expect(await collectedAtSet(id)).toBe(false);
     const payments = await paymentsFor(id);
     expect(payments).toHaveLength(1);
@@ -955,9 +867,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const app = suite.db;
-    // A PLACED ticket_then_pay order fired to the kitchen, whose card collect CAPTURED but lost P3
-    // (sale_id NULL) — the recovery path for a genuine counter collect. Recovery files from the locked
-    // lines (issue-at-pay, no outstanding invoice → `recover`, not `recover-settle`) without re-charging.
+    // A placed ticket_then_pay order whose card collect captured but lost P3. With no outstanding
+    // invoice this is `recover`, not `recover-settle`.
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -988,7 +899,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await paymentCount(id)).toBe(1);
     expect(await preparationTicketCount(id)).toBe(1); // placement fired it; recovery did not re-fire
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    // A recovered PLACED collect leaves its station queue: collected_at stamped in the settle UPDATE.
+    // A recovered placed collect leaves its station queue.
     expect(await collectedAtSet(id)).toBe(true);
     expect(await stationQueueOrderIds(station)).toEqual([]);
   });
@@ -1004,8 +915,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
     expect(out.outcome).toBe("captured");
     expect(client.lastCreateIntent).toBeUndefined(); // no re-charge
-    // The FISCAL total stays ex-tip (1.50); the tender carries the whole 1.80 charge with tip 0.30
-    // (the coverage identity sum(amount) = total + sum(tip) holds).
+    // The fiscal total stays ex-tip; the tender carries the whole charge with the tip.
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
     expect(await paymentCount(id)).toBe(1);
@@ -1016,9 +926,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
     const { deps, client } = integratedDeps(cfg, app);
-    // Captured 1.00 against a locked total 1.50 — the charge cannot even cover the total. There is no
-    // honest fiscal figure to file, so recovery files NOTHING and throws (→ server.internal 500),
-    // leaving the captured payment (sale_id NULL) as reconcile's orphan class (Decision 2 / §5).
+    // The charge cannot cover the locked total: there is no honest figure to file, so recovery
+    // files NOTHING and throws, leaving the captured payment for reconciliation.
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.00");
 
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
@@ -1041,17 +950,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       label: "Mesa 7",
     });
 
-    // Two orchestrations, each with its OWN reader, drive the SAME parked order id, interleaved by
-    // `Promise.allSettled`. On PostgreSQL they were two distinct connections; here there is one
-    // handle and one writer, so what serialises them is `withWriteLock` rather than a row lock.
-    // The property under test survives that, because it belongs to the three-transaction SPLIT and
-    // not to the connection count: P1 COMMITS before the network `collect`, so both reach `collect`
-    // and capture, and P3's duplicate backstop makes exactly one file — the loser replays the
-    // winner's ticket. See `finalizeCapture`'s doc comment, which derives both backstops from the
-    // split. LOST with the second connection: that the backstop is reached through a genuine
-    // cross-BACKEND write conflict. (The one-CHARGE guarantee across the network sub-window is the
-    // Stripe idempotency key, proven in the sandbox, Task 1 — not the FakeStripe here, which
-    // captures per-reader.)
+    // Two orchestrations, each with its own reader, pay the SAME parked order, interleaved by
+    // `Promise.allSettled`. P1 commits before `collect`, so both capture; P3's duplicate backstop
+    // files exactly one sale and the loser replays.
     const { deps: depsA } = integratedDeps(cfg, suite.db);
     const { deps: depsB } = integratedDeps(cfg, suite.db);
     const req = { id, lines: [] };
@@ -1069,7 +970,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
       throw new Error("unreachable");
     }
-    // Both captured, ONE invoice number, ONE sale + registro.
     expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
@@ -1077,12 +977,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("two concurrent recoveries of one lost capture file ONE sale; the loser replays", async () => {
     const { cfg, cafe } = await setupVenue();
-    // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) and dispatch to
-    // recovery; `finalizeRecovery` is ONE transaction and one write transaction runs on the venue
-    // file at a time, so one files + associates the existing row + settles, and the other runs after
-    // that commit, reads `settled`, and REPLAYS — the recovery path's own idempotency, with no
-    // double-file and no double-associate. (Same one-writer staging as the concurrent-pays case
-    // above, and the same loss.)
+    // ONE lost capture, TWO retries: one recovers, and the other's transaction runs after that
+    // commit, reads `settled`, and replays — no second filing, no second association.
     const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
 
     const { deps: depsA } = integratedDeps(cfg, suite.db);
@@ -1105,7 +1001,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       throw new Error("unreachable");
     }
     expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
-    // Exactly one sale, one registro; the SINGLE lost capture is the linked payment (no second row).
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await paymentCount(id)).toBe(1);
@@ -1113,17 +1008,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   });
 });
 
-// ORDERING 1 (invoice-first): the sale/invoice is issued (chained, filed) AT PLACING and sits
-// OUTSTANDING; the integrated card collect must SETTLE that already-issued invoice (`settleSale`,
-// NOT a second `recordSale`) and associate the captured payment. The real hazard this closes is
-// NOT a double-file (`sales_working_order_id_key` UNIQUE refuses a second file for one order) — it
-// is an ORPHANED captured payment beside an UNSETTLED issued invoice (money taken, invoice left
-// outstanding). A decline files/voids nothing: the issued invoice stays outstanding, retryable
-// (§5). The double-settle replay and the concurrent recovery below used to need distinct
-// connections; on one writer they stage less, and each case says what.
+// Invoice-first: the invoice is issued at placing, so the card collect must SETTLE it rather than
+// file again, and associate the captured payment. A decline leaves the invoice outstanding.
 describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)", () => {
-  /** Arrange an OUTSTANDING invoice-first sale: park, then `placeOrder` issues the DEFERRED invoice at
-   *  placing (open → placed), leaving one chained-but-unsettled sale. Returns the order id + its saleId. */
+  /** Park, then `placeOrder` issues the deferred invoice (open → placed), leaving one unsettled
+   *  sale. Returns the order id and its sale id. */
   async function placeInvoiceFirst(
     cfg: TillConfig,
     cafe: OfferedProduct,
@@ -1144,8 +1033,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     const station = await defaultStationId(cfg);
     const app = suite.db;
     const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
-    // The deferred invoice is issued at placing: one sale + registro, order placed, OUTSTANDING. Placing
-    // also FIRED the ticket item to the default station, so the order queues there, uncollected.
+    // Issued at placing and outstanding; placing also fired the order to the default station.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
@@ -1161,15 +1049,12 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     expect(out.ticket.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
     expect(out.ticket.total).toBe("1.50");
     expect(out.ticket.tender.method).toBe("card");
-    // NO second sale/registro — the invoice was SETTLED, not re-filed. The card charged the exact
-    // invoice total; the captured stripe payment links to the ISSUED sale; the order is now settled
-    // and no longer outstanding.
+    // Settled, not re-filed.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await outstandingSalesFor()).toEqual([]);
-    // A settle IS a counter collect: `collected_at` stamped in the placed → settled UPDATE, so the
-    // order leaves its station queue (the fiscal settle itself is byte-unchanged).
+    // A settle is a counter collect, so the order leaves its station queue.
     expect(await collectedAtSet(id)).toBe(true);
     expect(await stationQueueOrderIds(station)).toEqual([]);
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
@@ -1183,9 +1068,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
 
   it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
     const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
-    // Tips are read off `cfg.tipsEnabled` (the single source) — override it rather than passing a
-    // `tipsEnabled` argument to `integratedDeps`. `placeInvoiceFirst` only dispatches on `orderFlow`,
-    // so placing under this overridden cfg is unaffected.
+    // `placeInvoiceFirst` dispatches only on `orderFlow`, so the tips override does not affect it.
     const cfg = { ...baseCfg, tipsEnabled: true };
     const app = suite.db;
     const { id } = await placeInvoiceFirst(cfg, cafe);
@@ -1194,10 +1077,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
 
     expect(out.outcome).toBe("captured");
-    // The reader was charged the GROSS 1.80 (amount due 1.50 + tip 0.30)…
     expect(client.lastCreateIntent?.amount).toBe("1.80");
-    // …while the FISCAL total stays the ex-tip invoice total 1.50 (a settle files nothing new), and the
-    // tender carries amount 1.80 / tip 0.30 (coverage identity sum(amount) = total + sum(tip) holds).
     expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1214,13 +1094,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
     expect(out.outcome).toBe("declined");
-    // A decline files/voids NOTHING (§5): still one sale + registro, the order stays PLACED (not
-    // settled), the invoice is still unsettled and STILL LISTED as outstanding — retryable.
+    // A decline files and voids NOTHING: the invoice stays outstanding, retryable.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
-    // No tender was written (nothing settled); the provider's T2 wrote a `failed` audit row, unlinked.
     expect(await tendersFor(id)).toEqual([]);
     expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
   });
@@ -1230,10 +1108,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     const app = suite.db;
     const { id } = await placeInvoiceFirst(cfg, cafe);
 
-    // Mid-`collect` (AFTER P1 detected settle, BEFORE P3), a concurrent CASH collect settles the
-    // already-issued invoice and moves placed → settled. finalizeSettle's `settleSale` then trips
-    // `sale.already_settled` (the sale_settlements UNIQUE / post-settlement trigger) and REPLAYS the
-    // settled ticket in a fresh transaction rather than double-settling.
+    // Mid-`collect` (after P1, before P3) a concurrent cash collect settles the invoice. P3's
+    // `settleSale` refuses with `sale.already_settled`, and this replays rather than settling twice.
     const provider = cannedProvider(async () => {
       await collectOrder({ db: suite.db, backend, clock }, cfg, {
         id,
@@ -1248,8 +1124,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.total).toBe("1.50");
-    // Replayed the CONCURRENT winner's CASH settlement: still one sale + registro, one settlement, one
-    // CASH tender — the integrated pay filed/settled nothing of its own.
+    // Replayed the cash winner's settlement; the integrated pay settled nothing of its own.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1261,10 +1136,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     const app = suite.db;
     const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
 
-    // A provider that reports `captured` but wrote NO `payments` row — so `associatePaymentWithSale`
-    // throws the domain `payment.not_found` (a non-`already_settled` error). finalizeSettle must
-    // re-raise it, NOT swallow it as a replay, and the settlement it half-wrote must roll back with the
-    // transaction — leaving the invoice unsettled and outstanding.
+    // The provider reports `captured` but wrote no `payments` row, so the association throws
+    // `payment.not_found`: it must be re-raised, and the settlement rolled back.
     const provider = cannedProvider(() => Promise.resolve(), "captured");
     const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
@@ -1278,12 +1151,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
   });
 
-  // A lost-T2 capture on an invoice-first order: `collect`'s T2 committed a captured payment (sale_id
-  // NULL) but P3 never ran. A naive retry must NOT re-charge AND must NOT `recordSale` (which the
-  // issued invoice's unique key would refuse) — it RECOVERS by SETTLING the existing invoice.
+  // A captured payment with no sale on an invoice-first order is recovered by SETTLING the issued
+  // invoice: no second charge, and no `recordSale`.
   describe("lost-T2 recovery settles (never re-files)", () => {
-    /** Seed the lost-T2 state on an already-placed invoice-first order: a captured stripe payment for it
-     *  whose sale_id is NULL. `capturedAmount` is the GROSS the card was charged (amount due, or +tip). */
+    /** Seed a captured stripe payment with a NULL `sale_id` on a placed invoice-first order.
+     *  `capturedAmount` is the gross the card was charged. */
     async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
       await withTransaction(suite.db, async (tx) => {
@@ -1312,17 +1184,15 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
       expect(out.outcome).toBe("captured");
-      // collect was NEVER driven (recovery skips P2): no PaymentIntent created, no re-charge.
+      // Recovery skips P2: no second charge.
       expect(client.lastCreateIntent).toBeUndefined();
-      // Still ONE sale + registro (SETTLED, not re-filed) and ONE payment — the lost capture, now linked.
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await paymentCount(id)).toBe(1);
       expect(await filedSaleTotal(id)).toBe("1.50");
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       expect(await outstandingSalesFor()).toEqual([]);
-      // An invoice-first recovery is always a PLACED counter collect: collected_at stamped, order leaves
-      // the station queue (settle files nothing new — fiscally byte-unchanged).
+      // An invoice-first recovery is a counter collect, so the order leaves its station queue.
       expect(await collectedAtSet(id)).toBe(true);
       expect(await stationQueueOrderIds(station)).toEqual([]);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
@@ -1343,8 +1213,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
 
       expect(out.outcome).toBe("captured");
       expect(client.lastCreateIntent).toBeUndefined(); // no re-charge
-      // The FISCAL total stays the ex-tip invoice total 1.50; the tender carries the whole 1.80 with
-      // tip 0.30 (coverage identity holds).
+      // The fiscal total stays ex-tip; the tender carries the whole charge with the tip.
       expect(await filedSaleTotal(id)).toBe("1.50");
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
       expect(await paymentCount(id)).toBe(1);
@@ -1361,8 +1230,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
 
       expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
-      // Nothing settled: no tender, the order stays placed, the invoice is still outstanding, and the
-      // captured payment is untouched (still a sale_id-NULL orphan for reconcile).
+      // Nothing settled, and the captured payment is left for reconciliation.
       expect(await tendersFor(id)).toEqual([]);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
@@ -1374,12 +1242,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const { id } = await placeInvoiceFirst(cfg, cafe);
       await seedLostCaptureOnPlaced(id, "1.50");
 
-      // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) with an outstanding
-      // invoice → recover-settle; `finalizeSettleRecovery` is ONE transaction and one write
-      // transaction runs on the venue file at a time, so one settles + associates + moves
-      // placed → settled, and the other runs after that commit, reads `settled`, and REPLAYS — one
-      // settlement, no double-associate. (Same one-writer staging as the concurrent-pays case
-      // above, and the same loss.)
+      // ONE lost capture, TWO retries: one settles, and the other's transaction runs after that
+      // commit, reads `settled`, and replays — one settlement, no second association.
       const { deps: depsA } = integratedDeps(cfg, suite.db);
       const { deps: depsB } = integratedDeps(cfg, suite.db);
       const req = { id, lines: [] };
@@ -1400,7 +1264,6 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         throw new Error("unreachable");
       }
       expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
-      // Exactly one sale + registro; ONE settlement (one tender); the SINGLE lost capture is linked.
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);

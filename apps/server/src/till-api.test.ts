@@ -65,10 +65,6 @@ import type { TillConfig } from "./till-config.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
-// The session routes are LOGIC (login → cookie → logout), and the login
-// path runs through `withTransaction` exactly as production does. Sessions/persons live in
-// identity; the schema is the whole manifest (the tables here span modules that FK into core, so
-// the shared ordered set is the fixture).
 let cfg: TillConfig;
 let ana: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
@@ -78,10 +74,7 @@ let ana: { id: string };
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
-// The one product seeded into the counter location's DEFAULT catalogue, so `GET /api/products` has
-// something to return. Captured here so the success test can pin the exact `AvailableProduct` shape
-// the route reads back — id, the staff and customer names, unit price, VAT class, the resolved category NAME, and its
-// EU-14 allergen declaration, which the route carries through unchanged.
+// The one product seeded into the counter location's DEFAULT catalogue.
 let aguaProduct: { id: string; catalogueId: string };
 let eachUnit: {
   id: string;
@@ -97,11 +90,8 @@ let cervezaProduct: { id: string; catalogueId: string };
 let counterZoneId: string;
 let aguaOfferId: string;
 let hiddenAguaOfferId: string;
-// SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) now resolve `till_id` from
-// the authenticated enrolled device. This suite's single seeded tenant gets ONE enrolled `till` device
-// (bound to `cfg.tillId`) in setup; the happy-path place/sale calls carry its cookie so they reach the
-// route body rather than being refused `device.unauthorized`. (The device gate itself is proven in
-// `till-api.fiscal-sale-paths.test.ts`; here it is just the setup a place/cancel test needs.)
+// An enrolled `till` device's cookie: the sale routes resolve `till_id` from the device, so a
+// happy-path place/sale call carries it to reach the route body.
 let tillDeviceCookie: string;
 
 const suite = useVenueDb({
@@ -118,24 +108,14 @@ const suite = useVenueDb({
     );
     venueTaxId = tenant.rows[0]!.tax_id;
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with
-    // a FK to `tills`, so the till `cfg.tillId` names must exist. Pure setup, as `@waitron/db`'s
-    // own seed helpers document. invoice_locales is `es-ES` (full-tag, fiscal). The products are
-    // authored under the BARE `es` key; `priceOrderLines` re-keys their descriptions to the
-    // location's `es-ES` before the working-order-line insert `POST /api/working-orders` fires
-    // `check_locales`, which demands a line's `descriptions` keys equal the location's locales
-    // EXACTLY.
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
+    // a FK to `tills`, so the till `cfg.tillId` names must exist. The products are authored under the
+    // BARE `es` key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before
+    // the working-order-line insert fires `check_locales`, which demands the keys match EXACTLY.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
-    // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
-    // fallback.
+    // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {
       locationId: brandLocationId(loc!.id),
     });
@@ -164,10 +144,7 @@ const suite = useVenueDb({
       .values({ displayName: "Zoe", pinHash: hashPin("2222"), role: "staff", status: "suspended" });
     // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
     // product in a SECOND catalogue attached as a non-default accessible menu
-    // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list. Seeded
-    // via the catalogue helpers — the same `withTransaction` path the route reads them back
-    // through — so the active/assignment filters are real. (Catalogue tables live in
-    // CORE_MIGRATIONS, already applied.)
+    // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list.
     const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTransaction(
       db,
       async (tx) => {
@@ -210,13 +187,9 @@ const suite = useVenueDb({
           .insert(floorZones)
           .values({ locationId: loc!.id, name: "Counter" })
           .returning({ id: floorZones.id });
-        // Three statements where PostgreSQL took two. `zone_service_policies_default_allowed_fk`
-        // (zone_id, default_menu_id) → zone_menus was DEFERRABLE INITIALLY DEFERRED on PostgreSQL
-        // and sqlite-core has no deferrable option, so it is checked AT THE STATEMENT here — and
-        // `zone_menus.zone_id` points back at the policy row, so neither table can be filled first
-        // with `default_menu_id` already set. The comment above the key in
-        // `packages/venue-service/src/schema/service.ts` records the same order. The FINAL rows are
-        // the ones this fixture always wrote; only the number of statements changed.
+        // Three statements: `zone_service_policies_default_allowed_fk` is checked at each statement
+        // and `zone_menus.zone_id` points back at the policy row, so the order is the one the comment
+        // above that key in `packages/venue-service/src/schema/service.ts` gives.
         await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, default_menu_id, is_counter_default)
@@ -273,12 +246,8 @@ const suite = useVenueDb({
   },
 });
 
-// SP-A.2 cutover: the sale routes (`/api/sales`, `/api/pay`, place, collect) resolve `till_id` from the
-// authenticated enrolled device. The describe blocks whose happy-path tests drive a sale route enrol a
-// fresh `till` device (bound to `cfg.tillId`) in a `beforeEach` — fresh EACH test because the
-// `GET /api/till` canvas tests `delete from devices` for the shared tenant, so a once-only device would
-// not survive to a later describe. No canvas needed: place/collect run `assertNotHandheld`, not the
-// capability firewall (`/api/pay`'s integrated-card path is proven in `till-api.fiscal-sale-paths.test.ts`).
+// Enrolled fresh in each `beforeEach` that needs it, because the `GET /api/till` canvas tests
+// `delete from devices`, so a once-only device would not survive to a later describe.
 async function enrolSaleTillDevice(): Promise<void> {
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 }
@@ -290,10 +259,8 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `nodeId` is the seeded node the working-order routes
- * write and filter by; `seriesId` is unused by these routes (the chained sale write is proven in
- * `till-api.fiscal-sale-paths.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
- * one the sale/catalogue routes read. */
+/** The till's config for the seeded tenant. `seriesId` is unused by these routes, so it carries a
+ * fresh uuid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -303,16 +270,12 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
-    // These API tests exercise the session/roster/park routes, none of which dispatch on the mode.
     orderFlow: "prepay",
   };
 }
 
-/** The system wall clock, reported confident/anchored — the identical stub shape
- *  `working-order.pay-and-dispatch.test.ts`/`till-api.fiscal-sale-paths.test.ts` use. Task 9's `place`/`cancel` routes call
- *  `deps.clock.now()` unconditionally (the amendment's local wall-clock), even under `prepay` — this
- *  suite's cfg — where no fiscal doc is filed, so the stub can no longer be the inert `{}` the
- *  session-only routes got away with. */
+/** The system wall clock, reported confident/anchored. The `place`/`cancel` routes call
+ *  `deps.clock.now()` even under this suite's `prepay`, where no fiscal doc is filed. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -335,26 +298,16 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // `backend` is unused by every route this suite drives: the session/roster/park routes never
-    // touch it, and `place`/`prep`/`cancel` only reach it under `invoice_first`/Mode-T-collect, which
-    // this suite's `prepay` cfg never dispatches into (Task 8's `placeOrder`/`collectOrder` dispatch).
-    // Stubbed (never called) so this suite pulls in no fiscal backend. `clock` IS real (see
-    // `systemClock`) — `place`/`cancel` need it regardless of mode.
+    // An empty stub: this suite's `prepay` cfg never dispatches into the fiscal backend.
     backend: {} as FiscalBackend,
     clock: systemClock(),
     cfg,
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
     secureCookies: false,
-    // The venue's default UI locale (`readVenueLocale` at boot). The seeded tenant's country is 'ES',
-    // so the geography derivation yields `es-ES` — the SAME value `GET /api/till`'s `locale` asserts,
-    // now sourced from `deps.venueLocale` rather than the fiscal `cfg.locale`. `GET /api/locales`
-    // echoes it as `venueDefault`.
+    // The venue's default UI locale; `GET /api/locales` echoes it as `venueDefault`.
     venueLocale: "es-ES",
     onboardingIntent: "prepare",
-    // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
-    // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
-    // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
   };
 }
 
@@ -379,22 +332,17 @@ async function closeSession(db: Database, token: string): Promise<void> {
   });
 }
 
-/** Enrol a REAL `till` device for the seeded tenant via join-and-accept (the only way to get a
- * `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
- * `deviceProfileId`. Runs the production accept path, and returns the `${DEVICE_COOKIE}=…` header
- * value a booting device would carry. A `till` is sale-capable, so it always carries the seeded
- * `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover, `GET /api/till` resolves the canvas +
- * capabilities THROUGH the device profile — the profile is the SOLE canvas binding (the direct
- * device→canvas link was dropped in Task 10). */
+/** Enrol a `till` device via join-and-accept, optionally bound to a `deviceProfileId`, and return
+ * the `${DEVICE_COOKIE}=…` header value it carries. `GET /api/till` resolves the canvas and
+ * capabilities through that profile. */
 let tillDeviceCounter = 0;
 async function enrolTillDeviceCookie(
   db: Database,
   deviceProfileId: string | null = null,
 ): Promise<string> {
   tillDeviceCounter += 1;
-  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the device describes itself
-  // at accept. `resolveDeviceBinding` AUTO-CREATES the register a till rings against (named after the
-  // device), so each call gets a unique device name.
+  // `resolveDeviceBinding` creates a register for a `till` device at accept, named after the device,
+  // so each call names the device uniquely.
   const profileId =
     deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, [], null));
   const dev = await enrolDeviceForTest(db, cfg, {
@@ -404,10 +352,7 @@ async function enrolTillDeviceCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/**
- * Seed a `device_profiles` row for the seeded tenant, returning its id — the reusable bundle a
- * device resolves its canvas + capabilities through (device-profile §5, Task 9).
- */
+/** Seed a `device_profiles` row — the bundle a device resolves its canvas + capabilities through. */
 async function seedDeviceProfile(
   db: Database,
   name: string,
@@ -416,11 +361,8 @@ async function seedDeviceProfile(
   inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
   const rows = await withTransaction(db, async (tx) => {
-    // Through the table definition rather than raw SQL: `device_profiles.id`, `.created_at` and
-    // `.updated_at` are `$defaultFn` generators on NOT NULL columns
-    // (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`) that a raw insert never reaches
-    // on this engine. Both casts go with it: `canvas_id` is a text column here, not a uuid, and
-    // `capabilities` is JSON in a text column.
+    // Through the table definition, not raw SQL: `device_profiles.id` is a `$defaultFn` generator,
+    // which a raw insert never runs.
     return tx
       .insert(deviceProfiles)
       .values({ name, formFactor: "till", canvasId, capabilities, inactivityTimeoutSeconds })
@@ -445,8 +387,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(res.status).toBe(200);
     // The response carries the server-computed `canConfigureTill` capability so the till can gate
     // manager-only affordances client-side; Ana is `staff`, who does NOT hold `venue.configure`, so it is
-    // false. The on-till placement route (Task 4) still re-checks the gate server-side. `locale` is the
-    // operator's own UI-language preference (`persons.locale`, via the session) — Ana has none, so null.
+    // false. `locale` is the operator's own UI-language preference — Ana has none, so null.
     expect(await res.json()).toEqual({
       personId: ana.id,
       canConfigureTill: false,
@@ -477,10 +418,8 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
   });
 
   it("POST computes canConfigureTill from the operator's ACTUAL role — true for a manager", async () => {
-    // Seed + log in a manager to prove `canConfigureTill` reflects the person's ACTUAL role, not a
-    // hardcoded value — a mutant that hardcoded `false` (or dropped the field) fails here, while the
-    // staff case above (canConfigureTill: false) kills a mutant that hardcoded `true`. A manager holds
-    // `venue.configure`. Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
+    // A manager holds `venue.configure`; with the staff case above this pins the role, not a constant.
+    // Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const [mgr] = await suite.db
@@ -496,8 +435,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       body: JSON.stringify({ personId: managerId, pin: "9999" }),
     });
     expect(res.status).toBe(200);
-    // Marta carries no locale preference either, so `locale` is null here too — the with-preference
-    // case is proven by the dedicated test below.
+    // Marta carries no locale preference either.
     expect(await res.json()).toEqual({
       personId: managerId,
       canConfigureTill: true,
@@ -509,10 +447,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
   });
 
   it("POST returns the operator's own locale preference when set (persons.locale)", async () => {
-    // Seed + log in a staff person carrying `locale = 'en-GB'` to prove the response surfaces the
-    // SESSION person's OWN preference, not null and not a hardcoded value — a mutant that dropped
-    // `session.locale` (returning undefined/null) fails here, while the null cases above kill a mutant
-    // that hardcoded a locale. Cleaned up so the roster tests' exact ordering assertions stay untouched.
+    // Cleaned up so the roster tests' exact ordering assertions stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const [row] = await suite.db
@@ -561,7 +496,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 
     // No `waitron_device` cookie: the throttle keys off the device and the shift records the device's
     // register, so a device-less login is refused up front — the same fail-closed gate the sale routes
-    // apply. Dropping the gate (a mutant that skips `requireDevice`) makes this a 200.
+    // apply.
     const res = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -586,10 +521,9 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A stale or garbage cookie is never an error: the route clears it and answers 200. This case
-    // no longer pins the `isUuid` screen: measured 2026-09-24, with the screen deleted from the
-    // logout route and from `requireSession`, it still passes — `endSession` hashes the value and
-    // matches no row.
+    // A stale or garbage cookie is never an error: the route clears it and answers 200. Weaker than
+    // its name: it does not pin the `isUuid` screen, since `endSession` hashes the value and matches
+    // no row either way.
     const del = await app.request("/api/session", {
       method: "DELETE",
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
@@ -606,7 +540,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
 
     // A cookie naming a session that was already closed: `endSession` matches nothing, but logout
-    // still answers 200 and clears the cookie (the idempotency the route comment claims).
+    // still answers 200 and clears the cookie.
     const token = await openSession(suite.db);
     await closeSession(suite.db, token);
 
@@ -661,8 +595,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     const sess = await suite.db.execute<{ till_id: string }>(
       sql`select till_id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
-    // The session records the DEVICE's register (B), never the env `cfg.tillId` (A). A mutant that kept
-    // `tillId: deps.cfg.tillId` fails here.
+    // The session records the DEVICE's register (B), never the env `cfg.tillId` (A).
     expect(sess.rows[0]!.till_id).toBe(deviceTillId);
     expect(sess.rows[0]!.till_id).not.toBe(cfg.tillId);
 
@@ -711,11 +644,9 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
 
   it("keys the throttle on the CANONICAL personId, so an alternate UUID spelling shares the bucket (§5)", async () => {
     // `canonicaliseUuid` (`till-session.ts`) folds an uppercase / dash-free spelling of Ana's id to
-    // the same canonical value, so both spellings name the SAME person — the id column is plain
-    // `text` and folds nothing itself, which is why the route does it (`till-api.ts`'s
-    // `POST /api/session` states that). The throttle must therefore key on the canonical value, or a brute-forcer cycles
-    // spellings to get a fresh back-off bucket per spelling and evades the window. Fixed injected clock
-    // (CLAUDE.md §4): the window opens and blocks a later `check` at the same `now`, deterministically.
+    // the same canonical value, so both spellings name the SAME person. The throttle must therefore key
+    // on the canonical value, or a brute-forcer cycles spellings to get a fresh back-off bucket per
+    // spelling and evades the window.
     const now = 5_000_000;
     const app = new Hono();
     mountTillApi(
@@ -802,8 +733,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
     expect((await post(ana.id, "5555")).status).toBe(429); // Ana is locked out on this device
 
-    // Abel — a DIFFERENT person on the SAME device — is independent: his correct PIN logs in (200). A
-    // mutant that keyed the throttle on the device alone (ignoring the person) would 429 him here.
+    // Abel — a DIFFERENT person on the SAME device — is independent: his correct PIN logs in (200).
     const abelOk = await post(abel.id, "1111");
     expect(abelOk.status).toBe(200);
     expect(await abelOk.json()).toMatchObject({ personId: abel.id });
@@ -816,7 +746,7 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
   it("maps a registered but UNMAPPED AppError code to 400 (its default)", async () => {
     const app = new Hono();
     // `tenant.not_found` is a real code deliberately absent from STATUS, so it takes the `?? 400`
-    // default the wrapper falls back to for any code a later task forgets to map.
+    // default.
     app.get("/boom", (c) =>
       run(c, collect([]), () =>
         Promise.reject(new AppError("tenant.not_found", { id: randomUUID() })),
@@ -831,8 +761,7 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
    * STATUS rather than left to the 400 default that says "the till sent something wrong". 409 is
    * this table's "the state forbids it" family, and it keeps the structured code — which a 500
    * would drop — so the till can tell the operator this one is permanent and to stop retrying
-   * (`apps/till/src/till-app.ts`, `sale.refused`). Delete either entry and its case here goes red
-   * with 400. */
+   * (`apps/till/src/till-app.ts`, `sale.refused`). */
   it.each([["fiscal.record_invalid"], ["fiscal.foreign_recipient_unsupported"]])(
     "answers %s with 409, keeping the code the till needs to say the refusal is permanent",
     async (code) => {
@@ -872,9 +801,8 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
 });
 
 describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected routes)", () => {
-  // A throwaway route standing in for the protected routes Tasks 5/6 add: it calls `requireSession`
-  // and echoes what it resolved. `requireSession` does the DB lookup, so these tests exercise real
-  // validation, not a cookie-presence check.
+  // A throwaway route standing in for the protected routes: it calls `requireSession` and echoes what
+  // it resolved.
   function guardApp(db: Database): Hono {
     const app = new Hono();
     const d = { db, cfg };
@@ -932,9 +860,8 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("REJECTS (401 session.required) a NON-UUID cookie", async () => {
-    // A forged, non-UUID cookie is a CLIENT fault and answers 401. This case no longer pins the
-    // `isUuid` screen in `requireSession`: measured 2026-09-24, with the screen deleted it still
-    // passes — the value is hashed and the hash matches no row, which is also `session.required`.
+    // A forged, non-UUID cookie is a CLIENT fault and answers 401. Weaker than its name: it does not
+    // pin the `isUuid` screen in `requireSession`, since the hashed value matches no row either way.
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -1044,11 +971,9 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   });
 
   it("400s (locale.unsupported) an EMPTY or MALFORMED body, never a 500", async () => {
-    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body — BEFORE any `?? {}`
-    // could run — so without a defensive `.catch` the throw reaches `run` as a NON-AppError and becomes
-    // an opaque `server.internal` 500 (the `?? {}` alone only ever caught a literal JSON `null`, proven
-    // by the sibling test above). The guarded parse coerces a parse failure to `{}` too, so the body
-    // flows through the same `locale` coercion → `""` → the ONE `locale.unsupported` rejection path.
+    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body, which would reach
+    // `run` as an opaque 500. The guarded parse coerces it to `{}`, so the body takes the same
+    // `locale.unsupported` path.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const { personId, token } = await loginFresh("6004");
@@ -1119,12 +1044,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
     const body = await res.json();
-    // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
-    // customer receipt, the till's UI locale, (7c) the location's pay-timing mode, and (integrated
-    // card terminal) the card provider + tips flag the client picks its collect route / UI from. This
-    // suite's `deps` cfg carries no terminal (`cardProvider: "none"`) and tips off. The tenant has
-    // authored no receipt or canvas, so `receipt` is the built-in default (Task 8) and `canvas` is the
-    // `till` form-factor default resolved even for this cookieless request (SP-B4); `layout` is gone.
+    // The receipt-issuer identity (legal name + NIF), the UI locale, the pay-timing mode and the card
+    // fields. The tenant has authored no receipt or canvas, so `receipt` is the built-in default and
+    // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
       locale: "es-ES",
       // The RECEIPT locale — the fiscal `cfg.locale`, DISTINCT from the UI `locale` above (both es-ES
@@ -1143,8 +1065,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
-      // Cookieless: no device → no default reader → the per-device provider string is `none`, and the
-      // venue has no readers configured, so the picker list (Task 12) is empty.
+      // Cookieless: no device → no default reader → `none`; the venue has no readers configured.
       cardProvider: "none",
       activeReaders: [],
       tipsEnabled: false,
@@ -1153,10 +1074,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
       // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
       canvas: DEFAULT_CANVASES.till,
-      // Capabilities relocated onto the device profile (Task 9): a cookieless request has no profile, so
-      // the explicit sibling is the empty set (the render axis then hides the capability cards).
+      // A cookieless request has no device profile, so no capabilities.
       capabilities: [],
-      // The auto-logout timeout also rides the profile (Task 7): no profile → null (the app default).
+      // The auto-logout timeout also rides the profile: no profile → null (the app default).
       inactivityTimeoutSeconds: null,
       // The node this till is talking to, and the venue's routable server list — empty here because
       // `node_membership` holds no row (the server-list test below writes one and removes it again).
@@ -1240,9 +1160,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 
   it("GET /api/till echoes cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
     // A default of `false` would pass even if the route hardcoded it, so drive `cfg.tipsEnabled` to
-    // `true` (against the suite default `false` asserted above). The per-device `cardProvider` string
-    // (from the paying device's default reader) is proven in `till-api.fiscal-sale-paths.test.ts`, where
-    // a device + reader can be seeded; a cookieless request here carries `cardProvider: "none"`.
+    // `true`. The per-device `cardProvider` is covered in `till-api.fiscal-sale-paths.test.ts`.
     const app = new Hono();
     mountTillApi(app, { ...deps(suite.db), cfg: { ...cfg, tipsEnabled: true } }, collect([]));
 
@@ -1315,11 +1233,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
     // Seed two courses out of display order, plus a deactivated one, to prove the boot read
     // returns the ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker
-    // offers) and drops the retired one. Direct inserts (pure setup, like the bump_mode seed
-    // above); cleaned up in `finally` so the shared-location default `[]` case stays
-    // order-independent.
-    // `kitchen_courses.id` and `.created_at` are `$defaultFn` generators on NOT NULL columns
-    // (`packages/db/drizzle/0000_baseline.sql:211` and `:216`).
+    // offers) and drops the retired one. Cleaned up in `finally` so the shared-location default `[]`
+    // case stays order-independent.
     await suite.db.insert(kitchenCourses).values([
       { locationId: cfg.locationId, name: "Postres", displayOrder: 2, active: true },
       { locationId: cfg.locationId, name: "Entrantes", displayOrder: 1, active: true },
@@ -1345,15 +1260,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("GET /api/till returns the AUTHORED receipt (tenant_receipts), not the default, and no `layout` field", async () => {
-    // Seed the till's tenant (pure setup, like the other seeds here) with an authored RECEIPT in
-    // `tenant_receipts`. `GET /api/till` must return it via `getReceipt`, proving the read hits its
-    // own store rather than a constant. The `layout` field is GONE from the payload as of SP-B4
-    // (the counter renders from `canvas` now), so the test also pins its absence. Cleaned up in
-    // `finally` so the shared-tenant default case above stays order-independent (CLAUDE.md §4).
+    // An authored RECEIPT in `tenant_receipts` must come back via `getReceipt`, not the default.
+    // Cleaned up in `finally` so the shared-tenant default case above stays order-independent.
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
-    // `tenant_receipts.updated_at` is a `$defaultFn` generator on a NOT NULL column
-    // (`packages/db/drizzle/0000_baseline.sql:512`), and `receipt` is JSON in a text column, so the
-    // jsonb cast goes with the raw statement.
     await suite.db.insert(tenantReceipts).values({ receipt: authoredReceipt });
     try {
       const app = new Hono();
@@ -1370,15 +1279,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("GET /api/till surfaces the calling device's PROFILE canvas + capabilities (device-profile §5.3)", async () => {
-    // A booting device (device cookie present) whose PROFILE references a layout canvas gets the resolved
-    // CanvasDef under `canvas` (the counter renders from `canvas` — there is no `layout` field any more,
-    // SP-B4) plus the profile's capability set under the explicit `capabilities` sibling (Task 9 relocated
-    // it off the canvas). Seed a canvas + a profile referencing it, enrol a `till` device bound to that
-    // profile, and prove `GET /api/till` resolves + returns both. Cleaned up in `finally` so the
-    // shared-tenant no-cookie assertion above stays order-independent (CLAUDE.md §4).
-    // `canvases.id`, `.created_at` and `.updated_at` are `$defaultFn` generators on NOT NULL
-    // columns (`packages/db/drizzle/0000_baseline.sql:480`, `:483`, `:484`), and `definition` is
-    // JSON in a text column.
+    // A device whose PROFILE references a canvas gets that CanvasDef under `canvas`, and the profile's
+    // capabilities under `capabilities`. Cleaned up in `finally` so the shared-tenant no-cookie
+    // assertion above stays order-independent.
     const [prof] = await suite.db
       .insert(canvases)
       .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
@@ -1389,7 +1292,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       "Counter",
       ["integrated-card-payment", "open-cash-drawer"],
       canvasId,
-      // The profile carries a non-null auto-logout timeout, so the boot payload must mirror it (Task 7).
+      // The profile carries a non-null auto-logout timeout, so the boot payload must mirror it.
       300,
     );
     try {
@@ -1407,11 +1310,11 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       };
       // The resolved CanvasDef, verbatim (the `getCanvas` definition) — through the profile.
       expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
-      // The profile's capabilities, as the explicit sibling (no longer inside `canvas`).
+      // The profile's capabilities, as the explicit sibling.
       expect(body.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
-      // The profile's auto-logout timeout, mirrored onto the boot payload (Task 7) like `capabilities`.
+      // The profile's auto-logout timeout, mirrored onto the boot payload like `capabilities`.
       expect(body.inactivityTimeoutSeconds).toBe(300);
-      // The tenant authored no receipt, so it stays the built-in default. No `layout` field (SP-B4).
+      // The tenant authored no receipt, so it stays the built-in default.
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
@@ -1453,9 +1356,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("falls back to the form-factor default canvas + `capabilities: []` for an enrolled device with NO profile (§5.3)", async () => {
-    // The one behaviour change (§5.3): a no-profile device renders the form-factor default canvas with an
-    // EMPTY capability set — the render axis then HIDES the capability cards, making render and firewall
-    // agree. Enrol a `till` device with neither a canvas nor a profile.
+    // A no-profile device renders the form-factor default canvas with an EMPTY capability set, so render
+    // and firewall agree (§5.3).
     const cookie = await enrolTillDeviceCookie(suite.db, null);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1481,10 +1383,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("resolves the `till` form-factor default canvas + `capabilities: []` when the request carries no device cookie", async () => {
-    // Cookieless (no device): the boot read resolves the `till` form-factor default canvas
-    // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till when the tenant has authored none) and an empty
-    // capability set — the SP-B4 enabling change that guarantees the counter always has a canvas to
-    // render. No `layout` field either.
+    // Cookieless: the boot read still resolves the `till` form-factor default canvas, so the counter
+    // always has a canvas to render, and an empty capability set.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const res = await app.request("/api/till"); // no cookie header
@@ -1567,8 +1467,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // No cookie: the guard must refuse before any catalogue is read. Deleting the `requireSession`
-    // call in the route makes this 200-with-the-list instead, which is the deletion proof.
+    // No cookie: the guard must refuse before any catalogue is read.
     const res = await app.request("/api/products");
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
@@ -1579,8 +1478,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
 
     // Through the real route: a non-UUID cookie is refused by the guard as 401 before any catalogue
-    // read. Measured 2026-09-24: it still passes with `requireSession`'s `isUuid` screen deleted,
-    // because the hashed value matches no row, so it does not pin the screen.
+    // read. Weaker than its name: it does not pin `requireSession`'s `isUuid` screen, since the hashed
+    // value matches no row either way.
     const res = await app.request("/api/products", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -1601,10 +1500,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     // location's default ("Carta", `isDefault: true`) sorted first, then the non-default one attached
     // via `addCatalogueToLocation` ("Happy Hour") — and `products` carries a row from EACH of them,
     // proving the route reads across the whole accessible set rather than just the default catalogue.
-    // The exact `AvailableProduct` shape: the seeded product with its resolved category NAME (not
-    // id), priced from the catalogue, its EU-14 allergen declaration carried through unchanged,
-    // KDS-2's default `courseId` (null — no course assigned), and the menu tag
-    // (`catalogueId`/`catalogueName`) the multi-menu read carries.
+    // The exact `AvailableProduct` shape: the resolved category NAME (not id), the EU-14 allergen
+    // declaration carried through unchanged, and the menu tag (`catalogueId`/`catalogueName`).
     expect(await res.json()).toEqual({
       menus: [
         { id: aguaProduct.catalogueId, name: "Carta", isDefault: true },
@@ -1621,9 +1518,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           vatClass: "general",
           category: "Bebidas",
           allergens: { sulphites: { presence: "may_contain" } },
-          // Dietary classification (Task 4): a product with no override and no recipe publishes the
-          // empty but PENDING derived profile (vegan/vegetarian "unknown" — the cautious posture, an
-          // unreviewed plate asserts no positive diet claim), a null derivation and override.
+          // No override and no recipe: vegan/vegetarian "unknown" — an unreviewed plate asserts no
+          // positive diet claim.
           diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
           dietDerivation: null,
           dietOverride: null,
@@ -1665,10 +1561,8 @@ describe("POST /api/sales (session-guarded sale)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The guard runs BEFORE the body is even read, so an unauthenticated sale is refused with the
-    // same code a missing session yields everywhere else. The chained fiscal write (the happy path)
-    // and the idempotent replay are proven end-to-end in `till-api.fiscal-sale-paths.test.ts`, not
-    // here (CLAUDE.md §4).
+    // The guard runs BEFORE the body is even read. The chained fiscal write and the idempotent replay
+    // are covered in `till-api.fiscal-sale-paths.test.ts`.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1683,11 +1577,8 @@ describe("POST /api/sales (session-guarded sale)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const token = await openSession(suite.db);
 
-    // The 7b malformed-id follow-up for the OPTIONAL `workingOrderId` (only a malformed one is an error;
-    // absent / well-formed-unknown are valid walk-ups). The non-empty basket + cash tender clear
-    // `recordTillSale`'s early-outs, so in the RED state the id reaches `payWorkingOrder`'s
-    // `eq(workingOrders.id, req.id)` lock read and `22P02`s → 500; the screen refuses it 400 first,
-    // at the HTTP boundary before any query runs.
+    // Only a malformed `workingOrderId` is an error (absent or well-formed-unknown are walk-ups); the
+    // screen refuses it 400 at the HTTP boundary, before any query runs.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
@@ -1709,9 +1600,8 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The guard runs BEFORE the body is even read, matching every other session-guarded route.
-    // The capture/decline/empty-basket happy paths are proven end-to-end in
-    // `till-api.fiscal-sale-paths.test.ts` (CLAUDE.md §4).
+    // The guard runs BEFORE the body is even read. The capture/decline paths are covered in
+    // `till-api.fiscal-sale-paths.test.ts`.
     const res = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1722,12 +1612,8 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 
   it("401s device.unauthorized on /api/pay from a cookieless caller (an env-only till is not a sellable box)", async () => {
-    // The Task 12 cutover removed the old "no integrated card provider configured" 500: a card sale
-    // now routes to its reader's provider through the pool, and the reader is resolved from the paying
-    // DEVICE. A cookieless caller therefore nets to `device.unauthorized` (401) at `requireSaleTillId`
-    // — the SP-A.2 §16.4 gate — before any reader read. The reader-routing happy path and the
-    // `reader.not_found` refusal (a device with no default reader) are proven in
-    // `till-api.fiscal-sale-paths.test.ts`, where a device + reader can be seeded.
+    // The reader is resolved from the paying DEVICE, so a cookieless caller is refused
+    // `device.unauthorized` at `requireSaleTillId`, before any reader read.
     const token = await openSession(suite.db);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1768,10 +1654,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b /api/pay sibling)", async () => {
     const token = await openSession(suite.db);
     const app = new Hono();
-    // A non-undefined stub provider clears the route's `cardProvider === undefined` guard, so in the RED
-    // state a malformed `id` genuinely reaches `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)`
-    // lock read — a `uuid` column — and `22P02`s → an opaque 500, the same exposure `/api/sales` has. The
-    // route screen refuses it 400 first, so the stub is never invoked.
+    // The route screen refuses the malformed id 400 before the empty stub provider is invoked.
     mountTillApi(app, { ...deps(suite.db), cardProvider: {} as PaymentProvider }, collect([]));
 
     const res = await app.request("/api/pay", {
@@ -1908,8 +1791,7 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
 
 // Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
 // module directly), so every assertion using it rides the route's own requireSession + run wrapper.
-// Module-scoped (not just `/api/working-orders`'s own describe) because Task 9's place/prep/cancel
-// suites below all need a parked order to place first.
+// Module-scoped because the place/prep/cancel suites below all need a parked order to place first.
 async function park(
   app: Hono,
   cookie: string,
@@ -1930,8 +1812,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const json = { "content-type": "application/json" };
     // The guard runs FIRST on each route (before any body is read or catalogue touched), so an
     // unauthenticated park/list/retrieve/update/abandon/place/prep/collect/cancel all 401 with the one
-    // code. Deleting the `requireSession` call from any route flips that route's case to a 200/404, the
-    // deletion proof. (The KDS-1 station-operate routes have their own 401 guard test below.)
+    // code. (The station-operate routes have their own 401 guard test below.)
     const cases = [
       app.request("/api/working-orders", {
         method: "POST",
@@ -1946,7 +1827,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
         body: JSON.stringify({ lines: [] }),
       }),
       app.request(`/api/working-orders/${id}`, { method: "DELETE" }),
-      // Task 9 — the prep surface.
+      // The prep surface.
       app.request(`/api/working-orders/${id}/place`, { method: "POST" }),
       app.request(`/api/working-orders/${id}/prep`, {
         method: "POST",
@@ -2011,13 +1892,8 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       }),
     });
     expect(allowed.status).toBe(200);
-    // Read straight from the column, which counts whole cents: 175 is the stored 1.75. Nothing
-    // converts here, so this asserts the stored COUNT; the cast only normalises it to a number for
-    // the assertion. `cast(x as int)` is the spelling because this engine has no cast operator —
-    // and UNLIKE the `::int` it replaces it refuses nothing: PostgreSQL raised 22003 on a value
-    // too wide for an `integer`, where SQLite's INTEGER is 64-bit whatever the declared type says
-    // (`packages/db/src/schema/columns.ts`, the `smallCount`/`bigCount` note). The values here are
-    // three digits, so nothing in this case turns on that.
+    // Read straight from the column, which counts whole cents: 175 is the stored 1.75. The cast
+    // refuses no width on this engine; the values here are three digits, so nothing turns on that.
     const priced = await suite.db.execute<{ unit_price_gross: number }>(sql`
       select cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines where working_order_id = ${allowedId}`);
@@ -2066,10 +1942,9 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // Park is the one route where the client MINTS the working-order id that becomes the PK:
-    // `createOpenOrder` INSERTs `body.id` into the `working_orders.id` `uuid` column (working-order.ts),
-    // so un-screened a malformed one `22P02`s → an opaque 500. The non-empty basket clears parkOrder's
-    // empty-basket early-out so the INSERT is reached in the RED state; the route screen refuses it 400.
+    // Park is the one route where the client MINTS the working-order id that becomes the PK; the
+    // route screen refuses a malformed one 400. The non-empty basket clears parkOrder's empty-basket
+    // early-out.
     const res = await park(app, cookie, {
       id: "not-a-uuid",
       lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -2111,7 +1986,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 
     // GET /:id rebuilds the basket from the frozen menu offer and returns its product details.
     // `quantity` reads back at the three places `thousandthsToDecimal` always renders ("2.000",
-    // not the sent "2") — the scale is the converter's now, not the column's.
+    // not the sent "2").
     const got = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
     expect(got.status).toBe(200);
     expect(await got.json()).toMatchObject({
@@ -2208,11 +2083,8 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
   });
 
-  // The 7b malformed-id follow-up for the retrieve/edit/abandon routes — the counterparts of the
-  // place/prep/collect/cancel malformed-id tests below. An un-screened `:id` reaches
-  // `getHeldOrder`/`updateHeldOrder`/`abandonHeldOrder`'s `eq(workingOrders.id, id)` (a `uuid` column)
-  // and `22P02`s → an opaque 500; the `requireUuidId` screen refuses it FIRST with the same domain code
-  // an absent/non-open id gets on that route. The screen fires before any query runs.
+  // The retrieve/edit/abandon routes: the `requireUuidId` screen refuses a malformed `:id` before any
+  // query runs, with the same domain code an absent/non-open id gets on that route.
   it("GET /:id with a malformed id is 404 working_order.not_found, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2230,8 +2102,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // A well-formed body, so the route parses it and reaches the (un-screened) `updateHeldOrder` query
-    // in the RED state — this 409, not a 500, is the witness the screen refuses before that query.
+    // A well-formed body, so the refusal comes from the id screen, not the body parse.
     const res = await app.request("/api/working-orders/not-a-uuid", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
@@ -2259,12 +2130,9 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   });
 });
 
-// Task 9 — the prep surface's till routes. This suite's cfg is `prepay` (never `invoice_first`), so
-// `placeOrder`/`cancelPlacedOrder` never dispatch into the fiscal backend (Task 8's mode dispatch) —
-// only `deps.clock` is genuinely needed (see `systemClock` above), so these routes are testable
-// hermetically. `collectOrder`'s NON-fiscal path (a malformed id, refused before any dispatch) is
-// tested here too, for the same reason; its FISCAL happy path needs a real backend and lives in
-// `till-api.fiscal-sale-paths.test.ts`.
+// The prep surface's till routes. This suite's cfg is `prepay`, so `placeOrder`/`cancelPlacedOrder`
+// never dispatch into the fiscal backend and these routes are testable hermetically. `collectOrder`'s
+// fiscal happy path needs a real backend and lives in `till-api.fiscal-sale-paths.test.ts`.
 describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   beforeEach(enrolSaleTillDevice);
   it("POST places an open order (open → placed), fires a ticket item at queued, and returns { id, status }", async () => {
@@ -2283,12 +2151,12 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
       headers: { cookie: `${cookie}; ${tillDeviceCookie}` },
     });
     expect(placed.status).toBe(200);
-    // `prepay` files nothing at placing (Task 8's dispatch) — just the bare transition result.
+    // `prepay` files nothing at placing — just the bare transition result.
     expect(await placed.json()).toEqual({ id, status: "placed" });
 
     // The order really transitioned AND a ticket item was fired at `queued` — placing fires the
-    // lines to the kitchen (KDS-1, `placeOrder` → `fireLines`). A plain state witness; the single
-    // line routes to the seeded default station "Cocina".
+    // lines to the kitchen (`placeOrder` → `fireLines`); the single line routes to the seeded default
+    // station "Cocina".
     const order = await suite.db.execute<{ status: string }>(
       sql`select status from working_orders where id = ${id}`,
     );
@@ -2327,8 +2195,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // "not-a-uuid" passed straight into `eq(workingOrders.id, id)` would `22P02` in the DB → an
-    // opaque 500; the route's `isUuid` screen refuses it first.
+    // The route's `isUuid` screen refuses "not-a-uuid" before any query.
     const res = await app.request("/api/working-orders/not-a-uuid/place", {
       method: "POST",
       headers: { cookie },
@@ -2341,11 +2208,9 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
 });
 
 describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)", () => {
-  // `sendToPrep` needs a SETTLED order, and settling one under this suite's `prepay` cfg means a real
-  // fiscal write the stub `FiscalBackend` cannot make — so the SUCCESS path (a genuine Mode-P walk-up
-  // settled via `POST /api/sales`, then sent to prep) and the DOUBLE-send collision (→
-  // `ticket.already_fired`) live in `till-api.fiscal-sale-paths.test.ts`. This suite proves, hermetically, the REFUSAL
-  // the route forwards and the malformed-id screen.
+  // `sendToPrep` needs a SETTLED order, and settling one means a real fiscal write the stub backend
+  // cannot make — so the success path and the double-send collision live in
+  // `till-api.fiscal-sale-paths.test.ts`. This suite covers the refusal and the malformed-id screen.
   it("POST on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, nothing fired", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2391,13 +2256,9 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
   });
 });
 
-// KDS-1 station-display operate routes: GET /api/stations, GET /api/stations/:id/queue, POST
-// /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Hermetic:
-// the station list, the per-station queue read, the per-line + whole-ticket bumps and the
-// malformed-id screens are plain logic; `working-order.pay-and-dispatch.test.ts` also
-// covers node filtering of `ticket_items` (`working-order.pay-and-dispatch.test.ts`). `placeOrder`'s OWN fire
-// seeds ticket items with no fiscal write under this suite's `prepay` cfg (only
-// `invoice_first`/Mode T dispatch a fiscal doc).
+// Station-display operate routes: GET /api/stations, GET /api/stations/:id/queue, POST
+// /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Under this suite's
+// `prepay` cfg, `placeOrder`'s fire seeds ticket items with no fiscal write.
 describe("KDS-1 station-display operate routes", () => {
   beforeEach(enrolSaleTillDevice);
   /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
@@ -2581,7 +2442,7 @@ describe("KDS-1 station-display operate routes", () => {
     });
 
     // A malformed ORDER id, and a malformed STATION id, each name nothing — the SAME no-op advanceTicket
-    // makes for an unknown one, a clean 200 (never the 22P02 500 the raw value would raise).
+    // makes for an unknown one, a clean 200.
     expect((await advance("not-a-uuid", cocina.id, "preparing")).status).toBe(200);
     expect((await advance(id, "not-a-uuid", "preparing")).status).toBe(200);
 
@@ -2601,7 +2462,7 @@ describe("KDS-1 station-display operate routes", () => {
     const someId = randomUUID();
     const j = { "content-type": "application/json" };
     const advanceBody = JSON.stringify({ to: "preparing" });
-    // The guard runs FIRST on each route; deleting `requireSession` from any flips its case to a 2xx/4xx.
+    // The guard runs FIRST on each route.
     const cases = [
       app.request("/api/stations"),
       app.request(`/api/stations/${someId}/queue`),
@@ -2714,12 +2575,10 @@ describe("/api/working-orders/:id/cancel", () => {
   });
 });
 
-// FP-1 Task 6 — the live-floor till surface: GET /api/zones (list-only), the mark/unmark-served
-// route, and the zoneId + pendingToServe fields Task 4 added to the /api/tables/state read. All
-// SESSION-GUARDED, all wrapped in `run`. served_at is a PRE-FISCAL operational field (design H2):
-// nothing here touches a fiscal path. A zone is SEEDED directly (pure setup, exactly as the
-// location/till/node seeds in `setup` above; zone CRUD is the management API's, Task 5), then read
-// back / assigned through the routes under test.
+// The live-floor till surface: GET /api/zones (list-only), the mark/unmark-served route, and the
+// zoneId + pendingToServe fields of the /api/tables/state read. served_at is a PRE-FISCAL
+// operational field: nothing here touches a fiscal path. Zone CRUD is the management API's, so a
+// zone is seeded directly.
 describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
   /** A table_tab zone offering the agua, for a served-route case that needs a real open tab. No route
    *  is written: the agua already has its venue-wide one from setup. */
@@ -2743,10 +2602,6 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       .values({ locationId: cfg.locationId, name: "Comedor" })
       .returning({ id: floorZones.id });
     const zoneId = zoneRow!.id;
-    // Two statements where PostgreSQL took one: a data-modifying CTE (`with department as (insert
-    // … returning id) insert …`) is a PostgreSQL feature, and SQLite refuses an INSERT inside a
-    // WITH. The department id now travels in JavaScript instead; the rows written are the same
-    // two.
     const [department] = await suite.db
       .insert(departments)
       .values({
@@ -2816,7 +2671,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       return rows.find((t) => t.id === tableId)!;
     };
 
-    // The state read carries the table's zoneId (Task 4) and its pending-to-serve count (2 unserved).
+    // The state read carries the table's zoneId and its pending-to-serve count (2 unserved).
     let state = await stateOf();
     expect(state.zoneId).toBe(zoneId);
     expect(state.pendingToServe).toBe(2);
@@ -2847,7 +2702,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     mountTillApi(app, deps(suite.db), collect([]));
     const id = randomUUID();
     // The guard runs FIRST on each route (before any DB work), so an unauthenticated list/mark/unmark
-    // all 401 with the one code. Deleting the `requireSession` call from any of them flips its case.
+    // all 401 with the one code.
     const cases = [
       app.request("/api/zones"),
       app.request(`/api/working-orders/${id}/lines/1/served`, { method: "POST" }),
@@ -2864,9 +2719,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // A non-UUID :id passed into `eq(workingOrders.id, id)` would 22P02 → an opaque 500; the tab screen
-    // refuses it first with the SAME code a non-open/absent tab gets from `markLineServed` (the
-    // fail-closed shape the sibling void-line route uses).
+    // The tab screen refuses a non-UUID :id with the SAME code a non-open/absent tab gets from
+    // `markLineServed` (the fail-closed shape the sibling void-line route uses).
     const res = await app.request("/api/working-orders/not-a-uuid/lines/1/served", {
       method: "POST",
       headers: { cookie },
@@ -2882,12 +2736,10 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // A REAL open tab, so `markLineServed`'s `assertAnchoredTabOpen` passes and the malformed :lineNo genuinely
-    // reaches the `where line_no = $n` UPDATE in the RED (screen-removed) state — the witness that the
-    // route screen, not the verb, is what refuses it. "abc"/"1.5"/NaN and "9999999999" (which clears
-    // `Number.isInteger` but exceeds int4's max) would raise `22P02`/`22003` → an opaque 500 there;
-    // "0" is below the 1-based floor. All four are refused BEFORE any query as the honest 404 an absent
-    // line gets — the same shape the sibling void-line route screens.
+    // A REAL open tab, so `markLineServed`'s `assertAnchoredTabOpen` passes and the route's :lineNo
+    // screen is what refuses: "9999999999" clears `Number.isInteger` but is out of range, and "0" is
+    // below the 1-based floor. All four get the 404 an absent line gets, as the sibling void-line
+    // route screens them.
     const tab = await tabZone();
     const tableRes = await app.request("/api/tables", {
       method: "POST",
@@ -2962,14 +2814,9 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
 });
 
 describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue.configure) gate (FP-2, Task 4)", () => {
-  // The novel thing under test is the FIRST on-till
-  // `authorize(venue.configure)` hop: the route resolves the SESSION operator's OWN role and
-  // refuses a write the role cannot make (no supervisor override this slice — manager-on-till
-  // only). That gate is `authorize` reading `persons.role` for the open session and asking
-  // `roleHasPermission` — a query plus a JS lookup whose 204-vs-403 outcome turns on the person's
-  // role VALUE alone. The write itself
-  // (`setTablePlacement`'s UPDATE on dining_tables) is proven by the management-api placement
-  // sibling, which wraps the SAME verb (management-api.test.ts).
+  // The on-till `authorize(venue.configure)` gate: the route resolves the SESSION operator's OWN role
+  // and refuses a write the role cannot make (no supervisor override — manager-on-till only). The
+  // write itself is covered by the management-api placement sibling, which wraps the SAME verb.
 
   // A live zone every placement body points at, and the two operators the gate distinguishes: a MANAGER
   // (role `manager`, which holds `venue.configure`) and a STAFF operator (Ana, role `staff`, which does
@@ -3068,8 +2915,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     });
 
     // Staff holds no `venue.configure` and sends no override: `authorize` throws
-    // `authorization.not_permitted`, which the till STATUS map answers 403. (Removing the `authorize`
-    // call flips this case to a 204 — the gate deletion-proof this task runs.)
+    // `authorization.not_permitted`, which the till STATUS map answers 403.
     const forbidden = await app.request(`/api/tables/${tableId}/placement`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: staffCookie },
@@ -3106,7 +2952,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     // The staff 403 wrote nothing: the placement the manager set is still present.
     expect(await placementOf(tableId)).toMatchObject({ pos_x: 120, pos_y: 340 });
 
-    // Manager clears it: the four placement columns go NULL (zone_id is an FP-1 assignment, left as-is).
+    // Manager clears it: the four placement columns go NULL (zone_id is left as-is).
     const cleared = await app.request(`/api/tables/${tableId}/placement`, {
       method: "DELETE",
       headers: { cookie: managerCookie },
@@ -3126,10 +2972,9 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A non-UUID :id passed into `eq(diningTables.id, id)` would 22P02 → an opaque 500; the isUuid screen
-    // refuses it first with the domain `table.not_found` (404), the shape the sibling PATCH/DELETE
-    // /api/tables routes use. The MANAGER cookie proves it is the SCREEN, not the gate, that rejects it —
-    // an authorized operator still gets the 404 (the screen runs before `authorize`).
+    // The isUuid screen refuses a non-UUID :id with the domain `table.not_found` (404), the shape the
+    // sibling PATCH/DELETE /api/tables routes use. The MANAGER cookie shows it is the SCREEN, not the
+    // gate, that rejects it.
     const put = await app.request("/api/tables/not-a-uuid/placement", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -3155,8 +3000,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     mountTillApi(app, deps(suite.db), collect([]));
     const tableId = await makeTable(app);
 
-    // A string-typed but non-UUID zoneId reaches `setTablePlacement`'s `where floor_zones.id = ${zoneId}`
-    // read → 22P02 → opaque 500 un-screened; the route screens it to the SAME `zone.not_found` a
+    // A string-typed but non-UUID zoneId is screened to the SAME `zone.not_found` a
     // well-formed-but-missing zone gets, matching the sibling table POST/PATCH routes.
     const res = await app.request(`/api/tables/${tableId}/placement`, {
       method: "PUT",
@@ -3229,9 +3073,8 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     const tableId = await makeTable(app);
 
     // posX above the 0..1000 canvas bound is `setTablePlacement`'s `placement.invalid` naming the field
-    // (reached only AFTER `authorize` passes for the manager). The till STATUS map answers it 400 — the
-    // entry this task lists explicitly; absent it the `?? 400` default yields the same 400, so this pins
-    // the surfaced status rather than proving the entry load-bearing.
+    // (reached only AFTER `authorize` passes for the manager). Weaker than it looks: the `?? 400`
+    // default yields the same 400, so this pins the surfaced status, not the STATUS map entry.
     const res = await app.request(`/api/tables/${tableId}/placement`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -3258,11 +3101,8 @@ async function modifierOfferFixture() {
       vatClass: "general",
     });
     await tx.execute(
-      // Still a SELECT-driven copy of the existing route. `preparation_routes.id` is a
-      // `$defaultFn` generator on a NOT NULL column
-      // (`packages/venue-service/drizzle/0000_baseline.sql:47`) that no raw insert reaches, and an
-      // INSERT … SELECT cannot go through the table definition, so the id is generated here and
-      // bound into the select list.
+      // `preparation_routes.id` is a `$defaultFn` generator a raw insert never runs, and an
+      // INSERT … SELECT cannot go through the table definition, so the id is bound into the select.
       sql`insert into preparation_routes (id,location_id,product_id,station_id) select ${randomUUID()},location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
     const section = await createMenuSection(tx, {
@@ -3574,9 +3414,6 @@ describe("canonical modifier HTTP serialization", () => {
       .values({ locationId: cfg.locationId, name: "Modifier tables" })
       .returning({ id: floorZones.id });
     const zoneId = zone!.id;
-    // Two statements where PostgreSQL took one: a data-modifying CTE (`with department as (insert
-    // … returning id) insert …`) is a PostgreSQL feature and SQLite refuses an INSERT inside a
-    // WITH, so the department id travels in JavaScript. The rows written are the same two.
     const [modifierDepartment] = await suite.db
       .insert(departments)
       .values({

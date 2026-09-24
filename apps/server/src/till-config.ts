@@ -1,6 +1,5 @@
-// Keeps this package's `errors.ts` augmentation reachable from every file that throws one of its
-// codes — the reachability convention `config.ts` and `webhook.ts` follow (a side-effect import, no
-// value used here). See the note atop `errors.ts`.
+// Side-effect import: keeps this package's `errors.ts` augmentation reachable from a file that
+// throws its codes.
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tillId } from "@waitron/shared";
@@ -10,26 +9,12 @@ import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
 /**
- * The per-venue pay-timing / service mode (design §3), the union of the `order_flow` enum's values —
- * derived from `@waitron/db`'s `orderFlow` vocabulary so the two can never drift (add a mode to it
- * and this widens with it). `prepay` pays + issues at ORDER (open → settled, no placed state);
- * `invoice_first` issues a deferred invoice at PLACE and settles it at COLLECT (open → placed →
- * settled); `ticket_then_pay` files no fiscal doc at PLACE and files + settles at COLLECT
- * (open → placed → settled). It decides WHICH issuance primitive fires and WHEN — a wrong dispatch
- * files the wrong kind of unrepairable fiscal record (§5), which is why it rides on the till's config.
+ * The per-venue pay-timing mode. It decides which issuance primitive fires and when, so a wrong
+ * dispatch files the wrong kind of unrepairable fiscal record.
  */
 export type OrderFlow = (typeof orderFlow.enumValues)[number];
 
-/**
- * The deployed till's identity, resolved once at boot from the environment provisioning stamped it
- * with. The four fiscal ids are branded (a bare uuid string cannot be passed where one of these is
- * expected), and `locationId` rides alongside because the sale path reads the location it sells
- * from (its invoice languages, `priceOrderLines`), not just its fiscal keys.
- *
- * `locale` / `invoiceLocales` are display-side: the till's own UI locale and the set of locales its
- * invoices are rendered in. One entry today (there is a single till locale), a list so the invoice
- * renderer never has to change shape when a second is added.
- */
+/** The deployed till's identity, resolved once at boot from the environment provisioning stamped. */
 export interface TillConfig {
   tillId: TillId;
   nodeId: NodeId;
@@ -38,18 +23,11 @@ export interface TillConfig {
   locale: string;
   invoiceLocales: string[];
   /**
-   * The RAW `WAITRON_TILL_LOCALE` (`undefined` when unset/empty) — the explicit operator OVERRIDE for
-   * the venue's default UI locale (`readVenueLocale` → country-pack locale resolution, boot.ts). DISTINCT from
-   * `locale` above, which defaults to `es-ES` and feeds the FISCAL receipt/`invoiceLocales` path: the
-   * defaulted value would mask the geography derivation (province → country → English), so the venue
-   * default reads the raw env here instead. Display-side, never fiscal.
+   * The RAW `WAITRON_TILL_LOCALE` (`undefined` when unset or empty), for the venue's default UI locale.
+   * Distinct from the defaulted `locale`, which would mask the geography-based derivation.
    */
   localeOverride?: string;
-  /**
-   * Whether the till offers a tip prompt at card collect (`WAITRON_TILL_TIPS`). Default false; only
-   * the literal `"true"` or `"1"` enable it, so a typo fails safe (off). `GET /api/till` echoes it so
-   * the client shows or hides the tip affordance (Task 8).
-   */
+  /** Whether the till offers a tip prompt at card collect. */
   tipsEnabled: boolean;
   /**
    * True for Demo and Prepare installations. Receipt renderers use it only to add an unmistakable
@@ -59,22 +37,13 @@ export interface TillConfig {
   /** Request-derived drawer eligibility; handheld cash sales never open a linked till's drawer. */
   allowCashDrawer?: boolean;
   /**
-   * The venue's pay-timing / service mode, read from the till's LOCATION rather than the environment
-   * (the env carries no `order_flow` — the location does), so it is NOT set by `loadTillConfig` and is
-   * merged in by `boot.ts` via `readOrderFlow` once the pool is open. That is why `loadTillConfig`
-   * returns `Omit<TillConfig, "orderFlow">`: the type forbids reading this off the env-only identity
-   * before the DB read has supplied its real value, so a wrong-mode dispatch cannot slip in from a
-   * placeholder default (§5 — the mode decides which unrepairable fiscal record is filed).
+   * Read from the till's location row by `readOrderFlow`, not the environment — which is why
+   * `loadTillConfig` returns `Omit<TillConfig, "orderFlow">`: no placeholder mode can reach a dispatch.
    */
   orderFlow: OrderFlow;
 }
 
-/**
- * The value of `key`, or a loud failure. "Unset" is absent OR the empty string — an operator's
- * `VAR=` (as opposed to omitting the line) must be reported as missing, not accepted as a value that
- * will then fail the uuid check with a less honest code. Only the variable NAME travels in the
- * error, never the value.
- */
+/** Only the variable NAME travels in the error, never the value. */
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
   if (value === undefined || value === "") {
@@ -83,12 +52,7 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
   return value;
 }
 
-/**
- * Runs a branded-id constructor over `raw`, translating its `shared.invalid_id` throw into
- * `server.till_config_invalid` naming the env var. The value that failed is deliberately dropped on
- * the floor here: the operator needs to know WHICH variable is malformed, and echoing a possibly-
- * secret value into an error is the leak `errors.ts` documents this code avoiding.
- */
+/** The rejected value is deliberately not carried: it may be a secret pasted into the wrong variable. */
 function brand<T>(key: string, fn: (value: string) => T, raw: string): T {
   try {
     return fn(raw);
@@ -97,25 +61,10 @@ function brand<T>(key: string, fn: (value: string) => T, raw: string): T {
   }
 }
 
-/**
- * Resolve the till's fiscal identity (+ location and locale) from the environment, failing loudly on
- * any missing or malformed value. Every id is required and branded; `WAITRON_TILL_LOCALE` is the one
- * optional value, defaulting to `es-ES`.
- *
- * Returns `Omit<TillConfig, "orderFlow">`: `order_flow` is a per-LOCATION column, not an env var, so
- * it cannot be resolved here without a database. `boot.ts` reads it via `readOrderFlow` once the pool
- * is open and spreads it in to form the full `TillConfig` the routes receive (see this file's
- * `orderFlow` field comment for why the omission is deliberate and type-enforced).
- */
 export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderFlow"> {
-  // "Unset" is absent OR the empty string — the same rule `required` applies to the ids, so an
-  // operator's `WAITRON_TILL_LOCALE=` line falls back to the default rather than pushing an empty
-  // locale into `invoiceLocales` (which downstream invoice rendering consumes). A bare `?? "es-ES"`
-  // would only catch `undefined`.
   const rawLocale = env.WAITRON_TILL_LOCALE;
   const locale = rawLocale === undefined || rawLocale === "" ? "es-ES" : rawLocale;
 
-  // Only the literal "true" or "1" enable tips; anything else (including a typo) fails safe to off.
   const rawTips = env.WAITRON_TILL_TIPS;
   const tipsEnabled = rawTips === "true" || rawTips === "1";
 
@@ -130,25 +79,12 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
     ),
     locale,
     invoiceLocales: [locale],
-    // The RAW env (NOT the defaulted `locale`), for the venue-default UI locale derivation in
-    // `boot.ts`. Same "absent OR empty is unset" rule the ids and `locale` use, but here unset stays
-    // `undefined` (no `es-ES` default) so country-pack locale resolution can use geography.
     localeOverride: rawLocale === undefined || rawLocale === "" ? undefined : rawLocale,
     tipsEnabled,
   };
 }
 
-/**
- * The four environment variables that carry the till's fiscal identity — the ids `loadTillConfig`
- * `required`s. `tryLoadTillConfig` reads this ONE list to decide none/all/partial, so "which four
- * make a provisioned till" lives in exactly one place rather than being re-enumerated per call site.
- * Order matters: a partial set names the FIRST missing var in THIS order, so an operator fixes them
- * top-down.
- *
- * `WAITRON_TILL_TENANT_ID` is NOT one of them any more: the database holds one taxpayer, keyed 1,
- * so there is nothing for the variable to select. A box whose env file still sets it is unaffected
- * — nothing reads it.
- */
+/** Order matters: a partial set names the FIRST missing variable in this order. */
 const TILL_ID_VARS = [
   "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
@@ -157,20 +93,8 @@ const TILL_ID_VARS = [
 ] as const;
 
 /**
- * Setup-mode-aware wrapper over `loadTillConfig` (slice 1b). An unprovisioned box has no venue, so
- * the four `WAITRON_TILL_*_ID` are absent — that is SETUP MODE, not a fault. Three cases, on the SAME
- * absent-or-empty `isUnset` rule `config.ts` applies everywhere (a `VAR=` line counts as unset):
- *
- *  - NONE of the four set → `undefined`. Boot branches on `config.till === undefined` to run the
- *    setup surface instead of the trading surface.
- *  - ALL four set → the loaded identity, delegated verbatim to `loadTillConfig` (which `required`s and
- *    brands each id, throwing `server.till_config_missing` / `server.till_config_invalid` as before —
- *    a set of four that are present-but-malformed still fails there, not here).
- *  - SOME but not all set → `server.config_invalid { variable, reason: "till_config_partial" }`,
- *    naming the FIRST missing var. A half-configured server is a MISCONFIGURATION a human must fix,
- *    never a setup box — so it fails loudly rather than silently degrading to setup mode and hiding
- *    the supplied-but-ignored ids. Only the variable NAME travels, never a value: the same no-leak
- *    discipline `loadTillConfig`'s own `required`/`brand` paths keep.
+ * None of the four ids set is setup mode (`undefined`), not a fault. Some but not all set is a
+ * misconfiguration, refused rather than silently degraded to setup mode.
  */
 export function tryLoadTillConfig(
   env: NodeJS.ProcessEnv,
@@ -178,7 +102,6 @@ export function tryLoadTillConfig(
   const present = TILL_ID_VARS.filter((v) => !isUnset(env[v]));
   if (present.length === 0) return undefined;
   if (present.length < TILL_ID_VARS.length) {
-    // Non-null: length is in (0, 4), so at least one is unset and `find` cannot miss.
     const missing = TILL_ID_VARS.find((v) => isUnset(env[v]))!;
     throw new AppError("server.config_invalid", {
       variable: missing,
@@ -188,13 +111,6 @@ export function tryLoadTillConfig(
   return loadTillConfig(env);
 }
 
-/**
- * Read the venue's pay-timing mode from the till's own LOCATION row — the DB half of the config
- * `loadTillConfig` cannot resolve from the environment. Runs under `withTransaction`; the `eq(id)`
- * filter selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request:
- * the mode is provisioning-time config, stable for the process lifetime, so re-reading it on every
- * place/collect would be a needless round trip on the till's hottest path.
- */
 export async function readOrderFlow(
   db: Database,
   cfg: Pick<TillConfig, "locationId">,
@@ -206,10 +122,6 @@ export async function readOrderFlow(
       .where(eq(locations.id, cfg.locationId));
     /* v8 ignore start */
     if (row === undefined) {
-      // Structurally unreachable: provisioning stamped this till with its own location, so the
-      // row always exists and the by-id lookup returns it. A till pointed at a nonexistent
-      // location is a misconfiguration that fails loudly at boot rather than dispatching against
-      // a guessed mode.
       throw new Error(`readOrderFlow: no location ${cfg.locationId}`);
     }
     /* v8 ignore stop */
@@ -218,9 +130,8 @@ export async function readOrderFlow(
 }
 
 /**
- * The node's stamped filing module (`nodes.filing_module`, set by provisioning from the territory's
- * registry), which `fiscalSlot` cross-checks against the enabled fiscal module. Null for a bare
- * fixture node. Read ONCE at boot.
+ * The node's stamped filing module, which `fiscalSlot` cross-checks against the enabled fiscal
+ * module.
  */
 export async function readFilingModule(
   db: Database,
@@ -233,11 +144,6 @@ export async function readFilingModule(
       .where(eq(nodes.id, cfg.nodeId));
     /* v8 ignore start */
     if (row === undefined) {
-      // Reachable only by operator misconfiguration: a till whose WAITRON_TILL_NODE_ID names a
-      // node that does not exist. Provisioning stamps the till with its own node, so a correctly
-      // configured deployment never gets here; when it does, boot fails loudly rather than
-      // selecting a fiscal backend against a guessed regime. Excluded from coverage deliberately
-      // — no fixture should build that state.
       throw new Error(`readFilingModule: no node ${cfg.nodeId}`);
     }
     /* v8 ignore stop */

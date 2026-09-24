@@ -22,15 +22,12 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-// The `POST /api/tables/:id/status` route is wiring — session guard +
-// isUuid screen + STATUS mapping over the operator `setTableStatus` verb, which is LOGIC. The verb's
-// own proofs (the reset trigger) live in
-// `set-table-status.test.ts` and `clear-table-status.test.ts`; they are not re-proven at the HTTP layer.
+// The HTTP wiring of `POST /api/tables/:id/status`: session guard, isUuid screen and STATUS mapping.
+// The `setTableStatus` verb is pinned in `set-table-status.test.ts` and `clear-table-status.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
-// A persistent dining table and two statuses (one active, one inactive) seeded once. The inactive one
-// is seeded inactive (rather than deactivated at runtime) so the `status.inactive` case is
-// order-independent (CLAUDE.md §4): no test mutates the active status out from under another.
+// The inactive status is seeded inactive (rather than deactivated at runtime) so no test mutates a
+// status out from under another.
 let TABLE_ID: string;
 let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
@@ -43,12 +40,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({
@@ -63,14 +54,12 @@ const suite = useVenueDb({
       .values({ locationId: locationId, name: "Caja 1" })
       .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
-    // Ana logs in with PIN "5555"; the session cookie the route requires names her shift.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, locationId, nodeId);
-    // Seed a table and active/inactive statuses through the application transaction.
     const seeded = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
       const [active] = await tx
@@ -93,15 +82,13 @@ const suite = useVenueDb({
   },
 });
 
-/** A collecting logger — the route's structured lines are not asserted here, only that a code maps. */
 function collect(
   lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
 ): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `seriesId` is unused by this route (no fiscal write on the
- *  status path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the reads scope by. */
+/** `seriesId` is unused by this route (no fiscal write on the status path), so it carries a fresh uuid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -115,8 +102,6 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock — this route never files a fiscal doc, but `TillApiDeps` demands a clock, so
- *  the same stub shape the sibling suites use is supplied. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -148,8 +133,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- *  route runs — and returns its cookie token. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -219,8 +202,6 @@ describe("POST /api/tables/:id/status", () => {
   });
 
   it("a malformed :id → 404 table.not_found (isUuid guard, not a 500)", async () => {
-    // Dropping the `if (!isUuid(id))` line makes this a 500 (raw `22P02`) instead of 404 — the
-    // prove-by-deletion for the `:id` guard.
     const res = await request("/api/tables/not-a-uuid/status", {
       method: "POST",
       body: JSON.stringify({ statusId: null }),
@@ -230,8 +211,7 @@ describe("POST /api/tables/:id/status", () => {
   });
 
   it("a malformed statusId → 404 status.not_found (isUuid guard on the body, not a 500)", async () => {
-    // A present-but-malformed `statusId` names no status; screened to status.not_found BEFORE it can
-    // reach `eq(tableServiceStatuses.id, statusId)` and `22P02` → an opaque 500.
+    // A present-but-malformed `statusId` is screened to status.not_found before any query.
     const res = await request(`/api/tables/${TABLE_ID}/status`, {
       method: "POST",
       body: JSON.stringify({ statusId: "not-a-uuid" }),
@@ -250,9 +230,7 @@ describe("POST /api/tables/:id/status", () => {
   });
 
   it("REJECTS the status route with 401 session.required when no cookie is present", async () => {
-    // A fresh app driven WITHOUT the session cookie: `requireSession` runs first (before the isUuid
-    // screen, the body read, or any DB touch), so an unauthenticated request 401s. Deleting the
-    // `requireSession` call flips this to a 200 — the deletion proof of the guard.
+    // A fresh app driven WITHOUT the session cookie.
     const noAuth = new Hono();
     mountTillApi(noAuth, deps(suite.db), collect([]));
     const res = await noAuth.request(`/api/tables/${TABLE_ID}/status`, {
@@ -271,14 +249,12 @@ describe("GET /api/statuses", () => {
     expect(res.status).toBe(200);
     const options = (await res.json()) as { id: string; label: string; color: string }[];
     // The active status is offered with exactly { id, label, color }; the inactive "Retired" is not —
-    // a status you cannot apply must not be offered (the active-only predicate, proven by deletion).
+    // a status you cannot apply must not be offered.
     expect(options).toContainEqual({ id: STATUS_ID, label: "Bill requested", color: "#ef4444" });
     expect(options.some((o) => o.id === INACTIVE_STATUS_ID)).toBe(false);
   });
 
   it("REJECTS with 401 session.required when no cookie is present", async () => {
-    // `requireSession` runs FIRST (before any DB touch), so an unauthenticated read 401s. Deleting the
-    // `requireSession` call flips this to a 200 — the deletion proof of the guard.
     const noAuth = new Hono();
     mountTillApi(noAuth, deps(suite.db), collect([]));
     const res = await noAuth.request("/api/statuses");

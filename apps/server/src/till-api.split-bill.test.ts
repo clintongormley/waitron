@@ -32,14 +32,9 @@ import { joinTable, openTab } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// `splitOffCheck`/`unjoinTable`'s own WRITE behaviour (check minting,
-// item partition, quantity conservation, the concurrency properties the venue file's write queue now
-// carries, fiscal filing multiplicity) is proven
-// in the TS-5 verb + fiscal suites (Tasks 1-5); this suite proves only the HTTP surface — the session
-// guard, the malformed-`:id`/`tableId` screens, the happy-path result shapes, and the STATUS mapping for
-// the new `table.not_joined` code — the same shape `till-api.transfer.test.ts`/`till-api.move-merge.test.ts`
-// prove for the sibling tab verbs. Harness ported from
-// `till-api.transfer.test.ts`.
+// The HTTP surface of the split and un-join routes: the session guard, the malformed-`:id`/`tableId`
+// screens, the happy-path result shapes and the STATUS mapping for `table.not_joined`. The verbs'
+// write behaviour is pinned in `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
@@ -56,12 +51,6 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -70,18 +59,14 @@ const suite = useVenueDb({
       .insert(tills)
       .values({ locationId: loc!.id, name: "Till 1" })
       .returning({ id: tills.id });
-    // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
-    // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
+    // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
-    // One product in a catalogue assigned to the counter location, seeded via the catalogue
-    // helpers — the same `withTransaction` path `openTab` prices it through.
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
@@ -103,16 +88,13 @@ const suite = useVenueDb({
   },
 });
 
-/** A collecting logger for asserting the structured lines the routes emit. */
 function collect(
   lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
 ): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `nodeId` is the seeded node the tab is written on;
- * `seriesId` is unused by the split/unjoin routes (they open no fiscal chain — the detached check files
- * only when paid); `locationId` is the seeded one `createTable` writes into. */
+/** `seriesId` is unused by the split/unjoin routes: the detached check files only when paid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -126,8 +108,6 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock, reported confident/anchored — the identical stub shape the sibling suites
- *  use. The split/unjoin routes never call `clock`, but `TillApiDeps` requires it. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -150,8 +130,7 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // `backend` is unused by these routes (they touch no fiscal path); `clock` IS wired real for shape
-    // completeness though the routes never read it.
+    // Unused: these routes touch no fiscal path.
     backend: {} as FiscalBackend,
     clock: systemClock(),
     cfg,
@@ -160,8 +139,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- * route runs — and returns its cookie token. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -291,9 +268,8 @@ describe("POST /api/tabs/:id/split", () => {
 
   it("400 management.request_invalid when transfers is absent, not an opaque 500", async () => {
     const { app, tabA, cookie } = await setupTabApp();
-    // Body `{}` → `transfers` undefined → `splitOffCheck`'s `transfers.length` would throw a TypeError →
-    // opaque 500 without the route's array-shape screen. Screened at the boundary as the generic
-    // request-shape 400 naming the field (the `requireCapacity` sibling's discipline, till-api.ts:347).
+    // Body `{}` → `transfers` undefined, which `splitOffCheck` would reach as `transfers.length`.
+    // Refused at the boundary as the generic request-shape 400 naming the field.
     const res = await app.request(`/api/tabs/${tabA}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -320,12 +296,8 @@ describe("POST /api/tabs/:id/split", () => {
 
   it("400 management.request_invalid for a literal JSON null body, not an opaque 500 (Copilot)", async () => {
     const { app, tabA, cookie } = await setupTabApp();
-    // A literal JSON `null` body parses successfully (unlike malformed JSON, which throws a
-    // SyntaxError c.req.json<T>() never catches for these routes): `c.req.json()` returns `null`
-    // itself, so `body.transfers` would throw `Cannot read properties of null` before the
-    // array-shape screen above ever ran, escaping to an opaque 500 (the class every `:id`/field
-    // screen in this file exists to prevent). Screened by the same object/null/array guard the
-    // `/api/tables/:id/placement` sibling uses (till-api.ts ~1547), naming "body".
+    // A literal JSON `null` body parses successfully, so `body.transfers` would throw before the
+    // array-shape screen ran. Refused by the object/null/array guard, naming "body".
     const res = await app.request(`/api/tabs/${tabA}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -339,9 +311,8 @@ describe("POST /api/tabs/:id/split", () => {
 
   it("400 management.request_invalid for an empty (unparseable) body, not an opaque 500", async () => {
     const { app, tabA, cookie } = await setupTabApp();
-    // Unlike a literal `null` body (which parses), an empty body is invalid JSON: a bare
-    // `c.req.json()` throws a SyntaxError that escaped to an opaque 500. The route now routes that
-    // SyntaxError to the SAME body-shape refusal (field "body") a null body already gets.
+    // Unlike a literal `null` body, an empty body is invalid JSON; the route sends it to the SAME
+    // body-shape refusal (field "body").
     const res = await app.request(`/api/tabs/${tabA}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -485,10 +456,8 @@ describe("POST /api/tabs/:id/unjoin", () => {
   it("400 management.request_invalid for a literal JSON null body, not an opaque 500 (Copilot)", async () => {
     const { app, tabA, cookie } = await setupJoinedApp();
     // Same degenerate input as the /split case above: a literal JSON `null` body parses to `null`
-    // itself (not a SyntaxError), so `body.tableId` would throw before `isUuid` ever ran, escaping to
-    // an opaque 500. Screened by the object/null/array guard naming "body" — the SAME code the
-    // `/api/tables/:id/placement` sibling answers for a non-object body, before the domain-specific
-    // `table.not_joined` a well-formed-but-wrong `tableId` gets.
+    // itself, so `body.tableId` would throw before `isUuid` ever ran. Refused by the object/null/array
+    // guard naming "body", before the `table.not_joined` a well-formed-but-wrong `tableId` gets.
     const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -502,8 +471,7 @@ describe("POST /api/tabs/:id/unjoin", () => {
 
   it("400 management.request_invalid for an empty (unparseable) body, not an opaque 500", async () => {
     const { app, tabA, cookie } = await setupJoinedApp();
-    // An empty body is invalid JSON: the SyntaxError a bare `c.req.json()` throws escaped to an
-    // opaque 500. The route now routes it to the SAME field "body" refusal a null body gets.
+    // An empty body is invalid JSON; the route sends it to the SAME field "body" refusal a null body gets.
     const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },

@@ -25,11 +25,8 @@ import { createTable } from "./tables.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
-// The move/join/merge verbs are table-service LOGIC (re-point
-// `dining_tables` rows, move lines, abandon a tab) whose concurrency behaviour is proven in
-// `working-order.pay-and-dispatch.test.ts`; here we prove only the HTTP surface — the session
-// guard, the malformed-`:id` screen, and the verb's status mapping — which fires at the boundary
-// before/around a single query. Harness ported from `till-api.test.ts`.
+// The HTTP surface of the move/join/merge routes: the session guard, the malformed-id screens and
+// the verbs' status mapping. The verbs themselves are pinned in `move-merge.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 
@@ -39,15 +36,8 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with
-    // a FK to `tills`, so the till `cfg.tillId` names must exist. Pure setup, as `@waitron/db`'s
-    // own seed helpers document.
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
+    // `loginWithPin` inserts a `sessions` row with a FK to `tills`, so the till `cfg.tillId` names
+    // must exist.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -56,10 +46,8 @@ const suite = useVenueDb({
       .insert(tills)
       .values({ locationId: loc!.id, name: "Till 1" })
       .returning({ id: tills.id });
-    // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
-    // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
+    // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
@@ -69,16 +57,13 @@ const suite = useVenueDb({
   },
 });
 
-/** A collecting logger for asserting the structured lines the routes emit. */
 function collect(
   lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
 ): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `nodeId` is the seeded node the tab is written on;
- * `seriesId` is unused by the move/join/merge routes, so it carries a fresh uuid; `locationId` is the
- * seeded one `createTable` writes into. */
+/** `seriesId` is unused by the move/join/merge routes, so it carries a fresh uuid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -92,9 +77,6 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock, reported confident/anchored — the identical stub shape the sibling suites
- *  use. The move/join/merge routes never call `clock`, but `TillApiDeps` requires it, so it is stubbed
- *  real rather than left `{}`. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -117,8 +99,7 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // `backend` is unused by the move/join/merge routes (they touch no fiscal path), so it is a never-
-    // called stub; `clock` IS wired real for shape completeness though these routes never read it.
+    // Unused: the move/join/merge routes touch no fiscal path.
     backend: {} as FiscalBackend,
     clock: systemClock(),
     cfg,
@@ -128,9 +109,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- * route runs — and returns its cookie token, so a test can hand a cookie that names a genuine open
- * row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -159,15 +137,13 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    // A non-UUID `:id` passed straight into `eq(workingOrders.id, id)` would `22P02` → an opaque 500;
-    // `requireTabParam` refuses it as `tab.not_open` (409) BEFORE any query — the witness the screen is
-    // present. Dropping the screen makes this a 500.
+    // `requireTabParam` refuses a non-UUID `:id` as `tab.not_open` (409) before any query.
     const res = await app.request("/api/tabs/not-a-uuid/move", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ toTableId: "00000000-0000-4000-8000-000000000001" }),
     });
-    expect(res.status).toBe(409); // tab.not_open, not an opaque 500
+    expect(res.status).toBe(409); // tab.not_open
     expect(await res.json()).toMatchObject({
       error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
     });
@@ -353,8 +329,8 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     });
   });
 
-  // The body-id screens (requirement #4): a malformed target/source id is refused at the boundary with
-  // the route's fail-closed domain code — never the `22P02` → opaque 500 the raw value would raise.
+  // A malformed target/source id in the body is refused at the boundary with the route's
+  // fail-closed domain code.
   it("404 table.not_found on move with a malformed toTableId (never a 500)", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

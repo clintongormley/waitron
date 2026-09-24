@@ -59,25 +59,10 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
 
-// `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over the HTTP
-// surface to a GENUINE chained fiscal record. The 401-without-session guards, the products list and
-// the park/list/retrieve/update/abandon route LOGIC live in the hermetic `till-api.test.ts`; what
-// lives here is the chained-write happy path AND the pay-idempotency crux (a lost-response pay
-// retry must REPLAY the ticket, filing no second chained record — spec §3), which only a real
-// fiscal write proves. Setup mirrors `till-sale.test.ts` (Task 3) — a provisioned venue + a seeded
-// catalogue, a real `VerifactuBackend` and the system clock — plus a login person.
-//
-// That split is what the name `till-api.fiscal-sale-paths.test.ts` records, and its checkable half
-// is the backend each suite mounts: `grep -n 'backend:' apps/server/src/till-api.test.ts` returns
-// two lines, one of them prose — the fiscal seat it passes is `backend: {} as FiscalBackend`, an
-// empty object, so a case over there that reached the fiscal write would fail rather than file (its
-// own comments at the prep and collect routes say the same). Run 2026-09-22.
-//
-// The `/api/pay` tests pass the suite's one handle to `StripeTerminalProvider`, whose
-// `payments`-ledger writes (`insertAttempting`/`captureAttempting`/`failAttempting`) each run
-// inside `this.inTransaction`, which is `withTransaction(db, …)` — both its T1 and T2 steps in
-// `packages/payments-stripe/src/provider.ts`. The reader ROUTING those cases exist for — which
-// reader a collect drives, and which id is stamped on `payments.reader_id` — is untouched.
+// `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
+// GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
+// and file no second record (spec §3). Route logic that needs no real fiscal write lives in the
+// hermetic `till-api.test.ts`, whose fiscal seat is an empty object.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -92,11 +77,7 @@ let clock: TrustedClock;
  * the HTTP responses and the database matter. */
 const noopLog: Logger = () => {};
 
-/**
- * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `till-sale.test.ts`/`record-one-sale.ts` document. `recordSale` reads `now()`
- * once and touches neither `anchor` nor `currentAnchor`.
- */
+/** The wall clock, reported as already confident and anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -116,11 +97,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants no longer accumulate: the per-test reset empties every data table
-// (`packages/db/src/testing/venue-db.ts`), and `tenants` holds ONE row anyway
-// (`tenants_singleton_ck CHECK(id = 1)`, `packages/db/drizzle/0000_baseline.sql:35`) — so a second
-// venue in one database would collide on the primary key, not on the NIF. Nothing here now depends
-// on the NIFs differing; the counter is kept so a venue's tax id still reads as its own.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -137,7 +113,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
-    // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
     orderFlow: "prepay",
   };
 }
@@ -145,10 +120,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 /**
  * Stand up a fresh chained venue + registered SIF, seed a catalogue and a staff
  * person with a known PIN, and read back the sellable products — one unit product
- * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%). Each test
- * gets its OWN tenant so the `registros_facturacion`/`sales` counts are that test's alone,
- * order-independent (CLAUDE.md §4). Returns the login person's id so the test can log in as them and
- * assert the sale is attributed to them.
+ * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
@@ -210,7 +182,7 @@ async function setupVenue(): Promise<{
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
-      unitId: null, // Each (no unit) — the seeded "each" unit no longer exists.
+      unitId: null, // Each (no unit).
       unitPrice: "1.50",
       vatClass: "general",
     });
@@ -241,9 +213,8 @@ async function setupVenue(): Promise<{
       update zone_service_policies set default_menu_id = ${cat.id}
       where location_id = ${cfg.locationId}
         and is_counter_default`);
-    // Through the table definition rather than raw SQL: `preparation_routes.id` is a `$defaultFn`
-    // generator on a NOT NULL column (`packages/venue-service/drizzle/0000_baseline.sql:47`) that a
-    // raw insert never reaches on this engine. The station is still the same correlated read.
+    // Through the table definition, not raw SQL: `preparation_routes.id` is a `$defaultFn`
+    // generator, which a raw insert never runs.
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;
     await tx.insert(preparationRoutes).values([
@@ -252,8 +223,6 @@ async function setupVenue(): Promise<{
     ]);
     // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
     // the sale is attributed to them.
-    // `persons.id` and `persons.created_at` are `$defaultFn` generators on NOT NULL columns
-    // (`packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
     const [person] = await tx
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
@@ -278,10 +247,6 @@ async function setupVenue(): Promise<{
  * backend + system clock the sale path files through, and `secureCookies:false` so the session
  * cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
-  // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
-  // `tillConfigFromVenue`). `cardProvider` (the built PaymentProvider) is optional and left undefined.
-  // `venueLocale` is the display default `GET /api/till`/`GET /api/locales` echo; mirror the cfg's
-  // locale so it is internally consistent (these API suites assert no locale field).
   return {
     db: suite.db,
     backend,
@@ -299,14 +264,10 @@ const RING = loadKeyRing({
 });
 
 /**
- * A FAKE `CardProviderPool` matching the PRODUCTION pool's shape: ONE cached `StripeTerminalProvider`
- * over `FakeStripe` per provider id, and `get` takes only a provider id — no reader. The reader a sale
- * charges is a per-collect input (`CollectParams.readerRef`), so one cached provider serves every
- * reader on the vendor; caching here (rather than a fresh provider per `get`) is what lets the
- * two-readers-one-provider regression below prove the ref is not baked in. The provider writes its
- * `payments` ledger on the suite's one handle, the same handle the routes use. This stands in for
- * the boot pool (which would build the real seat from a sealed credential) so a capture/decline
- * genuinely round-trips the adapter without a network.
+ * A fake `CardProviderPool` shaped like production's: one cached `StripeTerminalProvider` over
+ * `FakeStripe` per provider id, and `get` takes no reader — the reader is a per-collect input
+ * (`CollectParams.readerRef`). The caching is what lets the two-readers-one-provider case prove
+ * the ref is not baked in.
  */
 function fakePool(cfg: TillConfig, client: FakeStripe): CardProviderPool {
   const cache = new Map<string, StripeTerminalProvider>();
@@ -352,8 +313,6 @@ async function seedReader(
   opts: { provider?: string; providerRef?: string; name?: string } = {},
 ): Promise<{ id: string; providerRef: string }> {
   const providerRef = opts.providerRef ?? `reader_${randomUUID()}`;
-  // `card_readers.id` and `.created_at` are `$defaultFn` generators on NOT NULL columns
-  // (`packages/payments/drizzle/0000_baseline.sql:2` and `:7`).
   const [r] = await suite.db
     .insert(cardReaders)
     .values({
@@ -400,15 +359,9 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
 }
 
 /**
- * Enrol a REAL `till`-kind device in `cfg`'s tenant, BOUND TO THE VENUE'S OWN TILL (`cfg.tillId`), and
- * return the `waitron_device=<id>.<token>` cookie a booting till device carries. SP-A.2 cutover: a sale
- * route now resolves `till_id` from THIS device (`requireSaleTillId`), so the device's till IS the venue
- * till and every sale's fiscal record is byte-identical to the pre-cutover env-till (the same `till_id`,
- * and `nodeId`/`seriesId` still come from cfg). An optional `deviceProfileId` binds a device profile —
- * the `/api/pay` tests need one declaring `integrated-card-payment` so `assertDeviceCapability` passes
- * (capabilities relocated onto the profile, Task 9). Join-and-accept runs the production accept path,
- * so the scrypt hash actually verifies and `tryReadDevice` resolves a genuine binding rather than a
- * miss.
+ * Enrol a `till` device and return its `waitron_device=<id>.<token>` cookie; a sale route resolves
+ * its `till_id` from it (`requireSaleTillId`). The `/api/pay` cases pass a profile declaring
+ * `integrated-card-payment`.
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
@@ -416,9 +369,8 @@ async function enrolTillCookie(
   deviceProfileId: string | null = null,
 ): Promise<string> {
   tillDeviceCounter += 1;
-  // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the device describes itself
-  // at accept, and `resolveDeviceBinding` AUTO-CREATES the register it rings against (named after the
-  // device). Each call names the device uniquely so its auto-created register cannot collide.
+  // `resolveDeviceBinding` creates a register for a `till` device at accept, named after the device,
+  // so each call names the device uniquely.
   const profileId = deviceProfileId ?? (await seedProfileFF("till"));
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
@@ -427,10 +379,8 @@ async function enrolTillCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Log the operator (PIN "5555") in through the HTTP surface and return the Set-Cookie session cookie.
- *  The login is DEVICE-GATED (§5/§6), so it enrols a throwaway `till` device and presents its cookie;
- *  each sale/pay test enrols its OWN device (bound to the till/profile the case needs) for the sale call
- *  itself. */
+/** Log the operator (PIN "5555") in and return the Set-Cookie session cookie. The login is
+ *  device-gated, so it enrols a throwaway `till` device to present. */
 async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
   const deviceCookie = await enrolTillCookie(cfg);
   const login = await app.request("/api/session", {
@@ -444,11 +394,8 @@ async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Pro
 
 /** Create a till profile with the reader and drawer capabilities needed by payment tests. */
 async function createTillProfile(): Promise<string> {
-  // Through the table definition rather than raw SQL: `device_profiles.id`, `.created_at` and
-  // `.updated_at` are `$defaultFn` generators on NOT NULL columns
-  // (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`) that a raw insert never reaches on
-  // this engine, and `capabilities` is JSON in a text column, so the jsonb cast is both unnecessary
-  // and a syntax error here (SQLite reads a colon as the start of a bind parameter).
+  // Through the table definition, not raw SQL: `device_profiles.id` is a `$defaultFn` generator,
+  // which a raw insert never runs.
   const [prof] = await suite.db
     .insert(deviceProfiles)
     .values({
@@ -460,8 +407,7 @@ async function createTillProfile(): Promise<string> {
   return prof!.id;
 }
 
-/** Seed a `device_profiles` row of a given FORM FACTOR (a device is DEFINED by its profile since Task
- *  7). A per-suite counter keeps the tenant-unique name from colliding across repeated seeds. */
+/** Seed a `device_profiles` row of a given form factor; the counter keeps its unique `name` fresh. */
 let profileCounter = 0;
 async function seedProfileFF(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
@@ -522,9 +468,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 1. Log in through the HTTP surface and capture the session cookie the route sets.
     const cookie = await loginSession(app, cfg, operatorId);
     expect(cookie).toMatch(/waitron_till_session=/);
-    // SP-A.2 cutover: the sale resolves its till from the enrolled device, so the box carries a
-    // `waitron_device` cookie for a till bound to THIS venue's own till — the resolved till equals the
-    // env `cfg.tillId`, keeping the fiscal record below byte-identical to the pre-cutover sale.
     const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. Ring a sale with that cookie: 2 × 1.50 = 3.00 total, 5.00 tendered → 2.00 change.
@@ -553,8 +496,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(typeof ticket.qr).toBe("string");
     expect(ticket.qr.length).toBeGreaterThan(0);
 
-    // 4. A GENUINE chained fiscal record exists for this tenant/node — one, hashed (own tenant, so
-    // the count is order-independent).
+    // 4. A GENUINE chained fiscal record exists for this node — one, hashed.
     const registros = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
     });
@@ -569,11 +511,9 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(saleRows).toEqual([{ operatorId }]);
   });
 
-  // The definitive "ring up a sandwich" proof (Task 20). The test above rings a single-rate cash
-  // sale; this one drives the operator's WHOLE server-side journey — log in, read the menu, ring a
-  // MIXED-rate basket built from that menu — and then holds the response to the legal ticket
-  // standard (findings §14) AND the database to an intact hash chain across two sales. Nothing here
-  // touches production code; it is pure end-to-end verification over the same venue harness.
+  // The operator's whole server-side journey — log in, read the menu, ring a MIXED-rate basket built
+  // from it — held to the legal ticket standard (findings §14) and an intact hash chain across two
+  // sales.
   it("walks the full journey: login → menu → mixed-rate sale → legal ticket + an intact fiscal chain", async () => {
     const { cfg, operatorId } = await setupVenue();
 
@@ -583,8 +523,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 1. Log in through the HTTP surface and capture the session cookie.
     const cookie = await loginSession(app, cfg, operatorId);
     expect(cookie).toMatch(/waitron_till_session=/);
-    // SP-A.2 cutover: an enrolled till device bound to the venue's own till (resolved till == env
-    // `cfg.tillId`), so both sales below file the same chain the pre-cutover env-till would.
     const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. The operator sees the default zone's menu offers. The sale lines are built from those offers,
@@ -658,12 +596,9 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // The QR is the AEAT verification URL — required on every RRSIF invoice, so a non-empty string.
     expect(typeof ticket.qr).toBe("string");
     expect(ticket.qr.length).toBeGreaterThan(0);
-    // Read through the TABLE DEFINITION, not a raw `select`: `unit_name` is a `json` column over
-    // text (`packages/db/src/schema/sales.ts:247`), and a raw read reaches no drizzle column
-    // mapper, so it hands back the stored JSON TEXT rather than the object asserted below.
-    // `quantity` stays an explicit text cast for the reason its old comment gave: sale_lines.quantity
-    // counts whole THOUSANDTHS, so the weighed 0.200 kg line is the row where the column holds 200,
-    // and reading it as text asserts the stored COUNT, not an amount.
+    // Read through the table definition, not a raw `select`: `unit_name` is a `json` column over
+    // text (`saleLines.unitName`), and a raw read hands back the stored JSON TEXT. `quantity` counts
+    // whole thousandths, so the weighed 0.200 kg line holds 200.
     const snapshottedLine = await suite.db
       .select({
         quantity: sql<string>`cast(${saleLines.quantity} as text)`,
@@ -695,12 +630,9 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     });
     expect(secondRes.status).toBe(200);
 
-    // 6. Two GENUINE, chained fiscal records exist for this tenant/node (own tenant, so the count is
-    // this test's alone). The chain-integrity assertions follow `write-path.e2e.test.ts`'s pattern:
-    // the first record opens the chain (`primerRegistro`, no predecessor pointer), and the second
-    // increments `secuencia` and carries the first record's ACTUAL huella as its predecessor
-    // (`anteriorHuella`) — the four-part Encadenamiento link (schema/registros.ts). Both hashes are
-    // the stored 64-hex huella the append-only table pins.
+    // 6. Two chained fiscal records: the first opens the chain (`primerRegistro`, no predecessor
+    // pointer), and the second increments `secuencia` and carries the first's huella as
+    // `anteriorHuella`.
     const registros = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -722,10 +654,8 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
   });
 });
 
-// The H2 fiscal cutover (SP-A.2 §16.4/§16.5): a sale's `till_id` now resolves from the AUTHENTICATED
-// enrolled device (`requireSaleTillId`), not env. These two negatives pin the fail-closed setup
-// preconditions; every happy-path sale test in this file carries a till-device cookie so the resolved
-// till equals the venue till and the fiscal record is unchanged.
+// A sale's `till_id` resolves from the authenticated enrolled device (`requireSaleTillId`); these two
+// negatives pin its fail-closed preconditions.
 describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () => {
   it("refuses POST /api/sales with NO device cookie — 401 device.unauthorized, filing nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -733,11 +663,8 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A valid operator session, but the SALE below carries NO `waitron_device` cookie — an ordinary
-    // env-only till, which after the cutover is no longer a sellable box on its own. (The login itself
-    // is device-gated now, §5/§6, so `loginSession` presents a device to obtain the session; the SALE
-    // request deliberately omits it.) Prove-by-deletion: revert `saleCfg` → `deps.cfg` at
-    // `POST /api/sales` (drop the `requireSaleTillId` resolve) and this same request 200s + files one.
+    // A valid operator session, but the SALE carries no `waitron_device` cookie (the login itself is
+    // device-gated, so `loginSession` presents one).
     const cookie = await loginSession(app, cfg, operatorId);
 
     const res = await app.request("/api/sales", {
@@ -763,11 +690,8 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
 
-    // A `kds_station` binds a live station and NO till (a kds device rings no sale), so its
-    // `devices.till_id` is null — `requireSaleTillId` refuses it `device.till_required`: a till-less
-    // device (a kitchen screen) cannot ring a sale. The device authenticates (a real enrolled binding),
-    // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
-    // A distinct, non-default station name — provisioning already seeds the venue's default "Cocina".
+    // A `kds_station` device binds a station and no till, so `requireSaleTillId` refuses it — the
+    // second branch, distinct from the no-cookie refusal above. Provisioning already seeds "Cocina".
     const station = await withTransaction(suite.db, async (tx) => {
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
@@ -808,12 +732,9 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // 1. Log in and capture the session cookie.
     const cookie = await loginSession(app, cfg, operatorId);
-    // SP-A.2 cutover: the pay + replay below resolve their till from this enrolled till device (bound to
-    // the venue's own till), so the filed record and the replay are byte-identical to the pre-cutover sale.
     const deviceCookie = await enrolTillCookie(cfg);
 
-    // 2. Park an order (client-minted id, its own idempotency key) with 2 × 1.50. Fresh tenant+node
-    //    per test, so the allocated order number is deterministically 1.
+    // 2. Park an order (client-minted id, its own idempotency key) with 2 × 1.50.
     const workingOrderId = randomUUID();
     const parkRes = await app.request("/api/working-orders", {
       method: "POST",
@@ -900,14 +821,10 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
   });
 });
 
-// POST /api/pay (Task 12 cutover): the integrated-card-terminal pay route now RESOLVES the reader
-// (request `readerId`, else the paying device's default in `device_card_readers`), loads the reader
-// row by id, PRE-CHECKS the provider is connected, then drives the reader's provider
-// (from the pool) through the real `payWorkingOrderIntegrated` split-transaction flow (P1 commit →
-// network collect → P3 file/settle) over a `FakeStripe`-backed `StripeTerminalProvider` — so a
-// capture/decline genuinely round-trips the adapter rather than being stubbed. What these cases
-// prove is the reader ROUTING — which reader a collect drives, and which id lands on
-// `payments.reader_id`. The cookieless refusal is hermetic, in `till-api.test.ts`.
+// POST /api/pay resolves the reader (request `readerId`, else the paying device's default in
+// `device_card_readers`), pre-checks its provider is connected, and drives it through
+// `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader
+// ROUTING: which reader a collect drives, and which id lands on `payments.reader_id`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -934,7 +851,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
     expect(outcome.outcome).toBe("captured");
     expect(outcome.ticket?.total).toBe("1.50");
-    // The payment records the reader it settled on (Task 12) — proof the pay routed to the default.
+    // The payment records the reader it settled on — the default.
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
@@ -968,11 +885,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   });
 
   it("two active readers on ONE provider: two sales route each to its OWN providerRef (not the first)", async () => {
-    // The reader-ref-per-collect guard. Before the fix, the pool cached ONE provider per id and baked
-    // the FIRST sale's reader resolver into it, discarding every later sale's reader — so a venue with
-    // two readers on one provider charged every sale after the first on the first reader. Now the ref
-    // is a per-collect input, so one shared cached provider drives each sale's own reader. `FakeStripe`
-    // records the reader id `processPaymentIntent` drove, in order — assert the two DISTINCT refs.
+    // The reader ref is a per-collect input, so one cached provider must drive each sale's own
+    // reader. `FakeStripe` records the reader id each collect drove, in order.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const client = new FakeStripe();
@@ -1008,12 +922,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   });
 
   it("a resolvePending sweep tick BEFORE the first sale does not break the subsequent sale (no 500)", async () => {
-    // Regression for the sweep-poisons-the-pool defect: the boot sweep fetches each provider via
-    // `pool.get(providerId)` and runs `resolvePending`. The pay path then fetches the SAME cached
-    // instance. Before the fix, the sweep baked a THROWING reader resolver into that instance, so the
-    // next card sale 500'd (`collect` called the resolver before its own try). With the reader now a
-    // per-collect input, the swept instance and the pay instance are one and the same and the sale
-    // captures cleanly.
+    // The boot sweep fetches each provider through `pool.get` and runs `resolvePending`; the pay path
+    // then gets the SAME cached instance, which the sweep must leave usable.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const pool = fakePool(cfg, new FakeStripe());
@@ -1192,8 +1102,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   });
 });
 
-// GET /api/till: the per-device card provider string (Task 12) — the paying device's default reader's
-// provider, mapped to the till's union — and the `activeReaders` list Task 17's picker reads.
+// GET /api/till: the paying device's default reader's provider, mapped to the till's union, and the
+// `activeReaders` list the reader picker reads.
 describe("GET /api/till (per-device card provider, over HTTP)", () => {
   it("maps the device's default reader provider to the till union and lists active readers", async () => {
     const { cfg } = await setupVenue();
@@ -1212,8 +1122,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     };
     // "stripe" → "stripe_terminal" (the till's closed union), never the raw seat id.
     expect(body.cardProvider).toBe("stripe_terminal");
-    // The default reader's OWN id (Task 17) — needed to name it in `activeReaders` below, since
-    // `cardProvider` alone only names the provider TYPE, not which reader on it is the default.
+    // `cardProvider` names only the provider TYPE, so the default reader is named by id.
     expect(body.defaultReaderId).toBe(reader.id);
     expect(body.activeReaders).toEqual([
       { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
@@ -1268,9 +1177,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    // Flip this venue's location to `ticket_then_pay` (Mode T) — `setupVenue` provisions the DEFAULT
-    // `prepay`, so both the DB column and the in-memory cfg are updated together, the same two-part
-    // flip `working-order.pay-and-dispatch.test.ts`'s `modeVenue` makes.
+    // Flip to `ticket_then_pay` (Mode T) in both the DB column and the in-memory cfg.
     await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
     );
@@ -1282,8 +1189,6 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
 
     // 1. Log in.
     const cookie = await loginSession(app, cfg, operatorId);
-    // SP-A.2 cutover: place + collect are sale routes now, so the box is an enrolled till device bound to
-    // the venue's own till (resolved till == env `cfg.tillId`, so the record filed at collect is unchanged).
     const deviceCookie = await enrolTillCookie(cfg);
 
     // 2. Park then PLACE: 2 × 1.50 = 3.00. Mode T files NO fiscal doc at placing.
@@ -1361,8 +1266,6 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             id: expect.any(String),
             workingOrderLineId: expect.any(String),
             state: "queued",
-            // The dish name + quantity the kitchen display renders, carried end to end from the fired
-            // working-order line's snapshot through the HTTP route (KDS-1 Gap 2): "2× Agua mineral".
             // The kitchen name, falling back to the staff name because this product carries none.
             name: "Agua mineral",
             quantity: "2.000",
@@ -1374,12 +1277,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
               gl: "u",
             },
             unitPrecision: 0,
-            // KDS-2: this product carries no course, so the item serialises `course: null` and fires
-            // IMMEDIATELY (a null course is treated as earliest, §2b) — `firedAt` is a timestamp, not null.
+            // No course, so the item fires immediately: a null course is treated as earliest.
             course: null,
             firedAt: expect.any(String),
-            // Order-line customisation (spec §2/§3): this line carried no note, so the snapshotted
-            // field the KDS reads serialises null.
             note: null,
             // No extras picked on this line → an empty modifier sub-item list, and no options list
             // answered → an empty frozen-answer list.
@@ -1388,22 +1288,17 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // Just fired — nowhere near the default station's 5-minute warm threshold.
             queuedAt: expect.any(String),
             band: "fresh",
-            // Modifier↔allergen: this dish's OWN allergens are unreviewed, so the profile is an empty set
-            // flagged pending — the KDS surfaces "not reviewed" for it (the Cautious policy: a
-            // modifier-less unreviewed dish still warns the kitchen).
+            // This dish's own allergens are unreviewed, so the profile is empty and flagged pending.
             asServed: { allergens: {}, pending: true },
-            // The as-served DIET twin. This dish carries no recipe (null `diet_derivation`), which reads as
-            // "no recipe": empty origins but PENDING (the same default `republishOverlays` uses when it
-            // folds a product's diet), so an unreviewed dish reads vegan/vegetarian "unknown" — the CAUTIOUS
-            // posture, matching the allergen `pending` above. An unreviewed plate asserts no positive claim.
+            // No recipe, so the diet reads "unknown": an unreviewed plate asserts no positive claim.
             asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
           },
         ],
       },
     ]);
 
-    // 4. Advance the ticket item over HTTP, per line: queued → preparing → ready. (`collected` is no
-    //    longer a kitchen state — the handover is order-level `collected_at`, set at collect below.)
+    // 4. Advance the ticket item over HTTP, per line: queued → preparing → ready. (The handover is
+    //    the order-level `collected_at`, set at collect below.)
     const itemId = groups1[0]!.items[0]!.id;
     for (const to of ["preparing", "ready"]) {
       const advance = await app.request(`/api/ticket-items/${itemId}/advance`, {
@@ -1446,9 +1341,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(after.wo).toEqual([{ status: "settled" }]);
     expect(after.registros).toHaveLength(1); // exactly one chained record, filed at collect
 
-    // 6. Collect stamped `collected_at`, so the handed-over order drops off the station's display —
-    //    `listStationQueue` filters `collected_at IS NULL` (the KDS-1 successor to the old `collected`
-    //    prep state).
+    // 6. Collect stamped `collected_at`, so the handed-over order drops off the station's display.
     const queueAfterCollect = await app.request(queueUrl, { headers: { cookie } });
     expect(await queueAfterCollect.json()).toEqual([]);
   });
@@ -1466,7 +1359,6 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
 
     const cookie = await loginSession(app, cfg, operatorId);
 
-    // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
     const deviceCookie = await enrolTillCookie(cfg);
 
     // A genuine Mode-P walk-up: `POST /api/sales` settles it immediately (open → settled) — no
@@ -1535,12 +1427,10 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
   });
 });
 
-// KDS-1 collect fix — the Mode-P counter handover. A settled walk-up fired to the kitchen and walked to
-// `ready` is handed to the customer via POST /api/orders/:id/collect — the NON-FISCAL marker that stamps
-// `collected_at` and drops the order off the station display (the very thing the regression made
-// impossible: a settled order was immutable, so a fired Mode-P order lingered forever). It needs a
-// genuine fiscal settle (`POST /api/sales`, Mode P's walk-up) plus the 0056 enforce_transition
-// relaxation — neither of which the hermetic stub `FiscalBackend` can exercise.
+// The Mode-P counter handover. A settled walk-up fired to the kitchen and walked to `ready` is handed
+// over via POST /api/orders/:id/collect — the NON-FISCAL marker that stamps `collected_at` and drops
+// the order off the station display. It needs a genuine fiscal settle, which the hermetic suite's
+// stub backend cannot make.
 describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
   it("hands over a fired, ready order: 200, collected_at stamped, off the station queue; a still-OPEN order is refused working_order.not_settled", async () => {
     const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
@@ -1549,7 +1439,6 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await loginSession(app, cfg, operatorId);
-    // SP-A.2 cutover: the walk-up sale resolves its till from an enrolled till device (venue's own till).
     const deviceCookie = await enrolTillCookie(cfg);
 
     // Walk-up settle and preparation fire happen in one transaction.
@@ -1593,7 +1482,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     }[];
     expect(readyQueue.map((g) => g.orderId)).toEqual([workingOrderId]);
 
-    // Hand it over — the new non-fiscal collect route (an empty body; it needs only the id).
+    // Hand it over — the non-fiscal collect route (an empty body; it needs only the id).
     const collect = await app.request(`/api/orders/${workingOrderId}/collect`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -1607,7 +1496,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
         .select({
           // `.mapWith(Boolean)` because `sql<boolean>` is a TypeScript cast and not a read mapping:
           // without it this expression arrives as the number 1, which `toEqual` separates from
-          // `true`. Measured both ways on this file, 2026-09-22.
+          // `true`.
           collected: sql`collected_at is not null`.mapWith(Boolean),
           status: workingOrders.status,
         })
@@ -1641,16 +1530,12 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 // require their profile capabilities; prep mutations retain the handheld restriction. These cases
 // drive real device lookup and real chained fiscal writes.
 describe("handheld sales and device capability gates", () => {
-  /** Enrol a REAL handheld device in `cfg`'s tenant (no station — a handheld form factor binds none — it is
-   * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
-   * token's scrypt hash actually verifies, so `tryReadDevice` resolves it to a genuine `handheld`
-   * binding rather than folding into a miss. */
+  /** Enrol a handheld device and return its `waitron_device=<id>.<token>` cookie. */
   async function enrolHandheldCookie(
     cfg: TillConfig,
     capabilities: string[] = [],
   ): Promise<string> {
-    // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
-    // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
+    // A handheld binds an EXISTING register at enrol — here the venue's own till.
     const profileId = await seedProfileFF("phone-portrait", capabilities);
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
@@ -1660,10 +1545,8 @@ describe("handheld sales and device capability gates", () => {
     return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
   }
 
-  /** Log in through the HTTP surface and return just the `name=value` session cookie pair (stripping
-   * the Set-Cookie attributes), so it can be combined with a device cookie in one `Cookie` header. The
-   * login is DEVICE-GATED (§5/§6), so it enrols a throwaway `till` device for the login itself; each
-   * handheld test then carries its OWN handheld/till device cookie on the sale/pay call. */
+  /** Log in and return just the `name=value` session cookie pair, to combine with a device cookie in
+   * one `Cookie` header. The login is device-gated, so it presents a throwaway `till` device. */
   async function loginOperator(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
     const loginDeviceCookie = await enrolTillCookie(cfg);
     const login = await app.request("/api/session", {
@@ -1749,12 +1632,8 @@ describe("handheld sales and device capability gates", () => {
       );
     });
 
-    // The owner reversed the order-only firewall for the CASH tender (2026-08-30): a handheld may SETTLE a
-    // cash sale because the fiscal chain is keyed by the submitting NODE (`nodeId`), not the till
-    // (record-sale.ts:79-82 — "Which node processes and chains the sale — the SIF/chain/series key"), so a
-    // handheld files under its node's SIF exactly like a till. The handheld holds BOTH a valid operator
-    // session AND a real handheld cookie. Prove-by-deletion: add an `assertNotHandheld` back onto
-    // `POST /api/sales` and this same request 403s instead.
+    // A handheld may settle a cash sale: the fiscal chain is keyed by the submitting node (`nodeId`),
+    // not the till, so a handheld files under its node's SIF exactly like a till.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1770,11 +1649,8 @@ describe("handheld sales and device capability gates", () => {
     const ticket = await res.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
-    // Exactly ONE chained fiscal record for this (own) tenant, INDISTINGUISHABLE from a counter cash
-    // record: the same chain-opening shape the "ordinary till" mixed-cash test above asserts (own tenant,
-    // node = cfg.nodeId — the SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor
-    // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
-    // separate device metadata; it never keys the chain.
+    // Exactly one chained record, the same chain-opening shape a counter cash sale files, under
+    // `cfg.nodeId`: the SIF is the node, not the till.
     const registros = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -1797,15 +1673,9 @@ describe("handheld sales and device capability gates", () => {
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
 
-    // The reversal was widened (2026-08-30) from cash to cash OR a MANUAL card tender: the `card` tender
-    // on `POST /api/sales` is the datáfono / unintegrated tender — the operator charges the card on a
-    // SEPARATE bank terminal the POS never talks to (`recordManualCardPayment` makes NO network call), so
-    // it is fiscally identical to a cash sale: the SAME chained registro under the node's SIF (`nodeId`,
-    // record-sale.ts:79-82), differing only by the one captured `payments` row it adds. `/api/sales` is
-    // therefore no longer fenced against a handheld at all — only the INTEGRATED reader (`POST /api/pay`)
-    // stays fenced. The handheld holds BOTH a valid operator session AND a real handheld cookie.
-    // Prove-by-deletion: re-add an `assertNotHandheld(deps, c, "record_sale_card")` on `POST /api/sales`
-    // and this same request 403s instead.
+    // The `card` tender on `POST /api/sales` is charged on a separate bank terminal the POS never
+    // talks to, so it files the same chained record as cash plus one captured `payments` row. Only
+    // the integrated reader (`POST /api/pay`) is fenced against a handheld.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
@@ -1818,10 +1688,7 @@ describe("handheld sales and device capability gates", () => {
     const ticket = await res.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
-    // Exactly ONE chained fiscal record, INDISTINGUISHABLE from a counter card record: the SAME
-    // chain-opening shape the handheld cash parity test above asserts (own tenant, node = cfg.nodeId — the
-    // SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor pointer, a 64-hex
-    // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
+    // Exactly one chained record, the same chain-opening shape as the handheld cash case above.
     const registros = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -1850,10 +1717,7 @@ describe("handheld sales and device capability gates", () => {
   });
 
   it("allows a sale from an enrolled TILL device (not a handheld) — operator session + till-device cookie — 200", async () => {
-    // The counterpart to the handheld cases: a `till`-kind device is NOT refused, and post-cutover its
-    // enrolled `till_id` (the venue's own till) is what the sale files under. (Pre-cutover this was an
-    // ordinary env-till with no device cookie; the cutover retires that path — the no-cookie sale is now
-    // refused `device.unauthorized`, pinned by the cutover negative test near the top of this file.)
+    // The counterpart to the handheld cases: a `till`-kind device is not refused.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -1900,13 +1764,8 @@ describe("handheld sales and device capability gates", () => {
     },
   );
 
-  // SP-A.2 §16 (Task 14) + device-profile §5.3 (Task 9): the handheld firewall on `/api/pay` and
-  // `/api/drawer/open` is the GENERALISED capability firewall — a device is refused unless its assigned
-  // device PROFILE declares the required flag, not merely because its kind is `handheld`. This drives the
-  // capability path directly: a device whose profile declares `capabilities: []` is refused `/api/pay`
-  // even though its kind is not consulted. Prove-by-deletion: remove
-  // `assertDeviceCapability(deps, c, "integrated-card-payment", "pay")` from `/api/pay` and this request
-  // proceeds past the fence (a `card.*`/id error, never the 403 the fence exists to raise).
+  // The firewall on `/api/pay` is capability-based: a device is refused unless its profile declares
+  // `integrated-card-payment`, whatever its kind.
   it("refuses /api/pay from a device whose assigned PROFILE LACKS integrated-card-payment (403 device.forbidden_action)", async () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
@@ -1935,18 +1794,13 @@ describe("handheld sales and device capability gates", () => {
     expect((await res.json()).error.code).toBe("device.forbidden_action");
   });
 
-  // C1 (whole-branch review): the two ORDER-SETTLEMENT routes a handheld reaches through its own order
-  // screens must be fenced too — they file a CHAINED fiscal record, the unrecoverable one (CLAUDE.md
-  // §5). `POST /:id/place` files a deferred invoice in a Mode-I (invoice-first) venue; `POST /:id/collect`
-  // files the immediate sale (Mode T) or settles the deferred invoice (Mode I). Each test drives a REAL
-  // order end to end: the handheld is refused 403 having filed NOTHING, then an enrolled TILL device
-  // (post-cutover a sale route resolves its till from the device, not env) completes the same order and
-  // files exactly one chained record — so removing the `assertNotHandheld` guard flips the handheld case
-  // to a 200 that files the record the guard exists to prevent (prove-by-deletion).
+  // The two order-settlement routes a handheld reaches through its order screens file a chained
+  // fiscal record, so they are fenced too: `POST /:id/place` in a Mode-I venue, `POST /:id/collect`
+  // in Mode T or I. The handheld is refused having filed nothing; an enrolled till device then
+  // completes the same order and files exactly one record.
   it("refuses a handheld PLACE (Mode I) with 403, filing nothing; an ordinary till places and files one record", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    // Flip to invoice-first (Mode I), so PLACE files the DEFERRED chained invoice — the fiscal write the
-    // firewall protects. Same two-part flip (DB column + in-memory cfg) the Mode-T test above makes.
+    // Flip to invoice-first (Mode I), so PLACE files the DEFERRED chained invoice.
     await suite.db.execute(
       sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
     );
@@ -1988,9 +1842,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(afterRefused.length).toBe(0);
 
-    // An enrolled TILL device (venue's own till) places the SAME order and files exactly one deferred
-    // invoice — post-cutover a place resolves its till from the device, not env (the record is unchanged
-    // because the device's till equals the venue till).
+    // An enrolled TILL device places the SAME order and files exactly one deferred invoice.
     const tillDeviceCookie = await enrolTillCookie(cfg);
     const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
       method: "POST",
@@ -2017,8 +1869,7 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(modeCfg), noopLog);
 
     const deviceCookie = await enrolHandheldCookie(cfg);
-    // A separate TILL device (venue's own till) for the place-setup + collect completion — both are sale
-    // routes post-cutover and resolve their till from the enrolled device, not env.
+    // A separate TILL device for the place setup and the collect, both sale routes.
     const tillDeviceCookie = await enrolTillCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
 
@@ -2076,10 +1927,8 @@ describe("handheld sales and device capability gates", () => {
     expect(after.registros.length).toBe(1);
   });
 
-  // I3 (whole-branch review): `POST /:id/cancel` appends an `order_cancelled` entry to the tamper-evident
-  // hash-chained amendment log — a fiscal-adjacent mutation a handheld must not perform. No fiscal doc is
-  // filed by cancel, so the prove-by-deletion signal is the order's TRANSITION: refused, it stays
-  // `placed`; allowed, the ordinary till drives it to `abandoned`.
+  // `POST /:id/cancel` appends to the hash-chained amendment log, which a handheld must not do. Cancel
+  // files no fiscal document, so the signal is the transition: refused, the order stays `placed`.
   it("refuses a handheld CANCEL with 403, leaving the order placed; an ordinary till cancels it", async () => {
     const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
     const each = available.find((p) => p.pricingUnit === "each")!;
@@ -2089,9 +1938,8 @@ describe("handheld sales and device capability gates", () => {
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
 
-    // Park + place a real order as the ordinary till, so there is a PLACED order to cancel. Place is a
-    // sale route post-cutover, so its completion carries an enrolled till device (the venue's own till);
-    // cancel is NOT a sale route (stays env), so the cancel calls below need no device cookie.
+    // Park + place a real order as the ordinary till, so there is a PLACED order to cancel. Cancel is
+    // not a sale route, so the ordinary till's cancel below carries no device cookie.
     const tillDeviceCookie = await enrolTillCookie(cfg);
     const workingOrderId = randomUUID();
     const park = await app.request("/api/working-orders", {
@@ -2348,11 +2196,8 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // and the renamed "Manchego" does not.
   expect(text).toContain("Queso");
   expect(text).not.toContain("Manchego");
-  // The dish's options answer reached the PAPER. Nothing else in this file follows the whole chain
-  // that puts it there — the stored line read back, priced, projected onto the ticket and formatted
-  // (`readLockedLines` -> `priceLockedLines` -> `ticketLinesFrom` -> `formatReceipt` ->
-  // `customerOptionSnapshotLabels`) — and every other test of it builds a result by hand. This list
-  // and label stored no customer text, so the staff names are what a diner reads.
+  // The dish's options answer reached the paper. This list and label stored no customer text, so the
+  // staff names are what a diner reads.
   expect(text).toContain("Preparación: Frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.db, async (tx) => {

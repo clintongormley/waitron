@@ -32,7 +32,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // (two `startServer` boots, in ONE test process — not two OS processes), each on its OWN venue
 // DIRECTORY of SQLite files. One venue, two nodes: A (primary, box) and B (mirror, cloud), with the
 // SAME identity seeded directly into each directory, because nothing copies rows between the two
-// nodes: the PostgreSQL replication that used to is deleted and its replacement has not landed.
+// nodes today.
 //
 // There is no role on this engine, and every call below runs on the one handle each directory
 // has. Nothing now checks that the deployment role may take the venue-wide read. What the case still
@@ -46,9 +46,8 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 //   2. B (a standby) refuses a till login (read-only gate → `node.read_only`) and mounts no device group.
 //   3. The seeded device cookie authenticates on A (the selling node); A logs a till in.
 //   4. A goes down (its listener closes; a till sees an unreachable box). B is promoted (the deployment
-//      flip a human's promote performs; Track B item 3 builds the endpoint) and RESTARTED —
-//      `acceptingSales` is boot-captured, so an un-restarted B still answers false, and only the fresh
-//      boot flips it true.
+//      flip a human's promote performs) and RESTARTED — `acceptingSales` is boot-captured, so an
+//      un-restarted B still answers false, and only the fresh boot flips it true.
 //   5. The SAME device cookie authenticates on the promoted B, the till re-logs-in, and the venue's open
 //      tab — tagged with the DEAD node's id — is inherited by the now venue-wide read (§3.6).
 //
@@ -68,15 +67,11 @@ const SERIES_A = "44444444-4444-4444-8444-444444444444";
 const SERIES_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PERSON = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const DEVICE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-// A device is defined by its profile's form factor now (no device_kind column): a `till` profile means
-// the binding rule requires a register (till_id), not a station.
+// A `till` profile means the binding rule requires a register (till_id), not a station.
 const DEVICE_PROFILE = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const DEVICE_TOKEN = "reroute-e2e-device-token";
-// The venue's one open tab, tagged with A's node id — the tab A had opened, seeded straight into B's
-// database, because nothing copies it there today (the deletion the header above records). It is the
-// state a replicated tab WOULD have been in under that deleted replication, which classed live-service
-// rows as copied to a standby and never drained back (swap spec §4.3). Only B carries it: the proof is
-// that a promoted B inherits it.
+// The venue's one open tab, tagged with A's node id, seeded straight into B's database because
+// nothing copies it there today. Only B carries it: the proof is that a promoted B inherits it.
 const TAB_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 const DEVICE_COOKIE_HEADER = `${DEVICE_COOKIE}=${DEVICE_ID}.${DEVICE_TOKEN}`;
@@ -104,9 +99,8 @@ writeFileSync(
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
 const KEY_ENV = {
-  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
-  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
-  // behaviour is proven directly in landing-listener.test.ts.
+  // Keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
+  // privileged, and a root CI container would otherwise stand up a live service on it.
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -115,10 +109,7 @@ const KEY_ENV = {
 };
 
 // One venue directory per node, migrated through the product's own `applyMigrations` — the same
-// entry point boot calls, so each directory carries the append-only triggers a box carries. The
-// long-lived handle beside it is this suite's seeding and promotion connection; it stays open
-// alongside the booted server's own open of the same directory, which write-ahead mode and the
-// store's `busy_timeout` allow (`packages/store/src/index.ts`).
+// entry point boot calls, so each directory carries the append-only triggers a box carries.
 let venueDirA: string;
 let venueDirB: string;
 let storeA: VenueDatabase;
@@ -129,20 +120,12 @@ let b: Database;
 let migrationsRoot: string;
 
 /** Seed the venue's identity (tenant, location, both nodes, till, both series) plus a staff person on
- * PIN 5555 and the till device, on one venue directory. The device's `token_hash`
- * is the scrypt hash of `DEVICE_TOKEN` (`hashSecret`, the same function `acceptDeviceJoinRequest`
- * stores), so the `waitron_device=<id>.<token>` cookie built above authenticates against this row on
- * whichever node holds it. Seeded identically on A and B — the "same device rows seeded directly" the
- * design names. */
+ * PIN 5555 and the till device, on one venue directory. The device's `token_hash` is
+ * `hashSecret(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
+ * against this row on whichever node holds it. */
 async function seedVenue(db: Database): Promise<void> {
-  // Through the table definitions, not raw SQL. Every id here is supplied explicitly (the two nodes
-  // and both series must match the constants the reroute is asserted against), so this is not about
-  // generated ids — it is the `array['en']::text[]` constructor and the `'[]'::jsonb` cast, both of
-  // which this engine refuses, plus the `created_at`/`enrolled_at` stamps that are JavaScript
-  // generators a raw insert never reaches. The untargeted `on conflict do nothing` becomes a
-  // primary-key-targeted one at each call: every row here is keyed by the id it supplies, and an
-  // untargeted form absorbs EVERY unique conflict rather than the one the caller means
-  // (CLAUDE.md §3).
+  // Every conflict target is the primary key: each row here is keyed by the id it supplies, and an
+  // untargeted form absorbs EVERY unique conflict rather than the one the caller means.
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90444444A", legalName: "Reroute E2E SL" })
@@ -308,8 +291,6 @@ beforeAll(async () => {
   });
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
-  // `working_orders.opened_at` is a JavaScript generator on this engine, so this goes through the
-  // table definition like the rest of the fixture; the conflict target is the id this row supplies.
   await b
     .insert(workingOrders)
     .values({ id: TAB_ID, tillId: TILL, nodeId: NODE_A, orderNumber: 1, status: "open" })
@@ -366,16 +347,14 @@ describe("till reroute — two instances, one venue", () => {
       await serverA.close();
       await expect(fetch(`http://127.0.0.1:${portA}/api/node`)).rejects.toThrow();
 
-      // 5. Promote B at the DB level — the deployment flip a human's promote performs (Track B item 3
-      // builds the endpoint).
+      // 5. Promote B at the DB level — the deployment flip a human's promote performs.
       await setDeploymentMode(b, NODE_B, "primary");
       await setSingletonRole(b, NODE_B, "primary");
 
-      // The boot-captured control (node-api.ts, §3.1) — the measurement where a live read and the
-      // captured one genuinely differ (CLAUDE.md §1): the STILL-RUNNING mirror keeps answering
-      // `acceptingSales:false` even though the DB now says primary, because the flag is read ONCE at boot,
-      // never live. A live read would already be true here, and a till would move to a node that has not
-      // completed its promotion reboot. Only the restart below flips it true.
+      // The boot-captured control: the STILL-RUNNING mirror keeps answering `acceptingSales:false`
+      // even though the DB now says primary, because the flag is read ONCE at boot, never live. A live
+      // read would already be true here, and a till would move to a node that has not completed its
+      // promotion reboot. Only the restart below flips it true.
       expect((await probe(portB)).acceptingSales).toBe(false);
       await serverB.close();
       serverB = undefined;
