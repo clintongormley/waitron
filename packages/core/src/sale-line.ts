@@ -16,16 +16,13 @@ export interface RecordSaleLine {
   /** A percentage literal, e.g. "21.00" meaning 21%. `sale_lines.vat_rate` stores the same rate
    * as a count of basis points; `saleLineRows` is where the two forms meet. */
   vatRate: string;
-  /** The line's tax-EXCLUSIVE base amount. `buildVatBreakdown` below groups lines by `vatRate`
-   * and derives each group's tax from this figure via `@waitron/shared`'s `percentOf` — plain
-   * multiplication, because this is already the base rather than a customer-facing gross price
-   * that would need reversing out of. */
+  /** The line's tax-exclusive base, so `buildVatBreakdown` derives the tax by plain
+   * multiplication rather than reversing it out of a gross price. */
   lineTotal: string;
-  /** Snapshotted analytics label, copied onto `sale_lines.category` at insert; never a catalogue
-   * reference. Optional: when absent the line inserts `null`, exactly as before this field existed. */
+  /** Snapshotted analytics label, copied onto `sale_lines.category`; never a catalogue reference. */
   category?: string | null;
-  /** The `lineNo` of this line's parent dish; `null` for a top-level line. Resolved to the parent's
-   * generated id at the `sale_lines` insert (Task 5); presentation metadata only, NEVER hashed. */
+  /** The `lineNo` of this line's parent dish; `null` for a top-level line. Presentation only,
+   * never hashed. */
   parentLineNo?: number | null;
   /** The diner's answers to this dish's options lists, each frozen as the list's three names and
    * the chosen label's three names. Copied onto `sale_lines.option_snapshots`; presentation only,

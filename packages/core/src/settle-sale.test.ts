@@ -24,27 +24,13 @@ import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
 
-/**
- * CORE then IDENTITY — the pair the deleted `core_identity` template this file cloned was built
- * from (`git show aabdde6a8^:packages/core/src/testing/global-setup.ts`). Kept as the pair rather
- * than narrowed to CORE, so the fixture is the one the suite always had.
- *
- * This file no longer has "two backends" available to it, and one describe changed subject because
- * of it — see `settleSale — two settlements started together`.
- */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], timeoutMs: 60_000 });
 
 const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
 
 /**
- * Inserts one `sales` row on the seeding connection: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
- * `amount_charged` was dropped in migration 0012), and `node_id` is NOT NULL (node-id rekey).
- * `correctsSaleId` defaults to NULL for an ordinary sale; pass it to seed a corrective invoice correcting
- * another sale (its negative/positive total is what `sales_total_ck` permits once it is set).
- *
- * `total` is given as the decimal amount a reader of these cases recognises and converted to the
- * count of whole cents the column stores on the way in, so this fixture is the same edge
- * `recordSale` is.
+ * Inserts one `sales` row directly. `total` is a decimal, converted to whole cents as `recordSale`
+ * does. Pass `correctsSaleId` to seed a corrective invoice.
  */
 async function seedSale(
   db: Database,
@@ -61,8 +47,7 @@ async function seedSale(
       issuedAt: new Date("2026-08-01T11:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
       total: stringToCents(overrides.total ?? "65.00"),
-      // The filed per-rate breakdown; `[]` — this file exercises settlement, not the
-      // breakdown, and the column just needs a valid NOT NULL jsonb array.
+      // Empty: this file exercises settlement, not the breakdown.
       vatBreakdown: [],
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
@@ -107,11 +92,6 @@ describe("settleSale — the happy path", () => {
       .from(saleSettlements)
       .where(eq(saleSettlements.saleId, saleId));
     expect(settled).toHaveLength(1);
-    // The tender's own moment, round-tripped through Postgres. Compared as an instant rather than
-    // as a string literal: a `timestamptz` read back through the driver is rendered in the session
-    // timezone (`2026-08-01 12:00:00+00`), not as the ISO string it was written from — the same
-    // reason `record-sale.test.ts` and `manual.test.ts` both wrap the read in `new Date(...)`.
-    // **Deviation from the brief**, whose `toBe("2026-08-01T12:00:00.000Z")` assumes the ISO form.
     expect(new Date(settled[0]!.settledAt).getTime()).toBe(SETTLED_AT.getTime());
 
     const tenderRows = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
@@ -120,17 +100,12 @@ describe("settleSale — the happy path", () => {
     expect(tenderRows[0]!.amount).toBe(7000);
     expect(tenderRows[0]!.tipAmount).toBe(500);
     expect(tenderRows[0]!.cashTendered).toBe(10000);
-    // `async () =>`, not `() =>`: this adapter's `execute` returns a `RawResult` synchronously
-    // rather than a promise, and `captureError` takes a `() => Promise<unknown>` (TS2739).
     const mutation = await captureError(async () =>
       suite.db.execute(sql`update tenders set cash_tendered = 20000 where sale_id = ${saleId}`),
     );
-    // Not `driverErrorCode`: it answers `ERR_SQLITE_ERROR` for EVERY failure on this engine
-    // (`packages/db/src/testing/errors.ts`), so a `.toBe(...)` on it would pass for a NOT NULL, a
-    // foreign key or a typo just as readily. `triggerRaised` asks the two questions that together
-    // identify one of OUR triggers — the result class AND the exact words it raised
-    // (`packages/db/src/constraint-target.ts`). The words come from `installAppendOnlyTriggers`
-    // (`packages/store/src/append-only.ts`: `<table> is append-only`).
+    // `triggerRaised` checks the result class and the trigger's exact words (`<table> is
+    // append-only`, from `installAppendOnlyTriggers`); `driverErrorCode` answers
+    // `ERR_SQLITE_ERROR` for every failure alike.
     expect(triggerRaised(mutation, "tenders is append-only")).toBe(true);
   });
 
@@ -146,8 +121,7 @@ describe("settleSale — the happy path", () => {
         tenders: [{ ...cash, amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
     );
-    // `isRefusal(error, CHECK_VIOLATION)` asks for the CHECK class (275 on this engine's own
-    // numbering); `driverErrorCode` would answer the same string for every failure here.
+    // The CHECK class; `driverErrorCode` would answer the same string for every failure.
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId))).toEqual([]);
     expect(
@@ -156,18 +130,13 @@ describe("settleSale — the happy path", () => {
   });
 
   it("settles a €0 comped sale with no tenders, stamped at the settlement instant (no raw TypeError)", async () => {
-    // A fully-comped sale is €0 and has NO payment: `tenders_amount_ck` forbids a €0 tender, so a
-    // comp is genuinely tenderless. The schema permits the settlement — `sales_total_ck` allows a
-    // total of 0, and the coverage trigger's `coalesce(sum(amount),0)` makes `0 = 0 + 0` hold — so
-    // `settleSale` must RECORD it, not crash on an empty `reduce`/empty `insert().values([])`. With
-    // no tender to time it by, the settlement stamps its OWN instant (`new Date()`, like
-    // `record-void.ts`), NOT the sale's `issued_at`: in invoice-first mode settlement runs long
-    // after the invoice printed, and backdating an append-only row to issuance cannot be corrected.
+    // A comped sale has no tender (`tenders_amount_ck` refuses a zero one), so `settleSale` must
+    // record the settlement with none, stamped at its own instant rather than the sale's
+    // `issued_at`.
     const seed = await seedTenant(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "0.00" });
 
-    // Window the settle call so the stamped instant is pinned to the actual settlement moment, not
-    // the seed's issued_at (11:00Z). `before`/`after` bracket the real `new Date()` inside settleSale.
+    // `before`/`after` bracket the `new Date()` inside settleSale; the seed's issued_at is 11:00Z.
     const before = new Date();
     await settle(suite.db, {
       saleId,
@@ -184,8 +153,7 @@ describe("settleSale — the happy path", () => {
     // The settlement's own instant: within the call window …
     expect(settledAt).toBeGreaterThanOrEqual(before.getTime());
     expect(settledAt).toBeLessThanOrEqual(after.getTime());
-    // … and strictly LATER than the seed's issued_at (11:00Z), proving it is the settlement instant
-    // rather than the print instant a backdating implementation would have copied.
+    // … and later than the seed's issued_at (11:00Z), so not a copy of the print instant.
     expect(settledAt).toBeGreaterThan(new Date("2026-08-01T11:00:00Z").getTime());
 
     const tenderRows = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
@@ -193,8 +161,7 @@ describe("settleSale — the happy path", () => {
   });
 
   it("stamps the settlement at the LATEST tender's settledAt, across a split payment", async () => {
-    // Decision ⑤: settled_at is the moment the last tender landed. Two tenders settling at
-    // different times prove the reduce picks the max rather than the first/last positionally.
+    // The last tender to land sets settled_at: the maximum by value, not by position.
     const seed = await seedTenant(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     const earlier = new Date("2026-08-01T12:00:00Z");
@@ -295,8 +262,7 @@ describe("settleSale — guards", () => {
     };
 
     await settle(suite.db, input);
-    // The second attempt is caught by the pre-check SELECT, not the UNIQUE violation (that is the
-    // concurrent path below).
+    // Caught by the read of `sale_settlements` before writing.
     await expect(settle(suite.db, input)).rejects.toMatchObject({
       code: "sale.already_settled",
       params: { saleId },
@@ -312,31 +278,10 @@ describe("settleSale — guards", () => {
 
 describe("settleSale — two settlements started together", () => {
   it("lets exactly one settlement win; the loser surfaces sale.already_settled", async () => {
-    // ## What this case used to be, and the ONE thing it no longer establishes
-    //
-    // It opened two PostgreSQL backends, had the holder run `settleSale` fully and pause BEFORE
-    // commit — so its `sale_settlements` UNIQUE key was held but invisible — then let the waiter
-    // through. The waiter's pre-check SELECT saw nothing, it inserted its tenders, and it collided
-    // on that UNIQUE key. The point was design decision ③: **the UNIQUE constraint, not the
-    // pre-check SELECT, is the real control.**
-    //
-    // **LOST: exactly that.** There is one writer and one write transaction at a time, so a
-    // second caller can never observe the state the first has written but not committed. Whichever
-    // order the queue picks, the loser's pre-check now SEES the committed settlement and throws
-    // `sale.already_settled` from there — the UNIQUE path is unreachable through the public verb.
-    // This case can no longer tell "the pre-check arbitrated" from "the UNIQUE arbitrated", and
-    // nothing else in the tree can either. The constraint is still in the schema and still the
-    // backstop for any writer that does not go through `settleSale`; what is gone is the test that
-    // proved it load-bearing. (Same shape as the two working-order cases the storage swap's
-    // disposition ledger records under "exist to reach the unique-violation CATCH".)
-    //
-    // ## What it still proves, and why it was not deleted
-    //
-    // Two callers starting together end with exactly ONE settlement and ONE tender, and the loser
-    // gets the structured `sale.already_settled` rather than a raw driver error. That is the
-    // outcome a till's retry depends on, and it is NOT the sequential case above: this one starts
-    // both before either has finished, which is the arrangement the venue file's write queue has
-    // to flatten (`packages/store/src/write-queue.ts`).
+    // Two callers started together end with one settlement and one tender, and the loser gets
+    // `sale.already_settled` rather than a raw driver error. Weaker than its name: the write queue
+    // runs the two in turn, so the loser is refused by the read before writing, never by the
+    // `sale_settlements` unique key.
     const seed = await seedTenant(suite.db);
     const saleId = await seedSale(suite.db, seed, { total: "65.00" });
     const input: SettleSaleInput = {
@@ -354,8 +299,7 @@ describe("settleSale — two settlements started together", () => {
     expect((loser as AppError).code).toBe("sale.already_settled");
     expect((loser as AppError).params).toMatchObject({ saleId });
 
-    // Exactly one settlement, and exactly the winner's single tender — the loser's tender rolled
-    // back with its whole transaction.
+    // Exactly one settlement, and exactly the winner's single tender.
     const settled = await suite.db
       .select()
       .from(saleSettlements)
@@ -368,15 +312,9 @@ describe("settleSale — two settlements started together", () => {
 
 describe("settleSale — error propagation", () => {
   it("rethrows a non-unique error from the settlement insert, untranslated", async () => {
-    // The settlement insert's OTHER failure path. `settleSale` catches the `sale_settlements` UNIQUE
-    // violation and maps it to `sale.already_settled`; ANY other database failure (a future
-    // constraint, a transport error) must reach the caller as-is rather than be mislabelled as
-    // already-settled. Mirrors record-void.test.ts's identical "propagates a database error that is
-    // not a unique violation" stub for recordVoid's analogous catch/rethrow. A hand-built
-    // Transaction stub rather than the suite's real handle: there is no second schema-level constraint on
-    // `sale_settlements` to provoke a genuinely different refusal, so this drives settleSale's own
-    // catch/rethrow branch directly. A tenderless (€0) settlement so the ONLY insert reached is the
-    // `sale_settlements` one that rejects — no tender insert runs before it.
+    // Any other failure of the settlement insert must reach the caller as it arrived, not as
+    // `sale.already_settled`. A stub drives `settleSale`'s catch directly; the sale is tenderless,
+    // so the settlement insert is the only insert reached.
     let selects = 0;
     const fakeTx = {
       select: () => ({
@@ -408,20 +346,9 @@ describe("settleSale — error propagation", () => {
   });
 
   it("translates the tenders post-settlement guard to sale.already_settled", async () => {
-    // The OTHER concurrent-loser interleaving, driven directly. The "two settlements started
-    // together" case above refuses its loser at the pre-check; here the pre-check sees no
-    // settlement and the winner has COMMITTED before the tender insert, so the loser's tender
-    // INSERT trips the `tenders_reject_post_settlement` trigger instead. That trigger fires iff a
-    // settlement row already exists for the sale, so its refusal on the tender insert always means
-    // "already settled" and must surface as `sale.already_settled` — the same code the UNIQUE path
-    // maps to — rather than a raw driver error a retry/idempotency caller would not recognise. A
-    // hand-built Transaction stub (like the rethrow test above): the deterministic post-commit
-    // interleaving is awkward to force on a live DB, and this drives settleSale's own
-    // tenders-insert catch/translate branch directly. Tenders are PRESENT (unlike the €0 rethrow
-    // test) so the tenders INSERT — the one the trigger fires on — is reached.
-    //
-    // The refused error is the trigger's refusal, from `refusalError`, whose own suite holds it
-    // equal to the engine's.
+    // The loser whose tender insert trips `tenders_reject_post_settlement` because the winner has
+    // committed, driven with a stub. Tenders are present so the tender insert is reached. The
+    // refusal comes from `refusalError`, whose own suite holds it equal to the engine's.
     let selects = 0;
     const fakeTx = {
       select: () => ({
@@ -460,19 +387,9 @@ describe("settleSale — error propagation", () => {
   });
 
   it("rethrows a refusal the post-settlement predicate declines, untranslated", async () => {
-    // The tenders insert's OTHER failure path, mirroring the settlement-insert rethrow above. Only
-    // the post-settlement guard's own raise means "already settled"; ANY other failure on the
-    // tenders insert (a transport error, another constraint) must reach the caller as-is rather
-    // than be mislabelled `sale.already_settled`.
-    //
-    // The refusal below is the sharp version of that, not an arbitrary error: `errcode` 1811 is the
-    // SAME result code the post-settlement trigger's raise arrives under, because SQLite implements
-    // `ON DELETE RESTRICT` with an internal trigger of its own. Only the wording separates the two,
-    // so this case fails unless the translation reads the message and not just the code. Control
-    // run 2026-09-23: with `{ restrict: true }` replaced by `{ trigger: POST_SETTLEMENT_REFUSAL }`
-    // and nothing else changed, it fails on
-    // `expected AppError: sale.already_settled { …(2) } to not be an instance of AppError`. Tenders
-    // are present so the tenders INSERT is the one reached.
+    // Errcode 1811 is also what SQLite raises for its own `ON DELETE RESTRICT`, so only the wording
+    // separates the two: this fails unless the translation reads the message, not just the code.
+    // Tenders are present so the tender insert is reached.
     let selects = 0;
     const refused = refusalError({ restrict: true });
     const fakeTx = {

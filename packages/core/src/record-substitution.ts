@@ -1,8 +1,5 @@
 import { saleLineRows } from "./sale-line-rows.js";
-// Side-effect only: registers this package's `sale.*` codes on the shared `ErrorParams` registry
-// by declaration merging. See ./errors.ts for why, and ./errors.reachability.test.ts for the
-// mechanical check that keeps errors.ts reachable from this package's own public barrel
-// (index.ts). Mirrors ./record-sale.ts / ./record-correction.ts's identical convention.
+// Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { eq, inArray } from "drizzle-orm";
 import {
@@ -26,97 +23,61 @@ import { buildVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordSubstitutionInput {
-  /**
-   * The till this F3 rings at — an informational snapshot only (written to `sales.till_id` and the
-   * fiscal record's `till_id`, and used for incidents). NOT checked against the series; see `nodeId`
-   * below for the guard.
-   */
+  /** Where the F3 rings; not checked against the series (`nodeId` is). */
   tillId: TillId;
   /**
-   * The node/SIF that ISSUES this F3 and whose chain it extends (node-id rekey, 2026-08-03: the SIF
-   * is the node, #33). Checked against the SERIES (`sale.series_wrong_node`, step 2) but NOT against
-   * the substituted tickets' own nodes — and, as for a corrective invoice, that is correct rather than a
-   * gap: an F3 is a self-standing new full invoice that references the tickets only by IDENTITY
-   * (`FacturasSustituidas`), so which SIF issues it is unconstrained (see `record-correction.ts`'s
-   * `nodeId` doc for the same reasoning and its AEAT citation).
+   * The node that issues this F3 and whose chain it extends. Checked against the series but not
+   * against the substituted tickets' nodes: an F3 references them only by identity
+   * (`FacturasSustituidas`). The same open question as `RecordCorrectionInput.nodeId` applies.
    */
   nodeId: NodeId;
   /**
-   * The series the F3 draws its own new number from. v1 REUSES the ordinary `standard` series (owner
-   * decision — no separate `'substitution'` purpose is added), so it is guarded exactly as
-   * `recordSale`'s series is: it must exist (`sale.series_not_found`), belong to
-   * this node (`sale.series_wrong_node`) AND be `purpose='standard'` (`sale.series_wrong_purpose`) —
-   * a series reserved for another purpose must not number an F3 (step 2). Supplied by the caller
-   * exactly as `recordSale` is; no series is auto-provisioned.
+   * An F3 draws its own number from an ordinary `standard` series (owner decision: there is no
+   * separate substitution purpose), guarded exactly as `recordSale`'s series is.
    */
   seriesId: SeriesId;
   /**
-   * The simplified (F2) tickets being exchanged for this one full invoice — one or many (the N:1
-   * fan-out a corrective invoice's single `correctsSaleId` does not have). An unknown id is `sale.not_found`. Must be non-empty and free of duplicates (both caller
-   * preconditions, rejected in step 1 before any row is written); a ticket already exchanged by a
-   * prior F3 is `sale.already_substituted`.
+   * The simplified (F2) tickets this one full invoice replaces: non-empty and free of duplicates,
+   * or a plain Error before anything is read or written.
    */
   substitutedSaleIds: SaleId[];
   /**
-   * The recipient — REQUIRED, because a full invoice must always name it (findings
-   * §10.2, «siempre debe llevar el destinatario»). Written to the F3's `counterparty_*` columns and
-   * passed NON-null into the fiscal record, where it becomes the record's `Destinatarios` block.
-   * `recordSale` files one too when it is given one; this is the path where it is never absent.
+   * The recipient, required because a full invoice always names one («siempre debe llevar el
+   * destinatario»). Written to the F3's `counterparty_*` columns and passed to the module.
    */
   counterparty: Counterparty;
-  /** The F3's OWN total — POSITIVE (an F3 restates the substituted operations; it is not a negative
-   * corrective invoice). `corrects_sale_id` is NULL, so the ordinary `total >= 0` arm of `sales_total_ck`
-   * applies unchanged. */
+  /** The F3's own total, positive: it restates the substituted operations rather than negating
+   * them, and `corrects_sale_id` stays null. */
   total: string;
-  /** The F3's own (positive) lines — the aggregate of the substituted tickets. Same shape as an
-   * ordinary sale's. */
+  /** The F3's own positive lines. Same shape as an ordinary sale's. */
   lines: RecordSaleLine[];
-  /** The F3's own locale + invoice-locale list, supplied by the caller (unlike a corrective invoice,
-   * which inherits the original's): an F3 is a fresh full invoice and its rendering locale is a
-   * till-UI choice, not a property carried from any one substituted ticket. */
+  /** Supplied by the caller rather than inherited, unlike a corrective invoice's: an F3 is a fresh
+   * invoice, not a property of any one ticket. */
   locale: string;
   invoiceLocales: string[];
   clock: TrustedClock;
 }
 
 /**
- * Records a `factura de canje` (AEAT `TipoFactura` F3) — a full invoice issued in SUBSTITUTION of
- * one or more previously-issued simplified tickets (F2), naming the customer's tax details, at a
- * later request for a proper invoice (spec §3.3, findings §10.2).
+ * Records a `factura de canje` (AEAT `TipoFactura` F3): a full invoice, naming the customer's tax
+ * details, issued in substitution of one or more simplified tickets (F2).
  *
- * An F3 is emphatically NOT a corrective invoice and issues no credit note: the substituted tickets are
- * neither edited nor annulled — they stay recorded exactly once — and AEAT avoids double-counting
- * the amount because `TipoFactura = F3` plus the `FacturasSustituidas` block identifies the record
- * AS a substitution, not because anything is negated. So the F3 carries a POSITIVE total (its own),
- * `corrects_sale_id` NULL, and one `sale_substitutions` row per ticket it replaces (the generic-layer
- * N:1 projection of that link).
+ * An F3 is not a corrective invoice. The tickets stay recorded, neither edited nor annulled; AEAT
+ * avoids counting the amount twice because the record identifies itself as a substitution. So the
+ * F3 carries a positive total and one `sale_substitutions` row per ticket.
  *
- * The customer already paid on the ticket(s); the F3 introduces no new charge («no cobrar dos
- * veces», findings §10.2). It is therefore recorded UNSETTLED with no tender and no settlement,
- * mirroring how a corrective invoice is recorded unsettled.
- *
- * No fiscal condition blocks it: a failed chain-integrity check records an incident and the F3
- * proceeds anyway, because a staff member issuing an invoice a customer is waiting for must never be
- * blocked by it (spec §5, «NUNCA debe interrumpirse») — the same rule `recordSale`/`recordCorrection`
- * follow.
- *
- * Takes a transaction handle, like every write in this package: atomicity between the F3 sale, its
- * substitution links and its fiscal record is the whole point, and step 7 (the caller's commit) is
- * what lets a till write them as one unit of work — a mixed batch that fails at the fiscal layer
- * (one ticket never recorded) rolls the whole thing back, chaining nothing.
+ * The customer already paid on the tickets («no cobrar dos veces»), so the F3 is recorded with no
+ * tender and no settlement. A failed integrity check records an incident and the F3 proceeds
+ * anyway.
  */
 export async function recordSubstitution(
   tx: Transaction,
   backend: FiscalBackend,
   input: RecordSubstitutionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Step 1. Caller preconditions on the ticket list, rejected before any read or write. Both are
-  // programming errors the till UI must prevent, not operational conditions staff can act on, so
-  // both are plain Errors (like the verifactu backend's own last-line defences) rather than `sale.*`
-  // codes. The empty case would file a full invoice naming nothing it replaces; a DUPLICATE id would
-  // double an F3's `FacturasSustituidas` entry and its `sale_substitutions` rows. "The caller passes
-  // a valid list" is a property of the caller, not of this code (CLAUDE.md §3) — and the backend is
-  // NOT trusted to dedup (defense-in-depth), so both are enforced here at the core layer too.
+  // Programming errors the till UI must prevent, so plain Errors rather than `sale.*` codes. An
+  // empty list would file a full invoice replacing nothing; a duplicate would name one ticket twice.
+  // Enforced here rather than trusted to the caller or the backend.
   if (input.substitutedSaleIds.length === 0) {
     throw new Error(
       "recordSubstitution: substitutedSaleIds must name at least one ticket — an F3 substitutes one or more simplified tickets",
@@ -128,8 +89,7 @@ export async function recordSubstitution(
     );
   }
 
-  // Step 1b. Every substituted ticket must exist; look up each by id.
-  // Report the first missing id in input order so the caller knows which ticket is missing.
+  // The first missing id in input order is the one reported.
   const found = await tx
     .select({ id: sales.id })
     .from(sales)
@@ -141,10 +101,7 @@ export async function recordSubstitution(
     }
   }
 
-  // Step 1c. Refuse to substitute a VOIDED ticket, reusing `sale.voided` exactly as
-  // `./record-correction.ts` does: a ticket annulled because it should never have existed cannot be
-  // exchanged for a full invoice. One scoped read for the whole batch; the first voided ticket in
-  // input order is named.
+  // A voided ticket cannot be exchanged. The first voided ticket in input order is named.
   const voided = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)
@@ -156,13 +113,6 @@ export async function recordSubstitution(
     }
   }
 
-  // Step 2. The series, and its guards. The F3 reuses the ordinary `standard` series (owner
-  // decision — no separate `'substitution'` purpose), so it must draw its number from a
-  // `purpose='standard'` series, exactly as `recordSale` does: a series reserved for another purpose
-  // (a `rectificative` one) numbers a different kind of document «en todo caso» (RD 1619/2012 art.
-  // 6.1.a), and drawing an F3's number from it would corrupt a legally significant, unrepairable
-  // series. The purpose guard is the mirror of the one `./record-correction.ts` applies from its
-  // side (which demands `rectificative`). The series lookup is by id alone, as in `recordSale`.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -199,11 +149,8 @@ export async function recordSubstitution(
     });
   }
 
-  // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` — a
-  // failed check records ONE aggregated incident (below, once `saleId` exists) and the F3 is chained
-  // anyway. The table-wide `incidents_open_dedup` index holds at most one open incident per
-  // (till, code, sale), so emitting one row per issue would collapse to a single row and drop every
-  // issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
+  // Nothing branches on `verification.ok`: a failed check records one incident carrying every
+  // issue, once `saleId` exists, and the F3 is chained anyway.
   const verification = await backend.checkIntegrity(tx, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
@@ -220,33 +167,18 @@ export async function recordSubstitution(
     });
   }
 
-  // Step 4. One clock reading for the whole transaction — the SAME `instant`/`offsetMinutes` travel
-  // into both the `sales` row below and `SaleForFiscalRecord.issuedAt`/`offsetMinutes`, so the F3
-  // sale and its fiscal record cannot carry different timestamps for one event.
+  // One clock reading, so the F3 and its fiscal record carry the same timestamp.
   const now = input.clock.now();
 
-  // Clock-confidence degraded is WARN ONLY, never blocking (spec §5) — `now.warning` is already a
-  // fully-formed AppError, forwarded verbatim rather than reconstructed, exactly as `recordSale`.
   if (now.warning) {
     pending.push({ error: now.warning, severity: "warning" });
   }
 
-  // Step 5. Allocation takes the series row lock and comes AFTER `checkIntegrity`'s chain-head lock,
-  // never before: both stay held until commit, so every write path must take them chain-then-series
-  // or two concurrent writers on one node deadlock — the chain-head lock is the per-node `cadenas`
-  // row, which spans that node's tills (node-id rekey, 2026-08-03). The guard SELECTs above take no
-  // persistent lock.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
-  // The F3's VAT breakdown, resolved ONCE so the SAME value feeds both the `sales` row below and
-  // `backend.recordSubstitution` further down (spec 8a's single-source rule): storing it on
-  // `sales.vat_breakdown` is a queryable copy of the already-filed data, never a second recompute.
+  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
   const vatBreakdown = buildVatBreakdown(input.lines);
 
-  // Step 6. The F3 sale: a POSITIVE `total` (the ordinary `total >= 0` arm applies — `corrects_sale_id`
-  // stays NULL, an F3 is not a corrective invoice), `fiscalState: "recorded"`, the recipient written to the
-  // three `counterparty_*` columns, and the caller-supplied `locale`/`invoiceLocales`. NO settlement
-  // and NO tenders — the money was collected on the substituted tickets («no cobrar dos veces»).
   const [inserted] = await tx
     .insert(sales)
     .values({
@@ -257,9 +189,6 @@ export async function recordSubstitution(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      // A money column stores a count of whole cents, converted here at the row. `vat_breakdown`
-      // above is JSON text holding the decimal literals the fiscal record hashes and stays as it
-      // is.
       total: stringToCents(input.total),
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
@@ -280,9 +209,7 @@ export async function recordSubstitution(
 
   const saleId = inserted.id as SaleId;
 
-  // Recorded now that `saleId` exists, on this same transaction — never a fresh connection, which
-  // would let an incident commit for an F3 that later rolls back. Attached to the F3 sale (the one
-  // this call created), matching `recordSale`/`recordCorrection`'s own deferral until `saleId` exists.
+  // On this same transaction, attached to the F3.
   for (const incident of pending) {
     await recordIncident(tx, {
       tillId: input.tillId,
@@ -294,12 +221,8 @@ export async function recordSubstitution(
 
   await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
-  // One `sale_substitutions` row per ticket — the N:1 fan-out. Inserted one at a time so a
-  // `unique(substituted_sale_id)` violation NAMES the exact ticket that collides. That
-  // unique — not this insert's success — is the real "substituted at most once" control: two
-  // concurrent F3s exchanging one ticket both pass any prior SELECT, and only one passes the
-  // constraint. Ordered BEFORE the fiscal write so a rejected substitution consumes no chain work,
-  // exactly as `recordVoid` orders its `sale_voids` insert before `backend.recordVoid`.
+  // One row per ticket, inserted one at a time so a unique violation names the ticket that
+  // collides. Before the fiscal write, so a refused substitution writes no fiscal record.
   for (const substitutedSaleId of input.substitutedSaleIds) {
     try {
       await tx.insert(saleSubstitutions).values({
@@ -308,9 +231,6 @@ export async function recordSubstitution(
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        // A translation, not a recovery: the transaction is already aborted by Postgres and must
-        // roll back. Catching here only ensures the caller gets a structured code instead of a raw
-        // driver error, exactly as `recordVoid` translates its double-void unique violation.
         throw new AppError("sale.already_substituted", { saleId: substitutedSaleId });
       }
       throw error;
@@ -325,19 +245,11 @@ export async function recordSubstitution(
 
   /* v8 ignore start */
   if (location === undefined) {
-    // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
-    // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // — a caller programming error, not a fiscal condition.
+    // `tills.location_id` is a not-null foreign key, so this means the till does not exist.
     throw new Error(`recordSubstitution: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */
 
-  // Step 7. Behind this one call the module builds the F3 fiscal record — its own next `sequence number`,
-  // its own fiscal fingerprint over the positive totals, `TipoFactura = F3`, the `FacturasSustituidas` block naming
-  // each ticket's stored identity, and the `Destinatarios` block from `counterparty` — advances its
-  // chain and inserts its pending-submission row, all on this transaction. `counterparty` is passed
-  // NON-null: an F3 must always name one, where an ordinary sale may not. A ticket the module never recorded
-  // makes this throw (`fiscal.sale_not_recorded`), rolling back everything above with nothing chained.
   const fiscal = await backend.recordSubstitution(
     tx,
     {
@@ -351,14 +263,11 @@ export async function recordSubstitution(
       offsetMinutes: now.offsetMinutes,
       descriptionOfOperation: location.operationDescription,
       total: decimal(input.total),
-      // The SAME breakdown stored on `sales.vat_breakdown` above — one variable feeds both (spec 8a).
       vatBreakdown,
       counterparty: input.counterparty,
     },
     { substitutedSaleIds: input.substitutedSaleIds },
   );
 
-  // Step 8 is the caller's. Returning inside the transaction rather than committing here lets the
-  // till write the F3, its substitution links and its fiscal record as one unit of work.
   return { saleId, fiscal };
 }

@@ -12,38 +12,10 @@ import {
 } from "./incidents.js";
 
 /**
- * Two managers acknowledging one incident, started together.
- *
- * ## What this file used to be, and what changed
- *
- * It opened two PostgreSQL backends, had the first hold the incident row's write lock open, polled
- * `pg_stat_activity` until the second backend was genuinely WAITING on that lock, and then
- * released. None of that exists here: a venue file has one write connection, there are no row locks, and
- * `pg_stat_activity` has no counterpart — so `waitForLockWaiter` is gone with it.
- *
- * **LOST: the observation that the second caller had actually reached the contended row** rather
- * than merely not having finished yet. That was the thing which made this a race test. Nothing
- * replaces it here; the general receipt that the venue file's write queue serialises two
- * overlapping transactions lives in `packages/db/src/tenancy.write-lock.test.ts` ("runs two
- * overlapping transactions one after the other") and, for a fiscal chain, in
- * `packages/fiscal-verifactu/src/chain.concurrency.test.ts`.
- *
- * ## What still holds, and why the case was kept rather than deleted
- *
- * First-wins was never the lock's doing. `markIncidentHandled` (`./incidents.ts:219-222`) updates
- * `where id = ? and acknowledged_at is null`, so the SECOND update matches no row whatever order
- * the two arrive in — that predicate is the whole mechanism and it is engine-independent. The
- * assertion below is unchanged: the stored handler and time are the FIRST caller's, and neither
- * call throws.
- *
- * PROOF BY DELETION, run 2026-09-22: with `isNull(incidents.acknowledgedAt)` removed from that
- * `where` clause, this case fails with the second manager's person id and timestamp stored
- * (`00000000-…-002` / `2026-03-01T12:05:05.000Z` in place of `…-001` / `2026-03-01T12:05:00.000Z`).
- * Restored afterwards.
- *
- * Migration sets: CORE then IDENTITY, the pair the deleted `core_identity` template this file
- * cloned was built from (`git show aabdde6a8^:packages/core/src/testing/global-setup.ts`). Kept
- * as the pair rather than narrowed to CORE, so the fixture is the one the suite always had.
+ * Two managers acknowledging one incident, started together. First-wins is the
+ * `acknowledged_at is null` predicate in `markIncidentHandled`, not a lock: the second update
+ * matches no row whichever order the two arrive in. Weaker than a race test: nothing observes the
+ * second caller reaching the row, because the write queue runs the two transactions in turn.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], timeoutMs: 60_000 });
 

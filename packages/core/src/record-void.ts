@@ -1,7 +1,4 @@
-// Side-effect only: registers this package's `sale.*` codes on the shared `ErrorParams` registry
-// by declaration merging. See ./errors.ts for why, and ./errors.reachability.test.ts for the
-// mechanical check that keeps errors.ts reachable from this package's own public barrel
-// (index.ts). Mirrors ./record-sale.ts's identical convention.
+// Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
@@ -13,23 +10,13 @@ import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 
 /**
- * Voids a sale by asking the module for a NEW record that references it (spec §4, findings §7).
+ * Voids a sale by appending, never by editing: a `sale_voids` row here, then the module's own
+ * record through `backend.recordVoid`. `sales` and `sale_voids` are both append-only.
  *
- * Once chained, records are never edited. Voiding a sale is not an UPDATE on `sales` (which has no
- * UPDATE privilege at all — `packages/db/src/schema/sales.ts`) and not an UPDATE on anything this
- * package owns either: the generic-layer projection of "this sale was voided" is an APPENDED row
- * in `sale_voids`, and the module's own annulment is an APPENDED record in its own chain, taking
- * the next `sequence number` in generation order — not a reset, and not the position of the sale record it
- * annuls (`FiscalBackend.recordVoid`'s own doc comment, `packages/fiscal/src/backend.ts`).
- *
- * The gate is INTRINSIC: this call itself demands `sale.void`, so a void cannot be performed
- * without a credential `authorize` accepts — either the session operator's own role holds the
- * permission, or a supervisor `override` (a second person's PIN) supplies it. `authorize` returns
- * the authorizing person, which is written to `sale_voids.voided_by` at insert. That column is on an
- * append-only table with no UPDATE grant, so the authorizer MUST be supplied here, at the append, and
- * can never be back-filled. `authorize` runs AFTER the sale-exists lookup (so a missing sale
- * still returns `sale.not_found`, never an authz leak) and BEFORE any chain work, so a
- * rejected void consumes none.
+ * The gate is intrinsic: this call demands `sale.void` itself, from the session operator's role or
+ * a supervisor `override`, and the authorizer is written to `sale_voids.voided_by` at insert, the
+ * only moment it can be recorded. It runs after the sale lookup, so a missing sale is
+ * `sale.not_found` rather than an authorization error, and before any fiscal work.
  */
 export async function recordVoid(
   tx: Transaction,
@@ -44,36 +31,21 @@ export async function recordVoid(
     .where(eq(sales.id, saleId));
 
   if (sale === undefined) {
-    // An OPERATIONAL failure, not a fiscal one: there is nothing here to void, which is a different
-    // condition from a chain that failed to verify, and NO FISCAL CONDITION BLOCKS a void does not
-    // extend to it.
     throw new AppError("sale.not_found", { saleId });
   }
 
-  // The gate. Placed after the sale is confirmed to exist (so a missing sale still returns
-  // sale.not_found above, not an authz leak) and before any chain work below, so a rejected
-  // void consumes none. `authorization.authorizedBy` is the person to record on the append.
   const authorization = await authorize(tx, {
     sessionId: authz.sessionId,
     permission: "sale.void",
     override: authz.override,
   });
 
-  // Art. 7.i, exactly as for a sale record (spec §4 steps 1-2 in `./record-sale.ts`): the duty is
-  // "before generating each new record", not "before each sale", and an annulment is a fiscal record
-  // like any other. Nothing branches on `verification.ok` — a failed check records an
-  // incident (below) and the void proceeds anyway, because a staff member correcting the very sale
-  // an incident concerns must never be blocked by it («NUNCA debe interrumpirse»).
+  // Verification runs before every new record, and an annulment is one. Nothing branches on
+  // `verification.ok`: a failed check records an incident and the void proceeds anyway.
   //
-  // No clock-degradation incident here: unlike `recordSale`, `recordVoid` takes no `TrustedClock`
-  // at all (its own `new Date()` a few lines down is not a `TrustedReading`), so there is no
-  // `.warning` to forward.
+  // No clock-degradation incident: this path takes no `TrustedClock`.
   const verification = await backend.checkIntegrity(tx, sale.nodeId as NodeId);
-  // ONE incident aggregating all of this call's issues, never one per issue — the table-wide
-  // `incidents_open_dedup` index holds at most one open incident per (till, code, sale), so
-  // one row per issue (all sharing this sale + `chain.verification_failed`) would collapse to a
-  // single row and drop every issue after the first. `params.issues` carries them all. Mirrors
-  // `./record-sale.ts`'s identical aggregation.
+  // One incident per failed check, carrying every issue in `params.issues`.
   const pending =
     verification.issues.length > 0
       ? [
@@ -95,9 +67,6 @@ export async function recordVoid(
   // (`IDFacturaAnulada`), not an identity of its own — allocating here would burn a number for a
   // record with nowhere to put it, leaving a permanent series gap per void.
 
-  // One reading, reused for both the void's own timestamp and any incident detected alongside it —
-  // the same "one clock reading for the whole transaction" discipline `./record-sale.ts` follows,
-  // applied here to a plain `Date` since this path carries no `TrustedClock`.
   const now = new Date();
 
   for (const incident of pending) {
@@ -109,33 +78,24 @@ export async function recordVoid(
     });
   }
 
-  // Append-only, and this runs BEFORE the module is asked for a record. The UNIQUE constraint on
-  // sale_id — not this insert's success — is what makes double-voiding impossible: two concurrent
-  // transactions both pass a SELECT-then-INSERT check, and only one passes this. Ordering it before
-  // `backend.recordVoid` is what keeps a rejected second void from having consumed any chain work
-  // at all — lock order stays chain-then-everything-else, matching `./record-sale.ts`.
+  // The unique `sale_voids.sale_id` is what refuses a second void. Inserted before
+  // `backend.recordVoid`, so a refused void writes no fiscal record.
   try {
     await tx.insert(saleVoids).values({
       saleId,
       reason,
       voidedAt: now.toISOString(),
-      // The seam, now filled: recorded at INSERT because `sale_voids` is append-only (no UPDATE
-      // grant), so there is no later moment to attribute the void.
       voidedBy: authorization.authorizedBy,
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
-      // A translation, not a recovery: the transaction is already aborted by Postgres and must
-      // roll back. Catching here only ensures the caller gets a structured code instead of a raw
-      // driver error string on screen.
       throw new AppError("sale.already_voided", { saleId });
     }
     throw error;
   }
 
-  // The module already holds the annulled invoice's identity in its own fiscal record, keyed by
-  // sale_id. Passing `NumSerieFactura`/`FechaExpedicionFactura` back through here would put a fiscal
-  // fact in the generic layer and give it two sources of truth.
+  // Only the sale id: a fiscal identity passed through here would give that fact a second source
+  // of truth in the generic layer.
   const fiscal = await backend.recordVoid(tx, saleId, reason);
 
   return { fiscal };

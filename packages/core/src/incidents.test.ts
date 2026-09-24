@@ -2,8 +2,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
-// See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
-// subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { CORE_MIGRATIONS, incidents, nowIso, sales, withTransaction } from "@waitron/db";
@@ -27,9 +25,6 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-// `timeoutMs` restates the 60s the helper applies by default
-// (`packages/db/src/testing/venue-db.ts`) and replaces `vitest.config.ts`'s `hookTimeout` — the
-// same as record-sale.test.ts, which carries the pointer to the receipt.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
@@ -42,11 +37,7 @@ beforeEach(async () => {
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
-/**
- * Builds a `TrustedClock` from a `now()` implementation alone, matching record-sale.test.ts's
- * and record-void.test.ts's identical helper: the real `TrustedClock` interface also requires
- * `anchor`/`currentAnchor`, which `recordSale` never calls.
- */
+/** A `TrustedClock` from `now()` alone; `recordSale` calls nothing else on it. */
 function fixedClock(now: TrustedClock["now"]): TrustedClock {
   return {
     now,
@@ -67,13 +58,8 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 }));
 
 /**
- * Degraded, fixed. Reads `tillId` lazily (inside `now()`, invoked only once a test's own
- * `beforeEach` has already set it) rather than capturing it at module-eval time.
- *
- * Carries `warning` itself, exactly as `packages/fiscal`'s real `createTrustedClock` would
- * construct it (`clock.ts`'s own `now()`) — `recordSale` forwards `now.warning` verbatim (see
- * `./record-sale.ts`), so a fixture that omitted it would test a codepath `recordSale` never
- * actually takes with a real clock.
+ * Degraded, and carrying `warning` as the real clock does, because `recordSale` forwards
+ * `now.warning` rather than building one. Reads `tillId` lazily, after `beforeEach` has set it.
  */
 const degradedClock: TrustedClock = fixedClock(() => ({
   instant: BASE,
@@ -112,8 +98,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
         lineTotal: "2.10",
       },
     ],
-    // Immediate settlement with the tip on the tender (design D2): sum(amount) 16.31 = total 14.41 +
-    // tip 1.90, the coverage identity settleSale enforces inside recordSale's immediate half.
+    // sum(amount) 16.31 = total 14.41 + tip 1.90.
     settlement: {
       kind: "immediate",
       tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
@@ -123,18 +108,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   };
 }
 
-/**
- * A backend whose `checkIntegrity` reports one failed issue on the current test's `nodeId` (the
- * chain is keyed by node after the node-id rekey; the incident it produces stays till-keyed).
- *
- * **Deviation from the brief.** The brief's `failingChain()` set `backend.chainVerification =
- * { ok: false, error: new AppError(...) }` — not a real affordance on `FakeFiscalBackend`, and
- * itself contradicted by this same task's own governing dispatch, which states the real
- * `IntegrityReport` shape is `{ ok, checked, issues }`. The actual test-only control is
- * `breakIntegrity(nodeId, issue)`, taking a plain `IntegrityIssue` (`{ code, params, recordId? }`)
- * — the identical substitution record-sale.test.ts's and record-void.test.ts's own
- * "no fiscal condition blocks a sale"/"no fiscal condition blocks a void" tests already made.
- */
+/** A backend whose `checkIntegrity` reports one issue on the current test's node. */
 function failingChain(): FakeFiscalBackend {
   const backend = new FakeFiscalBackend(suite.db);
   backend.breakIntegrity(nodeId, {
@@ -145,10 +119,8 @@ function failingChain(): FakeFiscalBackend {
 }
 
 /**
- * Runs the write path exactly as the application will: registers the node with the injected
- * backend, then sells inside one transaction — mirrors record-sale.test.ts's own
- * `run` helper (registration is required; `FakeFiscalBackend` refuses `recordSale` for a node
- * with no prior `registerNode`, exactly like a real backend).
+ * Registers the node with the backend, then sells, in one transaction: the fake refuses
+ * `recordSale` for a node it has not registered.
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
@@ -157,23 +129,11 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   });
 }
 
-/**
- * Scoped to the CURRENT test's own till, never the bare table, because several cases below seed a
- * SECOND till inside one test (`seedTillForIncidents`, just under this) and then assert on that
- * one's rows alone — a bare `select` over `incidents` could not tell the two tills apart. It is
- * not about leakage between tests: `useVenueDb` empties every data table after each one
- * (`resetPerTest`, its default, which this suite does not turn off).
- */
+/** Scoped to one till: several cases seed a second till and read only that one's rows. */
 async function incidentsForTill(till: TillId) {
   return suite.db.select().from(incidents).where(eq(incidents.tillId, till));
 }
 
-/**
- * The open-dedup suite below needs its own till per test (rather than the module-level
- * `tillId` `beforeEach` already seeds) purely so each test's assertions read against
- * an isolated till — reuses `seedTenant`'s exact seeding path, narrowed to the one id these
- * tests care about.
- */
 async function seedTillForIncidents(): Promise<{ tillId: TillId }> {
   const seeded = await seedTenant(suite.db);
   return { tillId: seeded.tillId };
@@ -189,23 +149,14 @@ describe("incidents — chain verification failure", () => {
     expect(rows[0]?.code).toBe("chain.verification_failed");
     expect(rows[0]?.severity).toBe("error");
     expect(rows[0]?.saleId).toBe(saleId);
-    // The sale completed and the record was chained ANYWAY. Both halves matter: a suite
-    // asserting only the incident row would pass against an implementation that recorded the
-    // incident and then aborted.
+    // Both halves matter: asserting only the incident would pass an implementation that recorded
+    // it and then aborted.
     expect(await suite.db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
     expect(await backend.recordsFor(nodeId)).toHaveLength(1);
   });
 
   it("carries the module's structured issue detail, not a rendered message", async () => {
-    // **Deviation from the brief.** The brief expected `row.params` to equal the injected issue's
-    // OWN params flatly (`{ tillId, sequence, expected }`). This task's own dispatch resolves
-    // Step 2's ambiguity explicitly: `chain.verification_failed` is the `ErrorCode` recordSale
-    // maps a failed check onto when rendering an incident, not something `checkIntegrity` returns —
-    // so every chain-verification incident carries this ONE stable, translatable code regardless
-    // of which regime-specific issue kinds the module actually reported, with that call's issues
-    // (their own code and params) nested underneath in `params.issues` for support to read. The
-    // issues are AGGREGATED into one incident — never one row per issue — so they survive the
-    // table-wide open-dedup index. See ./errors.ts's doc comment on this code.
+    // One stable code, with the module's own issues nested under `params.issues`.
     await sell(failingChain());
     const [row] = await incidentsForTill(tillId);
     expect(row?.params).toEqual({
@@ -221,15 +172,9 @@ describe("incidents — chain verification failure", () => {
   });
 
   it("aggregates multiple issues from one failed check into a SINGLE incident", async () => {
-    // A doubly-corrupted predecessor: `verifyChain` can return TWO issues for one sale — e.g. a
-    // `predecessor-hash-mismatch` AND a `predecessor-link-mismatch`, because the hash-mismatch push
-    // does not early-return (packages/fiscal-verifactu/src/verify.ts). Modelled here by a fake whose
-    // `checkIntegrity` reports two issues for this till (`breakIntegrity` appends). The table-wide
-    // `incidents_open_dedup` index holds at most ONE open incident per (till, code, sale),
-    // so emitting one incident row per issue — all sharing this sale + `chain.verification_failed`
-    // — would silently drop the second under `ON CONFLICT DO NOTHING`. record-sale AGGREGATES all
-    // issues into ONE incident whose `params.issues` carries BOTH: this is the proof the
-    // aggregation preserves detail under the index.
+    // Two issues for one sale. `incidents_open_dedup` allows one open incident per
+    // (till, code, sale), so one row per issue would lose the second; both must be carried in the
+    // one incident's `params.issues`.
     const backend = new FakeFiscalBackend(suite.db);
     backend.breakIntegrity(nodeId, {
       code: "predecessor-hash-mismatch",
@@ -248,7 +193,7 @@ describe("incidents — chain verification failure", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.code).toBe("chain.verification_failed");
     expect(rows[0]?.saleId).toBe(saleId);
-    // Both issues are carried, in order, under `params.issues` — no detail lost to the index.
+    // Both issues, in order.
     expect(rows[0]?.params).toEqual({
       tillId,
       issues: [
@@ -267,9 +212,7 @@ describe("incidents — chain verification failure", () => {
   });
 
   it("writes the incident in the same transaction as the sale", async () => {
-    // A separate connection would let an incident exist for a sale that rolled back, or a sale
-    // exist for an incident that did. Force the rollback after recordSale returns and confirm
-    // neither survives.
+    // Force a rollback after recordSale returns: neither the incident nor the sale may survive.
     const backend = failingChain();
     await expect(
       withTransaction(suite.db, async (tx) => {
@@ -286,8 +229,8 @@ describe("incidents — chain verification failure", () => {
 
 describe("incidents — clock degradation", () => {
   it("records a warning, not an error", async () => {
-    // Spec §4: clock confidence degraded is WARN ONLY. Recording it at error severity would put
-    // it in the same visual channel as a chain failure and train staff to ignore both.
+    // At error severity it would share a channel with chain failures and train staff to ignore
+    // both.
     await sell(new FakeFiscalBackend(suite.db), { clock: degradedClock });
     const [row] = await incidentsForTill(tillId);
     expect(row?.code).toBe("clock.degraded");
@@ -302,8 +245,7 @@ describe("incidents — clock degradation", () => {
   });
 
   it("records nothing when verification passes and the clock is confident", async () => {
-    // The negative case. Without it, an implementation that records an incident unconditionally
-    // passes every test above.
+    // Without this, an implementation that always records an incident passes every test above.
     await sell(new FakeFiscalBackend(suite.db));
     expect(await incidentsForTill(tillId)).toHaveLength(0);
   });
@@ -311,11 +253,6 @@ describe("incidents — clock degradation", () => {
 
 describe("recordIncident — no sale attached", () => {
   it("records an incident with a null sale_id when the caller supplies no saleId", async () => {
-    // `RecordIncidentInput.saleId` is optional: plan 3's drainer raises incidents (a submission
-    // failure discovered hours after the sale) with no sale in hand at the call site — see
-    // ./incidents.ts's own doc comment on `saleId`. Nothing in Task 18's own write path omits it
-    // (`recordSale`/`recordVoid` always have one), so this is the one place that path is
-    // exercised at all before plan 3 exists to call it for real.
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
         tillId,
@@ -369,38 +306,12 @@ describe("openIncidents", () => {
     });
     expect(rows).toHaveLength(0);
   });
-
-  // DELETED with the storage switch: "refuses to rewrite an incident's code as the application
-  // role". Nothing on this engine refuses that write, so the case passed only by asserting that a
-  // write it expected to fail did.
-  //
-  // It is NOT replaced. `scripts/write-path-tables.test.ts` (task P9) covers whole TABLES the
-  // application may not write, not one column of one table — `CLAUDE.md` §3 says so of that guard
-  // in its own words, and `docs/backlog.md` → B9 is where the per-operation half is tracked. So
-  // "an incident is a record, not a note anyone may rewrite" now rests on nobody writing the
-  // UPDATE, which is exactly what this case existed to stop resting on.
 });
 
 describe("recordIncidentOnce", () => {
-  // **Deviation from the brief.** The brief's sketch raised `fiscal.reconcile_no_trace` /
-  // `fiscal.reconcile_drift_anulada` — codes that `packages/fiscal-verifactu/src/errors.ts` adds
-  // to the shared `ErrorParams` registry by declaration merging. `packages/core` does not (and
-  // must not) depend on `@waitron/fiscal-verifactu` — see record-sale.test.ts's own beforeAll
-  // comment on the eslint boundary zone that forbids it even from a test file — so those codes
-  // are not members of `ErrorCode` in this package's own typecheck program and using them here
-  // would not compile. Using `chain.verification_failed` (registered in `./errors.ts`, this
-  // package's own contribution) and `clock.degraded` (registered by `@waitron/fiscal`, already
-  // reachable here — see the `warning` fixture above) instead: two real, distinct, in-boundary
-  // codes are all `recordIncidentOnce`'s dedup key cares about, and every other test in this file
-  // already builds incidents from exactly these two.
-  //
-  // The brief also seeded `saleId`/`otherSaleId` fixtures that do not exist in this file. Every
-  // real write path (`recordSale`/`recordVoid`) always has a `saleId`, so the null-`saleId` case
-  // is only exercised by `recordIncident` (see "no sale attached" above) and — for
-  // `recordIncidentOnce` — by the dedup/ack/different-code tests below, which pass
-  // `saleId: undefined` precisely because they don't need a real `sales` row (no FK to satisfy)
-  // to prove the key. The "different sale" case gets its own test with two REAL sales via `sell`,
-  // since `incidents.sale_id` has an FK to `sales.id`.
+  // `packages/core` does not depend on the packages that register the reconcile or payment codes,
+  // so these cases use `chain.verification_failed` and `clock.degraded`; the dedup key needs only
+  // two distinct real codes.
 
   function chainFailed(): RecordIncidentInput["error"] {
     return new AppError("chain.verification_failed", {
@@ -459,8 +370,7 @@ describe("recordIncidentOnce", () => {
         detectedAt: BASE,
       };
       await recordIncidentOnce(tx, input);
-      // The acknowledgement stamp is written by the CALLER on this engine — `acknowledged_at` is
-      // an ISO string in a text column and SQLite has no `now()`. Only "not null" matters here.
+      // The caller stamps `acknowledged_at`; only "not null" matters here.
       await tx.execute(
         sql`update incidents set acknowledged_at = ${nowIso()} where till_id = ${tillId}`,
       );
@@ -494,9 +404,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("does not de-dup the same code for a different sale", async () => {
-    // Two REAL sales (the FK on incidents.sale_id requires it), each raising the same
-    // `clock.degraded` code — proving `sale_id is not distinct from` scopes the key per sale
-    // rather than deduping across the whole till.
+    // Two real sales (`incidents.sale_id` is a foreign key): the key is per sale, not per till.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: saleA } = await sell(backend);
     const { saleId: saleB } = await sell(backend);
@@ -525,14 +433,6 @@ describe("recordIncidentOnce", () => {
 });
 
 describe("incidents open-dedup invariant (partial unique index)", () => {
-  // **Deviation from the brief.** The brief's orphan/ack tests used `payment.offline_forward_
-  // declined`, an `AppError` code registered by `@waitron/payments`'s `errors.ts` via declaration
-  // merging. `@waitron/core` does not depend on `@waitron/payments` (see this file's own
-  // `recordIncidentOnce` describe block's identical note about `@waitron/fiscal-verifactu`'s
-  // codes) so that code is not a member of `ErrorCode` in this package's typecheck program.
-  // `clock.degraded` (registered by `@waitron/fiscal`, already used throughout this file) is used
-  // in its place — the dedup key only cares that it is a real, distinct code.
-
   it("recordIncident (unconditional) de-dups a second OPEN same-key raise to one row", async () => {
     const { tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
     const input: RecordIncidentInput = {

@@ -1,8 +1,4 @@
-// Side-effect only: keeps ./errors.ts reachable from this package's own public barrel
-// (index.ts), mirroring record-sale.ts's/record-void.ts's identical import — see errors.ts for
-// why and errors.reachability.test.ts for the mechanical check. Nothing in THIS file throws;
-// this module documents chain.verification_failed's shape (RecordIncidentInput's own doc
-// comment) without constructing one — that happens in record-sale.ts/record-void.ts.
+// Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { incidents, newId } from "@waitron/db";
@@ -13,12 +9,9 @@ import type { SaleId, TillId } from "@waitron/shared";
 export type IncidentSeverity = "warning" | "error";
 
 export interface RecordIncidentInput {
-  /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
   tillId: TillId;
   saleId?: SaleId;
-  /** The structured error itself. `code` and `params` are taken from it, never re-derived —
-   * see `./errors.ts`'s `chain.verification_failed` doc comment and `./record-sale.ts`'s use of
-   * `TrustedReading.warning` verbatim for the two shapes this arrives in. */
+  /** `code` and `params` are taken from it, never re-derived. */
   error: AppError;
   severity: IncidentSeverity;
   detectedAt: Date;
@@ -35,18 +28,10 @@ export interface Incident {
 }
 
 /**
- * Records a fiscal incident on the caller's transaction, deduplicated to at most one OPEN incident
- * per `(till_id, code, sale_id)` by the `incidents_open_dedup` partial unique index
- * (`ON CONFLICT DO NOTHING`). Always the caller's transaction, never a fresh connection: an incident
- * that committed while its sale rolled back would report a failure for a sale that never existed.
- * Only `.code` and `.params` are written (an `AppError` instance would not survive the jsonb round
- * trip) — the structured-code-plus-params shape spec §9 requires crossing any boundary. record-sale
- * and record-void now emit exactly ONE `chain.verification_failed` per (sale, code) — every issue
- * from a failed check is aggregated into that one incident's `params.issues` rather than pushed as
- * its own same-key row — so those callers, and the drainer's terminal transitions, genuinely never
- * conflict: each has a naturally-unique `(sale, code)` key. A caller that re-detects a still-open
- * condition (reconcile's drift) does hit the conflict and now no-ops instead of accumulating a
- * duplicate — the intended table-wide invariant.
+ * Records an incident on the caller's transaction, deduplicated to at most one OPEN incident per
+ * `(till_id, code, sale_id)` by the `incidents_open_dedup` index. Never a fresh connection: an
+ * incident that committed while its sale rolled back would report a failure for a sale that never
+ * existed. Only `.code` and `.params` are written; an `AppError` would not survive the round trip.
  */
 export async function recordIncident(tx: Transaction, input: RecordIncidentInput): Promise<void> {
   await tx
@@ -63,13 +48,9 @@ export async function recordIncident(tx: Transaction, input: RecordIncidentInput
 }
 
 /**
- * Like `recordIncident`, but reports whether it actually inserted (`true`) or de-duped against an
- * existing OPEN incident for the same `(till_id, code, sale_id)` (`false`) — so a periodic
- * caller that re-detects a still-open condition each sweep counts only real raises. Race-free: the
- * `incidents_open_dedup` partial unique index (`NULLS NOT DISTINCT`, `WHERE acknowledged_at IS NULL`)
- * is the arbiter, so two concurrent same-key callers serialise on it and exactly one inserts — the
- * property a concurrent `forward` (payments Cycle B) relies on. Once the prior incident is
- * acknowledged the key is free again and the next detection raises afresh.
+ * Like `recordIncident`, but reports whether it inserted (`true`) or found an OPEN incident with
+ * the same `(till_id, code, sale_id)` (`false`), so a caller that re-detects a still-open condition
+ * on every sweep counts only real raises. Once that incident is handled the key is free again.
  */
 export async function recordIncidentOnce(
   tx: Transaction,
@@ -99,10 +80,7 @@ export async function recordIncidentOnce(
   return rows.length > 0;
 }
 
-/**
- * Unacknowledged incidents for one till, newest first. Only tests call it: the till shows no
- * incidents, and the dashboard alerts read them all through `listOpenIncidents`.
- */
+/** Unacknowledged incidents for one till, newest first. Only tests call it. */
 export async function openIncidents(tx: Transaction, tillId: TillId): Promise<Incident[]> {
   const rows = await tx
     .select({
@@ -124,11 +102,6 @@ export async function openIncidents(tx: Transaction, tillId: TillId): Promise<In
     saleId: row.saleId as SaleId | null,
     code: row.code,
     params: row.params,
-    // incidents.detected_at is tsString (packages/db/src/schema/incidents.ts), so a read hands back
-    // the string the driver rendered rather than a Date — a JS Date takes on the host timezone as
-    // soon as something formats it in local time (`toString()` moves with `TZ`; `toISOString()`
-    // does not), and nothing formatted is ever written. This is the one place the value becomes a
-    // Date again, for the caller's own sort and display use.
     severity: row.severity as IncidentSeverity,
     detectedAt: new Date(row.detectedAt),
   }));

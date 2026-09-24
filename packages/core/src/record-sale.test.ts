@@ -7,13 +7,6 @@ import {
   decimal,
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
-// **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
-// — a subpath that does not exist (no `packages/fiscal/testing` folder, no `exports` map, and
-// `@waitron/fiscal`'s own `src/index.ts` re-export barrel explicitly does NOT carry the fake — see
-// its own closing comment). That same comment in the already-committed `packages/fiscal/src/index.ts`
-// states the ACTUAL intended import path in so many words: "packages/core imports it from
-// '@waitron/fiscal/src/testing/fake-backend.js' in test files only". Used that path, verbatim, per
-// the already-committed source rather than the brief's paraphrase of it.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type {
   FiscalBackend,
@@ -44,26 +37,8 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
-// `timeoutMs` restates the 60s the helper applies by default and passes to its own `beforeAll`
-// (`packages/db/src/testing/venue-db.ts`), so dropping it would change no bound.
-// An argument to a hook replaces `vitest.config.ts`'s `hookTimeout` rather than narrowing it
-// (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`), so this line is what governs the boot.
-//
-// **Deviation from the brief.** The brief's `beforeAll` ran BOTH `@waitron/db`'s migrations and
-// `@waitron/fiscal-verifactu`'s (`FISCAL_MIGRATIONS`). This suite never touches a module's own
-// tables at all — `FakeFiscalBackend` participates in the caller's transaction through its OWN
-// ephemeral `fake_node_registrations`/`fake_fiscal_records` tables (created below via
-// `FakeFiscalBackend.install`), never `registros_facturacion`/`cadenas`/`envios` — and importing
-// `@waitron/fiscal-verifactu` from `packages/core` at all (even from a test file: the eslint
-// boundary zone's `files` glob is `packages/core/**/*.ts`, with no `*.test.ts` carve-out) would
-// trip the very generic-layer boundary this task was asked to re-verify. Runs core migrations
-// only.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
-  // Not in the brief at all: `FakeFiscalBackend.recordSale`/`registerNode`/`checkIntegrity` read
-  // and write `fake_node_registrations`/`fake_fiscal_records`, and nothing creates those tables
-  // except this call. Omitting it fails every test in this file with "relation
-  // fake_fiscal_records does not exist" — caught in this task's own red phase.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
@@ -74,14 +49,7 @@ beforeEach(async () => {
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
-/**
- * Builds a `TrustedClock` from a `now()` implementation alone.
- *
- * **Deviation from the brief.** Every `TrustedClock` literal in the brief supplied only `now`.
- * The real interface (`packages/fiscal/src/clock.ts`) also requires `anchor` and
- * `currentAnchor` — `recordSale` never calls either (it reads `now()` exactly once), so both are
- * stubbed here rather than duplicated at each of this file's three call sites.
- */
+/** A `TrustedClock` from `now()` alone; `recordSale` calls nothing else on it. */
 function fixedClock(now: TrustedClock["now"]): TrustedClock {
   return {
     now,
@@ -101,10 +69,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
   anchorAgeSeconds: 0,
 }));
 
-// The default immediate tender for the €14.41 sale: sum(amount) 16.31 = total 14.41 + tip 1.90 —
-// the coverage identity `settleSale` now enforces inside `recordSale`'s immediate half. The tip
-// rides on the tender (design D2), no longer on the sale. Reused by the mode-equivalence test so
-// the two modes settle the identical tender list.
+// sum(amount) 16.31 = total 14.41 + tip 1.90.
 const DEFAULT_TENDERS: RecordSaleTender[] = [
   { method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE },
 ];
@@ -116,9 +81,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     seriesId,
     locale: "es-ES",
     invoiceLocales: ["es-ES", "ca-ES"],
-    // The taxable total: base (10.00 + 2.10 = 12.10) plus this fixture's own VAT (2.10 + 0.21 =
-    // 2.31) = 14.41. Deliberately reconciled by hand here rather than left to coincide with
-    // `lines`, so a reader can check the arithmetic without running the suite.
+    // Base 10.00 + 2.10, plus VAT 2.10 + 0.21.
     total: "14.41",
     lines: [
       {
@@ -147,15 +110,8 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /**
- * Runs the write path exactly as the application will: in one transaction, on a node already
- * registered with the injected backend.
- *
- * Registration is not in the brief's own `run` helper, but it is required: `FakeFiscalBackend` is
- * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a node
- * with no prior `registerNode` — `fiscal.node_not_registered` — exactly like a real backend would.
- * `recordSale` itself never calls `registerNode` (provisioning a node is a separate, one-time
- * admin action, out of this task's seven steps), so a test that skips this fails every happy-path
- * assertion with that error instead of the one under test.
+ * Runs the write path in one transaction, on a node registered with the backend: the fake refuses
+ * `recordSale` for a node it has not registered.
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
@@ -164,9 +120,7 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
   });
 }
 
-/** Counts every row in `table`. The suite helper empties every data table between tests
- * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
- * test wrote. */
+/** Counts every row in `table`; the suite helper empties the tables between tests. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)}`,
@@ -174,33 +128,18 @@ async function countRows(table: string): Promise<number> {
   return result.rows[0]!.n;
 }
 
-/**
- * A thin `execute` wrapper returning the raw rows, for the `sale_lines.category` assertion. Scoped
- * by the CALLER's own `where` (in practice `sale_id = ${saleId}`) rather than an unscoped `limit 1`,
- * so it reads the row this case wrote even when a test writes several sales.
- */
 async function rows<T extends Record<string, unknown>>(
   query: ReturnType<typeof sql>,
 ): Promise<T[]> {
   const result = await suite.db.execute<T>(query);
-  // `execute`'s row type is `Assume<T, Record<string, unknown>>`, structurally identical to `T`
-  // here but not provably equal to a fresh `T` for tsc — the same reason `countRows` above passes a
-  // concrete literal to `execute` rather than a type parameter. Cast at this single boundary.
+  // `execute`'s row type is not provably `T` to tsc; cast at this one boundary.
   return result.rows as T[];
 }
 
 /**
- * Builds a `FiscalBackend` that delegates every method to `fake` except whichever ones
- * `overrides` supplies.
- *
- * **Deviation from the brief.** The brief built this shape with `{ ...fake, async
- * checkIntegrity(...) {...} }` — object-spreading a `FakeFiscalBackend` INSTANCE. That does not
- * work against the real class: `registerNode`/`recordSale`/`recordVoid`/`checkIntegrity`/
- * `pendingCount` are ordinary ES class methods, which live on `FakeFiscalBackend.prototype` and
- * are non-enumerable — object spread copies only an instance's OWN enumerable properties, so
- * `{...fake}` silently produces an object with NONE of the interface's methods on it, and calling
- * `backend.recordSale(...)` on the spread result throws "is not a function". Verified live in this
- * task's own red phase. Every method is bound explicitly here instead.
+ * A `FiscalBackend` delegating to `fake` except where `overrides` supplies a method. Each method
+ * is bound by hand: they live on the class prototype, and object spread copies only an instance's
+ * own enumerable properties, so `{ ...fake }` would carry none of them.
  */
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
@@ -262,15 +201,10 @@ describe("recordSale — the happy path", () => {
   });
 
   it("keeps the tip off the sale's fiscal total and onto the tender", async () => {
-    // total is the taxable amount and now the ONLY money column on the sale (design D1); the tip is
-    // non-taxable, must never reach the fiscal record, and rides on the tender it was left with
-    // (design D2). `amount_charged` is derived (total + tip = 16.31), never stored — migration 0012
-    // dropped both the tip and amount_charged columns off `sales`. Fixture values are deliberately
-    // different from each other and from their sum, so an implementation that copied the wrong field
-    // cannot produce the expected rows by coincidence.
+    // The tip is non-taxable and rides on the tender. The three figures all differ, so copying the
+    // wrong field cannot produce the expected rows.
     const { saleId } = await run(new FakeFiscalBackend(suite.db));
-    // Read straight off the tables, so every money figure here is a count of whole cents:
-    // 1441 is 14.41, 1631 is 16.31, 190 is 1.90.
+    // Whole cents: 1441 is 14.41, 1631 is 16.31, 190 is 1.90.
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.total).toBe(1441);
 
@@ -280,14 +214,9 @@ describe("recordSale — the happy path", () => {
   });
 
   it("stores a line's quantity in whole thousandths and its VAT rate in whole basis points", async () => {
-    // The two columns that are neither money nor a decimal: a quantity counts whole thousandths
-    // and a rate whole basis points, converted at the row exactly as an amount is.
-    //
-    // Line 2 weighs five grams, which is the reason a quantity does not share the money scale:
-    // read at two places it is 0.01, read at three it is 0.005, and only 5 here shows the third
-    // place survived the write. The four expected numbers are all different from each other and
-    // from the amounts on the same rows, so a conversion that used the wrong scale for either
-    // column cannot produce this set.
+    // Line 2 weighs five grams: only 5 shows the third decimal place survived, which the money
+    // scale would lose. The four expected numbers differ from each other and from the amounts, so
+    // a wrong scale for either column cannot produce this set.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       // base 30.00 + 10.00, tax 6.30 (21% of 30.00) + 1.05 (10.5% of 10.00).
       total: "47.35",
@@ -332,11 +261,6 @@ describe("recordSale — the happy path", () => {
   });
 
   it("returns the fiscal record reference the backend produced", async () => {
-    // **Deviation from the brief.** `FiscalRecordRef` is `{ backend, recordId, state, issuedAt,
-    // offsetMinutes, verificationUrl? }` — there is no `.hash`, `.sequence` or `.qrPayload` field
-    // on the real type (`packages/fiscal/src/backend.ts`); those describe chaining / the fiscal fingerprint
-    // concepts that belong to a regime's own module, never the generic interface. Assertions
-    // below are against the fields that actually exist.
     const backend = new FakeFiscalBackend(suite.db);
     const { fiscal } = await run(backend);
     expect(fiscal.backend).toBe("fake");
@@ -345,15 +269,6 @@ describe("recordSale — the happy path", () => {
   });
 
   it("hands the backend the sale's bare invoice number and taxable total", async () => {
-    // **Deviation from the brief.** The brief asserted `backend.calls.recordSale[0]?.invoiceNumber
-    // === "A/1"` — a pre-formatted string — via a `.calls` spy that does not exist on the real
-    // fake. The real `SaleForFiscalRecord.invoiceNumber` is a bare `number`, with `seriesCode`
-    // carried alongside it SEPARATELY so a regime-specific backend composes its own identity
-    // string however its regime requires (`formatInvoiceNumber`, exported from this package,
-    // composes Veri*Factu's own "code/number" form — see
-    // packages/fiscal-verifactu/src/write-path.e2e.test.ts for that assertion against the REAL
-    // backend). Observed here via `FakeFiscalBackend`'s own `recordsFor` accessor rather than a
-    // spy — the fake's one intentional test-only affordance for this.
     const backend = new FakeFiscalBackend(suite.db);
     await run(backend);
     const [record] = await backend.recordsFor(nodeId);
@@ -363,12 +278,7 @@ describe("recordSale — the happy path", () => {
   });
 
   it("groups two lines at the same VAT rate into one breakdown entry", async () => {
-    // Exercises `buildVatBreakdown`'s merge path (two lines contributing to the SAME rate's
-    // base) rather than only ever having one line per rate. `FakeFiscalBackend` does not store
-    // `vatBreakdown` at all, so this cannot assert on the merged entry's own shape — that is
-    // exactly what packages/fiscal-verifactu/src/write-path.e2e.test.ts's real `Desglose`
-    // assertions are for — but it does prove the grouping arithmetic runs without error and
-    // still lands on the sale's own taxable total.
+    // Two lines at one rate exercise `buildVatBreakdown`'s merge.
     const backend = new FakeFiscalBackend(suite.db);
     await run(backend, {
       total: "9.68",
@@ -403,17 +313,9 @@ describe("recordSale — the happy path", () => {
   });
 
   it("stores the filed vatBreakdown on sales, equal to what the backend filed", async () => {
-    // The single-source guarantee (spec 8a): the breakdown written to `sales.vat_breakdown` is the
-    // SAME variable filed into the hash-chained record — never a second, recomputed one. Proven by
-    // filing a mixed-rate sale with a caller-supplied DIFFERENCE-METHOD breakdown whose 21% VAT amount
-    // (1.74) is deliberately NOT `percentOf(base, rate)` (8.26 * 21% = 1.73), then reading BOTH the
-    // stored `sales.vat_breakdown` and the filed breakdown (`FakeFiscalBackend.filedReceiptFor`,
-    // inverted from `fake_fiscal_records`) back and asserting they carry the same per-rate base and
-    // tax. Were the sale insert to recompute from `lines` (or file any second breakdown), the stored
-    // 21% tax would read 1.73 and this would fail — which is exactly what the mutation in this task's
-    // report exercises. Reconciles with `total` (8.26 + 1.74 + 5.00 + 0.50 = 15.50), so it passes
-    // `recordSale`'s own `sale.total_mismatch` precondition; `deferred` settlement keeps the sale off
-    // the tender-coverage identity so the breakdown is the only thing under test.
+    // A caller-supplied difference-method breakdown whose 21% tax (1.74) is not
+    // `percentOf(8.26, 21)` (1.73): a sale insert that recomputed from `lines` would store 1.73.
+    // It reconciles with `total` (8.26 + 1.74 + 5.00 + 0.50 = 15.50).
     const backend = new FakeFiscalBackend(suite.db);
     const filedBreakdown: VatBreakdownLine[] = [
       { rate: decimal("21.00"), base: decimal("8.26"), tax: decimal("1.74") },
@@ -461,10 +363,8 @@ describe("recordSale — the happy path", () => {
 });
 
 describe("recordSale — operator attribution", () => {
-  // Attribution only (design §7). A uuid-shaped value the till would supply from its open session;
-  // recordSale writes it verbatim to `sales.operator_id`, with no FK and no authorize — ringing a
-  // sale is ungated in this slice. Deliberately distinct from tenant/till/node/series so a copy of
-  // the wrong column could not produce it by coincidence.
+  // A uuid-shaped value no other fixture column holds, so copying the wrong column cannot
+  // produce it.
   const OPERATOR_ID = "11111111-1111-4111-8111-111111111111";
 
   it("stamps input.operatorId onto sales.operator_id when supplied", async () => {
@@ -486,9 +386,7 @@ describe("recordSale — the order of operations", () => {
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
       async checkIntegrity(tx, node) {
-        // Read the counter from inside the verification call. If allocation had already run,
-        // next_number would read 2 here. Observing only "both happened" would not discriminate
-        // which came first — this is the one observation that does.
+        // Read from inside verification: 1 means allocation has not run yet.
         const [row] = await tx
           .select({ n: invoiceSeries.nextNumber })
           .from(invoiceSeries)
@@ -502,15 +400,8 @@ describe("recordSale — the order of operations", () => {
   });
 
   it("reads the clock exactly once for the whole transaction", async () => {
-    // Reading it twice — once for the sale's own issued_at, once again for whatever the module
-    // stamps its own record with — lets a second boundary fall between them, and the sale and its
-    // fiscal record then carry different timestamps for one event. The drifting clock makes that
-    // divergence observable instead of theoretical.
-    //
-    // **Deviation from the brief.** The brief compared against `backend.calls.recordSale[0]
-    // ?.issuedAt` — the non-existent spy again. `FiscalRecordRef.issuedAt` is a real field on the
-    // real interface, and `FakeFiscalBackend` echoes back exactly the `issuedAt` it was handed, so
-    // the backend's OWN return value is the observation point instead.
+    // A drifting clock makes a second reading visible: the sale and its fiscal record would carry
+    // different timestamps. The fake returns the `issuedAt` it was handed.
     let ticks = 0;
     const drifting: TrustedClock = fixedClock(() => {
       ticks += 1;
@@ -532,16 +423,8 @@ describe("recordSale — the order of operations", () => {
 
 describe("recordSale — no fiscal condition blocks a sale", () => {
   it("completes the sale when chain verification fails", async () => {
-    // AEAT: «la facturación por este motivo NUNCA debe interrumpirse». A test asserting the sale
-    // is BLOCKED here would enforce the exact opposite of the requirement, so this assertion is
-    // the one that must not be inverted.
-    //
-    // **Deviation from the brief.** `backend.chainVerification = { ok: false, error: new
-    // AppError(...) }` is not a real affordance on `FakeFiscalBackend` — the actual test-only
-    // control is `breakIntegrity(nodeId, issue)`, taking a plain `IntegrityIssue` (`{ code,
-    // params, recordId? }`), never an `AppError` instance (an `IntegrityReport` is persisted and
-    // displayed, and an `Error` does not survive JSON — `packages/fiscal/src/backend.ts`'s own
-    // doc comment on `IntegrityIssue`).
+    // AEAT: «la facturación por este motivo NUNCA debe interrumpirse». This assertion must never
+    // be inverted.
     const backend = new FakeFiscalBackend(suite.db);
     const issue: IntegrityIssue = { code: "chain.verification_failed", params: { sequence: 4 } };
     backend.breakIntegrity(nodeId, issue);
@@ -562,20 +445,11 @@ describe("recordSale — no fiscal condition blocks a sale", () => {
     await run(new FakeFiscalBackend(suite.db), { clock: degraded });
     expect(await countRows("sales")).toBe(1);
   });
-
-  // The brief additionally asserted `backend.calls.recordSale[0]?.clockConfident === false`. There
-  // is no such field to assert on: the real `SaleForFiscalRecord` (`packages/fiscal/src/backend.ts`)
-  // carries no `clockConfident` at all — only `issuedAt`/`offsetMinutes`. A degraded reading's
-  // `TrustedReading.warning` (an `AppError`, never thrown) is how confidence would be surfaced,
-  // and recording that warning as an incident is out of this task's seven steps. Dropped rather
-  // than kept as a test of a field that does not exist.
 });
 
 describe("recordSale — the fiscal record is created when ALL tenders settle", () => {
   it("writes nothing when a tender has not settled", async () => {
-    // A card declined mid-tender must leave the order open and retryable with NOTHING chained.
-    // The alternative chains records for sales that never happened, correctable only by issuing
-    // a rectifying record later.
+    // A declined card must leave the order retryable with nothing chained.
     await expect(
       run(new FakeFiscalBackend(suite.db), {
         settlement: {
@@ -588,10 +462,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
       }),
     ).rejects.toMatchObject({ code: "sale.tender_unsettled" });
 
-    // Nothing survives — but now BY ATOMICITY, not by a pre-check. `recordSale` has already written
-    // the sale and its lines by the time it calls `settleSale`; the throw rolls the whole
-    // transaction back, allocated invoice number included, so a declined card still leaves nothing
-    // chained. This is the assertion that pins that guarantee under the new order of operations.
+    // The sale and its lines were written before `settleSale` threw; the rollback removes them.
     expect(await countRows("sales")).toBe(0);
     expect(await countRows("sale_lines")).toBe(0);
     expect(await countRows("tenders")).toBe(0);
@@ -656,9 +527,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
 
 describe("recordSale — atomicity", () => {
   it("leaves no sale, no line and no tender when the fiscal step fails", async () => {
-    // The worst outcome this design has is a partial write here: an invoice that exists
-    // commercially and not fiscally, with a customer holding a receipt for a record that was
-    // never legally recorded. Nothing may survive.
+    // A partial write here would leave an invoice that exists commercially and not fiscally.
     const fake = new FakeFiscalBackend(suite.db);
     const exploding = wrapBackend(fake, {
       recordSale: () => {
@@ -675,10 +544,8 @@ describe("recordSale — atomicity", () => {
 
 describe("recordSale — settlement modes", () => {
   it("deferred records the sale and fiscal record with no tender and no settlement", async () => {
-    // Invoice-first: the bill is printed and handed over BEFORE payment. The sale and its fiscal
-    // record exist; there is no tender and no `sale_settlements` row — a legitimate unsettled
-    // steady state, not a half-written sale (design §3). Issuing the invoice is the fiscal event;
-    // payment is not, so the record is chained regardless of settlement.
+    // Invoice-first: the invoice is issued before payment, and a sale with no tender and no
+    // settlement is a legitimate steady state.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await run(backend, { settlement: { kind: "deferred" } });
 
@@ -692,11 +559,8 @@ describe("recordSale — settlement modes", () => {
   });
 
   it("immediate and deferred+settleSale produce identical tenders and settlement rows", async () => {
-    // D6, made observable: `immediate` runs the SAME `settleSale` code in the same transaction, so
-    // a sale settled inline must leave byte-for-byte identical `tenders` and `sale_settlements`
-    // rows to the identical sale recorded `deferred` and settled later by a separate `settleSale`
-    // (modulo the ids and the sale they hang off). If the two paths ever drift, this fails —
-    // which is the whole reason `recordSale` calls `settleSale` rather than re-implementing it.
+    // `immediate` runs the same `settleSale`, so a sale settled inline must leave the same
+    // `tenders` and `sale_settlements` rows as one recorded `deferred` and settled later.
     const later = new Date(BASE.getTime() + 5 * 60_000);
     const tendersInput: RecordSaleTender[] = [
       { method: "cash", amount: "6.31", cashTendered: "10.00", tipAmount: "0.00", settledAt: BASE },
@@ -714,7 +578,7 @@ describe("recordSale — settlement modes", () => {
       );
     });
 
-    // Path B — a second, independent venue: deferred record, then a SEPARATE settleSale.
+    // Path B — a second node: deferred record, then a SEPARATE settleSale.
     const other = await seedTenant(suite.db);
     const b = await withTransaction(suite.db, async (tx) => {
       await backend.registerNode(tx, other.nodeId);
@@ -761,8 +625,7 @@ describe("recordSale — settlement modes", () => {
     });
     expect(aTenders).toEqual(bTenders);
 
-    // Settlements, modulo id/sale_id. Both stamp the LATEST tender's instant (decision 5),
-    // which is `later`, NOT either sale's issuance instant (BASE) — proving the max-tender path.
+    // Both stamp the latest tender's instant, `later`, not the issuance instant (BASE).
     const [aSettle] = await suite.db
       .select()
       .from(saleSettlements)
@@ -778,17 +641,10 @@ describe("recordSale — settlement modes", () => {
   });
 
   it("immediate settles a fully-comped €0 sale with no tenders", async () => {
-    // The tenderless immediate path, driven end to end through `recordSale` rather than only through
-    // a direct `settleSale` (settle-sale.test.ts already covers the latter). A fully-comped sale is
-    // total 0.00 with NO tender — `tenders_amount_ck` forbids a €0 tender — so immediate mode hands
-    // `settleSale` an EMPTY tender list; it must record the settlement (stamped at its OWN instant,
-    // `new Date()`, like `record-void.ts`) rather than crash on an empty `reduce`/`insert().values([])`.
-    // The coverage identity `0 = 0 + 0` holds, so the settlement is written and the sale is still
-    // chained.
+    // Driven through `recordSale`; settle-sale.test.ts covers `settleSale` directly. A comped sale
+    // has no tender, so immediate mode hands `settleSale` an empty list.
     const backend = new FakeFiscalBackend(suite.db);
-    // Window the run so the stamped instant is pinned to the actual settlement moment. `issued_at` is
-    // the fixed `steadyClock` reading (BASE, March), so a settlement stamped `new Date()` (now) is
-    // demonstrably NOT a copy of issuance.
+    // `issued_at` is the fixed BASE (March), so a settlement stamped now is not a copy of it.
     const before = new Date();
     const { saleId } = await run(backend, {
       total: "0.00",
@@ -811,8 +667,6 @@ describe("recordSale — settlement modes", () => {
     expect(await countRows("tenders")).toBe(0);
     expect(await countRows("sale_settlements")).toBe(1);
     expect(await backend.recordsFor(nodeId)).toHaveLength(1);
-    // Stamped at the settlement's own instant — there is no tender to time it by, and settlement is
-    // not a fiscal event.
     const [settled] = await suite.db
       .select()
       .from(saleSettlements)
@@ -822,20 +676,14 @@ describe("recordSale — settlement modes", () => {
     // Within the run window …
     expect(settledAt).toBeGreaterThanOrEqual(before.getTime());
     expect(settledAt).toBeLessThanOrEqual(after.getTime());
-    // … and strictly LATER than the fixed issued_at (BASE), proving it is the settlement instant, not
-    // a backdated copy of the print instant.
+    // … and later than the fixed issued_at.
     expect(settledAt).toBeGreaterThan(new Date(row!.issuedAt).getTime());
   });
 });
 
 describe("recordSale — numbering", () => {
   it("never reissues a number that reached a committed sale", async () => {
-    // The property that actually matters. Gaps are permitted; reuse is not.
-    //
-    // `.rejects.toThrow`/`.rejects.toMatchObject` do not see through Drizzle's own
-    // `DrizzleQueryError` wrapper (its `.code` is undefined; the real driver error lives on
-    // `.cause`), so the refusal is read via `captureError` instead, per this task's own governing
-    // context.
+    // Gaps are permitted; reuse is not.
     await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
@@ -848,9 +696,7 @@ describe("recordSale — numbering", () => {
           issuedOffsetMinutes: 60,
           // A money column holds whole cents: 100 is 1.00.
           total: 100,
-          // The filed per-rate breakdown; `[]` — supplied so the insert reaches the
-          // duplicate-invoice-number unique violation (23505) under test rather than tripping the
-          // column's own NOT NULL (23502) first.
+          // Required by the column; supplied so the only thing wrong with this row is its number.
           vatBreakdown: [],
           locale: "es-ES",
           invoiceLocales: ["es-ES"],
@@ -859,10 +705,6 @@ describe("recordSale — numbering", () => {
         });
       }),
     );
-    // The class, and then WHICH key — stronger than the SQLSTATE this used to assert, which said
-    // only that something unique was violated. This engine reports one code for a primary key, a
-    // unique index, a NOT NULL and a CHECK alike, and names the table and columns for a unique
-    // index over plain columns (`packages/db/src/constraint-target.ts`).
     expect(isUniqueViolation(error)).toBe(true);
     expect(constraintTarget(error)).toEqual({
       table: "sales",
@@ -871,9 +713,8 @@ describe("recordSale — numbering", () => {
   });
 
   it("returns the number to the pool when the transaction rolls back", async () => {
-    // Documented so the behaviour is deliberate rather than discovered. Under a `next_number`
-    // COLUMN the allocating UPDATE is transactional, so a rollback un-allocates. That is safe —
-    // the number never reached a committed sale, so reissuing it is not reuse.
+    // Deliberate: the allocating update is transactional, so a rollback un-allocates. The number
+    // never reached a committed sale, so reissuing it is not reuse.
     const fake = new FakeFiscalBackend(suite.db);
     const exploding = wrapBackend(fake, {
       recordSale: () => {
@@ -897,11 +738,7 @@ describe("recordSale — series validation", () => {
   });
 
   it("rejects a series belonging to another node", async () => {
-    // A node may own N series, but a series belongs to exactly one node. Allocating from another
-    // node's series would have two chains issuing from one counter, which no constraint
-    // downstream can detect. a second `seedTenant` call mints a SECOND node,
-    // so `other.seriesId` is real but owned by a different node than the one under
-    // test — the series↔node guard must reject it.
+    // `seedTenant` mints a second node, so `other.seriesId` is real but not this node's.
     const other = await seedTenant(suite.db);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
@@ -909,9 +746,6 @@ describe("recordSale — series validation", () => {
   });
 
   it("rejects a rectificative series: an ordinary sale must not draw a corrective number", async () => {
-    // The other direction of the §5 purpose guard. A corrective series (`purpose='rectificative'`)
-    // is reserved for corrective invoices (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
-    // would consume a corrective number and break the mandated separation.
     const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
@@ -922,8 +756,8 @@ describe("recordSale — series validation", () => {
   });
 
   it("rejects a RETIRED series: a restored box must never number from the series it was restored with", async () => {
-    // A cold restore retires the node's series and opens fresh ones; a stale `WAITRON_TILL_SERIES_ID`
-    // (spec 2026-09-06-module-sp3d §5) must fail LOUD here, never issue a number the tax agency saw.
+    // A cold restore retires the node's series and opens fresh ones; a stale configured series
+    // must fail loudly, never issue a number the tax agency saw.
     const retiredAt = new Date("2026-09-06T10:00:00.000Z");
     await suite.db.update(invoiceSeries).set({ retiredAt }).where(eq(invoiceSeries.id, seriesId));
     try {
@@ -941,19 +775,10 @@ describe("recordSale — series validation", () => {
 });
 
 describe("recordSale — working order linkage", () => {
-  // The parked working order this sale is FILED from is the sale-idempotency key
-  // (`sales_working_order_id_key`, migration for sub-project 7b): recordSale writes
-  // `input.workingOrderId` onto `sales.working_order_id` when the till supplies one, and leaves it
-  // NULL for a walk-up sale rung with no draft. The FK
-  // `(working_order_id) → working_orders(id)` is enforced here, because the venue store opens
-  // every connection with `pragma foreign_keys = on` (`packages/store/src/index.ts`) — SQLite
-  // checks no foreign key without it. So the "supplied" case needs a REAL working_orders row as
-  // the FK target; a fabricated id would FK-violate, which is why the seed fixtures no longer mint
-  // one.
+  // `sales.working_order_id` is a foreign key onto `working_orders`, enforced because the venue
+  // store turns `foreign_keys` on (`packages/store/src/index.ts`), so the supplied case needs a
+  // real row.
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
-    // Through the table definition: `working_orders.id` is a `$defaultFn` generator only the
-    // insert BUILDER runs, so a raw INSERT omitting it is refused
-    // `NOT NULL constraint failed: working_orders.id`.
     const [row] = await suite.db
       .insert(workingOrders)
       .values({ tillId, orderNumber: 1 })
@@ -982,17 +807,7 @@ describe("recordSale — working order linkage", () => {
 });
 
 describe("recordSale — caller-supplied vatBreakdown and line category", () => {
-  /**
-   * Captures the `vatBreakdown` that actually reaches `FiscalBackend.recordSale`.
-   *
-   * **Deviation from the brief.** The brief asserts on `backend.lastSale!.vatBreakdown`, but the
-   * real `FakeFiscalBackend` (`@waitron/fiscal/src/testing/fake-backend.js`) has no `lastSale`
-   * affordance and does not persist `vatBreakdown` at all — its `fake_fiscal_records` table carries
-   * no such column, and the suite's existing "groups two lines…" test already records that the fake
-   * cannot assert on the breakdown's shape. Observed instead through this file's own `wrapBackend`
-   * override, capturing the `SaleForFiscalRecord` argument as it passes through — the same
-   * method-override mechanism the "order of operations" tests already use.
-   */
+  /** Captures the `vatBreakdown` that reaches `FiscalBackend.recordSale`. */
   function captureBreakdown(): {
     backend: FiscalBackend;
     captured: () => readonly VatBreakdownLine[] | undefined;
@@ -1009,12 +824,8 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
   }
 
   it("passes a supplied vatBreakdown to the backend verbatim", async () => {
-    // The whole point of the catalogue slice: a caller (catalogue pricing's gross-inclusive
-    // difference method) hands recordSale the breakdown it computed, and recordSale files it as-is
-    // rather than re-deriving one from `lines`. The supplied entry (base 7.25 + tax 0.72 = 7.97) is
-    // deliberately NOT what `buildVatBreakdown` would derive from the single 7.25 line at 10%
-    // (which would compute tax 0.73 = percentOf(7.25, 10.00)), so a code path that ignored the
-    // supplied value and derived its own could not produce this by coincidence.
+    // The supplied tax (0.72) is not what `buildVatBreakdown` derives from the line (0.73), so a
+    // path that ignored the supplied value cannot pass.
     const breakdown: VatBreakdownLine[] = [
       { rate: decimal("10.00"), base: decimal("7.25"), tax: decimal("0.72") },
     ];
@@ -1034,16 +845,14 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
           category: "Food",
         },
       ],
-      // total 7.97 ≠ the fixture's default €14.41, so its default tenders would fail settleSale's
-      // coverage identity. Deferred keeps this test on the fiscal-record path it is about.
+      // Deferred: the default tenders would not cover 7.97.
       settlement: { kind: "deferred" },
     });
     expect(captured()).toEqual(breakdown); // NOT buildVatBreakdown's derivation
   });
 
   it("derives the breakdown when none is supplied (legacy path unchanged)", async () => {
-    // The additive guarantee: with no `vatBreakdown`, recordSale runs `buildVatBreakdown(lines)`
-    // exactly as before — one 10.00 line at 10% derives base 10.00, tax 1.00.
+    // One 10.00 line at 10% derives base 10.00, tax 1.00.
     const { backend, captured } = captureBreakdown();
     await run(backend, {
       total: "11.00",
@@ -1066,10 +875,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
   });
 
   it("throws sale.total_mismatch when a supplied breakdown disagrees with total", async () => {
-    // The defence for an unrepairable record: a supplied breakdown summing to 7.97 filed against a
-    // declared total of 8.00 would chain a self-inconsistent record. Compared by value, so it fires
-    // on the magnitude, not on scale. Refused at the very top of recordSale, before anything is
-    // written.
+    // Compared by value, and refused before anything is written.
     const breakdown: VatBreakdownLine[] = [
       { rate: decimal("10.00"), base: decimal("7.25"), tax: decimal("0.72") }, // sums to 7.97
     ];
@@ -1122,8 +928,6 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
   });
 
   it("leaves sale_lines.category NULL when a line omits it (additive, no behaviour change)", async () => {
-    // The other branch of `line.category ?? null`: an existing caller that never sets `category`
-    // inserts NULL, exactly as before this field existed.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "1.50",
       lines: [
@@ -1148,10 +952,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
 
 describe("recordSale — modifier child lines (parent_line_id)", () => {
   it("links a child modifier line to its parent by the parent's GENERATED id", async () => {
-    // Task 5. A filed MODIFIER child line carries `parent_line_id` pointing at the dish line it
-    // belongs to. `recordSale` pre-generates one id per line, builds a `lineNo -> generated id` map,
-    // and resolves `line.parentLineNo` (a caller-facing line number) to the parent's generated id at
-    // insert. lineNo 2 names lineNo 1 as its parent; the top-level line 1 leaves it NULL.
+    // Line 2 names line 1 as its parent; the top-level line 1 has none.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.71",
       lines: [
@@ -1186,15 +987,12 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.lineNo === 1)!;
     const child = lines.find((l) => l.lineNo === 2)!;
-    // A top-level line has no parent; the child points at the parent's actual generated id — not its
-    // lineNo, and not some other row's id.
+    // The child points at the parent's generated id, not its lineNo.
     expect(parent.parentLineId).toBeNull();
     expect(child.parentLineId).toBe(parent.id);
   });
 
   it("leaves parent_line_id NULL when a line omits parentLineNo (additive, no behaviour change)", async () => {
-    // The `line.parentLineNo == null ? null : ...` branch for an existing caller that never sets it —
-    // every line inserts a NULL parent, exactly as before this field existed.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.05",
       lines: [
@@ -1226,10 +1024,8 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
   });
 
   it("inserts NULL for a parentLineNo that names no line in the basket (the `?? null` guard)", async () => {
-    // Defensive branch of `byLineNo.get(line.parentLineNo) ?? null`: a `parentLineNo` pointing at a
-    // lineNo not present in this basket resolves to NO generated id, so the row inserts NULL rather
-    // than a dangling pointer — and the self-FK would reject a fabricated id
-    // anyway. Line 2 names lineNo 9, which does not exist here.
+    // A `parentLineNo` naming no line in this basket resolves to null, never a dangling pointer.
+    // Line 2 names line 9.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.05",
       lines: [
@@ -1261,13 +1057,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
   });
 
   it("files a VAT breakdown carrying BOTH the reduced dish's rate and the general option's rate", async () => {
-    // Task 5, requirement 3, pinned at the RECORD level. A `reduced`-rated (10%) dish with a
-    // `general`-rated (21%) modifier option must file a VAT breakdown carrying BOTH rates — the
-    // child's base is a taxable amount like any other line's, grouped by its own rate. Already true
-    // via Task 4's `buildVatBreakdown`, which groups `input.lines` (parent AND child alike) by
-    // `vatRate`; this pins it so a future change that dropped child lines from the breakdown would
-    // fail here. Read off the STORED `sales.vat_breakdown`, the queryable copy of the filed breakdown
-    // (spec 8a's single source).
+    // A 10% dish with a 21% option files both rates: a child line is grouped by its own rate.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.71",
       lines: [
@@ -1300,8 +1090,6 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
       .where(eq(sales.id, saleId));
     const byRate = new Map(saleRow!.vb.map((g) => [g.rate, g]));
     expect([...byRate.keys()].sort()).toEqual(["10.00", "21.00"]);
-    // The dish's own base and the child option's own base, each under its own rate — the child is
-    // not folded into the parent's rate.
     expect(byRate.get("10.00")!.base).toBe("5.00");
     expect(byRate.get("21.00")!.base).toBe("1.00");
   });
