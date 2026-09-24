@@ -5444,6 +5444,20 @@ canonicalisation, verification, trust), node enrolment and its rate limiting
 is in `venue.db` (slice-2 spec §2). Read the residuals below as requirements for what failover is
 rebuilt INTO, not as descriptions of code that exists today.
 
+**Owner decision 2026-09-24 — a cut-off primary keeps streaming, into its own copy.** Raised by #590
+(slice 2 Task 6), whose `StreamHost` streams on any node whose role is primary, while the Cloud
+snapshot worker also requires the node not be fenced (`cloudPrimary`, `apps/server/src/boot.ts`).
+Invoices a primary has recorded and chained but not yet sent to AEAT exist only in its database, and
+Litestream copies the whole file page by page — it cannot pick out the fiscal tables — so the way to
+carry them across is to keep streaming everything and extract the fiscal records afterwards, from a
+restore of that node's copy, on the promoted side. So when slice 3 builds fencing and promotion: a
+fenced primary does NOT stop streaming; it streams into its OWN generation and never writes over the
+live one, and the tail shipper files what that copy holds that the promoted side lacks. Watch for the
+rule #590's review described — a node refuses itself once the bucket's pointer names another
+generation — which, if it stops a fenced node's stream the moment the promoted node claims the
+pointer, would cut off exactly the tail this decision is meant to keep. Invoices already sent to AEAT
+stay recoverable from AEAT either way.
+
 Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
 that slice 3 has to restore:
 
