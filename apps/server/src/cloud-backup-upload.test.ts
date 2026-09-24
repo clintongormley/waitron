@@ -100,10 +100,9 @@ it("uploads with capture credentials and a conditional PUT; retries need no read
 it("refuses HTTP before sending upload credentials to a listening server", async () => {
   const { createServer: plainServer } = await import("node:http");
   let requests = 0;
-  const server = plainServer(async (req, res) => {
+  const server = plainServer((req, res) => {
     requests++;
-    for await (const _ of req) {
-    }
+    req.resume();
     res.end();
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
