@@ -87,6 +87,7 @@ import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
@@ -296,6 +297,46 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     eachUnitId,
     kgUnitId,
   };
+}
+
+/** A basket line naming the product it sells; {@link ZoneOffers.toOfferLines} turns it into an offer line. */
+interface ProductLine {
+  productId: string;
+  quantity: string;
+  extras?: ExtraSelection[];
+  options?: OptionSelection[];
+  note?: string;
+}
+
+/**
+ * Every product the venue's catalogue holds now, offered in its counter zone (`setupVenue`'s) from
+ * the test helper's own menu at the product's own price. Call it after the catalogue is final.
+ */
+function counterOffers(cfg: TillConfig): Promise<ZoneOffers> {
+  return withTransaction(db, (tx) => offerProducts(tx, cfg));
+}
+
+/** `parkOrder` for a basket named by product, sold through each product's counter-zone offer. */
+async function parkProducts(
+  cfg: TillConfig,
+  req: { id: string; label?: string; lines: ProductLine[] },
+): Promise<{ id: string; orderNumber: number }> {
+  const offers = await counterOffers(cfg);
+  return parkOrder({ db }, cfg, {
+    ...req,
+    zoneId: offers.zoneId,
+    lines: offers.toOfferLines(req.lines),
+  });
+}
+
+/** `updateHeldOrder` for a basket named by product, each line naming its counter-zone offer. */
+async function updateProducts(
+  cfg: TillConfig,
+  id: string,
+  req: { label?: string; lines: (ProductLine & { workingOrderLineId?: string })[] },
+): Promise<void> {
+  const offers = await counterOffers(cfg);
+  return updateHeldOrder({ db }, cfg, id, { ...req, lines: offers.toOfferLines(req.lines) });
 }
 
 /**
@@ -717,7 +758,7 @@ describe("parkOrder", () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
 
-    const { orderNumber } = await parkOrder({ db }, cfg, {
+    const { orderNumber } = await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "2" }],
       label: "John",
@@ -771,7 +812,7 @@ describe("parkOrder", () => {
       await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
     });
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "1.500" }],
     });
@@ -789,7 +830,7 @@ describe("parkOrder", () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
 
-    const { orderNumber } = await parkOrder({ db }, cfg, {
+    const { orderNumber } = await parkProducts(cfg, {
       id,
       // Two lines in a deliberate order, so the per-line product_id zip (line i ← req.lines[i]) is
       // proven for more than index 0.
@@ -817,35 +858,38 @@ describe("parkOrder", () => {
     expect(lines[1]!.category).toBeNull();
   });
 
-  it("refuses an empty basket (sale.empty_basket) and an unknown product (sale.unknown_product)", async () => {
+  it("refuses an empty basket (sale.empty_basket) and an offer the zone does not hold (service_zone.offer_not_allowed)", async () => {
     const { cfg, cafeId } = await setupVenue();
+    const offers = await counterOffers(cfg);
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
-    await expect(parkOrder({ db }, cfg, { id: randomUUID(), lines: [] })).rejects.toMatchObject({
+    await expect(parkProducts(cfg, { id: randomUUID(), lines: [] })).rejects.toMatchObject({
       code: "sale.empty_basket",
     });
 
     await expect(
       parkOrder({ db }, cfg, {
         id: randomUUID(),
-        lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
+        zoneId: offers.zoneId,
+        lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
       }),
     ).rejects.toMatchObject({
-      code: "sale.unknown_product",
-      params: { productId: UUID_NOT_IN_CAT },
+      code: "service_zone.offer_not_allowed",
+      params: { zoneId: offers.zoneId, menuItemId: UUID_NOT_IN_CAT },
     });
 
-    // The unknown-product refusal aborts the whole transaction: even the good line beside it leaves
-    // no working order behind (the refuse-empty guard runs before the tx; the unknown guard inside it).
+    // The refusal aborts the whole transaction: even the good line beside it leaves no working order
+    // behind (the refuse-empty guard runs before the tx; the offer guard inside it).
     await expect(
       parkOrder({ db }, cfg, {
         id: randomUUID(),
+        zoneId: offers.zoneId,
         lines: [
-          { productId: cafeId, quantity: "1" },
-          { productId: UUID_NOT_IN_CAT, quantity: "1" },
+          { menuItemId: offers.offerFor(cafeId), quantity: "1" },
+          { menuItemId: UUID_NOT_IN_CAT, quantity: "1" },
         ],
       }),
-    ).rejects.toMatchObject({ code: "sale.unknown_product" });
+    ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
     const parked = await withTransaction(db, async (tx) => {
       return tx.select().from(workingOrders);
     });
@@ -862,12 +906,12 @@ describe("parkOrder", () => {
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
 
-    const first = await parkOrder({ db }, cfg, { id, lines, label: "John" });
+    const first = await parkProducts(cfg, { id, lines, label: "John" });
     expect(first.orderNumber).toBe(1);
 
     // The re-sent park (a lost-response retry) REPLAYS the committed order rather than PK-colliding into
     // an opaque 500 — same id, same allocated number, nothing new filed.
-    const replay = await parkOrder({ db }, cfg, { id, lines, label: "John" });
+    const replay = await parkProducts(cfg, { id, lines, label: "John" });
     expect(replay).toEqual({ id, orderNumber: 1 });
 
     // Exactly ONE order and ONE line survive: the replay re-inserted neither the order nor its lines.
@@ -889,14 +933,14 @@ describe("parkOrder", () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
 
-    const first = await parkOrder({ db }, cfg, {
+    const first = await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "1" }],
     });
     expect(first.orderNumber).toBe(1);
 
     // Re-park the SAME id with a different product and quantity. It replays the original, unchanged.
-    const replay = await parkOrder({ db }, cfg, {
+    const replay = await parkProducts(cfg, {
       id,
       lines: [{ productId: aguaId, quantity: "5" }],
     });
@@ -921,7 +965,7 @@ describe("parkOrder", () => {
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "1" }];
 
-    await parkOrder({ db }, cfg, { id, lines });
+    await parkProducts(cfg, { id, lines });
     // Abandon it: `abandonHeldOrder` is a conditional open→abandoned UPDATE, so the row PERSISTS (status
     // 'abandoned'), not a delete — a re-park's id still PK-collides, but the committed row is no longer open.
     await abandonHeldOrder({ db }, cfg, id);
@@ -936,7 +980,7 @@ describe("parkOrder", () => {
     // else here; and SQLite reports a duplicate key two ways — 1555 for a primary key, 2067 for any
     // other unique index (packages/db/src/sql-state.ts). `UNIQUE_VIOLATION` holds both, so the
     // claim is that the collision surfaced as a duplicate key.
-    const error = await captureError(() => parkOrder({ db }, cfg, { id, lines }));
+    const error = await captureError(() => parkProducts(cfg, { id, lines }));
     expect(isUniqueViolation(error)).toBe(true);
 
     // The failed re-park did not resurrect the abandoned row.
@@ -1220,8 +1264,8 @@ describe("listHeldOrders", () => {
       { productId: cafeId, quantity: "1" },
       { productId: aguaId, quantity: "3" },
     ];
-    await parkOrder({ db }, cfg, { id: idA, lines: linesA, label: "Mesa 4" });
-    await parkOrder({ db }, cfg, { id: idB, lines: linesB });
+    await parkProducts(cfg, { id: idA, lines: linesA, label: "Mesa 4" });
+    await parkProducts(cfg, { id: idB, lines: linesB });
 
     // The Important review finding: the held `total` is the GROSS (VAT-inclusive) basket total the
     // operator saw — `priceBasket(sameItems).total`, computed independently of the persisted column —
@@ -1259,7 +1303,7 @@ describe("listHeldOrders", () => {
     // All three are parked identically (same node, real lines), so the ONLY thing separating the
     // listed one from the other two is status — not a missing node_id or an empty basket.
     for (const id of [openId, abandonedId, settledId]) {
-      await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+      await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     }
     await setStatus(abandonedId, "abandoned");
     await setStatus(settledId, "settled");
@@ -1271,7 +1315,7 @@ describe("listHeldOrders", () => {
   it("lists an open order from ANOTHER node of the same tenant — reads are venue-wide under warm standby (till-reroute §3.6)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const mine = randomUUID();
-    await parkOrder({ db }, cfg, { id: mine, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id: mine, lines: [{ productId: cafeId, quantity: "1" }] });
     const foreign = await seedForeignNodeOrder(cfg);
     const listed = (await listHeldOrders({ db }, cfg)).map((o) => o.id);
     expect(listed).toContain(mine);
@@ -1472,7 +1516,7 @@ describe("getHeldOrder", () => {
   it("returns the open order's product/quantity lines, ordered by lineNo", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       label: "Mesa 7",
       lines: [
@@ -1481,16 +1525,35 @@ describe("getHeldOrder", () => {
       ],
     });
 
+    const offers = await counterOffers(cfg);
     const order = await getHeldOrder({ db }, cfg, id);
     // Saved selections and quantities return in lineNo order; a quantity reads back at the three
     // places `thousandthsToDecimal` renders.
-    expect(order).toEqual({
+    expect({
+      ...order,
+      lines: order.lines.map(({ productId, menuItemId, quantity, optionSnapshots }) => ({
+        productId,
+        menuItemId,
+        quantity,
+        optionSnapshots,
+      })),
+    }).toEqual({
       id,
       orderNumber: 1,
       label: "Mesa 7",
       lines: [
-        { productId: cafeId, quantity: "1.000", optionSnapshots: [] },
-        { productId: aguaId, quantity: "3.000", optionSnapshots: [] },
+        {
+          productId: cafeId,
+          menuItemId: offers.offerFor(cafeId),
+          quantity: "1.000",
+          optionSnapshots: [],
+        },
+        {
+          productId: aguaId,
+          menuItemId: offers.offerFor(aguaId),
+          quantity: "3.000",
+          optionSnapshots: [],
+        },
       ],
     });
   });
@@ -1507,7 +1570,7 @@ describe("getHeldOrder", () => {
   it("throws working_order.not_found for a settled (non-open) order — closed is not retrievable", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
 
     await expect(getHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
@@ -1737,18 +1800,18 @@ describe("updateHeldOrder", () => {
     },
   );
 
-  it("refuses raising the quantity of a catalogue line whose product is Unavailable", async () => {
+  it("refuses raising the quantity of a plain offer line whose product is Unavailable", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     const before = await readLines(id);
     await withTransaction(db, (tx) => catalogue.updateProduct(tx, cafeId, { available: false }));
 
     await expect(
-      updateHeldOrder({ db }, cfg, id, {
+      updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2" }],
       }),
-    ).rejects.toMatchObject({ code: "sale.unknown_product" });
+    ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
     expect(await readLines(id)).toEqual(before);
   });
 
@@ -1868,7 +1931,7 @@ describe("updateHeldOrder", () => {
   it("replaces the lines, re-prices the total and updates the label, leaving the order row otherwise unchanged", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "2" }],
       label: "Mesa 4",
@@ -1881,7 +1944,7 @@ describe("updateHeldOrder", () => {
       { productId: aguaId, quantity: "1" },
       { productId: cafeId, quantity: "1" },
     ];
-    await updateHeldOrder({ db }, cfg, id, { lines: newLines, label: "Mesa 7" });
+    await updateProducts(cfg, id, { lines: newLines, label: "Mesa 7" });
 
     // order_number / node_id / till_id are untouched; only the label changed and the
     // status stays open (the update ran over the enforce_transition trigger, not around it).
@@ -1920,7 +1983,7 @@ describe("updateHeldOrder", () => {
   it("clears the label to null when the update omits one — the whole request is the new state", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "1" }],
       label: "Mesa 4",
@@ -1928,16 +1991,16 @@ describe("updateHeldOrder", () => {
 
     // No label on the update: a label is part of the order's state, so omitting it clears the
     // parked "Mesa 4" rather than leaving it in place.
-    await updateHeldOrder({ db }, cfg, id, { lines: [{ productId: aguaId, quantity: "1" }] });
+    await updateProducts(cfg, id, { lines: [{ productId: aguaId, quantity: "1" }] });
 
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(wo!.label).toBeNull();
   });
 
-  it("refuses an empty basket (sale.empty_basket) and an unknown product (sale.unknown_product), leaving the parked lines untouched", async () => {
-    const { cfg, cafeId } = await setupVenue();
+  it("refuses an empty basket (sale.empty_basket) and an offer the zone does not hold (service_zone.offer_not_allowed), leaving the parked lines untouched", async () => {
+    const { cfg, cafeId, zoneId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "2" }],
       label: "Mesa 4",
@@ -1949,10 +2012,10 @@ describe("updateHeldOrder", () => {
       code: "sale.empty_basket",
     });
     await expect(
-      updateHeldOrder({ db }, cfg, id, { lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }] }),
+      updateHeldOrder({ db }, cfg, id, { lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }] }),
     ).rejects.toMatchObject({
-      code: "sale.unknown_product",
-      params: { productId: UUID_NOT_IN_CAT },
+      code: "service_zone.offer_not_allowed",
+      params: { zoneId, menuItemId: UUID_NOT_IN_CAT },
     });
 
     // Both refusals happen before any line is deleted, so the parked order still holds its one
@@ -1970,11 +2033,11 @@ describe("updateHeldOrder", () => {
   it("throws working_order.not_open on a settled order — a closed order can no longer be edited", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
 
     await expect(
-      updateHeldOrder({ db }, cfg, id, { lines: [{ productId: cafeId, quantity: "2" }] }),
+      updateProducts(cfg, id, { lines: [{ productId: cafeId, quantity: "2" }] }),
     ).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: id },
@@ -1986,7 +2049,7 @@ describe("updateHeldOrder", () => {
     const missing = randomUUID();
 
     await expect(
-      updateHeldOrder({ db }, cfg, missing, { lines: [{ productId: cafeId, quantity: "1" }] }),
+      updateProducts(cfg, missing, { lines: [{ productId: cafeId, quantity: "1" }] }),
     ).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: missing },
@@ -1994,12 +2057,14 @@ describe("updateHeldOrder", () => {
   });
 
   it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
-    const { cfg, cafeId } = await setupVenue();
+    const { cfg, cafeId, zoneId } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
+    // An edit prices from the order's own zone, which a raw order row does not carry.
+    await withTransaction(db, (tx) => VENUE_SERVICE.recordOrderContext(tx, cfg, foreign, zoneId));
 
     // The foreign-node order is edited like the node's own: the whole-basket replacement lands.
     await expect(
-      updateHeldOrder({ db }, cfg, foreign, { lines: [{ productId: cafeId, quantity: "1" }] }),
+      updateProducts(cfg, foreign, { lines: [{ productId: cafeId, quantity: "1" }] }),
     ).resolves.toBeUndefined();
     const after = await getHeldOrder({ db }, cfg, foreign);
     expect(after.lines).toHaveLength(1);
@@ -2012,7 +2077,7 @@ describe("abandonHeldOrder", () => {
   it("flips an open order to abandoned and drops it from the held list, leaving settled_at null", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     expect((await listHeldOrders({ db }, cfg)).map((o) => o.id)).toEqual([id]);
 
     await abandonHeldOrder({ db }, cfg, id);
@@ -2027,7 +2092,7 @@ describe("abandonHeldOrder", () => {
   it("throws working_order.not_open on an already-abandoned order", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await abandonHeldOrder({ db }, cfg, id);
 
     await expect(abandonHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
@@ -2039,7 +2104,7 @@ describe("abandonHeldOrder", () => {
   it("throws working_order.not_open on a settled order and on an absent id", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
 
     await expect(abandonHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
@@ -2131,13 +2196,45 @@ async function attachedPrinter(
   return { station: created, printerId };
 }
 
-/** Insert an active dining table in the venue and return its id (for the openTab → addTabRound path). */
+/** The helper's table-service zone, every current product offered in it. */
+function tableOffers(tx: Transaction, cfg: TillConfig): Promise<ZoneOffers> {
+  return offerProducts(tx, cfg, { zone: "tables" });
+}
+
+/** Insert an active dining table in the table-service zone and return its id (for the openTab →
+ *  addRound path). */
 async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
+  const { zoneId } = await tableOffers(tx, cfg);
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into dining_tables (id, location_id, label, created_at)
-    values (${randomUUID()}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}, ${nowIso()})
+    insert into dining_tables (id, location_id, label, zone_id, created_at)
+    values (${randomUUID()}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}, ${zoneId},
+      ${nowIso()})
     returning id`);
   return rows[0]!.id;
+}
+
+/** `addTabRound` for a round named by product, each line sold through its table-zone offer. */
+async function addRound(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lines: (ProductLine & { courseId?: string | null; hold?: boolean })[],
+): Promise<void> {
+  const offers = await tableOffers(tx, cfg);
+  await addTabRound(tx, cfg, tabId, offers.toOfferLines(lines));
+}
+
+/** `createOpenOrder` for a basket named by product, sold through each product's counter-zone offer. */
+async function createOfferedOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  lines: ProductLine[],
+): ReturnType<typeof createOpenOrder> {
+  const offers = await offerProducts(tx, cfg);
+  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+    zoneId: offers.zoneId,
+  });
 }
 
 /** Open a fresh working order carrying `lines` and FIRE it — the same read-lines → fireLines sequence
@@ -2148,16 +2245,10 @@ async function placeOrderWith(
   cfg: TillConfig,
   // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
   // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
-  lines: {
-    productId: string;
-    quantity: string;
-    extras?: ExtraSelection[];
-    options?: OptionSelection[];
-    note?: string;
-  }[],
+  lines: ProductLine[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
-  await createOpenOrder(tx, cfg, id, lines, null);
+  await createOfferedOrder(tx, cfg, id, lines);
   const fired = await tx
     .select({
       id: workingOrderLines.id,
@@ -2171,6 +2262,45 @@ async function placeOrderWith(
     .orderBy(workingOrderLines.lineNo);
   await fireLines(tx, cfg, id, fired);
   return { id };
+}
+
+/**
+ * Open an order with NO service context and one line per product, then FIRE it, so each line takes
+ * `fireLines`' context-less station chain (product, then category, then the default station) rather
+ * than a preparation route. The lines are written straight to the table because pricing one needs a
+ * zone; the price and name columns are placeholders nothing here reads.
+ */
+async function fireContextless(
+  tx: Transaction,
+  cfg: TillConfig,
+  productIds: string[],
+): Promise<{ id: string }> {
+  const id = randomUUID();
+  await createOpenOrder(tx, cfg, id, [], null);
+  await insertContextlessLines(tx, id, productIds);
+  await fireLines(tx, cfg, id, await fireableLines(tx, id));
+  return { id };
+}
+
+async function insertContextlessLines(
+  tx: Transaction,
+  orderId: string,
+  productIds: string[],
+): Promise<void> {
+  await tx.insert(workingOrderLines).values(
+    productIds.map((productId, index) => ({
+      workingOrderId: orderId,
+      lineNo: index + 1,
+      productId,
+      name: "Line",
+      descriptions: { [LOCALE]: "Line" },
+      quantity: 1000,
+      unitPrice: 124,
+      unitPriceGross: 150,
+      vatRate: 2100,
+      lineTotal: 150,
+    })),
+  );
 }
 
 /** Attach a fresh one-product extras list to `dishId`, priced 0.50 at the reduced rate — the shape a
@@ -2256,9 +2386,12 @@ describe("createOpenOrder empty-basket skips the full catalogue read (perf)", ()
 
   it("DOES call listAvailableProducts for a non-empty basket (negative control)", async () => {
     const { cfg, cafeId } = await setupVenue();
+    const offers = await counterOffers(cfg);
     const spy = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
-      await createOpenOrder(tx, cfg, randomUUID(), [line(cafeId)], null);
+      await createOpenOrder(tx, cfg, randomUUID(), offers.toOfferLines([line(cafeId)]), null, {
+        zoneId: offers.zoneId,
+      });
     });
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -2290,7 +2423,7 @@ describe("basket-wide modifier resolution (perf)", () => {
   // on rather than read twice, is covered where the walk lives — "one shared resolution for a set
   // of dishes" (packages/catalogue/src/offered-modifiers.test.ts).
 
-  it("reads each PRODUCT-side definition once for a walk-up basket", async () => {
+  it("reads each definition once for a basket of offers priced at their products' prices", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       await addExtraList(tx, catalogueId, cafeId, "Bacon");
@@ -2299,9 +2432,10 @@ describe("basket-wide modifier resolution (perf)", () => {
       const agua = await addOptionList(tx, aguaId, "Tamano");
       return { cafe, agua };
     });
+    const offers = await counterOffers(cfg);
     const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id: randomUUID(),
       lines: [
         {
@@ -2323,12 +2457,11 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(resolve).toHaveBeenCalledTimes(1);
-    // One entry per line, every one of them on the PRODUCT side: no line names a menu offer, so
-    // nothing the resolver is handed can send it to the menu-side read.
+    // One entry per line, each carrying the offer it was ordered through.
     expect(resolve.mock.calls[0]![1]).toEqual([
-      { productId: cafeId, menuItemId: null },
-      { productId: cafeId, menuItemId: null },
-      { productId: aguaId, menuItemId: null },
+      { productId: cafeId, menuItemId: offers.offerFor(cafeId) },
+      { productId: cafeId, menuItemId: offers.offerFor(cafeId) },
+      { productId: aguaId, menuItemId: offers.offerFor(aguaId) },
     ]);
   });
 
@@ -2340,7 +2473,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
     const answer = { listId: seeded.listId, labelId: seeded.labelIds[0]! };
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "1", options: [answer], note: "sin sal" }],
     });
@@ -2353,7 +2486,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     // re-priced from the current offer. The preserve check that runs first decides that from the
     // stored `note` alone, which costs nothing — so the catalogue is resolved once, by
     // `priceOrderLines`, and not a second time by a preserve check that was never going to hold.
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateProducts(cfg, id, {
       lines: [
         {
           workingOrderLineId: held.lines[0]!.workingOrderLineId,
@@ -2448,7 +2581,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         stationId: cocina.id,
       }); // → cocina (the product override wins over its category default)
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(cana), line(cafe)]);
+      const { id: orderId } = await fireContextless(tx, cfg, [cana, cafe]);
       const items = await ticketItemsFor(tx, orderId);
       expect(byProduct(items, cana).stationId).toBe(barra.id);
       expect(byProduct(items, cafe).stationId).toBe(cocina.id);
@@ -2477,8 +2610,11 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         primaryCategoryId: drinks.id,
       });
 
+      // The station comes from the context-less chain; the frozen label from a sale, which a
+      // context-less order cannot carry.
+      const { id: routedId } = await fireContextless(tx, cfg, [product]);
+      expect(byProduct(await ticketItemsFor(tx, routedId), product).stationId).toBe(bar.id);
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(product)]);
-      expect(byProduct(await ticketItemsFor(tx, orderId), product).stationId).toBe(bar.id);
       const [before] = await tx
         .select({ category: workingOrderLines.category })
         .from(workingOrderLines)
@@ -2544,7 +2680,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     const { cfg, catalogueId } = await setupVenue(); // no default station created
     await withTransaction(db, async (tx) => {
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
-      await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
+      await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toMatchObject({
         code: "station.no_default",
         params: { locationId: cfg.locationId },
       });
@@ -2561,7 +2697,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await deactivateStation(tx, cfg, cocina.id);
       const uncategorised = await makeProduct(tx, cfg, catalogueId, {}); // no product/category route
-      await expect(placeOrderWith(tx, cfg, [line(uncategorised)])).rejects.toMatchObject({
+      await expect(fireContextless(tx, cfg, [uncategorised])).rejects.toMatchObject({
         code: "station.no_default",
         params: { locationId: cfg.locationId },
       });
@@ -2608,7 +2744,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
-      await addTabRound(tx, cfg, tabId, [line(cafe)]);
+      await addRound(tx, cfg, tabId, [line(cafe)]);
 
       const items = await ticketItemsFor(tx, tabId);
       expect(items).toHaveLength(1);
@@ -2684,7 +2820,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     });
 
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [line(cafe)] });
+    await parkProducts(cfg, { id, lines: [line(cafe)] });
     await placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId);
 
     const items = await withTransaction(db, async (tx) => {
@@ -2699,7 +2835,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     // An OPEN (parked, never settled) order is ineligible — Mode P's pickup fires only a settled order.
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await expect(sendToPrep({ db }, cfg, id)).rejects.toMatchObject({
       code: "working_order.not_settled",
       params: { workingOrderId: id },
@@ -3434,7 +3570,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // Round 1: starter (Entrantes, earliest) auto-fires; main (Principales) is held.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       let items = await courseItemsFor(tx, tabId);
       expect(byLine(items, starter).firedAt).not.toBeNull();
       expect(byLine(items, main).firedAt).toBeNull();
@@ -3442,7 +3578,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       // Round 2: dessert (Postres) ALONE. It is NOT the order's earliest (Entrantes from round 1 is), so
       // it stays held — decisive proof the earliest is taken over prior rounds, not this batch (a
       // batch-only min would make Postres its own earliest and fire it).
-      await addTabRound(tx, cfg, tabId, [line(dessert)]);
+      await addRound(tx, cfg, tabId, [line(dessert)]);
       items = await courseItemsFor(tx, tabId);
       expect(byLine(items, dessert).firedAt).toBeNull();
 
@@ -3453,7 +3589,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       // Round 3: another main. Principales is already fired for this order, so this new item joins the
       // fired course and fires at once — the `firedCourseIds` branch, isolated (Principales is not the
       // earliest). Dessert (Postres, still unfired) remains held.
-      await addTabRound(tx, cfg, tabId, [line(main)]);
+      await addRound(tx, cfg, tabId, [line(main)]);
       items = await courseItemsFor(tx, tabId);
       const mains = items.filter((i) => i.productId === main);
       expect(mains).toHaveLength(2);
@@ -3558,7 +3694,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // Ring both: starter (Entrantes, earliest) auto-fires; main (Principales) is HELD — it is line 2.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const before = await courseItemsFor(tx, tabId);
       expect(byLine(before, main).firedAt).toBeNull(); // held — a later course
       expect(byLine(before, main).courseId).toBe(pri.id); // its snapshot sits on Principales
@@ -3590,7 +3726,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await setProductCourse(tx, cfg, main, pri.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
 
       // A null target clears the course (skipping the requireLiveCourse screen).
       await setLineCourse(tx, cfg, tabId, 2, null);
@@ -3615,7 +3751,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
       // A lone Entrantes line is the order's earliest (only) course, so it auto-fires at round-send.
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
 
       // Principales is a valid LIVE course, so requireLiveCourse passes — the FIRED guard is what refuses.
@@ -3637,7 +3773,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
 
       // An id naming no course of this venue — screened by requireLiveCourse BEFORE the line is resolved.
       const missing = randomUUID();
@@ -3662,7 +3798,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
 
       // A live target course, so we get PAST requireLiveCourse to the line-resolution miss.
       await expect(setLineCourse(tx, cfg, tabId, 999, ent.id)).rejects.toMatchObject({
@@ -3716,7 +3852,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
 
       // Ring three: starter (Entrantes, earliest) auto-fires as line 1; both Principales mains are HELD
       // — main1 is line 2, main2 is line 3.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main1), line(main2)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main1), line(main2)]);
       // Age the held lines' queued_at so the send's now() refresh is distinguishable from the ring stamp.
       await tx
         .update(ticketItems)
@@ -3762,7 +3898,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Principales) and dessert (line 3, Postres) are held.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main), line(dessert)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main), line(dessert)]);
       const before = await itemsByLineNo(tx, tabId);
       expect(before.get(2)!.firedAt).toBeNull();
       expect(before.get(3)!.firedAt).toBeNull();
@@ -3790,7 +3926,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       // Send line 2 once — it fires. Age line 1's (already-fired) stamps so a re-fire that wrongly matched
       // it would move them.
       await sendLines(tx, cfg, tabId, [2]);
@@ -3850,7 +3986,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
 
       // Ring both: starter auto-fires (prints at Cocina); main (Principales, Barra) is HELD — no Barra
       // print yet, because a held line prints only when it is sent.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const allJobsBefore = await tx.select({ id: printJobs.id }).from(printJobs);
       const barraJobsBefore = await tx
         .select({ id: printJobs.id })
@@ -3885,7 +4021,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // A lone earliest-course line auto-fires at round-send — fired but not yet started (state queued).
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
       const before = byLine(await courseItemsFor(tx, tabId), starter);
       expect(before.firedAt).not.toBeNull();
       expect(before.state).toBe("queued");
@@ -3908,7 +4044,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
 
       // The kitchen begins the (fired) line — advance it to `preparing` via the real bump verb.
       const item = byLine(await courseItemsFor(tx, tabId), starter);
@@ -3935,7 +4071,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
 
       // Cook it through to READY, then dispatch it to the floor (away). markCourseAway stamps away_at ONLY
       // on state='ready' items, so an away line is state='ready' — caught by the started-check's `ready`
@@ -3969,7 +4105,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Principales) is HELD — fired_at already null.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
 
       // Recalling an already-held line resolves and changes nothing.
@@ -3989,7 +4125,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
 
       await expect(recallLines(tx, cfg, tabId, [999])).rejects.toMatchObject({
         code: "tab.line_not_found",
@@ -4054,7 +4190,7 @@ describe("correction slips on recall & void (A6)", () => {
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // A lone earliest-course line auto-fires at round-send — it prints (fire ticket) at Cocina.
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
       const before = await jobRows(tx);
 
@@ -4082,7 +4218,7 @@ describe("correction slips on recall & void (A6)", () => {
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Principales) is HELD — never printed.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
       const before = await jobRows(tx);
 
@@ -4108,7 +4244,7 @@ describe("correction slips on recall & void (A6)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
-      await addTabRound(tx, cfg, tabId, [line(starter)]);
+      await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
       const before = await jobRows(tx);
 
@@ -4136,7 +4272,7 @@ describe("correction slips on recall & void (A6)", () => {
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2) is HELD — never printed.
-      await addTabRound(tx, cfg, tabId, [line(starter), line(main)]);
+      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
       const before = await jobRows(tx);
 
@@ -4175,7 +4311,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       const { tabId } = await openTab(tx, cfg, { tableId });
 
       // Both starters sit in the EARLIEST course, so both WOULD auto-fire — but line 2 carries hold:true.
-      await addTabRound(tx, cfg, tabId, [
+      await addRound(tx, cfg, tabId, [
         { productId: olives, quantity: "1" },
         { productId: bread, quantity: "1", hold: true },
       ]);
@@ -4215,7 +4351,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
-      await addTabRound(tx, cfg, tabId, [
+      await addRound(tx, cfg, tabId, [
         {
           productId: modified,
           quantity: "1",
@@ -4382,13 +4518,14 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const cafe = await makeProduct(tx, cfg, catalogueId, {}); // null course → fires immediately
 
       // A TAB at a known-labelled table: dining_tables.tab_id back-points at the order.
+      const { zoneId } = await tableOffers(tx, cfg);
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Mesa 5', ${nowIso()})
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Mesa 5', ${zoneId}, ${nowIso()})
         returning id`);
       const tableId = rows[0]!.id;
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(cafe)]);
+      await addRound(tx, cfg, tabId, [line(cafe)]);
 
       // A WALK-UP counter order, no table → tableLabel omitted.
       const { id: walkup } = await placeOrderWith(tx, cfg, [line(cafe)]);
@@ -4462,7 +4599,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       // `served_at` is writable only while the parent order is OPEN (design H2, ruling R4), so this
       // needs a tab rather than `placeOrderWith`'s settled/placed order.
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [line(cafe), line(agua)]);
+      await addRound(tx, cfg, tabId, [line(cafe), line(agua)]);
 
       const rows = await ticketItemRows(tx, tabId);
       // Backdate line 1 past overdue (10); line 2 stays fresh.
@@ -4668,10 +4805,13 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
     tx: Transaction,
     cfg: TillConfig,
     tableId: string,
-    lines: { productId: string; quantity: string; extras?: ExtraSelection[] }[],
+    lines: ProductLine[],
   ): Promise<string> {
     const id = randomUUID();
-    await createOpenOrder(tx, cfg, id, lines, null);
+    const offers = await tableOffers(tx, cfg);
+    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+      zoneId: offers.zoneId,
+    });
     await tx.execute(sql`update dining_tables set tab_id = ${id} where id = ${tableId}`);
     return id;
   }
@@ -4742,27 +4882,21 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
       // belongs in `quantity`, so two entries for one product are a malformed answer and neither
       // entry may be quietly dropped (which would serve and cook an extra unbilled).
       const error = await captureError(() =>
-        createOpenOrder(
-          tx,
-          cfg,
-          randomUUID(),
-          [
-            {
-              productId: cafeId,
-              quantity: "1",
-              extras: [
-                {
-                  listId: bacon.listId,
-                  picks: [
-                    { productId: bacon.productId, quantity: 1 },
-                    { productId: bacon.productId, quantity: 1 },
-                  ],
-                },
-              ],
-            },
-          ],
-          null,
-        ),
+        createOfferedOrder(tx, cfg, randomUUID(), [
+          {
+            productId: cafeId,
+            quantity: "1",
+            extras: [
+              {
+                listId: bacon.listId,
+                picks: [
+                  { productId: bacon.productId, quantity: 1 },
+                  { productId: bacon.productId, quantity: 1 },
+                ],
+              },
+            ],
+          },
+        ]),
       );
       expect(error).toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
     });
@@ -4773,21 +4907,13 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
     await withTransaction(db, async (tx) => {
       const bacon = await addMultiExtra(tx, catalogueId, cafeId, "Bacon"); // maxPicks 2, item cap 2
       const id = randomUUID();
-      await createOpenOrder(
-        tx,
-        cfg,
-        id,
-        [
-          {
-            productId: cafeId,
-            quantity: "1",
-            extras: [
-              { listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 2 }] },
-            ],
-          },
-        ],
-        null,
-      );
+      await createOfferedOrder(tx, cfg, id, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 2 }] }],
+        },
+      ]);
       const lines = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -4881,19 +5007,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         maxQuantity: 5,
       });
       const id = randomUUID();
-      await createOpenOrder(
-        tx,
-        cfg,
-        id,
-        [
-          {
-            productId: cafeId,
-            quantity: "3",
-            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 2 }] }],
-          },
-        ],
-        null,
-      );
+      await createOfferedOrder(tx, cfg, id, [
+        {
+          productId: cafeId,
+          quantity: "3",
+          extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 2 }] }],
+        },
+      ]);
       const lines = await tx
         .select({
           id: workingOrderLines.id,
@@ -4935,21 +5055,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         maxQuantity: 2,
       });
       await expect(
-        createOpenOrder(
-          tx,
-          cfg,
-          randomUUID(),
-          [
-            {
-              productId: cafeId,
-              quantity: "1",
-              extras: [
-                { listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] },
-              ],
-            },
-          ],
-          null,
-        ),
+        createOfferedOrder(tx, cfg, randomUUID(), [
+          {
+            productId: cafeId,
+            quantity: "1",
+            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] }],
+          },
+        ]),
       ).rejects.toMatchObject({
         code: "extras.limit_exceeded",
         params: { extraListId: shot.listId },
@@ -4973,19 +5085,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         { productId: shot.productId },
       ] as { productId: string; quantity: number }[]) {
         await expect(
-          createOpenOrder(
-            tx,
-            cfg,
-            randomUUID(),
-            [
-              {
-                productId: cafeId,
-                quantity: "1",
-                extras: [{ listId: shot.listId, picks: [pick] }],
-              },
-            ],
-            null,
-          ),
+          createOfferedOrder(tx, cfg, randomUUID(), [
+            {
+              productId: cafeId,
+              quantity: "1",
+              extras: [{ listId: shot.listId, picks: [pick] }],
+            },
+          ]),
         ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "quantity" } });
       }
     });
@@ -5001,21 +5107,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         maxQuantity: 5,
       });
       await expect(
-        createOpenOrder(
-          tx,
-          cfg,
-          randomUUID(),
-          [
-            {
-              productId: cafeId,
-              quantity: "1",
-              extras: [
-                { listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] },
-              ],
-            },
-          ],
-          null,
-        ),
+        createOfferedOrder(tx, cfg, randomUUID(), [
+          {
+            productId: cafeId,
+            quantity: "1",
+            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 3 }] }],
+          },
+        ]),
       ).rejects.toMatchObject({
         code: "extras.limit_exceeded",
         params: { extraListId: shot.listId },
@@ -5032,27 +5130,21 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
       });
       // one ×1 + one ×1 → tally 2 ≤ maxPicks 2 → OK (two child lines).
       const okId = randomUUID();
-      await createOpenOrder(
-        tx,
-        cfg,
-        okId,
-        [
-          {
-            productId: cafeId,
-            quantity: "1",
-            extras: [
-              {
-                listId: list.listId,
-                picks: [
-                  { productId: list.uno, quantity: 1 },
-                  { productId: list.dos, quantity: 1 },
-                ],
-              },
-            ],
-          },
-        ],
-        null,
-      );
+      await createOfferedOrder(tx, cfg, okId, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [
+            {
+              listId: list.listId,
+              picks: [
+                { productId: list.uno, quantity: 1 },
+                { productId: list.dos, quantity: 1 },
+              ],
+            },
+          ],
+        },
+      ]);
       const okLines = await tx
         .select({ parentLineId: workingOrderLines.parentLineId })
         .from(workingOrderLines)
@@ -5061,27 +5153,21 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 
       // same two products, but uno ×2 → tally 2 + 1 = 3 > maxPicks 2 → refused.
       await expect(
-        createOpenOrder(
-          tx,
-          cfg,
-          randomUUID(),
-          [
-            {
-              productId: cafeId,
-              quantity: "1",
-              extras: [
-                {
-                  listId: list.listId,
-                  picks: [
-                    { productId: list.uno, quantity: 2 },
-                    { productId: list.dos, quantity: 1 },
-                  ],
-                },
-              ],
-            },
-          ],
-          null,
-        ),
+        createOfferedOrder(tx, cfg, randomUUID(), [
+          {
+            productId: cafeId,
+            quantity: "1",
+            extras: [
+              {
+                listId: list.listId,
+                picks: [
+                  { productId: list.uno, quantity: 2 },
+                  { productId: list.dos, quantity: 1 },
+                ],
+              },
+            ],
+          },
+        ]),
       ).rejects.toMatchObject({
         code: "extras.limit_exceeded",
         params: { extraListId: list.listId },
@@ -5097,19 +5183,13 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         maxQuantity: 1,
       });
       const id = randomUUID();
-      await createOpenOrder(
-        tx,
-        cfg,
-        id,
-        [
-          {
-            productId: cafeId,
-            quantity: "2",
-            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 1 }] }],
-          },
-        ],
-        null,
-      );
+      await createOfferedOrder(tx, cfg, id, [
+        {
+          productId: cafeId,
+          quantity: "2",
+          extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 1 }] }],
+        },
+      ]);
       const lines = await tx
         .select({
           parentLineId: workingOrderLines.parentLineId,
@@ -5145,7 +5225,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
       await expect(
-        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: "not-a-uuid" }]),
+        addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: "not-a-uuid" }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: "not-a-uuid" } });
     });
   });
@@ -5158,7 +5238,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const tabId = await openEmptyTab(tx, cfg);
       const missing = randomUUID();
       await expect(
-        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: missing }]),
+        addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: missing }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
     });
   });
@@ -5184,7 +5264,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const cfg2: TillConfig = { ...cfg, locationId: brandLocationId(location2Id) };
       const foreign = await createCourse(tx, cfg2, { name: "Entrantes", displayOrder: 0 });
       await expect(
-        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: foreign.id }]),
+        addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: foreign.id }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: foreign.id } });
     });
   });
@@ -5198,7 +5278,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const dead = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       await deactivateCourse(tx, cfg, dead.id);
       await expect(
-        addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: dead.id }]),
+        addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: dead.id }]),
       ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead.id } });
     });
   });
@@ -5214,9 +5294,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, cafe, def.id);
       const tabId = await openEmptyTab(tx, cfg);
-      await addTabRound(tx, cfg, tabId, [
-        { productId: cafe, quantity: "1", courseId: override.id },
-      ]);
+      await addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: override.id }]);
       const items = await courseItemsFor(tx, tabId);
       expect(items).toHaveLength(1);
       expect(items[0]!.courseId).toBe(override.id);
@@ -5274,7 +5352,7 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
 
 describe("frozen answers through a fractional quantity edit", () => {
   it.each(["menu", "product"])(
-    "preserves %s answers and the locked price when a weighed dish's quantity changes",
+    "preserves the answers on a %s-priced offer and the locked price when a weighed dish's quantity changes",
     async (source) => {
       const { cfg, cafeId, cafeOfferId, zoneId, kgUnitId } = await setupVenue();
       // A WEIGHED dish: the quantity edit below moves a fraction, which is where the decimal
@@ -5286,16 +5364,13 @@ describe("frozen answers through a fractional quantity edit", () => {
         return addOptionList(tx, cafeId, "Taza", ["Grande"]);
       });
       const options = [{ listId: taza.listId, labelId: taza.labelIds[0]! }];
+      // The product-priced offer carries no price of its own, so it sells at the product's.
+      const menuItemId =
+        source === "menu" ? cafeOfferId : (await counterOffers(cfg)).offerFor(cafeId);
       const result = await parkOrder({ db }, cfg, {
         id: randomUUID(),
-        ...(source === "menu" ? { zoneId } : {}),
-        lines: [
-          {
-            ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
-            quantity: "0.500",
-            options,
-          },
-        ],
+        zoneId,
+        lines: [{ menuItemId, quantity: "0.500", options }],
       });
       const held = await getHeldOrder({ db }, cfg, result.id);
       expect(held.lines).toHaveLength(1);
@@ -5326,7 +5401,7 @@ describe("frozen answers through a fractional quantity edit", () => {
         lines: [
           {
             workingOrderLineId: held.lines[0]!.workingOrderLineId,
-            ...(source === "menu" ? { menuItemId: cafeOfferId } : { productId: cafeId }),
+            menuItemId,
             quantity: "1.000",
             options,
           },
@@ -5508,7 +5583,7 @@ describe("order path — extras and options", () => {
   it("freezes the list's and the chosen label's three names onto the dish line", async () => {
     const seeded = await seedDish();
     const id = randomUUID();
-    await parkOrder({ db }, seeded.cfg, {
+    await parkProducts(seeded.cfg, {
       id,
       lines: [
         {
@@ -5542,7 +5617,7 @@ describe("order path — extras and options", () => {
   it("an extra child line carries product_id and the extra product's OWN vat rate", async () => {
     const seeded = await seedDish();
     const id = randomUUID();
-    await parkOrder({ db }, seeded.cfg, {
+    await parkProducts(seeded.cfg, {
       id,
       lines: [
         {
@@ -5609,7 +5684,7 @@ describe("order path — extras and options", () => {
   it("refuses a dish whose options list is left unanswered", async () => {
     const seeded = await seedDish();
     await expect(
-      parkOrder({ db }, seeded.cfg, {
+      parkProducts(seeded.cfg, {
         id: randomUUID(),
         lines: [{ productId: seeded.dishId, quantity: "1" }],
       }),
@@ -5622,7 +5697,7 @@ describe("order path — extras and options", () => {
   it("refuses more picks than the extras list allows", async () => {
     const seeded = await seedDish();
     await expect(
-      parkOrder({ db }, seeded.cfg, {
+      parkProducts(seeded.cfg, {
         id: randomUUID(),
         lines: [
           {
@@ -5737,7 +5812,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       { listId: seeded.leche.listId, picks: [{ productId: seeded.leche.productId, quantity: 3 }] },
     ];
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "1", extras }],
     });
@@ -5757,7 +5832,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     });
     await db.execute(sql`update products set unit_price = 9900 where id = ${cafeId}`);
 
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateProducts(cfg, id, {
       lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2", extras }],
     });
 
@@ -5815,7 +5890,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       { listId: seeded.dearListId, picks: [{ productId: seeded.wineId, quantity: dearQuantity }] },
     ];
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [{ productId: cafeId, quantity: "1", extras: picks(1, 2) }],
     });
@@ -5830,7 +5905,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ).toEqual([100, 600]);
 
     // The two picks change places: two of the cheap one and one of the dear one, same dish count.
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateProducts(cfg, id, {
       lines: [
         {
           workingOrderLineId: before[0]!.id,
@@ -5874,7 +5949,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       return { wineId: cheap.productId, cheapListId: cheap.listId, dearListId: dear.id };
     });
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [
         {
@@ -5897,7 +5972,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
 
     // ONE pick, moved off the 1.00 list onto the 3.00 one. The product and the count are the same,
     // and neither is what changed.
-    await updateHeldOrder({ db }, cfg, id, {
+    await updateProducts(cfg, id, {
       lines: [
         {
           workingOrderLineId: before[0]!.id,
@@ -5976,7 +6051,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       return addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
     });
     const id = randomUUID();
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id,
       lines: [
         {
@@ -5996,7 +6071,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     // comes from the replacement path re-validating the answer — not from the preserve check, which
     // only ever answers "not this edit".
     await expect(
-      updateHeldOrder({ db }, cfg, id, {
+      updateProducts(cfg, id, {
         lines: [
           {
             workingOrderLineId: before[0]!.id,
@@ -6430,7 +6505,7 @@ describe("a variant is sold as the product it is", () => {
   });
 
   it("fires a variant line to its parent's product station, and one overriding the station to its own", async () => {
-    const { cfg, catalogueId, cafeId, aguaId } = await setupVenue();
+    const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6439,15 +6514,12 @@ describe("a variant is sold as the product it is", () => {
       await setProductStation(tx, cfg, wine.parentId, barra.id);
       await tx.update(products).set({ stationId: copas.id }).where(eq(products.id, wine.wine175));
       // An order with no service context, so the station comes from the product and category
-      // routes. Its lines are handed to `fireLines` naming the two variants, which is what an order
-      // line for each would carry.
+      // routes. Its two lines name the two variants, which is what an order line for each carries.
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [line(cafeId), line(aguaId)], null);
+      await createOpenOrder(tx, cfg, orderId, [], null);
+      await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
       const [first, second] = await fireableLines(tx, orderId);
-      await fireLines(tx, cfg, orderId, [
-        { ...first!, productId: wine.wine125 },
-        { ...second!, productId: wine.wine175 },
-      ]);
+      await fireLines(tx, cfg, orderId, [first!, second!]);
       const stations = await tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
@@ -6462,7 +6534,7 @@ describe("a variant is sold as the product it is", () => {
   });
 
   it("fires a variant line to its parent's category station, and one in its own category to that one's", async () => {
-    const { cfg, catalogueId, cafeId, aguaId } = await setupVenue();
+    const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6471,12 +6543,10 @@ describe("a variant is sold as the product it is", () => {
       await setCategoryStation(tx, cfg, wine.vinosId, bodega.id);
       await setCategoryStation(tx, cfg, wine.copasId, terraza.id);
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [line(cafeId), line(aguaId)], null);
+      await createOpenOrder(tx, cfg, orderId, [], null);
+      await insertContextlessLines(tx, orderId, [wine.wine125, wine.wine175]);
       const [first, second] = await fireableLines(tx, orderId);
-      await fireLines(tx, cfg, orderId, [
-        { ...first!, productId: wine.wine125 },
-        { ...second!, productId: wine.wine175 },
-      ]);
+      await fireLines(tx, cfg, orderId, [first!, second!]);
       const stations = await tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
@@ -6958,7 +7028,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     const bacon = await withTransaction(db, (tx) => addExtraList(tx, catalogueId, cafeId, "Bacon"));
     const spy = vi.spyOn(catalogue, "parentsWithActiveVariants");
 
-    await parkOrder({ db }, cfg, {
+    await parkProducts(cfg, {
       id: randomUUID(),
       lines: [
         {
@@ -6972,9 +7042,8 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     });
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect([...spy.mock.calls[0]![1]].sort()).toEqual(
-      [cafeId, cafeId, aguaId, bacon.productId].sort(),
-    );
+    // An offer line's dish is decided by its variant selection, so only the extras picks are asked.
+    expect([...spy.mock.calls[0]![1]]).toEqual([bacon.productId]);
   });
 
   it("refuses raising a held line whose product has gained an Active variant, and keeps an unchanged one", async () => {
@@ -7007,7 +7076,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       return { id: product.id, doble: doble! };
     });
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: coffee.id, quantity: "1" }] });
+    await parkProducts(cfg, { id, lines: [{ productId: coffee.id, quantity: "1" }] });
     const [parked] = await db
       .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
@@ -7016,7 +7085,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       setProductVariants(tx, coffee.id, [{ ...coffee.doble, active: true }], LOCALE),
     );
     const edit = (quantity: string) =>
-      updateHeldOrder({ db }, cfg, id, {
+      updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: parked!.id, productId: coffee.id, quantity }],
       });
     const stored = () =>
@@ -7038,7 +7107,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     const bacon = await withTransaction(db, (tx) => addExtraList(tx, catalogueId, cafeId, "Bacon"));
     const extras = [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }];
     const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1", extras }] });
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1", extras }] });
     const stored = () =>
       db
         .select({
@@ -7070,7 +7139,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
       ),
     );
     const edit = (quantity: string) =>
-      updateHeldOrder({ db }, cfg, id, {
+      updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: parked[0]!.id, productId: cafeId, quantity, extras }],
       });
 

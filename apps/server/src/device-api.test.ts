@@ -58,6 +58,7 @@ import { PENDING_CAP, acceptDeviceJoinRequest, denyJoinRequest } from "./join-re
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
@@ -111,12 +112,14 @@ beforeAll(() => {
  *  ticket item ids in `line_no` order (owner read). The per-line bump / foreign-station targets. */
 async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string[] }> {
   const orderId = randomUUID();
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
-    lines: [
+    zoneId: offers.zoneId,
+    lines: offers.toOfferLines([
       { productId: venue.cafeId, quantity: "1" },
       { productId: venue.aguaId, quantity: "1" },
-    ],
+    ]),
     label: "Mesa 7",
   });
   await placeOrder(

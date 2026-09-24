@@ -72,6 +72,7 @@ import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
@@ -183,13 +184,18 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   };
 }
 
+/** A product and the counter zone's offer of it — `menuItemId` is what a sale line names. */
+type OfferedProduct = AvailableProduct & { menuItemId: string };
+
 interface SeededVenue {
   cfg: TillConfig;
   available: AvailableProduct[];
+  /** The venue's counter-default zone, whose mode matches `cfg.orderFlow`. */
+  zoneId: string;
   /** "Café" — each, 1.50 gross, general(21%). */
-  cafe: AvailableProduct;
+  cafe: OfferedProduct;
   /** "Agua" — each, 2.00 gross, general(21%). Same rate as café, so a two-line basket has one VAT group. */
-  agua: AvailableProduct;
+  agua: OfferedProduct;
 }
 
 /**
@@ -255,24 +261,40 @@ async function setupVenue(): Promise<SeededVenue> {
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return (await listAvailableProducts(tx, cfg.locationId)).products;
   });
-  const cafe = available.find((p) => p.name === "Café")!;
-  const agua = available.find((p) => p.name === "Agua")!;
-  return { cfg, available, cafe, agua };
+  return offerAtCounter(cfg, available);
+}
+
+async function offerAtCounter(
+  cfg: TillConfig,
+  available: AvailableProduct[],
+): Promise<SeededVenue> {
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+  const offered = (name: string): OfferedProduct => {
+    const product = available.find((p) => p.name === name)!;
+    return { ...product, menuItemId: offers.offerFor(product.id) };
+  };
+  return {
+    cfg,
+    available,
+    zoneId: offers.zoneId,
+    cafe: offered("Café"),
+    agua: offered("Agua"),
+  };
 }
 
 /**
  * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT
  * `prepay` (planVenue has no mode input), then this flips the location's `order_flow` column to
- * `mode` AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow` reads) and the
- * in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly as boot wires them
- * in production.
+ * `mode`, sets `cfg.orderFlow` to match, and sets the counter zone to `mode` too — a zoned order's
+ * pay timing is its zone's (`serviceContext?.serviceMode ?? cfg.orderFlow`, till-sale.ts), so all
+ * three agree.
  */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
   await suite.db.execute(
     sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`,
   );
-  return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
+  return offerAtCounter({ ...venue.cfg, orderFlow: mode }, venue.available);
 }
 
 /** The OUTSTANDING (issued-but-unsettled) sales — the surface an invoice-first order shows on
@@ -476,8 +498,9 @@ async function ticketStateOf(id: string): Promise<string | null> {
 }
 
 /** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location —
- *  venue-apply.ts). Every fixture line here carries no product/category route, so it fires to this
- *  station; it is the id the whole-ticket bump and the per-station queue address. */
+ *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
+ *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
+ *  per-station queue address. */
 async function defaultStationId(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
@@ -598,12 +621,13 @@ beforeAll(() => {
 
 describe("payWorkingOrder", () => {
   it("walk-up: creates an open working order, files, and settles it in one tx", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
     const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
@@ -633,7 +657,7 @@ describe("payWorkingOrder", () => {
   });
 
   it("parked: pays the STORED composition at its LOCKED prices and settles it", async () => {
-    const { cfg, cafe, agua } = await setupVenue();
+    const { cfg, cafe, agua, zoneId } = await setupVenue();
     const id = randomUUID();
 
     // Park café×1 + agua×1 — BOTH added, so both gross units are LOCKED onto their `working_order_lines`
@@ -642,9 +666,10 @@ describe("payWorkingOrder", () => {
     // The old model re-priced the sent basket; this one cannot, which is the behaviour under test.
     await parkOrder({ db: suite.db }, cfg, {
       id,
+      zoneId,
       lines: [
-        { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "1" },
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "1" },
       ],
       label: "Mesa 4",
     });
@@ -692,13 +717,14 @@ describe("payWorkingOrder", () => {
   });
 
   it("retrieve → edit → pay files the RE-LOCKED edit, not the pre-edit lock (Finding 2 — no silent drop)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
     // Park café×1 (locked 1.50) — the composition a retrieve loads onto the till.
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     expect((await draftAggregate(id)).total).toBe("1.50");
 
@@ -707,7 +733,7 @@ describe("payWorkingOrder", () => {
     // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED — the 7c
     // regression this closes (the till-app side is pinned by `retrieve → edit → pay re-syncs …`).
     await updateHeldOrder({ db: suite.db }, cfg, id, {
-      lines: [{ productId: cafe.id, quantity: "2" }],
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
     });
     expect((await draftAggregate(id)).total).toBe("3.00"); // the lock now reflects the edit
 
@@ -739,13 +765,14 @@ describe("payWorkingOrder", () => {
   });
 
   it("files a parked line at its LOCKED price after the catalogue price changes (line-add snapshot)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
     // Park café×1 at the locked 1.50 — the gross unit is snapshotted onto the line here.
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     // Change the catalogue price AFTER the lock — the exact mutation across the park→pay gap that
@@ -771,18 +798,19 @@ describe("payWorkingOrder", () => {
   });
 
   it("idempotent replay: a second pay with the same id returns the SAME ticket — filed QR and breakdown, no second record", async () => {
-    const { cfg, cafe, agua } = await setupVenue();
+    const { cfg, cafe, agua, zoneId } = await setupVenue();
     const id = randomUUID();
     const req = {
       id,
+      zoneId,
       // A DIVERGENCE-PRONE basket at ONE rate (21%): café×1 (gross 1.50 → base 1.24) + agua×2 (gross
       // 4.00 → base 3.31). The FILED difference-method group is base 4.55, tax = 5.50 − 4.55 = 0.95;
       // a naive base×rate recompute gives round(4.55 × 21%) = 0.96 — a DIFFERENT cent. So this basket
       // proves the replay returns the FILED figures (Task 14), not the old reconstruction, which would
       // have made the assertion below fail with 0.96 ≠ 0.95.
       lines: [
-        { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "2" },
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "2" },
       ],
       tender: { method: "cash" as const, amount: "10.00" },
     };
@@ -839,16 +867,18 @@ describe("payWorkingOrder", () => {
   });
 
   it("concurrent double-pay of a PARKED order files ONE sale (two callers, same id)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     const req = {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "5.00" },
     };
     // Two overlapping pays of ONE order id, both started before either has finished. The write queue
@@ -868,7 +898,7 @@ describe("payWorkingOrder", () => {
   });
 
   it("concurrent double-pay of a WALK-UP (no prior row) files ONE sale — the 23505 backstop", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     // THE CASE NAME IS NOW WRONG AND THE CASE IS KEPT ANYWAY. On PostgreSQL the two overlapping
     // backends both reached the create-then-file path and the loser collided on `working_orders`'
     // primary key — the 23505 backstop the name records. On one handle the write queue admits the
@@ -888,7 +918,8 @@ describe("payWorkingOrder", () => {
 
     const req = {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "5.00" },
     };
     const [resA, resB] = await Promise.all([
@@ -903,11 +934,12 @@ describe("payWorkingOrder", () => {
   });
 
   it("refuses paying an ABANDONED order (working_order.not_open) and files nothing", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     // Abandon it (open → abandoned), then try to pay.
     await withTransaction(suite.db, async (tx) => {
@@ -917,7 +949,8 @@ describe("payWorkingOrder", () => {
     await expect(
       payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
         id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
@@ -926,23 +959,24 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(0);
   });
 
-  it("a retrieved pay IGNORES req.lines — even an unknown product there — and files the STORED lock", async () => {
-    const { cfg, cafe } = await setupVenue();
+  it("a retrieved pay IGNORES req.lines — even an unknown offer there — and files the STORED lock", async () => {
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }], // the STORED lock: café×1 at 1.50
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }], // the STORED lock: café×1 at 1.50
     });
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
     // A retrieved order files from its STORED locked lines; `req.lines` is IGNORED entirely (design §2,
-    // line-add snapshot). Under the OLD re-price-at-pay model this garbage basket — an unknown product —
-    // would have thrown `sale.unknown_product`; under the new one it is not even looked at, so the pay
-    // SUCCEEDS on the stored café×1. Divergent inputs, opposite outcomes (CLAUDE.md §1): this is the
-    // regression guard against anyone re-reading `req.lines` for a retrieved order.
+    // line-add snapshot). Under the OLD re-price-at-pay model this garbage basket — an unknown offer —
+    // would have been refused; under the new one it is not even looked at, so the pay SUCCEEDS on the
+    // stored café×1. Divergent inputs, opposite outcomes (CLAUDE.md §1): this is the regression guard
+    // against anyone re-reading `req.lines` for a retrieved order.
     const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
-      lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
+      lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
@@ -956,7 +990,7 @@ describe("payWorkingOrder", () => {
   });
 
   it("refuses an empty basket and any tender that is neither cash nor card (voucher/transfer/other)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
 
     await expect(
@@ -974,7 +1008,8 @@ describe("payWorkingOrder", () => {
       await expect(
         payWorkingOrder(deps, cfg, {
           id: randomUUID(),
-          lines: [{ productId: cafe.id, quantity: "1" }],
+          zoneId,
+          lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
           tender: { method: method as unknown as "cash", amount: "1.50" },
         }),
       ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
@@ -984,7 +1019,7 @@ describe("payWorkingOrder", () => {
 
 describe("parkOrder concurrent replay", () => {
   it("concurrent double-park of the same id parks ONE order — the 23505 replay backstop (two concurrent callers)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     // A fresh id with NO prior row, parked twice with both calls in flight at once. Unlike
     // `payWorkingOrder`, `parkOrder` reads no existing row first — it goes straight to
     // `createOpenOrder`'s insert (`working-order.ts:926-933`) — so the second call's insert DOES
@@ -996,11 +1031,11 @@ describe("parkOrder concurrent replay", () => {
     // unrecognised code would surface here as a rejection rather than a replay. The 23505 in the
     // case name is the PostgreSQL code and is no longer what is raised.
     const id = randomUUID();
-    const lines = [{ productId: cafe.id, quantity: "1" }];
+    const lines = [{ menuItemId: cafe.menuItemId, quantity: "1" }];
 
     const [resA, resB] = await Promise.all([
-      parkOrder({ db: suite.db }, cfg, { id, lines }),
-      parkOrder({ db: suite.db }, cfg, { id, lines }),
+      parkOrder({ db: suite.db }, cfg, { id, zoneId, lines }),
+      parkOrder({ db: suite.db }, cfg, { id, zoneId, lines }),
     ]);
     expect(resA).toEqual(resB);
     expect(resA.id).toBe(id);
@@ -1024,12 +1059,13 @@ describe("parkOrder concurrent replay", () => {
 // `recordManualCardPayment` commits inline).
 describe("card tender (manual / datáfono)", () => {
   it("files a card sale: a card tender AND a captured manual payment linked to the filed sale; no change", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
     const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }], // café → 1.50 gross
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }], // café → 1.50 gross
       tender: { method: "card", amount: "1.50", externalRef: "OP-12345" },
     });
 
@@ -1057,7 +1093,7 @@ describe("card tender (manual / datáfono)", () => {
   });
 
   it("normalises the card tender to the total — a client over-send does not change the filed amount", async () => {
-    const { cfg, cafe, agua } = await setupVenue();
+    const { cfg, cafe, agua, zoneId } = await setupVenue();
     const id = randomUUID();
 
     // café + agua = 3.50 total; the till sends a card amount that DISAGREES (5.00). A card charges the
@@ -1066,9 +1102,10 @@ describe("card tender (manual / datáfono)", () => {
     // 5.00 ≠ 3.50, so a would-be pass-through of `req.tender.amount` would show here.
     const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
+      zoneId,
       lines: [
-        { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "1" },
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "1" },
       ],
       tender: { method: "card", amount: "5.00" },
     });
@@ -1082,11 +1119,12 @@ describe("card tender (manual / datáfono)", () => {
   });
 
   it("card lost-response retry replays the SAME ticket and files no second payment (7b idempotency covers card)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     const req = {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "card" as const, amount: "1.50" },
     };
     const deps = { db: suite.db, backend, clock };
@@ -1115,7 +1153,7 @@ describe("card tender (manual / datáfono)", () => {
 // that parked it, so any till on the node can list, retrieve and pay it.
 describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
-    const { cfg: tillA, cafe, agua } = await setupVenue();
+    const { cfg: tillA, cafe, agua, zoneId } = await setupVenue();
     // A SECOND register on the SAME node. It differs from till A ONLY in `till_id`: same tenant, node,
     // series and location — the shared node is the whole point of this cross-till, same-node path.
     const tillB = await addTill(tillA, "Caja 2");
@@ -1129,7 +1167,8 @@ describe("cross-till end-to-end", () => {
     // DIFFERENT tills, the concrete proof the chain is per-node, not per-till.
     const walkUp = await payWorkingOrder(deps, tillA, {
       id: randomUUID(),
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
     expect(walkUp.invoiceNumber).toBe("A/1");
@@ -1138,9 +1177,10 @@ describe("cross-till end-to-end", () => {
     const orderId = randomUUID();
     const { orderNumber } = await parkOrder({ db: suite.db }, tillA, {
       id: orderId,
+      zoneId,
       lines: [
-        { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "1" },
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "1" },
       ],
       label: "Mesa 7",
     });
@@ -1172,12 +1212,8 @@ describe("cross-till end-to-end", () => {
     const paid = await payWorkingOrder(deps, tillB, {
       id: orderId,
       // A retrieved order IGNORES req.lines (design §2); these are passed only to mirror the till
-      // round-trip. Filter to product lines — `HeldOrder.lines.productId` is typed nullable because
-      // the column is, not because a line here lacks a product: this order carries one dish and no
-      // extras, so the filter keeps every line it has.
-      lines: retrieved.lines.filter(
-        (l): l is { productId: string; quantity: string } => l.productId !== null,
-      ),
+      // round-trip, which sends each retrieved line's offer.
+      lines: retrieved.lines.map((l) => ({ menuItemId: l.menuItemId!, quantity: l.quantity })),
       tender: { method: "cash", amount: "10.00" },
     });
     expect(paid.invoiceNumber).toBe("A/2");
@@ -1207,7 +1243,7 @@ describe("cross-till end-to-end", () => {
   });
 
   it("venue-wide reads: a same-tenant register on a DIFFERENT node lists an order parked on node A (till-reroute §3.6)", async () => {
-    const { cfg: nodeA, cafe } = await setupVenue();
+    const { cfg: nodeA, cafe, zoneId } = await setupVenue();
     // A second node under the SAME tenant. Reads are venue-wide, so both nodes see the order — a
     // promoted node inherits the venue's open tabs regardless of the `node_id` they carry.
     const nodeB = await addNode(nodeA, "Servidor 2");
@@ -1215,7 +1251,8 @@ describe("cross-till end-to-end", () => {
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
       id: orderId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     expect((await listHeldOrders({ db: suite.db }, nodeA)).map((o) => o.id)).toContain(orderId);
@@ -1223,7 +1260,7 @@ describe("cross-till end-to-end", () => {
   });
 
   it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order (till-reroute §3.6)", async () => {
-    const { cfg: nodeA, cafe } = await setupVenue();
+    const { cfg: nodeA, cafe, zoneId } = await setupVenue();
     // A second register under the SAME tenant + location, differing only in node_id. Reads are
     // venue-wide, so every by-id lookup on node B reaches node A's order — a promoted node serves
     // the tabs it inherited (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family).
@@ -1232,14 +1269,15 @@ describe("cross-till end-to-end", () => {
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
       id: orderId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     // Node B retrieves the foreign-node order and edits it like its own.
     expect((await getHeldOrder({ db: suite.db }, nodeB, orderId)).id).toBe(orderId);
     await expect(
       updateHeldOrder({ db: suite.db }, nodeB, orderId, {
-        lines: [{ productId: cafe.id, quantity: "2" }],
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
     ).resolves.toBeUndefined();
 
@@ -1267,11 +1305,12 @@ describe("cross-till end-to-end", () => {
 // deferred file and the mode dispatch are Task 8.
 describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
@@ -1283,7 +1322,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // `require_open_parent` trigger is the DB backstop underneath — placing freezes for free (design §3).
     await expect(
       updateHeldOrder({ db: suite.db }, cfg, id, {
-        lines: [{ productId: cafe.id, quantity: "2" }],
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
     ).rejects.toMatchObject({ code: "working_order.not_open" });
 
@@ -1306,11 +1345,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   });
 
   it("placeOrder refuses a non-open order — a re-place of a placed one, and an absent id — writing no second log", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
@@ -1336,11 +1376,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   });
 
   it("cancelPlacedOrder: placed → abandoned, appends an order_cancelled amendment with the reason", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
@@ -1362,11 +1403,12 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   });
 
   it("cancelPlacedOrder refuses an empty or whitespace reason (working_order.reason_required), changing nothing", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
@@ -1393,7 +1435,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   });
 
   it("cancelPlacedOrder refuses a non-placed order — an open one, a settled one, and an absent id", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
 
     // An OPEN (parked, never placed) order — the wrong-status branch. A non-empty reason, so the reason
     // guard passes and the STATE check is what refuses. It reports `not_placed`, not `not_open`: cancel
@@ -1401,7 +1443,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     const openId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: openId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await expect(
       cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, openId, "changed mind", OPERATOR),
@@ -1416,7 +1459,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     const settledId = randomUUID();
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: settledId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
     await expect(
@@ -1437,14 +1481,15 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   });
 
   it("a pure prepay walk-up settles without placing and fires preparation", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
 
     // A walk-up settles open → settled in one transaction (till-sale.ts), never passing through
     // `placed`, so placing's log never opens. Prepay fires preparation in that same sale transaction.
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
@@ -1471,12 +1516,13 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
   // pinned beside I and T.
   it("Mode P (prepay): pay at order files an immediate sale, open → settled, nothing outstanding", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
 
     const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
@@ -1496,12 +1542,13 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // `working_order_lines` (where the add-time freeze writes it) and `sale_lines` (where filing
   // copies it) directly.
   it("freezes the unit's abbreviation, not its name, onto the filed line", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
 
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
 
@@ -1519,13 +1566,14 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // MODE I (invoice_first): at PLACE issue a DEFERRED (unpaid) chained invoice, open → placed, and it
   // shows as outstanding; at COLLECT `settleSale` closes it, placed → settled, filing NO second record.
   it("Mode I (invoice_first): place issues a deferred invoice; collect settles it, no second file", async () => {
-    const { cfg, cafe, agua } = await modeVenue("invoice_first");
+    const { cfg, cafe, agua, zoneId } = await modeVenue("invoice_first");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
+      zoneId,
       lines: [
-        { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "1" },
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "1" },
       ],
     });
 
@@ -1588,11 +1636,12 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
@@ -1610,14 +1659,15 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a card tender at collect records exactly one captured payment linked to the sale; cash records none", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
 
     // CARD collect: the invoice issued deferred at placing, then a manual-card ("datáfono") tender at
     // collect. The card charges the EXACT invoice total on the separate terminal — no change.
     const cardId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: cardId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, cardId, OPERATOR, cfg.tillId);
     const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
@@ -1647,7 +1697,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     const cashId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: cashId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, cashId, OPERATOR, cfg.tillId);
     await collectOrder({ db: suite.db, backend, clock }, cfg, {
@@ -1659,11 +1710,12 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a double-tap place issues exactly ONE deferred invoice (the two placements serialise)", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     // Two overlapping places of the SAME order. The write queue admits the second only once the first
@@ -1686,11 +1738,12 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: a concurrent double collect settles the invoice ONCE and both see the same ticket", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
@@ -1713,11 +1766,12 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // MODE T (ticket_then_pay): at PLACE no fiscal doc, open → placed; at COLLECT `recordSale` immediate
   // files + settles, placed → settled.
   it("Mode T (ticket_then_pay): place files no fiscal doc; collect files immediate at collect", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
@@ -1761,11 +1815,12 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode T: a concurrent double collect-pay files ONE sale, and a later sequential collect replays", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
@@ -1797,12 +1852,13 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // Mode I through the direct settle UPDATE, and both stamp `collected_at` in the UPDATE that
   // settles the order; these cases check only that it ends up set.
   it("Mode T: collectOrder stamps collected_at, dropping the order from its station queue, fiscal result unchanged", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
     // PLACE fires one ticket item to the default station; the order shows on that station's queue and
@@ -1837,12 +1893,13 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("Mode I: collectOrder stamps collected_at, dropping the order from its station queue, no second file", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     // PLACE issues the deferred invoice AND fires the ticket item to the default station.
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
@@ -1869,7 +1926,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   });
 
   it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
 
     // An OPEN (parked, never placed) order → `working_order.not_placed`, files nothing. `not_placed`,
     // not `not_open`: collect is the placed → settled operation, so an open order is a placing-state
@@ -1877,7 +1934,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     const openId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: openId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await expect(
       collectOrder({ db: suite.db, backend, clock }, cfg, {
@@ -1909,7 +1967,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     const placedId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: placedId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, placedId, OPERATOR, cfg.tillId);
     await expect(
@@ -1932,14 +1991,15 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 // scope).
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
       {
         id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
@@ -1983,13 +2043,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 
   it("advanceTicket bumps every not-yet-`to` line of an order at a station together, leaving already-advanced lines alone", async () => {
-    const { cfg, cafe, agua } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, agua, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
+      zoneId,
       lines: [
-        { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "1" },
+        { menuItemId: cafe.menuItemId, quantity: "1" },
+        { menuItemId: agua.menuItemId, quantity: "1" },
       ],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId); // fires two items → default station
@@ -2013,14 +2074,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
 
     // Two orders placed oldest-first, each a single line → the default station.
     const id1 = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: id1,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id1, OPERATOR, cfg.tillId);
@@ -2028,7 +2090,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const id2 = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: id2,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 3",
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id2, OPERATOR, cfg.tillId);
@@ -2075,7 +2138,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node (till-reroute §3.6)", async () => {
-    const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
     // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs
     // only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
     // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
@@ -2086,7 +2149,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const idA = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
       id: idA,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node A order",
     });
     await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR, nodeA.tillId);
@@ -2094,7 +2158,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const idB = randomUUID();
     await parkOrder({ db: suite.db }, nodeB, {
       id: idB,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node B order",
     });
     await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR, nodeB.tillId);
@@ -2109,14 +2174,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 
   it("sendToPrep refuses to fire an order it may not (working_order.not_settled) — an open one and an absent id", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
 
     // OPEN — parked but never paid. `sendToPrep` is Mode P's own pickup (settle happens at ORDER via
     // `payWorkingOrder`); an open order has never reached settlement, so nothing is fired.
     const openId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: openId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await expect(sendToPrep({ db: suite.db }, cfg, openId)).rejects.toMatchObject({
       code: "working_order.not_settled",
@@ -2142,7 +2208,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // reads run through {@link asTenant} (a `withTransaction` scope).
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
-    const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
     // A second node under the SAME tenant + location (addNode's 7b shape). Reads are venue-wide, so
     // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side
     // holds two orders, not "one empty, one not" (CLAUDE.md §1).
@@ -2151,7 +2217,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
     const idA = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
       id: idA,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node A order",
     });
     await placeOrder({ db: suite.db, backend, clock }, nodeA, idA, OPERATOR, nodeA.tillId);
@@ -2159,7 +2226,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
     const idB = randomUUID();
     await parkOrder({ db: suite.db }, nodeB, {
       id: idB,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Node B order",
     });
     await placeOrder({ db: suite.db, backend, clock }, nodeB, idB, OPERATOR, nodeB.tillId);
@@ -2183,7 +2251,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   // drops off listStationQueue. Before the fix that stamp was impossible (a settled order was immutable),
   // so a fired Mode-P order's tickets lingered on the display forever.
   it("Mode P: fired → ready → markCollected stamps collected_at and drops the order off listStationQueue", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
 
@@ -2193,7 +2261,8 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
       cfg,
       {
         id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
@@ -2223,13 +2292,14 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   });
 
   it("refuses a non-settled order — an open one and an absent id (working_order.not_settled)", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
 
     // OPEN — parked, never paid: not settled, so there is no handover to mark. Fails closed before any write.
     const openId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: openId,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await expect(markCollected({ db: suite.db }, cfg, openId)).rejects.toMatchObject({
       code: "working_order.not_settled",
@@ -2246,16 +2316,17 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   });
 
   it("refuses a settled order that was never fired (ticket.not_fired) — nothing on the kitchen queue to hand over", async () => {
-    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
-    // A context-less ticket-then-pay order settled through the direct pay primitive has no ticket item,
-    // so there is nothing on any station display to hand over.
+    // A walk-up in a ticket-then-pay zone settled through the direct pay primitive has no ticket item
+    // (only a prepay walk-up fires at pay), so there is nothing on any station display to hand over.
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
       {
         id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
@@ -2268,14 +2339,15 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   });
 
   it("refuses a re-collect of an already-handed-over order (working_order.already_collected)", async () => {
-    const { cfg, cafe } = await modeVenue("prepay");
+    const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
       {
         id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
@@ -2300,16 +2372,16 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
 // below use `suite.db` directly, which is the SAME handle — there is no outside to witness from
 // any more, only a read taken after the write committed.
 
-/** Insert an active dining table under `cfg`'s location and return its id — the `openTab` →
- *  `addTabRound` entry point. Written as an INSERT under `withTransaction`, the same shape
+/** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
+ *  → `addTabRound` entry point. Written as an INSERT under `withTransaction`, the same shape
  *  `addTill`/`addNode` above use. */
-async function addTable(tx: Transaction, cfg: TillConfig): Promise<string> {
+async function addTable(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<string> {
   // Through the table, for the reason {@link addTill} gives — and here BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
   // `NOT NULL constraint failed: dining_tables.id`.
   const rows = await tx
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, label: `T-${randomUUID().slice(0, 8)}` })
+    .values({ locationId: cfg.locationId, zoneId, label: `T-${randomUUID().slice(0, 8)}` })
     .returning({ id: diningTables.id });
   return rows[0]!.id;
 }
@@ -2395,9 +2467,15 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
     // default station. Nothing has printed yet.
     const tabId = await withTransaction(suite.db, async (tx) => {
-      const tableId = await addTable(tx, cfg);
+      const tables = await offerProducts(tx, cfg, { zone: "tables" });
+      const tableId = await addTable(tx, cfg, tables.zoneId);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
+      await addTabRound(
+        tx,
+        cfg,
+        tabId,
+        tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
+      );
       return tabId;
     });
     expect(await tabSnapshot(tabId)).toEqual([
@@ -2468,9 +2546,15 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
-      const tableId = await addTable(tx, cfg);
+      const tables = await offerProducts(tx, cfg, { zone: "tables" });
+      const tableId = await addTable(tx, cfg, tables.zoneId);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
+      await addTabRound(
+        tx,
+        cfg,
+        tabId,
+        tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
+      );
       return { postres, otros, tabId };
     });
     // Baseline: one HELD line in `postres`, nothing fired.
@@ -2551,9 +2635,15 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     const { postres, tabId } = await withTransaction(suite.db, async (tx) => {
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
-      const tableId = await addTable(tx, cfg);
+      const tables = await offerProducts(tx, cfg, { zone: "tables" });
+      const tableId = await addTable(tx, cfg, tables.zoneId);
       const { tabId } = await openTab(tx, cfg, { tableId });
-      await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
+      await addTabRound(
+        tx,
+        cfg,
+        tabId,
+        tables.toOfferLines([{ productId: cafe.id, quantity: "1", hold: true }]),
+      );
       return { postres, tabId };
     });
     expect(await tabSnapshot(tabId)).toEqual([

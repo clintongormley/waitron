@@ -40,12 +40,13 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig } from "./till-config.js";
 import { collectOrder, recordTillSale, reprintSale } from "./till-sale.js";
-import { openTab, parkOrder, placeOrder } from "./working-order.js";
+import { createOpenOrder, openTab, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
+import { offerProducts } from "./testing/zone-offers.js";
 
 /**
  * The auto-print hook, on the engine the box now runs: a `print_jobs` outbox row and a `drawer_opens`
@@ -106,7 +107,7 @@ function nextNif(): string {
   return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
   return {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
@@ -115,7 +116,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
-    orderFlow: "prepay",
+    orderFlow,
   };
 }
 
@@ -123,10 +124,15 @@ function printCfg(cfg: TillConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
-/** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %). Each test
+/** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %), offered
+ *  in the counter zone under `orderFlow`. Each test
  *  gets its OWN tenant, so its `print_jobs` / `drawer_opens` / `registros_facturacion` counts are its
  *  own, order-independent (CLAUDE.md §4). */
-async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }> {
+async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
+  cfg: TillConfig;
+  each: AvailableProduct & { menuItemId: string };
+  zoneId: string;
+}> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -161,8 +167,8 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(suite.db, async (tx) => {
+  const cfg = tillConfigFromVenue(venue, orderFlow);
+  const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -174,9 +180,13 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return (await listAvailableProducts(tx, cfg.locationId)).products;
+    return {
+      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      offers: await offerProducts(tx, cfg),
+    };
   });
-  return { cfg, each: available.find((p) => p.pricingUnit === "each")! };
+  const each = available.find((p) => p.pricingUnit === "each")!;
+  return { cfg, each: { ...each, menuItemId: offers.offerFor(each.id) }, zoneId: offers.zoneId };
 }
 
 /**
@@ -306,37 +316,44 @@ describe("receipt grouping after table changes", () => {
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
     "%s freezes the table label at issuance across renaming, collection and table turnover",
     async (orderFlow) => {
-      const base = await setupVenue();
+      const base = await setupVenue(orderFlow);
       const cfg: TillConfig = { ...base.cfg, orderFlow };
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
-      const { tableId, tabId } = await withTransaction(suite.db, async (tx) => {
+      // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
+      // order in a zone of this flow, delivered to the table.
+      const { tableId, orderId } = await withTransaction(suite.db, async (tx) => {
         const table = await createTable(tx, cfg, { label: "Terrace 6" });
-        const tab = await openTab(tx, cfg, {
-          tableId: table.id,
-          lines: [{ productId: base.each.id, quantity: "1" }],
-        });
-        return { tableId: table.id, tabId: tab.tabId };
+        const orderId = randomUUID();
+        await createOpenOrder(
+          tx,
+          cfg,
+          orderId,
+          [{ menuItemId: base.each.menuItemId, quantity: "1" }],
+          null,
+          { deliveryTableId: table.id, zoneId: base.zoneId },
+        );
+        return { tableId: table.id, orderId };
       });
       if (orderFlow === "prepay") {
         await recordTillSale(
           deps(),
           cfg,
           {
-            workingOrderId: tabId,
+            workingOrderId: orderId,
             lines: [],
             tender: { method: "cash", amount: "2.00" },
           },
           OPERATOR,
         );
       } else {
-        await placeOrder(deps(), cfg, tabId, OPERATOR, cfg.tillId);
+        await placeOrder(deps(), cfg, orderId, OPERATOR, cfg.tillId);
         if (orderFlow === "ticket_then_pay") {
           await collectOrder(
             deps(),
             cfg,
             {
-              id: tabId,
+              id: orderId,
               lines: [],
               tender: { method: "cash", amount: "2.00" },
             },
@@ -353,13 +370,13 @@ describe("receipt grouping after table changes", () => {
           .set({ label: "Renamed table" })
           .where(eq(diningTables.id, tableId));
       });
-      await reprintSale({ db: suite.db, backend }, cfg, tabId);
+      await reprintSale({ db: suite.db, backend }, cfg, orderId);
       if (orderFlow === "invoice_first") {
         const collected = await collectOrder(
           deps(),
           cfg,
           {
-            id: tabId,
+            id: orderId,
             lines: [],
             tender: { method: "cash", amount: "2.00" },
           },
@@ -370,7 +387,7 @@ describe("receipt grouping after table changes", () => {
       await withTransaction(suite.db, async (tx) => {
         await openTab(tx, cfg, { tableId });
       });
-      await reprintSale({ db: suite.db, backend }, cfg, tabId);
+      await reprintSale({ db: suite.db, backend }, cfg, orderId);
       const receiptTexts = (await printJobsFor(cfg))
         .map((job) => decodeTicket(new Uint8Array(job.payload)))
         .filter((text) => text.includes("TOTAL"));
@@ -388,14 +405,15 @@ describe("cash payment drawer separation", () => {
   it.each(["auto", "on_request", "never"] as const)(
     "%s mode keeps cash payment separate from document printing",
     async (mode) => {
-      const { cfg, each } = await setupVenue();
+      const { cfg, each, zoneId } = await setupVenue();
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
       await recordTillSale(
         deps(),
         cfg,
         {
-          lines: [{ productId: each.id, quantity: "1" }],
+          zoneId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
           tender: { method: "cash", amount: "2.00" },
         },
         OPERATOR,
@@ -419,7 +437,7 @@ describe("cash payment drawer separation", () => {
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
   it("lays the automatic receipt out for the till printer's paper width and character set", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
       await updatePrinter(tx, printCfg(cfg), printerId, {
@@ -433,7 +451,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "2" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
@@ -446,7 +465,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("auto + printer + CASH: enqueues separate receipt and drawer jobs, records the drawer open, never blocks filing", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     // A network_tcp printer, so the never-block spy below actually covers ITS delivery adapter (a
     // cloud_poll printer uses neither NetworkTcp nor Usb, which would make the spy vacuous — MINOR 1).
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
@@ -456,7 +475,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "2" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
@@ -495,7 +515,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("prints the tenant's authored receipt trim from tenant_receipts (SP-B4 rehome)", async () => {
     // Seed a tenant_receipts trim and assert it appears in the printed ticket.
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
     await withTransaction(suite.db, async (tx) => {
@@ -511,7 +531,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
@@ -534,7 +555,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: base.each.id, quantity: "1" }],
+        zoneId: base.zoneId,
+        lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
@@ -546,7 +568,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("auto + printer + CARD: enqueues the receipt with NO kick and records NO drawer open", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
 
@@ -554,7 +576,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "card", amount: "1.50" },
       },
       OPERATOR,
@@ -571,7 +594,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("mode 'on_request': files the sale and enqueues only the cash drawer job", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
@@ -579,7 +602,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
@@ -591,7 +615,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("mode 'never': files the sale and enqueues only the cash drawer job", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "never", printerId });
 
@@ -599,7 +623,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
@@ -611,13 +636,14 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("auto but NO printer set: files the sale, enqueues nothing, opens no drawer", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     // Default mode is 'auto'; leave receipt_printer_id NULL.
     await recordTillSale(
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
@@ -629,7 +655,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("auto + INACTIVE printer: files the sale, enqueues nothing (printer.not_found stays unreachable)", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     // The till NAMES a real printer (the FK is satisfied) but it is DEACTIVATED. The hook's `active = true`
     // filter drops it, so `enqueuePrintJob` is never called with it — its `printer.not_found` throw, which
     // would abort the sale (§5), stays unreachable.
@@ -640,7 +666,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       deps(),
       cfg,
       {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
@@ -653,7 +680,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it("auto + printer + CASH but NO operator: prints the receipt, but no kick and no audit row", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
 
@@ -662,7 +689,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     // customer receipt still prints. (Unreachable on the real session-guarded routes; the defensive
     // degrade keeps a null-operator sale from failing on the NOT-NULL constraint — §5.)
     await recordTillSale(deps(), cfg, {
-      lines: [{ productId: each.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
 
@@ -676,7 +704,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it.each(["auto", "on_request", "never"] as const)(
     "invoice-first placement routes the original to the issuing device's till printer in %s mode",
     async (mode) => {
-      const base = await setupVenue();
+      const base = await setupVenue("invoice_first");
       const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
       const deviceTillId = await withTransaction(suite.db, async (tx) => {
         const [till] = await tx
@@ -693,7 +721,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const id = randomUUID();
       await parkOrder({ db: suite.db }, cfg, {
         id,
-        lines: [{ productId: base.each.id, quantity: "1" }],
+        zoneId: base.zoneId,
+        lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
       await placeOrder(deps(), cfg, id, OPERATOR, deviceTillId);
       const jobs = await printJobsFor(cfg);
@@ -706,7 +735,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it.each(["auto", "on_request", "never"] as const)(
     "invoice-first %s placement prints an unpaid original; collection only opens and audits the drawer",
     async (mode) => {
-      const base = await setupVenue();
+      const base = await setupVenue("invoice_first");
       // Placement issues the invoice before any payment; collection retains its separate drawer action.
       await withTransaction(suite.db, async (tx) => {
         await tx
@@ -721,7 +750,8 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const id = randomUUID();
       await parkOrder({ db: suite.db }, cfg, {
         id,
-        lines: [{ productId: base.each.id, quantity: "1" }],
+        zoneId: base.zoneId,
+        lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
       await placeOrder(deps(), cfg, id, OPERATOR, cfg.tillId);
       const issuedJobs = await printJobsFor(cfg);
@@ -763,10 +793,11 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
 describe("receipt issuer", () => {
   it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
-    const { cfg, each } = await setupVenue();
+    const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
     const filed = await recordTillSale(deps(), cfg, {
-      lines: [{ productId: each.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
     const withoutIssuer = { ...filed, issuer: undefined };

@@ -40,6 +40,7 @@ import {
   moveTabLines,
   openTab,
 } from "./working-order.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -136,7 +137,24 @@ async function setupVenue(): Promise<Seeded> {
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return { cafeId: cafe.id, aguaId: agua.id, baconId: bacon.id };
   });
+  offersByCfg.set(
+    cfg,
+    await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" })),
+  );
   return { cfg, cafeId, aguaId, baconId };
+}
+
+/** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
+const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
+function offersOf(cfg: TillConfig): ZoneOffers {
+  return offersByCfg.get(cfg)!;
+}
+
+/** Offer the venue's products in `zoneId` too, as a table_tab zone. */
+async function offerIn(cfg: TillConfig, zoneId: string): Promise<void> {
+  await withTransaction(db, (tx) =>
+    offerProducts(tx, cfg, { zone: { zoneId }, serviceMode: "table_tab" }),
+  );
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -146,9 +164,10 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Create one active dining table; returns its id. */
+/** Create one active dining table in the venue's tables zone; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
-  return asApp(cfg, (tx) => createTable(tx, cfg, { label }).then((r) => r.id));
+  const zoneId = offersOf(cfg).zoneId;
+  return asApp(cfg, (tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
 }
 
 /** Open a tab on a table with the given lines; returns the tab (working_order) id. */
@@ -157,7 +176,9 @@ async function openTabOn(
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
-  return asApp(cfg, (tx) => openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId));
+  return asApp(cfg, (tx) =>
+    openTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then((r) => r.tabId),
+  );
 }
 
 /** The dining table's current tab_id — owner read. */
@@ -327,12 +348,17 @@ describe("moveTabLines", () => {
       values
         (${prepayZoneId}, ${cfg.locationId}, 'Flow prepay', ${createdAt}),
         (${tabZoneId}, ${cfg.locationId}, 'Flow tab', ${createdAt})`);
+    // Both tabs opened with a context in the tables zone; this replaces each.
     await db.execute(sql`
       insert into order_service_contexts
         (working_order_id, location_id, zone_id, department_id, service_mode)
       values
         (${from}, ${cfg.locationId}, ${prepayZoneId}, ${departmentId}, 'prepay'),
-        (${to}, ${cfg.locationId}, ${tabZoneId}, ${departmentId}, 'table_tab')`);
+        (${to}, ${cfg.locationId}, ${tabZoneId}, ${departmentId}, 'table_tab')
+      on conflict (working_order_id) do update set
+        zone_id = excluded.zone_id,
+        department_id = excluded.department_id,
+        service_mode = excluded.service_mode`);
 
     await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
       code: "service_zone.mode_incompatible",
@@ -382,14 +408,11 @@ describe("moveTab", () => {
     const { cfg, cafeId } = await setupVenue();
     const src = await seedTable(cfg, "Zone-src");
     const dst = await seedTable(cfg, "Zone-dst");
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
     const source = await configureTableZone(cfg, src, "Downstairs", "table_tab");
     const destination = await configureTableZone(cfg, dst, "Upstairs", "prepay");
-    await db.execute(sql`
-      insert into order_service_contexts
-        (working_order_id, location_id, zone_id, department_id, service_mode)
-      values
-        (${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+    await offerIn(cfg, source.zoneId);
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    expect(await serviceContextOf(tabId)).toEqual({ ...source, serviceMode: "table_tab" });
 
     const before = await linesOf(tabId);
     await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
@@ -496,14 +519,10 @@ describe("joinTable", () => {
     const { cfg, cafeId } = await setupVenue();
     const t1 = await seedTable(cfg, "Join-downstairs");
     const t2 = await seedTable(cfg, "Join-upstairs");
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const source = await configureTableZone(cfg, t1, "Join downstairs", "table_tab");
     const destination = await configureTableZone(cfg, t2, "Join upstairs", "table_tab");
-    await db.execute(sql`
-      insert into order_service_contexts
-        (working_order_id, location_id, zone_id, department_id, service_mode)
-      values
-        (${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+    await offerIn(cfg, source.zoneId);
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
 
     await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
       code: "service_zone.join_mismatch",
@@ -636,19 +655,27 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       await writeProductModifiers(tx, cafeId, [{ kind: "extras", id: list.id }]);
       return list.id;
     });
+    // Re-offer now the café carries the list and a default station exists, so the offer publishes
+    // the list and the round has a route to fire through.
+    const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
 
     // intoTab: a plain café. fromTab: a café WITH the Bacon extra (added via a round, the path that
     // takes `extras`) → a parent dish line + a child line pointing at it.
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, []);
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, fromTab, [
-        {
-          productId: cafeId,
-          quantity: "1",
-          extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
-        },
-      ]),
+      addTabRound(
+        tx,
+        cfg,
+        fromTab,
+        offers.toOfferLines([
+          {
+            productId: cafeId,
+            quantity: "1",
+            extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
+          },
+        ]),
+      ),
     );
     const ticketBefore = await db.execute<{
       id: string;

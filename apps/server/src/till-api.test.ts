@@ -58,6 +58,7 @@ import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -1691,7 +1692,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
-        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
         workingOrderId: "not-a-uuid",
       }),
@@ -2234,7 +2235,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const res = await app.request("/api/working-orders/not-a-uuid", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "1" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: aguaOfferId, quantity: "1" }] }),
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
@@ -2720,6 +2721,15 @@ describe("/api/working-orders/:id/cancel", () => {
 // location/till/node seeds in `setup` above; zone CRUD is the management API's, Task 5), then read
 // back / assigned through the routes under test.
 describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
+  /** A table_tab zone offering the agua, for a served-route case that needs a real open tab. No route
+   *  is written: the agua already has its venue-wide one from setup. */
+  async function tabZone(): Promise<{ zoneId: string; aguaOffer: string }> {
+    const offers = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, cfg, { zone: "tables", productIds: [aguaProduct.id], routes: "none" }),
+    );
+    return { zoneId: offers.zoneId, aguaOffer: offers.offerFor(aguaProduct.id) };
+  }
+
   it("lists zones, marks a line served (2→1) and unmarks it (1→2), surfacing zoneId + pendingToServe in the state read", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -2878,16 +2888,17 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // `Number.isInteger` but exceeds int4's max) would raise `22P02`/`22003` → an opaque 500 there;
     // "0" is below the 1-based floor. All four are refused BEFORE any query as the honest 404 an absent
     // line gets — the same shape the sibling void-line route screens.
+    const tab = await tabZone();
     const tableRes = await app.request("/api/tables", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ label: "served-bad-lineno" }),
+      body: JSON.stringify({ label: "served-bad-lineno", zoneId: tab.zoneId }),
     });
     const { id: tableId } = (await tableRes.json()) as { id: string };
     const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "1" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
     });
     const { tabId } = (await tabRes.json()) as { tabId: string };
 
@@ -2909,16 +2920,17 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // A real open tab (one line), then a mark of line 99 — an in-range int4 that clears the route
     // screen and reaches `markLineServed`, whose 0-row UPDATE throws `tab.line_not_found`. This is the
     // verb's own guard, distinct from the route's range screen above.
+    const tab = await tabZone();
     const tableRes = await app.request("/api/tables", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ label: "served-99" }),
+      body: JSON.stringify({ label: "served-99", zoneId: tab.zoneId }),
     });
     const { id: tableId } = (await tableRes.json()) as { id: string };
     const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "1" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
     });
     const { tabId } = (await tabRes.json()) as { tabId: string };
 

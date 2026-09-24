@@ -34,6 +34,7 @@ import {
 import type { TillConfig } from "./till-config.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { createTable, createZone, updateTable } from "./tables.js";
 import {
   addTabRound,
@@ -69,6 +70,10 @@ interface Seeded {
   menuId: string;
   categoryId: string;
   tableId: string;
+  /** The café's and the agua's offers in the table's zone, which is what a round sells. */
+  cafeOffer: string;
+  aguaOffer: string;
+  offerFor: (productId: string) => string;
 }
 
 async function setupVenue(): Promise<Seeded> {
@@ -89,8 +94,8 @@ async function setupVenue(): Promise<Seeded> {
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
-  // directly here, as the surrounding venue rows are (fixture setup).
+  // The default kitchen station, where `offerProducts` routes both products, so a round's fire has
+  // somewhere to go.
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const [till] = await db
     .insert(tills)
@@ -107,7 +112,7 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } =
+  const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId, offers } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
@@ -144,7 +149,8 @@ async function setupVenue(): Promise<Seeded> {
         sectionId: section.id,
         grossPrice: "2.00",
       });
-      const table = await createTable(tx, cfg, { label: "T1" });
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
       return {
         cafeId: cafe.id,
         aguaId: agua.id,
@@ -153,9 +159,22 @@ async function setupVenue(): Promise<Seeded> {
         menuId: cat.id,
         categoryId: bebidas.id,
         tableId: table.id,
+        offers,
       };
     });
-  return { cfg, cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId };
+  return {
+    cfg,
+    cafeId,
+    aguaId,
+    cafeMenuItemId,
+    aguaMenuItemId,
+    menuId,
+    categoryId,
+    tableId,
+    cafeOffer: offers.offerFor(cafeId),
+    aguaOffer: offers.offerFor(aguaId),
+    offerFor: offers.offerFor,
+  };
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
@@ -171,6 +190,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Pro
  *  this file reads a list name, only the picked PRODUCT a child line carries. */
 async function attachExtras(
   tx: Transaction,
+  cfg: TillConfig,
   dishId: string,
   extraProductId: string,
 ): Promise<string> {
@@ -188,6 +208,8 @@ async function attachExtras(
     LOCALE,
   );
   await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
+  // An offer carries only the extras lists published on it, so re-offer to publish this one.
+  await offerProducts(tx, cfg, { zone: "tables" });
   return list.id;
 }
 
@@ -202,12 +224,12 @@ async function attachExtras(
  *  `listTablesWithState`'s pending-deliveries count. */
 async function seedFiredDelivery(
   cfg: TillConfig,
-  cafeId: string,
+  cafeOffer: string,
   tableId: string,
 ): Promise<string> {
   const id = randomUUID();
   await asApp(cfg, async (tx) => {
-    await createOpenOrder(tx, cfg, id, [{ productId: cafeId, quantity: "1" }], null, {
+    await createOpenOrder(tx, cfg, id, [{ menuItemId: cafeOffer, quantity: "1" }], null, {
       deliveryTableId: tableId,
     });
     const lines = await tx
@@ -236,9 +258,9 @@ async function tabIdOf(tableId: string): Promise<string | null> {
 
 describe("openTab", () => {
   it("opens a tab, points the table's tab_id at it, with an initial round", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId, orderNumber } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     expect(orderNumber).toBe(1);
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, tabId));
@@ -263,9 +285,9 @@ describe("openTab", () => {
   });
 
   it("refuses a second tab on a table that already has an OPEN one (tab.already_open)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "tab.already_open",
@@ -274,9 +296,9 @@ describe("openTab", () => {
   });
 
   it("treats a STALE tab_id (pointing at a settled order) as free and overwrites it", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId: firstTab } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Settle the first tab (owner write — fixture setup). tab_id STILL points at it (no
     // settle-time write, design §2b), but it is now stale.
@@ -285,7 +307,7 @@ describe("openTab", () => {
     );
     // A fresh tab is fine — the stale pointer reads free and is overwritten to the new order.
     const { tabId: secondTab } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     expect(secondTab).not.toBe(firstTab);
     expect(await tabIdOf(tableId)).toBe(secondTab);
@@ -318,19 +340,23 @@ async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
 
 describe("addTabRound (append-only, no re-price)", () => {
   it("appends a round with the NEXT line_no, without deleting or re-pricing existing lines", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Round 2 at the current 1.50.
-    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }]));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
     // Change the catalogue price AFTER two rounds are locked.
     await asApp(cfg, (tx) =>
       tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
     // Round 3 prices at the NEW 9.99 — but rounds 1 & 2 are UNTOUCHED (the load-bearing behaviour; a
     // full-basket replace like updateHeldOrder would re-price ALL to 9.99).
-    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }]));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
 
     const lines = await db
       .select({ lineNo: workingOrderLines.lineNo, gross: workingOrderLines.unitPriceGross })
@@ -350,16 +376,16 @@ describe("addTabRound (append-only, no re-price)", () => {
     // Extras on the tab round-send path: a round line carrying `extras` expands into a parent dish
     // line plus one child line per pick, and only the PARENT is fired to the kitchen (an extra is
     // part of its dish, not its own ticket item).
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     // The café offers the agua as a +0.50 extra. Two DIFFERENT products, so an assertion about which
     // one a row carries can fail.
-    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cafeId, aguaId));
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
-          productId: cafeId,
+          menuItemId: cafeOffer,
           quantity: "1",
           extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
         },
@@ -393,36 +419,36 @@ describe("addTabRound (append-only, no re-price)", () => {
   });
 
   it("refuses a round on a settled tab, a walk-up (not a tab), and an absent id (tab.not_open)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Settled tab → not open.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     await expect(
-      asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }])),
+      asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId } });
 
     // A bare open walk-up (no table points at it) is not a tab.
     const walkUp = randomUUID();
     await bareOpenOrder(cfg, walkUp);
     await expect(
-      asApp(cfg, (tx) => addTabRound(tx, cfg, walkUp, [{ productId: cafeId, quantity: "1" }])),
+      asApp(cfg, (tx) => addTabRound(tx, cfg, walkUp, [{ menuItemId: cafeOffer, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: walkUp } });
 
     // An absent id names nothing.
     const missing = randomUUID();
     await expect(
-      asApp(cfg, (tx) => addTabRound(tx, cfg, missing, [{ productId: cafeId, quantity: "1" }])),
+      asApp(cfg, (tx) => addTabRound(tx, cfg, missing, [{ menuItemId: cafeOffer, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: missing } });
   });
 
   it("refuses an empty round (sale.empty_basket)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await expect(asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, []))).rejects.toMatchObject({
       code: "sale.empty_basket",
@@ -432,10 +458,10 @@ describe("addTabRound (append-only, no re-price)", () => {
 
 describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   it("persists a TRIMMED note on the working_order_lines row AND snapshots it onto ticket_items at fire", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note: "  sin sal  " }]),
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", note: "  sin sal  " }]),
     );
 
     // Draft line carries the validated (trimmed) note.
@@ -454,12 +480,12 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   });
 
   it("stores NULL for an absent note and for a whitespace-only note", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { productId: cafeId, quantity: "1", note: "   " },
-        { productId: cafeId, quantity: "1" },
+        { menuItemId: cafeOffer, quantity: "1", note: "   " },
+        { menuItemId: cafeOffer, quantity: "1" },
       ]),
     );
     const lines = await db
@@ -471,11 +497,13 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   });
 
   it("rejects a note longer than 200 chars (working_order.note_too_long)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const note = "x".repeat(201);
     await expect(
-      asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note }])),
+      asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", note }]),
+      ),
     ).rejects.toMatchObject({
       code: "working_order.note_too_long",
       params: { length: 201, limit: 200 },
@@ -485,11 +513,11 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   it("rejects a non-string note with a clean 400 screen (management.request_invalid), not a 500", async () => {
     // A crafted body could send `note: 123` (the wire type `note?: string` is a JSON lie). It must be
     // type-screened to a structured 400 rather than reaching `.trim()` as a TypeError → an opaque 500.
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await expect(
       asApp(cfg, (tx) =>
-        addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", note: 123 as never }]),
+        addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", note: 123 as never }]),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "note" } });
   });
@@ -497,11 +525,13 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
 
 describe("voidTabLine", () => {
   it("deletes one line from an open tab and leaves the rest", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: aguaId, quantity: "1" }])); // line 2
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
+    ); // line 2
     await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
 
     const lines = await db
@@ -513,9 +543,9 @@ describe("voidTabLine", () => {
   });
 
   it("throws tab.line_not_found for a line_no that matches nothing", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 99))).rejects.toMatchObject({
       code: "tab.line_not_found",
@@ -524,9 +554,9 @@ describe("voidTabLine", () => {
   });
 
   it("throws tab.not_open for a settled order", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
@@ -550,13 +580,13 @@ describe("markLineServed / unmarkLineServed", () => {
   }
 
   it("marks one line served, unmarks it, and refuses an unknown line (tab.line_not_found)", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
         lines: [
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "1" },
+          { menuItemId: cafeOffer, quantity: "1" },
+          { menuItemId: aguaOffer, quantity: "1" },
         ],
       }),
     );
@@ -584,9 +614,9 @@ describe("markLineServed / unmarkLineServed", () => {
   });
 
   it("refuses a settled tab (tab.not_open — the require_open_parent trigger is the DB backstop)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Settled order → not open. assertAnchoredTabOpen's STATUS check refuses it — but strip that
     // check and the DB
@@ -602,9 +632,9 @@ describe("markLineServed / unmarkLineServed", () => {
   });
 
   it("refuses an open order no table points at, carrying a real line — the back-pointer check is the sole gate (tab.not_open)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Orphan the tab: clear the dining_tables back-pointer while the order stays OPEN and keeps line 1.
     // No DB trigger fires (the parent is still open) and the UPDATE would match a real row, so
@@ -622,13 +652,13 @@ describe("markLineServed / unmarkLineServed", () => {
 
 describe("readTabLines", () => {
   it("reads an open tab's lines in line_no order with locked gross price, quantity and served state", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
         lines: [
-          { productId: cafeId, quantity: "1" },
-          { productId: aguaId, quantity: "2" },
+          { menuItemId: cafeOffer, quantity: "1" },
+          { menuItemId: aguaOffer, quantity: "2" },
         ],
       }),
     );
@@ -660,7 +690,7 @@ describe("readTabLines", () => {
     // fired). `addTabRound` fires the round via `fireLines`, which stamps `fired_at` on the earliest
     // course and leaves the later one null. `readTabLines` LEFT-joins the ticket item so the tab screen
     // can group its "Fire <course>" actions by held course.
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const entrantes = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
     );
@@ -672,8 +702,8 @@ describe("readTabLines", () => {
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
-        { productId: cafeId, quantity: "1" },
-        { productId: aguaId, quantity: "1" },
+        { menuItemId: cafeOffer, quantity: "1" },
+        { menuItemId: aguaOffer, quantity: "1" },
       ]),
     );
 
@@ -698,14 +728,14 @@ describe("readTabLines", () => {
     // the PARENT is fired to the kitchen (`fireLines` filters children out), so the child never gets
     // a `ticket_items` row at all — `readTabLines`'s LEFT JOIN then reports `state: null` for it,
     // distinct from a HELD parent (which has a row, state "queued", firedAt null).
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
-    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cafeId, aguaId));
+    const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
-          productId: cafeId,
+          menuItemId: cafeOffer,
           quantity: "1",
           extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
         },
@@ -731,14 +761,14 @@ describe("readTabLines", () => {
     // rows so a test reading the wrong one fails. The parent is named by its `lineNo`, the same shape
     // `TillSaleLine.parentLineNo` uses on the settled-sale wire (`apps/server/src/till-sale.ts`), so a
     // screen groups children under dishes without a second lookup.
-    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
-    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cafeId, aguaId));
+    const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
-          productId: cafeId,
+          menuItemId: cafeOffer,
           quantity: "1",
           extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
         },
@@ -754,9 +784,9 @@ describe("readTabLines", () => {
   });
 
   it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Change the catalogue price AFTER the line locked its gross at 1.50 (a tab does NOT re-price —
     // addTabRound/openTab stamp unit_price_gross at add-time). A read that recomputed from the
@@ -775,9 +805,9 @@ describe("readTabLines", () => {
   });
 
   it("refuses a settled tab and an absent id (tab.not_open — assertTabOpen, an UNLOCKED read)", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // Settled → not open (owner write, fixture setup).
     await db.execute(
@@ -798,7 +828,7 @@ describe("readTabLines", () => {
 
 describe("listTablesWithState (occupancy)", () => {
   it("reflects free → open-tab → free as a tab opens and pays", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
 
     const free = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(free).toEqual([
@@ -811,7 +841,7 @@ describe("listTablesWithState (occupancy)", () => {
     ]);
 
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "2" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "2" }] }),
     );
     const busy = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(busy[0]).toMatchObject({
@@ -832,10 +862,10 @@ describe("listTablesWithState (occupancy)", () => {
   });
 
   it("shows delivery-pending while a fired delivery is uncollected, and free once collected", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     // A settled counter delivery FIRED to the kitchen (a ticket item), not yet collected — the KDS-1
     // successor to the old uncollected order_prep row.
-    const orderId = await seedFiredDelivery(cfg, cafeId, tableId);
+    const orderId = await seedFiredDelivery(cfg, cafeOffer, tableId);
 
     const pending = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(pending[0]).toMatchObject({
@@ -943,13 +973,13 @@ describe("listTablesWithState (occupancy)", () => {
   });
 
   it("open-tab dominates delivery-pending in the rolled-up state", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     // A fired, uncollected counter delivery to the SAME table — pendingDeliveries counts it, but the open
     // tab dominates the rolled-up state.
-    await seedFiredDelivery(cfg, cafeId, tableId);
+    await seedFiredDelivery(cfg, cafeOffer, tableId);
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
   });
@@ -957,11 +987,11 @@ describe("listTablesWithState (occupancy)", () => {
 
 // KDS-2 ring-time course resolution (design §2b). Resolver/CRUD logic — a plain read-then-insert of
 // a nullable column.
-type RoundLine = { productId: string; quantity: string; courseId?: string | null };
+type RoundLine = { menuItemId: string; quantity: string; courseId?: string | null };
 /** A round line for `addTabRoundWith`; `courseId` OPTIONAL — absent = no override (fall to the product
  *  default), present (incl. `null`) = the line-level override the resolver honours. */
-function line(productId: string, opts?: { courseId?: string | null }): RoundLine {
-  return { productId, quantity: "1", ...opts };
+function line(menuItemId: string, opts?: { courseId?: string | null }): RoundLine {
+  return { menuItemId, quantity: "1", ...opts };
 }
 /** Ring a round, then read each resulting line's resolved `course_id` back (the load-bearing assertion —
  *  a null-only check would prove nothing about the resolver). Runs inside the caller's tx, so it reads its
@@ -992,21 +1022,24 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
     // the `courseId: null` on bread is indistinguishable from no override — it is the absent default,
     // not the null override, that makes bread null here. Whether an explicit null should FORCE "no
     // course" over a product default is deferred to Task 7's picker; this test does not turn on it.
-    const { cfg, cafeId: steak, aguaId: bread, tableId } = await setupVenue();
+    const { cfg, cafeId: steak, aguaId: bread, tableId, offerFor } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const c = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
     );
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, steak, c.id));
     const o = await asApp(cfg, (tx) =>
-      addTabRoundWith(tx, cfg, tabId, [line(steak), line(bread, { courseId: null })]),
+      addTabRoundWith(tx, cfg, tabId, [
+        line(offerFor(steak)),
+        line(offerFor(bread), { courseId: null }),
+      ]),
     );
     expect(lineCourse(o, steak)).toBe(c.id); // product default (no override)
     expect(lineCourse(o, bread)).toBeNull(); // no product default → null
   });
 
   it("a non-null line override WINS over the product's default course", async () => {
-    const { cfg, cafeId: prod, tableId } = await setupVenue();
+    const { cfg, cafeId: prod, tableId, offerFor } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const def = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
@@ -1016,25 +1049,25 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
     );
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, prod, def.id));
     const o = await asApp(cfg, (tx) =>
-      addTabRoundWith(tx, cfg, tabId, [line(prod, { courseId: override.id })]),
+      addTabRoundWith(tx, cfg, tabId, [line(offerFor(prod), { courseId: override.id })]),
     );
     expect(lineCourse(o, prod)).toBe(override.id);
   });
 
   it("resolves null when the line has no override AND the product no default course", async () => {
-    const { cfg, cafeId: prod, tableId } = await setupVenue();
+    const { cfg, cafeId: prod, tableId, offerFor } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    const o = await asApp(cfg, (tx) => addTabRoundWith(tx, cfg, tabId, [line(prod)]));
+    const o = await asApp(cfg, (tx) => addTabRoundWith(tx, cfg, tabId, [line(offerFor(prod))]));
     expect(lineCourse(o, prod)).toBeNull();
   });
 });
 
 it("returns a tab line's stored staff names and options answers", async () => {
-  const { cfg, cafeId, tableId } = await setupVenue();
+  const { cfg, tableId, cafeOffer } = await setupVenue();
   await asApp(cfg, async (tx) => {
     const { tabId } = await openTab(tx, cfg, {
       tableId,
-      lines: [{ productId: cafeId, quantity: "1" }],
+      lines: [{ menuItemId: cafeOffer, quantity: "1" }],
     });
     // Each of the six frozen names carries its own text, so a read of the wrong one fails.
     const optionSnapshots = [

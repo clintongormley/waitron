@@ -20,6 +20,7 @@ import {
   createMenuSection,
   createProduct,
   readProductEditor,
+  setMenuItemExtraLists,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { VerifactuBackend, registerSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
@@ -27,7 +28,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { preparationRoutes } from "@waitron/venue-service";
+import { allowMenuInZone, preparationRoutes } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -47,6 +48,7 @@ import {
   type TicketState,
 } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // FP-1's single most important test — the fiscal firewall (spec §4 / CLAUDE.md §5). `served_at` is a
@@ -256,7 +258,11 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
       sectionId: section.id,
       grossPrice: "2.00",
     });
-    const table = await createTable(tx, cfg, { label: "T1" });
+    // The table sits in a table_tab zone offering this menu, with a route per product to the
+    // venue's default station.
+    const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
+    await allowMenuInZone(tx, cfg, zoneId, cat.id);
+    const table = await createTable(tx, cfg, { label: "T1", zoneId });
     return {
       aguaId: agua.id,
       cafeId: cafe.id,
@@ -281,22 +287,14 @@ async function openServeAndPay(
   shop: Shop,
   serveEveryLine: boolean,
 ): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaId, cafeId, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
-    const table = (await listTables(tx, cfg)).find((candidate) => candidate.id === tableId);
-    const lines =
-      table?.zoneId === null
-        ? [
-            { productId: aguaId, quantity: "1" },
-            { productId: cafeId, quantity: "1" },
-          ]
-        : [
-            { menuItemId: aguaMenuItemId, quantity: "1" },
-            { menuItemId: cafeMenuItemId, quantity: "1" },
-          ];
     return openTab(tx, cfg, {
       tableId,
-      lines,
+      lines: [
+        { menuItemId: aguaMenuItemId, quantity: "1" },
+        { menuItemId: cafeMenuItemId, quantity: "1" },
+      ],
     });
   });
 
@@ -493,8 +491,8 @@ describe("table placement is not part of the huella", () => {
  * through the real pay path with the FROZEN clock — so the registro is filed with the order's KDS state
  * fully populated:
  *   1. `fireLines` inserts one `ticket_items` row per line, each routed + snapshotted to the venue's
- *      seeded default station ('Cocina', `is_default = true` — applyVenue seeds it, so `fireLines`'s
- *      fallback resolves and no `station.no_default` fires);
+ *      seeded default station ('Cocina', `is_default = true`), through the product route `seedShop`
+ *      writes for each product;
  *   2. every item is advanced `queued → preparing → ready` via the real `advanceTicketItem`;
  *   3. the order-level `collected_at` handover marker (KDS-1 §3e) is stamped.
  * All THREE happen BEFORE the pay files the registro, so this world's filing carries live ticket items in
@@ -509,20 +507,20 @@ describe("table placement is not part of the huella", () => {
  * to the self-check.
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaId, cafeId, tableId } = shop;
+  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
     return openTab(tx, cfg, {
       tableId,
       lines: [
-        { productId: aguaId, quantity: "1" },
-        { productId: cafeId, quantity: "1" },
+        { menuItemId: aguaMenuItemId, quantity: "1" },
+        { menuItemId: cafeMenuItemId, quantity: "1" },
       ],
     });
   });
 
   await withTransaction(db, async (tx) => {
-    // Fire the tab's two stored lines to the kitchen (each falls to the seeded default station — neither
-    // product nor category names a route), then walk each ticket item queued→preparing→ready.
+    // Fire the tab's two stored lines to the kitchen (each routed to the seeded default station), then
+    // walk each ticket item queued→preparing→ready.
     const lines = await tx
       .select({
         id: workingOrderLines.id,
@@ -689,6 +687,8 @@ async function attachExtra(
       shop.cfg.locale,
     );
     await writeProductModifiers(tx, shop.aguaId, [{ kind: "extras", id: list.id }]);
+    // An offer carries only the extras lists published on it.
+    await setMenuItemExtraLists(tx, shop.aguaMenuItemId, [{ listId: list.id, items: [] }]);
     return { productId: panecillo.id, listId: list.id };
   });
 }
@@ -704,9 +704,9 @@ async function openWithExtraAndPay(
   shop: Shop,
   extra: { listId: string; productId: string },
 ): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaId, cafeId, tableId } = shop;
+  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   // Open the tab empty, then ADD a round carrying the pick — `openTab` takes only plain
-  // `{productId, quantity}` lines, while `addTabRound` is the path that accepts `extras` and expands
+  // `{menuItemId, quantity}` lines, while `addTabRound` is the path that accepts `extras` and expands
   // the dish into a parent row + one child row (working-order.ts `priceOrderLines`).
   const { tabId } = await withTransaction(db, async (tx) => {
     return openTab(tx, cfg, { tableId });
@@ -714,11 +714,11 @@ async function openWithExtraAndPay(
   await withTransaction(db, async (tx) => {
     await addTabRound(tx, cfg, tabId, [
       {
-        productId: aguaId,
+        menuItemId: aguaMenuItemId,
         quantity: "1",
         extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }],
       },
-      { productId: cafeId, quantity: "1" },
+      { menuItemId: cafeMenuItemId, quantity: "1" },
     ]);
   });
 

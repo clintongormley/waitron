@@ -1,10 +1,8 @@
 // End-to-end proof of the whole demo seed (Phase 2, Task 12): migrate → provision a chained venue →
 // `seedDemoRestaurant`, then assert the pieces Tasks 1-11 built actually COMPOSE — the reports light
 // up, both menus are accessible, products come from both catalogues, a seeded product's `image`
-// resolves to database image bytes, and a working order MIXING a Casa Delgado item with a
-// Menú del Día item parks and retrieves without `sale.unknown_product`. That last assertion is the
-// end-to-end proof of Phase 1's union-reprice: `parkOrder` re-prices the basket against the
-// location's WHOLE accessible catalogue set, so a line drawn from a non-default menu must resolve.
+// resolves to database image bytes, and a working order MIXING a Casa Delgado offer with a
+// Menú del Día offer parks and retrieves in the counter zone, which sells from both menus.
 //
 // SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
 // may write any seeded table. `seedSales` still writes real hash-chained preproduction
@@ -16,14 +14,15 @@
 //
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
+import { listAccessibleCatalogues, listAvailableProducts, menuItems } from "@waitron/catalogue";
+import { zoneServicePolicies } from "@waitron/venue-service";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,
@@ -198,17 +197,42 @@ describe("demo seed end-to-end", () => {
     expect(storedImage?.contentType).toBe("image/webp");
     expect(storedImage!.bytes.length).toBeGreaterThan(0);
 
-    // (5) A working order MIXING a Casa Delgado item and a Menú del Día item parks and retrieves
-    // WITHOUT `sale.unknown_product` — the end-to-end proof of Phase 1's union-reprice. `parkOrder`
-    // re-prices the basket against the location's whole accessible set, so a non-default-menu line
-    // must resolve. (`parkOrder` throws `sale.unknown_product` for any line it cannot price.)
+    // (5) A working order MIXING a Casa Delgado offer and a Menú del Día offer parks and retrieves:
+    // the counter zone sells from both menus, so the non-default menu's offer must resolve.
     const cfg = tillConfigFor(venue);
+    // The seed offers both menus in the counter-default zone, each product from its own menu.
+    const { zoneId, casaOffer, diaOffer } = await withTransaction(suite.db, async (tx) => {
+      const [counter] = await tx
+        .select({ zoneId: zoneServicePolicies.zoneId })
+        .from(zoneServicePolicies)
+        .where(
+          and(
+            eq(zoneServicePolicies.locationId, venue.locationId),
+            eq(zoneServicePolicies.isCounterDefault, true),
+          ),
+        );
+      const offerOf = async (product: { id: string; catalogueId: string }) => {
+        const [item] = await tx
+          .select({ id: menuItems.id })
+          .from(menuItems)
+          .where(
+            and(eq(menuItems.menuId, product.catalogueId), eq(menuItems.productId, product.id)),
+          );
+        return item!.id;
+      };
+      return {
+        zoneId: counter!.zoneId,
+        casaOffer: await offerOf(casaProduct),
+        diaOffer: await offerOf(diaProduct),
+      };
+    });
     const orderId = randomUUID();
     const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
       id: orderId,
+      zoneId,
       lines: [
-        { productId: casaProduct.id, quantity: "1" },
-        { productId: diaProduct.id, quantity: "2" },
+        { menuItemId: casaOffer, quantity: "1" },
+        { menuItemId: diaOffer, quantity: "2" },
       ],
       label: "Mesa 4",
     });
@@ -217,6 +241,10 @@ describe("demo seed end-to-end", () => {
     const held = await getHeldOrder({ db: suite.db }, cfg, orderId);
     // Both mixed lines survived the round-trip, in order — neither was dropped as unknown.
     expect(held.lines.map((l) => l.productId)).toEqual([casaProduct.id, diaProduct.id]);
+    expect(held.lines.map((l) => ("menuItemId" in l ? l.menuItemId : null))).toEqual([
+      casaOffer,
+      diaOffer,
+    ]);
     expect(held.lines[1]!.quantity).toBe("2.000");
   });
 });

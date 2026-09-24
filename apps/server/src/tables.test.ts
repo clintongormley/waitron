@@ -49,6 +49,7 @@ import {
 } from "./working-order.js";
 import "./errors.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
 const LOCALE = "es-ES";
 
@@ -526,13 +527,14 @@ describe("table placement", () => {
 });
 
 // KDS-1 §3d ready→floor. Unlike the CRUD describes above, this exercises the full
-// tab→fire→bump→serve path, so the venue also needs sellable products and a default kitchen
-// station (fireLines' fallback). The same fixture shape tabs.test.ts's setupVenue uses.
+// tab→fire→bump→serve path, so the venue also needs products offered in the table's zone and a
+// default kitchen station each product routes to.
 async function setupTabVenue(): Promise<{
   cfg: TillConfig;
   cafeId: string;
   aguaId: string;
   tableId: string;
+  offers: ZoneOffers;
 }> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
@@ -567,7 +569,7 @@ async function setupTabVenue(): Promise<{
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const { cafeId, aguaId, tableId } = await withTransaction(db, async (tx) => {
+  const { cafeId, aguaId, tableId, offers } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
     const cafe = await createProduct(tx, {
@@ -587,25 +589,26 @@ async function setupTabVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, locationId, cat.id);
-    const table = await createTable(tx, cfg, { label: "T1" });
-    return { cafeId: cafe.id, aguaId: agua.id, tableId: table.id };
+    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+    return { cafeId: cafe.id, aguaId: agua.id, tableId: table.id, offers };
   });
-  return { cfg, cafeId, aguaId, tableId };
+  return { cfg, cafeId, aguaId, tableId, offers };
 }
 
 // A read-model shape test: the shape is what this pins.
 describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
   it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     // Open a tab with two lines and FIRE the round → two ticket items, both queued.
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
-        lines: [
+        lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
           { productId: aguaId, quantity: "1" },
-        ],
+        ]),
       }),
     );
     const lines = await asApp(cfg, (tx) =>
@@ -656,16 +659,16 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
 // the floor carrying it out. The same read-model shape test as readyToServe above.
 describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
   it("counts away-not-served lines, reports enRoute + readyToServe together, and clears enRoute on serve", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     // Open a tab with two lines and FIRE the round → two ticket items, both queued.
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
-        lines: [
+        lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
           { productId: aguaId, quantity: "1" },
-        ],
+        ]),
       }),
     );
     const lines = await asApp(cfg, (tx) =>
@@ -728,15 +731,15 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
 // covers the threshold columns and their CHECK.
 describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   it("bands a line by its station thresholds and clears once served (design §3 — ages until it reaches the guest)", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
-        lines: [
+        lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
           { productId: aguaId, quantity: "1" },
-        ],
+        ]),
       }),
     );
     const lines = await asApp(cfg, (tx) =>
@@ -774,15 +777,15 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   });
 
   it("worst-line-wins: a forgotten line outranks a fresh one on the same table", async () => {
-    const { cfg, cafeId, aguaId, tableId } = await setupTabVenue();
+    const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
-        lines: [
+        lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },
           { productId: aguaId, quantity: "1" },
-        ],
+        ]),
       }),
     );
     const lines = await asApp(cfg, (tx) =>

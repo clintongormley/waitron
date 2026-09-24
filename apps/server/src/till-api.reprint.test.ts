@@ -28,6 +28,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // This file proves the HTTP SHAPE of the reprint route — the
@@ -40,7 +41,7 @@ const CAFE = "Cafe con leche";
 let cfg: TillConfig;
 let ana: { id: string };
 let stationId: string;
-let cafeId: string;
+let cafeOffer: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -89,8 +90,8 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      cafeId = cafe.id;
       await assignCatalogueToLocation(tx, loc!.id, catalogue.id);
+      cafeOffer = (await offerProducts(tx, cfg)).offerFor(cafe.id);
     });
   },
 });
@@ -190,7 +191,7 @@ async function placeAndFire(): Promise<string> {
   const park = await app.request("/api/working-orders", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ id, lines: [{ productId: cafeId, quantity: "1" }] }),
+    body: JSON.stringify({ id, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
   });
   expect(park.status).toBe(200);
   const place = await app.request(`/api/working-orders/${id}/place`, {

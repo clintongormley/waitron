@@ -47,6 +47,7 @@ import { readOnlyGate } from "./read-only-gate.js";
 import { parseEnvFile } from "./env-file.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 
 // Task 10 — the END-TO-END RECEIPT for the promote endpoint (spec §8/§9.1). No new production code: this
 // suite drives the whole arc over the real HTTP endpoint, each boot on its own venue DIRECTORY of
@@ -279,7 +280,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
  * catalogue with one sellable product, a staff operator on a known PIN, and an enrolled till device
  * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `acceptDeviceJoinRequest` stores, so the
  * device cookie verifies). */
-async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
+async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
   await seedLegacySellingUnits(admin);
   await admin
     .insert(tills)
@@ -327,10 +328,10 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
     })
     .onConflictDoNothing();
 
-  await withTransaction(admin, async (tx) => {
+  const waterOffer = await withTransaction(admin, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: { en: "Bebidas" } });
-    await createProduct(tx, {
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
       name: "Mineral water",
@@ -339,10 +340,16 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, brandLocationId(MIRROR_LOCATION_ID), cat.id);
+    const offers = await offerProducts(tx, {
+      locationId: brandLocationId(MIRROR_LOCATION_ID),
+      orderFlow: "prepay",
+    });
+    return offers.offerFor(water.id);
   });
   // Silence an unused-parameter lint without changing the seed shape: nodeId scopes nothing here (the
   // venue rows key on tenant/location/till), but it documents which node this venue promotes onto.
   void nodeId;
+  return waterOffer;
 }
 
 beforeAll(async () => {
@@ -443,7 +450,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
   // STEP 1 (+ its refusals and the real-boot gate control) — the headline receipt.
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
     const seed = await seedMirror(db.main);
-    await seedSaleVenue(db.main, seed.nodeId);
+    const waterOffer = await seedSaleVenue(db.main, seed.nodeId);
     await mintBreakGlassSecret(db.main, seed.nodeId); // a verifier exists (an adopted mirror always has one)
 
     const mirrorPort = await freePort();
@@ -562,13 +569,13 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       const products = (await (
         await fetch(`${primaryBase}/api/products`, { headers: { cookie: sessionCookie } })
       ).json()) as { products: { id: string; pricingUnit: string }[] };
-      const water = products.products.find((p) => p.pricingUnit === "each")!;
+      expect(products.products.find((p) => p.pricingUnit === "each")).toBeDefined();
 
       const saleRes = await fetch(`${primaryBase}/api/sales`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: bothCookies },
         body: JSON.stringify({
-          lines: [{ productId: water.id, quantity: "2" }],
+          lines: [{ menuItemId: waterOffer, quantity: "2" }],
           tender: { method: "cash", amount: "5.00" },
         }),
       });

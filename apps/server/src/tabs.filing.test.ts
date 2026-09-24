@@ -30,6 +30,7 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, openTab } from "./working-order.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 
 /**
@@ -136,6 +137,10 @@ interface SeededVenue {
   cafe: AvailableProduct;
   /** "Agua" — each, 2.00 gross, general(21%). Same rate as café, so a two-line basket has one VAT group. */
   agua: AvailableProduct;
+  /** Both products offered at the counter (a walk-up or delivery sells here) and in a `table_tab`
+   *  zone of their own (a tab's table sits there). */
+  counter: ZoneOffers;
+  tables: ZoneOffers;
 }
 
 /**
@@ -179,7 +184,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(db, async (tx) => {
+  const { available, counter, tables } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -199,17 +204,26 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return (await listAvailableProducts(tx, cfg.locationId)).products;
+    return {
+      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      counter: await offerProducts(tx, cfg),
+      tables: await offerProducts(tx, cfg, { zone: "tables" }),
+    };
   });
   const cafe = available.find((p) => p.name === "Café")!;
   const agua = available.find((p) => p.name === "Agua")!;
-  return { cfg, cafe, agua };
+  return { cfg, cafe, agua, counter, tables };
 }
 
-/** Seed one active dining table in the venue; returns its id. */
-async function seedTable(cfg: TillConfig, label: string, db: Database = suite.db): Promise<string> {
+/** Seed one active dining table in the venue, in `zoneId` when given; returns its id. */
+async function seedTable(
+  cfg: TillConfig,
+  label: string,
+  db: Database = suite.db,
+  zoneId?: string,
+): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { id } = await createTable(tx, cfg, { label });
+    const { id } = await createTable(tx, cfg, { label, zoneId });
     return id;
   });
 }
@@ -294,15 +308,18 @@ async function registroCount(workingOrderId: string): Promise<number> {
 
 describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
   it("openTab + addTabRound → payWorkingOrder settles it, files one sale + registro, table reads free", async () => {
-    const { cfg, cafe, agua } = await setupVenue();
-    const tableId = await seedTable(cfg, "Pay-1");
+    const { cfg, cafe, agua, tables } = await setupVenue();
+    const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
+      return openTab(tx, cfg, {
+        tableId,
+        lines: [{ menuItemId: tables.offerFor(cafe.id), quantity: "1" }],
+      });
     });
     await withTransaction(suite.db, async (tx) => {
-      return addTabRound(tx, cfg, tabId, [{ productId: agua.id, quantity: "1" }]);
+      return addTabRound(tx, cfg, tabId, [{ menuItemId: tables.offerFor(agua.id), quantity: "1" }]);
     });
 
     // Pay the tab by its id — the retrieved-order path (files the STORED lines; req.lines ignored).
@@ -446,12 +463,13 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
     // Tenant A — a WALK-UP, no table → A/1, primer_registro, filed under A's own NIF (database `suite`).
-    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const { cfg: cfgA, cafe: cafeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const walkUpId = randomUUID();
     await payWorkingOrder(depsA, cfgA, {
       id: walkUpId,
-      lines: [{ productId: cafeA.id, quantity: "1" }],
+      zoneId: counterA.zoneId,
+      lines: [{ menuItemId: counterA.offerFor(cafeA.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
@@ -459,10 +477,13 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // → the order) → also A/1, primer_registro. A separate database lets both `A/1` rows exist without
     // colliding on the (now global) `registros_identidad_uq`; the shared NIF makes IDEmisorFactura —
     // hence the huella input — identical (the receipt `secondVenueSharingNif` documents).
-    const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
-    const tableId = await seedTable(cfgB, "H2-tab", suiteB.db);
+    const { cfg: cfgB, cafe: cafeB, tables: tablesB } = await secondVenueSharingNif(nifA);
+    const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
-      return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
+      return openTab(tx, cfgB, {
+        tableId,
+        lines: [{ menuItemId: tablesB.offerFor(cafeB.id), quantity: "1" }],
+      });
     });
     await payWorkingOrder(depsB, cfgB, {
       id: tabId,
@@ -510,14 +531,15 @@ async function deliveryTableOf(
 
 describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
   it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, counter } = await setupVenue();
     const tableId = await seedTable(cfg, "Del-1");
     const deps = { db: suite.db, backend, clock };
 
     const id = randomUUID();
     const res = await recordTillSale(deps, cfg, {
       workingOrderId: id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: counter.zoneId,
+      lines: [{ menuItemId: counter.offerFor(cafe.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
       deliveryTableId: tableId,
     });
@@ -532,7 +554,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
   });
 
   it("a deliveryTableId naming no table is refused table.not_found (a domain 4xx, not a raw 500)", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, cafe, counter } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     const orderId = randomUUID();
     const missingTableId = randomUUID(); // a well-formed uuid that names no dining table
@@ -544,7 +566,8 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     await expect(
       recordTillSale(deps, cfg, {
         workingOrderId: orderId,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId: counter.zoneId,
+        lines: [{ menuItemId: counter.offerFor(cafe.id), quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
         deliveryTableId: missingTableId,
       }),
@@ -574,13 +597,14 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
 
     // Tenant A — a counter sale DELIVERED to a table → A/1, primer_registro, filed under A's own NIF
     // (database `suite`).
-    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const { cfg: cfgA, cafe: cafeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
     await recordTillSale(depsA, cfgA, {
       workingOrderId: deliveredId,
-      lines: [{ productId: cafeA.id, quantity: "1" }],
+      zoneId: counterA.zoneId,
+      lines: [{ menuItemId: counterA.offerFor(cafeA.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
       deliveryTableId: tableA,
     });
@@ -589,11 +613,12 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     // also A/1, primer_registro. The shared NIF makes IDEmisorFactura — hence the huella input —
     // identical; a separate database lets both `A/1` rows exist without colliding on the (now global)
     // `registros_identidad_uq` (the same trick `secondVenueSharingNif` documents for the tab H2 test).
-    const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
+    const { cfg: cfgB, cafe: cafeB, counter: counterB } = await secondVenueSharingNif(nifA);
     const walkUpId = randomUUID();
     await recordTillSale(depsB, cfgB, {
       workingOrderId: walkUpId,
-      lines: [{ productId: cafeB.id, quantity: "1" }],
+      zoneId: counterB.zoneId,
+      lines: [{ menuItemId: counterB.offerFor(cafeB.id), quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 

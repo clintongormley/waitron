@@ -29,6 +29,7 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { joinTable, mergeTabs, openTab } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 
 /**
@@ -192,13 +193,23 @@ async function setupVenue(): Promise<SeededVenue> {
   });
   const cafe = available.find((p) => p.name === "Café")!;
   const agua = available.find((p) => p.name === "Agua")!;
+  offersByCfg.set(
+    cfg,
+    await withTransaction(suite.db, (tx) => offerProducts(tx, cfg, { zone: "tables" })),
+  );
   return { cfg, available, cafe, agua };
 }
 
-/** Seed one active dining table in the venue; returns its id. */
+/** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
+const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
+function offersOf(cfg: TillConfig): ZoneOffers {
+  return offersByCfg.get(cfg)!;
+}
+
+/** Seed one active dining table in the venue's tables zone; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    return createTable(tx, cfg, { label }).then((r) => r.id);
+    return createTable(tx, cfg, { label, zoneId: offersOf(cfg).zoneId }).then((r) => r.id);
   });
 }
 
@@ -209,7 +220,9 @@ async function openTabOn(
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    return openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId);
+    return openTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then(
+      (r) => r.tabId,
+    );
   });
 }
 
