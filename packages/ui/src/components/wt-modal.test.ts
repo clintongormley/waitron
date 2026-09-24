@@ -100,6 +100,33 @@ test.each([800, 1280])("keeps its full margins and padding at %ipx wide", async 
   }
 });
 
+test.each([
+  [1280, 300, 490],
+  [360, 280, 40],
+])(
+  "follows its width, margin and padding tokens at %ipx wide",
+  async (width, expectedWidth, expectedLeft) => {
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const modal = await openModal();
+      host.style.setProperty("--wt-modal-max-width", "300px");
+      host.style.setProperty("--wt-modal-inline-margin", "40px");
+      host.style.setProperty("--wt-modal-inline-padding", "7px");
+      const rect = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      expect(rect.width).toBeCloseTo(expectedWidth, 0);
+      expect(rect.left).toBeCloseTo(expectedLeft, 0);
+      for (const selector of [".body", ".footer"]) {
+        const style = getComputedStyle(modal.shadowRoot!.querySelector(selector)!);
+        expect(parseFloat(style.paddingLeft)).toBe(7);
+        expect(parseFloat(style.paddingRight)).toBe(7);
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
 test("scrolls long content while both footer actions stay visible and stationary", async () => {
   await page.viewport(390, 600);
   try {
@@ -162,8 +189,8 @@ test("keeps the body in the tab order, whether or not there is anything to scrol
   //
   // `tabIndex` is asserted rather than where focus lands, because neither focus route can tell 0
   // from -1: `.focus()` works on both, and so does showModal()'s own initial focus, since -1 is
-  // still focusable and the body is the dialog's first focusable descendant. Measured by setting
-  // the component to -1 — all seven tests in this file stayed green until this assertion existed.
+  // still focusable and the body is the dialog's first focusable descendant. Measured 2026-09-20
+  // by setting the component to -1: no other test the file held then failed.
   const short = await openModal();
   const shortBody = short.shadowRoot!.querySelector<HTMLElement>(".body")!;
   expect(shortBody.tabIndex).toBe(0);
