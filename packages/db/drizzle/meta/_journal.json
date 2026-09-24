@@ -64,6 +64,13 @@
       "when": 1790204981184,
       "tag": "0008_node_keyed_rows",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790221858481,
+      "tag": "0009_node_sealed_state",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveKey, SCRYPT_PARAMS } from "./scrypt-kdf.js";
+import { deriveKey, deriveKeyAsync, SCRYPT_PARAMS } from "./scrypt-kdf.js";
 
 describe("deriveKey", () => {
   it("derives a stable 32-byte key for a passphrase + salt", () => {
@@ -32,5 +32,15 @@ describe("deriveKey", () => {
     // Passing the default explicitly must reproduce calling with no third argument at all — proves
     // the parameter, not just its presence, drives the default.
     expect(withExplicitDefaultCost.equals(withDefault)).toBe(true);
+  });
+
+  it("derives the same key off the main thread as the synchronous derivation does", async () => {
+    const salt = Buffer.alloc(16, 4);
+    const lighter = { N: 2 ** 14, r: 8, p: 1, keylen: 32, maxmem: SCRYPT_PARAMS.maxmem };
+    expect((await deriveKeyAsync("pw", salt)).equals(deriveKey("pw", salt))).toBe(true);
+    expect((await deriveKeyAsync("pw", salt, lighter)).equals(deriveKey("pw", salt, lighter))).toBe(
+      true,
+    );
+    expect((await deriveKeyAsync("pw", salt, lighter)).equals(deriveKey("pw", salt))).toBe(false);
   });
 });

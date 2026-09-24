@@ -38,10 +38,10 @@ import { join } from "node:path";
 import type { Database } from "@waitron/db";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
-import { encryptArtifact } from "./artifact-cipher.js";
-import { packArchive, type ArchiveEntry } from "./backup-archive.js";
+import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
+import { encryptArtifactAsync } from "./artifact-cipher.js";
+import { packArchive } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
-import { collectModuleNonDbState } from "./backup-sources.js";
 import type { BackupSchedule } from "./backup-config.js";
 import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -53,8 +53,6 @@ import {
   backupArchiveTimestamp,
   dumpFileName,
 } from "./backup-keys.js";
-import { collectStateSecrets } from "./state-secrets.js";
-import { OPTIONAL_BACKUP_STATE, collectOptionalStateFiles } from "./backup-optional-state.js";
 import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
 
@@ -168,23 +166,20 @@ export async function runOnce(
   // can throw before that, so the `finally` guards its cleanup on this flag.
   let dumped = false;
   try {
-    // Collect the cheap, throw-prone pieces FIRST — the manifest, the module non-DB state
-    // (`<source>/<filename>`), the required state secrets (`secrets/<path>`), and the OPTIONAL state config
-    // (`backup.env`/`modules.json`, absent-is-fine). A misconfigured box fails here before the
-    // whole-DB dump is wasted (see the FAIL-FAST note above). They are independent, so they run
-    // concurrently; `Promise.all` still rejects (and the tick still fails BEFORE the dump) if any
-    // REQUIRED collector throws — the optional one only rejects on a non-ENOENT read fault, never on
-    // a missing file. This changes only the COLLECTION order; the packed ENTRY order below is unchanged.
-    const [manifest, secrets, nonDbState, optionalState] = await Promise.all([
+    // Collected before the copy, so a broken state folder fails the tick without copying the
+    // whole database.
+    const [manifest, parts] = await Promise.all([
       buildBackupManifest({
         db: deps.db,
         modules: deps.modules,
         environment: deps.environment,
         now: stamp,
       }),
-      collectStateSecrets(deps.stateDir),
-      collectModuleNonDbState(deps.modules, deps.resolvers),
-      collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE),
+      collectStateParts({
+        stateDir: deps.stateDir,
+        modules: deps.modules,
+        resolvers: deps.resolvers,
+      }),
     ]);
 
     // Cheap collection passed — now take the expensive copy into the staging file.
@@ -197,24 +192,8 @@ export async function runOnce(
     // group/other-readable.
     await chmod(staged, 0o600);
     const dumpBytes = await readFile(staged);
-    // Pack the archive in its fixed ENTRY order: index first, then the database copy, then the module non-DB
-    // state (`<source>/<filename>`), then the secrets (`secrets/<path>`) — the required RECOVERY_FILES first,
-    // then any present OPTIONAL_BACKUP_STATE (`backup.env`/`modules.json`), also under `secrets/` so
-    // the restore writes them back with no restore-side change.
-    const entries: ArchiveEntry[] = [
-      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
-      { name: "db.dump", bytes: dumpBytes },
-      ...nonDbState,
-      ...Object.entries(secrets).map(([path, contents]) => ({
-        name: `secrets/${path}`,
-        bytes: Buffer.from(contents),
-      })),
-      ...Object.entries(optionalState).map(([name, contents]) => ({
-        name: `secrets/${name}`,
-        bytes: Buffer.from(contents),
-      })),
-    ];
-    const ciphertext = encryptArtifact(packArchive(entries), deps.recoveryKey);
+    const entries = assembleArchiveEntries(manifest, dumpBytes, parts);
+    const ciphertext = await encryptArtifactAsync(packArchive(entries), deps.recoveryKey);
     const key = backupArchiveKey(stamp);
     // Fan out to every backend concurrently; each keeps its own try/catch so a THROWING failure is
     // logged and swallowed rather than rejecting the batch — a throwing backend never costs the

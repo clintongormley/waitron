@@ -109,17 +109,24 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "local",
     "one node's signal to its own dashboard, deleted by the transaction that wrote it; a row a write outside withTransaction left is delivered by the next transaction on whichever node holds the file",
   ),
+  classify(
+    "node_sealed_state",
+    "local",
+    "this node's own state files, locked with the recovery key; one row per node, keyed by its node id",
+  ),
 ];
 
 /**
  * The tables whose row changes the dashboard is told about.
  *
  * `change_log` is filtered out because it is where the trigger PUTS its output: a change trigger on
- * it would insert a row for every row it writes, and that row would trigger another. Guard:
- * `classification.test.ts`.
+ * it would insert a row for every row it writes, and that row would trigger another.
+ * Guard: `classification.test.ts`.
  */
+const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state"]);
+
 export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.filter(
-  ({ table }) => table !== "change_log",
+  ({ table }) => !NOT_CHANGE_SOURCES.has(table),
 ).map(({ table }) => ({
   table,
   type: table,

@@ -4044,6 +4044,7 @@ wizard can skip minting one. Only rotate changes the key."
   - `readSealedStateRow(tx: Transaction, nodeId: string): Promise<Uint8Array | null>`.
   - The row's entries are named exactly as the archive's: `manifest.json`, then any module non-database state as `<source>/<file>`, then `secrets/<path>` for each `RECOVERY_FILES` path, then `secrets/backup.env` / `secrets/modules.json` when present. There is no `db.dump`.
   - `collectSealedEntries`, `sealNodeState`, `writeSealedStateRow`, `createSealedStateRefresher`, `SealedStateDeps`, `SealedStateRefresher`, `SealedStateOutcome`.
+  - (2026-09-24, review fixes on this task's branch: `sealNodeState` returns `Promise<Uint8Array>` and seals through `encryptArtifactAsync`; the backup routes call the refresh straight after each write to `backup.env`, before the reload and any check that can refuse, not just before the final `return`; all three writes go through one `persist` helper in `mountBackupApi`, which writes and then refreshes; the refresh chain turns any rejection into `"failed"`, so `refresh()` never rejects; a failure whose thrown value carries a system error code (`EACCES`, `ENOSPC`) logs it as `errno` beside `errorCode`; logging comes after the outcome is settled, so a refresh whose row has committed answers `"sealed"` even when the logger then throws; the backup sweep in `backup-sweep.ts` encrypts with `encryptArtifactAsync` too; and `classification.ts` no longer gives a reason for filtering out `node_sealed_state`. The code and instructions below still show the first version.)
   - `collectStateParts`, `assembleArchiveEntries`, `StateParts` in `archive-entries.ts`.
 
 Why a core table: it belongs to every box whatever modules are enabled, `apps/server` (which owns
@@ -15053,6 +15054,20 @@ import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
 import { StreamHost } from "./stream-host.js";
 
+// The route calls `putCredential` itself, so the harness sees the credential write through this
+// pass-through wrapper.
+const credentialWrites = vi.hoisted(() => ({ onPut: (): void => {} }));
+vi.mock("@waitron/credentials", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/credentials")>();
+  return {
+    ...real,
+    putCredential: (...args: Parameters<typeof real.putCredential>) => {
+      credentialWrites.onPut();
+      return real.putCredential(...args);
+    },
+  };
+});
+
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -15116,6 +15131,7 @@ interface Harness {
 function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Harness {
   const key = { value: startKey };
   const order: string[] = [];
+  credentialWrites.onPut = () => order.push("put-credential");
   const stream = {
     reload: vi.fn(async () => {
       order.push("reload");
@@ -15266,7 +15282,7 @@ describe("stream settings routes", () => {
     expect(stored).toBeNull();
   });
 
-  it("Save sets a recovery key when there is none, seals the bucket, refreshes the locked row, then starts streaming", async () => {
+  it("Save sets a recovery key when there is none, refreshes the locked row, seals the bucket, then starts streaming", async () => {
     await clearBucket();
     const { app, key, order } = harness();
     const cookie = await login(app);
@@ -15276,7 +15292,7 @@ describe("stream settings routes", () => {
     expect(key.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
     // The row must be locked under the key BEFORE the first generation opens, or a rebuild from
     // that generation finds no row to unlock.
-    expect(order).toEqual(["write-key", "refresh", "reload"]);
+    expect(order).toEqual(["write-key", "refresh", "put-credential", "reload"]);
     const view = await res.json();
     expect(view).toEqual({
       isPrimary: true,
@@ -15561,7 +15577,8 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
 
   // Save and switch on. The order is the invariant: a key exists, the locked row is written under
   // it, and only then does a generation open — so the first generation already holds a row a
-  // rebuild can unlock.
+  // rebuild can unlock. The refresh comes straight after the `backup.env` write, when there is one,
+  // and before the credential write that can refuse: the file has changed whatever this answers.
   app.put("/api/backup/stream", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -15571,13 +15588,13 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       if ((await deps.readRecoveryKey()) === undefined) {
         await deps.writeRecoveryKey(randomBytes(32).toString("base64url"));
       }
+      await deps.sealedState.refresh();
       await withTransaction(deps.db, (tx) =>
         putCredential(tx, deps.ring, {
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({ venueId: deps.venueId, bucket }),
         }),
       );
-      await deps.sealedState.refresh();
       await deps.stream.reload();
       return c.json(await view());
     }),
@@ -17970,7 +17987,7 @@ the same function."
 - Modify: `apps/server/src/restore.ts` (`RestoreDeps.checkSourceLive?`, called by `restoreFromArtifact` between validation and the write — Reconciliation N23's archive half)
 
 **Interfaces:**
-- Consumes: 8a's `RecoveryKit`, `parseRecoveryKit`, `encodeRecoveryKit` (tests); 9a's `REBUILD_MARKER` and `RestoreDeps.rebuildSource` (its `writeValidated` writes and clears the first-start marker, so this task writes none of its own); Task 5's `ObjectStore`, `createS3ObjectStore`, `readPointer`, `verifyPointer`, `venuePrefix`, `signPointer` (tests), `writePointer` (tests); Task 6's `replicaUrl(bucket, venueId, generation)`, `litestreamConfig`, `spawnLitestream`, `ENV_ACCESS_KEY_ID`, `ENV_SECRET_ACCESS_KEY`, `resolveLitestreamBin(env)`, `litestreamMetaDir(dbPath)`; Task 6's `readStreamSettings(db, ring)` (`apps/server/src/stream-host.ts`); Task 5's `PROBE_PREFIX`; Task 2b's `readSealedStateRow(tx, nodeId)`, `unsealNodeState(sealed, key)` (synchronous), and in tests `sealNodeState(entries, key)` (synchronous), `writeSealedStateRow(tx, nodeId, sealed, at)`, all from `apps/server/src/sealed-state.ts`.
+- Consumes: 8a's `RecoveryKit`, `parseRecoveryKit`, `encodeRecoveryKit` (tests); 9a's `REBUILD_MARKER` and `RestoreDeps.rebuildSource` (its `writeValidated` writes and clears the first-start marker, so this task writes none of its own); Task 5's `ObjectStore`, `createS3ObjectStore`, `readPointer`, `verifyPointer`, `venuePrefix`, `signPointer` (tests), `writePointer` (tests); Task 6's `replicaUrl(bucket, venueId, generation)`, `litestreamConfig`, `spawnLitestream`, `ENV_ACCESS_KEY_ID`, `ENV_SECRET_ACCESS_KEY`, `resolveLitestreamBin(env)`, `litestreamMetaDir(dbPath)`; Task 6's `readStreamSettings(db, ring)` (`apps/server/src/stream-host.ts`); Task 5's `PROBE_PREFIX`; Task 2b's `readSealedStateRow(tx, nodeId)`, `unsealNodeState(sealed, key)` (synchronous), and in tests `sealNodeState(entries, key)` (returns a promise since 2026-09-24; await it), `writeSealedStateRow(tx, nodeId, sealed, at)`, all from `apps/server/src/sealed-state.ts`.
 - Produces:
   - `@waitron/stream`: `restoreGeneration(args: RestoreGenerationArgs): Promise<void>` with `RestoreGenerationArgs = { litestreamBin; bucket; venueId; generation; outPath; configDir?; stallMs?; ceilingMs?; pollMs? }` — the five fields Reconciliation N7 names, plus optional ones (Task 10 calls it with the five) — and `RESTORE_STALL_MS` (2 minutes without the output growing) and `RESTORE_CEILING_MS` (6 hours, a backstop), Reconciliation N18. It writes its configuration with Task 6's `litestreamConfig` and starts its child with Task 6's `spawnLitestream` (Reconciliation N17). A refusal is `backup.stream_restore_failed { exitCode: number | null; diskFull: boolean }`.
   - `restore.ts`: `validateEntries(entries: ArchiveEntry[], deps: EntryValidationDeps): Promise<ValidatedArtifact>`, `type EntryValidationDeps = Omit<ValidationDeps, "artifact" | "recoveryKey">`.
@@ -18535,7 +18552,7 @@ beforeAll(async () => {
   await db.insert(tills).values({ id: T.tillId, locationId: T.locationId, name: "Caja 1" });
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
-  const sealed = sealNodeState(ENTRIES, RECOVERY_KEY);
+  const sealed = await sealNodeState(ENTRIES, RECOVERY_KEY);
   await writeSealedStateRow(db, T.nodeId, sealed, NOW);
   fixtureDb = join(await mkdtemp(join(tmpdir(), "waitron-stream-fixture-")), "venue.db");
   await db.archiveTo(fixtureDb);
@@ -23603,10 +23620,11 @@ migration and Task 1's migration are both in the core set, so whichever lands se
    - `collectRecoveryEntries` → `collectSealedEntries(deps: { stateDir: string; modules: readonly WaitronModule[]; resolvers: Record<string, string>; manifest: BackupManifest }): Promise<ArchiveEntry[]>`
      (it also needs `modules` and `resolvers`, because the module non-database state is collected
      from them — `collectModuleNonDbState(modules, resolvers)` in `backup-sources.ts`);
-   - `sealRecoveryState` → `sealNodeState(entries: ArchiveEntry[], recoveryKey: string): Uint8Array`
+   - `sealRecoveryState` → `sealNodeState(entries: ArchiveEntry[], recoveryKey: string): Promise<Uint8Array>`
      and `unsealRecoveryState` → `unsealNodeState(sealed: Uint8Array, recoveryKey: string): ArchiveEntry[]`.
-     Both are **synchronous**: `encryptArtifact`, `decryptArtifact`, `packArchive` and
-     `unpackArchive` are all synchronous (`artifact-cipher.ts`, `backup-archive.ts`);
+     `unsealNodeState` is **synchronous** (`decryptArtifact` and `unpackArchive` are). `sealNodeState`
+     returns a promise (changed 2026-09-24, on Task 2b's branch): it derives the key with
+     `encryptArtifactAsync`, off the event loop, so a refresh does not stall sales;
    - `writeRecoveryStateRow` → `writeSealedStateRow(tx: Transaction, nodeId: string, sealed: Uint8Array, at: Date): Promise<void>`;
    - `readRecoveryStateRow` → `readSealedStateRow(tx: Transaction, nodeId: string): Promise<Uint8Array | null>`;
    - `refreshRecoveryState(deps)` → `createSealedStateRefresher(deps: SealedStateDeps): SealedStateRefresher`,

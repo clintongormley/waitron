@@ -15,6 +15,7 @@ import {
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
+import type { SealedStateRefresher } from "./sealed-state.js";
 // This file THROWS the `backup.*` admin codes, so it imports the host error registry directly, the
 // "every file that throws one of these imports ./errors.js" convention errors.ts states.
 import "./errors.js";
@@ -29,6 +30,9 @@ export interface BackupApiDeps {
   /** The recovery key from the box env (files merged under the process env), read afresh each call.
    * Answers with no archive destination configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
+  /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
+   * key. */
+  sealedState: SealedStateRefresher;
 }
 
 /**
@@ -228,6 +232,14 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     if (!s.isPrimary) throw new AppError("backup.not_primary", {});
   };
 
+  // Every `backup.env` write this API makes goes through here. The refresh follows the write straight
+  // away, before anything that can refuse the request: the file has changed whatever the request
+  // answers.
+  const persist = async (write: () => Promise<void>): Promise<void> => {
+    await write();
+    await deps.sealedState.refresh();
+  };
+
   const heldKey = async (): Promise<string | undefined> =>
     deps.supervisor.current().recoveryKey ?? (await deps.readRecoveryKey());
 
@@ -296,7 +308,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         // Dry-validate the EXACT record we are about to write, so the route rejects exactly what boot
         // would (`recovery_key_too_short`/`destinations_invalid`/`schedule_invalid`) BEFORE touching disk.
         loadBackupConfig(backupEnvRecord(input));
-        await writeBackupEnv(deps.stateDir, input);
+        await persist(() => writeBackupEnv(deps.stateDir, input));
         await deps.supervisor.reload();
         // The effective key is what the box will actually encrypt under. If a partial env override (or
         // any merge) made it differ from the key chosen above, fail LOUD rather than orphan archives.
@@ -340,7 +352,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const cur = deps.supervisor.current();
         if (cur.destinations.length === 0 && (await keyPresent())) {
           loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
-          await writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt });
+          await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
@@ -348,7 +360,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         }
         const input: BackupEnvInput = { ...fromCurrent(cur), recoveryKey, keyRotatedAt };
         loadBackupConfig(backupEnvRecord(input));
-        await writeBackupEnv(deps.stateDir, input);
+        await persist(() => writeBackupEnv(deps.stateDir, input));
         await deps.supervisor.reload();
         if (deps.supervisor.current().recoveryKey !== recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});

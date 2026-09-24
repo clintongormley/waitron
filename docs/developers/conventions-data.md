@@ -889,7 +889,7 @@ open under Task 1b.
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`node_roles`,
-`mirror_config`, `join_requests`), a seal only that node's key opens (`tenant_credentials`), or rows
+`mirror_config`, `join_requests`, `node_sealed_state`), a seal only that node's key opens (`tenant_credentials`), or rows
 the transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/identity/src/classification.ts`; plan
@@ -898,7 +898,9 @@ each by deleting the node filter and watching a case fail: the `node_roles` and
 `mirror_config` readers (`packages/db/src/node-roles.test.ts`), and every node filter on
 `join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a
 node-filtered read of the same id (the "belong to the node" cases in
-`apps/server/src/join-requests.test.ts`).
+`apps/server/src/join-requests.test.ts`), and the `node_sealed_state` reader
+(`readSealedStateRow`, the "reads only the named node's row" case in
+`apps/server/src/sealed-state.test.ts`).
 
 HISTORICAL, kept for the mechanism it records: while `ledger`/`state` tables were PUBLISHED for
 PostgreSQL logical replication (removed 2026-09-19), such a table also needed a PRIMARY KEY, not a

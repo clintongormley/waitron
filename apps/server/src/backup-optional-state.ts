@@ -6,10 +6,11 @@ import { join } from "node:path";
  * must bring back but whose ABSENCE is a valid box state, not a fault: `backup.env` (the backup
  * schedule/destinations — absent when backups are off) and `modules.json` (the enabled-module set —
  * absent when every module runs at its default). UNLIKE `RECOVERY_FILES` (`state-secrets.ts`), a
- * missing one here is skipped, never a `recovery.state_incomplete`. Captured by the SWEEP alone
- * (`backup-sweep.ts`), NOT by `collectStateSecrets`/the operator recovery-bundle download, which stays
- * the identity-only set. Restored with no restore-side change: they pack as `secrets/<name>`, which the
- * restore already writes back verbatim (`restore.ts`).
+ * missing one here is skipped, never a `recovery.state_incomplete`. Captured by the backup archive
+ * (`backup-sweep.ts`) and the sealed state row (`sealed-state.ts`), NOT by `collectStateSecrets`/the
+ * operator recovery-bundle download, which stays the identity-only set. Restored with no
+ * restore-side change: they pack as `secrets/<name>`, which the restore already writes back verbatim
+ * (`restore.ts`).
  */
 export const OPTIONAL_BACKUP_STATE = ["backup.env", "modules.json"] as const;
 

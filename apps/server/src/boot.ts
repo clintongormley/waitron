@@ -164,6 +164,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountBackupApi } from "./backup-api.js";
+import { createSealedStateRefresher } from "./sealed-state.js";
 import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -2071,6 +2072,19 @@ export async function startServer(
     log,
   });
   await backupSupervisor.reload();
+  // After migrations, so the row's manifest names the schema the database holds.
+  const sealedState = createSealedStateRefresher({
+    db,
+    nodeId: till.nodeId,
+    stateDir: config.stateDir,
+    modules: ALL_MODULES,
+    resolvers: {},
+    environment: config.environment,
+    readRecoveryKey,
+    now,
+    log,
+  });
+  await sealedState.refresh();
 
   // Dashboard alerts. Mounted HERE, after the backup supervisor exists, because the backups source
   // reads the supervisor's live status; the claims list comes from every module, but the ongoing
@@ -2190,6 +2204,7 @@ export async function startServer(
       db,
       stateDir: config.stateDir,
       readRecoveryKey,
+      sealedState,
     },
     log,
   );

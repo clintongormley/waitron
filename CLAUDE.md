@@ -527,7 +527,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A `local` table says what ties a row to its node** — a `node_id` column that every read and
-  write names (`node_roles`, `mirror_config`, `join_requests`), a seal only that node's key opens
+  write names (`node_roles`, `mirror_config`, `join_requests`, `node_sealed_state`), a seal only that node's key opens
   (`tenant_credentials`), or rows the transaction that wrote them deletes (`change_log`). A node
   holding another node's copy of `venue.db` must read its own rows or none. No guard makes a new
   `local` table say which. Which node filters a deletion pins:

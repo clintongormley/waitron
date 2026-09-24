@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import { deriveKey, type ScryptParams } from "./scrypt-kdf.js";
+import { deriveKey, deriveKeyAsync, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
 
 const MAGIC = Buffer.from("WBK1"); // Waitron BacKup, format 1
@@ -34,8 +34,22 @@ const HEADER_LEN = AAD_LEN + TAG_LEN; // 49
  * symmetry is structural, not merely test-enforced. */
 export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buffer {
   const salt = randomBytes(SALT_LEN);
+  return frameUnderKey(plaintext, salt, deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]));
+}
+
+/** `encryptArtifact` with the key derived on the thread pool; the same frame, opened by
+ * `decryptArtifact`. */
+export async function encryptArtifactAsync(
+  plaintext: Uint8Array,
+  passphrase: string,
+): Promise<Buffer> {
+  const salt = randomBytes(SALT_LEN);
+  const key = await deriveKeyAsync(passphrase, salt, KDF_BY_VERSION[VERSION]);
+  return frameUnderKey(plaintext, salt, key);
+}
+
+function frameUnderKey(plaintext: Uint8Array, salt: Buffer, key: Buffer): Buffer {
   const iv = randomBytes(IV_LEN);
-  const key = deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const header = Buffer.concat([MAGIC, Buffer.from([VERSION]), salt, iv]);
   cipher.setAAD(header);

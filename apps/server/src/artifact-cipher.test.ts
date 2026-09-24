@@ -1,6 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { decryptArtifact, encryptArtifact, KDF_BY_VERSION, VERSION } from "./artifact-cipher.js";
+import {
+  decryptArtifact,
+  encryptArtifact,
+  encryptArtifactAsync,
+  KDF_BY_VERSION,
+  VERSION,
+} from "./artifact-cipher.js";
 import { SCRYPT_PARAMS } from "./scrypt-kdf.js";
 
 describe("artifact cipher", () => {
@@ -82,5 +88,24 @@ describe("artifact cipher", () => {
         params: { reason: "bad_version" },
       }),
     );
+  });
+
+  it("opens a frame sealed off the main thread with the same reader", async () => {
+    const plaintext = randomBytes(4096);
+    const framed = await encryptArtifactAsync(plaintext, "recovery-key-123");
+    expect(decryptArtifact(framed, "recovery-key-123").equals(plaintext)).toBe(true);
+    expect(() => decryptArtifact(framed, "wrong-passphrase")).toThrowError(
+      expect.objectContaining({ code: "recovery.passphrase_invalid" }),
+    );
+  });
+
+  it("frames an off-thread seal exactly as the synchronous one: same magic, version and length", async () => {
+    const plaintext = randomBytes(64);
+    const sync = encryptArtifact(plaintext, "pw-000000000000");
+    const off = await encryptArtifactAsync(plaintext, "pw-000000000000");
+    expect(off.subarray(0, 5).equals(sync.subarray(0, 5))).toBe(true);
+    expect(off.length).toBe(sync.length);
+    // Fresh salt and IV each time, so the two frames differ past the magic and version.
+    expect(off.equals(sync)).toBe(false);
   });
 });
