@@ -8,10 +8,8 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openVenueStore } from "./index.js";
 
-// Two one-table schemas, one per file, to show each handle reaches its own file. The product
-// applies every migration set to the venue file and leaves the node file empty
-// (`packages/migrations/src/apply.ts`); this package does not know that, and the split here is the
-// test's own.
+// One table per file, to show each handle reaches its own file. The split is this suite's, not the
+// product's.
 const sales = sqliteTable("sales", { id: integer("id").primaryKey(), total: integer("total") });
 const sessions = sqliteTable("sessions", { id: integer("id").primaryKey(), token: text("token") });
 
@@ -31,7 +29,6 @@ afterEach(async () => {
   while (opened.length > 0) await opened.pop()!.close();
 });
 
-/** The tables SQLite itself reports for whichever file this handle is connected to. */
 const tableNames = (db: { all: (query: ReturnType<typeof sql>) => unknown }) =>
   (
     db.all(sql`select name from sqlite_master where type = 'table' order by name`) as {
@@ -49,9 +46,8 @@ describe("openVenueStore", () => {
     store.venue.run(sql`create table sales (id integer primary key, total integer)`);
     store.node.run(sql`create table sessions (id integer primary key, token text)`);
 
-    // The discriminating assertion: each file holds ONLY its own table. A store that pointed both
-    // handles at one file would report both tables on both sides. Asserting only that the venue
-    // file lacks `sessions` would pass on an empty file, which is every fresh store.
+    // Exact lists: a store that pointed both handles at one file would report both tables on both
+    // sides.
     expect(tableNames(store.venue)).toEqual(["sales"]);
     expect(tableNames(store.node)).toEqual(["sessions"]);
   });
@@ -80,25 +76,19 @@ describe("openVenueStore", () => {
     for (const db of [store.venue, store.node]) {
       expect(pragma(db, "journal_mode")).toBe("wal");
       expect(pragma(db, "busy_timeout")).toBe(5000);
-      // `node:sqlite` enables foreign keys by default, unlike the SQLite library it wraps, so this
-      // number stays 1 with the store's `pragma foreign_keys` deleted — measured 2026-09-21 on
-      // Node v26.7.0, where a bare `new DatabaseSync(":memory:")` reads 1 and one opened with
-      // `{ enableForeignKeyConstraints: false }` reads 0. The pragma is still doing work: with that
-      // option passed AND the pragma kept, this case passes; with both gone, it reads 0.
+      // Weaker than it looks: `node:sqlite` enables foreign keys by default, so this reads 1 even
+      // with the store's `pragma foreign_keys` deleted.
       expect(pragma(db, "foreign_keys")).toBe(1);
       // SQLite's own default, deliberately not zero: nothing else checkpoints until Litestream
       // arrives, so a zero here would let the write-ahead file grow without limit.
       expect(pragma(db, "wal_autocheckpoint")).toBe(1000);
-      // SQLite's default is 0, so this one is a real setting rather than a restated default. The
-      // case below is what it buys.
+      // SQLite's default is 0. The case below is what the setting buys.
       expect(pragma(db, "recursive_triggers")).toBe(1);
     }
   });
 
-  // Recursive triggers, proven by what they change rather than by reading the pragma back. The
-  // delete `INSERT OR REPLACE` performs internally fires a `BEFORE DELETE` trigger only with the
-  // pragma on; with SQLite's default the row is rewritten and nothing is raised. That is the whole
-  // reason append-only enforcement on this engine needs the setting (`./append-only.ts`).
+  // The delete inside `INSERT OR REPLACE` fires a `BEFORE DELETE` trigger only with
+  // `recursive_triggers` on; with SQLite's default the row is silently rewritten.
   it("fires a before-delete trigger for the delete inside an insert or replace", async () => {
     const { store } = await open();
     store.venue.run(sql`create table ledger (id integer primary key, payload text not null)`);
@@ -159,9 +149,6 @@ describe("openVenueStore", () => {
 
     await Promise.allSettled([write("A", true), write("B", false)]);
 
-    // The same reading the venue case takes, on the other file: the node connection needs its own
-    // queue, because two overlapping node writes share one WRITE connection exactly as two venue writes
-    // do. Sharing the venue's queue would serialise the two files against each other instead.
     expect(store.node.all(sql`select who from t`)).toEqual([{ who: "B" }]);
   });
 
@@ -178,8 +165,6 @@ describe("openVenueStore", () => {
       });
     });
 
-    // One queue over both files would deadlock here: the inner call would wait for the outer one
-    // to release, which cannot happen until the inner one returns.
     expect(nodeWriteFinished).toBe(true);
     expect(store.node.all(sql`select id from t`)).toEqual([{ id: 1 }]);
   });
@@ -187,7 +172,6 @@ describe("openVenueStore", () => {
   it("closes one file through the handle that owns it", async () => {
     const { store } = await open();
     await store.node.close();
-    // The venue file is untouched, so a handle's `close` is that file's and not the store's.
     expect(() => store.node.run(sql`select 1`)).toThrow();
     expect(store.venue.all(sql`select 1 as one`)).toEqual([{ one: 1 }]);
   });
@@ -195,18 +179,13 @@ describe("openVenueStore", () => {
   it("closes the store after one handle has already been closed", async () => {
     const { store } = await open();
     await store.node.close();
-    // `node:sqlite` throws "database is not open" on a second close, so a store that closed its
-    // connections directly would fail its own teardown after a handle was closed.
+    // `node:sqlite` throws "database is not open" on a second close.
     await expect(store.close()).resolves.toBeUndefined();
     opened.pop();
   });
 
-  /**
-   * The store-level archive is the venue file's, which is the interface the slice-1 plan names
-   * (step 21). Each file's tables are the discriminating reading: an archive of the node file
-   * would come back holding `sessions`, and one of a store that pointed both handles at one file
-   * would hold both.
-   */
+  // An archive of the node file would hold `sessions`, and one of a store that pointed both handles
+  // at one file would hold both.
   it("archives the venue file, not the node file", async () => {
     const { directory, store } = await open();
     store.venue.run(sql`create table sales (id integer primary key, total integer)`);
@@ -252,13 +231,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * A read taken while someone else's write transaction is open.
-   *
-   * The distinction this turns on is asynchronous context, never a flag: a read written INSIDE the
-   * transaction body must still see that body's own rows (the control in the same case), while a
-   * read whose context began outside the body is a concurrent request and must see committed rows
-   * only. `written.then(...)` is registered before the lock is taken, so its callback runs in the
-   * outer context however it is resumed.
+   * The read inside the body is the control: it must still see the body's own row.
+   * `written.then(...)` is registered before the lock is taken, so its callback runs in the outer
+   * context.
    */
   it("shows a read taken outside the write lock the committed rows only", async () => {
     const { store } = await open();
@@ -282,12 +257,8 @@ describe("openVenueStore", () => {
     expect(await concurrent).toEqual([]);
   });
 
-  /**
-   * The same rule for a transaction the write queue did not open. `packages/payments/src/simulator.ts`
-   * and several testing helpers call `.transaction(...)` on the handle directly, so the body's own
-   * reads have to see its own rows there too — which is why the shim in `./node-sqlite-adapter.ts`
-   * marks the context as well as the queue does.
-   */
+  // A transaction the write queue did not open: `.transaction(...)` called on the handle directly,
+  // as `packages/payments/src/simulator.ts` does.
   it("shows a transaction opened outside the write queue its own rows", async () => {
     const { store } = await open();
     store.venue.run(sql`create table t (id integer primary key)`);
@@ -302,14 +273,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * The case in the other direction, without which the routing could be too wide.
-   *
-   * A write issued from outside the body, while a transaction is open, is what the read connection
-   * refuses — so it is re-run on the writer instead. All three outcomes are visible here and they
-   * differ: on the read connection it would THROW; on a second read-write connection it would
-   * survive the rollback; on the writer it joins the open transaction and goes with it, which is
-   * what one connection did, and it is the only one of the three this case RAN: the other two are
-   * named to say what the assertion separates, not offered as measurements.
+   * A write from outside the body, while a transaction is open, is refused by the read connection
+   * and re-run on the writer, where it joins the open transaction and goes with its rollback.
+   * Weaker than its name: it passes with the routing deleted.
    */
   it("sends a write issued outside the lock to the writer rather than refusing it", async () => {
     const { store } = await open();
@@ -334,10 +300,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * The other half of the case above it: the same direct transaction must be HIDDEN from a reader
-   * whose context began outside it. Without this half the pair does not discriminate — with the
-   * shim's marking deleted nothing is registered, everything falls back to the writer, and the
-   * body's own read still sees its row.
+   * The other half of "shows a transaction opened outside the write queue its own rows", and the
+   * half that discriminates: with the shim's marking deleted everything falls back to the writer,
+   * where that case's read still sees its row.
    */
   it("hides a transaction opened outside the write queue from a reader outside it", async () => {
     const { store } = await open();
@@ -359,19 +324,10 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * The shim's mark has to outlast the BODY, the same way the queue's does below.
-   *
-   * The body RETURNS the gate, so the shim's own handler and the outsider's are two handlers on
-   * one promise and the mark decides which connection the second one is sent to.
-   *
-   * Instrumented 2026-09-23 on Node v26.7.0, printing `forStatement`'s answer and the shim's
-   * `rollback`: as shipped, that read is sent to the READER, and it runs after the rollback — so
-   * what it reads back is the committed state rather than uncommitted rows being withheld from
-   * it. What it separates is the other shape. With `connections.asTransactionBody` moved to wrap
-   * `fn(...args)` alone, the same read prints the WRITER with the mark already dropped and runs
-   * BEFORE the rollback, reading the row the rollback is about to remove:
-   * `pnpm --filter @waitron/store test` then reports this case failing
-   * `expected [ { id: 1 } ] to deeply equal []`, and every other case in the package passing.
+   * The shim's mark has to outlast the BODY, until its `rollback`. Weaker than its name: as
+   * shipped the read runs after the rollback, so it reads the committed state rather than having
+   * uncommitted rows withheld, and it passes with the routing deleted. What it catches is the mark
+   * wrapping `fn(...args)` alone, which sends the read to the writer before the rollback.
    */
   it("sends a read registered on a direct transaction's body promise to the reader", async () => {
     const { store } = await open();
@@ -403,15 +359,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * The same shape for the WRITE QUEUE: its mark has to outlast the body too, because it issues
-   * the `rollback` after the body has settled.
-   *
-   * Instrumented 2026-09-23 on Node v26.7.0, printing `forStatement`'s answer,
-   * `DatabaseSync.isTransaction` and the queue's `rollback`: as shipped, the outsider's read is
-   * sent to the reader with `isTransaction` already false — the rollback has run — so it reads the
-   * committed state. With `asTransactionBody` moved to wrap the body alone, the same read prints
-   * the WRITER with `isTransaction` true and runs before the `rollback`, reading the uncommitted
-   * row, and this case fails `expected [ { id: 1 } ] to deeply equal []`.
+   * The same shape for the WRITE QUEUE, which issues its `rollback` after the body has settled.
+   * Weaker than its name in the same way: as shipped the read runs after the rollback and passes
+   * with the routing deleted. What it catches is the queue's mark wrapping the body alone.
    */
   it("sends a read registered on the write lock's body promise to the reader", async () => {
     const { store } = await open();
@@ -426,10 +376,8 @@ describe("openVenueStore", () => {
       release = reject;
     });
 
-    // The body RETURNS its promise rather than awaiting it, which `withTransaction` explicitly
-    // allows (`packages/db/src/tenancy.ts`) — and it is what puts the two handlers on the SAME
-    // promise, the queue's first and the outsider's second. An `async` body would hand back a
-    // promise of its own and hide the gap behind an extra hop.
+    // The body RETURNS its promise rather than awaiting it, which puts the two handlers on the SAME
+    // promise, the queue's first. An `async` body would hide the gap behind an extra hop.
     const locked = store.withWriteLock(() => {
       store.venue.run(sql`insert into t (id) values (1)`);
       bodyStarted();
@@ -437,8 +385,7 @@ describe("openVenueStore", () => {
     });
 
     await started;
-    // Registered from OUTSIDE the body, on the very rejection that ends it, so it runs in the gap
-    // between the body finishing and the queue undoing its work.
+    // Registered from OUTSIDE the body, on the rejection that ends it.
     let observed: unknown;
     const watcher = gate.catch(() => {
       observed = store.venue.all(sql`select id from t`);
@@ -451,14 +398,8 @@ describe("openVenueStore", () => {
     expect(observed).toEqual([]);
   });
 
-  /**
-   * Work detached inside one transaction body and settling after it has ended.
-   *
-   * The context says "a transaction body of mine is around you", and without a way to tell WHICH
-   * body, a callback whose own transaction committed long ago is read as being inside whatever
-   * transaction happens to be open when it finally runs — so it sees a stranger's uncommitted
-   * rows. `./write-queue.ts` records the same shape for its own re-entrancy marking.
-   */
+  // Asynchronous context never expires, so routing that could not tell WHICH body a callback came
+  // from would read this one as inside whatever transaction is open when it finally runs.
   it("does not let work detached from a finished transaction read a later one's rows", async () => {
     const { store } = await open();
     store.venue.run(sql`create table t (id integer primary key)`);
@@ -471,8 +412,7 @@ describe("openVenueStore", () => {
     let detached!: Promise<void>;
 
     await store.withWriteLock(async () => {
-      // Detached INSIDE this body and deliberately not awaited, so its continuation carries this
-      // body's asynchronous context into a moment when this body is long gone.
+      // Deliberately not awaited: the continuation carries this body's context past its end.
       detached = gate.then(() => {
         observed = store.venue.all(sql`select id from t`);
       });
@@ -491,17 +431,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * An archive taken while someone else's transaction is open, which the read connection CHANGES.
-   *
-   * `VACUUM INTO` is refused on a connection with a transaction open — `cannot VACUUM from within a
-   * transaction`, errcode 1, and errcode 1 is not the read-only refusal, so nothing would route it
-   * back. On the read connection it is allowed, and the copy holds the committed state. Measured
-   * 2026-09-23 on Node v26.7.0, both ways round: from the read connection the copy is written and
-   * holds the committed row alone; from the write connection, at the same moment, it is refused.
-   *
-   * This retires the reason `apps/server/src/backup-supervisor.ts` gave for opening its own venue
-   * handle — a backup firing mid-sale no longer fails on the shared one. It still opens its own,
-   * for the other reasons its header states.
+   * `VACUUM INTO` is refused on a connection with a transaction open — errcode 1, not the read-only
+   * refusal, so nothing would route it back. On the read connection it is allowed, and the copy
+   * holds the committed state.
    */
   it("archives the committed state while another caller's transaction is open", async () => {
     const { directory, store } = await open();
@@ -529,14 +461,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * A refusal the read connection gives for any reason OTHER than being read-only is the caller's,
-   * and is not retried on the writer.
-   *
-   * The two answers differ here, which is what makes this a measurement: the table exists only
-   * inside the open transaction, so on the read connection the select is `no such table` — and on
-   * the writer, where a retry would send it, it would have SUCCEEDED and returned no rows. The
-   * control afterwards shows the table is genuinely there once the transaction has committed, so
-   * the refusal was about visibility and not about a name nothing ever creates.
+   * The table exists only inside the open transaction, so the reader answers `no such table`, where
+   * a retry on the writer would have returned no rows. The last line is the control: once
+   * committed, the table is there.
    */
   it("hands back a refusal from the read connection rather than retrying it on the writer", async () => {
     const { store } = await open();
@@ -558,12 +485,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * A transaction opened by RUNNING `begin`, which is not a shape only a test writes: Drizzle's
-   * migrator opens and closes its own transaction that way, through the session rather than
-   * through the transaction shim. Nothing tells this pair about it, so nothing about it changes —
-   * and it must not, because its `rollback` on the read connection is refused
-   * `cannot rollback - no transaction is active`, errcode 1, which is not the read-only refusal
-   * and so could not be routed back.
+   * Drizzle's migrator opens its transaction this way, bypassing the shim. It has to stay on the
+   * writer: on the read connection its `rollback` is refused `cannot rollback - no transaction is
+   * active`, errcode 1, which is not the read-only refusal and so could not be routed back.
    */
   it("keeps to the writer for a transaction opened as an ordinary statement", async () => {
     const { store } = await open();
@@ -577,17 +501,9 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * A smoke test over the routed read, and no more than that — both halves of what it is NOT were
-   * measured 2026-09-23 rather than argued.
-   *
-   * It does not reach a file with no sidecars: logging the directory, straight after `open()` it
-   * holds `venue.db` and `node.db` alone, and by the moment this read runs `venue.db-wal` and
-   * `venue.db-shm` are there too, put there by the `begin immediate` the lock takes. And it
-   * discriminates nothing about routing: with `forStatement` replaced by `return write;` — the
-   * routing deleted outright — eight cases in this package fail and this is not one of them.
-   *
-   * What the read-only connection can and cannot do on a bare file is recorded where it is opened
-   * (`openReadConnection`, `./index.ts`).
+   * A smoke test over the routed read, and no more. It discriminates nothing about routing: with
+   * `forStatement` replaced by `return write;` it still passes. Nor does it reach a file with no
+   * sidecars: `venue.db-wal` and `venue.db-shm` exist by the time it reads.
    */
   it("serves a read routed to the reader on a file with no tables in it", async () => {
     const { store } = await open();
@@ -598,8 +514,6 @@ describe("openVenueStore", () => {
     });
     const concurrent = running.then(() => store.venue.all(sql`select name from sqlite_master`));
 
-    // The body writes no rows. What HAS run on this file by now is the pragmas the two
-    // connections are opened with, and the `begin immediate` the lock takes.
     await store.withWriteLock(async () => {
       started();
       await concurrent;
@@ -609,12 +523,8 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * The read connection's own settings, read through it.
-   *
-   * `busy_timeout` defaults to 0 on this driver (measured 2026-09-23 on Node v26.7.0 against a
-   * bare `new DatabaseSync(":memory:")`), so 5000 separates a setting that was applied from one
-   * inherited. It does not separate the two connections — both carry the same number — and the
-   * case above it is what does that.
+   * Weaker than its name: 5000 (the driver's default is 0) shows the setting was applied, not which
+   * connection served the read — both carry 5000, and this case passes with the routing deleted.
    */
   it("sets a busy timeout on the connection a concurrent read lands on", async () => {
     const { store } = await open();
@@ -647,28 +557,15 @@ describe("openVenueStore", () => {
 
     await Promise.allSettled([write("A", true), write("B", false)]);
 
-    // Both halves of the queue are needed to reach this one row, measured by replacing
-    // `withWriteLock` twice: with a bare `body()` — no transaction at all — the table holds BOTH
-    // rows, because A's throw rolls nothing back; with a transaction per body but no
-    // serialisation, the table is EMPTY, because B's `begin immediate` is refused on the shared
-    // connection and A's rollback then takes its own row.
     expect(store.venue.all(sql`select who from t`)).toEqual([{ who: "B" }]);
   });
 });
 
 /**
- * The file is opened while ANOTHER PROCESS holds a write lock on it.
- *
- * A child process is what makes this a real reading. `openVenueStore` issues its pragmas without
- * yielding, so nothing in this process could take the lock and release it again in between; and
- * the lock SQLite refuses on is a file lock, which a second connection in one process would
- * contend for in the same way but under a holder this suite controls too directly to be evidence
- * about two boxes.
- *
- * The child leaves the file in SQLite's default rollback-journal mode deliberately. That is the
- * state a fresh venue directory is in, and it is the only state in which the switch into
- * write-ahead mode has to take an exclusive lock — against a file already in write-ahead mode the
- * same pragma is a no-op that succeeds under a held write transaction.
+ * Holds a write lock on the venue file from another process, leaving the file in rollback-journal
+ * mode as a fresh venue directory is: only then does the switch into write-ahead mode need an
+ * exclusive lock. Against a file already in write-ahead mode the pragma succeeds under a held
+ * write transaction.
  */
 const HOLDER_SCRIPT = `import { DatabaseSync } from "node:sqlite";
 const [path, holdMs] = process.argv.slice(2);
@@ -685,7 +582,7 @@ setTimeout(() => {
 }, Number(holdMs));
 `;
 
-/** Resolves once the child says it holds the lock — never on a sleep that hopes it does. */
+/** Resolves once the child says it holds the lock, rather than after a sleep. */
 const untilLocked = (child: ChildProcess) =>
   new Promise<void>((resolve, reject) => {
     let seen = "";
@@ -699,9 +596,8 @@ const untilLocked = (child: ChildProcess) =>
   });
 
 /**
- * The sum of the waiting case's waits: the holder process starting (node's own startup, which on
- * a loaded machine is the largest and least predictable term), the hold below, and one retry
- * interval past it. The bound clears all three with room rather than sitting just above them.
+ * Clears the sum of the waiting case's waits, with room: the holder process starting (the largest
+ * and least predictable on a loaded machine), the hold, and one retry interval past it.
  */
 const CONTENTION_TIMEOUT_MS = 20_000;
 
@@ -724,12 +620,8 @@ describe("openVenueStore under contention", () => {
         opened.push(store);
         const waited = Date.now() - started;
 
-        // Opening at all is the reading the defect failed: with the switch into write-ahead mode
-        // attempted once, this line threw `database is locked` (errcode 5) in about a
-        // millisecond, before any statement of the store's own had run.
         expect(pragma(store.venue, "journal_mode")).toBe("wal");
-        // And it opened by WAITING, not because the holder had already let go. Without this floor
-        // a child that failed to take the lock would look exactly like a fix.
+        // It opened by WAITING, not because the holder had already let go.
         expect(waited).toBeGreaterThan(holdMs / 4);
       } finally {
         child.kill("SIGKILL");
@@ -738,12 +630,8 @@ describe("openVenueStore under contention", () => {
     CONTENTION_TIMEOUT_MS,
   );
 
-  /**
-   * The other side of the same condition: a refusal waiting cannot fix is re-thrown at once. A
-   * file of bytes that is not a database reads errcode 26 rather than 5, measured on Node v26.7.0
-   * — so a retry that looked only at whether the pragma threw would sit on this for the whole
-   * budget and then report it anyway.
-   */
+  // A file that is not a database is refused errcode 26, not 5. A retry that looked only at
+  // whether the pragma threw would sit on it for the whole budget and then report it anyway.
   it("re-throws a refusal that is not a lock, without waiting", async () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
     writeFileSync(join(directory, "venue.db"), "these bytes are not a database".repeat(100));
@@ -752,49 +640,15 @@ describe("openVenueStore under contention", () => {
     await expect(openVenueStore({ directory, venueSchema, nodeSchema })).rejects.toThrow(
       "file is not a database",
     );
-    // The discriminating half: it came back at once rather than after the whole retry budget,
-    // which is five seconds. A second is far below that and far above what this path costs.
+    // The retry budget is five seconds.
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
   /**
-   * The budget is bounded, so a holder that never lets go ends in the engine's own refusal rather
-   * than a hang. The holder here is a second connection in THIS process, which contends for the
-   * same file lock — measured, errcode 5, exactly as the child process produces.
-   *
-   * Only `Date` is faked, and a real interval pushes the mocked clock forward. That reaches the
-   * give-up in milliseconds instead of the budget's five seconds, and it does not depend on
-   * catching the retry loop at a particular moment: whenever the deadline was computed, the mocked
-   * clock overtakes it within a few real ticks.
-   */
-  /**
-   * A failed open must not leave a connection behind.
-   *
-   * `new DatabaseSync(path)` and `pragma busy_timeout` both SUCCEED on a file whose bytes are not a
-   * database — measured on Node v26.7.0, the refusal comes from the switch into write-ahead mode,
-   * with the handle still open. So three connections are live when the node file fails: the venue
-   * file's two, and the node file's own writer. TWO of them reach the cleanup list — measured
-   * 2026-09-23 by printing `standing.length` in `openVenueStore`'s catch, which prints 2 for this
-   * case — because the node writer is closed by `openConnection`'s own `closeQuietly` before it is
-   * ever pushed onto that list.
-   *
-   * **The measurement is the process's open file descriptors, and the reason is that the obvious
-   * observable does not discriminate.** A leaked connection was first looked for in the `-wal` and
-   * `-shm` sidecars, on the grounds that SQLite keeps them while a connection is open. It does —
-   * but only once something has been WRITTEN: measured on Node v26.7.0, a freshly opened,
-   * never-written database in write-ahead mode has no sidecars whether its connection is open or
-   * closed, so that test passed with the leak still there. Descriptor count separates the two, in
-   * both directions — measured on Node v26.7.0, opening one connection raises the count by exactly
-   * one, closing it returns the count, and the leak shape above leaves it raised.
-   *
-   * The assertion is "no higher than before" rather than an equality, and deliberately: the count
-   * is the whole PROCESS's, and this suite does not own every descriptor in the worker, so an
-   * equality would fail on unrelated churn — a flake, not a leak. A leak can only push the number
-   * UP, so the inequality catches it without the false failure.
-   *
-   * What the leak costs is a descriptor per failed open, which a boot that retries repeats. It is
-   * NOT contention: an idle SQLite connection holds no lock, so a later attempt is not blocked by
-   * an earlier one's leftover.
+   * Counted in open file descriptors, because the `-wal`/`-shm` sidecars cannot show a leak: a
+   * never-written database in write-ahead mode has none whether its connection is open or closed.
+   * The count is the whole process's, so the assertion is "no higher than before" — a leak can
+   * only push it up.
    */
   it("leaves no connection behind when the NODE file cannot be opened", async () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
@@ -809,6 +663,11 @@ describe("openVenueStore under contention", () => {
     expect(readdirSync("/dev/fd").length).toBeLessThanOrEqual(before);
   });
 
+  /**
+   * The holder is a second connection in this process, which contends for the same file lock. Only
+   * `Date` is faked, and a real interval pushes the mocked clock past the deadline within a few
+   * ticks, wherever the retry loop computed it.
+   */
   it("gives up when the holder never releases", async () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
     const holder = new DatabaseSync(join(directory, "venue.db"));

@@ -51,9 +51,9 @@ function refusalFor(db: Database, statement: string): string | undefined {
  *
  * Only the foreign keys are switched off — the values satisfy every CHECK the table declares, which
  * is why the insert below needs no second pragma — and they are switched straight back on, which is
- * how `packages/store/src/index.ts:133` leaves a handle it opened. Issued outside any transaction.
- * Every refusal asserted below is tried after this function has put foreign keys back on, so no
- * assertion here rests on what the pragma does or does not do to a trigger.
+ * how `openConnection` (`packages/store/src/index.ts`) leaves a handle it opened. Issued outside
+ * any transaction. Every refusal asserted below is tried after this function has put foreign keys
+ * back on, so no assertion here rests on what the pragma does or does not do to a trigger.
  */
 function seedSale(db: Database, id: string, invoiceNumber: number): void {
   db.run(sql.raw("pragma foreign_keys = off"));

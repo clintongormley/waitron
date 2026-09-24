@@ -63,7 +63,8 @@ import "./errors.js";
 //  - the FK-before-attempting invariant — the provider's `insertAttempting` FKs `working_orders`,
 //    which the walk-up's tx A must COMMIT before the network `collect`. That key is in the SQLite
 //    baseline (`packages/payments/drizzle/0000_baseline.sql:65`) and this engine enforces it, which
-//    is stated rather than inherited (`pragma foreign_keys = on`, `packages/store/src/index.ts:133`);
+//    is stated rather than inherited (`pragma foreign_keys = on`, `openConnection` in
+//    `packages/store/src/index.ts`);
 //  - `finalizeCapture`'s duplicate backstop, measured on this engine at the concurrent-winner case.
 // `FakeStripe` drives the reader deterministically.
 const LOCALE = "es-ES";

@@ -26,12 +26,9 @@ const seed = (db: NodeSqliteDatabase<Record<string, never>>) => {
 };
 
 /**
- * The refusal the DRIVER raised, dug out of the chain Drizzle wraps it in.
- *
- * Asserting on the caught error directly would prove nothing: Drizzle's wrapper message is
- * `Failed to run the query '<the statement>'`, so a match on the table name — or on any word the
- * statement contains — passes whether a trigger fired or not. Measured: with no triggers installed
- * at all, `toThrow(/registros_facturacion/)` against the wrapper still passes.
+ * The refusal the DRIVER raised, dug out of the chain Drizzle wraps it in. Drizzle's own message is
+ * `Failed to run the query '<the statement>'`, so matching the table name on it passes whether a
+ * trigger fired or not.
  */
 const refusal = (body: () => unknown): { message: string; errcode: number } => {
   try {

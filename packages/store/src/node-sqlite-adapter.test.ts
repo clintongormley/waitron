@@ -26,8 +26,7 @@ describe("the node:sqlite adapter", () => {
     db.insert(rows)
       .values({ id: 1, name: "a", doc: { k: 1 } })
       .run();
-    // A selection Drizzle maps itself: the rows arrive as arrays and are named by the column list,
-    // so a client that cannot switch to array mode returns every column undefined.
+    // A selection Drizzle maps itself: the rows must arrive as arrays, named by the column list.
     expect(db.select().from(rows).all()).toEqual([{ id: 1, name: "a", doc: { k: 1 } }]);
     expect(db.select().from(rows).get()).toEqual({ id: 1, name: "a", doc: { k: 1 } });
   });
@@ -79,10 +78,7 @@ describe("the node:sqlite adapter", () => {
 
   it("rolls back only the inner work when a transaction is already open on the connection", () => {
     const { raw, db } = open();
-    // What a request leaves open before any Drizzle call: `createWriteQueue` runs `begin immediate`
-    // on the connection and `withTransaction` (`packages/db/src/tenancy.ts`) hands the body the
-    // DATABASE handle, so the body's `tx.transaction(...)` reaches THIS client. Drizzle's own
-    // savepoint path is the other one — it belongs to a transaction object, not to the database.
+    // What the write queue leaves open before a request's first Drizzle call.
     raw.exec("begin immediate");
     db.insert(rows).values({ id: 1, name: "outer" }).run();
     expect(() =>
@@ -142,9 +138,8 @@ describe("the node:sqlite adapter", () => {
       exec(statement);
     };
     expect(() =>
-      // Three levels: the outermost finds nothing open, the two below it each find the level
-      // above. Drizzle's own savepoints are not in play — those belong to a nested call on a
-      // TRANSACTION object, and every call here is on the database.
+      // Every call here is on the database, so each depth below the top finds the level above
+      // open and takes a savepoint of this client's.
       db.transaction(() => {
         db.transaction(() => {
           db.transaction(() => {
@@ -156,16 +151,15 @@ describe("the node:sqlite adapter", () => {
     const names = emitted
       .filter((statement) => statement.startsWith("savepoint "))
       .map((statement) => statement.slice("savepoint ".length));
-    // One name per depth. A single name for every depth would still pass the behavioural cases
-    // above, because SQLite resolves a repeated name to the most recent one — so this is what
-    // stands between the scheme and a name that means two things at once.
+    // One name per depth. A single name for every depth still passes the behavioural cases above,
+    // because SQLite resolves a repeated name to the most recent savepoint.
     expect(new Set(names).size).toBe(2);
     expect(emitted).toEqual([
       "begin deferred",
       `savepoint ${names[0]}`,
       `savepoint ${names[1]}`,
-      // `rollback to` undoes the work and leaves the savepoint on the stack; the `release` is what
-      // takes it off, so a retrying caller does not grow the stack by one per failed attempt.
+      // `rollback to` leaves the savepoint on the stack; `release` takes it off, so a retrying
+      // caller does not grow the stack by one per failed attempt.
       `rollback to ${names[1]}`,
       `release ${names[1]}`,
       `rollback to ${names[0]}`,
@@ -178,11 +172,8 @@ describe("the node:sqlite adapter", () => {
     const { raw, db } = open();
     raw.exec("begin immediate");
     db.insert(rows).values({ id: 1, name: "outer" }).run();
-    // Every nested call in this repository hands in an async function — `appendToChain`'s attempt
-    // (`packages/fiscal-verifactu/src/chain.ts`, `packages/workforce/src/chain.ts`),
-    // `enqueueSuccessor`'s insert, `insertClose`, an alert source's read. A wrapper that finishes
-    // the transaction as soon as the body RETURNS finishes it at the body's first `await`, with
-    // the work still to come and the throw still to happen.
+    // A wrapper that finished the transaction when the body RETURNS would finish it at the first
+    // `await`, before the later work and the throw.
     await expect(
       db.transaction(async (tx) => {
         tx.insert(rows).values({ id: 2, name: "before the await" }).run();
@@ -246,7 +237,6 @@ describe("the node:sqlite adapter", () => {
     let sawReleaseEarly = false;
     await db.transaction(async () => {
       await Promise.resolve();
-      // The savepoint is still the newest statement: nothing has finished this transaction yet.
       sawReleaseEarly = emitted.some((statement) => statement.startsWith("release "));
     });
     expect(sawReleaseEarly).toBe(false);
@@ -257,9 +247,8 @@ describe("the node:sqlite adapter", () => {
   it("offers a transaction in each mode SQLite names", () => {
     const { raw } = open();
     const client = adaptNodeSqlite(connectionPair(raw, raw));
-    // Drizzle picks the mode by property name rather than calling the wrapper
-    // (drizzle-orm/better-sqlite3/session.js:40), so a missing mode is a type error, not a
-    // query error.
+    // Drizzle indexes the wrapper by mode name rather than calling it
+    // (drizzle-orm/better-sqlite3/session.js:40), so a missing mode is a type error.
     for (const mode of ["deferred", "immediate", "exclusive"] as const) {
       client
         .transaction((name: string) => {
@@ -281,8 +270,6 @@ describe("the node:sqlite adapter", () => {
   it("hands back a rows object for a statement written as raw SQL", () => {
     const { db } = open();
     db.insert(rows).values({ id: 1, name: "a" }).run();
-    // The shape every write path in `@waitron/db` reads: `execute` exists so that a caller
-    // written against `{ rows }` does not have to change when the engine does.
     expect(db.execute(sql`select id, name from t`)).toEqual({ rows: [{ id: 1, name: "a" }] });
   });
 
@@ -295,10 +282,8 @@ describe("the node:sqlite adapter", () => {
   it("hands a rows object to a statement written as raw SQL inside a transaction", () => {
     const { db } = open();
     db.insert(rows).values({ id: 1, name: "a" }).run();
-    // Drizzle builds a FRESH transaction object for the body — it is not the database handle — so
-    // `execute` has to be put on that object too. Without this, every write path in the tree that
-    // runs raw SQL inside `db.transaction(...)` dies on `tx.execute is not a function`, which is
-    // what `packages/fiscal-verifactu`'s chain suite reported for all sixteen of its cases.
+    // Drizzle builds a FRESH transaction object for the body, so `execute` has to be put on that
+    // object too.
     expect(db.transaction((tx) => tx.execute(sql`select id, name from t`))).toEqual({
       rows: [{ id: 1, name: "a" }],
     });
@@ -307,9 +292,6 @@ describe("the node:sqlite adapter", () => {
   it("hands a rows object to raw SQL inside a NESTED transaction", () => {
     const { db } = open();
     db.insert(rows).values({ id: 1, name: "a" }).run();
-    // A savepoint gets its own object again, so the decoration has to survive one more level.
-    // `appendToChain` retries inside `tx.transaction(...)`, so this is the shape the fiscal chain
-    // actually runs.
     expect(
       db.transaction((tx) => tx.transaction((inner) => inner.execute(sql`select id from t`))),
     ).toEqual({ rows: [{ id: 1 }] });
@@ -317,8 +299,7 @@ describe("the node:sqlite adapter", () => {
 
   it("writes through a transaction's execute, and rolls it back with the transaction", () => {
     const { db, raw } = open();
-    // Not only reads: the decorated `execute` must be the same statement path, so a write it runs
-    // is the transaction's write and goes with it when the body throws.
+    // A write through the decorated `execute` is the transaction's, and goes with it.
     expect(() =>
       db.transaction((tx) => {
         tx.execute(sql`insert into t (id, name) values (7, 'g')`);
@@ -330,18 +311,9 @@ describe("the node:sqlite adapter", () => {
   });
 
   /**
-   * A `commit` this engine REFUSES has to leave the connection the way a body that threw does.
-   *
-   * `commit` is the one statement in the wrapper that runs after the body has already succeeded,
-   * and it can still fail: a deferred foreign key is checked AT COMMIT, so the refusal arrives from
-   * `commit` itself rather than from any statement the body wrote. Two things must hold afterwards,
-   * and they fail differently — the work must be gone, and the connection must be usable again.
-   * A transaction left open is the worse half: every later read on that connection sees the
-   * uncommitted rows, and the next `begin` is refused `cannot start a transaction within a
-   * transaction`, so the failure surfaces somewhere that has nothing to do with the cause.
-   *
-   * `apps/server/src/configuration-transfer.ts` is the real caller: it empties and refills a
-   * foreign-key cycle under exactly this pragma.
+   * A deferred foreign key is checked AT COMMIT, so the refusal comes from `commit` itself, after
+   * the body succeeded. Afterwards the work must be gone and no transaction left open.
+   * `apps/server/src/configuration-transfer.ts` runs under this pragma.
    */
   const deferred = () => {
     const raw = new DatabaseSync(":memory:");
@@ -358,9 +330,7 @@ describe("the node:sqlite adapter", () => {
     expect(() =>
       db.transaction((tx) => {
         tx.execute(sql`pragma defer_foreign_keys = on`);
-        // Accepted here and refused at commit: that is what makes this the commit's failure and
-        // not a statement's. The control is the same insert with `defer_foreign_keys` left off,
-        // which is refused on this line instead — driven by the case below.
+        // Accepted here and refused at commit. The control, below, is refused on this line.
         tx.execute(sql`insert into child (id, parent_id) values (1, 999)`);
       }),
     ).toThrow(/FOREIGN KEY constraint failed/);
@@ -375,20 +345,13 @@ describe("the node:sqlite adapter", () => {
         tx.execute(sql`insert into child (id, parent_id) values (1, 999)`);
       }),
     ).toThrow(/FOREIGN KEY constraint failed/);
-    // Asked of the CONNECTION, not by starting another transaction — because starting one cannot
-    // tell the two answers apart. The wrapper opens a SAVEPOINT rather than a `begin` whenever the
-    // connection already has a transaction, so a second `db.transaction(...)` succeeds either way
-    // and quietly writes INTO the leaked one. Measured on node v26.7.0 (/tmp/f1-w5/probe-commit.mjs):
-    // with the transaction left open, `isTransaction` stays true, the refused row reads back, and a
-    // raw `begin immediate` is refused `cannot start a transaction within a transaction`.
+    // Asked of the CONNECTION: a second `db.transaction(...)` would succeed either way, because
+    // the wrapper opens a savepoint inside a leaked transaction rather than a `begin`.
     expect(raw.isTransaction).toBe(false);
   });
 
   it("refuses the same insert at the STATEMENT when the key is not deferred", () => {
-    // The control for the two cases above: without the pragma the refusal comes from the insert,
-    // the body throws, and the wrapper's existing rollback path is what handles it. It is here so
-    // that "the commit failed" is a measured difference rather than an assumption about which
-    // statement raised.
+    // The control for the two cases above: without the pragma the insert itself is refused.
     const { db, raw } = deferred();
     expect(() =>
       db.transaction((tx) => {
@@ -400,16 +363,8 @@ describe("the node:sqlite adapter", () => {
   });
 
   /**
-   * A savepoint opened on a TRANSACTION object, with a body that awaits.
-   *
-   * This is the level the client's own `transaction` shim never sees: Drizzle's
-   * `SQLiteTransaction.transaction` emits its savepoint on the session rather than calling the
-   * client, and it is written for a synchronous driver, so it releases the moment the body RETURNS
-   * — which for an `async` body is its first `await`, with the throw still ahead of it.
-   *
-   * Reached by the product: `appendToChain` (`packages/fiscal-verifactu/src/chain.ts`,
-   * `packages/workforce/src/chain.ts`) retries inside `tx.transaction(...)`, and a caller that had
-   * already opened one would put that retry here.
+   * Left to Drizzle, a transaction opened on a transaction object releases its savepoint when the
+   * body RETURNS — for an `async` body, at its first `await`, before the throw.
    */
   it("undoes an awaiting body's earlier writes when a transaction opened ON A TRANSACTION throws", async () => {
     const { db, raw } = open();
@@ -423,15 +378,12 @@ describe("the node:sqlite adapter", () => {
         }),
       ).rejects.toThrow("the attempt lost");
     });
-    // Both writes belong to the attempt that lost. Neither survives it, and the enclosing
-    // transaction still committed.
     expect(rowCount(raw)).toBe(0);
     expect(raw.isTransaction).toBe(false);
   });
 
   it("keeps an awaiting body's writes when a transaction opened ON A TRANSACTION returns", async () => {
-    // The control in the other direction: the same shape, without the throw. If the fix undid work
-    // indiscriminately this case would read 0.
+    // The control: the same shape without the throw.
     const { db, raw } = open();
     await db.transaction(async (tx) => {
       await tx.transaction(async (inner) => {

@@ -16,8 +16,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       //
       // The department's `where not exists` became a read-then-insert. The two are equivalent
       // because a seed runs inside `withTransaction`, which holds the file's write lock for its
-      // whole body (`packages/store/src/write-queue.ts:13-21`), so nothing can seed a second
-      // default department between the read and the write.
+      // whole body (`packages/store/src/write-queue.ts`, `createWriteQueue`), so nothing can seed
+      // a second default department between the read and the write.
       const existingDepartment = await tx
         .select({ id: departments.id })
         .from(departments)

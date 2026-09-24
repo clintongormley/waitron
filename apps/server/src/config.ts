@@ -69,7 +69,7 @@ export interface ServerConfig {
   stateDir: string;
   /**
    * The directory holding this venue's databases — the `directory` `openVenueStore` creates
-   * `venue.db` and `node.db` in (`packages/store/src/index.ts:159`). Defaults to
+   * `venue.db` and `node.db` in (`packages/store/src/index.ts`). Defaults to
    * `join(stateDir, "venue")` so the databases live under the same durable, protected root as the
    * box's other persisted state; `WAITRON_VENUE_DIR` overrides it. An unset OR EMPTY value falls
    * back to the default via `isUnset` — never `resolve("")`, which is cwd (the "empty value is a

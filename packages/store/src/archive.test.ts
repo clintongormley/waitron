@@ -14,7 +14,7 @@ afterEach(() => {
   while (connections.length > 0) connections.pop()!.close();
 });
 
-/** A venue-shaped source file: on disk, in write-ahead mode, exactly as the store opens one. */
+/** A source file on disk in write-ahead mode, as the store opens one. */
 const open = () => {
   const directory = mkdtempSync(join(tmpdir(), "waitron-archive-"));
   const path = join(directory, "venue.db");
@@ -29,7 +29,6 @@ const open = () => {
   };
 };
 
-/** Reads an archive the way a restore would: a connection that knows nothing of the source. */
 const readBack = (path: string) => {
   const connection = new DatabaseSync(path);
   connections.push(connection);
@@ -48,16 +47,8 @@ describe("archiveTo", () => {
     ]);
   });
 
-  /**
-   * The case the write-ahead file makes non-obvious, and the plan's acceptance test
-   * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 21).
-   *
-   * A committed row does not reach the main database file until something checkpoints: measured
-   * here on the source, whose own bytes do NOT contain the value while its `-wal` sidecar does.
-   * The control is in the assertion below — copying the main file alone yields a database that
-   * answers `no such table: sales`, so this case fails loudly for an archive that took the file
-   * rather than asking the engine.
-   */
+  // A committed row stays in the `-wal` sidecar until something checkpoints. The hand copy of the
+  // main file at the end is the control.
   it("carries rows that are committed but not yet checkpointed", async () => {
     const { directory, path, db } = open();
     db.run(sql`insert into sales (id, total) values (1, 250)`);
@@ -69,20 +60,13 @@ describe("archiveTo", () => {
     expect(readBack(join(directory, "archive.db")).all(sql`select id, total from sales`)).toEqual([
       { id: 1, total: 250 },
     ]);
-    // The control, in the other direction: the same bytes taken by hand prove the case above is
-    // discriminating rather than true of any copy.
     await copyFile(path, join(directory, "naive.db"));
     expect(() => readBack(join(directory, "naive.db")).all(sql`select id from sales`)).toThrow(
       /no such table: sales/,
     );
   });
 
-  /**
-   * A path no concatenated statement could carry. Built as text and pasted into the SQL,
-   * `…/it's "an archive".db` is a syntax error (measured: `near "s": syntax error`, errcode 1), so
-   * this case separates a bound path from an escaped or validated one — both of the shapes
-   * `CLAUDE.md` §3 offers for a statement that cannot bind.
-   */
+  // Pasted unescaped into the SQL, this path is a syntax error.
   it("archives to a path that would break a statement built as text", async () => {
     const { directory, db } = open();
     db.run(sql`insert into sales (id, total) values (1, 250)`);
@@ -95,15 +79,9 @@ describe("archiveTo", () => {
   });
 
   /**
-   * Temp-then-rename: bytes land under a working name and reach the final one only when the whole
-   * copy succeeded, so nothing a reader would take for a finished archive appears until there is
-   * one. These cases are where that discipline is now proven — it used to be held (and tested)
-   * beside the `pg_dump` shell-out in `apps/server`, which the storage switch deleted.
-   *
-   * The failure is forced at the rename by pointing the final path at a directory. That makes the
-   * case discriminating in both directions: the copy has already written its bytes by then, so a
-   * body that vacuumed straight to the final path fails EARLIER and with the engine's own error
-   * (measured: `unable to open database: <path>`, errcode 14) rather than this one.
+   * The failure is forced at the rename by pointing the final path at a directory, after the copy
+   * has written its bytes. A body that vacuumed straight to the final path would fail earlier, with
+   * the engine's `unable to open database` (errcode 14) rather than `EISDIR`.
    */
   it("removes the half-written file when the copy cannot be finished", async () => {
     const { directory, db } = open();
@@ -117,15 +95,9 @@ describe("archiveTo", () => {
   });
 
   /**
-   * What an interrupted archive leaves behind must not block the next one, and `VACUUM INTO`
-   * refuses every target that already holds bytes. Both refusals were measured while writing this
-   * case, and which one a box meets depends on what the interrupted run got as far as writing: a
-   * copy far enough along to be a database gives `output file already exists` (errcode 1), and one
-   * holding anything else gives `file is not a database` (errcode 26). Either ends archiving to
-   * that path for good, so the working file is cleared before the copy as well as after a failure.
-   *
-   * The leftover here is written the way a real interruption writes one — a completed copy that
-   * never got renamed — so this case meets the first of those two.
+   * `VACUUM INTO` refuses a target that is already a database, so without clearing it a leftover
+   * working file would end archiving to that path for good. The leftover here is a completed copy
+   * that was never renamed, which `VACUUM INTO` alone refuses with `output file already exists`.
    */
   it("archives again after an interrupted run left its working file behind", async () => {
     const { directory, db } = open();
@@ -141,13 +113,9 @@ describe("archiveTo", () => {
   });
 
   /**
-   * A constraint of the engine, pinned here because `archive.ts` states it and because it decides
-   * where a caller may put this call: not inside `withWriteLock`, whose body runs under
-   * `begin immediate`. The refusal comes from SQLite, so this case characterises the engine rather
-   * than driving our own code — it passed the moment it was written.
-   *
-   * The driver's own words are read off the cause, because Drizzle's wrapper message is
-   * `Failed to run the query 'vacuum into ?'` and would match nothing about a transaction.
+   * Characterises the engine rather than our code: it is why an archive cannot be taken inside
+   * `withWriteLock`, whose body runs under `begin immediate`. The driver's words are on the cause;
+   * Drizzle's wrapper message says nothing about a transaction.
    */
   it("refuses to archive from inside an open transaction", async () => {
     const { directory, db } = open();
@@ -166,11 +134,8 @@ describe("archiveTo", () => {
     source.exec("rollback");
   });
 
-  /**
-   * Re-archiving over yesterday's file. The engine refuses this on its own — `output file already
-   * exists`, errcode 1 — and the rename is what makes it work: the copy goes to the working name,
-   * which no finished archive occupies, and only then takes the final one.
-   */
+  // `VACUUM INTO` alone refuses an existing target (`output file already exists`); the copy goes
+  // to the working name and only then takes the final one.
   it("replaces an archive already at that path", async () => {
     const { directory, db } = open();
     const path = join(directory, "archive.db");
