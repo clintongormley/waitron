@@ -34,9 +34,10 @@ export interface VenueStoreConfig<
  *
  * `withWriteLock` is per file because the thing it protects is per file — the one WRITE connection,
  * which SQLite will not let two transactions share. One queue across both files would also be correct
- * for safety and wrong for throughput: a node write (a session, a pairing code) would wait behind
- * a venue transaction it can never conflict with, and a node write nested inside a venue
- * transaction would deadlock outright.
+ * for safety and wrong for throughput: a write to one file would wait behind a transaction on the
+ * other that it can never conflict with, and a node write nested inside a venue transaction would
+ * be refused as re-entering the lock (`./write-queue.ts`). Nothing writes to the node file today —
+ * every migration set is applied to the venue file (`packages/migrations/src/apply.ts`).
  */
 export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDatabase<TSchema> & {
   /** Runs `body` as the only write transaction on this file at that moment. */

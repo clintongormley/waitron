@@ -166,10 +166,9 @@ export async function setDeploymentMode(
  * co-sets `singleton_role = 'secondary'` in the same write, so the pair `node_roles_role_valid_ck`
  * forbids is never written even transiently; `primary` leaves `singleton_role` as it is — which of
  * the two a primary holds is the promote action's call. Nothing in the database refuses another
- * caller this write. `scripts/write-path-tables.test.ts` flags a `node_roles` write it recognises —
- * a raw SQL statement, or a drizzle builder call on a handle-named receiver — in the production
- * source under each app's and package's `src`, outside this file; its header lists what it cannot
- * see.
+ * caller this write. `scripts/write-path-tables.test.ts` flags a `node_roles` write written in one
+ * of the statement or builder shapes its `detector` matches, in the production source under each
+ * app's and package's `src`, outside this file; its header lists what it cannot see.
  */
 export async function setDeploymentModeTx(
   tx: Transaction,

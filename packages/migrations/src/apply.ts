@@ -55,8 +55,11 @@ const LOCK_WAIT_MS = 120_000;
  * migrate under and no second connection string to keep in step with the one the host serves
  * requests over — both of which the PostgreSQL body existed to reconcile.
  *
- * **Every set goes to the VENUE handle, and the node file stays empty**, for the reason
- * `packages/db/src/testing/venue-db.ts` states on `useVenueDb`.
+ * **Every set goes to the VENUE handle, and the node file stays empty.** The slice-2 design keeps
+ * every table in `venue.db`, to be streamed from there, and gives among its reasons that "a rebuild
+ * from the stream would come back without what `node.db` held"; `node.db` is kept, empty, for slice
+ * 5's mirror box, which "may need somewhere writable of its own"
+ * (`docs/superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md` §2).
  *
  * **It also installs the append-only triggers**, set by set, from each set's `appendOnlyTables`. This
  * is where they go because it is the one place that knows a set's tables now exist: boot, the cold

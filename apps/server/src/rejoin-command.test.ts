@@ -183,7 +183,14 @@ describe("waitron-rejoin rejoin", () => {
       expect(code).toBe(0);
       // Both files and both sets of sidecars are gone, each with the marker table written into it
       // above — which is what `DROP DATABASE` took when there was one database.
-      for (const name of ["venue.db", "venue.db-wal", "venue.db-shm", "node.db", "node.db-wal"]) {
+      for (const name of [
+        "venue.db",
+        "venue.db-wal",
+        "venue.db-shm",
+        "node.db",
+        "node.db-wal",
+        "node.db-shm",
+      ]) {
         await expect(stat(join(venueDir, name))).rejects.toMatchObject({ code: "ENOENT" });
       }
       // The re-migrate targets the directory just emptied, and the next boot is setup mode.

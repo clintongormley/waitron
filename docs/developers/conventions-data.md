@@ -334,8 +334,9 @@ rather than trusting this line.
 Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
 `mirror_config`; and the promote route reaches `node_roles`. Each does it by calling into one of the
-files `scripts/write-path-tables.json` names, which is where such a write is allowed to live. Keeping them in a handful of named files is the whole of the property now,
-because no connection makes the distinction for us any more.
+files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
+Keeping them in a handful of named files is the whole of the property now, because no connection
+makes the distinction for us any more.
 
 HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in
 PGlite against the core migrations inside a transaction that had run `set local role app_user`: an
