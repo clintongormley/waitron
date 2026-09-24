@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FEED_BEFORE_CUT, esc } from "./escpos.js";
 
-// Byte-level assertions PIN each ESC/POS command's exact sequence (design §3d). The builder is a
-// pure, DB-free byte assembler, so these are ordinary unit tests — no database at all. Every
-// constant is the canonical ESC/POS spelling, cited in escpos.ts; a hardware printer is verified
-// MANUALLY (design §5 / the deli-hardware fake-sink approach), so the guard here is that the bytes
-// are DETERMINISTIC and correct, not that a physical printer accepts them.
+// These pin the exact bytes, not that a physical printer accepts them.
 describe("esc() ESC/POS builder", () => {
   it("init emits ESC @ (0x1B 0x40)", () => {
     expect([...esc().init().bytes()]).toEqual([0x1b, 0x40]);
@@ -36,9 +32,6 @@ describe("esc() ESC/POS builder", () => {
   });
 
   it("feedAndCut feeds FEED_BEFORE_CUT lines (five — three measured too short) then cuts", () => {
-    // Three lines left the Epson TM-T88III's cut on the last printed line (owner's test print,
-    // 2026-09-11); five is the chosen margin, to be confirmed on paper. Every ticket formatter and the
-    // test print cut through this verb (`cut()` itself stays public for raw payloads).
     expect(FEED_BEFORE_CUT).toBe(5);
     expect([...esc().feedAndCut().bytes()]).toEqual([0x1b, 0x64, 0x05, 0x1d, 0x56, 0x00]);
   });
@@ -87,9 +80,6 @@ describe("esc() ESC/POS builder", () => {
   });
 
   // --- QR Code -------------------------------------------------------------------------------------
-  // The native GS ( k sequence and the GS v 0 raster fallback (design §3a). Every byte below is the
-  // canonical ESC/POS spelling cited in escpos.ts; the fiscal cotejo QR is a legal element, so EC
-  // level M (0x31, mandated by Orden HAC/1177/2024 art. 21.1) is pinned explicitly.
 
   it("qr emits the native GS ( k sequence (model → size → EC M → store → print) in order", () => {
     // "https://a.es" = 12 Latin-1 data bytes, so the <Function 180> store length is 12 + 3 = 15
@@ -224,8 +214,7 @@ describe("esc() ESC/POS builder", () => {
   });
 
   it("qr rejects an out-of-range moduleSize but accepts the [1, 16] Fn167 boundaries", () => {
-    // moduleSize is the Fn167 dot count, valid range 1-16. Out-of-range values were previously masked
-    // with `& 0xff` into a malformed parameter byte (e.g. -1 → 0xFF), so the guard must throw first.
+    // moduleSize is the Fn167 dot count, valid range 1-16.
     expect(() => esc().qr("x", { moduleSize: 0 })).toThrow(RangeError);
     expect(() => esc().qr("x", { moduleSize: 17 })).toThrow(RangeError);
     expect(() => esc().qr("x", { moduleSize: -1 })).toThrow(RangeError);

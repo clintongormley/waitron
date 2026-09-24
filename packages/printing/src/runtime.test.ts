@@ -17,16 +17,10 @@ import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
-// The runtime's LOGIC, on one venue file (`useVenueDb`) — the happy pull→push→report path,
-// per-printer failure isolation, the retry cap, and the venue-scope filter. Every case below runs
-// its transactions one after another, so none of them observes two agents contending; that property
-// is runtime.race.test.ts's, and what holds it on this engine is the venue file's write queue
-// rather than row locks (`packages/store/src/write-queue.ts`, and that suite's own header).
+// Every case below runs its transactions one after another, so none of them observes two agents
+// contending; that property is runtime.race.test.ts's.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-/** Insert one venue. Through the table definition rather than raw SQL: `locations.id` and
- * `print_agents.id` are supplied by `$defaultFn(newId)` in JavaScript, so a raw INSERT that names
- * no id is refused `NOT NULL constraint failed: locations.id`. */
 async function seedLocation(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(locations)
@@ -147,10 +141,8 @@ describe("runAgentOnce (pull → push → report)", () => {
       });
 
       expect(result).toEqual({ claimed: 2, delivered: 1, failed: 1 });
-      // The up printer's job still printed — the down printer never blocked its queue.
       expect(sink.written).toEqual([{ printerId: up.id, bytes: new Uint8Array([2]) }]);
       expect((await jobRow(tx, upJob)).status).toBe("done");
-      // The down printer's job is failed, attempts bumped, last_error captured.
       const failed = await jobRow(tx, downJob);
       expect(failed.status).toBe("failed");
       expect(failed.attempts).toBe(1);
@@ -165,8 +157,6 @@ describe("runAgentOnce (pull → push → report)", () => {
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
-      // A transport that rejects with a bare string, not an Error — the non-Error branch of the
-      // report path (String(error)), so last_error is still a readable message.
       const rejecting: Transport = { send: () => Promise.reject("drawer jammed") };
       const result = await runAgentOnce({
         tx,
@@ -189,7 +179,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]));
 
-      // Run 1: the printer is down → failed, attempts 1.
       await runAgentOnce({
         tx,
         agentId,
@@ -200,7 +189,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       expect(await jobRow(tx, jobId).then((r) => r.status)).toBe("failed");
       expect(await jobRow(tx, jobId).then((r) => r.attempts)).toBe(1);
 
-      // Run 2: the printer recovers → the failed job is re-claimed and delivered.
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
@@ -215,10 +203,6 @@ describe("runAgentOnce (pull → push → report)", () => {
     });
   });
 
-  // The lease cutoff is now a bound ISO-8601 string compared against `claimed_at`, not the
-  // database's `now()` minus an interval, so BOTH directions of the comparison are pinned here: the
-  // side that must still be claimed and the side that must not. A cutoff that is wrong in either
-  // direction moves exactly one of these two expectations.
   it("reclaims a claim whose lease has EXPIRED and leaves one still INSIDE the lease alone", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
@@ -249,22 +233,18 @@ describe("runAgentOnce (pull → push → report)", () => {
         transport: sink,
       });
 
-      // OUTSIDE the lease — reclaimed and delivered.
       expect(result).toEqual({ claimed: 1, delivered: 1, failed: 0 });
       expect(sink.written).toEqual([{ printerId, bytes: new Uint8Array([2]) }]);
       expect((await jobRow(tx, stale)).status).toBe("done");
-      // INSIDE the lease — still held by the agent that claimed it, not reprinted.
       expect((await jobRow(tx, live)).status).toBe("printing");
       expect((await jobRow(tx, live)).deliveredAt).toBeNull();
     });
   });
 
-  // The other half of the lease: the cutoff can only be compared against what the claim WROTE, and
   // `claimed_at` is a text column, so a stamp in any spelling other than the cutoff's sorts against
-  // it as plain characters. A `datetime('now')` stamp ('2026-09-22 08:00:00') sorts BEFORE every
-  // 'T'-separated cutoff, so a job claimed a moment ago would read as lease-expired and be reprinted
-  // on the very next batch. This case is what notices; the lease case above does not, because it
-  // writes `claimed_at` itself.
+  // it as plain characters: a `datetime('now')` stamp ('2026-09-22 08:00:00') sorts BEFORE a
+  // same-day 'T'-separated cutoff, and a job claimed a moment ago would be reprinted on the next
+  // batch. The lease case above cannot notice, because it writes `claimed_at` itself.
   it("does not re-claim a job it claimed moments ago (the stamp is in the cutoff's own spelling)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
@@ -279,7 +259,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       });
       expect(claimed.map((j) => j.id)).toEqual([jobId]);
 
-      // A second batch must find nothing: the claim is seconds old, well inside the lease.
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
@@ -300,7 +279,6 @@ describe("runAgentOnce (pull → push → report)", () => {
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([9]));
-      // Drive the job straight to the cap so it is no longer claimable.
       await tx
         .update(printJobs)
         .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
@@ -316,21 +294,18 @@ describe("runAgentOnce (pull → push → report)", () => {
       });
       expect(result).toEqual({ claimed: 0, delivered: 0, failed: 0 });
       expect(sink.written).toEqual([]);
-      expect((await jobRow(tx, jobId)).status).toBe("failed"); // still failed — not re-claimed
+      expect((await jobRow(tx, jobId)).status).toBe("failed");
     });
   });
 
   it("does NOT pull a network printer's job for an agent serving a DIFFERENT venue (venue scope)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    // A second venue in the same tenant. Printers carry no agent binding now, so venue membership is
-    // what scopes a network printer's job — an agent reporting the OTHER venue must claim nothing.
     const otherLocationId = await seedLocation("Terrace");
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
 
-      // The agent serves a different venue, so the network printer's `location_id` conjunct excludes it.
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
@@ -341,7 +316,7 @@ describe("runAgentOnce (pull → push → report)", () => {
       });
       expect(result).toEqual({ claimed: 0, delivered: 0, failed: 0 });
       expect(sink.written).toEqual([]);
-      expect((await jobRow(tx, jobId)).status).toBe("queued"); // untouched, wrong venue
+      expect((await jobRow(tx, jobId)).status).toBe("queued");
     });
   });
 
@@ -349,7 +324,7 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await seedPrinter(tx, cfg); // a printer, but no jobs
+      await seedPrinter(tx, cfg);
       const sink = new FakeSink();
       expect(
         await runAgentOnce({

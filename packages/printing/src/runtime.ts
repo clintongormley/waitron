@@ -3,75 +3,44 @@ import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
 /**
- * The agent runtime (design §3c) — ONE pull → push → report batch. A deployable agent loop calls this
- * repeatedly; the inter-batch interval is that loop's concern (it is where the time BACKOFF between
- * retries lives), so this function stays a single, testable batch with no timers of its own.
+ * The agent runtime: one pull → push → report batch. The calling loop owns the interval between
+ * batches, which is also the only spacing between retries.
  *
- * The three steps:
- *  1. PULL — atomically CLAIM a batch of this agent's due jobs (queued, under-cap failed, or a
- *     lease-expired stuck `printing` job — §5 Gap 1), stamping each `printing` with a fresh `claimed_at`.
- *     The claim is the double-print guard, and it is ONE statement, so two agents (the two-boxes /
- *     reimaged-agent topology) never deliver the same job twice. Proven with two agents contending
- *     in runtime.race.test.ts.
- *  2. PUSH — hand each claimed job's bytes to its printer via the injected transport.
- *  3. REPORT — mark each job `done`, or on a push failure `failed` with `attempts++` and the error.
- *
- * Single-writer-per-row (design §4): the enqueuer owns row CREATION, this path owns the
- * `printing`→`done`/`failed` TRANSITION. No cross-node sync, no second writer.
+ * Single writer per row: the enqueuer owns a job's creation, this path its
+ * `printing`→`done`/`failed` transition.
  */
 
 /** Jobs claimed per batch. A bound, not a tuning knob — the loop calls again while work remains. */
 export const PULL_BATCH_LIMIT = 50;
 
 /**
- * How many delivery attempts a job gets before it stops being retried (design §3c "bounded"). A
- * `failed` job under this cap is re-claimed by a later batch; at the cap it stays `failed` and is no
- * longer pulled. This is an ATTEMPT bound, not a time-scheduled backoff: `print_jobs` carries no
- * next-attempt timestamp, so time spacing between retries is the agent loop's batch interval. A
- * time-scheduled per-job backoff would need a new column and is deliberately out of this slice.
+ * Delivery attempts before a `failed` job stops being re-claimed. An attempt bound, not a time
+ * backoff: `print_jobs` carries no next-attempt timestamp.
  */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
 /**
- * The claim LEASE (failover-printing design §5 Gap 1, §10) — a visibility timeout. `claimPrintJobs`
- * stamps `claimed_at` with the moment of the claim; a job still `printing` whose `claimed_at` is older than
- * this is treated as a DROPPED claim (the agent crashed or the box died mid-service) and re-selected by
- * the pull, exactly like a fresh job. (A `printing` row whose `claimed_at IS NULL` — anomalous, since
- * every real claim stamps it — is likewise not a live claim, so the pull reclaims it immediately; see the
- * reclaim predicate in `claimPrintJobs`.) 60s: long enough not to reclaim a slow-but-LIVE push (a real
- * network/USB push is seconds), short enough that a genuine drop is caught within a service. NOTE the
- * 60s is reasoned per-push, but `claimed_at` is stamped once per CLAIM (a batch of up to
- * `PULL_BATCH_LIMIT` jobs): a large batch to a slow printer can age its unsent tail past the lease.
- * Harmless in the shipped model — a printer is pinned to one `agent_id` and the agent loop is
- * sequential, so in local mode nothing else is claiming while the batch transaction is open (what
- * held that open used to be `for update … skip locked`; `claimRows` in `@waitron/db` records what
- * replaced it), and in
- * server mode no second agent serves the same printer to reclaim the tail. The un-pin follow-on
- * (failover-printing §4a, "any LAN agent serves") makes it reachable and must weigh it (a per-claim
- * token, a lease heartbeat, or a batch sized against the lease) alongside its own distinct-agents race
- * test. This is
- * deliberately AT-LEAST-ONCE (§5): a reclaim can reprint a job that physically printed but whose `done`
- * report was lost — for a kitchen ticket a duplicate is a nuisance, a drop is a missed order, so we
- * accept the rare duplicate. No per-claim token exists to tighten it (see reportPrintJob's RECLAIM
- * NUANCE), and none is added in this slice.
+ * The claim lease: a job still `printing` whose `claimed_at` is older than this is a dropped claim
+ * (the agent crashed or the box died) and the pull re-claims it. Long enough not to reclaim a live
+ * push, which takes seconds.
+ *
+ * `claimed_at` is stamped once per BATCH, so a large batch to a slow printer can age its unsent
+ * tail past the lease. Another agent in the venue can then re-claim a network printer's unsent jobs
+ * and print them while the first still sends every job it pulled, so those jobs print twice.
+ * Delivery is deliberately at-least-once: a reclaim can also reprint a job that printed but whose
+ * `done` report was lost. A double print is accepted over a dropped kitchen ticket.
  */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
-  /** The caller's transaction (the Task-6 route wraps this in `withTransaction`). */
   tx: Transaction;
-  /** The calling agent. NOT an eligibility filter (printers carry no agent binding) — it is stamped
-   * into `claimed_by` on every claim and is what authorises the later report (only the claimer reports
-   * its own job). */
+  /** Not an eligibility filter: it is stamped into `claimed_by`, and only the claimer may report. */
   agentId: string;
-  /** The venue the agent serves. A `network_tcp` printer is claimable by any agent reporting this
-   * `locationId` — the venue IS the eligibility for a network printer (design §3). */
+  /** A `network_tcp` printer is claimable by any agent reporting its venue. */
   locationId: string;
-  /** The stable device keys (USB serials, Bluetooth MACs) the agent currently SEES on its box. A
-   * usb/bluetooth printer is eligible only when its `local_key` is one of these; an empty set matches
-   * no local printer. Local mode has no devices to enumerate, so its callers pass `[]`. */
+  /** The device keys (USB serials, Bluetooth MACs) the agent currently sees. A usb/bluetooth printer
+   * is eligible only when its `local_key` is one of these. */
   visibleKeys: string[];
-  /** Where claimed bytes go — a real `RoutingTransport` in production, a `FakeSink` in tests. */
   transport: Transport;
 }
 
@@ -84,9 +53,7 @@ export interface AgentRunResult {
   failed: number;
 }
 
-/** One claimed job plus its printer's connection facts, read via the RETURNING join. A `type` (not an
- * `interface`) so it satisfies `tx.execute`'s `Record<string, unknown>` row constraint — an interface
- * is open and TS will not give it an implicit index signature (the drain.ts `DueRow` precedent). */
+/** A `type`, not an `interface`, so it satisfies `claimRows`'s `Record<string, unknown>` constraint. */
 export type ClaimedJob = {
   id: string;
   printer_id: string;
@@ -97,99 +64,30 @@ export type ClaimedJob = {
   local_key: string | null;
 };
 
-/** The outcome an agent reports for one job (design §3c step 3). `done` → delivered; `failed` carries
- * the transport's error message, which the report records into `last_error` and bumps `attempts`. */
 export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
 
 /**
- * PULL (design §3c step 1) — atomically CLAIM a batch of this agent's due jobs, flipping them
- * `queued`/`failed`→`printing`, and RETURN each with its printer's connection facts. Extracted from
- * `runAgentOnce` (Controller Ruling 6) so the SERVER path can claim-and-COMMIT within one HTTP request
- * (the route's `withTransaction` transaction is the commit boundary) and then return the claimed jobs to a
- * remote agent, holding NO lock or transaction across that agent's socket write. `runAgentOnce` (local
- * mode) still calls this, then pushes+reports in the SAME transaction.
+ * Claims a batch of this agent's due jobs and returns each with its printer's connection facts.
+ * Separate from `runAgentOnce` so the server can commit the claim in one request and hand the jobs to
+ * a remote agent without holding a transaction across that agent's socket write.
  *
- * ONE statement, built by `claimRows` in `@waitron/db`, which is where this claim's SQL and the
- * receipts for its behaviour under two agents live. Its selection chooses the batch, and
- * its UPDATE stamps that batch and reads each job's connection facts through a join to `printers`
- * on that table's id, so the push step needs no second read. The join appears in BOTH halves and
- * both are needed — the selection's decides eligibility, the stamp's supplies the columns the agent
- * pushes with — so neither is redundant, and neither is the authorization scope.
+ * A job is due when `queued`, `failed` under the attempt cap, or `printing` with no live claim. That
+ * last case covers `claimed_at IS NULL` too: every claim stamps it, so a `printing` row without one
+ * is stuck, and `<` alone would never select it. A deactivated printer's jobs, stuck ones included,
+ * are left unclaimed until it is reactivated.
  *
- * All values bind as parameters (Drizzle renders them `?` on this engine), never concatenated. Eligibility is DERIVED
- * (design §3): a `network_tcp` printer is claimable by any
- * agent reporting this venue (`p.location_id = ctx.locationId`), a `usb`/`bluetooth` printer only when
- * its `local_key` is one the agent currently SEES (`ctx.visibleKeys`). An empty `visibleKeys` degenerates
- * the local branch to `false` (an `in ()` matches nothing — the drain.ts hazard). The claim stamps
- * `claimed_by = agentId`, which records the holder (a lease reclaim OVERWRITES it) and is what later
- * authorises the report. A `failed` job under the attempt cap is re-claimed here (the retry); at the
- * cap it is filtered out (the bound).
- *
- * `p.active = true` makes a DEACTIVATED printer (`deactivatePrinter`) stop being served: the pull skips
- * ALL of its jobs — a queued job, an under-cap `failed` retry, AND a lease-expired stuck `printing` row
- * (the reclaim below is suppressed too). Its jobs are not failed or dropped, just left unclaimed until
- * the printer is reactivated — the delivery half of "deactivated = disabled" (the enqueue half is the
- * `active = true` pre-check in outbox.ts). Proven load-bearing by deletion in runtime.active.test.ts.
- * The predicate is spelled the same on SQLite, which has no boolean type but does know the keyword:
- * measured on Node v26.7.0 against the generated `active integer DEFAULT true NOT NULL`, a row that
- * took the DEFAULT and a row given a bound 1 both store the integer 1 and both match
- * `where active = true`, while a row given a bound 0 does not. (A JavaScript `true` bound as a
- * parameter is a different thing and is REFUSED by the driver — `columns.ts`'s `flag` converts
- * before the bind. Nothing here binds one.)
- *
- * LEASE RECLAIM (failover-printing design §5 Gap 1, IMPLEMENTED here): the predicate re-picks `queued`
- * rows, under-cap `failed` rows, AND a row still `printing` that is NOT a live claim — either its
- * `claimed_at` is older than PRINT_JOB_LEASE_MS (the lease EXPIRED), or `claimed_at IS NULL`. So a job an
- * agent CLAIMED (`queued`→`printing`, committed by the claim request) but never reported — because the
- * agent crashed between the claim and `POST /result`, or the box died holding the claim — is no longer
- * stranded forever: once the lease elapses the pull reclaims it and delivers it, on the SAME agent
- * rebooted or on any surviving agent serving the printer. The `claimed_at IS NULL` alternative is
- * defense-in-depth for the lease's OWN guarantee: today every `printing` row HAS `claimed_at` set (the
- * claim UPDATE stamps `status='printing'` and `claimed_at` in one statement and is the only writer of
- * `status='printing'`), but a `printing` row with no lease timestamp is by definition not a live claim —
- * a real claim always stamps `claimed_at` — so it is anomalous/stuck and must be reclaimed immediately
- * rather than stranded forever (SQL `claimed_at < …` is UNKNOWN for NULL, so the time bound alone would
- * never re-select it). A committed stuck `printing` row is held by nobody, so the claim does not pass
- * over it once the lease predicate makes it eligible; the reclaim then re-stamps `claimed_at`,
- * treating it exactly like a fresh claim. AT-LEAST-ONCE by design (§5, PRINT_JOB_LEASE_MS): a reclaim may reprint a
- * job that printed but lost its `done` — a nuisance duplicate we accept over a dropped ticket. Proven by
- * deletion of the reclaim branch in runtime.reclaim.test.ts (the stuck job is not reclaimed without it);
- * the cutoff's two directions are pinned by the lease case in runtime.test.ts, which is the one of the
- * two that runs on this engine.
+ * SQLite has no boolean type but reads `true` as 1, which is what the `active` column stores.
  */
 export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
   ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
-  // The claim's instant, read ONCE so the stamp it writes and the lease cutoff it compares against
-  // are the same moment — which is what `now()` gave for free, being transaction-start time.
-  //
-  // Both are ISO-8601 strings produced by `nowIso`, the generator `print_jobs.created_at` takes its
-  // own default from, because `claimed_at` is a text column and `<` on it is a STRING comparison.
-  // That comparison is a correct time ordering only for this one spelling. Measured on Node
-  // v26.7.0's `node:sqlite`, inserting two stamps and asking the engine which is smaller: two
-  // `toISOString()` values compare in instant order, and three other spellings of the same instants
-  // do not — a `+02:00` offset ('…T10:00:00.000+02:00' vs '…T09:00:00.000Z'), a space-separated
-  // zone-less stamp, which is what SQLite's own `datetime('now')` returns, and a second-precision
-  // stamp with no milliseconds ('…T09:00:00Z' reads as LATER than '…T09:00:00.500Z', because 'Z'
-  // sorts after '.'). So the cutoff is computed here rather than in SQL: `strftime` can be made to
-  // emit the same spelling, but it would be a SECOND spelling of it with nothing holding the two
-  // together, and nothing in the generated schema writes a timestamp from SQL today.
-  //
-  // What this gives up, stated rather than discovered: `now()` was the PostgreSQL SERVER's clock, so
-  // every node that connected measured the lease against one clock. Here the clock is the process
-  // that holds the venue file. Today that is the same single process either way — `node:sqlite` runs
-  // in the server, and a remote agent never opens the database but calls `claimPrintJobs` /
-  // `reportPrintJob` through `apps/server/src/print-api.ts` — so stamp and cutoff are one machine's
-  // reading. A topology with two processes writing one venue file would have to re-establish it.
+  // `claimed_at` is text, so `<` is a string comparison, a correct time order only for the
+  // `toISOString()` spelling `nowIso` writes; the cutoff is computed here to keep one spelling. Stamp
+  // and cutoff read the clock of the one process that holds the venue file.
   const claimedAt = nowIso();
   const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
-  // A usb/bluetooth printer is eligible only when its `local_key` is one the agent currently SEES. An
-  // EMPTY visible set must match nothing: `in ()` degenerates (the drain.ts hazard), so guard it
-  // with `false`. `local_key in ${array}` is the
-  // proven-correct Drizzle expansion — `in ($1, $2, …)` — NOT `= any(…)` / `in (${ids})`, both of
-  // which mis-expand for a text list.
   const usbBt =
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
@@ -209,10 +107,7 @@ export async function claimPrintJobs(
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
-    // The printer's four columns come back through correlated subqueries rather than a joined
-    // table: SQLite refuses a RETURNING clause naming a column of the table an `UPDATE … FROM`
-    // joins (`no such column: p.host`, measured on SQLite 3.53.4). `claimRows`'s `returning`
-    // records the reading, and its `join` option is gone with it.
+    // Correlated subqueries: SQLite refuses a RETURNING column from a table an `UPDATE … FROM` joins.
     returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
       (select transport from printers where printers.id = print_jobs.printer_id) as transport,
       (select host from printers where printers.id = print_jobs.printer_id) as host,
@@ -222,54 +117,21 @@ export async function claimPrintJobs(
 }
 
 /**
- * REPORT (design §3c step 3) — record one job's delivery outcome, CLAIMER-SCOPED and IDEMPOTENT.
- * Extracted from `runAgentOnce` (Controller Ruling 6) so the SERVER path can report in a SEPARATE
- * request from the claim (the remote agent pushes the bytes, then POSTs the result). Two predicates
- * guard every report:
- *  - `and print_jobs.claimed_by = ${agentId}` is the AUTHORIZATION scope: only the agent that CLAIMED
- *    the job (the `claimed_by` the claim stamped) may report it, so a report from any other agent
- *    mutates nothing (`{ updated: false }`) — proven by deletion of that predicate. The old `printers`
- *    join is gone: printers are never hard-deleted, so nothing scopes to them here; `claimed_by` is a
- *    fact on the job row itself.
- *  - `and print_jobs.status = 'printing'` is the IDEMPOTENCY guard: a report only applies to a
- *    currently-CLAIMED job. Without it a duplicated report (a retried HTTP request) on the `failed`
- *    path would bump `attempts` a second time, burning the 5-attempt cap faster than deliveries
- *    warrant; with it, a second report on an already-terminal (`done`/`failed`) job is a no-op. It
- *    holds for `runAgentOnce` too, which reports the job it just claimed to `printing` in the same tx.
+ * Records one job's outcome. Only the agent that claimed the job may report it, and only while it is
+ * `printing`, so a retried report on a finished job is a no-op rather than a second `attempts` bump.
+ * An unknown job, another agent's and a finished one all return the same `{ updated: false }`.
  *
- * `done` sets `delivered_at`; `failed` records `last_error` and bumps `attempts` (the bounded-retry
- * counter). All values bind as parameters, never concatenated.
- *
- * Returns whether a row matched. The server route treats a no-match as an idempotent no-op (a job that
- * is not this agent's, already terminal, or unknown) rather than an oracle, so it never discloses which
- * job ids exist.
- *
- * RECLAIM NUANCE (deliberately not over-built): a job is re-claimed into `printing` by a later batch two
- * ways — a `failed` job under the cap (`failed`→`printing`), or a lease-EXPIRED `printing` job whose
- * claimer died (the visibility timeout, `claimPrintJobs`/PRINT_JOB_LEASE_MS, §5). Either way a duplicate
- * report that arrives AFTER the re-claim finds the job `printing` again and legitimately applies to that
- * NEW claim — indistinguishable at this layer from the genuine report for it. The `status = 'printing'`
- * guard gives true idempotency for the common case (a duplicate arriving before any re-claim); the
- * post-reclaim race would need a per-claim token the outbox schema does not carry, which is out of this
- * slice — and for the lease path is exactly the accepted AT-LEAST-ONCE reprint (§5).
+ * A duplicate report that arrives after the SAME agent re-claimed the job applies to the new claim:
+ * telling the two apart would need a per-claim token the schema does not carry.
  */
 export async function reportPrintJob(
   tx: Transaction,
   input: { agentId: string; jobId: string; outcome: JobOutcome },
 ): Promise<{ updated: boolean }> {
   const { agentId, jobId, outcome } = input;
-  // Only the SET clause differs by outcome; the WHERE — the job id, the `status = 'printing'`
-  // idempotency guard and the `claimed_by` claimer-scope — is IDENTICAL for both, so it is written
-  // once. `done` stamps `delivered_at`; `failed` records `last_error` and bumps the bounded-retry
-  // `attempts`. `${outcome.error}` binds like every other value here, never concatenated.
   const setClause =
     outcome.status === "done"
-      ? // `delivered_at` is a text column, so the stamp is the same ISO-8601 spelling `claimed_at`
-        // and `created_at` carry and for the same reason (see `claimPrintJobs`). It is the moment
-        // the report is recorded, which under `now()` was the enclosing transaction's START: in
-        // `runAgentOnce`, where the claim and the report share one transaction, the two stamps were
-        // equal and are now the push apart.
-        sql`status = 'done', delivered_at = ${nowIso()}`
+      ? sql`status = 'done', delivered_at = ${nowIso()}`
       : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
@@ -283,22 +145,10 @@ export async function reportPrintJob(
 export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResult> {
   const { tx, agentId, locationId, visibleKeys, transport } = deps;
 
-  // 1. PULL — claim a batch of due jobs (the locking `claimPrintJobs`, flipping them to `printing`),
-  //    returning each with its printer's connection facts so the push needs no second read. Eligibility
-  //    is the venue + this agent's visible device keys; `agentId` is stamped as `claimed_by`.
   const claimed = await claimPrintJobs(tx, agentId, { locationId, visibleKeys });
 
-  // 2/3. PUSH each job, then REPORT its outcome. Per-job try/catch ISOLATES a down/erroring printer:
-  //      its failure marks only that job `failed` and the loop moves on, so one dead printer never
-  //      blocks another printer's jobs in the same batch (design §3c). The push is SERIAL, so that
-  //      isolation depends on each `transport.send` being BOUNDED: a black-hole printer (accepts the
-  //      TCP connection but never drains, or a dropped SYN) would otherwise hang this loop for the OS
-  //      TCP timeout (~1-2 min) and stall every later job behind it — which is why `NetworkTcpTransport`
-  //      arms a per-send timeout (`DEFAULT_TCP_TIMEOUT_MS`, `@waitron/print-agent`), turning a stalled printer
-  //      into a prompt `failed` bounded by that deadline rather than an unbounded stall. Both the claim
-  //      above and each report below run in the SAME transaction here (local mode); the server path
-  //      splits them across two HTTP requests, calling the identical `claimPrintJobs`/`reportPrintJob`
-  //      pieces.
+  // The push is serial, so one dead printer blocks the rest of the batch unless each
+  // `transport.send` is bounded — `NetworkTcpTransport` arms a per-send timeout for that.
   let delivered = 0;
   let failed = 0;
   for (const job of claimed) {
@@ -307,34 +157,15 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       transport: job.transport,
       host: job.host,
       port: job.port,
-      // Local mode + FakeSink ignores `devicePath`; on a real host the local_key → OS device-node
-      // resolution is the host's job (Task 6), so passing the raw key here is correct for both.
       devicePath: job.local_key,
     };
-    // HAZARD, deliberately left, and NARROWER on SQLite than the PostgreSQL note it replaces: if
-    // it is the `reportPrintJob` INSIDE this `try` that the database refuses, rather than
-    // `transport.send`, the catch's write runs on a transaction SQLite has left open and usable
-    // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not
-    // need"), so it is no longer a `25P02` that takes the whole batch down. What is still wrong is
-    // that the refused report's own partial work stays in the caller's transaction, unconfined by
-    // any savepoint. No caller in the tree today
-    // reaches it: `apps/server/src/print-api.ts` calls the split `claimPrintJobs`/`reportPrintJob`,
-    // and `runAgentOnce`'s only callers are this package's `runtime.test.ts`, `runtime.race.test.ts`
-    // and `runtime.reclaim.test.ts`. That is a fact about today's tree, not a property of the API —
-    // `runAgentOnce` is exported from `index.ts`, so any package may start calling it. Whoever
-    // wires up a local agent host fixes it with a SAVEPOINT around the report (a nested
-    // `tx.transaction`) or by moving the report out of the `try`.
+    // Gap, deliberately left: if the database refuses the `done` report inside this `try`, the
+    // catch records `failed` for a job whose bytes were sent, so a later batch can print it again.
+    // No production caller reaches it today (`apps/server/src/print-api.ts` calls the split
+    // functions), but it is exported from `index.ts`.
     try {
-      // `claimPrintJobs` reads this row with raw SQL through `tx.execute`, so no column mapping
-      // runs over it and the DRIVER's own value arrives, not the column's. On this engine that
-      // value is a plain `Uint8Array`: measured 2026-09-22 on Node v26.7.0 through
-      // `openVenueDatabase` and `execute` itself, selecting a `blob` column back —
-      // `constructor.name` is `Uint8Array` and `Buffer.isBuffer` is `false`. So the copy here is a
-      // copy rather than the Buffer-to-Uint8Array conversion it used to be, and `ClaimedJob.payload`
-      // above still DECLARES `Buffer` — the narrower of the two types, so it now promises more than
-      // the driver delivers. The copy is kept because the transport interface deals in `Uint8Array`
-      // and the fake sink's capture compares byte-for-byte against an `esc().bytes()` (also a
-      // Uint8Array).
+      // `ClaimedJob.payload` is typed `Buffer`, but this raw read delivers a plain `Uint8Array`
+      // (measured 2026-09-22).
       await transport.send(target, new Uint8Array(job.payload));
       await reportPrintJob(tx, { agentId, jobId: job.id, outcome: { status: "done" } });
       delivered += 1;

@@ -1,7 +1,6 @@
 /**
- * Everything that turns a printer's settings into layout (design 2026-09-14, "Layout" and "The QR
- * code"). No other file holds these numbers. Text passed to the wrapping helpers must already be
- * prepared for the printer's character set (`prepareText`), so one character is one printed column.
+ * Text passed to the wrapping helpers must already be prepared for the printer's character set
+ * (`prepareText`), so one character is one printed column.
  */
 export type PaperWidth = "58mm" | "80mm";
 export type Resolution = "180dpi" | "203dpi";

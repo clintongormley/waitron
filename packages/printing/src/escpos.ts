@@ -1,16 +1,6 @@
 /**
- * A tiny, reusable ESC/POS command builder (design §3d) — the byte assembler Slice B (kitchen
- * tickets) and the later customer-receipt + cash-drawer consumers use to fill a `print_jobs.payload`.
- * The printing subsystem itself only MOVES the bytes (the payload is opaque to it); this builder is
- * how a consumer PRODUCES them.
- *
- * Chainable: every verb returns `this`, so `esc().init().line("Mesa 4").cut().bytes()` reads as the
- * ticket does. `.bytes()` materialises the accumulated commands into a fresh `Uint8Array`.
- *
- * The command constants below are the canonical ESC/POS sequences (the Epson TM/Star command set the
- * deli-hardware `ReceiptPrinter` targets). A physical printer is verified MANUALLY (design §5 — the
- * fake-sink approach); the guarantee this module carries is only that the bytes are DETERMINISTIC and
- * match those documented sequences, which escpos.test.ts pins byte for byte.
+ * An ESC/POS command builder for `print_jobs.payload`; the rest of the package treats the payload as
+ * opaque. The sequences follow the Epson ESC/POS reference; a physical printer is checked by hand.
  */
 
 import {
@@ -20,36 +10,24 @@ import {
   type CharacterSet,
 } from "./charset.js";
 
-/** ESC — the escape lead byte (0x1B) beginning most two/three-byte commands. */
 const ESC = 0x1b;
-/** GS — the group-separator lead byte (0x1D) beginning the cut command. */
 const GS = 0x1d;
-/** LF — line feed (0x0A): prints the buffered line and advances one line. */
+/** Prints the buffered line and advances one line. */
 const LF = 0x0a;
 
 /**
- * Blank lines {@link EscBuilder.feedAndCut} feeds before the cut, so the tear-off clears the print
- * head and the holder has something to grip. The cutter sits above the head: three lines left the
- * Epson TM-T88III's cut on the last printed line (owner's test print, 2026-09-11); five is the chosen
- * margin and has not itself been measured on paper yet. The ticket formatters in `apps/server` and
- * the test print all cut through `feedAndCut()`, so this is the one value.
+ * Blank lines fed before the cut. The cutter sits above the print head: three lines left the Epson
+ * TM-T88III's cut on the last printed line (test print, 2026-09-11); five has not been measured on
+ * paper yet.
  */
 export const FEED_BEFORE_CUT = 5;
 
-/**
- * The encoding of a builder created without a character set: ONE byte per character via Latin-1, so
- * every code point 0x00-0xFF maps to its own byte. A builder created with a set encodes with that
- * set's table instead (`charset.ts`); the drawer kick and the legacy `qr()` store data keep Latin-1.
- */
+/** A builder created without a character set, and `qr()`'s stored data, encode as Latin-1. */
 const TEXT_ENCODING = "latin1";
 
 /**
- * QR error-correction level → the ESC/POS `GS ( k <Function 169>` parameter byte. Level M (0x31,
- * ~15 % recovery) is the default, mandated for the fiscal cotejo QR by Orden HAC/1177/2024 art.
- * 21.1. Byte values verified against the Epson ESC/POS TM-printer reference (GS ( k Function 169,
- * https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn169.html) and
- * cross-checked against the escpos-coffee reference implementation
- * (github.com/anastaciocintra/escpos-coffee, src/main/java/.../barcode/QRCode.java: M = 49).
+ * QR error-correction level → the `GS ( k` Function 169 parameter byte. Source:
+ * https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn169.html
  */
 const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
   L: 0x30,
@@ -58,22 +36,11 @@ const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
   H: 0x33,
 };
 
-/**
- * Default dots per QR square for the built-in `qr()` command and `qrRaster()`. The receipt no longer
- * uses either default: its QR is a raster whose dot size `layout.ts` `chooseQrDots` picks from the
- * printer's configured resolution (180 or 203 dpi) for the legal 30-40 mm.
- */
 const QR_DEFAULT_MODULE_SIZE = 6;
 
-/**
- * The chainable builder returned by {@link esc}. Accumulates raw bytes; `bytes()` snapshots them.
- * Kept a class (not a bare closure) so the fluent chain has a nameable return type consumers can
- * annotate.
- */
 export class EscBuilder {
   private readonly parts: number[] = [];
 
-  /** `charset` undefined keeps the Latin-1 builder that selects no table (the drawer kick, legacy jobs). */
   constructor(
     private current?: CharacterSet,
     private currentTable: number | undefined = current === undefined
@@ -81,7 +48,7 @@ export class EscBuilder {
       : DEFAULT_CHARACTER_TABLE[current],
   ) {}
 
-  /** Reset, select the configured table and cancel Kanji mode for single-byte text. */
+  /** `ESC @` resets; `FS .` cancels Kanji mode so text stays single-byte. */
   init(): this {
     this.parts.push(ESC, 0x40);
     if (this.current !== undefined) {
@@ -92,7 +59,6 @@ export class EscBuilder {
     return this;
   }
 
-  /** Switch character set mid-payload: emits its `ESC t` (nothing for `plain`) and encodes later text with it. */
   charset(cs: CharacterSet, table: number | undefined = DEFAULT_CHARACTER_TABLE[cs]): this {
     this.current = cs;
     this.currentTable = table;
@@ -100,7 +66,6 @@ export class EscBuilder {
     return this;
   }
 
-  /** Append `s` encoded for the current character set (Latin-1 when none was given), with no terminator. */
   text(s: string): this {
     if (this.current === undefined) {
       for (const b of Buffer.from(s, TEXT_ENCODING)) this.parts.push(b);
@@ -110,73 +75,49 @@ export class EscBuilder {
     return this;
   }
 
-  /** Append `s` (if given) followed by a single LF — one printed line. `line()` alone emits a bare LF. */
   line(s?: string): this {
     if (s !== undefined) this.text(s);
     this.parts.push(LF);
     return this;
   }
 
-  /** Feed `n` lines — `ESC d n`. `n` is a single byte (0-255); defaults to 1. */
+  /** `ESC d n`. */
   feed(n = 1): this {
     this.parts.push(ESC, 0x64, n & 0xff);
     return this;
   }
 
-  /** Full cut — `GS V 0`. Severs the paper completely, wherever the paper is: a ticket ends with
-   * {@link feedAndCut} so the cut clears what was just printed. */
+  /** Full cut, `GS V 0`, wherever the paper is: a ticket ends with {@link feedAndCut} instead. */
   cut(): this {
     this.parts.push(GS, 0x56, 0x00);
     return this;
   }
 
-  /** Feed {@link FEED_BEFORE_CUT} blank lines, then full cut — `ESC d 5` then `GS V 0`; how every
-   * ticket formatter and the test print end. */
   feedAndCut(): this {
     return this.feed(FEED_BEFORE_CUT).cut();
   }
 
-  /**
-   * Pulse the cash drawer — `ESC p 0 25 250` (connector pin 2, ~50ms on, ~500ms off; the on/off units
-   * are 2ms). The drawer is a PRINTER capability driven over the same channel (deli-hardware §6), so
-   * it lives in this builder rather than a separate device path.
-   */
+  /** Pulse the cash drawer: `ESC p 0 25 250` — connector pin 2, 50ms on, 500ms off (units of 2ms). */
   kick(): this {
     this.parts.push(ESC, 0x70, 0x00, 0x19, 0xfa);
     return this;
   }
 
   /**
-   * Native QR Code — the `GS ( k` two-dimensional-symbol command family (lead bytes 0x1D 0x28 0x6B,
-   * cn = 0x31 = QR Code; each operation picked by its `fn` byte). The PRINTER'S own QR engine encodes
-   * `text`, so this builder needs no QR-encoding library (see {@link qrRaster} for the dependency-free
-   * raster fallback). Emits, in the order the printer requires: select model 2, set module size, set
-   * error-correction level, store the data, print the symbol.
-   *
-   * `text` is stored verbatim as its Latin-1 bytes, always — unlike {@link text}, which switches to
-   * the builder's selected character set once one is set. Latin-1 is exactly right for the ASCII
-   * Veri*Factu cotejo URL this command still encodes. Default EC level M is mandated for that fiscal
-   * QR (Orden HAC/1177/2024 art. 21.1); `moduleSize` defaults per {@link QR_DEFAULT_MODULE_SIZE}.
-   *
-   * Byte layout verified against the Epson ESC/POS TM-printer reference (GS ( k Functions 165/167/
-   * 169/180/181, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn180.html
-   * et seq.) and the escpos-coffee reference implementation (github.com/anastaciocintra/escpos-coffee).
-   * A physical printer is verified MANUALLY (design §5); the guarantee here is deterministic bytes.
+   * Native QR through the printer's own `GS ( k` engine (cn = 0x31 selects QR). The five functions
+   * must be sent in this order: model, module size, EC level, store data, print. `text` is always
+   * stored as Latin-1, whatever the builder's character set. The receipt's fiscal QR does not use
+   * this: it is a `qrRaster` image sized by `chooseQrDots`.
    */
   qr(text: string, opts: { ecLevel?: "L" | "M" | "Q" | "H"; moduleSize?: number } = {}): this {
     const { ecLevel = "M", moduleSize = QR_DEFAULT_MODULE_SIZE } = opts;
-    // Validate the sizing inputs BEFORE emitting any bytes — a programmer-input guard, not a domain
-    // error (so a plain thrown Error, no printer.* AppError code). moduleSize is the Fn167 dot count,
-    // valid range 1-16 (Epson GS ( k Function 167); an out-of-range value would otherwise be masked
-    // with `& 0xff` below into a malformed parameter byte, e.g. -1 → 0xFF.
+    // Function 167 accepts 1-16 dots; `& 0xff` below would otherwise mask a bad value into a byte.
     if (!Number.isInteger(moduleSize) || moduleSize < 1 || moduleSize > 16) {
       throw new RangeError(
         `qr moduleSize must be an integer in [1, 16] (ESC/POS GS ( k Fn167), got ${moduleSize}`,
       );
     }
-    // Fn 180 store-data length = data bytes + 3 (the +3 covering cn, fn and m). It is packed into the
-    // 16-bit pL/pH field, so it cannot exceed 0xFFFF; beyond that the bytes below would truncate into
-    // a malformed length.
+    // Function 180's length counts cn, fn and m as well as the data, in a 16-bit pL/pH field.
     const data = Buffer.from(text, TEXT_ENCODING);
     const storeLen = data.length + 3;
     if (storeLen > 0xffff) {
@@ -190,8 +131,7 @@ export class EscBuilder {
     this.parts.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, moduleSize & 0xff);
     // Fn 169 — select EC level: cn=0x31, fn=0x45, n per QR_EC_LEVEL; length pL=0x03.
     this.parts.push(GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, QR_EC_LEVEL[ecLevel]);
-    // Fn 180 — store data: cn=0x31, fn=0x50, m=0x30; length field = (data bytes + 3), the +3 covering
-    // cn, fn and m. pL = low byte, pH = high byte.
+    // Fn 180 — store data: cn=0x31, fn=0x50, m=0x30; pL/pH = storeLen, low byte first.
     this.parts.push(GS, 0x28, 0x6b, storeLen & 0xff, (storeLen >> 8) & 0xff, 0x31, 0x50, 0x30);
     for (const b of data) this.parts.push(b);
     // Fn 181 — print symbol: cn=0x31, fn=0x51, m=0x30; length pL=0x03.
@@ -200,30 +140,16 @@ export class EscBuilder {
   }
 
   /**
-   * Raster fallback for printers whose firmware lacks the native `GS ( k` QR engine: packs an
-   * ALREADY-COMPUTED square boolean module matrix (`true` = dark module) into a `GS v 0` raster
-   * bit-image. It performs NO QR encoding — the caller supplies the matrix — so `@waitron/printing`
-   * keeps its dependency-free "pure byte assembler" shape (no `qrcode` library). The receipt and the
-   * setup test page print their QR codes through it (design 2026-09-14); the matrix comes from
-   * `apps/server`'s `qrModules`.
-   *
-   * `GS v 0 m xL xH yL yH d1…dk` (lead bytes 0x1D 0x76 0x30): m=0 (normal); xL/xH = bytes per row =
-   * ceil(pixelWidth / 8); yL/yH = pixel height. Each module expands to `moduleSize`×`moduleSize`
-   * pixels; rows are packed MSB-first, a set bit meaning a dark (printed) pixel, and the final byte of
-   * a row is zero-padded on the right. Verified against the ESC/POS `GS v 0` raster-bit-image
-   * specification (Epson TM-printer reference / escpos.readthedocs.io imaging).
+   * Packs an already-computed square module matrix (`true` = dark) into a `GS v 0` raster image; the
+   * caller does the QR encoding. `GS v 0 m xL xH yL yH d1…dk`: x is bytes per row, y is dots high,
+   * rows are packed MSB-first with a set bit printing, and a row's last byte is zero-padded.
    */
   qrRaster(modules: boolean[][], opts: { moduleSize?: number } = {}): this {
     const { moduleSize = QR_DEFAULT_MODULE_SIZE } = opts;
-    // Validate BEFORE emitting any bytes (a programmer-input guard, so a plain thrown Error).
-    // moduleSize <= 0 makes the module→pixel division below invalid and would emit a width/height-0
-    // GS v 0 header — a malformed payload.
     if (!Number.isInteger(moduleSize) || moduleSize < 1) {
       throw new RangeError(`qrRaster moduleSize must be an integer >= 1, got ${moduleSize}`);
     }
-    const side = modules.length; // square: side × side modules
-    // The matrix must be non-empty and square; a ragged or empty matrix would emit a GS v 0 header
-    // whose declared dimensions do not match the packed data rows.
+    const side = modules.length;
     if (side === 0 || modules.some((row) => row.length !== side)) {
       throw new RangeError(
         `qrRaster modules must be a non-empty square matrix (every row length === row count ${side})`,
@@ -231,7 +157,6 @@ export class EscBuilder {
     }
     const pixelSide = side * moduleSize;
     const widthBytes = Math.ceil(pixelSide / 8);
-    // GS v 0, m=0 (normal); width in bytes per row, then height in dots — each as low/high byte.
     this.parts.push(
       GS,
       0x76,
@@ -245,12 +170,11 @@ export class EscBuilder {
     for (let my = 0; my < side; my++) {
       const row = modules[my];
       for (let sy = 0; sy < moduleSize; sy++) {
-        // Each module row prints `moduleSize` identical pixel rows (vertical expansion).
         for (let bx = 0; bx < widthBytes; bx++) {
           let byte = 0;
           for (let bit = 0; bit < 8; bit++) {
-            const mx = Math.floor((bx * 8 + bit) / moduleSize); // pixel x → module x
-            if (mx < side && row[mx]) byte |= 0x80 >> bit; // dark module → set bit, MSB first
+            const mx = Math.floor((bx * 8 + bit) / moduleSize);
+            if (mx < side && row[mx]) byte |= 0x80 >> bit;
           }
           this.parts.push(byte);
         }
@@ -259,14 +183,11 @@ export class EscBuilder {
     return this;
   }
 
-  /** Snapshot the accumulated commands as a FRESH `Uint8Array` — a copy, so the caller can hand it to
-   * the outbox / a transport and keep building or mutate the result without disturbing this builder. */
   bytes(): Uint8Array {
     return Uint8Array.from(this.parts);
   }
 }
 
-/** Start a new ESC/POS command chain, optionally for a character set. */
 export function esc(charset?: CharacterSet, characterTable?: number): EscBuilder {
   return new EscBuilder(charset, characterTable);
 }

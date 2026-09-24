@@ -16,27 +16,12 @@ import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from ".
 import type { PrintConfig, PrintTransport } from "./printers.js";
 import "./errors.js";
 
-// One venue file (`useVenueDb`). `createPrinter` is a single INSERT gated by an app-layer
-// required-field pre-check plus the DB's transport CHECK and partial UNIQUE, and every case below
-// runs its transactions one after another, so nothing here turns on two writers contending. The
-// CHECK and the partial UNIQUE have their own cases in `packages/db/src/schema/printing.test.ts`;
-// what this suite adds on top is this package's own behaviour over them — the error codes those
-// refusals are mapped onto, the partial-edit and deactivation paths, the listing, and the layout
-// settings.
-//
-// This engine has no roles and no grants, so no case below is a claim about a privilege, and no
-// suite this branch left behind replaces that half.
+// The CHECK and the partial UNIQUE have their own cases in `packages/db/src/schema/printing.test.ts`;
+// this suite covers the error codes those refusals are mapped onto.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-/**
- * A fresh tenant + venue per test. Each test gets its OWN tenant (via seedTenant's fresh NIF) so
- * rows are order-independent. There is one handle on the venue file and no role to seed under.
- */
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  // Through the table definition rather than raw SQL: `locations.id` is supplied by
-  // `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
-  // `NOT NULL constraint failed: locations.id`.
   const [row] = await suite.db
     .insert(locations)
     .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
@@ -111,8 +96,7 @@ async function fullRow(printerId: string): Promise<{
 describe("createPrinter", () => {
   it("inserts a network_tcp printer; an omitted port defaults to 9100", async () => {
     const cfg = await setup();
-    // port deliberately OMITTED — this is the receipt for the "drizzle omits undefined → the column
-    // default applies" claim in printers.ts: the stored port must be 9100, not NULL.
+    // port deliberately OMITTED: the stored port must be the column default 9100, not NULL.
     const { id } = await asTx(cfg, (tx) =>
       createPrinter(tx, cfg, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }),
     );
@@ -244,7 +228,6 @@ describe("updatePrinter", () => {
     const id = await seedPrinter(cfg);
     // Empty patch, existing id → resolves (no-op), never a drizzle "No values to set" throw.
     await expect(asTx(cfg, (tx) => updatePrinter(tx, cfg, id, {}))).resolves.toBeUndefined();
-    // Empty patch, unknown id → printer.not_found.
     expect(await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, cfg, randomUUID(), {})))).toBe(
       "printer.not_found",
     );
@@ -285,11 +268,9 @@ describe("updatePrinter", () => {
   });
 
   it("a CHECK that is NOT the transport-fields one is not dressed up as printer.invalid_config", async () => {
-    // `printers` carries seven CHECK constraints and only ONE of them — `printers_transport_fields_ck`
-    // — means "this transport is short of a field it needs". A character table outside 0..255 trips
-    // `printers_character_table_ck`, which is a different complaint entirely, so translating it to
-    // `printer.invalid_config {reason: "transport_fields"}` would tell an operator to fix a field
-    // that is not the problem. 16 is accepted (the control, in the update case above), 300 is not.
+    // Only `printers_transport_fields_ck` means "this transport is short of a field it needs". A
+    // character table outside 0..255 trips `printers_character_table_ck`, a different complaint, so
+    // translating it to `printer.invalid_config` would send an operator to the wrong field.
     const cfg = await setup();
     const id = await seedPrinter(cfg);
     const err = await errorOf(() =>
@@ -300,11 +281,8 @@ describe("updatePrinter", () => {
   });
 
   it("a driver error that is NEITHER the UNIQUE NOR the CHECK propagates UNCHANGED (the rethrow branch)", async () => {
-    // A transport the column's own CHECK does not allow. It was an invalid ENUM value on
-    // PostgreSQL, arriving as 22P02 and matching neither translated class; `transport` is a text
-    // column with `printers_transport_ck` here, so the refusal is now a CHECK — but not the
-    // transport-fields one, and translatePrinterWriteError must still rethrow it rather than
-    // mistranslate it to a printing code.
+    // `printers_transport_ck` refuses this value — a CHECK, but not the transport-fields one, so
+    // translatePrinterWriteError must rethrow it rather than mistranslate it to a printing code.
     const cfg = await setup();
     const id = await seedPrinter(cfg);
     const err = await errorOf(() =>
@@ -313,7 +291,6 @@ describe("updatePrinter", () => {
       ),
     );
     expect(err).toBeDefined();
-    // NOT translated: the two mapped domain codes must not appear on the rethrown error.
     expect((err as { code?: string }).code).not.toBe("printer.already_registered");
     expect((err as { code?: string }).code).not.toBe("printer.invalid_config");
   });
@@ -325,7 +302,6 @@ describe("deactivatePrinter", () => {
     const id = await seedPrinter(cfg);
     await asTx(cfg, (tx) => deactivatePrinter(tx, cfg, id));
     expect((await fullRow(id)).active).toBe(false);
-    // The row still exists (deactivated, not deleted).
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from printers where id = ${id}`,
     );
@@ -354,17 +330,14 @@ describe("listPrinters", () => {
     await asTx(cfg, (tx) => deactivatePrinter(tx, cfg, bId));
     const rows = await asTx(cfg, (tx) => listPrinters(tx, cfg));
     const mine = rows.filter((r) => r.id === aId || r.id === bId);
-    expect(mine.map((r) => r.name)).toEqual(["Alfa", "Bravo"]); // sorted by name
-    expect(mine.find((r) => r.id === bId)!.active).toBe(false); // a deactivated printer still lists
+    expect(mine.map((r) => r.name)).toEqual(["Alfa", "Bravo"]);
+    expect(mine.find((r) => r.id === bId)!.active).toBe(false);
     expect(mine.find((r) => r.id === aId)!.port).toBe(9100);
   });
 });
 
-// The refusal a driver reports is a numeric extended RESULT CODE on `errcode`, not a five-character
-// SQLSTATE on `code` — `code` is the constant "ERR_SQLITE_ERROR" on every failure alike, so nothing
-// reads it (`packages/db/src/sql-state.ts`). The codes below are the ones that suite measured:
-// 2067 a unique index, 275 a CHECK. Every case in this block kept its subject; what changed is the
-// spelling of a refusal.
+// The driver reports a refusal as a numeric extended result code on `errcode` — 2067 a unique index,
+// 275 a CHECK (`packages/db/src/sql-state.ts`).
 describe("isRefusal (@waitron/db result-code cause-walk, as printers.ts uses it)", () => {
   it("recognises a bare driver error", () => {
     expect(isRefusal(Object.assign(new Error("unique"), { errcode: 2067 }), UNIQUE_VIOLATION)).toBe(
