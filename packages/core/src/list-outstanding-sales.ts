@@ -9,9 +9,8 @@ import {
 import type { Decimal, SaleId, TillId } from "@waitron/shared";
 
 /**
- * A sale issued (invoice printed, chained, filed) but not yet paid — the answer to "what is owed?"
- * under invoice-first. `amountDue` is the printed `total` net of every corrective invoice that corrects
- * it; a "take a fiver off" shows here as 65.00 against a 70.00 total (design §3).
+ * A sale issued (invoice printed, chained, filed) but not yet paid. `amountDue` is the printed
+ * `total` net of every corrective invoice: a "take a fiver off" shows 65.00 against a 70.00 total.
  */
 export interface OutstandingSale {
   saleId: SaleId;
@@ -27,15 +26,12 @@ export interface OutstandingSale {
 }
 
 /**
- * Lists the outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
- * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
- * voided. This is a plain read over the database's one taxpayer.
+ * The outstanding sales: ordinary sales (`corrects_sale_id` null) that are not settled, not voided
+ * and not an F3, which was paid through the tickets it replaces.
  */
 export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
-  // Both money expressions are counts of whole cents read raw, cast to text and converted by
-  // `rawCentsToDecimal` — see its doc comment for why it is text and not an integer cast.
-  // `issued_at` needs no cast at all: the column IS text on this engine (`ts` in
-  // `packages/db/src/schema/columns.ts`), so the raw read already hands back the stored spelling.
+  // The money expressions are whole cents cast to text for `rawCentsToDecimal` (see its doc
+  // comment). `issued_at` is already a text column on this engine.
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;

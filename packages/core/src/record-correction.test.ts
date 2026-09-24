@@ -2,9 +2,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
-// See record-sale.test.ts's own deviation note: there is no `@waitron/fiscal/testing` subpath. The
-// real import path — stated verbatim in `packages/fiscal/src/index.ts`'s closing comment — is
-// `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -28,26 +25,18 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
-// The people and open shift sessions the correction gate now consults. `supervisorId` holds
-// `sale.rectify`, so `supervisorSessionId` is the default authorizer every green-path correction
-// uses; `staffId` holds nothing (the reject case); `managerId` is the second person whose PIN
-// unlocks an override. The manager also holds `sale.void`, so `managerSessionId` authorizes the ONE
-// precondition void this suite performs.
+// `supervisorId` holds `sale.rectify`, so `supervisorSessionId` authorizes every green-path
+// correction; `staffId` holds nothing; `managerId` is the second person whose PIN unlocks an
+// override, and also holds `sale.void`, so `managerSessionId` authorizes the one precondition void.
 let supervisorId: string;
 let managerId: string;
 let supervisorSessionId: string;
 let managerSessionId: string;
 let staffSessionId: string;
 
-// One venue file for everything here (`useVenueDb`): the guards are pure logic (an unknown id, a
-// series of the wrong purpose, an unsettled corrective), none of which turns on who is connected
-// or on two writers contending. `sale.not_found` and `sale.series_not_found` are asserted below
-// for a genuinely ABSENT row, which is what those codes mean with one tenant per database.
 const suite = useVenueDb({
-  // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
+  // `authorize` reads identity's tables.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  // FakeFiscalBackend.recordSale/recordCorrection/checkIntegrity read and write
-  // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
@@ -55,26 +44,15 @@ const suite = useVenueDb({
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
-  // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
-  // Seeded on the suite's own handle, like the record-void suite.
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
   const staffId = await seedPerson("staff");
-  // Three open shift sessions, opened through `loginWithPin` exactly as a till would at the start of
-  // a shift. The supervisor's is the default authorizer for green-path corrections; the manager's
-  // also authorizes the precondition void; the staff one is what the gate must reject unless a
-  // manager override rides along.
   supervisorSessionId = await openSession(supervisorId);
   managerSessionId = await openSession(managerId);
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted on the suite's own handle. The role makes the
- * display name distinct because this fixture creates several live people in one tenant.
- *
- * Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
- * `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
- * so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`. */
+/** A person of `role` whose PIN is "1234". The role keeps the display names distinct. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const [row] = await suite.db
     .insert(persons)
@@ -93,8 +71,7 @@ async function openSession(personId: string): Promise<string> {
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
-/** Mirrors record-sale.test.ts's helper: the real `TrustedClock` also requires `anchor`/
- * `currentAnchor`, which neither `recordSale` nor `recordCorrection` ever calls. */
+/** A `TrustedClock` from `now()` alone; nothing under test calls anything else on it. */
 function fixedClock(now: TrustedClock["now"]): TrustedClock {
   return {
     now,
@@ -113,8 +90,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
   anchorAgeSeconds: 0,
 }));
 
-/** The ordinary sale input, later corrected. Immediate settlement so the ORIGINAL is fully paid —
- * which makes "the CORRECTIVE is unsettled" a real assertion rather than a vacuous one. */
+/** The ordinary sale, settled immediately, so "the corrective is unsettled" is not vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tillId,
@@ -152,10 +128,8 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   };
 }
 
-/** The corrective input: a full reversal of the €14.41 sale — negative total and negative delta
- * lines, drawn from the rectificative series. Descriptions are inherited by neither layer (they
- * reach no fiscal record); the corrective sale's own locale/invoice-locale list is inherited from
- * the original, not supplied here. */
+/** A full reversal of the €14.41 sale: negative total and negative delta lines, drawn from the
+ * rectificative series. The locale list is inherited from the original, not supplied. */
 function correctionInput(
   correctsSaleId: SaleId,
   overrides: Partial<RecordCorrectionInput> = {},
@@ -187,16 +161,14 @@ function correctionInput(
       },
     ],
     clock: steadyClock,
-    // Default authorizer: the supervisor session opened in `beforeEach`. A supervisor holds
-    // `sale.rectify`, so every green-path correction here is authorized on the operator's own role;
-    // the authorization suite below overrides this to exercise the staff-reject and override paths.
+    // The supervisor holds `sale.rectify`, so green-path corrections authorize on the operator's
+    // own role.
     authz: { sessionId: supervisorSessionId },
     ...overrides,
   };
 }
 
-/** Records an ORIGINAL sale exactly as the application will: in one transaction, on a node
- * already registered with the backend. */
+/** Records an original sale in one transaction, on a node registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await backend.registerNode(tx, nodeId);
@@ -204,7 +176,6 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   });
 }
 
-/** Runs `recordCorrection` in one transaction — the real write path. */
 async function correct(
   backend: FiscalBackend,
   correctsSaleId: SaleId,
@@ -215,9 +186,7 @@ async function correct(
   });
 }
 
-/** Counts every row in `table`. The suite helper empties every data table between tests
- * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
- * test wrote. */
+/** Counts every row in `table`; the suite helper empties the tables between tests. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)}`,
@@ -225,8 +194,7 @@ async function countRows(table: string): Promise<number> {
   return result.rows[0]!.n;
 }
 
-/** Rows for one specific sale — what "the CORRECTIVE sale is unsettled" actually means, since the
- * ORIGINAL sale (settled immediately by `sell`) carries tenders and a settlement of its own. */
+/** Rows for one sale: the original, settled by `sell`, has tenders and a settlement of its own. */
 async function countForSale(table: string, saleId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)} where sale_id = ${saleId}`,
@@ -234,8 +202,7 @@ async function countForSale(table: string, saleId: SaleId): Promise<number> {
   return result.rows[0]!.n;
 }
 
-/** How many corrective sales point at `originalId` — the direct measure of "a corrective sale was
- * written" that the authorization gate turns on. A rejected correction must leave this at zero. */
+/** How many corrective sales point at `originalId`; a refused correction leaves it at zero. */
 async function countCorrectives(originalId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from sales where corrects_sale_id = ${originalId}`,
@@ -285,8 +252,6 @@ describe("recordCorrection — series purpose guard (§5)", () => {
   });
 
   it("rejects a rectificative series belonging to another node", async () => {
-    // A node may own several series, but a series belongs to exactly one node — drawing from
-    // another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTenant(suite.db);
@@ -307,9 +272,8 @@ describe("recordCorrection — the sale being corrected", () => {
   });
 
   it("rejects a correction when the original was never fiscally recorded", async () => {
-    // The original exists in `sales` (so it is not `sale.not_found`) but has no backend record, so
-    // there is nothing to reference: the backend throws `fiscal.sale_not_recorded`, mirroring the
-    // same precondition `recordVoid` enforces.
+    // The original exists in `sales` but has no fiscal record, so the fake backend refuses with
+    // `fiscal.sale_not_recorded`.
     const backend = new FakeFiscalBackend(suite.db);
     const bareOriginal = await seedBareSale(suite.db, { tillId, nodeId, seriesId });
     await expect(correct(backend, bareOriginal)).rejects.toMatchObject({
@@ -319,8 +283,6 @@ describe("recordCorrection — the sale being corrected", () => {
   });
 
   it("refuses to correct a voided sale (a voided sale is corrected by nothing)", async () => {
-    // A real sale that should never have existed is annulled, not corrected; correcting an already
-    // annulled sale is a staff/UI error. Reuses `sale.voided` (ratified decision, plan §4.3).
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await withTransaction(suite.db, async (tx) => {
@@ -345,8 +307,6 @@ describe("recordCorrection — the corrective sale", () => {
     expect(row?.total).toBe(-1441);
     expect(row?.correctsSaleId).toBe(originalId);
     expect(row?.fiscalState).toBe("recorded");
-    // Inherited from the original (spec §9: a corrective invoice inherits the original list), never
-    // supplied on the input.
     expect(row?.locale).toBe("es-ES");
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
   });
@@ -433,9 +393,6 @@ describe("recordCorrection — a sale may be corrected more than once", () => {
 
 describe("recordCorrection — authorization", () => {
   it("records the authorizing supervisor on the corrective sale", async () => {
-    // The green path. The operator's own role (supervisor) holds `sale.rectify`, so `authorize`
-    // accepts on the operator path and returns the supervisor as the authorizer — which is who
-    // `authorized_by` must name on the corrective sale it just created.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
@@ -448,9 +405,8 @@ describe("recordCorrection — authorization", () => {
   });
 
   it("records the authorizing manager when a staff session corrects under an override", async () => {
-    // The operator (staff) holds nothing, but a manager's PIN rides along. authorize accepts the
-    // override and returns the MANAGER as the authorizer — the person who took responsibility, not
-    // the operator at the till — which is who `authorized_by` must name.
+    // The staff operator holds nothing; the manager's PIN authorizes, so `authorized_by` names the
+    // manager.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
@@ -463,12 +419,8 @@ describe("recordCorrection — authorization", () => {
   });
 
   it("refuses a staff session with no override, allocating no number and writing no corrective sale", async () => {
-    // The gate itself, and its placement. A staff member cannot rectify alone; the load-bearing
-    // halves are that a rejected correction (a) writes NO corrective sale and (b) burns NO invoice
-    // number — proving `authorize` runs BEFORE `allocateInvoiceNumber`, so a rejected correction
-    // leaves no permanent series gap. Prove the gate by deletion: drop the `authorize()` call and
-    // the `authorizedBy` field from record-correction.ts and this expectation flips (the staff
-    // correction succeeds), which is exactly the security regression the gate exists to catch.
+    // A refused correction writes no corrective sale and burns no number: `authorize` runs before
+    // `allocateInvoiceNumber`.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const [before] = await suite.db
@@ -489,10 +441,6 @@ describe("recordCorrection — authorization", () => {
   });
 
   it("returns the series guard before the gate — a wrong-purpose series never leaks an authz error", async () => {
-    // Ordering: `authorize` runs AFTER the series purpose guard, so a staff session correcting on
-    // the ORDINARY series still gets `sale.series_wrong_purpose`, never `authorization.not_permitted`
-    // — even under an operator who could not have rectified anyway. A gate placed before the guard
-    // would answer the wrong question first.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await expect(
@@ -503,9 +451,7 @@ describe("recordCorrection — authorization", () => {
 
 describe("recordCorrection — no fiscal condition blocks a correction (§5)", () => {
   it("completes the correction when chain verification fails, recording an incident on it", async () => {
-    // A staff member correcting the very sale an incident concerns must never be blocked by it
-    // («NUNCA debe interrumpirse»). The failed check is recorded against the CORRECTIVE sale and
-    // the correction proceeds.
+    // «NUNCA debe interrumpirse». The incident is recorded against the corrective sale.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
@@ -521,7 +467,6 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
   });
 
   it("records a warning incident when the clock is degraded, and still records the correction", async () => {
-    // Clock-confidence degraded is WARN ONLY, never blocking — the same rule the sale path follows.
     const degraded: TrustedClock = fixedClock(() => ({
       instant: BASE,
       offsetMinutes: 60,
@@ -550,7 +495,7 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
 
     await correct(backend, originalId);
 
-    // Only the corrective path could add one — the original sale's own recordSale ran clean too.
+    // The original sale's own recordSale ran clean too.
     expect(await countRows("incidents")).toBe(0);
   });
 });

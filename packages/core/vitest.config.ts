@@ -5,22 +5,16 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // A hook given its OWN timeout overrides `hookTimeout` rather than narrowing it, so this bounds
-    // only hooks written without one — `useVenueDb`'s afterEach reset and afterAll close
-    // (`packages/db/src/testing/venue-db.ts`) and any untimed hook a test file writes.
-    // It does not bound that helper's setup, which carries its own 60s budget (`venue-db.ts`).
-    // testTimeout covers work inside an individual test.
+    // A hook given its own timeout overrides `hookTimeout` rather than narrowing it, so this bounds
+    // only hooks written without one, such as `useVenueDb`'s reset and close; its setup carries its
+    // own budget (`packages/db/src/testing/venue-db.ts`).
     testTimeout: 30_000,
     hookTimeout: 60_000,
-    // NO `maxWorkers`: this package runs MULTI-FORK deliberately. It is not pinned to one worker for
-    // the @vitest/coverage-v8 cross-fork branch-merge artifact the way packages/payments and
-    // packages/reporting are — core has been multi-fork all along.
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
-      // reason packages/shared's own vitest.config.ts excludes its identical barrel.
+      // A re-export barrel with no logic of its own.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

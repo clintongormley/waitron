@@ -1,8 +1,5 @@
 import { saleLineRows } from "./sale-line-rows.js";
-// Side-effect only: registers this package's `sale.*` codes on the shared `ErrorParams` registry
-// by declaration merging. See ./errors.ts for why, and ./errors.reachability.test.ts for the
-// mechanical check that keeps errors.ts reachable from this package's own public barrel
-// (index.ts). Mirrors ./record-sale.ts / ./record-void.ts's identical convention.
+// Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import {
@@ -25,97 +22,51 @@ import { buildVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordCorrectionInput {
-  /**
-   * The till this corrective invoice rings at — an informational snapshot only (written to `sales.till_id`
-   * and the fiscal record's `till_id`, and used for incidents). NOT checked against the series; see
-   * `nodeId` below for the guard.
-   */
+  /** Where the corrective invoice rings; not checked against the series (`nodeId` is). */
   tillId: TillId;
   /**
-   * The node/SIF that ISSUES this corrective invoice and whose chain it extends (node-id rekey,
-   * 2026-08-03: the SIF is the node, #33). Caller-supplied and used verbatim: checked against the
-   * corrective SERIES (`sale.series_wrong_node`, step 2) but NOT against the original sale's own
-   * node — deliberately, not a gap. A corrective invoice is a self-standing NEW invoice that references
-   * the original only by IDENTITY (`FacturasRectificadas` = NIF + series & number + date — how AEAT
-   * links a corrective invoice to what it corrects), from which we INFER that the issuing SIF is
-   * unconstrained by the original's. That inference is not merely theoretical: under active-active /
-   * failover (#33) a venue runs MORE THAN ONE SIF (each node is its own SIF), so a correction
-   * genuinely can land on a different node-SIF than the original. AEAT's developer FAQ (4-Dec-2025)
-   * confirms cross-SIF is lawful for the SIBLING correction records — a remedy or annulment record
-   * «se [podría] generar y conservar o remitir a la AEAT desde un SIF distinto al que
-   * expidió la factura original» (same-SIF is merely the usual case). But the reach to a
-   * self-standing corrective invoice is OURS, not the FAQ's words — it names only the remedy /
-   * annulment records. The identity-linkage reading is sound, but UNVERIFIED for corrective invoices
-   * specifically, and to be confirmed with the asesor before a real cross-SIF caller is wired (F3).
-   * (`recordVoid` pins to the original's node by its own choice, not a regime requirement.)
+   * The node that issues this corrective invoice and whose chain it extends. Checked against the
+   * corrective series (`sale.series_wrong_node`) but deliberately NOT against the original sale's
+   * node: a corrective invoice references the original only by identity (`FacturasRectificadas`),
+   * from which we infer that the issuing SIF need not be the original's. AEAT's developer FAQ
+   * (4-Dec-2025) allows this for the remedy and annulment records — «se [podría] generar y
+   * conservar o remitir a la AEAT desde un SIF distinto al que expidió la factura original» — but
+   * extending it to a corrective invoice is our reading, not the FAQ's words: confirm it with the
+   * asesor before a real cross-node caller is wired.
    */
   nodeId: NodeId;
-  /**
-   * MUST name a `purpose='rectificative'` series (spec §5). A correction draws its own new number
-   * from a corrective series — never the ordinary one the corrected sale used — and this is guarded
-   * (`sale.series_wrong_purpose`), never inferred. The caller supplies it exactly as it supplies the
-   * `standard` series for `recordSale`; no series is auto-provisioned.
-   */
+  /** Must name a `rectificative` series (`sale.series_wrong_purpose`); none is provisioned here. */
   seriesId: SeriesId;
-  /** The earlier sale being corrected. An unknown id is `sale.not_found`. */
+  /** The earlier sale being corrected. */
   correctsSaleId: SaleId;
   /**
-   * The corrective invoice's OWN total — negative for a full or partial reversal, allowed on `sales`
-   * only because `corrects_sale_id` is set (the relaxed `sales_total_ck`, migration 0013). This is
-   * a delta-in model: the caller supplies the already-signed figure the corrective reports, and it
-   * flows verbatim into the fiscal record's own total, so it must be the value that record needs.
+   * The corrective invoice's own, already-signed total: negative for a reversal, which
+   * `sales_total_ck` allows only because `corrects_sale_id` is set. Filed verbatim.
    */
   total: string;
   /** The already-signed delta lines (negative for a reversal). Same shape as an ordinary sale's. */
   lines: RecordSaleLine[];
-  /**
-   * Who authorises this corrective invoice (spec §7). The gate is INTRINSIC — `recordCorrection` calls
-   * `authorize` itself with permission `sale.rectify`, so a correction cannot be performed without a
-   * credential `authorize` accepts (the operator's own role holds it, or a supervisor `override`
-   * supplies a second person's PIN). The authorizer it returns is recorded on `sales.authorized_by`.
-   */
+  /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
+   * recorded on `sales.authorized_by`. */
   authz: AuthzInput;
   clock: TrustedClock;
 }
 
 /**
- * Records a corrective invoice (a credit note) for a prior sale, spec §4.2.
+ * Records a corrective invoice (a credit note) for a prior sale: a new record with its own number
+ * that points at the invoice it corrects. It settles nothing; a refund is a separate payments
+ * action.
  *
- * Structurally a hybrid of `./record-sale.ts` (it mints its OWN new number and writes its own sale
- * row) and `./record-void.ts` (it references an earlier sale rather than a working order). Unlike a
- * sale it settles NOTHING — the corrective is recorded unsettled and the customer refund is a
- * separate payments-layer action (decoupled refund, spec §4). Unlike a void it takes a number of
- * its own, because a correction is a fresh `registro de alta` pointing at the invoice it corrects, not
- * an annulment of it.
- *
- * The gate is INTRINSIC: this call itself demands `sale.rectify`, so a correction cannot be
- * performed without a credential `authorize` accepts — the session operator's own role holds the
- * permission, or a supervisor `override` (a second person's PIN) supplies it. `authorize` returns
- * the authorizing person, written to `sales.authorized_by` at insert; it runs AFTER the sale/series
- * guards (so a missing sale or wrong series never leaks an authz error) and BEFORE any chain work
- * (so a rejected correction burns no number). See `./record-void.ts` for the identical shape.
- *
- * No fiscal condition blocks a correction: a failed chain-integrity check records an incident and
- * the correction proceeds anyway, because a staff member correcting the very sale an incident
- * concerns must never be blocked by it (spec §5, «NUNCA debe interrumpirse») — the same rule
- * `recordSale`/`recordVoid` follow.
- *
- * Issues on the caller-supplied `input.nodeId` (the SIF is the node, #33), NOT the original sale's
- * node — see that field's doc for the cross-SIF fiscal-policy question (sound but asesor-pending) a
- * future cross-SIF caller must resolve first.
- *
- * Takes a transaction handle, like every write in this package: atomicity between the corrective
- * sale and its fiscal record is the whole point, and step 7 (the caller's commit) is what lets a
- * till write the correction and its fiscal record as one unit of work.
+ * The authorization gate runs after the sale and series checks, so those still report their own
+ * codes, and before the number is allocated, so a refused correction burns no number. A failed
+ * integrity check records an incident and the correction proceeds anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Step 1. Look up the original sale by id. `locale`/`invoiceLocales` are read
-  // here because the corrective INHERITS them (spec §9: a corrective invoice inherits the original
-  // list); they are not supplied on the input.
+  // The corrective inherits the original's `locale` and `invoiceLocales`.
   const [original] = await tx
     .select({ locale: sales.locale, invoiceLocales: sales.invoiceLocales })
     .from(sales)
@@ -125,9 +76,7 @@ export async function recordCorrection(
     throw new AppError("sale.not_found", { saleId: input.correctsSaleId });
   }
 
-  // Step 1b. Refuse to correct a VOIDED sale (ratified decision, spec §4). A sale that should never
-  // have existed is annulled, not corrected; correcting an already-annulled sale is a staff/UI
-  // error. Reuses `sale.voided`, like the lookup above.
+  // A voided sale is not corrected: it was annulled.
   const [voided] = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)
@@ -137,9 +86,6 @@ export async function recordCorrection(
     throw new AppError("sale.voided", { saleId: input.correctsSaleId });
   }
 
-  // Step 2. The corrective series, and the purpose guard that IS the §5 separation. A correction
-  // must draw from a `purpose='rectificative'` series; an ordinary sale must not (the mirror guard
-  // lives in `./record-sale.ts`). The series lookup is by id alone, as in `recordSale`.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -176,26 +122,14 @@ export async function recordCorrection(
     });
   }
 
-  // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing
-  // original, or a wrong/absent corrective series, still returns its own code and never
-  // leaks an authz error) and BEFORE the chain work and the number allocation below, so a rejected
-  // correction consumes NO number and does NO chain work, leaving no permanent series gap. That
-  // ordering is what matters and it is engine-independent; the two row locks this note used to name
-  // are gone (`allocate-number.ts` and `packages/fiscal-verifactu/src/chain.ts` each say what
-  // replaced theirs). `authorization.authorizedBy` is the person to
-  // record on the corrective sale below (the operator's own role held `sale.rectify`, or a
-  // supervisor `override` supplied it).
   const authorization = await authorize(tx, {
     sessionId: input.authz.sessionId,
     permission: "sale.rectify",
     override: input.authz.override,
   });
 
-  // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` —
-  // a failed check records ONE aggregated incident (below, once `saleId` exists) and the correction
-  // is chained anyway. The table-wide `incidents_open_dedup` index holds at most one open incident
-  // per (till, code, sale), so emitting one row per issue would collapse to a single row and
-  // drop every issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
+  // Nothing branches on `verification.ok`: a failed check records one incident carrying every
+  // issue, once `saleId` exists, and the correction is chained anyway.
   const verification = await backend.checkIntegrity(tx, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
@@ -212,35 +146,19 @@ export async function recordCorrection(
     });
   }
 
-  // Step 4. One clock reading for the whole transaction — the SAME `instant`/`offsetMinutes` travel
-  // into both the `sales` row below and `SaleForFiscalRecord.issuedAt`/`offsetMinutes`, so the
-  // corrective sale and its fiscal record cannot carry different timestamps for one event.
+  // One clock reading, so the corrective sale and its fiscal record carry the same timestamp.
   const now = input.clock.now();
 
-  // Clock-confidence degraded is WARN ONLY, never blocking (spec §5) — `now.warning` is already a
-  // fully-formed AppError, forwarded verbatim rather than reconstructed, exactly as `recordSale`.
   if (now.warning) {
     pending.push({ error: now.warning, severity: "warning" });
   }
 
-  // Step 5. Allocation comes AFTER the chain work, and on PostgreSQL that order was mandatory:
-  // both steps took a row lock and held it to commit — the per-node `cadenas` row, which spans
-  // that node's tills (node-id rekey, 2026-08-03), then the series row — so a write path taking
-  // them series-then-chain deadlocked against one taking them the other way. There are no locks
-  // left to order (`allocate-number.ts` and `packages/fiscal-verifactu/src/chain.ts` each say what
-  // replaced theirs), and one write transaction runs on the venue file at a time, so two writers
-  // on one node cannot interleave at all. The order is kept because the step numbering is the
-  // spec's; nothing now depends on it.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
-  // The corrective's VAT breakdown, resolved ONCE so the SAME value feeds both the `sales` row below
-  // and `backend.recordCorrection` further down (spec 8a's single-source rule): storing it on
-  // `sales.vat_breakdown` is a queryable copy of the already-filed data, never a second recompute.
+  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
   const vatBreakdown = buildVatBreakdown(input.lines);
 
-  // Step 6. The corrective sale: a negative `total` (allowed by the relaxed CHECK because
-  // `corrects_sale_id` is set), `fiscalState: "recorded"`, and `locale`/`invoiceLocales` inherited
-  // from the original. NO settlement and NO tenders — the refund is decoupled (spec §4).
+  // No settlement and no tenders: the refund is a separate action.
   const [inserted] = await tx
     .insert(sales)
     .values({
@@ -251,19 +169,13 @@ export async function recordCorrection(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      // A money column stores a count of whole cents, converted here at the row. `vat_breakdown`
-      // above is JSON text holding the decimal literals the fiscal record hashes and stays as it
-      // is.
       total: stringToCents(input.total),
       locale: original.locale,
       invoiceLocales: original.invoiceLocales,
       fiscalBackend: backend.id,
       fiscalState: "recorded",
       correctsSaleId: input.correctsSaleId,
-      // Recorded at INSERT because `sales` is append-only, so there is no later moment to
-      // attribute the correction — the same seam `sale_voids.voided_by` fills. Our own metadata; it
-      // never enters the fiscal record's fingerprint (it is on the sales row, not the fiscal
-      // record).
+      // Written at insert: `sales` is append-only, so the authorizer cannot be added later.
       authorizedBy: authorization.authorizedBy,
     })
     .returning({ id: sales.id });
@@ -277,9 +189,7 @@ export async function recordCorrection(
 
   const saleId = inserted.id as SaleId;
 
-  // Recorded now that `saleId` exists, on this same transaction — never a fresh connection, which
-  // would let an incident commit for a correction that later rolls back. Attached to the CORRECTIVE
-  // sale (the one this call created), matching `recordSale`'s own deferral until `saleId` exists.
+  // On this same transaction, attached to the corrective sale.
   for (const incident of pending) {
     await recordIncident(tx, {
       tillId: input.tillId,
@@ -299,18 +209,11 @@ export async function recordCorrection(
 
   /* v8 ignore start */
   if (location === undefined) {
-    // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
-    // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // — a caller programming error, not a fiscal condition.
+    // `tills.location_id` is a not-null foreign key, so this means the till does not exist.
     throw new Error(`recordCorrection: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */
 
-  // Step 7. Behind this one call the module reads the ORIGINAL's stored fiscal identity (by
-  // `correctsSaleId`), builds the corrective fiscal record referencing it, advances its own chain,
-  // and inserts its own pending-submission row — all on this transaction. Built exactly as
-  // `recordSale` builds `SaleForFiscalRecord`, with `counterparty: null`: this task wires no
-  // recipient-identified (B2B) correction, so the reachable corrective is of a simplified invoice.
   const fiscal = await backend.recordCorrection(
     tx,
     {
@@ -324,14 +227,11 @@ export async function recordCorrection(
       offsetMinutes: now.offsetMinutes,
       descriptionOfOperation: location.operationDescription,
       total: decimal(input.total),
-      // The SAME breakdown stored on `sales.vat_breakdown` above — one variable feeds both (spec 8a).
       vatBreakdown,
       counterparty: null,
     },
     { correctsSaleId: input.correctsSaleId },
   );
 
-  // Step 8 is the caller's. Returning inside the transaction rather than committing here lets the
-  // till write the correction and its fiscal record as one unit of work.
   return { saleId, fiscal };
 }

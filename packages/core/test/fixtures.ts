@@ -15,9 +15,6 @@ export interface SeededTenant {
   seriesId: SeriesId;
 }
 
-// Module-scope, not per-call: every test in record-sale.test.ts shares this counter across the
-// whole run, which is what keeps each call's NIF collision-free against `tenants_country_tax_id_key` — the
-// same convention packages/fiscal-verifactu/test/fixtures.ts's own `freshNif` uses.
 let nifSequence = 0;
 
 function freshNif(): string {
@@ -26,20 +23,10 @@ function freshNif(): string {
 }
 
 /**
- * Makes sure the one taxpayer row is there, then seeds location -> till -> node -> invoice series
- * for `record-sale.test.ts`, directly through the fixture connection.
- *
- * The invoice series is keyed to the NODE, not the till (node-id rekey, 2026-08-03: the SIF is the
- * node, #33). Each call mints its own location, till and node, which is exactly the shape
- * `record-sale.test.ts`'s "rejects a series belonging to another node" test needs: a series that is
- * real but owned by a different node than the one under test (the returned `nodeId` is genuinely
- * different from the first call's). The taxpayer row is a singleton, so only the first call
- * inserts it.
+ * Makes sure the one taxpayer row is there, then seeds location -> till -> node -> invoice series.
+ * Each call mints its own node, so a second call gives a series owned by a different node.
  */
 export async function seedTenant(db: Database): Promise<SeededTenant> {
-  // Through the table definitions, not raw SQL: `id` and `created_at` are `$defaultFn` generators
-  // that only the insert BUILDER runs, and `invoice_locales` is a list the column's own mapping
-  // encodes. A raw insert omitting them is refused (`NOT NULL constraint failed: tenants.created_at`).
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Waitron SL" })
@@ -73,21 +60,11 @@ export async function seedTenant(db: Database): Promise<SeededTenant> {
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
 
-  // No `working_orders` row and no `workingOrderId`: `recordSale` now WRITES `input.workingOrderId`
-  // to `sales.working_order_id`, a real FK onto `working_orders` (sub-project 7b). A fabricated id
-  // would FK-violate on the insert, so this fixture mints none — the walk-up sales every suite here
-  // records omit it and the column inserts NULL. A test that needs the linkage seeds its own real
-  // `working_orders` row and passes its id explicitly (see record-sale.test.ts's "working order
-  // linkage").
   return { tillId, nodeId, seriesId };
 }
 
 /**
- * Adds a second series to an EXISTING node whose `purpose` is `rectificative`, returning its id
- * (node-id rekey, 2026-08-03: a series is owned by a node, #33). `recordCorrection` requires such a
- * series (a correction must draw its number from a corrective series, never an ordinary one — RD
- * 1619/2012 art. 6.1.a); `recordSale` requires the opposite. Uses the fixture connection directly,
- * like `seedTenant`.
+ * Adds a `rectificative` series to an existing node, as `recordCorrection` requires.
  */
 export async function seedRectificativeSeries(
   db: Database,
@@ -102,15 +79,9 @@ export async function seedRectificativeSeries(
 }
 
 /**
- * Inserts one `sales` row directly through the fixture connection.
- * For tests that need an ORIGINAL sale to correct without
- * routing it through `recordSale` (so it has NO backend fiscal record, or so an original can be
- * planted under another node or series). Written on the current schema: `total` is the
- * only money column. `correctsSaleId` defaults to NULL for an ordinary original; pass it to seed a
- * rectificativa instead (its negative/positive total is what `sales_total_ck` permits once it is set).
- *
- * `total` is given as the decimal amount a caller reads — "65.00" — and converted to the count of
- * whole cents the column stores on the way in, so this fixture is the same edge `recordSale` is.
+ * Inserts one `sales` row directly, for a test that needs an original sale with no fiscal record
+ * or one planted under another node or series. Pass `correctsSaleId` to seed a corrective invoice.
+ * `total` is a decimal ("65.00"), converted to whole cents as `recordSale` does.
  */
 export async function seedBareSale(
   db: Database,
@@ -132,9 +103,8 @@ export async function seedBareSale(
       issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
       total: stringToCents(overrides.total ?? "65.00"),
-      // The filed per-rate desglose. Defaults to `[]`: a bare original planted for a
-      // correction test carries no line detail here, and the correction's OWN breakdown is what those
-      // tests exercise (via recordCorrection). Overridable for a test that needs a specific one.
+      // Empty by default: the tests that plant a bare original exercise the correction's own
+      // breakdown.
       vatBreakdown: overrides.vatBreakdown ?? [],
       locale: "es-ES",
       invoiceLocales: ["es-ES"],

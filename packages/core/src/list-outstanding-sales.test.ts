@@ -63,9 +63,6 @@ describe("listOutstandingSales", () => {
       correctionTotal: "0.00",
       amountDue: "70.00",
     });
-    // The `::text` cast in the query is what makes `issuedAt` a genuine string; both drivers would
-    // otherwise parse `timestamptz` to a Date, contradicting the `string` type on OutstandingSale.
-    // Assert the type only — not the exact rendering — to avoid coupling to Postgres's text format.
     expect(typeof out[0]!.issuedAt).toBe("string");
   });
 

@@ -49,10 +49,8 @@ describe("saleLineRows", () => {
       optionSnapshots: [cookedRare],
       unitName: { "en-GB": "cup" },
       unitPrecision: 0,
-      // Every one of these columns holds a whole number, at its own scale: 1000 thousandths for
-      // the "1" quantity, 300 cents for "3.00", 1000 basis points for the "10.00" rate. The
-      // discriminating case — where a quantity and a rate could not be swapped unnoticed — is the
-      // five-gram line below.
+      // Whole numbers at each column's scale: 1000 thousandths for the "1" quantity, 300 cents for
+      // "3.00", 1000 basis points for the "10.00" rate.
       quantity: 1000,
       unitPrice: 300,
       vatRate: 1000,

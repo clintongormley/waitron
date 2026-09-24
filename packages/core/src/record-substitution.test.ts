@@ -2,8 +2,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
-// See record-correction.test.ts's own note: there is no `@waitron/fiscal/testing` subpath; the real
-// import path is `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -32,31 +30,18 @@ import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtu
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
-// A manager shift session authorizes the ONE precondition void this suite performs — recordVoid now
-// requires `sale.void`, and only the void's authorization matters here, not the substitution's caller.
+// A manager's session authorizes the one precondition void this suite performs.
 let voidSessionId: string;
 
-// The deployment holds one tenant per database. One venue file for everything here (`useVenueDb`):
-// the guards are pure logic (an empty list, a duplicate id, an unknown/voided/already-substituted
-// ticket, a wrong-node series), none of which turns on who is connected or on two writers
-// contending. `sale.not_found` and `sale.series_not_found` are asserted below for a genuinely
-// ABSENT row, which is what those codes mean here — the same shape record-correction.test.ts uses.
 const suite = useVenueDb({
-  // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
+  // `recordVoid` calls `authorize`, which reads identity's tables.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  // FakeFiscalBackend.recordSale/recordSubstitution/checkIntegrity read and write
-  // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
-  // Seed a manager (holds `sale.void`) on the suite's own handle and open its session — the
-  // precondition void below needs an authorizer, exactly as the record-void suite arranges.
-  // Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
-  // `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
-  // so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`.
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "P", pinHash: hashPin("1234"), role: "manager" })
@@ -69,8 +54,7 @@ beforeEach(async () => {
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
-/** Mirrors record-correction.test.ts's helper: the real `TrustedClock` also requires `anchor`/
- * `currentAnchor`, which neither `recordSale` nor `recordSubstitution` ever calls. */
+/** A `TrustedClock` from `now()` alone; nothing under test calls anything else on it. */
 function fixedClock(now: TrustedClock["now"]): TrustedClock {
   return {
     now,
@@ -89,13 +73,11 @@ const steadyClock: TrustedClock = fixedClock(() => ({
   anchorAgeSeconds: 0,
 }));
 
-/** The recipient every F3 must carry — a full invoice always names its recipient (findings
- * §10.2). Neutral English-ish legal name; `test/` is out of english-only's scan (it walks `src/`
- * only), but a Spanish token here would still read as noise. */
+/** The recipient every F3 must carry. */
 const RECIPIENT = { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: "ES" };
 
-/** An ordinary simplified (F2) ticket, settled immediately so the ORIGINAL is fully paid — which
- * makes "the F3 is unsettled" a real assertion rather than a vacuous one. */
+/** An ordinary simplified (F2) ticket, settled immediately, so "the F3 is unsettled" is not
+ * vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tillId,
@@ -133,8 +115,8 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   };
 }
 
-/** The F3 input: a full invoice restating the substituted tickets, POSITIVE total, naming the
- * recipient. Drawn from the SAME standard series the tickets used (the reuse decision). */
+/** A full invoice restating the tickets: positive total, naming the recipient, drawn from the
+ * same standard series the tickets used. */
 function substitutionInput(
   substitutedSaleIds: SaleId[],
   overrides: Partial<RecordSubstitutionInput> = {},
@@ -173,8 +155,7 @@ function substitutionInput(
   };
 }
 
-/** Records an ORIGINAL simplified ticket exactly as the application will: in one transaction, on a
- * node already registered with the backend. */
+/** Records a simplified ticket in one transaction, on a node registered with the backend. */
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await backend.registerNode(tx, nodeId);
@@ -182,7 +163,6 @@ async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleI
   });
 }
 
-/** Runs `recordSubstitution` in one transaction — the real write path. */
 async function substitute(
   backend: FiscalBackend,
   substitutedSaleIds: SaleId[],
@@ -193,9 +173,7 @@ async function substitute(
   });
 }
 
-/** Counts every row in `table`. The suite helper empties every data table between tests
- * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
- * test wrote. */
+/** Counts every row in `table`; the suite helper empties the tables between tests. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)}`,
@@ -203,8 +181,8 @@ async function countRows(table: string): Promise<number> {
   return result.rows[0]!.n;
 }
 
-/** Rows for one specific sale — what "the F3 is unsettled" actually means, since each substituted
- * ticket (settled immediately by `sellTicket`) carries tenders and a settlement of its own. */
+/** Rows for one sale: each ticket, settled by `sellTicket`, has tenders and a settlement of its
+ * own. */
 async function countForSale(table: string, saleId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)} where sale_id = ${saleId}`,
@@ -219,10 +197,8 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
   });
 
   it("rejects duplicate ids in the input list (defense-in-depth, never trusting the backend)", async () => {
-    // A repeated id would double an F3's `FacturasSustituidas` and its `sale_substitutions` rows.
-    // Rejected HERE at the core layer, distinct from `sale.already_substituted` (a ticket substituted
-    // by a PRIOR, committed F3) — the message names the distinct concept so a caller can tell them
-    // apart.
+    // Refused in core, and distinct from `sale.already_substituted`, which is a ticket exchanged by
+    // a prior, committed F3.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await expect(substitute(backend, [saleId, saleId])).rejects.toThrow(/duplicate/i);
@@ -239,8 +215,6 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
   });
 
   it("refuses to substitute a voided ticket (a voided ticket is exchanged by nothing)", async () => {
-    // A ticket annulled because it should never have existed cannot be exchanged for a full invoice;
-    // reuses `sale.voided`, the same code `recordCorrection` reuses for the analogous refusal.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await withTransaction(suite.db, async (tx) => {
@@ -253,10 +227,8 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
   });
 
   it("refuses to substitute a ticket already substituted by a prior F3 (at most once)", async () => {
-    // The `unique(substituted_sale_id)` on sale_substitutions is the real control — a
-    // ticket exchanged twice would put the same operation in two canje invoices. Translated to
-    // `sale.already_substituted`, the way `recordVoid` translates its own double-void unique
-    // violation into `sale.already_voided`.
+    // The unique `substituted_sale_id` is the control: a ticket exchanged twice would put one
+    // operation in two canje invoices.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await substitute(backend, [saleId]); // the first F3 succeeds
@@ -269,18 +241,9 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
 
 describe("recordSubstitution — error propagation", () => {
   it("propagates a sale_substitutions error that is not a unique violation, untranslated", async () => {
-    // The insert's OTHER failure path: any reason `sale_substitutions` could reject BESIDES the
-    // `substituted_sale_id` unique (a constraint added later, an FK violation) must reach the caller
-    // as-is rather than being misreported as `sale.already_substituted` — mirrors record-void.ts's
-    // identical "not a unique violation" test.
-    //
-    // Provoked by a `RAISE(ABORT)` trigger that refuses every insert, which is the "a constraint
-    // added later" case stated as this engine states it: SQLite has no
-    // `ALTER TABLE ... ADD CONSTRAINT`, so a CHECK cannot be bolted onto an existing table, and a
-    // trigger is what the tree already uses to refuse a write (`packages/store/src/append-only.ts`).
-    // The refusal arrives under `RESTRICT_VIOLATION` (1811, `SQLITE_CONSTRAINT_TRIGGER`), which is
-    // not `UNIQUE_VIOLATION` — the discrimination the case is for. The trigger is dropped in the
-    // `finally` so nothing after this case sees it.
+    // Any other insert failure must reach the caller as it arrived, not as
+    // `sale.already_substituted`. Provoked by a `RAISE(ABORT)` trigger, because SQLite cannot add a
+    // CHECK to an existing table; its refusal is not a unique violation. Dropped in `finally`.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await suite.db.execute(
@@ -314,8 +277,6 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
   });
 
   it("rejects a series belonging to another node", async () => {
-    // A node may own several series, but a series belongs to exactly one node — drawing the F3's
-    // number from another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     const other = await seedTenant(suite.db);
@@ -328,11 +289,6 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
   });
 
   it("rejects a non-standard series: an F3 draws its number from the standard series", async () => {
-    // The F3 reuses the `standard` series; a `rectificative` (or any non-standard) series must be
-    // refused, or the F3 would draw an invoice number from a series reserved for a different
-    // purpose — corrupting a legally-load-bearing, unrepairable series. Mirrors record-sale.ts /
-    // record-correction.ts's symmetric purpose guard. The guard fires before any write, so nothing
-    // is chained.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     const rectSeries = await seedRectificativeSeries(suite.db, nodeId);
@@ -453,8 +409,7 @@ describe("recordSubstitution — the F3 sale", () => {
 
 describe("recordSubstitution — no double charge (the F3 is unsettled)", () => {
   it("records no tenders and no settlement for the F3 (the money was collected on the tickets)", async () => {
-    // «no cobrar dos veces» (findings §10.2): the customer paid on the simplified ticket(s); the F3
-    // introduces no new charge, so it carries no tender and no settlement.
+    // «no cobrar dos veces»: the customer paid on the tickets.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
 
@@ -467,9 +422,8 @@ describe("recordSubstitution — no double charge (the F3 is unsettled)", () => 
 
 describe("recordSubstitution — a mixed batch fails atomically", () => {
   it("chains nothing when one ticket in the batch was never fiscally recorded", async () => {
-    // One ticket is real and recorded; the other exists in `sales` but has NO backend record. The
-    // backend rejects the batch (`fiscal.sale_not_recorded`) and the WHOLE transaction rolls back —
-    // no F3 sale, no sale_substitutions rows, no chained record, no burned series number.
+    // One ticket is recorded; the other exists in `sales` with no fiscal record. The fake backend
+    // refuses the batch and the whole transaction rolls back.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: recorded } = await sellTicket(backend); // number 1, has a fiscal record
     const unrecorded = await seedBareSale(
@@ -497,8 +451,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
 
 describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => {
   it("completes when chain verification fails, recording an incident on the F3", async () => {
-    // A customer is waiting for a proper invoice; a chain-integrity failure must never block issuing
-    // it. The failed check is recorded against the F3 and the F3 proceeds.
+    // A customer is waiting for a proper invoice; a chain-integrity failure must never block it.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
     backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
@@ -541,7 +494,7 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
 
     await substitute(backend, [ticket]);
 
-    // Only the F3 path could add one — the ticket's own recordSale ran clean too.
+    // The ticket's own recordSale ran clean too.
     expect(await countRows("incidents")).toBe(0);
   });
 });
@@ -594,8 +547,7 @@ it("rejects repeated line numbers in a multi-ticket substitution without recordi
   const lines = substitutionInput(ids).lines.map((line) => ({ ...line, lineNo: 1 }));
   const before = await countRows("sales");
   const error = await captureError(() => substitute(backend, ids, { lines }));
-  // WHICH key: the repeated line number, not a code that means only "something unique" — see
-  // record-sale.test.ts's numbering backstop for why this engine cannot be asserted on a code.
+  // WHICH key: the repeated line number.
   expect(isUniqueViolation(error)).toBe(true);
   expect(constraintTarget(error)).toEqual({ table: "sale_lines", columns: ["sale_id", "line_no"] });
   expect(await countRows("sales")).toBe(before);

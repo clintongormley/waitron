@@ -3,17 +3,11 @@ import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitro
 import type { RecordSaleLine } from "./record-sale.js";
 
 /**
- * Every issuance path preserves the same saved facts and resolves child links within its new sale.
- *
- * This builds the `sale_lines` insert, so it is where a line's decimal literals become the whole
- * numbers those columns store — each at its own scale, which is why there are three converters and
- * not one: an amount counts cents, `quantity` counts thousandths (0.005 kg is 5), `vatRate` counts
- * basis points (21.00% is 2100).
- *
- * The conversion is this row and nothing above it. The line's own `quantity` and `vatRate` stay the
- * decimal strings the caller supplied, and the breakdown the fiscal record is filed with comes from
- * those: all three issuance paths hand `buildVatBreakdown` (`record-sale.ts`) their `input.lines`,
- * never a row this returns.
+ * The `sale_lines` insert, and the only place a line's decimal literals become the whole numbers
+ * those columns store, each at its own scale: amounts in cents, `quantity` in thousandths
+ * (0.005 kg is 5), `vatRate` in basis points (21.00% is 2100). The fiscal breakdown is built from
+ * the caller's decimal lines, never from these rows. A child line's parent is resolved within the
+ * new sale.
  */
 export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
   const ids = lines.map(() => randomUUID());
