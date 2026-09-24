@@ -3962,12 +3962,16 @@ Task 0, shrink every uploaded photo, landed as #543; what it does and what it le
 open are under the image library in Track A.
 Task 1a, each machine's own rows keyed by its node id (a new `node_roles` table takes a node's mode,
 singleton role and break-glass verifier off `deployment`; `mirror_config` and `join_requests` gain
-`node_id`), is on branch `feat/sqlite-slice2-node-keyed-rows` (PR number added at land). A dev venue
+`node_id`), landed as #548. A dev venue
 holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt reset demo <name>`
-rebuilds it.
+rebuilds it. Left by #548: deny's delete is the one join-request node filter no test fails
+without (the `requirePending` read before it already refuses another node's row, as its doc
+comment says); identity's comments that still place its tables in different files are Task 1b's
+to rewrite; and the run-it review did not reach three claims within its budget — holders torn by
+a concurrent promotion, credential sealing, and scheduler takeover.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
-`[""]` it still passes 18 of 18 (the assertions predate this branch: aabdde6a8, #489). The wipe's
+`[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
 sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing is only a
 rejoin-level case with sidecars on disk.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
