@@ -2303,7 +2303,7 @@ image constraints under *Detail → Box image*.
   §3 names — it adds a readiness runner and the dev and demo scripts under `apps/server/scripts`.
   `instance-apply.ts` is no longer among them: it went with `waitron-provision instance` when a venue
   became a directory of SQLite files, and with it the question of gating a migrate that could lock a
-  trading shop's tables (the reason is at `packages/provisioning/src/errors.ts`).
+  trading shop's tables.
 - **Provisioning's migrate path still runs the linear full `manifestSets()`** — route it through the
   resolver once it gains per-module enablement.
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
@@ -2568,10 +2568,11 @@ image constraints under *Detail → Box image*.
   same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
   unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
-  comment lines to about 750) `payments` (#558, about 2,000 to about 750) and `identity` (#559, about 2,000 to
-  about 640). A pruning pull request cannot carry this file (the checker refuses it), so each one's
-  line lands here as a docs-only push after the merge. Found by #555, #558 and #559 and left for the
-  package that owns each, all still OPEN:
+  comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
+  2,000 to about 640) and `provisioning` (#561, about 1,740 to about 400). A pruning pull request
+  cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only push
+  after the merge. Found by #555, #558, #559 and #561 and left for the package that owns each, all
+  still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials`, `scheduler` and
     `fiscal-verifactu` ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2625,6 +2626,33 @@ image constraints under *Detail → Box image*.
     Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
     `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554,
     is reached by no test.
+  - The empty-venue-directory reason #561 deleted from `packages/provisioning` ("an empty value would
+    stand a venue up in the working directory") is false there: measured 2026-09-24 on Node v26.7.0,
+    `openVenueDatabase("")` fails `ENOENT: no such file or directory, mkdir ''`, and a real path as
+    the control created `venue.db` and `node.db`. The same reason still stands in
+    `packages/provisioning/README.md` and in `packages/credentials/src/bin.ts` and `bin.test.ts`,
+    whose pointer at `packages/provisioning/src/cli.ts:645` now points nowhere. Credentials opens
+    through `openVenueStore`, not `openVenueDatabase`, and was not measured.
+  - `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
+    exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
+    `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
+    reads and writes inside one `withTransaction`, `venue-apply.ts`, and whether a second PROCESS can
+    interleave was not measured) and that the entry point can only be checked through the built bundle (its prompt function
+    runs straight from source). `docs/developers/conventions-data.md` cites
+    `packages/provisioning/src/errors.ts` as spelling engine errors by `errcode`; it no longer
+    does.
+  - `packages/provisioning` code, found by #561 and not changed: `provisioning.database_not_owned`
+    is declared and neither thrown nor read anywhere in `packages/` or `apps/`;
+    `provisioning.adopt_incomplete`'s `missing` type still lists `"tenant"`; `quoteIdent` has no
+    caller outside its own suite, and the `quoteLiteral` re-export in `identifiers.ts` is used only
+    by that suite; the `action.email === undefined` branch in `venue-apply.ts`'s seed-admin cannot
+    run, because the action's `email` is a required string; the coverage config leaves `src/bin.ts`
+    out with no reason stated any more, which may hide code a test could reach; and `cli.test.ts`
+    test titles still say "before connecting" and "before opening a connection", and one title
+    ("rather than opening the working directory") rests on the false reason above.
+  - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
+    to another", which #561 deleted from provisioning (`tenants` holds one row). Prune with
+    `apps/server`.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2872,9 +2900,7 @@ image constraints under *Detail → Box image*.
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23).**
   `packages/db/src/constraint-target.sqlite.test.ts` and `migrate.sqlite.test.ts` carry a
   `.sqlite.` infix that distinguished them from a twin that no longer exists; a `packages/media`
-  test title still says `bytea`; `packages/provisioning`'s error-registry header argues the
-  `provisioning.*` prefix from "a role that cannot be adopted, a grant that did not take", neither of
-  which this engine can have; and `assertIdentifier` in that package has no product caller at all
+  test title still says `bytea`; and `assertIdentifier` in `packages/provisioning` has no product caller at all
   (only its own suite and the barrel re-export), while `generatePassword`'s single caller is
   `apps/server/src/break-glass.ts`. Each is a rename or a deletion rather than a comment fix.
   Two more the sweep left, both found by the review wave rather than by the sweep's own keys, and
@@ -4387,9 +4413,7 @@ it; and a correction must not decrement a count where it should drop it.
   `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
   `packages/shared/src/cause-chain.ts` and `packages/shared/src/engine-failure.ts` carry the
   sentence this branch corrected in `packages/db/src/unique-violation.ts`.
-  `packages/provisioning/src/bin.ts` and `packages/provisioning/src/errors.ts` only say the wrapper
-  puts the failing SQL in its message, which `DrizzleError` also does, so there the class name may
-  be all that is wrong. `packages/credentials/src/bin.ts` also says the message carries the bind
+  `packages/credentials/src/bin.ts` also says the message carries the bind
   parameters, which `DrizzleError`'s `Failed to run the query '<sql>'` does not. The thrown text
   in `packages/db/src/testing/errors.ts`'s `engineErrorMessage` names the old wrapper on purpose
   and is pinned verbatim by its test.
