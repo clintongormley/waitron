@@ -2914,9 +2914,7 @@ image constraints under *Detail → Box image*.
     there (errcode 14, no file created), while an existing file and `:memory:` attach — narrow that
     sentence in a pull request, since a root `CLAUDE.md` change takes the normal flow.
     `packages/db/drizzle/0001_behavioural_triggers.sql` still points at `packages/store/src/index.ts`
-    by line number, which the prune moved; it is a migration file, so it was left. The slice-2 plan's
-    Task 6 Step 10 still finds the two comments it replaces by their opening words, but its line
-    numbers into `index.ts` and `index.test.ts` are out of date.
+    by line number, which the prune moved; it is a migration file, so it was left.
   - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
     comment): the two `provider.test.ts` cases named "throws payment.not_found" assert only
     `rejects.toThrow()`, not the code (CLAUDE.md §4); `tenant-scoping.test.ts` is named for tenant
@@ -4737,8 +4735,6 @@ closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SI
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
 sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing is only a
 rejoin-level case with sidecars on disk.
-The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
-on purpose: that step rewrites it to match measurement 2's result.
 Every synchronous `deriveKey` caller still blocks the event loop while it derives, among them:
 `encodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts:286`, through
 `encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts:83`) —
@@ -4747,11 +4743,18 @@ decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeSt
 (`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
 `decryptBundle` (`apps/server/src/recovery-bundle.ts:44` and `:140`). Task 2b moved the backup
 sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
-**Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
-backup going after a pause only "if Litestream uploads a fresh full copy on restart". Measurement 1
-saw no new full copy, yet a restore after the restart held every sale, so it recorded
-`RESTART_RESYNCS = true` on restore completeness. Whether the same-backup branch still applies on that
-basis is the decision; spec §4.5 carries a dated note saying so.
+Task 6, the Litestream supervisor (`@waitron/stream`'s `StreamSupervisor`, the server's
+`StreamHost` started at boot on the primary, the store's `checkpointTruncate`, Litestream 0.5.17
+pinned in the box image and in `pnpm setup:litestream`), is on branch
+`feat/sqlite-slice2-stream-supervisor`. The owner decided on 2026-09-24 that the same generation
+continues after a pause, after measurement 1 was repeated at the 256 MiB side-file limit (results
+note §1b: the restore after the restart held every sale, and Litestream uploaded a full copy of the
+database at level 0). Left for later tasks: `/health` must treat the supervisor's
+`supervisor_failed` stop as a problem, not as streaming switched off (Task 7); the settings route
+must reload the stream only after its save commits, and word the refusal of a bucket name holding
+capitals or `_` (Task 8a). `scripts/setup-litestream.ts` is outside every coverage table and every
+typecheck, like the other root `.ts` scripts; the full box image was not built locally, only its
+`litestream` stage.
 
 **The SQLite slice-1 preparation tasks are all landed.** Column vocabulary (P1 — #390, #393, #394,
 #396–#404, #408, #413, #414, #416); the `useVenueDb` test-helper conversion (P2 — every package
