@@ -2623,12 +2623,13 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (owner's
-  answer (a) to B8's FYI, 2026-09-24; branch `fix/ci-root-script-consumers`).** `scripts/changed-scope.mjs`
-  now carries `ROOT_SCOPE_CONSUMERS`, which maps `scripts/bundle-node.mjs` to the four members whose
-  `build` runs it (server, print-agent, credentials, provisioning) and `scripts/dev-server-proxy.ts`
-  to the three front-ends whose `vite.config.ts` imports it; `scopeForPaths` selects those members,
-  so a change to either is `code=true` and `bundle-smoke` runs. The list is hand-written, and
+- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (the
+  owner's answer (a), 2026-09-24, to the note lane B's campaign queue item B8 raised about #580 —
+  not §B8 above; branch `fix/ci-root-script-consumers`).** `scripts/changed-scope.mjs` now carries
+  `ROOT_SCOPE_CONSUMERS`, which maps `scripts/bundle-node.mjs` to the four members whose `build`
+  runs it (server, print-agent, credentials, provisioning) and `scripts/dev-server-proxy.ts` to the
+  three front-ends whose `vite.config.ts` imports it; `scopeForPaths` selects those members, so a
+  change to either is `code=true` and `bundle-smoke` runs. The list is hand-written, and
   `scripts/root-scope-consumers.test.mjs` fails in both directions — a member file naming a root
   `scripts/` file by relative path that is not listed, or a listed pair no file makes. That guard
   reads text: a path assembled from parts is invisible to it. **Still open:** `bundle-smoke` builds

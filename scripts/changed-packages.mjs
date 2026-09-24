@@ -301,15 +301,15 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * Renders a scope as the five lines its two callers read.
  *
  * `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE, which
- * is why `kind: "root"` answers it false alongside `documentation`: a change to `scripts/`,
- * `.husky/` or `.github/` gives none of them work, and ci.yml's UNGATED `lint` job is what runs the
- * repo-level project that does read it. It is emitted from here rather than recomputed by the
- * workflow's shell so the two cannot drift. ci.yml reads `code=`, `scope=`, `packages=` and
- * `deploy=` into job outputs with `sed`; the hook reads `scope=` and `packages=` and routes a
- * root-only push on `scope=root`. `root=` is emitted for the record — a mixed push says `packages`
- * AND `root=true` — and is read by no consumer today: the hook runs the repo-level suite on every
- * non-documentation push anyway, and ci.yml's `lint` job runs it on every push. `deploy=` is read
- * only by ci.yml (its `image` job); the hook builds no image.
+ * is why `kind: "root"` answers it false alongside `documentation`: a `kind: "root"` change —
+ * machinery ROOT_SCOPE_CONSUMERS does not list — gives none of them work, and ci.yml's UNGATED
+ * `lint` job is what runs the repo-level project that does read it. It is emitted from here rather
+ * than recomputed by the workflow's shell so the two cannot drift. ci.yml reads `code=`, `scope=`,
+ * `packages=` and `deploy=` into job outputs with `sed`; the hook reads `scope=` and `packages=`
+ * and routes a root-only push on `scope=root`. `root=` is emitted for the record — a mixed push
+ * says `packages` AND `root=true` — and is read by no consumer today: the hook runs the repo-level
+ * suite on every non-documentation push anyway, and ci.yml's `lint` job runs it on every push.
+ * `deploy=` is read only by ci.yml (its `image` job); the hook builds no image.
  *
  * A single space separates the package names, and that separator is the contract between this file
  * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in

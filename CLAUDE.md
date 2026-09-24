@@ -104,9 +104,10 @@ normal pre-push hook run the local checks once; mandatory package tests and cove
 Do not add a whole-workspace local run solely to finish a branch. Broader local runs remain useful
 for investigating failures or behavior across packages. Required CI checks must pass on the current head.
 
-The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, formatting, lint, root guards
-with coverage, and scoped package types. It runs no package tests. Documentation stops after
-formatting; machinery-only changes stop after root guards; deletion-only pushes skip checks.
+The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, formatting, lint, root
+guards with coverage, and scoped package types. It runs no package tests. Documentation stops after
+formatting; machinery-only changes stop after root guards, unless they touch a root script a package
+reads (`ROOT_SCOPE_CONSUMERS` in `scripts/changed-scope.mjs`); deletion-only pushes skip checks.
 Unknown ranges keep the full local gate, including workspace typechecking. See
 [ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
@@ -230,8 +231,9 @@ hook, or how tests are scheduled:
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
   it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
 - **After a rebase + `--force-with-lease`, the hook can scope the WRONG package** (mechanism
-  unconfirmed). Confirm with `git diff --name-only origin/main..HEAD` that the hook typechecked
-  the actual changed packages; run any missing typechecks and verify the PR’s CI scope and results.
+  unconfirmed). Confirm with `git diff --name-only origin/main..HEAD` that the hook typechecked the
+  packages the changed paths select (a root script `ROOT_SCOPE_CONSUMERS` lists selects the packages
+  that read it); run any missing typechecks and verify the PR’s CI scope and results.
 - **The pre-push log file can be days stale.** Reproduce; do not read it.
 - **Every package whose vitest config enables browser mode runs in real headless Chromium.**
   Concurrency is decided by measured headroom, never by a count: check free memory

@@ -165,8 +165,8 @@ describe("scopeForPaths", () => {
   });
 
   // The repository's own machinery is ROOT scope, not global, so it gives the repo-level Vitest
-  // project work and gives no package any — including the two files members do read, which
-  // changed-scope.mjs names above ROOT_SCOPE_PREFIXES.
+  // project work and gives no package any. The files members do read are in ROOT_SCOPE_CONSUMERS,
+  // covered by the "a root file that workspace members read" block.
   it.each([
     ".github/workflows/ci.yml",
     "scripts/changed-scope.mjs",
@@ -503,9 +503,10 @@ describe("formatScope", () => {
     );
   });
 
-  // The FOURTH outcome. `code=false` is what makes a pure-root pull request skip every code-gated
-  // job in ci.yml — the ungated `lint` job runs the repo-level project there — and `scope=root` is
-  // what makes the hook skip package typechecks while still running the root guards.
+  // The FOURTH outcome. `code=false` is what makes a `scope=root` pull request skip every
+  // code-gated job in ci.yml — the ungated `lint` job runs the repo-level project there — and
+  // `scope=root` is what makes the hook skip package typechecks while still running the root
+  // guards.
   it("emits its own line for a root-only push", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
       "code=false\nscope=root\npackages=\nroot=true\ndeploy=false",
@@ -536,8 +537,8 @@ describe("formatScope", () => {
   });
 
   // The one place the two part company, and the reason `code` is not simply `classify`'s verdict
-  // any more. A root path IS code — `isInertPath` says so, and it can break the repo-level suite —
-  // but it gives no `code`-gated job in ci.yml anything to do.
+  // any more. A root path ROOT_SCOPE_CONSUMERS does not list IS code — `isInertPath` says so, and
+  // it can break the repo-level suite — but gives no `code`-gated job in ci.yml anything to do.
   it("emits code=false for a root-only push, where classify says code", () => {
     expect(classify([".husky/pre-push"]).code).toBe(true);
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace())).split("\n")[0]).toBe(
@@ -722,8 +723,9 @@ describe("the CLI", () => {
     );
   });
 
-  // What ci.yml's `changes` job reads: `code=true` is what runs `bundle-smoke` and the members' own
-  // builds and tests on a pull request that changes only the shared build script.
+  // What ci.yml's `changes` job reads: `code=true` is what runs `bundle-smoke`, the workspace
+  // typecheck, and the tests of the selected members and their dependents on a pull request that
+  // changes only the shared build script.
   it("selects the real members that build through scripts/bundle-node.mjs", () => {
     expect(run("scripts/bundle-node.mjs\n").stdout).toBe(
       "code=true\nscope=packages\npackages=@waitron/credentials @waitron/print-agent-app " +
