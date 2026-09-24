@@ -1276,9 +1276,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // the primary key, and `parkOrder` catches that refusal and REPLAYS the existing open order's
   // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
   // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
-  // is no longer open re-throws the raw refusal). `parkOrder` re-reads the catalogue and prices
-  // authoritatively (the request carries no price), opening its OWN `withTransaction` transaction,
-  // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
+  // is no longer open re-throws the raw refusal). `parkOrder` reads the zone's menu offers and
+  // prices authoritatively (the request carries no price), opening its OWN `withTransaction`
+  // transaction, so it is called OUTSIDE any transaction here. Returns the persisted
+  // `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);

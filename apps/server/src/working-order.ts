@@ -186,7 +186,7 @@ interface BasketModifiers extends AttachedModifiers {
  */
 async function resolveBasketModifiers(
   tx: Transaction,
-  dishes: readonly { productId: string; menuItemId: string | null }[],
+  dishes: readonly { productId: string; menuItemId: string }[],
   defaultLanguage: string,
   sellableOnly: boolean,
 ): Promise<BasketModifiers> {
@@ -740,8 +740,9 @@ export function toVatBreakdown(
 
 /**
  * A working order the counter parks to retrieve and pay later (park & retrieve, sub-project 7b). Like
- * `TillSaleRequest`, it carries NO price of any kind — the server re-reads the catalogue and prices
- * authoritatively (`priceBasket`), so a browser cannot influence the snapshot the draft carries.
+ * `TillSaleRequest`, it carries NO price of any kind — the server reads the zone's menu offers and
+ * prices authoritatively (`priceBasket`), so a browser cannot influence the snapshot the draft
+ * carries.
  *
  * `id` is client-supplied: the till mints the working-order uuid and holds it stable across a retry.
  * That id is what makes park IDEMPOTENT — a re-sent park (a lost-response retry) PK-collides on
@@ -835,9 +836,9 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
-  // keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own doc-comment
-  // explains the zip and why `priced` is threaded back out.
+  // Resolve + price the basket authoritatively (refusing an offer the zone does not list) into the
+  // line rows, keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own
+  // doc-comment explains the zip and why `priced` is threaded back out.
   const { lineRows, priced, lineContexts } = await priceOrderLines(
     tx,
     cfg,
@@ -876,15 +877,16 @@ export async function createOpenOrder(
 }
 
 /**
- * Park a working order: re-read the catalogue, re-price with `priceBasket`, allocate the next per-node
- * order number, and persist an OPEN `working_orders` row plus its priced `working_order_lines` — all
- * inside ONE `withTransaction` transaction, so the order and every line commit as a single unit
- * (or roll back together, leaving nothing parked). The server never trusts a browser-computed price;
- * `req` carries none. The persisted line keeps `product_id` (a pricing INPUT a later repricing
- * re-resolves) alongside the frozen display snapshot (`descriptions`, `unit_price`, `vat_rate`,
- * `category`) from `priceBasket`, plus its GROSS `line_total` (`priceBasket`'s `grossLineTotals`, not
- * the net base the fiscal line carries — see `priceOrderLines`). The persist itself is
- * `createOpenOrder`, shared verbatim with `payWorkingOrder`'s walk-up path.
+ * Park a working order: read the zone's menu offers, re-price with `priceBasket`, allocate the next
+ * per-node order number, and persist an OPEN `working_orders` row plus its priced
+ * `working_order_lines` — all inside ONE `withTransaction` transaction, so the order and every line
+ * commit as a single unit (or roll back together, leaving nothing parked). The server never trusts
+ * a browser-computed price; `req` carries none. The persisted line keeps `product_id` (a pricing
+ * INPUT a later repricing re-resolves) alongside the frozen display snapshot (`descriptions`,
+ * `unit_price`, `vat_rate`, `category`) from `priceBasket`, plus its GROSS `line_total`
+ * (`priceBasket`'s `grossLineTotals`, not the net base the fiscal line carries — see
+ * `priceOrderLines`). The persist itself is `createOpenOrder`, shared verbatim with
+ * `payWorkingOrder`'s walk-up path.
  */
 export async function parkOrder(
   deps: WorkingOrderDeps,
@@ -3354,12 +3356,12 @@ export async function updateHeldOrder(
       return;
     }
 
-    // Price the new basket (refusing an unknown product) BEFORE deleting anything, so a bad line
-    // aborts the tx with the parked order still intact. Then swap the lines wholesale: the parent is
-    // open (checked above, and nothing else can have closed it since — the docstring's note), so the
-    // line delete and the re-insert both satisfy
-    // `require_open_parent`, and the re-numbered `line_no`s start from 1.
-    // An edit only rewrites the persisted lines; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+    // Price the new basket (refusing an offer the zone does not list) BEFORE deleting anything, so
+    // a bad line aborts the tx with the parked order still intact. Then swap the lines wholesale:
+    // the parent is open (checked above, and nothing else can have closed it since — the
+    // docstring's note), so the line delete and the re-insert both satisfy `require_open_parent`,
+    // and the re-numbered `line_no`s start from 1. An edit only rewrites the persisted lines;
+    // `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
     const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const { lineRows, lineContexts } = await priceOrderLines(
       tx,

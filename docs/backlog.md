@@ -911,6 +911,15 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
   tab" and "addTabRound on that empty tab refuses order.service_context_missing"
   (`apps/server/src/till-api.zone-required.test.ts`). **Next action:** owner to decide whether to
   refuse opening a tab on a table in no zone, or to require every table to have a zone.
+- **Moving that empty tab onto a zoned table does not give it a zone.** `moveTab` and `joinTable`
+  (`apps/server/src/working-order.ts`) only re-point a zone record the tab already has
+  (`findOrderContext`, then `retargetOrderContext` or the `service_zone.join_mismatch` check), and
+  a tab opened on a table in no zone has none. So after either one, a round naming an offer the
+  new table's zone lists is refused `order.service_context_missing` (409), and the tab can never
+  take a round. Measured 2026-09-24 by the B4 review with a scratch HTTP test. Before B4 the till's
+  round, which names menu offers, also failed there, with `sale.unknown_product`. **Next action:**
+  the same owner decision as the entry above; if tabs on tables in no zone stay allowed, `moveTab`
+  and `joinTable` must create the zone record rather than only re-point one.
 - **Two branches still read a held line that names no menu offer, and only an order parked before
   B4 should have one.** `getHeldOrder` (`apps/server/src/working-order.ts`, its
   `context === undefined || line.productId === null` arm) returns such a line by its product alone,
