@@ -201,6 +201,20 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       return unavailable();
     }
   }
+  async function readForSetup(): Promise<SavedState | undefined> {
+    const state = await read();
+    if (state?.phase === "staged") {
+      try {
+        await lstat(join(options.stateDir, "restore-request.json"));
+      } catch (error) {
+        if (!record(error) || error.code !== "ENOENT") return unavailable();
+        // A failed cold restore removes its marker. Keep the approved identity for a retry.
+        delete state.phase;
+        await save(state);
+      }
+    }
+    return state;
+  }
   async function save(value: SavedState) {
     await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
     const temporary = `${path}.${randomUUID()}.tmp`;
@@ -377,7 +391,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     },
     async start(): Promise<CloudRecoveryView> {
       return locked(async () => {
-        let state = await read();
+        let state = await readForSetup();
         if (!state) {
           state = fresh();
           await save(state);
@@ -388,14 +402,14 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     },
     async status(): Promise<CloudRecoveryView> {
       return locked(async () => {
-        const state = await read();
+        const state = await readForSetup();
         if (!state) unavailable();
         return statusOf(state, "status");
       });
     },
     async startAgain(): Promise<CloudRecoveryView> {
       return locked(async () => {
-        const old = await read();
+        const old = await readForSetup();
         if (old) {
           if (old.phase) unavailable();
           const previous = await statusOf(old, "status");
@@ -411,7 +425,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       expectedPointId: string,
     ): Promise<void> {
       return locked(async () => {
-        const state = await read();
+        const state = await readForSetup();
         if (!state || state.phase) unavailable();
         const current = await statusOf(state, "status");
         if (current.state !== "approved" || !current.point || expectedPointId !== current.point.id)

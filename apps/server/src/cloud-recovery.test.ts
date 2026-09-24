@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createServer } from "node:https";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
+import { S3Client } from "@aws-sdk/client-s3";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import type { CloudRecoveryOptions } from "./cloud-recovery.js";
 
@@ -384,4 +385,165 @@ describe("Cloud recovery target", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, 10_000);
+  it("resumes approval after a failed cold restore clears its staged marker", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    const stage = vi.fn(async () => {
+      await writeFile(join(f.stateDir, "restore-request.json"), "{}", { mode: 0o600 });
+    });
+    await createCloudRecoveryClient(f.options).restore(stage, point.id);
+    const before = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    await expect(createCloudRecoveryClient(f.options).restore(stage, point.id)).rejects.toThrow();
+    expect(stage).toHaveBeenCalledOnce();
+    // runStagedRestore clears this marker after an unsuccessful cold restore.
+    await rm(join(f.stateDir, "restore-request.json"));
+    await createCloudRecoveryClient(f.options).start();
+    expect((await createCloudRecoveryClient(f.options).status()).state).toBe("approved");
+    await createCloudRecoveryClient(f.options).restore(stage, point.id);
+    expect(stage).toHaveBeenCalledTimes(2);
+    const after = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    expect([after.requestId, after.privateKey, after.pointId]).toEqual([
+      before.requestId,
+      before.privateKey,
+      before.pointId,
+    ]);
+    expect(f.calls.some((c) => c.action === "restored")).toBe(false);
+  });
+
+  it("allows an expired failed restore request to be explicitly replaced", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    await createCloudRecoveryClient(f.options).restore(async () => {}, point.id);
+    const original = f.options.fetch;
+    f.options.fetch = vi.fn((url: string | URL | Request, init?: RequestInit) =>
+      String(url).endsWith("/status")
+        ? Promise.resolve(new Response(null, { status: 410 }))
+        : original(url, init),
+    ) as typeof fetch;
+    const old = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const next = await createCloudRecoveryClient(f.options).startAgain();
+    expect(next.requestId).not.toBe(old.requestId);
+  });
+
+  it.each(["permissions", "size"])(
+    "refuses private state with unsafe %s before contacting Cloud",
+    async (kind) => {
+      const f = await fixture();
+      await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+      const path = join(f.stateDir, "cloud-recovery.json");
+      if (kind === "permissions") await chmod(path, 0o644);
+      else {
+        const saved = JSON.parse(await readFile(path, "utf8"));
+        await writeFile(path, JSON.stringify({ ...saved, padding: "x".repeat(8192) }));
+      }
+      f.calls.length = 0;
+      await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(
+        "Cloud recovery is unavailable",
+      );
+      expect(f.calls).toEqual([]);
+    },
+  );
+
+  it("keeps the approved point pinned across later status polls", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    await createCloudRecoveryClient(f.options).status();
+    const original = f.options.fetch;
+    f.options.fetch = vi.fn((url: string | URL | Request, init?: RequestInit) =>
+      String(url).endsWith("/info")
+        ? Promise.resolve(
+            Response.json({
+              point: {
+                ...point,
+                id: "715955bb-2dbd-4481-9746-f6d3e95a8651",
+                objectKey: "snapshots/715955bb-2dbd-4481-9746-f6d3e95a8651",
+              },
+              operationExpiresAt: new Date(Date.now() + 60000).toISOString(),
+            }),
+          )
+        : original(url, init),
+    ) as typeof fetch;
+    await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(
+      "Cloud recovery is unavailable",
+    );
+    expect(
+      JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).pointId,
+    ).toBe(point.id);
+  });
+
+  it("bounds otherwise valid control responses before accepting their payload", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    const original = f.options.fetch;
+    f.options.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const response = await original(url, init);
+      return Response.json({ ...(await response.json()), padding: "x".repeat(16384) });
+    }) as typeof fetch;
+    await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(
+      "Cloud recovery is unavailable",
+    );
+  });
+
+  it("requires the original request as well as the snapshot for completion", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    await createCloudRecoveryClient(f.options).restore(async () => {}, point.id);
+    await expect(
+      createCloudRecoveryClient(f.options).markRestored({
+        requestId: "715955bb-2dbd-4481-9746-f6d3e95a8651",
+        pointId: point.id,
+      }),
+    ).rejects.toThrow("Cloud recovery is unavailable");
+    expect(JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).phase).toBe(
+      "staged",
+    );
+  });
+
+  it("rejects a mismatched declared object length before reading its body", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    const consumed = vi.fn();
+    const send = vi.spyOn(S3Client.prototype, "send").mockResolvedValue({
+      ContentLength: 8,
+      Body: (async function* () {
+        consumed();
+        yield Buffer.from("archive");
+      })(),
+    } as never);
+    const stage = vi.fn(async () => {});
+    try {
+      await expect(
+        createCloudRecoveryClient({ ...f.options, download: undefined }).restore(stage, point.id),
+      ).rejects.toThrow("Cloud recovery is unavailable");
+      expect(consumed).not.toHaveBeenCalled();
+      expect(stage).not.toHaveBeenCalled();
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it("stops an overlong object stream before consuming further chunks", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    const continued = vi.fn();
+    const send = vi.spyOn(S3Client.prototype, "send").mockResolvedValue({
+      ContentLength: point.size,
+      Body: (async function* () {
+        yield Buffer.from("too long");
+        continued();
+        yield Buffer.from("tail");
+      })(),
+    } as never);
+    const stage = vi.fn(async () => {});
+    try {
+      await expect(
+        createCloudRecoveryClient({ ...f.options, download: undefined }).restore(stage, point.id),
+      ).rejects.toThrow("Cloud recovery is unavailable");
+      expect(continued).not.toHaveBeenCalled();
+      expect(stage).not.toHaveBeenCalled();
+    } finally {
+      send.mockRestore();
+    }
+  });
 });

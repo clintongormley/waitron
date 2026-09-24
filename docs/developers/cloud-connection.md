@@ -164,7 +164,9 @@ and temporary storage credentials stay on the server. A managed restore excludes
 The Cloud account page authorizes a target to read one snapshot. It does not confirm that local
 restore has finished. Waitron stages and validates the encrypted archive, restarts, runs cold
 restore, then tries to report completion to Cloud. Reporting is best effort and does not hold up
-the restored server if Cloud is unavailable.
+the restored server if Cloud is unavailable. If a failed cold restore clears its staged request
+and leaves the replacement in setup, retry the approved snapshot. Waitron keeps the same
+request identity; an expired approval requires a new request.
 
 ### Reissue staff TLS after a restore
 
