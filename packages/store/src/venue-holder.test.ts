@@ -1,0 +1,127 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  isVenueHolderFresh,
+  readVenueHolder,
+  VENUE_HOLDER_FILE,
+  VENUE_HOLDER_KINDS,
+  VENUE_HOLDER_STALE_MS,
+  type VenueHolder,
+} from "./venue-holder.js";
+
+const directories: string[] = [];
+afterEach(() => {
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
+});
+const tempDir = () => {
+  const directory = mkdtempSync(join(tmpdir(), "waitron-venue-holder-"));
+  directories.push(directory);
+  return directory;
+};
+
+const HOLDER: VenueHolder = {
+  kind: "server",
+  pid: 4242,
+  host: "3f2a9c1b7d4e",
+  lockedAt: "2026-09-24T20:00:00.000Z",
+  heartbeatAt: "2026-09-24T20:05:00.000Z",
+};
+
+const withFile = (content: string) => {
+  const directory = tempDir();
+  writeFileSync(join(directory, VENUE_HOLDER_FILE), content);
+  return directory;
+};
+
+describe("the holder file's fixed values", () => {
+  it("names the file, the kinds and the staleness bound", () => {
+    expect(VENUE_HOLDER_FILE).toBe("venue.holder.json");
+    expect(VENUE_HOLDER_KINDS).toEqual(["server", "restore", "rejoin", "provisioning", "script"]);
+    expect(VENUE_HOLDER_STALE_MS).toBe(30_000);
+  });
+});
+
+describe("readVenueHolder", () => {
+  it("reads a well-formed record", () => {
+    expect(readVenueHolder(withFile(JSON.stringify(HOLDER)))).toEqual(HOLDER);
+  });
+
+  it("reads every kind in the set", () => {
+    for (const kind of VENUE_HOLDER_KINDS) {
+      expect(readVenueHolder(withFile(JSON.stringify({ ...HOLDER, kind })))?.kind).toBe(kind);
+    }
+  });
+
+  it("answers null when there is no file", () => {
+    expect(readVenueHolder(tempDir())).toBeNull();
+  });
+
+  it("answers null when the folder does not exist", () => {
+    expect(readVenueHolder(join(tempDir(), "missing"))).toBeNull();
+  });
+
+  it("answers null for bytes that are not JSON", () => {
+    expect(readVenueHolder(withFile('{"kind": "server", "pid'))).toBeNull();
+  });
+
+  it("answers null for JSON that is not an object", () => {
+    for (const content of ["null", "42", '"server"', "[]"]) {
+      expect(readVenueHolder(withFile(content))).toBeNull();
+    }
+  });
+
+  it("answers null for a kind outside the set, rather than a record with no kind", () => {
+    expect(readVenueHolder(withFile(JSON.stringify({ ...HOLDER, kind: "break-glass" })))).toBe(
+      null,
+    );
+  });
+
+  it("answers null when any one field is missing or of the wrong shape", () => {
+    const broken: Record<string, unknown>[] = [
+      { kind: undefined },
+      { kind: 1 },
+      { pid: undefined },
+      { pid: "4242" },
+      { pid: 0 },
+      { pid: -1 },
+      { pid: 1.5 },
+      { host: undefined },
+      { host: "" },
+      { host: 7 },
+      { lockedAt: undefined },
+      { lockedAt: "yesterday" },
+      { lockedAt: "2026-09-24" },
+      { lockedAt: 1_790_000_000_000 },
+      { heartbeatAt: undefined },
+      { heartbeatAt: "not a time" },
+      { heartbeatAt: "2026-09-24T20:05:00Z" },
+    ];
+    for (const change of broken) {
+      const record = { ...HOLDER, ...change };
+      expect(readVenueHolder(withFile(JSON.stringify(record))), JSON.stringify(change)).toBeNull();
+    }
+  });
+});
+
+describe("isVenueHolderFresh", () => {
+  const beat = Date.parse(HOLDER.heartbeatAt);
+  const at = (offsetMs: number) => new Date(beat + offsetMs);
+
+  it("is fresh for a heartbeat younger than the bound", () => {
+    expect(isVenueHolderFresh(HOLDER, at(0))).toBe(true);
+    expect(isVenueHolderFresh(HOLDER, at(VENUE_HOLDER_STALE_MS - 1))).toBe(true);
+  });
+
+  it("is stale at exactly the bound and beyond it", () => {
+    expect(isVenueHolderFresh(HOLDER, at(VENUE_HOLDER_STALE_MS))).toBe(false);
+    expect(isVenueHolderFresh(HOLDER, at(10 * VENUE_HOLDER_STALE_MS))).toBe(false);
+  });
+
+  it("is stale for a heartbeat a whole bound or more in the future", () => {
+    expect(isVenueHolderFresh(HOLDER, at(-(VENUE_HOLDER_STALE_MS - 1)))).toBe(true);
+    expect(isVenueHolderFresh(HOLDER, at(-VENUE_HOLDER_STALE_MS))).toBe(false);
+  });
+});
