@@ -39,6 +39,7 @@ measurements".
 ```bash
 export TESTCONTAINERS_RYUK_DISABLED=true
 pnpm --filter @waitron/bench-sqlite-failover probe:restart          # 1: restart after an outside fold-back
+pnpm --filter @waitron/bench-sqlite-failover probe:restart-at-limit # 1b (2026-09-24): the same at the 256 MiB side-file limit; add `--no-restart` for its failing case
 pnpm --filter @waitron/bench-sqlite-failover probe:autocheckpoint   # 2 and 2b: automatic fold-back; offline past truncate-page-n
 pnpm --filter @waitron/bench-sqlite-failover probe:restore-points   # 3: surviving restore points (compressed schedule, ~11 min)
 pnpm --filter @waitron/bench-sqlite-failover probe:restore-time     # 4: restore time; add `--image-kib 330` (no `--`: pnpm passes it on; measured 2026-09-23: with `--`, the probe printed `reason="bad option -- --image-kib; …"`, and without it `pnpm` ran `node src/probes/restore-time.ts "--image-kib" …`) for the largest measured photo

@@ -8,6 +8,7 @@
     "setup:litestream": "node src/setup-litestream.ts",
     "typecheck": "tsc --noEmit",
     "probe:restart": "node src/probes/restart-after-foldback.ts",
+    "probe:restart-at-limit": "node src/probes/restart-at-limit.ts",
     "probe:autocheckpoint": "node src/probes/autocheckpoint.ts",
     "probe:restore-points": "node src/probes/restore-points.ts",
     "probe:restore-time": "node src/probes/restore-time.ts",
