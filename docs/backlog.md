@@ -4573,7 +4573,9 @@ where S3's `DeleteObjects` removes up to 1000 per request — using it would cha
 interface the plan fixed, and not every S3-compatible store has been checked for it. The other
 choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
 now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
-pruning's own check uses (owner, 2026-09-24). Also left: `@waitron/store` is missing from the
+pruning's own check uses (owner, 2026-09-24; landed as #576). Its value is the key as the bucket
+named it, so it is the first `backup.stream_*` parameter a bucket supplies: the screens that word
+these codes (Tasks 7 and 8b) must not put it in front of anyone as trusted text. Also left: `@waitron/store` is missing from the
 English-only guard's `GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned
 — I believe this predates #569 (the package dates from #489); and nothing in the package has been
 run against a real bucket — the unit tests drive the real S3 client over a scripted network, and
