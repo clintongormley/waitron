@@ -92,6 +92,7 @@ export class StreamHost {
   #supervisor: StreamSupervisor | undefined;
   #reloading = false;
   #stopped = false;
+  #retiring: Promise<void> = Promise.resolve();
 
   constructor(deps: StreamHostDeps) {
     this.#deps = deps;
@@ -115,7 +116,9 @@ export class StreamHost {
         log("warn", "stream.no_membership", {});
         return;
       }
-      // The reads above yield, so a stop() or an overlapping start() may have landed meanwhile.
+      // A supervisor still stopping may still have Litestream running; and a stop() or an
+      // overlapping start() may land while this waits.
+      await this.#retiring;
       if (this.#stopped || this.#supervisor !== undefined) return;
       const venueDbPath = join(this.#deps.venueDir, "venue.db");
       const supervisor = new StreamSupervisor({
@@ -142,12 +145,25 @@ export class StreamHost {
     }
   }
 
-  /** A shutdown: stops the copy for good; a later `start()` or `reload()` starts nothing. */
+  /**
+   * A shutdown: stops the copy for good; a later `start()` or `reload()` starts nothing. Resolves
+   * only once every supervisor this host started has stopped, including one a reload is still
+   * stopping, because the caller closes the store next.
+   */
   async stop(): Promise<void> {
     this.#stopped = true;
+    await this.#retire();
+    this.#deps.log("info", "stream.stopped", {});
+  }
+
+  /** Stops the running supervisor, if any; resolves once every stop begun so far has finished. */
+  #retire(): Promise<void> {
     const supervisor = this.#supervisor;
     this.#supervisor = undefined;
-    await supervisor?.stop();
+    if (supervisor !== undefined) {
+      this.#retiring = Promise.all([this.#retiring, supervisor.stop()]).then(() => undefined);
+    }
+    return this.#retiring;
   }
 
   /**
@@ -159,9 +175,7 @@ export class StreamHost {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
-      const supervisor = this.#supervisor;
-      this.#supervisor = undefined;
-      await supervisor?.stop();
+      await this.#retire();
       await this.start();
     } finally {
       this.#reloading = false;

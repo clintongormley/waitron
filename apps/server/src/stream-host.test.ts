@@ -11,8 +11,14 @@ import {
 import { CORE_MIGRATIONS, withTransaction, writeNodeMembership, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { buildNextMembershipDocument, generateNodeKeyPair } from "@waitron/membership";
-import { readPointer, venuePrefix, verifyPointer, type StreamStatus } from "@waitron/stream";
-import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
+import {
+  readPointer,
+  venuePrefix,
+  verifyPointer,
+  type SpawnFn,
+  type StreamStatus,
+} from "@waitron/stream";
+import { FakeLitestream, type FakeChild } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import {
   readStreamSettings,
@@ -274,6 +280,67 @@ describe("the live copy's wiring", () => {
         await rt.start();
         expect(rt.status()).toEqual({ state: "off" });
         expect(litestream.replicas()).toHaveLength(1);
+      });
+
+      // stopWork closes the store once stop() resolves, so Litestream must be gone by then even when
+      // a reload had already begun stopping it.
+      /** A Litestream that takes 800 ms to exit after it is killed. */
+      const slowToDie =
+        (litestream: FakeLitestream): SpawnFn =>
+        (bin, args, env) => {
+          const child = litestream.spawn(bin, args, env) as FakeChild;
+          if (args[0] === "replicate") {
+            const kill = child.kill.bind(child);
+            child.kill = () => {
+              setTimeout(kill, 800);
+            };
+          }
+          return child;
+        };
+
+      it("waits, on stop, for the old Litestream a running reload is still stopping", async () => {
+        const litestream = new FakeLitestream();
+        const rt = runtime({
+          spawn: slowToDie(litestream),
+          store: new SwitchableStore(() => new Date()),
+        });
+        await rt.start();
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+        const old = litestream.running()!;
+        const reloading = rt.reload();
+        await rt.stop();
+        expect(old.done).toBe(true);
+        await reloading;
+        expect(litestream.running()).toBeUndefined();
+        expect(rt.status()).toEqual({ state: "off" });
+      });
+
+      it("starts no second Litestream while a reload is still stopping the first", async () => {
+        const events: string[] = [];
+        const litestream = new FakeLitestream(events);
+        const rt = runtime({
+          spawn: slowToDie(litestream),
+          store: new SwitchableStore(() => new Date(), events),
+        });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+          await Promise.all([rt.reload(), rt.start()]);
+          await vi.waitFor(() => expect(litestream.replicas()).toHaveLength(2), {
+            timeout: 10_000,
+          });
+          // The next supervisor checks the binary first, so its `version` marks when it began.
+          const children = events.filter((event) => /^(spawn|kill) /.test(event));
+          expect(children).toEqual([
+            "spawn version",
+            "spawn replicate",
+            "kill replicate",
+            "spawn version",
+            "spawn replicate",
+          ]);
+        } finally {
+          await rt.stop();
+        }
       });
 
       // start() reads the vault before it builds the supervisor, so a shutdown can land in between.

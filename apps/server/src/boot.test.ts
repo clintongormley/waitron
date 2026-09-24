@@ -2217,25 +2217,29 @@ describe("startServer, against a migrated venue directory", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
   }, 60_000);
 
-  it("leaves the live copy off when no bucket is configured, and boots unaffected", async () => {
+  it("leaves the live copy off when no bucket is configured, boots unaffected, and stops it on shutdown", async () => {
     const port = await freePort();
-    const [server, notConfigured] = await withCapturedStdout(async (lines) => {
-      const started = await startServer({
+    const events = await withCapturedStdout(async (lines) => {
+      const server = await startServer({
         ...KEY_ENV,
         WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ENV: "production",
       });
-      const event = await waitForEvent(lines, "stream.not_configured");
-      return [started, event] as const;
+      try {
+        await waitForEvent(lines, "stream.not_configured");
+        await awaitListening(port);
+      } finally {
+        await server.close();
+      }
+      return lines.map((line) => /"event":"([^"]+)"/.exec(line)?.[1]);
     });
-    try {
-      await awaitListening(port);
-      expect(notConfigured.event).toBe("stream.not_configured");
-    } finally {
-      await server.close();
-    }
+    expect(events).toContain("stream.not_configured");
+    // `server.stopped` is logged only once the venue store has closed.
+    const streamStopped = events.indexOf("stream.stopped");
+    expect(streamStopped).toBeGreaterThan(-1);
+    expect(streamStopped).toBeLessThan(events.indexOf("server.stopped"));
   }, 60_000);
   // DELETED, not converted: "boots and TRADES when the backup DB is unreachable — the read-privilege
   // probe failure disables backup, never aborts boot (§5)". It drove `startServer` with a good main
