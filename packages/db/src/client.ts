@@ -12,6 +12,7 @@ import "./errors.js";
 
 export type { VenueHolder, VenueHolderKind, VenueLock } from "@waitron/store";
 export {
+  isLocked,
   isVenueHolderFresh,
   readVenueHolder,
   setVenueCrashReportDirectory,

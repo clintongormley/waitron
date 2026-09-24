@@ -1,4 +1,5 @@
 export {
+  isLocked,
   isVenueHolderFresh,
   lockVenueDatabase,
   openVenueDatabase,

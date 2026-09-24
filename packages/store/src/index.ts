@@ -12,7 +12,7 @@ export type { StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
-export { lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
+export { isLocked, lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
 export type { VenueLock } from "./venue-lock.js";
 export {
   isVenueHolderFresh,

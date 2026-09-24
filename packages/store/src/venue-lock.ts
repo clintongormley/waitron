@@ -12,6 +12,7 @@ export const VENUE_LOCK_FILE = "venue.lock";
 /** SQLite's `SQLITE_BUSY`, which `node:sqlite` puts on the thrown error's `errcode`. */
 const SQLITE_BUSY = 5;
 
+/** Whether the engine refused because another connection holds the lock. */
 export const isLocked = (error: unknown): boolean =>
   (error as { errcode?: number }).errcode === SQLITE_BUSY;
 

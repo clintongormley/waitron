@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { isLocked } from "@waitron/db";
 
 /**
  * The file whose engine lock serialises every change to `recovery.json`, across processes. It
@@ -13,9 +14,6 @@ export const RECOVERY_LOCK_FILE = "recovery.lock";
 export const RECOVERY_LOCK_WAIT_MS = 10_000;
 
 const POLL_MS = 25;
-
-/** SQLite's `SQLITE_BUSY`, which `node:sqlite` puts on the thrown error's `errcode`. */
-const SQLITE_BUSY = 5;
 
 /**
  * Runs `body` holding `<stateDir>/recovery.lock`: a `begin immediate` on it, released when the
@@ -41,7 +39,7 @@ export async function withRecoveryLock<T>(
         connection.exec("begin immediate");
         break;
       } catch (error) {
-        if ((error as { errcode?: number }).errcode !== SQLITE_BUSY) throw error;
+        if (!isLocked(error)) throw error;
         if (performance.now() >= deadline) throw error;
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));
       }
