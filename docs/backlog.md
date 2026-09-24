@@ -4538,11 +4538,8 @@ What the preparation tasks left, with F1's own answers where it found them:
   which reaches that file (what thirty seconds does not buy is stated beside it in
   `vitest.config.ts`); the fiscal chain's refused-then-successful retry has a case in
   `packages/fiscal-verifactu/src/chain.test.ts`.
-- **The working-time chain's retry has the same untested middle.** `appendToChain` in
-  `packages/workforce/src/chain.ts` retries a refused append like the fiscal one, and
-  `packages/workforce/src/chain.test.ts` covers exhaustion and a non-collision error but not a
-  refusal followed by a successful retry. The fiscal case above is the shape to copy (found by
-  #509's review).
+- **The working-time chain's retry has the same untested middle — CLOSED (#564).**
+  `packages/workforce/src/chain.test.ts` has the refused-then-successful case.
 - **Stale `vitest.config.ts` comments — DONE (2026-09-23, branch `chore/vitest-config-comments`).**
   The entry asked for each package to be checked "read not run"; it was the other way round — run,
   not read — and this supersedes it. Most of the named claims had gone before this branch: "every
