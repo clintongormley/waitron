@@ -426,9 +426,8 @@ An unregistered `name` renders nothing — there is no broken-icon fallback mark
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
 register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
 `hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `grip`, `bell`, `close`, each a
-plain geometric shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (see that file's own header
-for which of these were plotted fresh and which one was scaled from a published glyph's path data)
-and is registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
+plain geometric shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (its header carries the
+Material Symbols attribution) and is registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
 different things at different scales: hamburger opens the whole app's navigation (used once);
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,

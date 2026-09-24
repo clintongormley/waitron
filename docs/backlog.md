@@ -803,8 +803,8 @@ report shut a dialog that has been reopened. No migration: **no venue reset need
   spacing it ran past the dialog's right edge there too. The cause was not investigated. **Next
   action:** find what sets the form's minimum width, and add a 320px case to the library's tests.
 - **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
-  browser command (`apps/dashboard/vitest.config.ts`, whose comment says it exercises the responsive
-  breakpoints) resizes the outer Playwright page, not the frame a test renders in: measured
+  browser command (`apps/dashboard/vitest.config.ts`; since #612 its comment says what follows)
+  resizes the outer Playwright page, not the frame a test renders in: measured
   2026-09-24, `window.innerWidth` read 414 before and after `setViewportSize(390, 800)`, and 390
   after `page.viewport(390, 800)` from `vitest/browser`. Its callers are two drawer cases in
   `apps/dashboard/src/dashboard-app.test.ts` (one asking for 400px, one described as a 390px case)
@@ -812,7 +812,11 @@ report shut a dialog that has been reopened. No migration: **no venue reset need
   the variants branch: `git log -S setViewportSize` over those files names #172 and #333, and the
   branch changes none of the three. **Next action:** switch them to
   `page.viewport`, assert `window.innerWidth` after resizing, and delete the command if nothing else
-  uses it.
+  uses it. #612's probe also found the 414px frame already below the drawer's 48rem breakpoint
+  (`matchMedia` matched), so every dashboard browser test runs in the phone layout: the drawer cases
+  called "desktop" are not, restoring 1280 in `finally` does nothing, and the fixed-width drawer
+  test compares the drawer against a "desktop" width measured in that same phone layout, so its
+  equality check proves nothing.
 - **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
   (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one
@@ -2803,15 +2807,28 @@ image constraints under *Detail → Box image*.
   left) and `packages/module` (#606, about 363 to about 200 counted with the parse-tree walk, tests
   included) and `apps/dashboard/src/screens` (#607, about 3,170 to about 1,110 counted with the
   parse-tree walk, tests included) and `apps/dashboard/src/api` + `src/widgets` (#610, about 2,830
-  to about 980, parse-tree walk, tests included; the rest of `apps/dashboard` follows in one more
-  pull request) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
+  to about 980, parse-tree walk, tests included) and the rest of `apps/dashboard` — the files
+  directly in `src/`, `src/i18n`, `src/state` and the two configs (#612, about 1,375 to about 377,
+  parse-tree walk, tests included; comments inside `css` template text are strings and were left) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
   `drizzle/` SQL untouched) and `packages/venue-service` (#611, about 478 to about 220, parse-tree
   walk, tests included).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610 and #611 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611 and #612 and left for the package that owns each, all
   still OPEN:
+  - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.
+    `apps/dashboard/src/dashboard-app.ts` (a comment inside its `css` template, around line 435)
+    points at `till-counter-screen.ts:111` for the 48rem breakpoint; that file no longer contains
+    48rem. `date-utils.test.ts` has a test titled as guarding "against a vacuous pass", but #612's
+    review removed the timezone pin and ran the file under `TZ=UTC`, and all four cases failed on
+    their own. `catalogues` in `apps/dashboard/src/i18n/strings.ts` is read by nothing but
+    `i18n/t.test.ts` (`t.ts` registers `{ en, es }` with the kit), so that test's "registers en-GB"
+    case tests nothing that runs. The browser project in `apps/dashboard/vitest.config.ts` still
+    excludes `.stryker-tmp`, though the app has no Stryker config. Not restored, by the review's
+    choice: a note that `#sessionPermissions` only guides the screen and every module route is still
+    checked on the server (not traced). Like #607 and #610, #612 did not carry its 19 deleted
+    proof-by-deletion notes into its commit message.
   - Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
     change. `apps/server/src/served-at-huella.test.ts` and `sale-till-source.receipt.test.ts` cite
     `packages/venue-service/src/schema/service.ts:180` for `preparation_routes.id`, a line #611
@@ -3212,8 +3229,8 @@ image constraints under *Detail → Box image*.
     `payments-sumup`'s and `venue-service`'s config copies to a pointer at CLAUDE.md §4).
   - The same false comments outside bookings, found by #574 (#610 removed the dashboard API
     client's "runtime shape error a view test catches" and `purchase-form.ts`'s "client validation
-    mirrors the op's checks"): "per-venue timezone is a later slice" in
-    `apps/dashboard/src/date-utils.ts` (`locations.time_zone` exists); PostgreSQL's `22P02`
+    mirrors the op's checks"; #612 removed `date-utils.ts`'s "per-venue timezone is a later
+    slice"): PostgreSQL's `22P02`
     described as current in `apps/server`'s `print-api.printer-wiring.test.ts`, `print-api.test.ts`
     and `recipe-api.test.ts`; and `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
     records a deleted setup, which it no longer does. (#600 removed the same claim from
@@ -3226,8 +3243,8 @@ image constraints under *Detail → Box image*.
     left on the next field down) went from `packages/db` with #589 and from `packages/core` with
     #598, both fields being read. Comments quoting the PostgreSQL numbers for these two stores remain at
     `apps/server/src/management-api.ts:299` and `:358`,
-    `apps/server/src/management-api.canvases.test.ts:277` and
-    `apps/dashboard/src/i18n/codes.test.ts:92`. `packages/printing/src/errors.test.ts:5` says the
+    `apps/server/src/management-api.canvases.test.ts:277` (#612 removed the dashboard's copy in
+    `i18n/codes.test.ts`). `packages/printing/src/errors.test.ts:5` says the
     error construction typechecks "ONLY because" of one import — #588's review measured the same
     claim false for printing and layouts; `apps/server/src/errors.test.ts:8` makes it too, not
     measured. The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
@@ -4564,8 +4581,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   hands that date straight to the daily close's `businessDay` parameter. But a sale rung at 01:00
   still belongs to the PREVIOUS business day until the venue's cutover, and Overview asks the server
   for the business day it computes itself (`currentBusinessDay`, `apps/server/src/report-api.ts`).
-  So the two screens disagree for those few hours every night. `today()`'s own comment already flags the UTC choice and
-  defers the fix. **Next action:** seed the range from the venue's business day, the same value
+  So the two screens disagree for those few hours every night. `today()`'s own comment flags the UTC choice. **Next action:** seed the range from the venue's business day, the same value
   Overview renders, rather than from a UTC date.
 - **An imported configuration no longer carries "already offered a passkey"** (fixed 2026-09-14). A
   configuration transfer strips `passkey_offered_at` on export and refuses a bundle that still
@@ -4593,8 +4609,6 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   `NotSupportedError: Resident credentials or empty 'allowCredentials' lists are not supported`.
   What the headless browser lacks is a platform authenticator, which no version bump supplies, so
   expect the banner to still be there. The screen itself has not been re-opened on the new build.
-- **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
-  (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
