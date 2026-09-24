@@ -302,10 +302,11 @@ export function scriptRunCheck(members, script, readScripts) {
 //     of it a shell step can act on, which is why this is a subcommand rather than a sixth line.
 //
 // In the default shape the workspace layout is resolved HERE, because stdin already carries the
-// changed paths. A `pnpm ls` that fails for any reason leaves `stdout` null or empty, which
-// `workspacePackages` reads as `null` and `scopeForPaths` turns into a global run. `pnpm ls` needs no
-// `pnpm install` first, which matters because the hook classifies before installing and ci.yml's
-// `changes` job never installs.
+// changed paths. A `pnpm ls` that fails leaves no array on stdout — nothing when the spawn itself
+// failed (`?? ""` below makes that empty), or pnpm's JSON error object — and `workspacePackages`
+// returns `null` for empty, unparsable or non-array input, which `scopeForPaths` turns into a
+// global run. `pnpm ls` needs no `pnpm install` first, which matters because the hook classifies
+// before installing and ci.yml's `changes` job never installs.
 //
 // stdout carries the five lines and NOTHING else: both callers `sed` the `<name>=` lines out of it,
 // so a stray line that happened to carry a prefix would become a bogus job output or scope. The

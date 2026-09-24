@@ -10,8 +10,11 @@ import { appendOnlyTablesIn } from "../packages/sync-enrolment/src/classificatio
  * table missing from the constant gives test databases where the row can be rewritten and the box
  * refuses it.
  *
- * Not covered: whether the triggers are installed (`scripts/append-only-triggers.test.ts`), and a
- * module with no `src/migrations.ts`, which has no constant to compare.
+ * Not covered: whether the triggers are installed — on the product path by
+ * `scripts/append-only-triggers.test.ts`, and on the `useVenueDb` path by the
+ * `a migrated set's append-only tables` cases in `packages/db/src/testing/venue-db.test.ts`, which
+ * try one table, core's `sales` — and a module with no `src/migrations.ts`, which has no constant
+ * to compare.
  */
 
 /**

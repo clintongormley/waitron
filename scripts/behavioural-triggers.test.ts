@@ -7,8 +7,9 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { applyMigrations } from "../packages/migrations/src/apply.js";
 import { migrationOptionsFor } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
-// The exact words each refusing trigger raises, from the one place that declares them.
-// `packages/core` matches one of them, so a local copy here would assert this file against itself.
+// The exact words each refusing trigger raises, imported from the one place that declares them:
+// `packages/core` matches one of them (`settle-sale.ts`), and a local copy would test the
+// triggers against this file instead of against what the product reads.
 import {
   COVERAGE_REFUSAL,
   FORM_FACTOR_REFUSAL,
@@ -47,10 +48,6 @@ import {
  * name in the catalogue. So every refusing trigger has a real offending write with its message
  * asserted, and each has an ACCEPTING control in the other direction — without the control, a
  * trigger that refused EVERY write would pass the refusal cases.
- *
- * Nothing about these triggers is proven in `packages/db`: its suites exercise the same rules
- * through the product's write paths, which shows the CALLER is refused, not that the database
- * refuses a caller that goes around them.
  *
  * WHAT IT DOES NOT COVER. `INSERT … ON CONFLICT DO UPDATE` is not tried against any of these
  * triggers, though a `BEFORE INSERT` trigger fires on it and a `BEFORE UPDATE` one on its conflict
@@ -500,8 +497,8 @@ describe("working_order_lines_check_locales", () => {
     ).toBeUndefined();
   });
 
-  // A line whose order resolves to no location gets the same refusal: `raise` takes a literal, so a
-  // second message would be a second trigger, and from a caller's side it is the same fault.
+  // A line whose order resolves to no location deliberately gets the same refusal: from a caller's
+  // side it is the same fault.
   it("refuses a line whose order resolves to no location, in the same words", () => {
     expect(refusalFor(connection, line("line-orphan", "wo-orphan", '{"es":"a","ca":"b"}'))).toBe(
       LOCALES_REFUSAL,

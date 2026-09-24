@@ -11,7 +11,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *
  * A constraint that lives only in hand-written migration SQL disappears the moment a set is
  * regenerated from the TypeScript schema, and nothing else in the tree notices. The lists below are
- * the contract; a change that adds a constraint adds its entry.
+ * the contract, checked one way only: a listed constraint missing from the built schema fails, and
+ * a constraint nobody listed passes unseen.
  *
  * WHAT IT DOES NOT COVER. It reads the schema the migrations build; it does not try an offending
  * INSERT, so it cannot tell a constraint SQLite records from one SQLite enforces — `foreign_keys`
@@ -23,8 +24,9 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *
  * TWO KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)` and
  * `category_details(image)`, both referencing `media_images`. `packages/media` depends on
- * `@waitron/catalogue` and `@waitron/db`, so neither owning package may import media's schema to
- * name the column; `scripts/workspace-cycles.test.ts` refuses the import.
+ * `@waitron/catalogue` and `@waitron/db`, so neither owning package may depend on media to name the
+ * column: that dependency would close a loop `scripts/workspace-cycles.test.ts` refuses, and that
+ * guard reads each `package.json`, not source imports.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");

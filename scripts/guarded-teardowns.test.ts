@@ -3,7 +3,9 @@ import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Every `afterAll`/`afterEach` that closes a resource must guard it.
+ * Every `afterAll`/`afterEach` that closes a resource must guard it. An unguarded closer throws a
+ * second, spurious `TypeError` when the setup it depends on threw before assigning the resource, so
+ * a failing suite reports two errors and the real one is easier to miss.
  *
  * **A backstop, not the primary defence.** `@waitron/db/testing/venue-db.js` owns the hooks for the
  * suites that use it, so they cannot write a teardown at all. What remains in scope is a suite that
@@ -22,9 +24,9 @@ import { describe, expect, it } from "vitest";
  *
  * ## Why not an ESLint rule
  *
- * An esquery selector can only mandate the `?.` form, whereas the form CLAUDE.md documents is
- * `if (x !== undefined)`; lint would mean rewriting teardowns to a different canonical form. If the
- * canonical form ever changes, revisit this.
+ * An esquery selector can only mandate the `?.` form, whereas the form
+ * `docs/developers/testing-guide.md` documents is `if (x !== undefined)`; lint would mean rewriting
+ * teardowns to a different canonical form. If the canonical form ever changes, revisit this.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");

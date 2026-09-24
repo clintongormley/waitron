@@ -124,7 +124,8 @@ function isTestBinaryProcess(command) {
 }
 
 /**
- * Also kills parentless test binaries `isTestBinaryProcess` matches.
+ * Kills orphaned vitest processes (`isVitestProcess`) and the parentless test binaries
+ * `isTestBinaryProcess` matches.
  *
  * @param {{ psExec: (args: string[]) => string, kill: (pid: number, signal: string) => void }} deps
  *   `kill` is required, so the real `process.kill` lives only in the v8-ignored CLI block.

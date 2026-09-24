@@ -72,6 +72,8 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-shard.mjs")) {
   if (!Number.isInteger(shardIndex) || shardIndex < 1 || shardIndex > totalShards)
     die(`shard must be an integer in 1..${totalShards}, got "${process.argv[2]}"`);
 
+  // `src/schema/sales.ts` alone ran 186min while every other N=10 shard finished <=90min
+  // (run 32384997149).
   // A rename must not silently un-split a file, hence the check after the walk.
   const HEAVY_FILES = { "src/schema/sales.ts": 3 };
   const seenHeavy = new Set();

@@ -51,8 +51,9 @@ const VOCABULARY = "packages/db/src/schema/columns.ts";
  * imports `@waitron/store`, so the store cannot import the vocabulary back, and its suites declare
  * their probe tables straight from the engine.
  *
- * WIDER than `ALLOWED` below: a whole directory and every builder in it. Nothing outside `src/` of
- * that package is exempt.
+ * WIDER than `ALLOWED` below: a whole directory and every builder in it. Nothing in this file
+ * narrows it: a product table declared there would pass this guard, though it would already be in
+ * the wrong package. Nothing outside `src/` of that package is exempt.
  */
 const ENGINE_ADAPTER = "packages/store/src/";
 

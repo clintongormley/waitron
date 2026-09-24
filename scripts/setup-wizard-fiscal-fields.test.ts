@@ -1,6 +1,7 @@
-// The setup wizard keeps its own copy of the venue fields the fiscal regime refuses. This compares
-// the exported runtime values, not source text: two of the four paths reach `refuse(...)` through a
-// loop's tuple, never as a string literal.
+// `apps/setup` does not depend on the fiscal regime package, so the setup wizard keeps its own copy
+// of the venue fields the regime refuses. This compares the exported runtime values, not source
+// text: two of the four paths reach `refuse(...)` through a loop's tuple, never as a string
+// literal.
 import { expect, it } from "vitest";
 import { VENUE_FISCAL_FIELD_PATHS } from "../packages/fiscal-verifactu/src/venue-fields.js";
 import { SERVER_FIELDS } from "../apps/setup/src/server-fields.js";

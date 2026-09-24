@@ -562,9 +562,9 @@ describe("the CLI", () => {
     );
   });
 
-  // main has no scope to resolve, so there is no `pnpm ls` to run. The flag keeps the gate list in
-  // ONE place: adding a gate must not need a second edit in ci.yml, because forgetting that edit
-  // would leave the new job never running on main.
+  // main has no scope to resolve, so there is no `pnpm ls` to run. The flag keeps gate names out of
+  // the unscoped step: a new gate reaches main without an edit there, though the `changes` job's
+  // `outputs` block in ci.yml still needs its line.
   //
   // A resolved scope is fed in anyway, and must be ignored: that is what shows the flag decides on
   // its own rather than falling through to whatever happens to be on stdin.
