@@ -126,12 +126,14 @@ A one-time manual step, helped by `~/waitron-campaign-shared/new-account.sh clau
 
 - **claude:** symlinks `CLAUDE.md`, `commands`, `skills`, `agents`, `docs-writing-style.md` and the
   waitron memory folders to `~/.claude`, the way `~/.claude-waitron` does, and copies
-  `settings.json`. Plugins (superpowers among them) are installed per folder; whether a copy or link
-  of `~/.claude/plugins` works is to be checked with one real firing, not assumed.
+  `settings.json`. It does not touch plugins: they are installed into the new folder after login,
+  the same ones `~/.claude` has (`superpowers` and `security-guidance`, both from
+  `claude-plugins-official`, as of 2026-09-24).
 - **codex:** symlinks `AGENTS.md`, `skills` and `config.toml` to `~/.codex`.
 
-The script refuses a folder that already exists. Logging in stays manual:
-`CLAUDE_CONFIG_DIR=<folder> claude` then `/login`, or `CODEX_HOME=<folder> codex login`.
+The script refuses a folder that already exists. Logging in and installing plugins stay manual:
+`CLAUDE_CONFIG_DIR=<folder> claude`, then `/login` and `/plugin install` for each plugin above; or
+`CODEX_HOME=<folder> codex login`.
 
 ## Testing
 
