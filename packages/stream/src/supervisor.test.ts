@@ -122,6 +122,8 @@ interface HarnessOptions {
   /** The PID every `replicate` child reports. */
   pid?: number;
   readCommandLine?: SupervisorDeps["readCommandLine"];
+  /** A `replicate` start that throws at once, as `spawn` does for arguments it cannot use. */
+  replicateThrows?: boolean;
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -139,6 +141,8 @@ async function harness(options: HarnessOptions = {}) {
   const venueDbPath = join(directory, "venue.db");
   let wal = 0;
   let walFails = false;
+  let walHeld: Promise<void> | undefined;
+  let walWaiting = false;
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const deps: SupervisorDeps = {
     litestreamBin: "litestream",
@@ -153,17 +157,27 @@ async function harness(options: HarnessOptions = {}) {
       events.push("fold");
       const result = foldResults.shift() ?? true;
       if (result instanceof Error) throw result;
-      wal = 0;
+      // A fold-back a reader held leaves the side file as large as it was.
+      if (result) wal = 0;
       return { reclaimed: result };
     },
     walBytes: async () => {
+      if (walHeld !== undefined) {
+        walWaiting = true;
+        await walHeld;
+      }
       if (walFails) throw new Error("the side file could not be measured");
       return wal;
     },
     walLimitBytes: LIMIT,
     now: clock.now,
     log: (level, event, fields) => logs.push({ level, event, fields }),
-    spawn: litestream.spawn,
+    spawn: (bin, args, env) => {
+      if (options.replicateThrows === true && args[0] === "replicate") {
+        throw new Error("spawn refused its arguments");
+      }
+      return litestream.spawn(bin, args, env);
+    },
     store,
     sleep: clock.sleep,
     ...(options.readCommandLine === undefined ? {} : { readCommandLine: options.readCommandLine }),
@@ -184,6 +198,18 @@ async function harness(options: HarnessOptions = {}) {
     venueDbPath,
     setWal: (bytes: number) => {
       wal = bytes;
+    },
+    /** Holds every side-file measurement until the answer is released. */
+    holdWal: () => {
+      let release!: () => void;
+      walHeld = new Promise((resolve) => (release = resolve));
+      return {
+        waiting: () => walWaiting,
+        release: () => {
+          walHeld = undefined;
+          release();
+        },
+      };
     },
     failWal: () => {
       walFails = true;
@@ -303,6 +329,21 @@ describe("opening a generation", () => {
       level: "error",
       event: "stream.config_unsafe",
       fields: { errorCode: "backup.stream_name_invalid", field: "venueId" },
+    });
+    expect(h.events).toEqual([]);
+  });
+
+  // Settings come from outside the type system (the vault), so a missing field is a refusal too,
+  // not a supervisor that fails without saying why.
+  it("refuses settings with a field missing, naming no field it cannot know", async () => {
+    const h = await harness({ bucket: { ...BUCKET, prefix: undefined as unknown as string } });
+    await h.supervisor.start();
+    await vi.waitFor(() => expect(h.supervisor.status().state).toBe("refused"));
+    expect(h.supervisor.status().reason).toBe("config_unsafe");
+    expect(h.logs).toContainEqual({
+      level: "error",
+      event: "stream.config_unsafe",
+      fields: { errorCode: "unknown", field: undefined },
     });
     expect(h.events).toEqual([]);
   });
@@ -457,6 +498,90 @@ describe("opening a generation", () => {
       vi.waitFor(() => expect(h.litestream.replicas()).not.toHaveLength(0), { timeout: 300 }),
     ).rejects.toThrow();
     expect(h.supervisor.status().state).toBe("off");
+  });
+
+  it("does not move the pointer when the full copy is seen only after stop", async () => {
+    const h = await harness();
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    const generation = h.supervisor.status().generation!;
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let listing = false;
+    const list = h.store.list.bind(h.store);
+    h.store.list = async (prefix) => {
+      listing = true;
+      await answered;
+      return list(prefix);
+    };
+    h.store.upload(fullCopyOf(generation));
+    await h.clock.next(); // the opening poll
+    await vi.waitFor(() => expect(listing).toBe(true));
+    await h.supervisor.stop();
+    release();
+    await expect(
+      vi.waitFor(
+        () => expect(h.events.some((event) => event.endsWith("current.json"))).toBe(true),
+        {
+          timeout: 300,
+        },
+      ),
+    ).rejects.toThrow();
+    expect(h.supervisor.status()).toMatchObject({ state: "off", reason: "stopped" });
+  });
+
+  // A reader holding the side file keeps a fold-back from reclaiming it. Until the file is back under
+  // the limit, restarting Litestream would only grow it again: one paused episode, one claim.
+  it("stays paused while opening until a fold-back reclaims the side file", async () => {
+    const h = await harness({ foldResults: Array<boolean>(12).fill(false) });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "paused");
+    for (let tick = 0; tick < 10; tick += 1) await h.clock.next();
+    await h.clock.asleep();
+    expect(h.supervisor.status().state).toBe("paused");
+    expect(h.events.filter((event) => event.endsWith("opened.json"))).toHaveLength(1);
+    expect(h.litestream.replicas()).toHaveLength(1);
+    expect(h.events.filter((event) => event === "fold").length).toBeGreaterThanOrEqual(10);
+    expect(h.logs.filter((line) => line.event === "stream.paused")).toHaveLength(1);
+    expect(h.logs.filter((line) => line.event === "stream.fold_back_busy")).toHaveLength(1);
+    // The reader lets go: the next fold-back reclaims the file and a new generation opens.
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    expect(h.events.filter((event) => event.endsWith("opened.json"))).toHaveLength(2);
+  });
+
+  it("does nothing more when stopped during start-up, and leaves the status stopped", async () => {
+    let release!: (line: string | null) => void;
+    const answered = new Promise<string | null>((resolve) => (release = resolve));
+    let asked = false;
+    const h = await harness({
+      readCommandLine: async () => {
+        asked = true;
+        return answered;
+      },
+    });
+    const configDir = join(h.directory, "stream");
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(join(configDir, "litestream.pid"), "424242\n");
+    await h.supervisor.start();
+    await vi.waitFor(() => expect(asked).toBe(true));
+    await h.supervisor.stop();
+    release(null);
+    await expect(
+      vi.waitFor(() => expect(h.litestream.children).not.toHaveLength(0), { timeout: 300 }),
+    ).rejects.toThrow();
+    expect(h.supervisor.status()).toMatchObject({ state: "off", reason: "stopped" });
+  });
+
+  it("stops the version check when stopped while `litestream version` hangs", async () => {
+    const h = await harness({ versionHangs: true });
+    await h.supervisor.start();
+    await vi.waitFor(() => expect(h.litestream.children).toHaveLength(1));
+    await h.supervisor.stop();
+    expect(h.litestream.children[0]!.killed).toBe(true);
+    expect(h.supervisor.status()).toMatchObject({ state: "off", reason: "stopped" });
+    expect(h.logs.some((line) => line.event === "stream.litestream_unavailable")).toBe(false);
   });
 
   it("refuses to run a Litestream that is not the pinned version, and touches no bucket", async () => {
@@ -668,6 +793,96 @@ describe("while streaming", () => {
     });
   });
 
+  it("stays paused, with Litestream stopped, while fold-backs keep failing to reclaim the side file", async () => {
+    const h = await streaming({ foldResults: Array<boolean>(12).fill(false) });
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "paused");
+    for (let tick = 0; tick < 10; tick += 1) await h.clock.next();
+    await h.clock.asleep();
+    expect(h.supervisor.status().state).toBe("paused");
+    expect(h.litestream.replicas()).toHaveLength(1);
+    expect(h.litestream.running()).toBeUndefined();
+    expect(h.logs.filter((line) => line.event === "stream.paused")).toHaveLength(1);
+    expect(h.logs.filter((line) => line.event === "stream.fold_back_busy")).toHaveLength(1);
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.supervisor.status().generation).toBe(h.generation);
+    expect(h.litestream.replicas()).toHaveLength(2);
+  });
+
+  it("stays paused while every fold-back throws, and says so once", async () => {
+    const failure = new Error("disk I/O error");
+    const h = await streaming({ foldResults: Array<Error>(12).fill(failure) });
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "paused");
+    for (let tick = 0; tick < 10; tick += 1) await h.clock.next();
+    await h.clock.asleep();
+    expect(h.supervisor.status().state).toBe("paused");
+    expect(h.litestream.replicas()).toHaveLength(1);
+    expect(h.logs.filter((line) => line.event === "stream.fold_back_failed")).toHaveLength(1);
+  });
+
+  it("does not pause, fold or change the status when the side file is measured only after stop", async () => {
+    const h = await streaming();
+    const held = h.holdWal();
+    h.setWal(LIMIT);
+    await h.clock.next(); // the streaming tick
+    await vi.waitFor(() => expect(held.waiting()).toBe(true));
+    await h.supervisor.stop();
+    held.release();
+    await expect(
+      vi.waitFor(() => expect(h.events).toContain("fold"), { timeout: 300 }),
+    ).rejects.toThrow();
+    expect(h.logs.some((line) => line.event === "stream.paused")).toBe(false);
+    expect(h.supervisor.status()).toMatchObject({ state: "off", reason: "stopped" });
+  });
+
+  // An unhandled rejection ends the server process, and a keeper loop that died would leave
+  // Litestream running with nothing restarting it.
+  it("keeps supervising when the PID record cannot be written, and stops cleanly", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const h = await harness({ pid: 424_242 });
+      // A directory where the record belongs: the write fails, and so does removing it.
+      mkdirSync(join(h.directory, "stream", "litestream.pid"), { recursive: true });
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      await vi.waitFor(() =>
+        expect(h.logs.some((line) => line.event === "stream.pid_record_failed")).toBe(true),
+      );
+      h.litestream.running()!.exit(1);
+      await h.clock.until(() => h.litestream.replicas().length === 2);
+      await h.supervisor.stop();
+      expect(h.supervisor.status().state).toBe("off");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("stops and reads off when Litestream cannot be started at all, rather than failing unseen", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const h = await harness({ replicateThrows: true });
+      await h.supervisor.start();
+      await vi.waitFor(() => expect(h.supervisor.status().reason).toBe("supervisor_failed"));
+      expect(h.supervisor.status().reason).toBe("supervisor_failed");
+      expect(h.logs).toContainEqual({
+        level: "error",
+        event: "stream.supervisor_failed",
+        fields: { errorCode: "unknown" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("stop kills Litestream and reads off", async () => {
     const h = await streaming();
     const child = h.litestream.running()!;
@@ -835,6 +1050,38 @@ describe("a Litestream left running by a server that died", () => {
     await h.supervisor.start();
     expect(await gone).toBe("SIGKILL");
     await h.clock.until(() => h.litestream.running() !== undefined);
+  }, 15_000);
+
+  it("does not SIGKILL a PID whose command line changed during the grace", async () => {
+    const stubborn = spawn("/bin/sh", ["-c", "trap '' TERM; echo ready; sleep 30; :"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    try {
+      await new Promise((resolve) => stubborn.stdout.once("data", resolve));
+      let asked = 0;
+      const h = await harness({
+        readCommandLine: async () => {
+          asked += 1;
+          return asked === 1
+            ? `litestream replicate -config ${join(h.directory, "stream", "litestream.yml")}`
+            : "some other program";
+        },
+      });
+      const configDir = join(h.directory, "stream");
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(join(configDir, "litestream.pid"), `${stubborn.pid}\n`);
+      await h.supervisor.start();
+      // The version check starts once the sweep, grace included, is over.
+      await vi.waitFor(() => expect(h.litestream.children).not.toHaveLength(0), {
+        timeout: 10_000,
+        interval: 100,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(stubborn.signalCode).toBeNull();
+      expect(stubborn.exitCode).toBeNull();
+    } finally {
+      stubborn.kill("SIGKILL");
+    }
   }, 15_000);
 
   it("leaves alone a process whose command line is not this box's Litestream", async () => {

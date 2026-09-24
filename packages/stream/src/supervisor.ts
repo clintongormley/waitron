@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isAppError, type AppError } from "@waitron/shared";
+import { hasCode, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { claimGeneration, generationPrefix, pruneGenerations } from "./generations.js";
 import {
@@ -17,7 +17,7 @@ import {
   type SpawnFn,
 } from "./litestream-process.js";
 import { generationName } from "./names.js";
-import type { ObjectStore } from "./object-store.js";
+import type { ListedObject, ObjectStore } from "./object-store.js";
 import {
   pointerMessage,
   readPointer,
@@ -220,11 +220,16 @@ export class StreamSupervisor {
     const controller = new AbortController();
     this.#controller = controller;
     this.#run = this.#main(controller.signal).catch(async (error: unknown) => {
-      if (controller.signal.aborted) return;
-      this.#deps.log("error", "stream.supervisor_failed", { errorCode: codeOf(error) });
-      await this.#stopChild();
-      this.#set("off", "supervisor_failed");
+      if (!controller.signal.aborted) await this.#fail(error);
     });
+  }
+
+  /** Ends the run and Litestream with it; the status keeps `supervisor_failed` as its reason. */
+  async #fail(error: unknown): Promise<void> {
+    this.#deps.log("error", "stream.supervisor_failed", { errorCode: codeOf(error) });
+    this.#controller?.abort();
+    await this.#stopChild();
+    this.#set("off", "supervisor_failed");
   }
 
   /**
@@ -248,8 +253,9 @@ export class StreamSupervisor {
 
   async #main(signal: AbortSignal): Promise<void> {
     await this.#stopLeftover();
+    signal.throwIfAborted();
     if (!this.#configurationIsSafe()) return;
-    if (!(await this.#binaryIsPinned())) return;
+    if (!(await this.#binaryIsPinned(signal))) return;
     const generation = await this.#open(signal);
     if (generation === null) return;
     await this.#stream(generation, signal);
@@ -269,28 +275,30 @@ export class StreamSupervisor {
       litestreamConfig({ dbPath: venueDbPath, replicaUrl: replicaUrl(bucket, venueId, sample) });
       return true;
     } catch (error) {
-      // Every check here refuses with one of these two codes, and both name the field.
-      const refusal = error as AppError<
-        "backup.stream_config_unsafe" | "backup.stream_name_invalid"
-      >;
-      this.#deps.log("error", "stream.config_unsafe", {
-        errorCode: refusal.code,
-        field: refusal.params.field,
-      });
+      const field =
+        isAppError(error) &&
+        (hasCode(error, "backup.stream_config_unsafe") ||
+          hasCode(error, "backup.stream_name_invalid"))
+          ? error.params.field
+          : undefined;
+      this.#deps.log("error", "stream.config_unsafe", { errorCode: codeOf(error), field });
       this.#refuse("config_unsafe");
       return false;
     }
   }
 
-  async #binaryIsPinned(): Promise<boolean> {
+  async #binaryIsPinned(signal: AbortSignal): Promise<boolean> {
     const probe = this.#spawn(this.#deps.litestreamBin, ["version"], {});
     const timeout = new AbortController();
     const code = await Promise.race([
       probe.exited,
-      this.#sleep(VERSION_TIMEOUT_MS, timeout.signal).then(() => "timeout" as const),
+      this.#sleep(VERSION_TIMEOUT_MS, AbortSignal.any([signal, timeout.signal])).then(
+        () => "timeout" as const,
+      ),
     ]);
     timeout.abort();
     if (code === "timeout") probe.kill();
+    signal.throwIfAborted();
     const version = probe.output().trim();
     if (code === 0 && version === LITESTREAM_VERSION) return true;
     // A fixed reason only, never the binary's own words.
@@ -345,11 +353,10 @@ export class StreamSupervisor {
           generation,
           writtenAt: this.#deps.now().toISOString(),
         };
-        const pointer: SignedPointer = {
-          body,
-          signature: await this.#deps.sign(pointerMessage(body)),
-        };
+        const signature = await this.#unlessStopped(signal, this.#deps.sign(pointerMessage(body)));
+        const pointer: SignedPointer = { body, signature };
         if (!(await this.#movePointer(pointer, previous?.etag ?? null, signal))) return null;
+        signal.throwIfAborted();
         this.#set("streaming", null, generation);
         this.#deps.log("info", "stream.streaming", { generation });
         return generation;
@@ -368,17 +375,18 @@ export class StreamSupervisor {
   ): Promise<"landed" | "over_limit"> {
     const prefix = generationPrefix(this.#deps.venueId, generation);
     for (;;) {
+      let listed: ListedObject[] = [];
       try {
-        const listed = await this.#store.list(prefix);
-        if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) {
-          return "landed";
-        }
+        listed = await this.#store.list(prefix);
       } catch (error) {
         this.#deps.log("warn", "stream.list_failed", { errorCode: codeOf(error) });
       }
-      if ((await this.#deps.walBytes()) >= this.#deps.walLimitBytes) return "over_limit";
-      await this.#sleep(OPEN_POLL_MS, signal);
       signal.throwIfAborted();
+      if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) {
+        return "landed";
+      }
+      if (await this.#overLimit(signal)) return "over_limit";
+      await this.#unlessStopped(signal, this.#sleep(OPEN_POLL_MS, signal));
     }
   }
 
@@ -393,6 +401,7 @@ export class StreamSupervisor {
     signal: AbortSignal,
   ): Promise<boolean> {
     for (;;) {
+      signal.throwIfAborted();
       try {
         await writePointer(this.#store, this.#deps.venueId, pointer, previousEtag);
         return true;
@@ -405,7 +414,6 @@ export class StreamSupervisor {
         this.#deps.log("warn", "stream.pointer_write_failed", { errorCode: codeOf(error) });
       }
       await this.#sleep(OPEN_RETRY_MS, signal);
-      signal.throwIfAborted();
     }
   }
 
@@ -414,7 +422,7 @@ export class StreamSupervisor {
       await this.#sleep(TICK_MS, signal);
       signal.throwIfAborted();
       this.#pruneDaily(generation);
-      if ((await this.#deps.walBytes()) < this.#deps.walLimitBytes) continue;
+      if (!(await this.#overLimit(signal))) continue;
       await this.#pause(generation, signal);
       await this.#startChild(generation, false, signal);
       this.#set("streaming", null, generation);
@@ -422,22 +430,45 @@ export class StreamSupervisor {
     }
   }
 
-  /** Stops Litestream, folds the side file back, and waits for the bucket. */
+  /**
+   * Stops Litestream and folds the side file back, retrying each tick while it is still over the
+   * limit, then waits for the bucket. Restarting Litestream over a side file a reader still holds
+   * would only grow it again. Each kind of fold-back trouble is logged once per pause.
+   */
   async #pause(generation: string, signal: AbortSignal): Promise<void> {
+    const walBytes = await this.#unlessStopped(signal, this.#deps.walBytes());
     this.#deps.log("warn", "stream.paused", {
       generation,
-      walBytes: await this.#deps.walBytes(),
+      walBytes,
       limitBytes: this.#deps.walLimitBytes,
     });
     this.#set("paused", "side_file_limit", generation);
     await this.#stopChild();
-    let reclaimed = await this.#foldBack();
+    const noted = new Set<string>();
     for (;;) {
-      await this.#sleep(TICK_MS, signal);
-      signal.throwIfAborted();
-      if (!reclaimed) reclaimed = await this.#foldBack();
-      if (await this.#bucketAnswers(generation)) return;
+      if (await this.#overLimit(signal)) {
+        await this.#unlessStopped(signal, this.#foldBack(noted));
+      }
+      if (
+        !(await this.#overLimit(signal)) &&
+        (await this.#unlessStopped(signal, this.#bucketAnswers(generation)))
+      ) {
+        return;
+      }
+      await this.#unlessStopped(signal, this.#sleep(TICK_MS, signal));
     }
+  }
+
+  async #overLimit(signal: AbortSignal): Promise<boolean> {
+    const bytes = await this.#unlessStopped(signal, this.#deps.walBytes());
+    return bytes >= this.#deps.walLimitBytes;
+  }
+
+  /** `work`'s answer, unless the run was stopped while it was awaited. */
+  async #unlessStopped<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
+    const value = await work;
+    signal.throwIfAborted();
+    return value;
   }
 
   /**
@@ -479,25 +510,33 @@ export class StreamSupervisor {
     }
     await rm(pidPath, { force: true });
     if (!Number.isSafeInteger(pid) || pid <= 1) return;
-    const commandLine = await (this.#deps.readCommandLine ?? readCommandLine)(pid);
     const ours = `replicate -config ${join(this.#deps.configDir, CONFIG_FILE)}`;
-    if (commandLine === null || !commandLine.includes(ours)) return;
+    const isOurs = async () => {
+      const commandLine = await (this.#deps.readCommandLine ?? readCommandLine)(pid);
+      return commandLine !== null && commandLine.includes(ours);
+    };
+    if (!(await isOurs())) return;
     if (!sendSignal(pid, "SIGTERM")) return;
     this.#deps.log("warn", "stream.leftover_stopped", { pid });
     for (let waited = 0; waited < LEFTOVER_GRACE_MS && sendSignal(pid, 0); waited += 100) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    sendSignal(pid, "SIGKILL");
+    // The PID may have been reused during the grace: signal it only if it is still ours.
+    if (await isOurs()) sendSignal(pid, "SIGKILL");
   }
 
-  async #foldBack(): Promise<boolean> {
+  /** Logs each event in `noted` once only. */
+  async #foldBack(noted: Set<string>): Promise<void> {
+    const note = (level: "warn" | "error", event: string, fields: Record<string, unknown>) => {
+      if (noted.has(event)) return;
+      noted.add(event);
+      this.#deps.log(level, event, fields);
+    };
     try {
       const { reclaimed } = await this.#deps.foldBack();
-      if (!reclaimed) this.#deps.log("warn", "stream.fold_back_busy", {});
-      return reclaimed;
+      if (!reclaimed) note("warn", "stream.fold_back_busy", {});
     } catch (error) {
-      this.#deps.log("error", "stream.fold_back_failed", { errorCode: codeOf(error) });
-      return false;
+      note("error", "stream.fold_back_failed", { errorCode: codeOf(error) });
     }
   }
 
@@ -543,9 +582,7 @@ export class StreamSupervisor {
           ["replicate", "-config", configPath],
           this.#env,
         );
-        if (current.pid !== undefined) {
-          await writeFile(pidPath, `${current.pid}\n`, { mode: 0o600 });
-        }
+        if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
         const code = await current.exited;
         if (wake.signal.aborted) return;
         if (this.#deps.now().getTime() - startedAt >= HEALTHY_RUN_MS) attempt = 0;
@@ -558,16 +595,30 @@ export class StreamSupervisor {
         });
         await this.#sleep(delay, wake.signal);
       }
-    })();
+    })().catch((error: unknown) => {
+      // Not awaited: failing stops this keeper, and its stop() waits for this loop.
+      void this.#fail(error);
+    });
     return {
       stop: async () => {
         wake.abort();
         current?.kill();
         await current?.exited;
         await loop;
-        await rm(pidPath, { force: true });
+        await rm(pidPath, { force: true }).catch((error: unknown) => {
+          this.#deps.log("warn", "stream.pid_record_failed", { errorCode: codeOf(error) });
+        });
       },
     };
+  }
+
+  /** A record that cannot be written costs only the leftover sweep after a crash. */
+  async #recordPid(pidPath: string, pid: number): Promise<void> {
+    try {
+      await writeFile(pidPath, `${pid}\n`, { mode: 0o600 });
+    } catch (error) {
+      this.#deps.log("warn", "stream.pid_record_failed", { errorCode: codeOf(error) });
+    }
   }
 
   async #stopChild(): Promise<void> {
