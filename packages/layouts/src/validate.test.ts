@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
 import { MAX_RECEIPT_FIELD_LENGTH, validateReceiptConfig } from "./validate.js";
 
-/** Run `fn`, assert it threw an `AppError`, and return it so the caller can inspect code + params.
- *  A plain `toThrow` checks the message (= the code) but not the params, which is where these codes
- *  carry the whole of what went wrong (CLAUDE.md §1: params name the problem). */
+/** Returns the thrown `AppError` so a test can assert its params; `toThrow` does not check them. */
 function catchAppError(fn: () => unknown): AppError {
   try {
     fn();

@@ -17,69 +17,29 @@ import type { FormFactor, CanvasDef } from "./canvas.js";
 import { validateCanvas } from "./validate-canvas.js";
 
 /**
- * The list/get/create/update/delete service over `canvases` (design §4, SP-A.2 §16.3). MANY
- * rows, keyed by `id`, with distinct names.
- *
- * Every function takes the caller's transaction, opened with `withTransaction(deps.db, …)`.
- * Exercised against a real migrated database in `canvas-store.db.test.ts`. Mirrors the other
- * stores in this package (`theme-store.ts`, `receipt-store.ts`).
- *
- * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
- * any DB write, proven by-deletion in the suite; (2) `validateCanvas` — fail-closed on an invalid
- * `definition` (throws `canvas.invalid` before the write); (3) the drizzle write, whose unique
- * violation on the name key is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
- * authorises but has no definition to validate. Reads cast the opaque JSON document back to `CanvasDef`
- * WITHOUT re-running `validateCanvas` — the value was validated on the write that stored it and the
- * only writer is this service (the return-a-typed-shape-without-re-validating rationale). The `as`
- * cast re-attaches the shape the plain-JSON column drops (it carries no `@waitron/layouts` type,
- * to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
- * `packages/db/src/schema/canvases.ts`).
+ * Reads return the stored definition without re-running `validateCanvas`: `createCanvas` and
+ * `updateCanvas` validate before they write. The `as` casts restore a type the JSON column does
+ * not carry: this package depends on `@waitron/db`, so the column cannot name one of its types
+ * without a dependency cycle.
  */
 
-/** The unique index `canvases_tenant_name_key` over (name), declared in
- * `packages/db/drizzle/0000_baseline.sql`. A unique violation is one of the few classes SQLite
- * reports a table and columns for, so this is the key a duplicate name names. */
 const CANVAS_NAME: ConstraintTarget = { table: "canvases", columns: ["name"] };
 
 /**
- * Translate the two driver refusals the canvas write/delete paths care about into their domain
- * codes, and re-throw anything else untouched — the twin of `device-profile-store.ts`'s
- * `translateWriteError`:
- *   - a duplicate canvas name (a unique violation on {@link CANVAS_NAME}) → `canvas.name_taken`, so
- *     a duplicate returns a clean 409 rather than the raw refusal an unwrapped INSERT/UPDATE would
- *     surface as a 500. A unique violation on any OTHER key of `canvases` is re-thrown untouched
- *     rather than mislabelled. One that named no key at all — {@link constraintTarget} returns
- *     `undefined`, which is what a unique index over an EXPRESSION reports — is translated anyway:
- *     the name key is the only unique these writes can trip on an author-supplied value (the
- *     primary key is a cryptographically-unreachable `newId()` collision, and an UPDATE never
- *     changes `id`);
- *   - a delete refused because a device profile still references the canvas → `canvas.in_use`, a
- *     clean 409 rather than a raw 500.
+ * Translates the refusals these writes can raise into domain codes and re-throws anything else.
  *
- * The unique branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
- * whose key could not be identified, which `refusalOn` cannot express.
+ * A unique violation that names no key (what an index over an expression reports) is still
+ * `canvas.name_taken`: the name key is the only unique these writes can trip on an author-supplied
+ * value. That fallback is why this branch uses `constraintTarget`/`sameTarget`, not `refusalOn`.
  *
- * **Why the restrict branch asks only the CLASS.** SQLite reports a foreign-key refusal as
- * `FOREIGN KEY constraint failed` and nothing else — no table, no column, no constraint name — in
- * both directions (measured on node:sqlite, Node v26.7.0; the codes are driven in
- * `packages/db/src/constraint-target.sqlite.test.ts`). What it does separate is the direction: 1811
- * for a delete refused by an `ON DELETE RESTRICT` key, 787 for a written value naming no parent. So
- * the target this branch used to match on is unavailable, and STATEMENT SCOPE stands in its place:
- * each writer's `try` wraps ONE statement on `canvases` (`authorizeManager` and `validateCanvas`
- * both run before it), `canvases` declares no foreign key of its own to trip, and
- * `device_profiles.canvas_id` is the only key referencing it — so a restrict refusal reaching here
- * can only be a canvas a profile still binds. That last half is a fact about the SCHEMA, held by
+ * SQLite names no key in a foreign-key refusal, so the restrict branch asks only the class. That is
+ * sound only while each writer's `try` wraps ONE statement on `canvases` and
+ * `device_profiles.canvas_id` is the only key into `canvases` — the second half is pinned by
  * `has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it`
- * (canvas-store.db.test.ts), which reads the migrated database rather than the DDL text.
+ * (canvas-store.db.test.ts). Widen a `try` to a second statement and its refusals would be reported
+ * as `canvas.in_use`, with nothing to catch it.
  *
- * What that costs, stated because a reader would otherwise assume the old guarantee: widen one of
- * those `try` blocks to cover a second statement and a refusal it raises would be labelled
- * `canvas.in_use`, with nothing to catch it — the schema guard cannot see the scope of a `try`.
- *
- * No other PRODUCTION file calls it — exported for the unit test, NOT from the package barrel — so
- * the only refusals it ever sees are the ones this store's own statements raise.
- * Pinned by crafted-error unit tests in `canvas-store.test.ts` and end to end in
- * `canvas-store.db.test.ts`.
+ * Exported for canvas-store.test.ts, not from the package barrel.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
@@ -94,7 +54,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All canvases, in no defined order (the query has no ORDER BY). */
+/** In no defined order. */
 export async function listCanvases(
   tx: Transaction,
 ): Promise<{ id: string; name: string; definition: CanvasDef }[]> {
@@ -112,7 +72,6 @@ export async function listCanvases(
   }));
 }
 
-/** One canvas by id, or `undefined` when no canvas carries that id. */
 export async function getCanvas(
   tx: Transaction,
   id: string,
@@ -129,7 +88,6 @@ export async function getCanvas(
   return { id: row.id, name: row.name, definition: row.definition as CanvasDef };
 }
 
-/** Create a canvas, returning its generated id. Manager/admin only (`layout.configure`). */
 export async function createCanvas(
   tx: Transaction,
   input: { managementSessionId: string; name: string; definition: unknown },
@@ -150,20 +108,10 @@ export async function createCanvas(
   }
 }
 
-/**
- * Replace a canvas's name + definition in place. Manager/admin only (`layout.configure`). An absent id
- * throws `canvas.not_found` — the by-id config-CRUD idiom the
- * direct siblings on this same management surface use (`updateZone`/`updateTable`/`updateStatus` in
- * `apps/server/src/tables.ts`), read back via `.returning({ id })` so a PUT that matched zero rows is
- * a 404, never a masked "saved" 204 (e.g. a PUT to a canvas another session just deleted). A name
- * collision throws `canvas.name_taken` (see `translateWriteError`).
- */
 export async function updateCanvas(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
-     * when those callers do. */
     id: string;
     name: string;
     definition: unknown;
@@ -189,15 +137,6 @@ export async function updateCanvas(
   }
 }
 
-/**
- * Delete a canvas. Manager/admin only (`layout.configure`). No definition to validate. An absent id
- * throws `canvas.not_found`, read back via `.returning({ id })` —
- * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
- * use, so a DELETE that matched zero rows is a 404 rather than a silent success. A device profile still
- * referencing the canvas (`device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a restrict
- * refusal, which `translateWriteError` turns into `canvas.in_use` (a clean 409) rather
- * than letting the raw DB error propagate to a 500.
- */
 export async function deleteCanvas(
   tx: Transaction,
   input: { managementSessionId: string; id: string },
@@ -220,14 +159,6 @@ export async function deleteCanvas(
   }
 }
 
-/**
- * The first stored canvas of `formFactor`, else the built-in `DEFAULT_CANVASES[formFactor]`
- * — the "return-a-default-when-unauthored" precedent shared with `getReceipt` (receipt-store.ts). The form factor is
- * carried inside the opaque `definition` JSON document (`->> 'formFactor'`), not a column; "first"
- * is by `created_at` for a stable pick when several canvases share one form factor. SQLite reads
- * `->>` with a text label on the right the same way PostgreSQL did — measured on node:sqlite, Node
- * v26.7.0, against a document stored through this package's own column type.
- */
 export async function getCanvasForFormFactor(
   tx: Transaction,
   formFactor: FormFactor,

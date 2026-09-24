@@ -10,18 +10,8 @@ import { describe, expect, it } from "vitest";
 import type { ThemeOverride } from "./canvas.js";
 import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 
-// One real migrated SQLite database, carrying the core and identity sets in that order: the core
-// set creates `tenant_themes`, and the identity set creates the `persons`/`management_sessions`
-// tables `authorizeManager` reads.
-//
-// What it does NOT show: no assertion here is about who may write `tenant_themes`. This engine has
-// no roles and no grants — one process opens one file — so there is no such property left for a
-// suite to assert, and the store's own gates are the only refusal. Every assertion below is the
-// store's behaviour, which the engine does not touch.
-
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
-/** Run `fn` in one transaction — the shape the management routes wrap every store call in. */
 function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
@@ -45,7 +35,6 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-/** No `::int` cast: SQLite's `count(*)` already arrives as a number. */
 async function rowCount(): Promise<number> {
   const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from tenant_themes`);
   return rows.rows[0]!.n;
@@ -76,16 +65,11 @@ describe("tenant theme store against a real migrated database", () => {
     );
     const next: ThemeOverride = { tokens: { "--wt-color-surface": "#222222" } };
     await inTx((tx) => putTenantTheme(tx, { managementSessionId: session, theme: next }));
-    // ON CONFLICT (id) DO UPDATE — the second write replaces the row, never adds one.
     expect(await rowCount()).toBe(1);
     expect(await inTx((tx) => getTenantTheme(tx))).toEqual(next);
   });
 
   it("refuses a put from a staff-role session — the authorizeManager gate (differential)", async () => {
-    // The by-deletion proof: staff holds no layout.configure, so authorizeManager throws
-    // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from
-    // putTenantTheme makes this succeed → codeOf returns "did not throw…" and a row lands, failing both
-    // assertions.
     await seedTenant(suite.db);
     const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
@@ -103,8 +87,7 @@ describe("tenant theme store against a real migrated database", () => {
   it("rejects an invalid theme with theme.invalid before any INSERT", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
-    // authorize FIRST (manager is permitted), THEN validate — so an invalid theme from an AUTHORISED
-    // actor proves validate runs before the write. An un-allowlisted token fails validateThemeOverride.
+    // A manager passes the gate, so this refusal is validation's.
     const code = await codeOf(() =>
       inTx((tx) =>
         putTenantTheme(tx, {

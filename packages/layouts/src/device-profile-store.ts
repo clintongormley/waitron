@@ -16,42 +16,17 @@ import { asc, eq } from "drizzle-orm";
 import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 
-/**
- * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows,
- * keyed by `id`, with distinct names. The twin of `canvas-store.ts`, sharing its
- * shape exactly — read that file's header for the (tx, …)-is-caller-scoped convention.
- *
- * Every function takes the caller's transaction, opened with `withTransaction(deps.db, …)`.
- * Exercised against a real migrated database in `device-profile-store.db.test.ts`.
- *
- * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
- * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
- * unknown capability flag (throws `device_profile.invalid` {reason: "bad_capabilities"} before the
- * write, since capabilities drive the /api/pay + /api/drawer firewall); (3) the drizzle write, whose
- * unique violation on the name key becomes `device_profile.name_taken` and whose foreign-key
- * refusal on `device_profiles_canvas_fk` becomes `device_profile.invalid`
- * {reason: "bad_canvas_ref"} (see `translateWriteError`). `deleteDeviceProfile` authorises but has no
- * capabilities to validate. Reads return `capabilities` as a PARSED JSON array, which is the column's own read mapping
- * (`json` in `packages/db/src/schema/columns.ts`) rather than anything this file does. The `as`
- * cast re-attaches the `CapabilityFlag[]` shape the plain-JSON column drops (it carries no
- * `@waitron/layouts` type, to avoid a `@waitron/layouts` → `@waitron/db` circular dependency, see
- * `packages/db/src/schema/device-profiles.ts`).
- */
-
-/** The shape every read and write returns: identity, name, the optional canvas reference, and the
- * validated capability set. `canvasId` is `null` when the profile falls back to the form-factor
- * default canvas (design §5.3). */
+/** `canvasId` is `null` when the profile falls back to its form factor's canvas. */
 export type DeviceProfileRow = {
   id: string;
   name: string;
   formFactor: FormFactor;
   canvasId: string | null;
   capabilities: CapabilityFlag[];
-  /** The auto-logout idle timeout in seconds; `null` = never (always `null` for a `kds` profile). */
+  /** The auto-logout idle timeout in seconds; `null` means never. */
   inactivityTimeoutSeconds: number | null;
 };
 
-/** The `DeviceProfileRow` column projection shared by every `.select()` and `.returning()` here. */
 const PROFILE_COLUMNS = {
   id: deviceProfiles.id,
   name: deviceProfiles.name,
@@ -61,7 +36,10 @@ const PROFILE_COLUMNS = {
   inactivityTimeoutSeconds: deviceProfiles.inactivityTimeoutSeconds,
 } as const;
 
-/** Re-attach the `CapabilityFlag[]` shape the plain-JSON `capabilities` column drops (see header). */
+/**
+ * The `as` cast restores a type the JSON column does not carry: this package depends on
+ * `@waitron/db`, so the column cannot name one of its types without a dependency cycle.
+ */
 function toRow(row: {
   id: string;
   name: string;
@@ -80,46 +58,23 @@ function toRow(row: {
   };
 }
 
-/** The unique index `device_profiles_tenant_name_key` over (name), declared in
- * `packages/db/drizzle/0000_baseline.sql`. A unique violation is one of the few classes SQLite
- * reports a table and columns for, so this is the key a duplicate name names. */
 const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["name"] };
 
 /**
- * Translate the driver refusals the profile write/delete paths care about into their domain codes,
- * and re-throw anything else untouched:
- *   - a duplicate profile name (a unique violation on {@link PROFILE_NAME}) →
- *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, with the
- *     same two edges: a unique violation on any other key of `device_profiles` is re-thrown
- *     untouched, and one that named no key at all is translated anyway (the name key is the only
- *     unique these writes can trip on an author-supplied value);
- *   - a `canvas_id` that names no canvas → `device_profile.invalid` {reason: "bad_canvas_ref"};
- *   - a delete refused because a live device still references the profile →
- *     `device_profile.in_use`, a clean 409 rather than a raw 500.
+ * Translates the refusals these writes can raise into domain codes and re-throws anything else.
  *
- * The unique branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
- * whose key could not be identified, which `refusalOn` cannot express.
+ * A unique violation that names no key is still `device_profile.name_taken`, for the reason
+ * canvas-store.ts's `translateWriteError` gives.
  *
- * **Why the two foreign-key branches ask only the CLASS.** SQLite reports every foreign-key
- * refusal as `FOREIGN KEY constraint failed` and nothing else — no table, no column, no constraint
- * name (measured on node:sqlite, Node v26.7.0; the codes are driven in
- * `packages/db/src/constraint-target.sqlite.test.ts`). The one thing it does separate is the
- * DIRECTION, and that is exactly the separation these two branches need: 787 for a written value
- * naming no parent, 1811 for a delete refused by an `ON DELETE RESTRICT` key. STATEMENT SCOPE
- * supplies the rest: each writer's `try` wraps ONE statement on `device_profiles` (the gate and
- * the validators run before it); `canvas_id` is the only foreign key `device_profiles` declares,
- * so a 787 raised by these writes can only be a canvas reference that names no row; and
- * `devices.device_profile_id` is the only key referencing a profile, so an 1811 can only be a
- * profile a device still binds. Those last two are facts about the SCHEMA, held by
- * `has ONE key out of device_profiles and ONE key into it` (device-profile-store.db.test.ts),
- * which reads the migrated database rather than the DDL text.
+ * SQLite names no key in a foreign-key refusal, only its direction: 787 for a written value naming
+ * no parent, 1811 for a delete a RESTRICT key refused. So the two foreign-key branches ask only the
+ * class. That is sound only while each writer's `try` wraps ONE statement on `device_profiles`,
+ * `canvas_id` is the only key out of it and `devices.device_profile_id` the only key into it — the
+ * schema half is pinned by `has ONE key out of device_profiles and ONE key into it`
+ * (device-profile-store.db.test.ts). Widen a `try` to a second statement and its refusals would be
+ * translated, with nothing to catch it.
  *
- * What that costs, stated because a reader would otherwise assume the old guarantee: widen one of
- * those `try` blocks to cover a second statement and a refusal it raises would be translated, with
- * nothing to catch it — the schema guard cannot see the scope of a `try`.
- *
- * Exported for the crafted-error unit test (`device-profile-store.test.ts`), NOT from the package
- * barrel — the same shape as `canvas-store.ts`'s `translateWriteError`.
+ * Exported for device-profile-store.test.ts, not from the package barrel.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
@@ -137,7 +92,6 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All device profiles, ordered by name. */
 export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfileRow[]> {
   const rows = await tx
     .select(PROFILE_COLUMNS)
@@ -146,7 +100,6 @@ export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfile
   return rows.map(toRow);
 }
 
-/** One device profile by id, or `undefined` when no profile carries that id. */
 export async function getDeviceProfile(
   tx: Transaction,
   id: string,
@@ -159,20 +112,14 @@ export async function getDeviceProfile(
   return toRow(row);
 }
 
-/** Create a device profile, returning the stored row. Manager/admin only
- * (`layout.configure`). */
 export async function createDeviceProfile(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
-     * when those callers do. */
     name: string;
     formFactor: FormFactor;
     canvasId: string | null | undefined;
     capabilities: unknown;
-    // Optional so a caller that has not adopted the field yet (the management routes, wired in a later
-    // task) keeps compiling; an omitted value stores NULL (never). `kds` is forced NULL regardless.
     inactivityTimeoutSeconds?: number | null;
   },
 ): Promise<DeviceProfileRow> {
@@ -202,27 +149,15 @@ export async function createDeviceProfile(
   }
 }
 
-/**
- * Replace a profile's name, canvas reference and capabilities in place, returning the stored row.
- * Manager/admin only (`layout.configure`). An absent id throws
- * `device_profile.not_found` — the by-id config-CRUD idiom `updateCanvas` uses, read back via
- * `.returning({ id })` so a PUT that matched zero rows is a 404, never a masked "saved" 204. A name
- * collision throws `device_profile.name_taken`, a bad canvas reference `device_profile.invalid`
- * {reason: "bad_canvas_ref"} (see `translateWriteError`).
- */
 export async function updateDeviceProfile(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
-     * when those callers do. */
     id: string;
     name: string;
     formFactor: FormFactor;
     canvasId: string | null | undefined;
     capabilities: unknown;
-    // Optional so the not-yet-updated management routes keep compiling (later task); an omitted value
-    // stores NULL. `kds` is forced NULL regardless.
     inactivityTimeoutSeconds?: number | null;
   },
 ): Promise<DeviceProfileRow> {
@@ -259,15 +194,6 @@ export async function updateDeviceProfile(
   return updated[0]!;
 }
 
-/**
- * Delete a device profile. Manager/admin only (`layout.configure`). An absent id throws
- * `device_profile.not_found`, read back via `.returning({ id })` — the same
- * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
- * a silent success. A device still referencing the profile (the FK, ON DELETE RESTRICT)
- * trips a restrict refusal, which `translateWriteError`
- * turns into `device_profile.in_use` (a clean 409) rather than letting the raw DB error propagate to a
- * 500 — the twin of `deleteCanvas`.
- */
 export async function deleteDeviceProfile(
   tx: Transaction,
   input: { managementSessionId: string; id: string },

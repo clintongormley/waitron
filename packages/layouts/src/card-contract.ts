@@ -2,7 +2,6 @@ import type { Permission } from "@waitron/identity";
 import type { CapabilityFlag, CardType } from "./canvas.js";
 import type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 
-/** The widest grid a tab may declare (design §4.1). A tab's `columns` is validated into 1..this. */
 export const GRID_MAX_COLUMNS = 24;
 
 function intInRange(min: number, max: number): ConfigValidator {
@@ -10,13 +9,6 @@ function intInRange(min: number, max: number): ConfigValidator {
     typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
 }
 
-/**
- * What one card kind declares to the system (design §4.2): its config schema, the person-role
- * PERMISSION its sensitive action needs (drives the in-card locked state — §5), the device CAPABILITY
- * it requires to be available at all (drives structural absence — §6 axis 1), the runtime visibility
- * STATES an author may gate rendering on (§6 axis 3), its default grid span, and whether it is
- * sale-critical (§13 — a selling canvas must place it).
- */
 export interface CardContract {
   configSchema: WidgetConfigSchema;
   requiredPermission?: Permission;
@@ -27,12 +19,6 @@ export interface CardContract {
   saleCritical: boolean;
 }
 
-/**
- * The per-card contract registry — the ONE tested place defining every card kind's contract. The
- * `Record<CardType, …>` type makes forgetting a card a compile error. Config validators reuse the
- * fail-closed `ConfigValidator` shape from widget-config.ts. `visibilityStates` list the states a card
- * exposes; an author's `visibleWhen` must be a subset (validated in Task 6).
- */
 export const CARD_CONTRACTS: Record<CardType, CardContract> = {
   "product-grid": {
     configSchema: { columns: intInRange(1, 12) },
@@ -123,7 +109,6 @@ export const CARD_CONTRACTS: Record<CardType, CardContract> = {
   },
 };
 
-/** The sale-critical cards, derived from the contract so it can never drift from `saleCritical`. */
 export const SALE_CRITICAL_CARDS: readonly CardType[] = (
   Object.keys(CARD_CONTRACTS) as CardType[]
 ).filter((t) => CARD_CONTRACTS[t].saleCritical);

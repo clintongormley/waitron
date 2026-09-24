@@ -3,19 +3,11 @@ import { refusalError } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./device-profile-store.js";
 
-// The device-profile write/delete error translations, proven end to end against a real migrated
-// database in device-profile-store.db.test.ts. Here we pin the translator's branches directly
-// with crafted errors — no DB — so every branch is covered deterministically.
-// `translateWriteError` is exported from device-profile-store.ts for exactly this, not from the
-// package barrel. Mirrors canvas-store.test.ts.
-//
 // Each crafted refusal comes from `refusalError`, whose own suite holds it equal to the engine's.
 describe("translateWriteError", () => {
   it("translates a unique violation that named no key to device_profile.name_taken", () => {
-    // The fallback branch: a unique violation whose target cannot be identified still translates,
-    // because the name key is the only unique an insert/update can trip on an author-supplied
-    // value. The message is the shape SQLite uses when the index is over an EXPRESSION: it names
-    // the index and no columns, so `constraintTarget` returns undefined.
+    // The shape SQLite uses for an index over an EXPRESSION: it names the index and no columns, so
+    // `constraintTarget` returns undefined.
     let thrown: unknown;
     try {
       translateWriteError({
@@ -40,9 +32,8 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.code).toBe("device_profile.name_taken");
   });
 
-  // A unique violation on a DIFFERENT key (the primary key, or any unique added later) must NOT be
-  // mislabelled name_taken — it is re-thrown untouched. Proof-by-deletion: drop the target gate.
-  // A primary-key collision has its own result code, which `UNIQUE_VIOLATION` also holds.
+  // A primary-key collision has its own result code, which `UNIQUE_VIOLATION` also holds, so it
+  // reaches the unique branch.
   it("re-throws a unique violation on device_profiles whose key is not (name)", () => {
     const original = {
       cause: refusalError({ primaryKey: { table: "device_profiles", column: "id" } }),
@@ -56,8 +47,6 @@ describe("translateWriteError", () => {
     expect(thrown).toBe(original);
   });
 
-  // A written value naming no parent row (787) — the `canvas_id` case, and the only foreign key
-  // `device_profiles` declares.
   it("translates a foreign-key refusal to device_profile.invalid {bad_canvas_ref}", () => {
     let thrown: unknown;
     try {
@@ -71,9 +60,7 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
   });
 
-  // A delete refused by an ON DELETE RESTRICT key (1811) — the device that still binds the profile.
-  // The two directions carry the same message and differ only in this code, which is what keeps
-  // this branch and the one above apart.
+  // The two foreign-key directions carry the same message and differ only in their code.
   it("translates a restrict refusal to device_profile.in_use", () => {
     let thrown: unknown;
     try {

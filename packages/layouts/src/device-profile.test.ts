@@ -17,9 +17,6 @@ describe("validateCapabilities", () => {
     ]);
   });
   it("dedupes, keeping FIRST-SEEN order (exact output, not a superset)", () => {
-    // A duplicate in the input must collapse to one, and the surviving order is first-seen — pinned
-    // with an order-sensitive `toEqual` on the exact array, since `validateCapabilities` is the
-    // security-relevant fail-closed gate driving the /api/pay + /api/drawer firewall.
     expect(
       validateCapabilities(["open-cash-drawer", "integrated-card-payment", "open-cash-drawer"]),
     ).toEqual(["open-cash-drawer", "integrated-card-payment"]);
@@ -53,8 +50,6 @@ describe("validateInactivityTimeout", () => {
   });
 
   it("rejects 0 — NULL is the 'never' sentinel, so a zero timeout is not a valid value", () => {
-    // 0 would mean "log out immediately" once Task 7 wires auto-logout, making a device unusable;
-    // "never" is expressed as NULL, not 0. Same error shape as the negative case.
     try {
       validateInactivityTimeout(0, "till");
       throw new Error("should have thrown");
@@ -66,7 +61,6 @@ describe("validateInactivityTimeout", () => {
   });
 
   it("FORCES null for a kds profile regardless of the value (a display is not a logged-in operator)", () => {
-    // Proof-by-deletion: drop the `formFactor === "kds"` guard and this returns 300.
     expect(validateInactivityTimeout(300, "kds")).toBeNull();
     expect(validateInactivityTimeout(null, "kds")).toBeNull();
   });
@@ -138,9 +132,6 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
   });
 
   it("seeds the till and handheld with a 300 s inactivity timeout; kds carries none", () => {
-    // The owner-confirmed default: an operator-facing device (counter till and shared handheld alike)
-    // auto-logs-out after five minutes so the next operator does not inherit the last one's session; a
-    // kitchen display is not a logged-in operator and is exempt. `?? null` normalizes an omitted value.
     const byFormFactor = Object.fromEntries(DEFAULT_DEVICE_PROFILES.map((p) => [p.formFactor, p]));
     expect(byFormFactor["phone-portrait"]!.inactivityTimeoutSeconds).toBe(300);
     expect(byFormFactor.till!.inactivityTimeoutSeconds).toBe(300);

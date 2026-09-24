@@ -11,18 +11,8 @@ import { DEFAULT_RECEIPT } from "./defaults.js";
 import { getReceipt, putReceipt } from "./receipt-store.js";
 import type { ReceiptConfig } from "./types.js";
 
-// One real migrated SQLite database, carrying the core and identity sets in that order: the core
-// set creates `tenant_receipts`, and the identity set creates the `persons`/`management_sessions`
-// tables `authorizeManager` reads.
-//
-// What it does NOT show: no assertion here is about who may write `tenant_receipts`. This engine
-// has no roles and no grants — one process opens one file — so there is no such property left for a
-// suite to assert, and the store's own gates are the only refusal. Every assertion below is the
-// store's behaviour, which the engine does not touch.
-
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
-/** Run `fn` in one transaction — the shape the management routes wrap every store call in. */
 function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
@@ -46,7 +36,6 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-/** No `::int` cast: SQLite's `count(*)` already arrives as a number. */
 async function rowCount(): Promise<number> {
   const rows = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from tenant_receipts`,
@@ -56,8 +45,6 @@ async function rowCount(): Promise<number> {
 
 describe("tenant receipt store against a real migrated database", () => {
   it("returns DEFAULT_RECEIPT ({}) for a tenant that has never authored a receipt", async () => {
-    // Unlike getTenantTheme (which returns undefined on absence), getReceipt returns the built-in
-    // DEFAULT_RECEIPT so the till boot always has a trim to render around the mandated fiscal art.
     await seedTenant(suite.db);
     expect(await inTx((tx) => getReceipt(tx))).toEqual(DEFAULT_RECEIPT);
   });
@@ -81,15 +68,11 @@ describe("tenant receipt store against a real migrated database", () => {
     );
     const next: ReceiptConfig = { footerMessage: "Gracias por su visita" };
     await inTx((tx) => putReceipt(tx, { managementSessionId: session, receipt: next }));
-    // ON CONFLICT (id) DO UPDATE — the second write replaces the row, never adds one.
     expect(await rowCount()).toBe(1);
     expect(await inTx((tx) => getReceipt(tx))).toEqual(next);
   });
 
   it("refuses a put from a staff-role session — the authorizeManager gate (differential)", async () => {
-    // The by-deletion proof: staff holds no layout.configure, so authorizeManager throws
-    // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from putReceipt
-    // makes this succeed → codeOf returns "did not throw…" and a row lands, failing both assertions.
     await seedTenant(suite.db);
     const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
@@ -107,8 +90,7 @@ describe("tenant receipt store against a real migrated database", () => {
   it("rejects an invalid receipt with receipt.invalid before any INSERT", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
-    // authorize FIRST (manager is permitted), THEN validate — so an invalid receipt from an AUTHORISED
-    // actor proves validate runs before the write. An unknown field fails validateReceiptConfig.
+    // A manager passes the gate, so this refusal is validation's.
     const code = await codeOf(() =>
       inTx((tx) =>
         putReceipt(tx, {

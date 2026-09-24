@@ -3,10 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { THEMEABLE_TOKENS } from "./theme.js";
 
-// Guard: every allowlisted theme token MUST be a real `--wt-*` token declared by the design-system
-// registry, so the allowlist can never drift onto a phantom (the earlier draft allowlisted four
-// non-existent names — theme.ts). NB staleness caveat: a ui-SIDE removal only re-runs this when
-// @waitron/layouts is in scope; the unfiltered `main` merge is the backstop (CLAUDE.md §2).
+// Staleness caveat: a token removed on the ui-core side re-runs this only when @waitron/layouts is
+// in scope; the unfiltered `main` merge is the backstop (CLAUDE.md §2).
 function declaredTokens(): Set<string> {
   const dir = fileURLToPath(new URL("../../ui-core/src/tokens/", import.meta.url));
   const css =
