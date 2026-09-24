@@ -2461,16 +2461,19 @@ image constraints under *Detail → Box image*.
   this engine a refused statement backs ITSELF out and leaves the transaction usable
   (`CLAUDE.md` §3; measurement in `bench/sqlite-failover/README.md` → "What S5 measures, and the
   savepoint it does not need"). What is still wrong, and is the whole of the item now: when the
-  refusal is the `reportPrintJob` inside the `try` rather than `transport.send`, that refused
-  report's own partial work stays in the caller's transaction with nothing confining it, and the
-  `catch` then writes a second report over the top of it. No caller in the tree reaches it —
+  refusal is the `done` `reportPrintJob` inside the `try` rather than `transport.send`, the `catch`
+  records `failed` for a job whose bytes were already sent, so a later batch prints it again.
+  #572's probe (Node v26.7.0) found the refused report itself leaves nothing behind: inside one
+  transaction an `UPDATE` refused by a `raise(abort)` trigger left the row unchanged and undid
+  another trigger's insert, and a later `UPDATE` in the same transaction committed; #572's review
+  reproduced the reprint. No caller in the tree reaches it —
   `apps/server/src/print-api.ts` uses the split `claimPrintJobs`/`reportPrintJob`, and
   `runAgentOnce`'s only callers are this package's own `runtime.test.ts`, `runtime.race.test.ts` and
   `runtime.reclaim.test.ts` — but it is exported from the package's `index.ts`, so that is a fact
   about today's tree rather than a property of the API. It becomes real the moment a local-mode
-  agent host is wired up (the item above). **Next action:** confine the report — a nested
-  `tx.transaction` around it, which on this engine is a savepoint that rolls back only its own
-  writes — or move the report out of the `try`.
+  agent host is wired up (the item above). **Next action:** move the `done` report out of the
+  `try`, so a refused report is not recorded as a failed send; a savepoint around it would not
+  help, since the refused statement already confines itself.
 
 ### B7. Provisioning and build debt
 
@@ -2688,10 +2691,11 @@ image constraints under *Detail → Box image*.
   comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
   2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
   about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
-  (#568, about 1,120 to about 555, tests included) and `packages/payments-stripe` (#570, about 1,080
-  to about 270, tests included). A pruning pull request cannot carry this file (the checker refuses
+  (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080
+  to about 270, tests included) and `packages/printing` (#572, about 1,040 to about 350, tests
+  included). A pruning pull request cannot carry this file (the checker refuses
   it), so each one's line lands here as a docs-only push after the merge. Found by #555, #558, #559,
-  #561, #562, #567, #568 and #570 and left for the package that owns each, all still OPEN:
+  #561, #562, #567, #568, #570 and #572 and left for the package that owns each, all still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2839,6 +2843,15 @@ image constraints under *Detail → Box image*.
     id per reversal) is still deferred: #570's review showed two identical `reverseViaStripe` calls
     get different idempotency keys, so a retried reversal sends a second real refund; the comment
     at `reverse.ts` says so.
+  - `packages/printing`, found by #572 and not changed (code, not comments): an aged batch can
+    print twice. When a large batch to a slow printer outlives the one-minute lease, another agent
+    in the venue can re-claim the jobs not yet sent while the first agent still sends every job it
+    pulled; the lease comment in `runtime.ts` now says so. Read from the agent's send loop, not
+    run. `printers.test.ts` test names still carry the PostgreSQL codes "(CHECK 23514)" and
+    "(UNIQUE 23505)", and the case named "a driver error that is NEITHER the UNIQUE NOR the CHECK
+    propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
+    `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
+    reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
