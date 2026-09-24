@@ -24,11 +24,6 @@ export interface SeededForSale extends Seeded {
   seriesId: string;
 }
 
-// Each of this package's test files runs against its own venue database, and within a file tenants
-// accumulate for the life of the suite unless the helper's per-test reset empties them, so every
-// test that seeds a tenant needs its own NIF or collides with a prior one on
-// `tenants_country_tax_id_key`. A single shared counter is enough — the databases never see each
-// other's rows.
 let nifCounter = 0;
 
 /** Returns a NIF unused so far in this test run. */
@@ -38,17 +33,11 @@ export function freshNif(): string {
 }
 
 /**
- * Seeds tenant → location → till → node → open working_order and returns their ids. The `node`
- * is what the fiscal chain/series/SIF identity is keyed on; it is
- * created at the same location as the till. Uses the fixture connection directly.
+ * Seeds tenant → location → till → node → open working_order and returns their ids.
  *
- * Written through the table definitions rather than as raw SQL, and that is not a style choice:
- * `id` and `created_at` are `$defaultFn` generators only the insert BUILDER runs, and
- * `invoice_locales` is a list the column's own mapping encodes. The raw-SQL version this replaced
- * was refused `NOT NULL constraint failed: tenants.created_at` — measured 2026-09-22, the baseline
- * `pnpm --filter @waitron/payments test` run recorded at `/tmp/payments-baseline.txt`, where it was
- * the failure under `seedWorkingOrder test/seed.ts:33` in every wiring suite. The same shape is in
- * `packages/core/test/fixtures.ts`'s `seedTenant`.
+ * Written through the table definitions rather than as raw SQL: `id` and `created_at` are
+ * `$defaultFn` generators only the insert BUILDER runs, and `invoice_locales` is a list the
+ * column's own mapping encodes.
  */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   await db
@@ -68,7 +57,6 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .insert(nodes)
     .values({ locationId, name: "Node 1" })
     .returning({ id: nodes.id });
-  // order_number is NOT NULL since park & retrieve (@waitron/db Task 1); this seed just needs a value.
   const [wo] = await db
     .insert(workingOrders)
     .values({ tillId: till!.id, orderNumber: 1 })
@@ -76,31 +64,14 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
   return { tillId: till!.id, nodeId: node!.id, workingOrderId: wo!.id };
 }
 
-/** The instant the seeded sale and its covering tender are stamped with. A literal rather than the
- * engine's clock: SQLite has no `now()`, and a timestamp column here holds an ISO string. */
 const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();
 
 /**
- * Seeds one `invoice_series` row for the node, one `sales` row against it, and the one `tenders`
- * row that covers it, and returns the new sale's id — the minimal commercial record
- * `associatePaymentWithSale` needs to point a payment at, without going through `@waitron/core`'s
- * full `recordSale` (that full path is exercised in the Task 10 wiring test).
+ * Seeds the minimal commercial record `associatePaymentWithSale` needs to point a payment at,
+ * without going through `@waitron/core`'s full `recordSale`, and returns the sale's id.
  *
  * A money column counts whole cents, so the 10.00 sale and the tender covering it are written as
  * 1000.
- *
- * `total` is the only money column on `sales` now — `tip_amount`/`amount_charged` were dropped in
- * migration 0012 (the tip moved to `tenders.tip_amount`). No `sale_settlements` row is declared, so
- * this is a legitimate UNSETTLED sale (design §3) and NO coverage check runs against it: migration
- * 0012 retired the old commit-time deferred `sales_assert_tenders_cover` trigger, replacing it with
- * one that fires only when settlement is DECLARED (the `sale_settlements` INSERT). Every other NOT
- * NULL column on `sales` (`packages/db/src/schema/sales.ts`) is supplied, `locale` is a member of
- * `invoice_locales`, `issued_offset_minutes` is within range, and this is the series' first (and
- * only) sale, so `invoice_number = 1` never collides with `sales_series_invoice_number_key`. The
- * sale and its covering tender are wrapped in one transaction for atomic setup — not for the
- * FK (which a committed `sales` row satisfies across separate transactions too), but so a
- * partial failure can never leave a sale without its covering tender. Uses the fixture connection
- * directly, like `seedWorkingOrder`.
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
   const [series] = await db
@@ -133,19 +104,9 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
 }
 
 /**
- * Seeds everything `@waitron/core`'s `recordSale` needs to chain a real sale on this node, for the
- * Task 10 wiring test: tenant → location → till → node → open working_order (via
- * `seedWorkingOrder`), one `invoice_series` row for the node, and the node registered with the
- * injected fiscal `backend`. Returns the ids plus the new `seriesId`.
- *
- * `backend.registerNode` is required and not optional: `FakeFiscalBackend` refuses
- * `recordSale`/`recordVoid` for a node with no prior registration (`fiscal.node_not_registered`),
- * exactly like a real backend would, and `recordSale` itself never registers a node (provisioning
- * is a separate admin action). Registration runs in its OWN committed transaction here so the
- * `fake_node_registrations` row is visible to the later, separate `recordSale` transaction — the
- * node's `NodeId` is branded at the call site because `registerNode` requires the branded type.
- *
- * Uses the fixture connection directly, like `seedWorkingOrder`/`seedSale`.
+ * Seeds everything `@waitron/core`'s `recordSale` needs to chain a real sale on this node. The node
+ * must be registered with the fiscal `backend`: `FakeFiscalBackend` refuses `recordSale` for an
+ * unregistered node (`fiscal.node_not_registered`), and `recordSale` never registers one.
  */
 export async function seedForSale(
   db: Database,

@@ -3,9 +3,8 @@ import type { PaymentProvider } from "./provider.js";
 import type { CardProviderContribution } from "./card-provider.js";
 import { cardProviderById, selectCardProviders } from "./card-provider.js";
 
-// These fakes only need to satisfy the shape `selectCardProviders`/`cardProviderById` care about
-// (`providerId`); the rest of the contract (connect/build/readers) is exercised by the seats that
-// implement it (Task 7 SumUp, Task 8 Stripe), not by the selector itself.
+// These fakes only need `providerId`; the rest of the contract is exercised by the seats that
+// implement it.
 const fake = (providerId: string): CardProviderContribution =>
   ({
     providerId,

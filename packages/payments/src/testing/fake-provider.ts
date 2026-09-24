@@ -30,12 +30,9 @@ let counter = 0;
 const nextRef = (): string => `fake-${String(++counter).padStart(8, "0")}`;
 
 /**
- * A genuine DB-backed test double, not a stub. It persists to the real `payments`/`payment_refunds`
- * tables through short transactions of its own (it takes no caller transaction — the interface
- * forbids it), so the online path, the associate-back, and foreign keys behave exactly as a real adapter's
- * would. There is no network; a captured result and its persistence share one transaction, and the
- * outcome is deterministic (configurable via `failNextCollect`). NOT re-exported from the package
- * barrel — a production import cannot reach it.
+ * A DB-backed test double, not a stub: it persists to the real `payments`/`payment_refunds` tables,
+ * so the associate-back and foreign keys behave as a real adapter's would. There is no network, and
+ * the outcome is deterministic.
  */
 export class FakePaymentProvider implements PaymentProvider {
   readonly provider = "fake";
@@ -52,14 +49,12 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   /** Test affordance: makes the next `collect` simulate a network outage, so it exercises the
-   * offline gate (accept → accepted_offline, or refuse → network_unavailable) instead of an online
-   * capture. One-shot, like `failNextCollect`. */
+   * offline gate instead of an online capture. One-shot. */
   offlineNextCollect(): void {
     this.offlineNext = true;
   }
 
-  /** Test affordance: the next `forward` will DECLINE (network-refuse) this payment ref instead of
-   * settling it, exercising the decline → incident path. */
+  /** Test affordance: the next `forward` DECLINES this payment ref instead of settling it. */
   declineForwardFor(ref: string): void {
     this.declineForwardRefs.add(ref);
   }
@@ -96,12 +91,9 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   /**
-   * The offline store-and-forward drain: claim this provider's `accepted_offline` rows and advance
-   * each. The claim is this transaction, not a clause — see `claimAcceptedOffline` in `../store.ts`.
-   * Refs flagged via `declineForwardFor` are declined (→ `declined`,
-   * plus one idempotent uncollected-receivable incident for the till); all others settle (→
-   * `settled`). No network here, so claim + advance + incident share one transaction; a real adapter
-   * (Cycle B) splits them T1/T2. `nextDueAt` is null — the fake has nothing time-scheduled.
+   * No network here, so claim + advance + incident share one transaction; a real adapter must not
+   * hold one across its processor call. The claim is this transaction, not a clause — see
+   * `claimAcceptedOffline` in `../store.ts`.
    */
   async forward(now: Date): Promise<ForwardResult> {
     return this.db.transaction(async (tx) => {
@@ -138,8 +130,6 @@ export class FakePaymentProvider implements PaymentProvider {
     });
   }
 
-  /** The fake's `collect` resolves in one transaction (it never leaves a row `attempting`), so a
-   * pending-outcome sweep has nothing to resolve. */
   resolvePending(now: Date): Promise<ForwardResult> {
     void now;
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
@@ -154,13 +144,10 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async refund(ref: string): Promise<PaymentResult> {
-    // A full refund returns the whole captured amount (the ordinary case; a prior partial refund
-    // would make this exceed and throw, which is correct — use partialRefund for a remainder).
+    // After a prior partial refund this exceeds the capture and throws, which is correct.
     return this.reverse(ref);
   }
 
-  /** Unlike `refund`, reports the amount REFUNDED (not the capture) — see `PaymentResult.amount`'s
-   * doc. */
   async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
       await this.require(tx, ref);
@@ -185,9 +172,7 @@ export class FakePaymentProvider implements PaymentProvider {
     return this.toResult(ref, row);
   }
 
-  /** The offline branch of `collect`: read the venue's policy, apply the neutral gate. On "accept"
-   * write an `accepted_offline` row (settledAt = acceptance time) and report `offline: true`; on
-   * "refuse" write NOTHING and report `network_unavailable` (no money moved). */
+  /** On "refuse" writes NOTHING and reports `network_unavailable`. */
   private async collectOffline(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
     return this.db.transaction(async (tx) => {
       const policy = await getPaymentPolicy(tx);

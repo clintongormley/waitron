@@ -13,23 +13,12 @@ import {
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 
-// Was `store.pg.test.ts`, the real-PostgreSQL companion to store.test.ts. What this file covers:
-// the REPLAY branch of `findCapturedPaymentForWorkingOrder`, the card columns and their two CHECK
-// constraints, and `findCapturedPaymentForWorkingOrderAnyProvider` — none of which store.test.ts
-// covers.
-//
-// The file is renamed rather than kept as `store.pg.test.ts`, because the suffix marks the
-// real-PostgreSQL tier that this branch retires and would be a claim about a target that no longer
-// exists.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
 
 describe("findCapturedPaymentForWorkingOrder", () => {
   it("returns saleId once associated — the replay branch, not just the resume (saleId null) one", async () => {
-    // seedSale plants a real committed sale + covering tender, the minimal thing
-    // associatePaymentWithSale needs to point a payment at (no need to go through @waitron/core's
-    // full recordSale here).
     const tenant = await seedWorkingOrder(suite.db, "B77777777");
     const saleId = await seedSale(suite.db, tenant);
 
@@ -59,10 +48,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       associatePaymentWithSale(tx, { ...paymentKey, saleId }),
     );
 
-    // After association: the REPLAY branch — the sale is already filed, saleId populated. This is
-    // the branch the whole return shape exists for, and the only assertion of it anywhere:
-    // store.test.ts pins the resume branch (`saleId: null`) and reads the associated value back
-    // through getPaymentByRef instead.
+    // After association: the REPLAY branch — the sale is already filed, saleId populated.
     const afterAssoc = await withTransaction(suite.db, (tx) =>
       findCapturedPaymentForWorkingOrder(tx, orderKey),
     );
@@ -96,9 +82,6 @@ describe("payments card columns", () => {
     expect(row.cardAuthCode).toBe("328600");
   });
 
-  // Both refusals below keep the assertion they carried on PostgreSQL, unchanged: SQLite names a
-  // CHECK constraint in its message (`CHECK constraint failed: payments_card_last4_ck`), so
-  // `/card_last4|check/i` and `/card_entry_mode|check/i` still match what the engine says.
   it("rejects a card_last4 that is not four characters", async () => {
     const tenant = await seedWorkingOrder(suite.db, freshNif());
     await expect(

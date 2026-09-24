@@ -5,17 +5,13 @@ const LEDGER = "what happened, keyed by the writing node; drained back from a re
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
 
 /**
- * Payments' tables, classified for native replication (swap spec §2.1). A captured payment and a
- * refund are append-only money movements keyed by the writing node, so they drain back from a
- * returned box; the payment policy is manager configuration a standby holds but never sends back.
- * Completeness against payments' migrations is guarded by `classification.test.ts`.
+ * `payments` is `ledger` but not `appendOnly`: `store.ts` updates a payment's row as it moves
+ * through its states, so a trigger refusing updates would refuse a card capture.
  */
 export const PAYMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
-  // ledger (2) — append-only money movements; drained back from a returned box.
   classify("payments", "ledger", LEDGER),
   classify("payment_refunds", "ledger", LEDGER),
 
-  // state (3) — manager configuration; copied to a standby, never drained back.
   classify("payment_policy", "state", STATE),
   classify("card_readers", "state", STATE),
   classify("device_card_readers", "state", STATE),

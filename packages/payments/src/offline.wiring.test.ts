@@ -74,7 +74,6 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     const s = await seedForSale(pg.db, backend, freshNif());
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
 
-    // 1. Offline accept BEFORE the sale transaction (there is an acceptance step, unlike manual mode).
     const provider = new FakePaymentProvider(pg.db);
     provider.offlineNextCollect();
     const paid = await provider.collect({
@@ -87,7 +86,6 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     expect(paid.offline).toBe(true);
     expect(paid.settledAt).not.toBeNull();
 
-    // 2. The settled tender chains the sale; associate the payment in the same transaction.
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid.settledAt as Date));
       await associatePaymentWithSale(tx, {
@@ -98,12 +96,10 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
       return recorded.saleId;
     });
 
-    // 3. Later, the network refuses the forwarded payment.
     provider.declineForwardFor(paid.paymentRef);
     const result = await provider.forward(BASE);
     expect(result).toMatchObject({ forwarded: 0, declined: 1, incidentsRaised: 1 });
 
-    // The payment is declined; the SALE is untouched (immutable — same row, still present).
     const rows = await pg.db.execute<{ state: string; sale_id: string | null }>(sql`
       select state, sale_id from payments where working_order_id = ${s.workingOrderId}`);
     expect(rows.rows[0].state).toBe("declined");
@@ -111,9 +107,8 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     const sale = await pg.db.execute<{ id: string }>(
       sql`select id from sales where id = ${saleId}`,
     );
-    expect(sale.rows).toHaveLength(1); // the sale was NOT voided or removed
+    expect(sale.rows).toHaveLength(1);
 
-    // One staff-facing incident exists for the till.
     const incidents = await pg.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");

@@ -23,9 +23,6 @@ const CORE = ["working_orders", "sales", "tenants", "tenders", "invoice_series",
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
-/** How drizzle-kit writes a table name in this package's generated SQL. SQLite quotes an
- * identifier with backticks where PostgreSQL used double quotes, measured by reading this
- * package's own `drizzle/*.sql` on 2026-09-22. */
 function createTable(table: string): string {
   return `create table \`${table}\``;
 }
@@ -53,7 +50,7 @@ describe("the payments schema entrypoint owns exactly its own tables", () => {
 
   it("emits a CREATE TABLE for its own tables", () => {
     // The positive control. Without it the negative assertion below would pass against an empty
-    // string — the exact vacuous shape that let seven tests through in fiscal-verifactu's plan 1.
+    // string.
     const sqlText = generatedSql();
     for (const table of OWNED) {
       expect(sqlText).toContain(createTable(table));
@@ -71,9 +68,6 @@ describe("the payments schema entrypoint owns exactly its own tables", () => {
     // Importing core tables is not merely allowed, it is required — and this asserts the import
     // actually produced something, so a future "fix" that deletes the imports to silence the
     // re-export test is caught.
-    // SQLite has no schema namespace, so the `"public".` qualifier PostgreSQL emitted is gone. The
-    // referenced COLUMN takes its place, which keeps this at least as specific as it was: it still
-    // fails if the key stops being emitted, and now also if it moves to another column.
     const sqlText = generatedSql();
     expect(sqlText).toContain("references `working_orders`(`id`)");
     expect(sqlText).toContain("references `sales`(`id`)");

@@ -1,6 +1,4 @@
-// Side-effect import: registers `payment.provider_duplicate` / `payment.provider_unknown` on the
-// shared `ErrorParams` registry (see ./errors.ts), matching the pattern `./provider.ts` uses for
-// the codes it throws.
+// Side-effect import: registers the `payment.*` codes this file throws.
 import "./errors.js";
 import type { Database } from "@waitron/db";
 import type { KeyRing, Purpose } from "@waitron/credentials";
@@ -9,7 +7,7 @@ import type { PaymentProvider } from "./provider.js";
 import type { IncidentSink } from "./reconcile.js";
 
 /** A browser-safe field descriptor for the generic connect form. `secret` fields are password inputs
- * and are never echoed back by any GET. `optional` lets a field (SumUp affiliate) be left blank. */
+ * and are never echoed back by any GET. */
 export interface ProviderCredentialField {
   name: string; // the vault payload key (e.g. "apiKey")
   labelKey: string; // an i18n key the provider's dashboard panel registers
@@ -25,10 +23,9 @@ export type ReaderAddMode =
 export interface ConnectResult {
   /** The merchant name to show for confirmation; the seat has verified the credentials. */
   merchantName: string;
-  /** The COMPLETE payload to seal under `credentialPurpose`, assembled by the seat from the form
-   * values plus anything it discovered (SumUp fills in `merchantCode` from the memberships call and
-   * the `-` affiliate placeholders). The route validates it with `validatePayload` and seals it
-   * verbatim, so the generic route never assembles a provider-shaped payload. */
+  /** The COMPLETE payload to seal under `credentialPurpose`. The route validates it with
+   * `validatePayload` and seals it verbatim, so the generic route never assembles a provider-shaped
+   * payload. */
   sealedPayload: Record<string, string>;
 }
 
@@ -39,20 +36,18 @@ export interface AddReaderResult {
 }
 
 export interface CardProviderContribution {
-  readonly providerId: string; // "sumup" | "stripe"
-  readonly credentialPurpose: Purpose; // "payments.sumup" | "payments.stripe"
+  readonly providerId: string;
+  readonly credentialPurpose: Purpose;
   readonly credentialFields: readonly ProviderCredentialField[];
   readonly readerAdd: ReaderAddMode;
   /** Verify the typed credentials against the provider WITHOUT sealing, and return the merchant name
    * to confirm PLUS the complete payload to seal. Throws `payment.provider_credential_rejected` on a
    * bad credential. If the credential spans several merchants and `payload` names none, throws
-   * `payment.provider_merchant_ambiguous` with `{ merchants: [{ code, name }] }` (codes and names are
-   * not secrets) so the form offers a picker and re-submits `payload` with the chosen `merchantCode`.
+   * `payment.provider_merchant_ambiguous` so the form offers a picker and re-submits `payload` with
+   * the chosen `merchantCode`.
    *
-   * `environment` is the deployment context the route holds: a seat that can tell a key's
-   * environment from its shape (Stripe's `sk_live_`/`sk_test_` prefix) refuses a mismatched key with
-   * `payment.credential_environment_mismatch` before sealing. It is optional so a seat that has no
-   * such notion (SumUp) ignores it and a caller that cannot supply it skips the guard. */
+   * A seat that can tell a key's environment from its shape refuses a key that does not match
+   * `environment` with `payment.credential_environment_mismatch` before sealing. */
   connect(
     deps: {
       fetch?: typeof fetch;
@@ -96,23 +91,17 @@ export interface ReaderStatus {
   serial?: string;
   /** The status read failed; the device's connectivity is unknown. */
   unreachable?: boolean;
-  /** Where pairing itself stands, DISTINCT from device connectivity (`online`): a reader confirms
-   * pairing (`processing → paired`) and only later may go briefly offline. The add-reader dialog
-   * polls THIS to decide a pairing succeeded, never `online` — a reader that paired but is momentarily
-   * offline is paired. Optional and additive: a provider whose reader is paired the instant it is
-   * added (Stripe, a reference) reports `"paired"`, and a caller that predates the field ignores it. */
+  /** Where pairing stands, DISTINCT from device connectivity (`online`). The add-reader dialog polls
+   * THIS to decide a pairing succeeded, never `online`: a reader that paired but is momentarily
+   * offline is paired. */
   pairingStatus?: "processing" | "paired";
 }
 export interface CardProviderBuildDeps {
   db: Database;
   ring: KeyRing;
-  /** The node this provider is built for. Both card adapters take it at construction
-   * (`packages/payments-stripe/src/card-provider.ts`, `packages/payments-sumup/src/card-provider.ts`)
-   * and hold it on their own options. It names a node, never a taxpayer — `incidents` carries no
-   * tenant column. */
   nodeId: string;
   environment: "preproduction" | "production";
-  /** Where a provider raises `payment.pending_outcome_unactionable` (SumUp's resolvePending). */
+  /** Where a provider raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
 }
 export interface CardProviderRuntimeDeps {
@@ -121,8 +110,8 @@ export interface CardProviderRuntimeDeps {
   fetch?: typeof fetch;
 }
 
-/** Indexes a module list by `providerId` for the provider registry and the connection pool. Throws
- * `payment.provider_duplicate` rather than letting a later entry silently shadow an earlier one. */
+/** Throws `payment.provider_duplicate` rather than letting a later entry silently shadow an earlier
+ * one. */
 export function selectCardProviders(
   list: readonly CardProviderContribution[],
 ): Map<string, CardProviderContribution> {

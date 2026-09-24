@@ -20,33 +20,15 @@ import type { Seeded } from "../test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-// One `delete from` per table in place of `truncate incidents, payment_refunds, payments cascade`,
-// which this engine answers with `near "truncate": syntax error` — and which took every test in
-// this file down with it. SQLite has no TRUNCATE and no CASCADE. Three calls rather than one
-// because `node:sqlite` prepares a single statement at a time, and child before parent because
-// deleting `payments` while a `payment_refunds` row still points at it is refused with
-// `FOREIGN KEY constraint failed` (errcode 787, measured on a two-table probe, node v26.7.0).
-// Reordering them does NOT redden this suite, which was checked rather than assumed: `useVenueDb`
-// empties every table after each test, so no child row survives into this hook for the foreign key
-// to catch. The order is what keeps the hook correct if that ever stops being true.
+// Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
+// refused with `FOREIGN KEY constraint failed`.
 beforeEach(async () => {
   await pg.db.execute(sql`delete from incidents`);
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
 });
 
-/**
- * Decodes the `params` of the rows a raw `select … params … from incidents` returned, leaving every
- * other selected column alone.
- *
- * `incidents.params` is a json column (`packages/db/src/schema/incidents.ts`), and a raw `select`
- * skips the read mapping that column declares, so the value arrives as the stored TEXT — measured,
- * every assertion below read `'{"count":1,"payments":[…]'` where it wanted an object. The
- * PostgreSQL version needed no counterpart because `jsonb` decoded in the driver. The parse itself
- * is what this package's own `./reconcile.concurrency.test.ts` already does to the same column;
- * this wraps it so each call site keeps the `{ rows: [{ params }] }` shape its assertions are
- * written against, and no assertion moved.
- */
+/** A raw `select` skips the json column's read mapping, so `incidents.params` arrives as TEXT. */
 function parseParams<T, R extends { params: string } = { params: string }>(result: {
   rows: R[];
 }): { rows: (Omit<R, "params"> & { params: T })[] } {
@@ -64,7 +46,6 @@ const NOW = new Date("2026-07-25T12:00:00Z");
 const OLD_SETTLED = new Date("2026-07-01T12:00:00Z");
 const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-02T00:00:00Z") };
 
-/** Records every reversal the sweep asks for, so a test can assert what money moved. */
 function recordingReverse() {
   const calls: string[] = [];
   const fn = async (paymentRef: string): Promise<void> => {
@@ -81,8 +62,6 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
     reverse,
     incidents: recordIncidentOnce,
     settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
-    // Any node id: this suite asserts the sweep's classification/remediation, not the captured origin
-    // (proven in apps/server's sync-origin.test.ts); the payments container carries no capture.
     nodeId: "11111111-1111-4111-8111-111111111111",
   };
 }
@@ -117,23 +96,14 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
   });
 }
 
-/** Seeds a second till + node + open working order under the SAME tenant/location as `seeded` —
- * `seedWorkingOrder` always mints a fresh tenant, so a two-till test needs this instead. Mirrors
- * store.test.ts's `seedSecondSale`. The fresh node keeps each returned `Seeded` self-consistent
- * (its own chain/series key), mirroring `seedWorkingOrder`. */
+/** Seeds a second till, node and open working order at the same location as `seeded`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(
       sql`select location_id from tills where id = ${seeded.tillId}`,
     )
   ).rows;
-  // `id` and the timestamps are named here because nothing fills them any more. They were
-  // PostgreSQL column defaults (`defaultRandom()`, `defaultNow()`); the column vocabulary now
-  // generates both in JavaScript through drizzle's `$defaultFn`
-  // (`packages/db/src/schema/columns.ts`), which is not a SQL DEFAULT — so a raw insert like these
-  // three gets nothing, and the generated tables carry no default clause
-  // (`packages/db/drizzle/0000_baseline.sql`). Measured: without them this helper was refused with
-  // `NOT NULL constraint failed: tills.id`.
+  // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
   const till2 = await pg.db.execute<{ id: string }>(sql`
     insert into tills (id, location_id, name, created_at)
@@ -196,9 +166,8 @@ describe("reconcilePayments", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
-    // Deliberately NOT associated with a sale: the working order stays "open", so the orphan rule
-    // (which requires a non-open working order) never fires — these two rows are unsettled only.
-    // (Associating both would also collide on seedSale's fixed invoice-series code 'A' per node.)
+    // Not associated with a sale, and the working order stays "open", so these two rows are
+    // unsettled only, never orphans.
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
     expect(result.incidentsRaised).toBe(1);
@@ -212,8 +181,6 @@ describe("reconcilePayments", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].params.count).toBe(2);
-    // settledAt is normalised to ISO-8601, not the raw Postgres `mode: "string"` format
-    // (`2026-07-01 12:00:00+00`) `row.settledAt` carries on the way in.
     expect(rows[0].params.payments.map((p) => p.settledAt)).toEqual([
       OLD_SETTLED.toISOString(),
       OLD_SETTLED.toISOString(),
@@ -221,9 +188,7 @@ describe("reconcilePayments", () => {
   });
 
   it("aggregates per (till, class), not per class alone — two tills stay two incidents", async () => {
-    // The grouping key is `${tillId}|${klass}`. A single-till fixture can't distinguish that from
-    // a bare `klass` key, which would file every till's money under whichever till's row is seen
-    // first and leave every other till's incident silently missing — this is what catches it.
+    // A single-till fixture cannot tell the `${tillId}|${klass}` grouping key from a bare `klass`.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     const second = await seedSecondTill(seeded);
     await capture(seeded, "p1", "ext-1");
@@ -231,9 +196,8 @@ describe("reconcilePayments", () => {
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
     expect(result.incidentsRaised).toBe(2);
-    // Both type arguments, unlike every other call: TypeScript stops INFERRING `R` the moment any
-    // type argument is written by hand, so supplying only the params payload leaves `R` on its
-    // default and `till_id` off the row.
+    // Both type arguments: once one is written TypeScript stops inferring `R`, which would leave
+    // `till_id` off the row.
     const { rows } = parseParams<{ count: number }, { till_id: string; params: string }>(
       await pg.db.execute<{ till_id: string; params: string }>(
         sql`select till_id, params from incidents where code = 'payment.reconcile_unsettled' order by till_id`,
@@ -270,8 +234,6 @@ describe("reconcilePayments", () => {
     expect(result.drift).toHaveLength(1);
     expect(result.drift[0]).toMatchObject({ localAmount: "10.00", settledAmount: "9.00" });
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_drift"]);
-    // The declared params shape, asserted whole: a human resolving this incident needs BOTH
-    // figures, and the pair is the entire content of the finding.
     const { rows } = parseParams<{
       count: number;
       payments: { paymentRef: string; captured: string; settled: string }[];
@@ -305,9 +267,6 @@ describe("reconcilePayments", () => {
     );
     expect(result.lostSettlement).toHaveLength(1);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_lost_settlement"]);
-    // The declared params shape, asserted whole: this incident names a settlement the processor
-    // confirmed for a payment we never locally marked captured — the working order is the only
-    // thing pointing a human back at what was actually paid for.
     const { rows } = parseParams<{
       count: number;
       payments: { paymentRef: string; amount: string; workingOrderId: string }[];
@@ -351,9 +310,6 @@ describe("reconcilePayments", () => {
     expect(result.missingLocal).toHaveLength(1);
     expect(result.incidentsRaised).toBe(1);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_missing_local"]);
-    // The declared params shape, asserted whole: this incident names money we hold NO row for, so
-    // every processor reference, the amount, the settlement time and the hinted payment_ref are all
-    // a human has to go on.
     const { rows } = parseParams<{
       count: number;
       settlements: {
@@ -381,13 +337,9 @@ describe("reconcilePayments", () => {
   });
 
   it("resolves each missingLocal candidate independently — one settlement's existing row must not clear another's", async () => {
-    // The existence check is now ONE batched query over every unmatched settlement's references,
-    // not one query per settlement (see existingReferences). A naive translation that treats "the
-    // batched query returned a non-empty set" as "every candidate resolved" would wrongly clear
-    // BOTH settlements below, when only the second genuinely has a local row.
+    // The existence check is one batched query: a non-empty answer must not clear every candidate.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
-    // ext-2 has a local row, but settled OUTSIDE the swept PERIOD — existingReferences still finds
-    // it (unbounded by period, same as the single-record test below), so it must not be reported.
+    // ext-2's local row settled outside PERIOD; the existence check is unbounded by period.
     await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
         workingOrderId: seeded.workingOrderId,
@@ -451,14 +403,8 @@ async function associate(seeded: Seeded, paymentRef: string): Promise<void> {
     where payment_ref = ${paymentRef}`);
 }
 
-/** Sets a seeded working order's status. `settled` also needs `settled_at` (the biconditional
- * CHECK `working_orders_settled_at_ck`); `abandoned` must leave it null.
- *
- * The clock is read in JavaScript and bound, where this used to interpolate a `now()` fragment:
- * that call is answered here with `no such function: now`. `working_orders.settled_at` is a `tsString` column
- * (`packages/db/src/schema/orders.ts`), which stores exactly what `toISOString` produced, so the
- * bound string is the shape every other writer writes. Only the CHECK's null-vs-not-null half
- * matters to these tests; the instant itself is never read back. */
+/** `settled` also needs `settled_at` (the biconditional CHECK `working_orders_settled_at_ck`);
+ * `abandoned` must leave it null. */
 async function setOrderStatus(seeded: Seeded, status: "settled" | "abandoned"): Promise<void> {
   await pg.db.execute(sql`
     update working_orders
@@ -484,10 +430,6 @@ describe("orphan remediation", () => {
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).not.toBeNull();
-    // `remediation` tells a human whether the sweep is handing this customer their money back and,
-    // when it is not, which gate stopped it — so the whole params shape is asserted here and each
-    // other reason is asserted in its own test below. Hardcoding any single value must fail one of
-    // them.
     const incident = parseParams<{
       count: number;
       payments: {
@@ -520,9 +462,7 @@ describe("orphan remediation", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
-    // A reverse fake that peeks at its own paymentRef's marker AT CALL TIME. If a future change
-    // moved the stamp into a `finally` (or after the network call), this would still be green for
-    // every other test but would catch the marker reading null right here.
+    // Reads the marker at call time: a stamp moved after the network call would read null here.
     const markersAtCallTime: (string | null)[] = [];
     const reverse = async (paymentRef: string): Promise<void> => {
       const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
@@ -572,11 +512,8 @@ describe("orphan remediation", () => {
   });
 
   it("does NOT claim a SETTLED-state orphan on an abandoned order — nothing can reverse it", async () => {
-    // The mode 2b shape: an offline-accepted tender whose sale write never landed, forwarded to
-    // `settled`, on an order staff then abandoned. It is a genuine orphan on an abandoned order, so
-    // the working-order gate alone would claim it — but `settled` has no reversal path at all, so
-    // claiming it would stamp a permanent marker for a reversal that must fail, and no later sweep
-    // would ever look at it again. Incident-only, exactly like a settled-ORDER orphan.
+    // An offline-accepted tender forwarded to `settled`, on an abandoned order: the working-order
+    // gate alone would claim it.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await forwardedOffline(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -765,11 +702,8 @@ describe("orphan remediation", () => {
       { paymentRef: "p1", reason: "payment.not_refundable" },
     ]);
 
-    // A NEW orphan on the SAME till, while the first sweep's remediation-failed incident is still
-    // open. Its incident collides on the open-incident dedup key (till, code, sale_id) and
-    // is dropped — and unlike the five mismatch classes, this finding is never re-detected, because
-    // the marker means no later sweep will ever claim p2 again. The result list is therefore the
-    // ONLY record it has, which is exactly why the field exists.
+    // A new orphan on the same till while the first failure's incident is still open: its own
+    // incident is deduplicated away, so the result is the only record of it.
     await capture(seeded, "p2", "ext-2", "20.00");
     const second = await reconcilePayments(d, PERIOD, NOW);
     expect(second.incidentsRaised).toBe(0);
@@ -779,9 +713,6 @@ describe("orphan remediation", () => {
   });
 
   it("reports alreadyClaimed for an orphan an earlier sweep already stamped", async () => {
-    // The marker is permanent by design, so a second sweep over the same period must not reverse
-    // the payment again — and must say WHY it is standing down, rather than reading identically to
-    // an orphan it was never allowed to touch.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -789,10 +720,7 @@ describe("orphan remediation", () => {
     await reconcilePayments(deps(new FakeSettlementReport([settlement()]), first.fn), PERIOD, NOW);
     expect(first.calls).toEqual(["p1"]);
 
-    // Acknowledge the first sweep's incident before the second runs. Without this the assertion
-    // below would read the FIRST incident (`claimed`) and fail for a reason that has nothing to do
-    // with what is under test: the open-incident dedup index is partial on `acknowledged_at IS
-    // NULL`, so while the first stays open the second sweep's insert is deduplicated away.
+    // While the first sweep's incident stays open, the second sweep's insert is deduplicated away.
     await pg.db.execute(sql`
       update incidents set acknowledged_at = ${new Date().toISOString()}
       where code = 'payment.reconcile_orphan'`);
@@ -816,10 +744,7 @@ describe("orphan remediation", () => {
   });
 
   it("reports alreadyClaimed, not amountDrifted, for a row that is both already-claimed and drifting", async () => {
-    // Pins the gate order: already-claimed precedes drift. An earlier sweep's marker is permanent,
-    // so settling THIS sweep's drift can never unblock a reversal this row already either succeeded
-    // or permanently failed at — reporting `amountDrifted` here would point a human at a fix that
-    // cannot do anything, which is exactly what the reordering exists to prevent.
+    // Pins the gate order: already-claimed precedes drift.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -827,10 +752,7 @@ describe("orphan remediation", () => {
     await reconcilePayments(deps(new FakeSettlementReport([settlement()]), first.fn), PERIOD, NOW);
     expect(first.calls).toEqual(["p1"]);
 
-    // Acknowledge the first sweep's incident before the second runs — as in the test above, the
-    // open-incident dedup index is partial on `acknowledged_at IS NULL`, so leaving it open would
-    // dedupe away the second sweep's insert and this assertion would read the FIRST incident
-    // (`claimed`) instead of the second sweep's.
+    // Acknowledged for the same reason as in the test above.
     await pg.db.execute(sql`
       update incidents set acknowledged_at = ${new Date().toISOString()}
       where code = 'payment.reconcile_orphan'`);
@@ -856,10 +778,6 @@ describe("orphan remediation", () => {
   });
 
   it("does NOT claim an orphan whose amount has DRIFTED — it reports both instead", async () => {
-    // The one case where the sweep would move money at a figure it has, in the same pass, proven it
-    // cannot trust. The reversal primitive sends no amount, so the processor refunds ITS figure
-    // while we would record OURS; and the marker is permanent, so the row would leave the audited
-    // set with the books wrong and nothing to re-examine it. Report both, move nothing.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -876,10 +794,7 @@ describe("orphan remediation", () => {
     // Not a failed remediation — one correctly never attempted.
     expect(result.remediationFailures).toEqual([]);
     expect(reverse.calls).toEqual([]);
-    // No marker: the row stays in the audited state set, so any sweep whose period covers it again
-    // will re-detect it, and the open drift/orphan incidents persist regardless of cadence until a
-    // human settles the difference. This is the whole difference from a claimed-then-failed
-    // reversal, whose marker is permanent unconditionally.
+    // No marker, unlike a claimed-then-failed reversal: a later sweep can still claim this row.
     const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
@@ -894,8 +809,6 @@ describe("orphan remediation", () => {
       ),
     );
     expect(orphan.rows[0].params.payments[0].remediation).toBe("amountDrifted");
-    // The drift incident still carries BOTH figures — the human settling the difference reads them
-    // from here, which is what makes reporting-instead-of-reversing actionable.
     const drift = parseParams<{
       payments: { paymentRef: string; captured: string; settled: string }[];
     }>(
@@ -909,9 +822,7 @@ describe("orphan remediation", () => {
   });
 
   it("still claims an orphan whose amount MATCHES — this is a gate, not a disabling", async () => {
-    // The regression guard for the test above: if the drift set were built wrongly (say, over every
-    // classified row rather than the `drift` ones), auto-reversal would silently stop entirely and
-    // every other orphan test would still pass.
+    // Guards the test above: a drift set built over every classified row would stop all reversals.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -927,18 +838,9 @@ describe("orphan remediation", () => {
   });
 
   it("still claims and reverses an abandoned orphan whose reference matches NOTHING in the report", async () => {
-    // The documented scope boundary (see the design's §4/§7): `classify` only ever emits `drift` for
-    // a row a settlement actually MATCHED (`settled !== undefined`). A reference the report never
-    // mentions at all leaves `settled` undefined — no `drift` entry is ever produced for it, so the
-    // drift gate has nothing to catch — and the orphan is claimed and reversed with NO amount
-    // comparison ever having happened. A stricter gate written as
-    // `entry.settled === null || driftedRefs.has(ref)` would still pass every other test in this
-    // file, which is exactly why this one exists.
-    //
-    // This row is ALSO `unsettled`: it is audited (captured, non-open working order) but unmatched,
-    // and its `auditedAt` sits inside `PERIOD`, which is always more than the settlement lag before
-    // `NOW` in this fixture set. That overlap is asserted below rather than avoided — `classify`'s
-    // predicates are independent by design (see its own doc comment).
+    // An unmatched row produces no `drift` entry, so the orphan is reversed with no amount
+    // comparison. A gate written as `entry.settled === null || driftedRefs.has(ref)` would pass
+    // every other test in this file. The row is also `unsettled`: the classes are independent.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-nomatch");
     await setOrderStatus(seeded, "abandoned");
@@ -961,9 +863,8 @@ describe("orphan remediation", () => {
   });
 
   it("reports the FIRST gate when a row trips several — not the drift one", async () => {
-    // A settled-order orphan whose amount ALSO drifted. Both gates apply, and the order matters to
-    // the human: reporting `amountDrifted` would suggest that settling the difference unblocks the
-    // reversal, when the settled working order forbids it whatever the amount says.
+    // A settled-order orphan whose amount also drifted: the settled working order forbids the
+    // reversal whatever the amount says.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "settled");
@@ -984,10 +885,7 @@ describe("orphan remediation", () => {
   });
 
   it("gates only the DRIFTING orphan, not every orphan in the sweep", async () => {
-    // The regression guard for the three tests above: every one of them exercises a single payment,
-    // so an over-broad gate of the shape `if (driftedRefs.size > 0)` — any drift anywhere blocking
-    // EVERY orphan's reversal — would still pass all three. Two abandoned orphans on the same till,
-    // only one of which drifts, is what catches that: only the non-drifting one may be reversed.
+    // The single-payment tests above would all pass a gate of the shape `if (driftedRefs.size > 0)`.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
@@ -1007,8 +905,7 @@ describe("orphan remediation", () => {
     expect(result.drift).toHaveLength(1);
     expect(result.remediated).toBe(1);
     expect(reverse.calls).toEqual(["p1"]);
-    // One aggregate orphan incident, both reasons present — the only coverage anywhere of two
-    // different `remediation` values coexisting in the same aggregate.
+    // One aggregate orphan incident carrying both reasons.
     const orphan = parseParams<{ payments: { paymentRef: string; remediation: string }[] }>(
       await pg.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,

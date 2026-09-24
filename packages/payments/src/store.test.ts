@@ -48,29 +48,17 @@ import type { Seeded } from "../test/seed.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  // One `delete from` per table in place of `truncate payment_refunds, payments cascade`: SQLite
-  // has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time. Child
-  // before parent, because deleting `payments` while a `payment_refunds` row still points at it is
-  // refused with `FOREIGN KEY constraint failed`. Receipt: `src/reconcile.test.ts`'s own hook.
+  // Child before parent: `payment_refunds` points at `payments`.
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
 });
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
 
-// Nothing carries from one test to the next: `useVenueDb` empties every data table after each
-// one, `resetPerTest` defaulting to true and this suite not setting it. Both directions are
-// pinned by `packages/db/src/testing/venue-db.test.ts` — its "emptied the previous test's row"
-// case against its `resetPerTest: false` pair, which keeps one. So the `beforeEach` above and the
-// per-test `freshNif` (../test/seed.js) are belt-and-braces rather than the thing that keeps two
-// tests off each other's `tenants_country_tax_id_key`.
-
 async function seedTenant() {
   return seedWorkingOrder(pg.db, freshNif());
 }
 
-/** Inserts a captured payment for `seeded` at `paymentRef` (default "10.00") and returns the key
- * to reuse against every other store call. */
 async function capture(seeded: Seeded, paymentRef: string, amount = "10.00") {
   const key = { provider: "fake", paymentRef };
   await pg.db.transaction((tx) =>
@@ -89,16 +77,8 @@ async function getRow(key: { provider: string; paymentRef: string }) {
   return pg.db.transaction((tx) => getPaymentByRef(tx, key));
 }
 
-/** Seeds a second sale on a second till + node. `associatePaymentWithSale`'s write-once test needs
- * two real sales, and `seedSale` always plants its `invoice_series` at code "A" for the node it is
- * given — the series is keyed `(node_id, code)`, so calling it twice against the same node would
- * collide on `invoice_series_node_code_key`. A second node side-steps that without touching
- * `../test/seed.ts`.
- *
- * Written through the table definitions rather than as raw SQL, here and everywhere else in this
- * file that plants a row directly: `id` and `created_at` are `$defaultFn` generators only the
- * insert BUILDER runs, so the raw-SQL version was refused `NOT NULL constraint failed: tills.id`.
- * `../test/seed.ts` carries the full receipt. */
+/** A second node, because `seedSale` always plants its `invoice_series` at code "A" for the node it
+ * is given, and the series is keyed `(node_id, code)`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(
@@ -195,12 +175,10 @@ describe("recordRefund", () => {
   it("writes authorized_by when supplied, and NULL when omitted", async () => {
     const seeded = await seedTenant();
     const authorizer = "11111111-1111-1111-1111-111111111111";
-    // With an authorizer (the human gate at the till, #7): the value is persisted verbatim.
     const withKey = await capture(seeded, "auth-with", "20.00");
     await pg.db.transaction((tx) =>
       recordRefund(tx, { ...withKey, amount: decimal("20.00"), authorizedBy: authorizer }),
     );
-    // Without one (an automated reconcile/manual refund): the column stays NULL.
     const withoutKey = await capture(seeded, "auth-without", "20.00");
     await pg.db.transaction((tx) => recordRefund(tx, { ...withoutKey, amount: decimal("20.00") }));
     const rows = await pg.db.execute<{ payment_ref: string; authorized_by: string | null }>(
@@ -444,7 +422,6 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     expect(
       await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key)),
     ).toBeUndefined();
-    // A captured payment matches, carrying its ref/amount/saleId(null)/externalRef.
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,
@@ -491,12 +468,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
   });
 
   it("returns the MOST RECENT captured row if the one-capture-per-order invariant is ever violated", async () => {
-    // The design (spec §4) guarantees at most one captured/accepted_offline payment per working
-    // order by construction (Task 1's wo_<id> Stripe idempotency key + this very pre-check), not by
-    // a DB constraint — nothing stops two rows existing here. `ORDER BY settled_at DESC NULLS LAST`
-    // is what makes the read deterministic in that case, so this seeds two captured rows out of
-    // insertion order (the later-settled one inserted FIRST) and asserts the more recently settled
-    // one wins.
+    // No constraint stops two captured rows for one working order.
     const s = await seedWorkingOrder(pg.db, freshNif());
     const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.transaction((tx) =>
@@ -520,29 +492,16 @@ describe("findCapturedPaymentForWorkingOrder", () => {
   });
 
   it("prefers a genuinely settled row over a captured row with settled_at NULL", async () => {
-    // `settled_at` is always set for captured/accepted_offline "by construction", never by a DB
-    // constraint (see the doc comment on CapturedPaymentForOrder), so a NULL row is otherwise
-    // unreachable through the store's own insert helpers (insertCapturedPayment requires
-    // `settledAt: Date`). This seeds one directly to exercise the defensive case: the row with a
-    // real settlement time must win, whatever the NULL row does.
-    //
-    // It does NOT prove `desc nulls last` in `findCapturedPaymentForWorkingOrder` earns its place,
-    // and the claim that it did has been retired. That claim was taken against PostgreSQL, which
-    // sorts DESC as NULLS FIRST, so dropping the clause there ranked the NULL row first and reddened
-    // this case. This engine sorts NULL as the smallest value, so a plain `desc` already puts NULLs
-    // last and the clause is a no-op. Both measured 2026-09-22 on Node v26.7.0: a two-row probe
-    // returned `real-settled,null-settled` for `desc` and for `desc nulls last` alike, and removing
-    // `nulls last` from the store left this very case PASSING. The clause stays because it states
-    // the intent the ordering depends on, but nothing checks it any more — an ordering this engine
-    // gives by default is not one a test can distinguish.
+    // The store's own insert helpers cannot write a captured row with a NULL `settled_at`, so this
+    // seeds one directly. It does NOT pin `nulls last`: this engine already sorts NULL last under
+    // `desc`, so the case passes without the clause.
     const s = await seedWorkingOrder(pg.db, freshNif());
     const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.insert(payments).values({
       workingOrderId: key.workingOrderId,
       provider: key.provider,
       paymentRef: "null-settled",
-      // A money column counts whole cents: 300 is 3.00, the same amount the raw insert this
-      // replaced wrote. The `settled_at: null` beside it is the whole point of the case.
+      // Whole cents: 300 is 3.00.
       amount: 300,
       state: "captured",
       settledAt: null,
@@ -837,8 +796,7 @@ describe("Mode 3 initiated lifecycle", () => {
       }),
     );
     expect(second).toBeNull();
-    // Proves idempotency directly (not just by state-guard reasoning): a redelivered settle with a
-    // LATER timestamp must not move settled_at off the first settlement's value.
+    // A redelivered settle with a LATER timestamp must not move settled_at.
     const row = await getRow(key);
     expect(row?.state).toBe("captured");
     expect(row?.settledAt).toBe(firstSettledAt);
@@ -851,8 +809,6 @@ describe("Mode 3 initiated lifecycle", () => {
     expect((await getRow(key))?.state).toBe("failed");
     // Second call is a no-op (state is no longer `initiated`) — does not throw, leaves `failed`.
     await pg.db.transaction((tx) => expireInitiated(tx, { provider: "fake", externalRef: HOSTED }));
-    // Proves idempotency directly: re-fetch after the second call and confirm state did not move
-    // off `failed` (and settledAt, never set by expireInitiated, stays null).
     const row = await getRow(key);
     expect(row?.state).toBe("failed");
     expect(row?.settledAt).toBeNull();
@@ -861,17 +817,8 @@ describe("Mode 3 initiated lifecycle", () => {
   it("the partial unique index rejects a second initiated row with the same (provider, external_ref)", async () => {
     const seeded = await seedTenant();
     await initiate(seeded, HOSTED, "pay-1");
-    // Whether the engine's text is the error's own `.message` or sits on `.cause` depends on the
-    // path; `@waitron/db`'s `engineErrorMessage` returns the engine's words either way (its header
-    // in `packages/db/src/testing/errors.ts` records both shapes).
-    //
-    // For an index over plain columns this engine names the COLUMNS, not the index
-    // (`packages/db/src/constraint-target.ts`), so what an assertion can see is the column PAIR.
-    // That is enough to tell this index's refusal from the other unique on the same table —
-    // `payments_provider_ref_key` on (provider, payment_ref) prints `payments.provider,
-    // payments.payment_ref` — which is the discrimination the case needs, and the reason this is
-    // `toBe` on the whole string rather than a loose match. Measured 2026-09-22 on Node v26.7.0
-    // against a two-row probe over this exact partial index: errcode 2067, `ERR_SQLITE_ERROR`.
+    // This engine names the index's COLUMNS, not the index; the pair is what tells this refusal from
+    // `payments_provider_ref_key`'s (provider, payment_ref), hence `toBe` on the whole string.
     const error = await captureError(() => initiate(seeded, HOSTED, "pay-2"));
     expect(engineErrorMessage(error)).toBe(
       "UNIQUE constraint failed: payments.provider, payments.external_ref",
@@ -936,16 +883,12 @@ describe("listReconcilable", () => {
       tillId: seeded.tillId,
       reconcileRemediatedAt: null,
     });
-    // auditedAt is the non-null tolerance anchor: settled_at for a captured row.
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
   });
 
   it("returns settled rows too — the forwarded-offline state the orphan rule also reaches", async () => {
-    // Load-bearing, not completeness for its own sake: `settled` is the state a mode-2b tender
-    // reaches once `forward()` clears it, it is auditable exactly like `captured`, and it can be an
-    // orphan — but it has NO reversal path, which is why the sweep's claim gate has to test the
-    // state and not just the working order. That gate is only meaningful because this query admits
-    // the state in the first place.
+    // `settled` can be an orphan with NO reversal path, which is why the sweep's claim gate tests
+    // the state; that gate only means something if this query admits the state.
     const seeded = await seedTenant();
     await pg.db.transaction(async (tx) => {
       await insertAcceptedOffline(tx, {
@@ -963,15 +906,12 @@ describe("listReconcilable", () => {
     const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ paymentRef: "forwarded", state: "settled", amount: "12.00" });
-    // Anchored on settled_at, like a captured row — the acceptance time the offline insert stamped.
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
   });
 
   it("merges its two state arms back into one created_at ordering", async () => {
-    // The query is split in two (the captured/settled arm and the initiated arm) so each is
-    // independently index-usable. The `initiated` row here is created FIRST but comes back from the
-    // SECOND query, so a plain concatenation would report it last; only the merge restores the
-    // created_at order the single-query form gave.
+    // The `initiated` row is created FIRST but comes back from the SECOND query, so a plain
+    // concatenation would report it last.
     const seeded = await seedTenant();
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
@@ -1020,7 +960,7 @@ describe("listReconcilable", () => {
         externalRef: "ext-pending",
       }),
     );
-    // created_at defaults to now(), so widen the period to today rather than the fixed fixture day.
+    // created_at is the insert time, so the period is around now rather than the fixture day.
     const now = { from: new Date(Date.now() - 60_000), to: new Date(Date.now() + 60_000) };
     const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", now));
     expect(rows).toHaveLength(1);
@@ -1058,9 +998,8 @@ describe("listReconcilable", () => {
 });
 
 describe("existingReferences", () => {
-  /** Inserts an `initiated` row so its `externalRef` becomes visible to `existingReferences` —
-   * mirrors the fixture the old `anyPaymentWithReference` tests used: state and settlement time are
-   * irrelevant to the check (it is unbounded by both), only `provider` + `externalRef` are. */
+  /** `existingReferences` is unbounded by state and settlement time; only `provider` +
+   * `externalRef` matter. */
   async function seedReference(seeded: Seeded, paymentRef: string, externalRef: string) {
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
@@ -1146,10 +1085,6 @@ describe("markReconcileRemediated", () => {
   });
 });
 
-/** Seeds a second till + node + open working order under the SAME tenant/location as `seeded`.
- * Mirrors reconcile.test.ts's own `seedSecondTill` and this file's `seedSecondSale`. The fresh
- * node keeps each returned `Seeded` self-consistent (its own chain/series key), mirroring
- * `seedWorkingOrder`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(

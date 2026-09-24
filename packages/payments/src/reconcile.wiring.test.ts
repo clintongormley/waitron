@@ -17,25 +17,14 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  // One `delete from` per table in place of `truncate incidents, payment_refunds, payments
-  // cascade`: SQLite has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at
-  // a time. Child before parent, because deleting `payments` while a `payment_refunds` row still
-  // points at it is refused with `FOREIGN KEY constraint failed`. Receipt: `src/reconcile.test.ts`.
+  // Child before parent: deleting `payments` while a `payment_refunds` row still points at it is
+  // refused with `FOREIGN KEY constraint failed`.
   await pg.db.execute(sql`delete from incidents`);
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
 });
 
-/**
- * The capstone: money moved, the sale never happened, and the audit closed the gap.
- *
- * This is the §4 orphan window made concrete — `collect` captures, then `recordSale` never runs
- * (a crash, a walked-out customer), so a captured payment sits with a null `sale_id`. Nothing in
- * the capture path can fix that: the money moved before the invoice number existed, and T1/T2
- * forbids making the two atomic. `reconcile` is the designed backstop, and this proves the whole
- * chain end to end — provider → orphan → sweep → reversal → an open incident, read back through
- * `openIncidents`.
- */
+/** Money moved, the sale never happened, and the sweep reversed it and raised an open incident. */
 describe("the orphan backstop, end to end", () => {
   it("collects, loses the sale, and lets the sweep reverse it and record an open incident", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
@@ -53,14 +42,8 @@ describe("the orphan backstop, end to end", () => {
     await pg.db.execute(sql`
       update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`);
 
-    // 3. The report is empty on purpose — its contents cannot matter here either way.
-    //    `FakePaymentProvider` never sets `external_ref` on a capture, so `classify()` (which
-    //    matches a settlement to a row only via `row.externalRef`) can never pair this row with any
-    //    settlement record this test double produces, no matter what the report contains. What
-    //    actually keeps this from ALSO being `unsettled` is pure timing: the capture happened
-    //    moments before `now`, so `auditedAt` sits well inside the 7-day
-    //    `DEFAULT_SETTLEMENT_LAG_MS` tolerance, and the tolerance check never fires. The orphan is
-    //    the whole finding.
+    // 3. `FakePaymentProvider` sets no `external_ref`, so no settlement could match this row; the
+    //    capture is inside the settlement lag, so it is not also `unsettled`.
     const now = new Date();
     const report = new FakeSettlementReport([]);
     const reconciler = new FakeReconciler(pg.db, report);

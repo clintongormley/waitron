@@ -15,10 +15,7 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  // One `delete from` per table in place of `truncate payment_refunds, payments cascade`: SQLite
-  // has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time. Child
-  // before parent, because deleting `payments` while a `payment_refunds` row still points at it is
-  // refused with `FOREIGN KEY constraint failed`. Receipt: `src/reconcile.test.ts`'s own hook.
+  // Child before parent: a `payment_refunds` row points at its payment.
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
 });

@@ -11,11 +11,8 @@ import { insertInitiated } from "../store.js";
 let counter = 0;
 const nextHostedId = (): string => `fake-hosted-${String(++counter).padStart(8, "0")}`;
 
-/** A genuine DB-backed test double for the async / hosted mode, not a stub. `initiate` persists a
- * real `initiated` `payments` row through its own short transaction (no caller tx — the interface
- * forbids it). `verifyAndParse` trusts its payload (there is no signature to check in the fake): the
- * payload is a JSON-encoded settlement built by the static `event` helper. NOT re-exported from the
- * package barrel — a production import cannot reach it. */
+/** A DB-backed test double for the hosted mode: `initiate` persists a real `initiated` row.
+ * `verifyAndParse` checks no signature; the payload is a JSON settlement built by `event`. */
 export class FakeAsyncProvider implements AsyncPaymentProvider {
   readonly provider = "fake";
 
@@ -54,8 +51,6 @@ export class FakeAsyncProvider implements AsyncPaymentProvider {
     };
   }
 
-  /** Build the raw inbound payload for a settlement of this provider, the shape `verifyAndParse`
-   * decodes — the async analogue of `FakePaymentProvider`'s configurable outcomes. */
   static event(e: {
     externalRef: string;
     outcome: "settled" | "expired";

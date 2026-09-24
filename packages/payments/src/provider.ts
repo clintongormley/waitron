@@ -1,23 +1,12 @@
 // Side-effect only: registers this package's `payment.*` codes on the shared `ErrorParams`
-// registry (see ./errors.ts) and keeps errors.ts reachable from the public barrel
-// (./errors.reachability.test.ts). Nothing in this file throws — it is types only; ./store.ts and
-// ./testing/fake-provider.ts do the throwing — but this is the file the barrel re-exports, so it
-// carries the side-effect import.
+// registry and keeps ./errors.ts reachable from the public barrel (scripts/errors-reachable.test.ts).
 import "./errors.js";
 import type { Decimal, TillId, WorkingOrderId } from "@waitron/shared";
 
 /**
- * The lifecycle of one electronic tender as this POS understands it, provider-neutral. 4a covers
- * the online single-message path only: `captured` is the terminal success state, `failed` a
- * network refusal, and `voided`/`refunded`/`partially_refunded` the reversals. `attempting` is the
- * transient in-flight state a network-driving integrated adapter writes before its network call and
- * resolves after (T1/T2) — every integrated adapter has this window, so it is neutral, not
- * adapter-specific. `accepted_offline`/`settled`/`declined` are Cycle A's offline states — present
- * here because this cycle's later tasks give them real behavior (the fake's offline
- * `collect`/`forward`); the `forward` method that drives the transitions between them is now part
- * of the `PaymentProvider` interface below. The two-phase `authorized` state remains a later plan —
- * never reserved here as dead surface. `initiated` is Mode 3 (async / hosted): the minted-but-unpaid
- * hosted payment.
+ * The lifecycle of one electronic tender, provider-neutral. `attempting` is written before an
+ * integrated adapter's network call and resolved after it. `initiated` is a hosted payment minted but
+ * not yet paid; the inbound settlement advances it to `captured` or `failed`.
  */
 export type PaymentState =
   | "attempting"
@@ -29,20 +18,14 @@ export type PaymentState =
   | "accepted_offline"
   | "settled"
   | "declined"
-  // Mode 3 (async / hosted): the minted-but-unpaid hosted payment. initiate() writes it; the
-  // inbound settlement advances it to `captured` (paid) or `failed` (abandoned / expired).
   | "initiated";
 
 /**
- * What a `collect` result may REPORT, which is wider than what is PERSISTED: `network_unavailable`
- * is returned when the network is down and offline acceptance is refused, but nothing durable is
- * written (no money moved), so it is deliberately NOT a `payment_state` enum value — it lives only
- * here, on the return path.
+ * `network_unavailable` is reported but never persisted: it is returned when the network is down and
+ * offline acceptance is refused, and nothing durable is written.
  */
 export type PaymentResultState = PaymentState | "network_unavailable";
 
-/** What a given provider can do, so the app/UI can gate on it. Grows a flag per capability as the
- * methods that back them land — in 4a the only optional capability is partial refunds. */
 export interface ProviderCapabilities {
   partialRefund: boolean;
 }
@@ -50,19 +33,15 @@ export interface ProviderCapabilities {
 export interface CollectParams {
   tillId: TillId;
   workingOrderId: WorkingOrderId;
-  /** Exact decimal, tax-inclusive amount to take on this tender. Split tender is several
-   * `collect` calls against one working order, each with its own amount. */
+  /** Tax-inclusive. Split tender is several `collect` calls against one working order, each with
+   * its own amount. */
   amount: Decimal;
-  /** The resolved provider reference for THIS sale's chosen reader — the vendor's own reader id
-   * (SumUp's paired-reader id, Stripe's Terminal reader id). Supplied per collect so one pooled,
-   * cached provider serves every reader on the same vendor; a provider that uses no server-side
-   * reader (`stripe_on_device`, the simulator, manual) leaves it undefined. A server-driven reader
-   * provider (SumUp / Stripe Terminal) throws if it is undefined — a collect there cannot proceed
-   * without a reader. */
+  /** The vendor's own id for THIS sale's reader. Supplied per collect so one cached provider serves
+   * every reader of a vendor. A server-driven reader provider throws without it; a provider with no
+   * server-side reader ignores it. */
   readerRef?: string;
-  /** Per-transaction staff consent to accept this card offline if the network is down (default
-   * false). Even when true, acceptance still requires the venue's policy to allow it and the amount
-   * to be within the cap — offline is never automatic. */
+  /** Staff consent to accept this card offline if the network is down (default false). Even when
+   * true, the venue's policy must allow it and the amount be within its cap. */
   allowOffline?: boolean;
   /** A local simulator result selected by the practice UI. The server only forwards this field to
    * the simulator; real payment adapters never receive a browser-selected outcome. */
@@ -70,10 +49,8 @@ export interface CollectParams {
 }
 
 /**
- * Card facts for the customer's proof of a card payment, filled by a provider that can supply them
- * (SumUp does; Stripe leaves it undefined for now). Present only on a `captured` result. `scheme` is
- * the network as the provider names it (underscores → spaces), NOT a curated set; `entryMode` is
- * normalised to these four values; `authCode` is null when the transaction carries none.
+ * `scheme` is the network as the provider names it (underscores → spaces), NOT a curated set;
+ * `authCode` is null when the transaction carries none.
  */
 export interface CardDetails {
   scheme: string;
@@ -83,13 +60,10 @@ export interface CardDetails {
 }
 
 /**
- * The outcome of one provider operation, returned as DATA (never inside the caller's transaction —
- * see `PaymentProvider`). `settledAt` is what feeds `RecordSaleTender.settledAt`: non-null on a
- * `captured` result (the sale may then chain) and on an `accepted_offline` result (the acceptance
- * time — the sale chains immediately, before `forward()` clears it), null on `failed` and on the
- * return-only `network_unavailable` (the tender stays unsettled and `recordSale` refuses).
- * `paymentRef` is this provider's opaque reference and the join key used to associate the payment
- * with the committed sale afterwards.
+ * `settledAt` feeds `RecordSaleTender.settledAt`: non-null on a `captured` result and on an
+ * `accepted_offline` one (the acceptance time, so the sale chains before `forward()` clears it);
+ * null on `failed` and `network_unavailable`, where `recordSale` refuses. `paymentRef` is the
+ * provider's opaque reference and the key that later associates the payment with the sale.
  */
 export interface PaymentResult {
   provider: string;
@@ -98,21 +72,15 @@ export interface PaymentResult {
   /** The amount this result concerns. For `collect`/`void`/`refund` it is the captured total; for
    * `partialRefund` it is the AMOUNT REFUNDED (not the capture). */
   amount: Decimal;
-  /** True only on an `accepted_offline` result: the card was accepted while the network was down and
-   * awaits `forward()`. `settledAt` carries the acceptance time, so the sale chains immediately. */
+  /** True only on an `accepted_offline` result, which awaits `forward()`. */
   offline?: boolean;
   settledAt: Date | null;
-  /** Card facts for a card-present capture, rendered on the separate payment slip. Present only on a `captured`
-   * result whose provider can supply them; undefined for cash, manual, offline, failed, reversals. */
+  /** Present only on a `captured` result whose provider can supply the card facts. */
   card?: CardDetails;
 }
 
-/**
- * The outcome of one `forward(now)` pass — the offline store-and-forward drain, shaped exactly like
- * fiscal's `DrainResult`. `nextDueAt` is the only field a scheduler needs (null = nothing pending);
- * the counts are for a log line. A provider with nothing pending returns
- * `{ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }`.
- */
+/** `nextDueAt` is the only field a scheduler needs (null = nothing pending); the counts are for a
+ * log line. */
 export interface ForwardResult {
   nextDueAt: Date | null;
   forwarded: number;
@@ -121,19 +89,13 @@ export interface ForwardResult {
 }
 
 /**
- * The only thing that crosses between the POS and a payment provider.
+ * No method takes a transaction handle: every method makes a network call, and a database
+ * transaction is never held across one. Each does its own short-transaction bookkeeping and returns
+ * a `PaymentResult`, which the caller passes into `recordSale` as data.
  *
- * No method takes a transaction handle — the deliberate opposite of `FiscalBackend.recordSale(tx)`.
- * Every method here makes a network call to the terminal, and holding a DB transaction across a
- * network call is forbidden (T1/T2). Each method does its own short-transaction bookkeeping
- * internally and returns a `PaymentResult`; the caller passes that into `recordSale` as data.
- *
- * Card is the subject. Cash needs no provider (it is recorded directly as a settled tender), so it
- * is deliberately absent. Split tender is N `collect` calls, not a method.
- * `authorize`/`capture`/`preAuth`/`incrementalAuth`/`tipAdjust` are later plans. `reconcile` is
- * deliberately NOT here: the audit is scoped per settlement identity, not per capture mechanism, so
- * it lives on its own `PaymentReconciler` interface (./reconcile.ts) which one implementer covers
- * for all of a vendor's adapters — including a hosted one, which is not a `PaymentProvider` at all.
+ * Cash needs no provider: it is recorded directly as a settled tender. `reconcile` lives on
+ * `PaymentReconciler` (./reconcile.ts) because the audit is per settlement identity, and a hosted
+ * adapter is not a `PaymentProvider` at all.
  */
 export interface PaymentProvider {
   readonly provider: string;
@@ -143,18 +105,16 @@ export interface PaymentProvider {
    * `failed` on a network refusal. */
   collect(params: CollectParams): Promise<PaymentResult>;
 
-  /** Push previously offline-accepted payments to their terminal state. One pass over this provider's
-   * `accepted_offline` rows: `settled` when the network cleared it, `declined` (+ one idempotent
-   * uncollected-receivable incident, no fiscal change) when it refused. `nextDueAt` drives the caller's
-   * cadence (null = nothing pending). A provider with no device-local offline queue answers all-zeros. */
+  /** One pass over this provider's `accepted_offline` rows: `settled` when the network cleared it,
+   * `declined` (+ one idempotent uncollected-receivable incident, no fiscal change) when it refused.
+   * A provider with no device-local offline queue answers all-zeros. */
   forward(now: Date): Promise<ForwardResult>;
 
-  /** Resolve this provider's `attempting` rows whose outcome `collect` did not learn — a poll
-   * timeout, a crash between T1 and T2, a create call whose response was lost. One pass: each row
-   * is polled at the processor and resolved `captured` or `failed`; a row the processor still
-   * reports pending is left for the next pass (`nextDueAt`). Reuses `ForwardResult`: `forwarded`
-   * counts rows captured, `declined` rows failed. A synchronous adapter (its `collect` never leaves
-   * a row `attempting`) answers all-zeros — exactly how `forward` joined this interface. */
+  /** Resolve this provider's `attempting` rows whose outcome `collect` did not learn. One pass: each
+   * row is polled at the processor and resolved `captured` or `failed`; a row the processor still
+   * reports pending is left for the next pass (`nextDueAt`). `forwarded` counts rows captured,
+   * `declined` rows failed. An adapter whose `collect` never leaves a row `attempting` answers
+   * all-zeros. */
   resolvePending(now: Date): Promise<ForwardResult>;
 
   /** Reverse a captured payment in full — a same-day void, distinct from a refund. Throws
@@ -170,9 +130,8 @@ export interface PaymentProvider {
 }
 
 /**
- * Parameters to mint one hosted payment for an OPEN working order. `paymentRef` is the caller's
- * `(provider, payment_ref)` idempotency anchor (a uuid), so a retried initiate cannot
- * double-insert. Amount is the venue's single currency.
+ * For an OPEN working order. `paymentRef` is the caller's `(provider, payment_ref)` idempotency
+ * anchor, so a retried initiate cannot double-insert.
  */
 export interface InitiateParams {
   workingOrderId: WorkingOrderId;
@@ -181,10 +140,9 @@ export interface InitiateParams {
 }
 
 /**
- * What `initiate` returns: `ref` echoes the caller's `paymentRef`; `externalRef` is the
- * hosted-payment id (the ONLY identifier the later inbound webhook carries, and therefore the
- * resolve/settle key); `url` is the hosted payment page — presentation-agnostic, rendered as a QR
- * at the table or sent as a link by the app, never distinguished here.
+ * `ref` echoes the caller's `paymentRef`; `externalRef` is the hosted-payment id, the ONLY
+ * identifier the inbound webhook carries and therefore the settle key; `url` is the hosted payment
+ * page, however the app presents it.
  */
 export interface InitiateResult {
   ref: string;
@@ -193,9 +151,8 @@ export interface InitiateResult {
 }
 
 /**
- * A VERIFIED, parsed inbound settlement event, neutral of any vendor's wire shape. `outcome` is
- * `settled` (the customer paid — advance to `captured`) or `expired` (abandoned / timed out —
- * advance to `failed`). `amount` is what actually settled (the drift anchor reconcile uses later).
+ * A VERIFIED, parsed inbound settlement event. `settled` advances the payment to `captured`,
+ * `expired` to `failed`. `amount` is what actually settled.
  */
 export interface InboundSettlement {
   provider: string;
@@ -206,11 +163,10 @@ export interface InboundSettlement {
 }
 
 /**
- * The asynchronous / hosted settlement contract (§0's Mode 3) — a DIFFERENT method shape from
- * `PaymentProvider`, never new methods on it (a required `initiate` would break every synchronous
- * adapter). An adapter may implement `PaymentProvider`, this, or both. No method takes a caller
- * transaction: `initiate` does its own short-transaction bookkeeping around a network call (T1/T2,
- * like `collect`), and `verifyAndParse` is a pure verify+decode of a raw inbound event.
+ * The hosted-payment contract, separate from `PaymentProvider` so synchronous adapters need no
+ * `initiate`; an adapter may implement either or both. No method takes a caller transaction:
+ * `initiate` does its own short-transaction bookkeeping around its network call, and
+ * `verifyAndParse` is a pure verify+decode.
  */
 export interface AsyncPaymentProvider {
   readonly provider: string;

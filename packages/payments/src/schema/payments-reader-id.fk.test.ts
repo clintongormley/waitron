@@ -15,12 +15,8 @@ import { freshNif, seedWorkingOrder } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 import { payments } from "./payments.js";
 
-// What this suite covers is the column and its foreign key, which the schema still refuses on its
-// own.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-/** Seeds a till/working_order (via the shared payments seed helper) plus one card reader — the
- * rows `payments.reader_id`'s FK points at. */
 async function seedOrderWithReader(db: Database): Promise<{
   workingOrderId: string;
   readerId: string;
@@ -78,12 +74,8 @@ describe("payments.reader_id", () => {
         });
       }),
     );
-    // This case cannot match `/payments_reader_fk/` in the message. SQLite reports every
-    // foreign-key refusal as the six words `FOREIGN KEY constraint failed` and names neither the
-    // constraint nor the column (`packages/db/src/constraint-target.ts`), so this case can no
-    // longer tell `payments_reader_fk` from the row's OTHER foreign key onto `working_orders`.
-    // What keeps it honest is the statement: `workingOrderId` is a real seeded row and
-    // `readerId` is the one unknown id in it, so only the reader key can be what fired.
+    // This engine's foreign-key refusal names no key; `readerId` is the statement's one unknown id,
+    // so only the reader key can have fired.
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
