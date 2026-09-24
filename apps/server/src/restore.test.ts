@@ -236,6 +236,39 @@ describe("restoreFromArtifact", () => {
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("refuses to replace the venue database while another process holds the folder", async () => {
+    await mkdir(venueDir, { recursive: true });
+    await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
+    const script = `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+db.exec("begin immediate");
+process.stdout.write("held");
+setInterval(() => {}, 1000);`;
+    const holder = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script, join(venueDir, "venue.lock")],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        holder.stdout.on("data", (c: Buffer) => c.toString().includes("held") && resolve());
+        holder.on("exit", (code) => reject(new Error(`holder exited early (${code})`)));
+      });
+      await expect(restoreFromArtifact(deps())).rejects.toMatchObject({
+        code: "provisioning.database_in_use",
+      });
+      // Refused before anything changed: no database placed, no identity set aside or written.
+      await expectVenueUntouched();
+      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+      await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
+
   it("places the archive's database at venue.db and writes the secrets", async () => {
     await restoreFromArtifact(deps());
 
@@ -578,9 +611,9 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
       log: noopLog,
     });
 
-    // The stale handle is on an orphaned inode now. Nothing here stops it writing — refusing to
-    // restore under a running server is a separate guard — but neither its write nor the
-    // checkpoint its close performs may reach the file the next boot opens.
+    // The stale handle is on an orphaned inode now and can still write: `restoreDatabase` takes no
+    // lock, and the hold `writeValidated` takes is shared with opens in the same process. Neither
+    // its write nor the checkpoint its close performs may reach the file the next boot opens.
     live.venue.run(sql`insert into marker (v) values ('WRITTEN-AFTER-RESTORE')`);
     await live.close();
 
@@ -751,8 +784,12 @@ describe("restore hooks (identity phase)", () => {
     const blocker = join(stagingDir, "not-a-directory");
     await writeFile(blocker, "");
     const migrate = vi.fn(async () => {});
+    // No lock: the real one would be refused creating the same folder, before the set-aside.
+    const lockVenue = async () => ({ release: () => {} });
     await expect(
-      restoreFromArtifact(makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate })),
+      restoreFromArtifact(
+        makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate, lockVenue }),
+      ),
     ).rejects.toThrow(/ENOTDIR|ENOENT/);
     expect(migrate).not.toHaveBeenCalled();
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });

@@ -1148,6 +1148,109 @@ they were not changed back, and no guard reads for the shape either way. Whether
 callback is now harmless has NOT been established, so the outside-the-call shape is still the one to
 copy — as a habit whose receipt has expired, not as a rule with one.
 
+## One process per venue folder
+
+**The rule.** Opening a venue folder (`openVenueStore`, and so `openVenueDatabase`) holds
+`venue.lock` in it for as long as any open in the process is using the folder. A second PROCESS is
+refused at once, before either database file is opened: `@waitron/store` (`lockVenueDirectory`,
+`openVenueStore`) throws `VenueInUseError`, and `@waitron/db` (`openVenueDatabase`,
+`lockVenueDatabase`) turns that into `AppError("provisioning.database_in_use", { database })`, the
+code every caller outside those two packages sees. Opens inside one process share the hold, and the
+last close gives it up. A tool documented to run beside
+the server opens with `exclusive: false` and takes no lock. A command that changes the folder's files
+(the cold restore, rejoin's wipe) takes `lockVenueDatabase` before its first change. The restart
+reset of in-flight AEAT submissions (`apps/server/src/restart-reset.ts`) relies on one server
+process per folder.
+
+**The mechanism: a SQLite transaction on an empty file, not a lock file.** `venue.lock` is opened
+with `node:sqlite`, `pragma busy_timeout = 0`, and `begin immediate` is left open. It is the same
+mechanism the migrator uses for `migrations.lock` (`packages/migrations/src/apply.ts`), whose
+comment records why a file created exclusively would not do: a crash would leave it behind and
+refuse every later boot.
+
+**Measured 2026-09-24, `node:sqlite`, Node v26.7.0, macOS 26.6.2 on arm64**, by a throwaway script
+outside the repository. Each child process opened `venue.lock` with a zero busy timeout. What it
+printed:
+
+- While one process held `begin immediate` on the file, another process's `begin immediate` was
+  refused `errcode=5 message="database is locked"`, in about 1.1 ms measured inside the child. A
+  third connection's plain read of the file (`select count(*) from sqlite_master`) answered
+  `{"n":0}`, not blocked. Control, same file with no holder: `acquired`.
+- A second connection in the SAME process was refused the same way: `errcode=5 "database is
+  locked"`. That is why the lock is counted per process rather than taken per open: the server opens
+  its own folder more than once at a time (the backup supervisor's reload beside the long-lived
+  store), and so do the restore and rejoin, whose migrate opens inside their hold.
+- While held, the folder held `venue.lock (0B), venue.lock-journal (512B)`. The holder was killed
+  with `SIGKILL`; both files were still there, and a new acquirer printed `acquired` at once. After
+  that acquirer closed cleanly, only `venue.lock (0B)` remained.
+- A holder that closed its connection with the transaction still open released it: before the close
+  another process was refused `errcode=5`, after it `acquired`.
+- **Never unlink `venue.lock`.** With a holder alive, unlinking `venue.lock` alone, or it and its
+  journal, and then trying from another process printed `acquired` both times: the new file is a
+  different lock, taken beside the holder. `apps/server/src/db-wipe.ts` records the same for
+  `migrations.lock`.
+- A `venue.lock` that is a DIRECTORY is refused by the constructor with errcode 14, `unable to open
+  database file`, which the lock passes on as it came rather than reporting it as in use.
+
+**That is macOS, and the box runs Linux.** The store suite's "does not stay locked after the holder
+is killed" case (`packages/store/src/venue-lock.test.ts`) runs in CI on `ubuntu-latest`; that run is
+the Linux reading, not this paragraph.
+
+**Why the migrator's lock cannot serve.** It is held only while migrations run and then released, and
+it WAITS (up to two minutes, `LOCK_WAIT_MS`) for another migrator, where a second server has to be
+refused at once. Held for the life of the process, it would make that process's own later migrate
+wait on itself, because a second connection in one process is refused (above). So the two files
+nest: `applyMigrations` takes `migrations.lock`, then opens the store, which takes (or shares)
+`venue.lock`.
+
+**And why the migrator's lock is still needed beside it.** Measured 2026-09-24, same machine: two
+processes each running only `applyMigrations` over every manifest set, started together on one fresh
+folder, ten races, the two start-to-end windows overlapping in every race. With the lock as shipped,
+all twenty runs printed `ok`, and the folder afterwards held 122 tables and 29 journal rows across 13
+journal tables — the same as one migrator run alone. With the migrator's `begin immediate` removed
+(a temporary edit, reverted), one process of every pair was refused
+`provisioning.database_in_use`. So `migrations.lock`, taken first, is what makes the second migrator
+WAIT for the first instead of being refused by the first's open. It does not help when the first
+process keeps the folder open after migrating, as boot does with its long-lived store: in a race of
+two processes that each migrated and then opened the folder again, one of the pair was refused in 9
+of 20 races, which for two servers is the point. Guard: the "two real migrating
+processes" case in `packages/migrations/src/apply.concurrency.test.ts`, whose two child hosts run the
+real `applyMigrations`; with the migrator's `begin immediate` removed it fails with one host refused
+`provisioning.database_in_use`. The file's older peer case holds `migrations.lock` alone and never
+opens the store, so it could not see this.
+
+**What the guard does not see.** `packages/store/src/venue-lock.test.ts` proves the lock itself. It
+does not prove that every caller that should take the lock does: a new caller passing `exclusive:
+false` wrongly, or a new command that changes the folder's files without `lockVenueDatabase`, is seen
+by nothing.
+
+**Every caller, and what it does** (from `grep -rln "openVenueStore\|openVenueDatabase"` over `apps`,
+`packages`, `scripts` and `bench`, non-test files, 2026-09-24):
+
+| Caller | Runs | Decision |
+| --- | --- | --- |
+| `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it for the process's life. Between them the folder is briefly free |
+| `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
+| `apps/server/src/node-entry.ts` (`assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | locks, one after the other, before the server opens |
+| `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
+| `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
+| `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
+| `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while another process holds the folder, printed as `provisioning.database_in_use {"database":…}` |
+| `apps/server/scripts/register-till.ts` | registers a node as a Veri\*Factu SIF, closing any previous chain | locks; refused while another process holds the folder |
+| `apps/server/scripts/dev-setup.ts`, `dev-onboard` through `applyMigrations` | before a dev server starts | locks; refused while another process, such as a dev server, holds the same folder |
+| the dev server, `tsx watch` (`apps/server/scripts/dev-server.mjs`) | development | locks, as the server does. A restart waits for the old process's `exit` event before starting the new one: `killProcess` in `tsx@4.23.13`'s `dist/cli.mjs`, read, not run |
+| `apps/server/src/break-glass-command.ts` | beside the server (`deploy/README.md`) | `exclusive: false` |
+| `packages/credentials/src/bin.ts` | beside the server (`apps/server/README.md`: credentials are read fresh every pass, no restart) | `exclusive: false` |
+| `apps/server/scripts/record-one-sale.ts`, `settle-invoice-first.ts` | write sales for a running server to drain | `exclusive: false` |
+| `apps/server/scripts/cloud-backup-fixture.ts` `capture` | the Cloud repository's local-backups runner (`test-local-backups.mjs` in its scripts folder), while the fixture server on the same folder is still running (it stops the servers only after every capture: read, not run) | `exclusive: false` |
+| `apps/server/scripts/cloud-backup-fixture.ts` `restore` | the same runner, on a fresh folder with no server (read, not run) | locks (default), through `writeValidated`, then its own open |
+| `apps/server/scripts/cloud-integration-fixture.ts` | Cloud's runners start it as the server; a restart waits for the old process to exit before relaunching on the same folder (`stop` awaits the child's `exit` before `launch`: Cloud's runner scripts, read, not run) | locks (default); its first open runs before `startServer` in the same process |
+| `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
+| `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
+
+`deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
+not through the store, so it takes no lock and is never refused.
+
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 
 > **Superseded 2026-09-14.** There is no tenant column to compare against any more: the taxpayer is

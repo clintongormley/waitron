@@ -2,11 +2,12 @@
 // property under test is a lock SQLite holds on a file: two handles inside one process would not
 // reproduce it, and the migration itself is synchronous, so nothing in one process can interleave
 // with it.
-import { spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "./apply.js";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
@@ -104,5 +105,130 @@ describe("applyMigrations under two concurrent hosts", () => {
     // reverses the order, which is what makes the case above a measurement rather than a pair of
     // answers that look alike.
     expect(await race("no")).toEqual(["migrated", "peer-released"]);
+  });
+});
+
+/**
+ * A second host that runs the REAL `applyMigrations` over every manifest set. Plain JavaScript run
+ * by Node itself, which strips the package's types; the one hook maps this repository's `.js`
+ * relative specifiers to the `.ts` files they name. It loads, prints `ready`, waits for `go` on
+ * stdin so both hosts start together, and prints what happened and when.
+ */
+const HOST = `
+import { registerHooks } from "node:module";
+registerHooks({
+  resolve(specifier, context, next) {
+    try {
+      return next(specifier, context);
+    } catch (error) {
+      if (specifier.startsWith(".") && specifier.endsWith(".js")) {
+        return next(specifier.slice(0, -3) + ".ts", context);
+      }
+      throw error;
+    }
+  },
+});
+const [entry, venue] = process.argv.slice(1);
+const { applyMigrations, manifestSets, migrationOptionsFor } = await import(entry);
+process.stdout.write("ready\\n");
+process.stdin.once("data", async () => {
+  const start = Date.now();
+  let result = "ok";
+  try {
+    await applyMigrations(venue, migrationOptionsFor(manifestSets(), null));
+  } catch (error) {
+    result = "failed " + (error.code ?? error.message);
+  }
+  process.stdout.write(JSON.stringify({ result, start, end: Date.now() }) + "\\n");
+  process.exit(0);
+});
+`;
+
+interface HostRun {
+  result: string;
+  start: number;
+  end: number;
+}
+
+const spawnedHosts: ChildProcessWithoutNullStreams[] = [];
+
+function host(venue: string): {
+  child: ChildProcessWithoutNullStreams;
+  ready: Promise<void>;
+  done: Promise<HostRun>;
+} {
+  const child = spawn(process.execPath, [
+    "--input-type=module",
+    "-e",
+    HOST,
+    join(import.meta.dirname, "index.ts"),
+    venue,
+  ]);
+  spawnedHosts.push(child);
+  let out = "";
+  let err = "";
+  child.stderr.on("data", (chunk) => (err += String(chunk)));
+  const ready = new Promise<void>((resolve, reject) => {
+    child.stdout.on("data", (chunk) => {
+      out += String(chunk);
+      if (out.includes("ready")) resolve();
+    });
+    child.on("close", (code) => reject(new Error(`host exited before ready (${code}): ${err}`)));
+  });
+  const done = new Promise<HostRun>((resolve, reject) => {
+    child.on("close", () => {
+      const line = out.split("\n").find((l) => l.startsWith("{"));
+      if (line === undefined) reject(new Error(`host printed no result: ${out} ${err}`));
+      else resolve(JSON.parse(line) as HostRun);
+    });
+  });
+  // A host that dies before `ready` rejects both; only `ready` is awaited by then.
+  done.catch(() => {});
+  return { child, ready, done };
+}
+
+/** Every journal row in the folder's venue file, across each set's own journal table. */
+function journalRows(venue: string): number {
+  const db = new DatabaseSync(join(venue, "venue.db"), { readOnly: true });
+  try {
+    const tables = db
+      .prepare("select name from sqlite_master where type = 'table' and name like '%migrations%'")
+      .all() as { name: string }[];
+    return tables.reduce(
+      (sum, { name }) =>
+        sum + (db.prepare(`select count(*) as n from "${name}"`).get() as { n: number }).n,
+      0,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+describe("two real migrating processes on one venue folder", () => {
+  afterEach(() => {
+    for (const child of spawnedHosts.splice(0)) child.kill("SIGKILL");
+  });
+  afterAll(() => {
+    for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Opening the store takes `venue.lock`, which refuses a second process at once; the migration
+  // lock is taken first, so the second migrator waits instead. With the migration lock's
+  // `begin immediate` removed, one host of each pair is refused `provisioning.database_in_use`.
+  it("both succeed, queued on the migration lock, and leave one migrator's journal", async () => {
+    const alone = temp("wt-alone-");
+    await applyMigrations(alone, migrationOptionsFor(manifestSets(), null));
+    const expected = journalRows(alone);
+    for (let round = 0; round < 3; round++) {
+      const venue = temp("wt-two-hosts-");
+      const hosts = [host(venue), host(venue)];
+      await Promise.all(hosts.map((h) => h.ready));
+      for (const h of hosts) h.child.stdin.write("go\n");
+      const [a, b] = await Promise.all(hosts.map((h) => h.done));
+      expect([a!.result, b!.result]).toEqual(["ok", "ok"]);
+      // They raced: each started before the other finished.
+      expect(a!.start < b!.end && b!.start < a!.end).toBe(true);
+      expect(journalRows(venue)).toBe(expected);
+    }
   });
 });

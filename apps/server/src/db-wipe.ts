@@ -45,7 +45,10 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * breaks the one thing it does: measured, with a control — while one connection holds
  * `begin immediate` on the file, a second opener of the same path is refused `database is locked`
  * (errcode 5), and a second opener after the path is unlinked acquires it at once, so two
- * migrators would no longer be serialised (`packages/migrations/src/apply.ts`).
+ * migrators would no longer be serialised (`packages/migrations/src/apply.ts`). `venue.lock`, and
+ * `venue.lock-journal` while it is held, stay for the same reason: unlinking `venue.lock` while held
+ * let another process take it at once (measured, `docs/developers/conventions-data.md`, "One
+ * process per venue folder"). The wipe runs under that lock (`rejoin-command.ts`).
  *
  * The directory itself stays too; `applyMigrations` would recreate it, but nothing here needs it
  * gone and removing a directory an operator configured is wider than this command's remit.

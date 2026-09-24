@@ -17,6 +17,8 @@
 // records:
 //   pnpm --filter @waitron/server build
 //   node apps/server/dist/register-till.js <nodeId>
+// Stop the server first: while another process (usually the server) holds the venue folder, this
+// is refused with provisioning.database_in_use.
 //
 // Re-running this against an already-registered node is how a REIMAGED node is re-provisioned. It
 // closes the previous chain either way, so do not run it to "check" anything.

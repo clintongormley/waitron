@@ -72,13 +72,16 @@ unset everywhere in this codebase — it is `venue` under `WAITRON_STATE_DIR`, s
 beside the box's other persisted state (`config.ts`, `ServerConfig.venueDir`). Put it on durable,
 protected storage: it holds the fiscal records.
 
-Migrations run at every boot, over that directory. Two processes starting together are serialised
-by a third SQLite file, `migrations.lock`, which the migrator holds an open transaction on for the
+Migrations run at every boot, over that directory. Two migrators starting together queue on a
+third SQLite file, `migrations.lock`, which the migrator holds an open transaction on for the
 length of the run — a second migrator waits up to two minutes and is then refused
 `database is locked`. It is a SQLite file rather than an exclusively-created lock file on purpose:
 closing the connection releases it, and so does killing the process, where a plain lock file would
 survive the crash and wedge every later boot. `packages/migrations/src/apply.ts` carries the races
-that were run to decide both.
+that were run to decide both. Only the migrate step waits: opening the folder is guarded separately
+by `venue.lock`, so a second process that opens it WITH the lock while another holds it, a second
+server included, is refused `provisioning.database_in_use`; the tools meant to run beside the server
+open it without the lock ([conventions-data.md](../../docs/developers/conventions-data.md), "One process per venue folder").
 
 `applyMigrations` also installs each set's **append-only triggers** as it goes, from the table names
 that set declares. Those are SQLite `RAISE(ABORT)` triggers (`packages/store/src/append-only.ts`),
@@ -115,7 +118,8 @@ seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one t
 writes the stamp" above for why that file was removed).
 
 It runs **against a directory something has already migrated**, and stamps that directory itself
-when it carries no stamp (see "What actually writes the stamp" above). A directory nothing has
+when it carries no stamp (see "What actually writes the stamp" above). Stop the server first: while
+another process (usually the server) has the folder open, `venue` is refused with `provisioning.database_in_use`. A directory nothing has
 migrated is refused with `provisioning.database_unmigrated`, and one stamped for the other
 environment with `deployment.already_stamped` — one database per environment is a fiscal invariant. It opens the venue
 **directory** — `--venue-dir`, else `WAITRON_VENUE_DIR` (the same variable this server reads, so a
@@ -179,8 +183,9 @@ FENCED ex-primary (membership rejoin R1) — it cannot sell, because the cloud i
 primary. There is no artifact input: the wipe deletes both database files and their write-ahead
 sidecars out of the venue directory (`src/db-wipe.ts` — a committed row can live in a `-wal` file
 alone, so the sidecars go too), re-migrates the directory from source, then adopts in setup mode.
-`migrations.lock` is deliberately left in place; it holds no data, and removing it would stop two
-migrators being serialised.
+The whole command runs holding the venue folder's lock (`venue.lock`). `migrations.lock` and
+`venue.lock` (with `venue.lock-journal` while it is held) are deliberately left in place: they hold no
+data, and removing either would let a second process take a fresh lock beside the one holding it.
 
 ```
 waitron-rejoin rejoin [--accept-loss]
@@ -188,11 +193,15 @@ waitron-rejoin rejoin [--accept-loss]
 
 It reads its own boot env — `WAITRON_STATE_DIR`, `WAITRON_VENUE_DIR` (both resolved exactly as
 `config.ts` resolves them, so an empty value takes the default rather than the working directory),
-`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Two ordered guards refuse LOUD rather than wipe a box that is not safe to wipe:
+`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Three ordered refusals come before the wipe:
 
+- **`provisioning.database_in_use`** — another process, usually the running server, is using the venue
+  folder. Refused before anything is read or wiped; stop the server first.
 - **`rejoin.not_fenced`** — the box is not a fenced ex-primary; only a fenced one is safe to wipe.
 - **`rejoin.no_carrier`** — the held membership chart names no serving-primary to re-adopt from, so there
   is nowhere to rejoin.
+
+The last two refuse LOUD rather than wipe a box that is not safe to wipe.
 
 **What this command no longer checks.** It used to confirm, before wiping, that every row this box
 originated had reached the carrier — a check built on PostgreSQL replication, which has been removed and
@@ -502,8 +511,10 @@ most — a purpose and a field NAME, never decrypted material, a Stripe secret, 
 ## Migrations
 
 Applied at boot, every time, behind the venue directory's own `migrations.lock` file
-(`@waitron/migrations`'s `apply.ts`) so two processes starting together cannot race the same
-journal. Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current
+(`@waitron/migrations`'s `apply.ts`) so two migrators starting together cannot race the same
+journal. Only the migrate step waits on it; a second process opening the folder WITH the lock is
+refused `provisioning.database_in_use` by `venue.lock`, while the tools meant to run beside the
+server open it without the lock ([conventions-data.md](../../docs/developers/conventions-data.md), "One process per venue folder"). Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current
 database — the cost is opening the files and reading each journal, not any actual DDL. A migration
 failure is a boot failure: the process logs and exits non-zero rather than starting half-migrated.
 Each set's append-only triggers are installed in the same run; see

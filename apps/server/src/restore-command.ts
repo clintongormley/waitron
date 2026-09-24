@@ -58,18 +58,17 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * never touches a database. `bin-restore.ts` is a thin wrapper that supplies
  * `process.argv`/`process.env` and exits on the returned code. Returns a process exit code: 0 on
  * success, 1 on an expected disaster-recovery failure (missing recovery key,
- * an unreadable artifact file, an invalid `WAITRON_ENV`, or ANY error out of the orchestrator — a `restore.*`/`recovery.*`/
- * `backup.*` `AppError` (a decrypt, gate or guard failure) is reported by code, and literally anything
- * else is reported with a generic `restore failed`), 2 on a usage error.
+ * an unreadable artifact file, an invalid `WAITRON_ENV`, or ANY error out of the orchestrator — a
+ * few codes have their own message (see the catch below), any other `restore.*`/`recovery.*`/
+ * `backup.*` code is reported by code, and anything else as `restore failed`), 2 on a usage error.
  *
  * The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed, unlike
  * `runRecoveryUnpack`'s posture of rethrowing an unrecognised error. The reason is no longer a
  * subprocess — there is none — it is that this is a disaster-recovery CLI whose failure path is the
  * one an operator is most likely to see and to paste somewhere, and the messages that reach it come
  * from outside this function: a filesystem error names the path it failed on, and any bug anywhere
- * in `restoreFromArtifact`'s chain that throws a raw error is printed verbatim by
- * `bin-restore.ts`'s catch-less `.then(process.exit)`. Reporting a CODE carries no value from
- * outside the image; reporting a message carries whatever the thrower put in it.
+ * in `restoreFromArtifact`'s chain throws whatever its thrower wrote. Reporting a CODE carries no
+ * value from outside the image; reporting a message carries whatever the thrower put in it.
  */
 export async function runRestore(deps: {
   argv: string[];
@@ -113,13 +112,8 @@ export async function runRestore(deps: {
   // carries, exactly the reasoning `config.ts`'s `resolvedStateDir` documents for `logDir`.
   const resolvedStateDir = resolveConfigDir(stateDir, DEFAULT_STATE_ROOT);
 
-  // Resolve the target environment BEFORE building `restoreDeps`, and CATCH its one possible throw.
-  // `deploymentEnvironment` raises `server.config_invalid` for a `WAITRON_ENV` that is neither
-  // production/preproduction/dev — that is its ONLY throw. It used to be evaluated inline in the
-  // `restoreDeps` literal below, OUTSIDE the try that wraps the restore, so a bad value rejected RAW
-  // out of runRestore — past `bin-restore.ts`'s catch-less `.then(process.exit)` and contradicting
-  // that file's "runRestore never rejects with a raw error" note. Reporting it here by code and
-  // returning exit 1 — as every other bad env var above does — restores that guarantee.
+  // `deploymentEnvironment` throws `server.config_invalid` for a bad `WAITRON_ENV`; caught here so
+  // runRestore never rejects with a raw error.
   let environment: DeploymentEnvironment;
   try {
     environment = deploymentEnvironment(deps.env);
@@ -152,6 +146,12 @@ export async function runRestore(deps: {
     await restore(restoreDeps);
   } catch (err) {
     if (err instanceof AppError) {
+      if (err.code === "provisioning.database_in_use") {
+        deps.out(
+          "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",
+        );
+        return 1;
+      }
       if (DECRYPT_PHASE_CODES.has(err.code)) {
         deps.out("restore failed: wrong recovery key or corrupt artifact");
         return 1;
@@ -170,14 +170,13 @@ export async function runRestore(deps: {
         return reportCode(err.code);
       }
     }
-    // Anything else — an AppError outside those three namespaces, or a non-AppError entirely —
+    // Anything else — any other AppError, or a non-AppError entirely —
     // NEVER propagates raw and NEVER echoes `err.message`/`String(err)`. Every plausible failure
     // here now carries a message this function did not compose: a full disk or a bad permission on
     // the venue directory rejects with an `fs` error naming the path, and any bug elsewhere in
     // `restoreFromArtifact`'s chain throws whatever its thrower wrote. Unlike `runRecoveryUnpack`
-    // (which rethrows anything outside its two known codes), a rethrow here would let
-    // `bin-restore.ts`'s uncaught rejection print that message straight to stderr, where a box
-    // operator's only window is this terminal and curated code-keyed text is the whole posture.
+    // (which rethrows anything outside its two known codes), nothing is rethrown: a box operator's
+    // only window is this terminal, and curated code-keyed text is the whole posture.
     deps.out("restore failed");
     return 1;
   }

@@ -1,5 +1,6 @@
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { isAppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
@@ -88,7 +89,11 @@ export async function runStagedRestore(
       log: deps.log,
     });
   } catch (error) {
-    await clearStagedRestore(deps.stateDir);
+    // The lock refuses before the restore places the database or touches the identity, so the
+    // request stays for a boot that gets the folder.
+    if (!(isAppError(error) && error.code === "provisioning.database_in_use")) {
+      await clearStagedRestore(deps.stateDir);
+    }
     throw error;
   }
   await clearStagedRestore(deps.stateDir);

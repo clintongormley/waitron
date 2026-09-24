@@ -9,6 +9,7 @@ import {
   readNodeMembership,
   writeNodeMembership,
   type Database,
+  type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { describe, expect, it, vi } from "vitest";
@@ -62,6 +63,7 @@ async function run(
     rejoin?: (d: RejoinDeps) => Promise<RejoinResult>;
     openDb?: (directory: string) => Promise<OpenedVenue>;
     migrate?: (venueDir: string) => Promise<void>;
+    lockVenue?: (directory: string) => Promise<VenueLock>;
   } = {},
 ): Promise<{ code: number; out: string[] }> {
   const out: string[] = [];
@@ -72,6 +74,7 @@ async function run(
     rejoin: opts.rejoin ?? HAPPY_REJOIN,
     openDb: opts.openDb ?? (async () => fakeVenue()),
     migrate: opts.migrate ?? (async () => {}),
+    lockVenue: opts.lockVenue ?? (async () => ({ release: () => {} })),
   });
   return { code, out };
 }
@@ -293,6 +296,80 @@ describe("waitron-rejoin rejoin", () => {
     expect(code).toBe(1);
     expect(out).toEqual(["rejoin failed"]);
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses before reading or wiping anything while another process holds the venue folder", async () => {
+    const openDb = vi.fn(async () => fakeVenue());
+    const rejoin = vi.fn(async () => ({ wiped: true as const, carrierNodeId: "carrier-x" }));
+    const { code, out } = await run(
+      {},
+      {
+        openDb,
+        rejoin,
+        lockVenue: async (directory) => {
+          throw new AppError("provisioning.database_in_use", { database: directory });
+        },
+      },
+    );
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      "rejoin failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first",
+    ]);
+    expect(openDb).not.toHaveBeenCalled();
+    expect(rejoin).not.toHaveBeenCalled();
+  });
+
+  it("reports any other failure to take the folder generically, and reads nothing", async () => {
+    const openDb = vi.fn(async () => fakeVenue());
+    const { code, out } = await run(
+      {},
+      {
+        openDb,
+        lockVenue: async () => {
+          throw new Error("EACCES: permission denied, mkdir '/secret/path'");
+        },
+      },
+    );
+    expect(code).toBe(1);
+    expect(out).toEqual(["rejoin failed"]);
+    expect(openDb).not.toHaveBeenCalled();
+  });
+
+  it("gives the folder back on every way out", async () => {
+    const failingRead = (async () => {
+      throw new Error("read failed");
+    }) as unknown as Database["execute"];
+    const ways: Parameters<typeof run>[1][] = [
+      {}, // success
+      { rejoin: async () => Promise.reject(new AppError("rejoin.not_fenced", {})) },
+      { openDb: async () => Promise.reject(new Error("cannot open")) },
+      { openDb: async () => fakeVenue(failingRead) },
+    ];
+    for (const opts of ways) {
+      const release = vi.fn();
+      await run({}, { ...opts, lockVenue: async () => ({ release }) });
+      expect(release).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("reports generically and gives the folder back when the membership read fails and closing the handle fails too", async () => {
+    const failingRead = (async () => {
+      throw new Error("read failed");
+    }) as unknown as Database["execute"];
+    const release = vi.fn();
+    const { code, out } = await run(
+      {},
+      {
+        openDb: async () => ({
+          ...fakeVenue(failingRead),
+          close: async () => Promise.reject(new Error("close failed")),
+        }),
+        lockVenue: async () => ({ release }),
+      },
+    );
+    expect(code).toBe(1);
+    expect(out).toEqual(["rejoin failed"]);
+    expect(release).toHaveBeenCalledTimes(1);
   });
 });
 

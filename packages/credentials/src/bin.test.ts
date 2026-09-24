@@ -8,6 +8,7 @@
 // `packages/migrations/src/apply.ts:99` applies every set to `store.venue` and leaves the node file
 // empty. The `set`/`list` round trip below is what holds the entry point to the file its own
 // migrations actually created.
+import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -134,4 +135,28 @@ describe("waitron-credentials against a real venue directory", () => {
     // too (CLAUDE.md §4).
     expect(h.err.join("\n")).toContain("credentials.key_missing");
   });
+
+  it("runs beside a server that holds the venue folder", async () => {
+    const script = `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+db.exec("begin immediate");
+process.stdout.write("held");
+setInterval(() => {}, 1000);`;
+    const holder = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script, join(venueDir, "venue.lock")],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        holder.stdout.on("data", (c: Buffer) => c.toString().includes("held") && resolve());
+        holder.on("exit", (code) => reject(new Error(`holder exited early (${code})`)));
+      });
+      const h = capture();
+      expect(await runBin(["list"], { ...KEY_ENV, WAITRON_VENUE_DIR: venueDir }, h.io)).toBe(0);
+      expect(h.err).toEqual([]);
+    } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
 });

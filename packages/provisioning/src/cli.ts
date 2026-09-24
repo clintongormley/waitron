@@ -360,9 +360,11 @@ async function withVenueState(
 /**
  * A failure carrying an error `code` — the engine's or the filesystem's — becomes
  * `provisioning.state_unreadable`; one with no code (a bug) is returned untouched. `reason` is the
- * code, never the message: a driver message can quote the failing statement.
+ * code, never the message: a driver message can quote the failing statement. An `AppError` already
+ * names its own cause (`provisioning.database_in_use`) and is passed on unchanged.
  */
 function asUnreadable(error: unknown, venueDir: string): unknown {
+  if (isAppError(error)) return error;
   const reason = (error as { code?: unknown } | null)?.code;
   if (typeof reason !== "string") return error;
   return new AppError("provisioning.state_unreadable", { database: venueDir, reason });

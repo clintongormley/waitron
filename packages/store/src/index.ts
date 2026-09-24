@@ -4,12 +4,15 @@ import { DatabaseSync } from "node:sqlite";
 import { archiveTo } from "./archive.js";
 import { type Connections, connectionPair } from "./connections.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
+import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
 
 export { installAppendOnlyTriggers } from "./append-only.js";
 export type { StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
+export { lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
+export type { VenueLock } from "./venue-lock.js";
 import { createWriteQueue } from "./write-queue.js";
 
 /** The two database files. Every table is in the venue file; the node file is created empty
@@ -27,6 +30,12 @@ export interface VenueStoreConfig<
   venueSchema: TVenueSchema;
   /** The schema Drizzle maps over the node file. */
   nodeSchema: TNodeSchema;
+  /**
+   * Whether this open holds the venue folder against other processes (`./venue-lock.ts`). True
+   * unless set to false. False is for a short-lived tool documented to run beside a running
+   * server: it takes no lock, so it neither refuses nor is refused.
+   */
+  exclusive?: boolean;
 }
 
 /**
@@ -72,16 +81,6 @@ const BUSY_TIMEOUT_MS = 5000;
 const WAL_RETRY_INTERVAL_MS = 25;
 
 /**
- * SQLite's `SQLITE_BUSY`, which `node:sqlite` puts on the thrown error's `errcode`. The driver
- * throws an `Error` carrying that property; a refusal for any other reason — a file that is not a
- * database reads 26 — is not something waiting can fix.
- */
-const SQLITE_BUSY = 5;
-
-const isLocked = (error: unknown): boolean =>
-  (error as { errcode?: number }).errcode === SQLITE_BUSY;
-
-/**
  * Switches the file into write-ahead mode, waiting out whoever else holds it.
  *
  * The retry is the invariant, and `busy_timeout` is no substitute for it: converting a file into
@@ -105,15 +104,6 @@ async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, WAL_RETRY_INTERVAL_MS));
   }
 }
-
-/** Closes a connection where the failure being handled is the one the caller has to see. */
-const closeQuietly = (connection: DatabaseSync): void => {
-  try {
-    connection.close();
-  } catch {
-    // Already closed, or closing is what failed; either way the original error is the useful one.
-  }
-};
 
 /**
  * Opens a connection with the settings the engine needs.
@@ -244,6 +234,9 @@ export async function openVenueStore<
   config: VenueStoreConfig<TVenueSchema, TNodeSchema>,
 ): Promise<VenueStore<TVenueSchema, TNodeSchema>> {
   await mkdir(config.directory, { recursive: true });
+  // Before either file is opened, so a refused open leaves the databases untouched.
+  const lock: VenueLock =
+    config.exclusive === false ? { release: () => {} } : await lockVenueDirectory(config.directory);
   // Whatever is open when an open FAILS has to be closed, or a boot that retries keeps a descriptor
   // per attempt. One list and one cleanup rather than a handler per connection: by the time the
   // node file is being opened, three connections may be standing. Pinned by the descriptor-count
@@ -267,6 +260,7 @@ export async function openVenueStore<
   } catch (error) {
     // The refusal is what the caller needs to see, never a failure from closing up after it.
     for (const connection of standing) closeQuietly(connection);
+    lock.release();
     throw error;
   }
   const handle = <TSchema extends Record<string, unknown>>(
@@ -301,8 +295,12 @@ export async function openVenueStore<
     withWriteLock: venue.withWriteLock,
     archiveTo: venue.archiveTo,
     close: async () => {
-      await venue.close();
-      await node.close();
+      try {
+        await venue.close();
+        await node.close();
+      } finally {
+        lock.release();
+      }
     },
   };
 }

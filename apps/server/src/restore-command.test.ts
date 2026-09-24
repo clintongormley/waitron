@@ -236,10 +236,8 @@ describe("waitron-restore restore", () => {
 
   it("returns 1 (never rejects raw) on an invalid WAITRON_ENV", async () => {
     // `deploymentEnvironment` throws `server.config_invalid` for a WAITRON_ENV that is not
-    // production/preproduction/dev. That resolution used to sit OUTSIDE the try wrapping the restore,
-    // so a bad value rejected RAW out of runRestore — contradicting bin-restore.ts's "never rejects
-    // raw" note (its `.then(process.exit)` has no `.catch`). It must now RETURN 1 with a coded
-    // message, not throw. The assertion is `.resolves` — a raw throw here fails the test outright.
+    // production/preproduction/dev. runRestore must RETURN 1 with a coded message, not throw. The
+    // assertion is `.resolves` — a raw throw here fails the test outright.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-bad-env-"));
     const artifactPath = await makeArtifact(dir);
     const out: string[] = [];
@@ -301,10 +299,27 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
+  it("names another process holding the venue folder as the reason, and returns 1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-in-use-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("provisioning.database_in_use", { database: "/var/lib/waitron/venue" });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)",
+    ]);
+  });
+
   it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
-    // An AppError from some OTHER domain (here: a config error) is still an error `runRestore` must
-    // not let propagate raw — `bin-restore.ts`'s `.then(process.exit)` has no `.catch`, so an
-    // uncaught rejection here would dump straight to stderr instead of a controlled exit code.
+    // An AppError from some OTHER domain (here: a config error) must not propagate raw either.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-other-apperror-"));
     const artifactPath = await makeArtifact(dir);
     const out: string[] = [];

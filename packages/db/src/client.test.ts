@@ -1,38 +1,19 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { openVenueDatabase, type VenueDatabase } from "./client.js";
+import { lockVenueDatabase, openVenueDatabase, type VenueDatabase } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { runMigrations } from "./migrate.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
 
 /**
- * `openVenueDatabase` — the whole of this module's public surface now that the two PostgreSQL
- * constructors are gone.
- *
- * **What this file does NOT test, because `packages/store/src/index.test.ts` already does.**
- * `openVenueDatabase` is a thin call onto `openVenueStore`, and that package's own suite covers the
- * engine settings, the two file names under the directory, creating the directory, and closing.
- * What is left here is what `client.ts` itself decides, which is one thing: both files are opened
- * on the SAME schema barrel, so nothing but the FILE separates a venue table from a node one.
- *
- * **Five cases went with the two deleted constructors. What nothing checks any more:**
- *
- * - `createPgliteDb` "tags itself as the pglite driver" and `createPostgresDb` "tags itself as the
- *   postgres driver". There is no `driver` tag on a handle (`client.ts:29-31`) and `runMigrations`
- *   dispatches on nothing, so there is no tag to read and no dispatch to get wrong.
- * - `createPgliteDb` "is in-memory when no data directory is given". There is no no-argument form:
- *   `openVenueDatabase` takes a directory and always writes files. The isolation that case
- *   protected — two databases not seeing each other's tables — is now only ever tested WITHIN one
- *   store, by the first case below; nothing here checks that two SEPARATE directories are
- *   independent.
- * - `createPostgresDb` "fails fast on a connection that cannot succeed". Gone with the connection
- *   string: there is no pool and no connect-probe, and a bad DIRECTORY is a different failure
- *   nothing in this package now asserts on.
- * - `createPostgresDb` "returns a database that answers a query", "rejects a query after close" and
- *   "honours poolOptions". All three were about a server and a connection pool; neither exists.
+ * `packages/store`'s own suite covers the engine settings, the two file names, creating the
+ * directory, closing, and the folder lock. This file covers what `client.ts` decides: both files are
+ * opened on the SAME schema barrel, and a folder another process holds is reported as
+ * `provisioning.database_in_use`.
  */
 const opened: VenueDatabase[] = [];
 const directories: string[] = [];
@@ -115,4 +96,65 @@ describe("openVenueDatabase", () => {
     opened.push(reopened);
     expect(reopened.venue.all(sql`select id from persisted`)).toEqual([{ id: 7 }]);
   });
+});
+
+/** Holds `<directory>/venue.lock` from another process until killed, as a running server does. */
+async function holdFromAnotherProcess(directory: string): Promise<ChildProcess> {
+  const script = `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+db.exec("pragma busy_timeout = 0");
+db.exec("begin immediate");
+process.stdout.write("held");
+setInterval(() => {}, 1000);`;
+  const child = spawn(
+    process.execPath,
+    ["--input-type=module", "-e", script, join(directory, "venue.lock")],
+    { stdio: ["ignore", "pipe", "inherit"] },
+  );
+  await new Promise<void>((resolve, reject) => {
+    child.stdout!.on("data", (chunk: Buffer) => chunk.toString().includes("held") && resolve());
+    child.on("exit", (code) => reject(new Error(`holder exited early (${code})`)));
+  });
+  return child;
+}
+
+describe("a venue folder another process holds", () => {
+  it("is refused as provisioning.database_in_use, naming the folder, by both entry points", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "waitron-db-in-use-"));
+    directories.push(directory);
+    const holder = await holdFromAnotherProcess(directory);
+    try {
+      for (const attempt of [
+        () => openVenueDatabase(directory),
+        () => lockVenueDatabase(directory),
+      ]) {
+        await expect(attempt()).rejects.toMatchObject({
+          code: "provisioning.database_in_use",
+          params: { database: directory },
+        });
+      }
+    } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
+
+  it("passes every other refusal through untouched", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "waitron-db-not-a-db-"));
+    directories.push(directory);
+    writeFileSync(join(directory, "venue.db"), "these bytes are not a database".repeat(100));
+    await expect(openVenueDatabase(directory)).rejects.toThrow("file is not a database");
+  });
+
+  it("opens beside a holder when asked for no lock", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "waitron-db-beside-"));
+    directories.push(directory);
+    const holder = await holdFromAnotherProcess(directory);
+    try {
+      const store = await openVenueDatabase(directory, { exclusive: false });
+      opened.push(store);
+      expect(store.venue.all(sql`select 1 as one`)).toEqual([{ one: 1 }]);
+    } finally {
+      holder.kill("SIGKILL");
+    }
+  }, 20_000);
 });

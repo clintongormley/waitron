@@ -60,7 +60,8 @@ const exists = async (name: string) => {
   }
 };
 if (request.command === "capture") {
-  const store = await openVenueDatabase(join(root, "venue"));
+  // No lock: Cloud's runner captures while the fixture server on this folder is still running.
+  const store = await openVenueDatabase(join(root, "venue"), { exclusive: false });
   try {
     let artifact: Uint8Array | undefined;
     await runOnce({

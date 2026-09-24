@@ -837,6 +837,19 @@ describe("runCli venue", () => {
     expect(printed).not.toContain("file is not a database");
   });
 
+  it("reports a venue folder another process holds by its own code, not as unreadable", async () => {
+    const h = harness({ env: VENUE_ENV });
+    h.openVenue.mockRejectedValue(
+      new AppError("provisioning.database_in_use", { database: VENUE_DIR }),
+    );
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    const printed = h.lines.join("\n");
+    expect(printed).toContain(`provisioning.database_in_use {"database":"${VENUE_DIR}"}`);
+    expect(printed).not.toContain("state_unreadable");
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
   it("lets a failure carrying no code at all escape rather than dressing it as unreadable", async () => {
     // A bug's `TypeError` carries no `code`, so it is not dressed as `state_unreadable`.
     const h = harness({ env: VENUE_ENV });

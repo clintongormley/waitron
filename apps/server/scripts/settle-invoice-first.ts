@@ -114,7 +114,8 @@ export async function settleInvoiceFirst(
   const corrTotal = addDecimal(corrBase, corrTax); // -11.00
   const net = addDecimal(saleTotal, corrTotal); // 99.00
 
-  const store = await openVenueDatabase(await resolveScriptVenueDir(env));
+  // No lock: the sale is written for a running server's drain to send.
+  const store = await openVenueDatabase(await resolveScriptVenueDir(env), { exclusive: false });
   const db = store.venue;
   try {
     const clock = systemClock();

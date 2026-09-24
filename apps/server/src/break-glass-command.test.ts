@@ -1,4 +1,6 @@
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +17,7 @@ import {
   webauthnCredentials,
 } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import { runBreakGlassReset } from "./break-glass-command.js";
+import { openBreakGlassVenue, runBreakGlassReset } from "./break-glass-command.js";
 import { ALL_MODULES } from "./modules.js";
 
 // One migrated venue directory for the suite; `useVenueDb` empties the data after every test, so
@@ -457,4 +459,31 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+});
+
+describe("openBreakGlassVenue", () => {
+  it("opens a venue folder a running server holds, because break-glass runs beside it", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "break-glass-beside-"));
+    const script = `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+db.exec("begin immediate");
+process.stdout.write("held");
+setInterval(() => {}, 1000);`;
+    const holder = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script, join(directory, "venue.lock")],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        holder.stdout.on("data", (c: Buffer) => c.toString().includes("held") && resolve());
+        holder.on("exit", (code) => reject(new Error(`holder exited early (${code})`)));
+      });
+      const opened = await openBreakGlassVenue(directory);
+      await opened.close();
+    } finally {
+      holder.kill("SIGKILL");
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
 });

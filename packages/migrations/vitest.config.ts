@@ -4,9 +4,6 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // The slowest case in the package is the concurrency suite's race, which spawns a peer
-    // process and waits out a deliberate 600ms hold; the whole file runs in under two seconds.
-    // The old 120s/180s bounds were sized for a Postgres container this package no longer starts.
     testTimeout: 30_000,
     hookTimeout: 30_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
