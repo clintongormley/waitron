@@ -534,8 +534,8 @@ whenever a money column is added:
   altogether**, because this engine has no exact decimal type and summing filed cuotas in SQL would
   sum them as binary floating point. `packages/reporting/src/vat-summary.ts` reads one row per
   breakdown ELEMENT and folds them with `@waitron/shared`'s Decimal arithmetic at the money scale,
-  which is exact by construction; its own header records the whole-query comparison against PGlite
-  and the two controls that break it.
+  which is exact by construction; the whole-query comparison against PGlite and the controls that
+  break it are recorded in #601's commit message (`git log --grep='(#601)'`), not in the file.
 
   What that costs belongs in this list, and the file states it: `::numeric(12, 2)` REFUSED an element
   past ten integer digits with a `22003` and `::numeric(5, 2)` refused a rate past three, and neither

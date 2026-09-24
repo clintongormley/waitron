@@ -169,6 +169,10 @@ the cutover in dead hours), not enforced by a guard. `UNIQUE` guarantees one clo
 close over a fully-elapsed day recomputes byte-identically (the property #56 preserved), so re-deriving
 a closed day and comparing to its snapshot is a valid audit.
 
+> **2026-09-24:** not so once a later void touches that day's sales — #601's review recorded a void
+> on 5 August for a 4 August sale and 4 August's recomputed VAT changed from 21.00 to 0.00. Open in
+> `docs/backlog.md` (the #601 entry).
+
 ## Errors, migration, testing
 
 - **Error codes** (English, domain-concept, declared in `@waitron/reporting`'s errors registry by

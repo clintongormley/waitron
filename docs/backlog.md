@@ -2793,11 +2793,37 @@ image constraints under *Detail → Box image*.
   (#600, about 2,980 to about 1,720, tests included: `apps/print-agent`, `print-agent`,
   `server-kit`, `tunnel`, `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`,
   `fiscal-none`, `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages,
-  `ui-core` and `dashboard-kit`). A pruning pull request
+  `ui-core` and `dashboard-kit`) and `packages/reporting` (#601, about 1,885 to about 1,265, tests
+  included; the generated `src/dr303-layout.ts`, 185 of those lines, is untouched). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598 and #600 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600 and #601 and left for the package that owns each, all
   still OPEN:
+  - Found by #601 (`packages/reporting`). **Re-deriving a closed day does not reproduce its
+    snapshot once a later void touches that day's sales**: #601's Codex seat recorded a void on 5
+    August for a 4 August sale, and 4 August's recomputed VAT went from 21.00 to 0.00. So
+    `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`'s "Determinism" claim that
+    re-deriving a closed day and comparing it to its snapshot is a valid audit does not hold as
+    written (a dated pointer there says so); whether the derived close should ignore later voids,
+    or the audit should compare something else, is open. `stableStringify`
+    (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined` hashes
+    differently from the row the database stores (the column drops the key); its comment now
+    states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
+    change: the SQL comment inside `src/cash-up.ts`'s `sql` string (~36) still explains the
+    ordering by a `::text` cast on "a PostgreSQL ENUM"; test titles still say "jsonb"
+    (`verify-daily-close-chain.test.ts:70`), "tenant" (`top-sellers.test.ts:501`,
+    `overdue-orders.test.ts:252`, `vat-summary.test.ts:162`, `vat-summary-period.test.ts:111`),
+    "design §3" (`overdue-orders.test.ts:194`), "spec §12" (`top-sellers.test.ts:307`) and
+    "DrizzleQueryError-style" (`record-daily-close.test.ts:326`, not checked). `toDr303Record`
+    (`src/dr303.ts`) does not cross-check a monthly total against a quarterly period code such as
+    "4T"; a test pins that and the one route that builds the file takes both from the same code,
+    so it looks deliberate — worth the owner's eye because it is a tax file. The top-sellers
+    fixtures give most lines no kitchen name, where CLAUDE.md §3 asks all three names to differ
+    (top-sellers never reads that name). `record-daily-close.concurrency.test.ts:60` says "nothing
+    but the write queue keeps the second out"; a reviewer, reading only, thinks the one-close-per-day
+    unique constraint refuses it — not checked. `packages/core/src/errors.ts` names
+    `scripts/errors-reachable.test.ts` without the hedge #601 gave reporting's (the guard matches
+    text).
   - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
     comments AND test titles still say an unscreened malformed id raises PostgreSQL's 22P02 or
     becomes an opaque 500, although ids are text columns now: `till-api.test.ts` lines 1689, 1773,
@@ -3040,8 +3066,8 @@ image constraints under *Detail → Box image*.
     `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
     status 0); `apps/server/src/node-identity.ts` still says "ONE
     tenant transaction" and omits `credentials.key_version_unknown` among another node's read
-    failures; pointers to a missing `errors.reachability.test.ts` in `apps/server`,
-    `workforce-es` and `reporting` (the guard is `scripts/errors-reachable.test.ts`); and two
+    failures (the pointers to a missing `errors.reachability.test.ts` are gone:
+    `git grep errors.reachability -- apps packages` prints nothing after #601); and two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
     `docs/compliance/getting-to-production.md` §4 closed that day.
   - `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
@@ -3097,9 +3123,9 @@ image constraints under *Detail → Box image*.
     behaviour, left alone there: `packages/store/src/node-sqlite-adapter.test.ts:90` calls keeping
     the outer transaction usable "the whole point of the savepoint"; a test name in
     `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
-    transaction"; and `packages/reporting/src/record-daily-close.ts` keeps PostgreSQL-era comments
-    (its step 5, `date_trunc`, "On PostgreSQL that shape…"). The last two are for lane B's pruning of
-    those packages; `packages/store` was pruned by #568 before this was found. The reason "v8 reports phantom uncovered branches" given for excluding
+    transaction" (a test title, which a comments-only change cannot touch).
+    `packages/reporting/src/record-daily-close.ts`'s PostgreSQL-era comments went with #601;
+    `packages/store` was pruned by #568 before this was found. The reason "v8 reports phantom uncovered branches" given for excluding
     barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
     both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
     excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
