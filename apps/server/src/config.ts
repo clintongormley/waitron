@@ -59,8 +59,7 @@ export interface ServerConfig {
   migrationsRoot: string;
   /**
    * The Litestream binary the stream supervisor runs (`WAITRON_LITESTREAM_BIN`), resolved by
-   * `@waitron/stream`'s `resolveLitestreamBin` so every caller resolves it the same way. Unset or
-   * empty means `litestream`, found on PATH, where the box image puts the pinned one. A developer
+   * `@waitron/stream`'s `resolveLitestreamBin`. Unset or empty means `litestream`, found on PATH, where the box image puts the pinned one. A developer
    * points it at `pnpm setup:litestream`'s download.
    */
   litestreamBin: string;

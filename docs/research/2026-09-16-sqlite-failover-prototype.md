@@ -621,7 +621,7 @@ generation prefix. `objects-after` counts files per level: level 0 went from 2 f
 to 3 (48,455 bytes), so it gained one file and 38,206 bytes, and a level-2 file appeared, while level 9
 stayed at one file of 2,203 bytes — **no fresh full copy was uploaded at level 9**. The probe never
 read the new level-0 file, so whether it held the whole database or only the changed pages was not
-established. For scale, a re-run during review opened a database through the rig's `openNode`, made
+established. (2026-09-24: §1b below read it.) For scale, a re-run during review opened a database through the rig's `openNode`, made
 80 `sell()` calls, ran `checkpoint()` and read the file with `statSync`: the checkpoint printed
 `{"busy":0,"log":-1,"checkpointed":-1}` and the file was 81,920 bytes. `log: -1` means that database
 was not in write-ahead-log mode, so it is not exactly the probe's state. The spec's §8.1

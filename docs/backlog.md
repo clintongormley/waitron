@@ -4716,8 +4716,8 @@ the venue lock use one technique in two copies, and the test helper that holds t
 process is copied into five test files.
 Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed pointer
 `current.json` naming the live generation, generation claiming and pruning, and `probeBucket`, the
-check behind the settings screen's Test button), landed as #569. Nothing calls it yet; Tasks 6, 8a,
-9b and 10 do. Where it departs from the plan's code is recorded in a dated note in the plan's
+check behind the settings screen's Test button), landed as #569. Task 6 makes the server call it at boot, through
+`StreamHost`; Tasks 8a, 9b and 10 add the other callers. Where it departs from the plan's code is recorded in a dated note in the plan's
 Task 5. Left open by #569's review, the owner's call: pruning sends one delete request per file,
 where S3's `DeleteObjects` removes up to 1000 per request — using it would change the bucket
 interface the plan fixed, and not every S3-compatible store has been checked for it. The other

@@ -6,7 +6,8 @@ import "./errors.js";
 
 /**
  * The one Litestream version this package runs: every measurement the design rests on was taken on
- * it. `scripts/litestream-pin.test.ts` holds it equal to the box image's and the setup script's.
+ * it. `scripts/litestream-pin.test.ts` holds it equal to the box image's, the setup script's and the
+ * bench's.
  */
 export const LITESTREAM_VERSION = "0.5.17";
 
@@ -15,7 +16,7 @@ export const DEFAULT_LITESTREAM_BIN = "litestream";
 
 /**
  * `WAITRON_LITESTREAM_BIN`, or {@link DEFAULT_LITESTREAM_BIN} when it is unset or empty. Never
- * throws: the restore command line calls it and reads no other configuration.
+ * throws.
  */
 export function resolveLitestreamBin(env: Readonly<Record<string, string | undefined>>): string {
   const value = env.WAITRON_LITESTREAM_BIN;

@@ -6,9 +6,9 @@ import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readCommandLine, spawnLitestream } from "./litestream-process.js";
 
-let dir: string;
+let dir: string | undefined;
 const stub = (name: string, body: string): string => {
-  const path = join(dir, name);
+  const path = join(dir!, name);
   writeFileSync(path, `#!/bin/sh\n${body}\n`);
   chmodSync(path, 0o755);
   return path;
@@ -30,7 +30,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  rmSync(dir, { recursive: true, force: true });
+  if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
 });
 
 const alive = (pid: number): boolean => {
@@ -68,7 +68,7 @@ describe("spawnLitestream", () => {
   }, 10_000);
 
   it("reports a binary that is not there as an exit with no code", async () => {
-    const child = spawnLitestream(join(dir, "missing"), ["version"], {});
+    const child = spawnLitestream(join(dir!, "missing"), ["version"], {});
     await expect(child.exited).resolves.toBeNull();
     expect(child.output()).toContain("ENOENT");
   });

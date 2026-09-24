@@ -133,7 +133,7 @@ export function reap({ exec, now = () => Date.now() }) {
  * Kill orphaned vitest worker processes — the CPU-side counterpart to `reap()`'s container cleanup. A
  * pure data-in/data-out function over an injected `psExec` and `kill`, testable without touching a real
  * process; the CLI block below wires in the real `ps` and `process.kill`. It also kills parentless
- * `.bin/litestream` and `.bin/versitygw` processes the loop test leaves behind.
+ * test binaries `isTestBinaryProcess` matches.
  *
  * @param {{ psExec: (args: string[]) => string, kill: (pid: number, signal: string) => void }} deps
  *   `psExec(args)` runs `ps <args>` and returns stdout (throwing when `ps` is absent). `kill(pid, sig)`
@@ -158,8 +158,9 @@ function isVitestProcess(command) {
 }
 
 /**
- * Is this `ps` command column one of the test binaries a checkout keeps in its `.bin` (the pinned
- * Litestream from `scripts/setup-litestream.mjs`, and the loop test's S3 server)? The row's FIRST
+ * Is this `ps` command column one of the test binaries a checkout keeps in a `.bin` (the pinned
+ * Litestream the bench probes run, and `versitygw`, which nothing installs until Task 10's loop
+ * test)? The row's FIRST
  * token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
  * `<dir>/bench/sqlite-failover/`, where `<dir>` is a directory whose name starts `waitron` — the main
  * checkout and every `waitron-<branch>` worktree. Any other `.bin` (a developer's own `~/.bin`, a

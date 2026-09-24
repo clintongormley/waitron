@@ -10115,6 +10115,15 @@ list workspace members are updated to name it."
 
 ### Task 6: The Litestream supervisor, the pinned binary, and the side-file limit
 
+**2026-09-24:** the built code departs from the code shown below in these ways; the files under
+`packages/stream/`, and the other files this task lists, are authoritative. (i) `packages/stream/vitest.config.ts` has no `src/testing/**`
+coverage exclude: CLAUDE.md §2 forbids hiding code a test could reach from coverage. (ii) The
+reaper's pattern in `scripts/reap-testcontainers.mjs` matches `.bin/litestream` and `.bin/versitygw`
+only under a directory whose name starts `waitron` (or its `bench/sqlite-failover/`), not the
+`/^\S*\/\.bin\/(?:litestream|versitygw)(?:\s|$)/` of Step 39. (iii) `bucketKey` and
+`normalisePrefix` moved from `s3-store.ts` to `names.ts`. (iv) The setup script is
+`scripts/setup-litestream.mjs` (Step 28's note).
+
 **Branch:** `feat/sqlite-slice2-stream-supervisor`
 
 **Depends on:** Task 4's recorded results (`RESTART_RESYNCS`, `AUTOCHECKPOINT_OFF_NEEDED`,

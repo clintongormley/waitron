@@ -1536,10 +1536,9 @@ declare module "@waitron/shared" {
      * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
      * fault, not a client error: the box has lost part of its own unrecoverable state. */
     "recovery.state_incomplete": { missing: string };
-    /** A `BackupSupervisor.reload()` was called while another reload was still in flight. The
-     * lifecycle is latched (stop→close→re-read→open→start), so two concurrent reloads would race two
-     * teardowns of the same open venue; the second is refused rather than allowed to interleave.
-     * No params. */
+    /** A `reload()` on `BackupSupervisor` or `StreamHost` was called while another reload on the
+     * same object was still in flight; the second is refused rather than allowed to interleave its
+     * teardown with the first. No params. */
     "backup.reload_in_progress": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */

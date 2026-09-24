@@ -1,5 +1,5 @@
-// Reads the Dockerfile and the package's pin as TEXT, which makes it weaker than its name: it proves
-// the three copies of the pin agree, not that any of them downloads or runs. What runs the binary is
+// Reads the Dockerfile, the package's pin and the bench's as TEXT, which makes it weaker than its
+// name: it proves the copies of the pin agree, not that any of them downloads or runs. What runs the binary is
 // the image build's own `litestream version` check (deploy/Dockerfile, the `litestream` stage), the
 // image-smoke step that runs it in the shipped image, and the setup script's.
 import { readFileSync } from "node:fs";
@@ -11,6 +11,7 @@ const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const DOCKERFILE = read("deploy/Dockerfile");
 const PACKAGE = read("packages/stream/src/litestream.ts");
+const BENCH = read("bench/sqlite-failover/src/litestream.ts");
 
 /** The one capture of the one match of `pattern`; throws on none or several. */
 function one(text: string, pattern: RegExp, what: string): string {
@@ -22,8 +23,11 @@ function one(text: string, pattern: RegExp, what: string): string {
 describe("the pinned Litestream", () => {
   const version = one(PACKAGE, /export const LITESTREAM_VERSION = "([0-9.]+)";/g, "package pin");
 
-  it("names one version in the package, the setup script and the box image", () => {
+  it("names one version in the package, the setup script, the box image and the bench", () => {
     expect(VERSION).toBe(version);
+    expect(one(BENCH, /export const LITESTREAM_VERSION = "([0-9.]+)";/g, "bench pin")).toBe(
+      version,
+    );
     expect(one(DOCKERFILE, /version=([0-9.]+);/g, "Dockerfile pin")).toBe(version);
   });
 

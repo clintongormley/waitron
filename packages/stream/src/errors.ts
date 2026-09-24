@@ -30,10 +30,8 @@ declare module "@waitron/shared" {
      * listed key outside the prefix asked for (`field: "listedKey"`, `value` the key as the listing
      * named it). */
     "backup.stream_name_invalid": { field: string; value: string };
-    /** A value bound for Litestream could not be written into its configuration safely: a `$` in
-     * `dbPath` or `replicaUrl`, a `bucket` name holding more than S3's bucket-name characters, a
-     * bucket key a single-quoted YAML scalar cannot hold whole (`accessKeyId`, `secretAccessKey`),
-     * or a `prefix` path cleaning would change. `field` names the value, never its content. */
+    /** A value bound for Litestream could not be written into its configuration safely
+     * (`litestream.ts`). `field` names the value, never its content. */
     "backup.stream_config_unsafe": { field: string };
   }
 }

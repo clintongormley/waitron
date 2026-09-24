@@ -109,7 +109,8 @@ async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
  * Automatic checkpointing stays at SQLite's own default: every 1000 pages, and always PASSIVE, which
  * never invokes the busy handler (https://www.sqlite.org/pragma.html), so it never waits on
  * Litestream. With streaming off nothing else checkpoints, so switching it off would let the
- * write-ahead file grow without limit.
+ * write-ahead file grow without limit. Slice-2 spec §4.5
+ * (docs/superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
  */
 async function openConnection(path: string): Promise<DatabaseSync> {
   const connection = new DatabaseSync(path);
@@ -207,11 +208,8 @@ export async function openVenueStore<
     return Object.assign(db, {
       withWriteLock: <T>(body: () => Promise<T>) => writes.run(body),
       archiveTo: (path: string) => archiveTo(db, path),
-      // On the writer, in a queue slot that opens no transaction: inside the writer's own
-      // transaction a checkpoint is refused (`database table is locked`). With no busy wait it
-      // answers `busy` at once while a reader still holds the side file; with the store's wait it
-      // blocks on the busy handler, and on this synchronous engine the whole process blocks with it.
-      // The timeout is restored in `finally`, before anything else can run on the connection.
+      // With the store's busy wait the checkpoint blocks on the busy handler, and on this
+      // synchronous engine the whole process blocks with it.
       checkpointTruncate: () =>
         writes.exclusive(() => {
           connections.write.exec("pragma busy_timeout = 0");

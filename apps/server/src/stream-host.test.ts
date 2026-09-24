@@ -53,7 +53,7 @@ describe("the live copy's wiring", () => {
     timeoutMs: 60_000,
   });
   let db: Database;
-  let stateDir: string;
+  let stateDir: string | undefined;
   const keys = generateNodeKeyPair();
   let logs: string[] = [];
 
@@ -62,8 +62,8 @@ describe("the live copy's wiring", () => {
       db,
       ring: RING,
       nodeId: NODE_ID,
-      venueDir: stateDir,
-      stateDir,
+      venueDir: stateDir!,
+      stateDir: stateDir!,
       litestreamBin: "litestream",
       log: (_level, event) => logs.push(event),
       now: () => new Date(),
@@ -83,7 +83,7 @@ describe("the live copy's wiring", () => {
   });
 
   afterAll(async () => {
-    await rm(stateDir, { recursive: true, force: true });
+    if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
   });
 
   it("reads no settings, and starts nothing, when no bucket is stored", async () => {
