@@ -102,7 +102,7 @@ describe("verifyDailyCloseChain against a tampered committed chain", () => {
 
     // Rewrite close 2's frozen snapshot. entry_hash is left untouched, so it no longer recomputes.
     // Read-mutate-write through the column's own mapping rather than through a JSON function: the
-    // column is `text(..., { mode: "json" })` (`packages/db/src/schema/columns.ts:84`), so what
+    // column is `text(..., { mode: "json" })` (`packages/db/src/schema/columns.ts`), so what
     // Drizzle writes back is `JSON.stringify` of this object — the same encoding the close was
     // stored with. `jsonb_set`, which this case used on PostgreSQL, has no counterpart that is
     // guaranteed to reproduce that encoding.

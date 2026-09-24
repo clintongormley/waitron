@@ -170,7 +170,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("carries a nullable note column (spec §2/§3, NON-FISCAL)", async () => {
-    // `pragma table_info` reports the DECLARED type in the case the DDL wrote it.
     const meta = suite.db
       .all<{ name: string; type: string; notnull: number }>(
         sql`select name, type, "notnull" from pragma_table_info('ticket_items') where name = 'note'`,

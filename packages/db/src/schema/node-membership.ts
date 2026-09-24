@@ -8,7 +8,9 @@ import type { SignedMembershipDocument } from "@waitron/membership";
  * `deployment`.
  *
  * The signed document is stored as ONE unit (the whole `SignedMembershipDocument`), never a
- * per-row synced table — a row-image would not carry a signature over the node list. `term` is
+ * per-row synced table — a row-image would not carry a signature over the node list. Stored as
+ * parsed JSON rather than the signed bytes, which is safe because verification recomputes
+ * `canonicalize(body)` from the parsed object (`packages/membership/src/verify.ts`). `term` is
  * denormalised into its own column from `document.body.term` so ordering/superseding can be read
  * without parsing the blob. `writeNodeMembership` derives the column from the blob on every write,
  * so a write through that accessor keeps the two in step — a property of the accessor, not a DB

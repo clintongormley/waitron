@@ -268,7 +268,6 @@ describe("working_orders", () => {
   });
 
   it("rejects a no-op update of a settled order", async () => {
-    // Terminal means terminal, not "terminal for the columns we thought of".
     const id = await openOrder(db);
     await db
       .update(workingOrders)
@@ -448,7 +447,7 @@ describe("working_order_lines", () => {
   });
 
   it("carries a nullable note column (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
-    // `lower(type)`: the pragma reports the type in the case the DDL declared it.
+    // `lower(type)`: the pragma reports `TEXT` in upper case where the DDL declares `text`.
     const meta = await rows<{ name: string; type: string; notnull: number }>(
       db,
       sql`select name, lower(type) as type, "notnull" from pragma_table_info('working_order_lines')

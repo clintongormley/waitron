@@ -83,7 +83,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       ),
     );
     expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
-    // A CHECK refusal names the constraint in the message.
+    // A named CHECK's refusal carries its name.
     expect(engineErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
   });
 

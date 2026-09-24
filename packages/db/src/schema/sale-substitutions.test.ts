@@ -126,7 +126,7 @@ describe("sale_substitutions — schema shape", () => {
   });
 
   it("adds the three nullable counterparty columns to sales", async () => {
-    // `lower(type)`: the pragma reports the type in the case the DDL declared it.
+    // `lower(type)`: the pragma reports `TEXT` in upper case where the DDL declares `text`.
     const cols = await rows<{ name: string; type: string; notnull: number }>(
       db,
       sql`select name, lower(type) as type, "notnull" from pragma_table_info('sales')

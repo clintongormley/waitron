@@ -106,8 +106,9 @@ export const enumText = <const T extends string>(name: string, values: readonly 
  * result is a column builder (`ticketState("state")`) carrying `enumValues`, for a request
  * validator at runtime and for `(typeof ticketState.enumValues)[number]` at type level. The
  * narrowing is `enumText`'s, so the table in that helper's note applies unchanged. The `const`
- * modifier is NOT what makes the narrowing work: removing it moves no pin in `columns.test.ts`,
- * measured 2026-09-21.
+ * modifier mirrors `enumText`'s but is NOT what makes the narrowing work here: removing it from
+ * `enumType` moves no pin in `columns.test.ts`, where removing `enumText`'s fails its typecheck
+ * (measured 2026-09-24).
  */
 export const enumType = <const T extends string>(values: readonly T[]) =>
   Object.assign((name: string) => enumText(name, values), {

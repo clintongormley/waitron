@@ -178,7 +178,6 @@ describe("sales — the commercial record", () => {
     for (const [table, column] of wanted) {
       const col = columnsOf(suite.db, table).find((c) => c.name === column);
       expect(col, `${table}.${column} must exist`).toBeDefined();
-      // `pragma table_info` reports the type in the CASE the DDL declared it, not normalised.
       expect(col!.type).toBe("INTEGER");
     }
   });

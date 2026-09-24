@@ -54,8 +54,8 @@ export const dailyCloses = table(
     // Uppercase hex SHA-256: `computeCloseEntryHash` (`packages/reporting/src/daily-close-hash.ts`).
     entryHash: label("entry_hash").notNull(),
     closedAt: ts("closed_at").notNull().$defaultFn(now),
-    // The counting actor (identity person id). Plain uuid, no FK: the close must not depend on the
-    // person schema.
+    // The counting actor (identity person id). Plain uuid, no FK: `persons` is in
+    // @waitron/identity's migration set, not the core one.
     closedBy: id("closed_by").notNull(),
     snapshot: json<DailyCloseSnapshot>("snapshot").notNull(),
   },

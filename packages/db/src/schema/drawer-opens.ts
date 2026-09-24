@@ -7,6 +7,9 @@ import { tills } from "./tenants.js";
  * The cash-drawer audit log: one row per drawer open. The kick itself is a separate `drawer` print
  * job; printing a receipt never opens the drawer (CLAUDE.md §5).
  *
+ * Nothing in the database refuses an update or a delete: the table is declared with `classify()`,
+ * not `appendOnly()`.
+ *
  * `person_id` and `authorized_by` are plain ids with no FK: `persons` is in @waitron/identity's
  * migration set, not the core one.
  */
