@@ -273,10 +273,10 @@ service zones can sell neither such a product nor its variants as dishes: a vari
 dish only from a zone's menu offer. A product whose variants are all Inactive sells as itself on
 both paths.
 
-A held order keeps a line whose product has since gained an Active variant, and lowering or keeping
-its quantity is allowed; raising it is refused `product.variant_required`, as a raise of a line
-whose product has become Inactive or Unavailable is refused (`updateHeldOrder`,
-`apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
+A held order keeps a line whose product, or one of whose extras, has since gained an Active
+variant, and lowering or keeping its quantity is allowed; raising it is refused
+`product.variant_required`, as a raise of a line whose product has become Inactive or Unavailable
+is refused (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
 re-check them (`priceStoredOrder`, same file). On the till, retrieving the order drops such an extra
 from the basket with the `held.product_gone` notice, as it drops a sold-out one, because the extras
 lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,

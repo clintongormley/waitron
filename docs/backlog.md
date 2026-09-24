@@ -699,15 +699,20 @@ rows: **this task needs no venue reset of its own.** What it left open:
   name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) now refuses the parent
   with `product.variant_required`, Available variants or not; a product whose variants are all
   Inactive still sells as itself. The same refusal covers an extras pick of such a product on
-  either path (a pick of a variant still sells), and a raised quantity on a held line whose product
-  has gained an Active variant since it was parked (`updateHeldOrder`). The till's extras lists no
+  either path (a pick of a variant still sells), and a raised quantity on a held line whose product,
+  or one of whose extras, has gained an Active variant since it was parked (`updateHeldOrder`).
+  The till's extras lists no
   longer offer such a product (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`).
   Pinned by `apps/server/src/till-api.zoneless-variants.test.ts`, the "never sold as itself, as an
   extra or on a raise" cases in `apps/server/src/working-order.test.ts`, and "an extra that is a
   parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`.
-  The zone-less path itself stays: removing it would reach every suite that rings up by
-  `productId`. `GET /api/products` (`listAvailableProducts`) still lists such a parent; no
-  production screen in `apps/till` calls it (the till builds its buttons from zone offers).
+  The zone-less path itself stays. That was the implementer's choice on this branch, not an owner
+  decision: removing it would touch every suite that rings up by `productId`. `GET /api/products`
+  (`listAvailableProducts`) still lists such a parent; no production screen in `apps/till` calls it
+  (the till builds its buttons from zone offers).
+- **A venue with no service zones still sells by bare `productId`, though the owner said _"a zone
+  is required"_ (above).** **Next action:** owner to confirm whether that path should be removed;
+  if so, require a zone and move the suites that ring up by `productId` onto zone offers.
 - **`@waitron/fiscal-verifactu`'s tests now depend on `@waitron/catalogue`** (its VAT-per-variant
   test runs the real `selectMenuVariant`), so a catalogue change also runs fiscal-verifactu's test
   shard in CI. Kept deliberately; worth revisiting only if that shard's time becomes a problem.

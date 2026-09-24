@@ -152,8 +152,6 @@ async function readExtraProducts(
         inArray(products.id, productIds),
         eq(products.active, true),
         eq(products.available, true),
-        // A product with an Active variant is never sold as itself (spec §15.1), and the order
-        // path refuses one picked as an extra (`priceOrderLines`, apps/server), so it is not offered.
         notExists(
           tx
             .select({ one: sql`1` })
@@ -207,6 +205,10 @@ type WalkedList =
  * An item whose product is Inactive or Unavailable is left out too (spec §15.6): the till sells
  * nothing that is not both. The order path refuses a pick of one on its own read
  * (`resolveBasketModifiers`, `apps/server/src/working-order.ts`).
+ *
+ * So is a product that has an Active variant, which is never sold as itself (spec §15.1): the
+ * order path refuses a pick of one with `product.variant_required` (`priceOrderLines`,
+ * `apps/server/src/working-order.ts`).
  *
  * A bounded number of queries whatever the number of dishes: {@link walkAttachedModifiers}'s — the
  * same set {@link resolveAttachedModifiers} issues — plus one for the products the offered items
