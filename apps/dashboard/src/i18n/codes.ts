@@ -530,8 +530,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el nombre para clientes en el idioma predeterminado del sitio.",
   },
   "extras.product_has_variants": {
-    en: "This product has active variants, so it can't be offered as an extra. Offer one of its variants instead.",
-    es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra. Ofrece una de sus variantes.",
+    en: "This product has active variants, so it can't be offered as an extra.",
+    es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra.",
   },
   // The screen shows the names of the lists after this sentence.
   "product.offered_as_extra": {

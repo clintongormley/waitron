@@ -869,13 +869,16 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   a retrieved order was routed through `#syncIfDirty` in 29b7234ae (2026-08-18, #101). **Next action:** give the till a way to save a label
   without re-sending the lines, so the stored extras and locked prices are kept.
 - **DONE (owner decision 2026-09-24, PR to be added): an extras list can no longer offer a product
-  with Active variants**, so no list reaches the till with items it leaves out. Saving an extras
-  list that names such a product is refused `extras.product_has_variants` (409), naming the item;
-  a save that would give a product an extras list offers an Active variant, from the parent's
-  editor or the variant's own page, is refused `product.offered_as_extra` (409), naming every list
-  that offers it. A variant itself may still be an extra, and a product whose variants are all
-  Inactive may still be offered. The order-path refusals stay, for rows the catalogue's saves did
-  not write.
+  with Active variants.** Saving an extras list that names such a product is refused
+  `extras.product_has_variants` (409), naming the item; a save that would give a product an extras
+  list offers an Active variant, from the parent's editor or the variant's own page, is refused
+  `product.offered_as_extra` (409), naming every list that offers it. A variant itself may still be
+  an extra, and a product whose variants are all Inactive may still be offered. The order-path
+  refusals stay.
+- **The extras form cannot pick a variant.** The catalogue accepts a variant as an extras item
+  (owner decision 2026-09-24), but the extras form's product picker lists top-level products only
+  (`listProducts`, `packages/catalogue/src/operations.ts`), so a manager cannot choose one from the
+  dashboard. **Next action:** decide whether the picker should list variants.
 - **The header of the shipped `packages/media/drizzle/0001_image_references.sql` still describes
   `product_variants.image`,** now a dropped table. It stays unedited, for the reason given under
   Task 1.
