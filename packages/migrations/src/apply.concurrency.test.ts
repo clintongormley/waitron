@@ -7,7 +7,7 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "./apply.js";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
@@ -150,6 +150,8 @@ interface HostRun {
   end: number;
 }
 
+const spawnedHosts: ChildProcessWithoutNullStreams[] = [];
+
 function host(venue: string): {
   child: ChildProcessWithoutNullStreams;
   ready: Promise<void>;
@@ -162,6 +164,7 @@ function host(venue: string): {
     join(import.meta.dirname, "index.ts"),
     venue,
   ]);
+  spawnedHosts.push(child);
   let out = "";
   let err = "";
   child.stderr.on("data", (chunk) => (err += String(chunk)));
@@ -179,6 +182,8 @@ function host(venue: string): {
       else resolve(JSON.parse(line) as HostRun);
     });
   });
+  // A host that dies before `ready` rejects both; only `ready` is awaited by then.
+  done.catch(() => {});
   return { child, ready, done };
 }
 
@@ -200,6 +205,9 @@ function journalRows(venue: string): number {
 }
 
 describe("two real migrating processes on one venue folder", () => {
+  afterEach(() => {
+    for (const child of spawnedHosts.splice(0)) child.kill("SIGKILL");
+  });
   afterAll(() => {
     for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
   });
