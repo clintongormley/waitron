@@ -287,8 +287,7 @@ function changeState(
  * own error is what an operator needs, in the stayed-up callback a floating rejection would kill a
  * HEALTHY server two minutes after it booted, and in the retry a failed reset just means the page
  * comes back after the restart. The one write that is NOT routed through here is the pre-boot
- * counter, which is allowed to throw: a state volume that cannot be written is a box that can never
- * escalate, and the server would fail on the same volume moments later anyway.
+ * counter, which is allowed to throw: a box whose count cannot be written can never escalate.
  */
 async function persistState(
   deps: EntryDeps,
@@ -561,14 +560,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
  *
  * Missing counts because the holder writes its file in the same synchronous step that takes the
  * lock, and removes it just before letting the lock go (`packages/store/src/venue-lock.ts`). A live
- * holder without one is therefore a start refused within the instant of the take, a start refused
- * within the instant of the release (which counts once), or a process of an image from before the
- * file existed.
+ * holder without one includes a start refused within the instant of the take, a start refused
+ * within the instant of the release (which counts once), a file deleted by hand (the next heartbeat
+ * rewrites it), and a process of an image from before the file existed.
  *
- * Stale here is `VENUE_HOLDER_STALE_MS`, 30 s, while the holder's own watchdog kills it only after
- * `WATCHDOG_KILL_MS`, 120 s (`packages/store/src/venue-liveness.ts`). The gap is deliberate: a long
- * synchronous statement such as a backup's `VACUUM INTO` stops the heartbeat without the holder being
- * stuck, and killing it would be worse than counting a start or two against it.
+ * Stale is `VENUE_HOLDER_STALE_MS`, shorter than the watchdog's `WATCHDOG_KILL_MS` on purpose; the
+ * reason is at `WATCHDOG_KILL_MS` (`packages/store/src/venue-liveness.ts`).
  */
 async function recordRefusal(
   deps: EntryDeps,

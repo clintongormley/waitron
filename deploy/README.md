@@ -7,15 +7,18 @@ life. Back those up and you have backed up the box.
 **The venue's own database is a folder inside the `state` volume.** The app opens
 `/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars,
 the `migrations.lock` file two migrating processes queue on, and the `venue.lock` file that refuses
-a second process opening the folder with the lock. While either lock file is held a `-journal`
-appears beside it, and a crash can leave that behind. None of these lock files holds data; do not
-delete them, because a process that finds one missing takes a new lock beside the one still held.
+a second process opening the folder with the lock, and `venue.holder.json`, which names the process
+holding the folder (a killed holder leaves it behind for the next holder to overwrite). The state
+folder itself holds `recovery.lock`, which serialises changes to `recovery.json`. While any of these
+lock files is held a `-journal` appears beside it, and a crash can leave that behind. None of the
+lock files holds data; do not delete them, because a process that finds one missing takes a new
+lock beside the one still held.
 There is no database server in the app's path, no connection string and no database password.
 
 | volume        | mounted at                     | holds                                                                                                                           |
 | ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, the CA and leaf PEMs |
-| `logs`        | `/var/lib/waitron/logs`        | the rotating log file                                                                                                           |
+| `logs`        | `/var/lib/waitron/logs`        | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                |
 | `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                      |
 | `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                                        |
 | `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                             |

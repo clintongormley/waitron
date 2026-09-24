@@ -4879,8 +4879,8 @@ decided the first two on 2026-09-24, and A18d (branch `feat/venue-lock-liveness`
 page. Every holder now keeps `venue.holder.json` beside `venue.lock` with a heartbeat. A refused
 start counts, as `provisioning.database_holder_stalled`, when that heartbeat is 30 s old or more
 or the file is missing, and the recovery page names the holder's kind. A holder whose main thread has not run
-for 120 s is killed by its own watchdog thread, which records its stack first
-([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
+for 120 s is killed by its own watchdog thread, which first records the main thread's stack when it can read it (it cannot while that thread
+is inside one long synchronous database statement) ([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
 (2) `recovery.json` had no lock of its own, so a refused start could put back a count the running
 server had cleared, or erase a failure another start recorded. Every change to it now holds
 `recovery.lock`, and a clear count in the file stops a refused start's undo taking off a failure
@@ -4891,7 +4891,7 @@ recognised — a wrapped one, or the store's raw `VenueInUseError`, would still 
 them today). Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
-process is copied into five test files.
+process is copied into several test files.
 Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed pointer
 `current.json` naming the live generation, generation claiming and pruning, and `probeBucket`, the
 check behind the settings screen's Test button), landed as #569. Task 6 makes the server call it at boot, through

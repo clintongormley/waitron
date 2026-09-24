@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 /**
  * Who holds the venue folder, beside `venue.lock`, so a process refused the folder can tell a live
- * holder from a frozen one. Written only by the process holding the lock; removed by it before the
- * lock is let go.
+ * holder from a frozen one. Written only by the process holding the lock and removed on its last
+ * release; a holder that dies leaves it for the next holder to overwrite.
  */
 export const VENUE_HOLDER_FILE = "venue.holder.json";
 
@@ -29,9 +29,9 @@ export interface VenueHolder {
 }
 
 /**
- * How long without a heartbeat before a process refused the folder calls its holder frozen: six of
- * the holder's 5 s rewrites. The holder's own watchdog kills on a longer bound
- * (`WATCHDOG_KILL_MS`, `./venue-liveness.ts`).
+ * How long without a heartbeat before a process refused the folder calls its holder frozen: six
+ * `HOLDER_HEARTBEAT_MS` rewrites. Why the watchdog's `WATCHDOG_KILL_MS` is longer is stated there
+ * (`./venue-liveness.ts`).
  */
 export const VENUE_HOLDER_STALE_MS = 30_000;
 

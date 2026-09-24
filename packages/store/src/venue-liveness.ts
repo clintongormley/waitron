@@ -10,11 +10,11 @@ import {
 export const HOLDER_HEARTBEAT_MS = 5000;
 export const WATCHDOG_TICK_MS = 1000;
 /**
- * How long without a tick before the watchdog kills the process — far above the 30 s after which a
- * refused start calls the heartbeat stale, because killing a backup mid-statement is worse than a
- * frozen process living longer. Measured 2026-09-24 on Node v26.7.0, macOS NVMe: `VACUUM INTO` of a
- * 2.3 GB database took 2412 ms and `pragma wal_checkpoint(truncate)` 32 ms; a box on slower storage
- * is slower.
+ * How long without a tick before the watchdog kills the process — far above `VENUE_HOLDER_STALE_MS`,
+ * after which a refused start calls the heartbeat stale, because killing a backup mid-statement is
+ * worse than a frozen process living longer. Measured 2026-09-24 on Node v26.7.0, macOS NVMe:
+ * `VACUUM INTO` of a 2.3 GB database took 2412 ms and `pragma wal_checkpoint(truncate)` 32 ms; a box
+ * on slower storage is slower.
  *
  * Any stretch with no timer turn looks frozen, including a long run of awaited synchronous
  * `node:sqlite` work: measured on Node v26.7.0, 30M `await Promise.resolve()` ran 680 ms and a 50 ms

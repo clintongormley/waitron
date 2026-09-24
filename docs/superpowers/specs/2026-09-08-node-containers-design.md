@@ -449,7 +449,9 @@ read, never trusted from the file, so a hand-edited value cannot pin a box into 
 
 Normal → **recovery** after 3 consecutive failed boots. (2026-09-24: a start refused
 `provisioning.database_in_use` — another process holding the venue folder — no longer counts; see
-`deploy/README.md`.) The entrypoint increments the count
+`deploy/README.md`.) (2026-09-24, later the same day: a refusal counts again, as
+`provisioning.database_holder_stalled`, when the holder's `venue.holder.json` heartbeat is stale
+(`VENUE_HOLDER_STALE_MS`, 30 s), or the file is missing or unreadable; see `deploy/README.md`.) The entrypoint increments the count
 **before** starting the server, not in a failure handler: a boot that HANGS never throws, and a
 counter written only on a caught error would leave such a box restart-looping forever without ever
 escalating. It clears the count only on a boot that STAYS UP — `startServer` resolved (migrations

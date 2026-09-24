@@ -1334,9 +1334,10 @@ retry) is one read and one write while holding `recovery.lock` in the state fold
 instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
 connection in one process with `busy_timeout = 1500` blocked for 4093 ms with a 50 ms timer firing 0
 times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`. Three
-of its races run real child processes twice: with the lock, where no count is lost, and with the
-lock held around the write alone, where the test requires that a count IS lost. That second run is
-what shows each schedule races at all. The lock around the write stays in it because two writers
+of its races run real child processes twice: with the lock, where no write is lost, and with the
+lock held around the write alone, where the test requires that a write IS lost — another start's
+counted failure in the two counting races, the running server's clear in the clear-versus-undo race.
+That second run is what shows each schedule races at all. The lock around the write stays in it because two writers
 without one clash on `recovery.json.tmp` and crash, which is not the failure being tested.
 
 The lock orders the writes; it does not decide what a refused start's undo takes off. For that,

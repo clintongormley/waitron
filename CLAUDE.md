@@ -333,9 +333,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
 - **The unauthenticated recovery page renders fixed strings chosen by code, never the caught error's
-  words.** Only the error CODE and the LOG TAIL come from outside the image, which is why no code's
-  params may carry a secret. A page edit that interpolates a caught message breaks a security
-  boundary nothing outside the design states.
+  words.** Only the error CODE, `lastFailureAt` and the LOG TAIL reach it as text from outside the
+  image (the failure count is read as a number, and a recorded holder kind only picks a fixed name
+  from a closed table), which is why no code's params may carry a secret. A page edit that
+  interpolates a caught message breaks a security boundary nothing outside the design states.
   The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
   `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
@@ -458,9 +459,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   hold. A tool documented to run beside the server passes `exclusive: false`; a command that changes
   the folder's files takes `lockVenueDatabase` before its first change. Never unlink `venue.lock`.
   The server's own Litestream child also opens `venue.db` and takes no lock; the server stops it
-  before the store closes. Guard: `packages/store/src/venue-lock.test.ts`, weaker than its name — it proves the lock, not
-  that each caller takes it, so a caller passing `exclusive: false` wrongly is seen by nothing.
-  Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+  before the store closes. Every holder also writes `venue.holder.json`, and a watchdog thread
+  SIGKILLs the process once its main thread has gone `WATCHDOG_KILL_MS` (two minutes,
+  `packages/store/src/venue-liveness.ts`) without a timer turn. An entry point names itself with
+  `setVenueHolderIdentity` (`packages/db/src/venue-holder-identity.ts`); nothing checks that a new
+  one does. Every change to `recovery.json` goes through `updateRecoveryState` under
+  `recovery.lock`; never unlink either lock file. Guard: `packages/store/src/venue-lock.test.ts`,
+  weaker than its name — it proves the lock, not that each caller takes it, so a caller passing
+  `exclusive: false` wrongly is seen by nothing. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
   [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)

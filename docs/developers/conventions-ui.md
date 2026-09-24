@@ -290,8 +290,10 @@ by `scripts/deploy-image-env.test.ts`; spec
 ## The unauthenticated recovery page renders fixed strings chosen by code, never the caught error's words
 
 The error's own text goes to the container's stdout only, through `redactSecrets` — the installer's
-channel. Exactly two values on the page come from outside the image: the error CODE and the LOG
-TAIL, and the tail is the wider one, because the shared error boundary writes an `AppError`'s params
+channel. Three strings on the page come from outside the image: the error CODE, `lastFailureAt` and
+the LOG TAIL. The failure count also does, read as a number, and so does a recorded holder kind,
+which only selects a fixed name from a closed table and is never shown itself. The tail is the
+widest, because the shared error boundary writes an `AppError`'s params
 into `waitron.log`. So the convention that params never carry a secret (stated per-code in
 `apps/server/src/errors.ts`) is what keeps a page anyone on the venue's LAN can open safe. A page
 edit that interpolated a caught message, or a new code carrying a credential in its params, breaks a
