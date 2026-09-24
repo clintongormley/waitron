@@ -32,12 +32,6 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS]
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
-  // `delete`, not TRUNCATE: this engine has no TRUNCATE at all, and the statement did not even
-  // reach execution — running this suite before the change printed `Error: near "truncate": syntax
-  // error` from `packages/store/src/node-sqlite-adapter.ts:64`, which killed every case in the
-  // file in its `beforeEach`. `tenant_credentials` is declared with `classify()`, not
-  // `appendOnly()` (`./classification.ts`), so no append-only trigger refuses the delete — the
-  // same reasoning as `packages/fiscal-verifactu/src/acks.test.ts:123`.
   await suite.db.execute(sql`delete from tenant_credentials`);
 });
 
@@ -75,9 +69,6 @@ describe("waitron-credentials set", () => {
     const h = harness(STRIPE_JSON);
     const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(0);
-    // No `::int`: the cast only flattened PostgreSQL's bigint `count` to a JavaScript number, and
-    // this engine returns one already — measured on node v26.7.0, `select count(*) as n` over a
-    // one-row table gives `{ n: 1 }` with `typeof n === "number"`.
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from tenant_credentials`);
     expect(rows.rows[0]!.n).toBe(1);
@@ -93,21 +84,15 @@ describe("waitron-credentials set", () => {
   });
 
   it("NEVER accepts the payload as an argument", async () => {
-    // The rule this test exists for: argv is world-readable in `ps` and lands in shell history. If
-    // a --value flag is ever added and silently tolerated (`strict: false`), this must go red.
+    // argv is world-readable in `ps` and lands in shell history. If a --value flag is ever added
+    // and silently tolerated (`strict: false`), this must go red. Two things about how it is written:
     //
-    // Two things matter about how this is written, both load-bearing:
-    //
-    // - stdin carries a VALID payload — deliberately, not empty. With an empty stdin, an ignored
-    //   `--value` would still fail downstream on "payload is not valid JSON", passing this test
-    //   for the wrong reason even if `--value` were silently accepted.
-    // - `--value=<json>` uses `=` rather than two argv entries. node:util's `parseArgs` treats an
-    //   UNRECOGNIZED `--flag value` (two tokens) as the boolean flag `--flag` followed by a stray
-    //   POSITIONAL, which `allowPositionals: false` rejects independently of `strict` — so that
-    //   form passes this test even under `strict: false`, for the wrong reason again (verified
-    //   directly against node:util). `--value=<json>` binds the value to the flag regardless of
-    //   whether the flag is known, so `strict: true` is the ONLY thing standing between this and
-    //   an accepted secret. That is what makes this test airtight.
+    // - stdin carries a VALID payload. With an empty stdin, an ignored `--value` would still fail
+    //   downstream on "payload is not valid JSON", passing this test for the wrong reason.
+    // - `--value=<json>`, not two argv entries. `parseArgs` treats an UNRECOGNIZED `--flag value`
+    //   as the boolean `--flag` followed by a stray POSITIONAL, which `allowPositionals: false`
+    //   rejects independently of `strict`. `--value=<json>` binds the value to the flag whether or
+    //   not the flag is known, so `strict: true` is the only thing refusing it.
     const h = harness(STRIPE_JSON);
     const code = await runCli(
       ["set", "--purpose", "payments.stripe", `--value=${STRIPE_JSON}`],
@@ -120,11 +105,8 @@ describe("waitron-credentials set", () => {
     const h = harness(STRIPE_JSON);
     const code = await runCli(["set", "--purpose", "nope"], h.deps);
     expect(code).not.toBe(0);
-    // Asserts the CODE itself, not just that the message happens to mention a known purpose:
-    // `USAGE` also lists every purpose, so a mutation that collapsed this whole branch to
-    // `deps.io.stderr(USAGE); return 2;` would still pass a test that checked only for
-    // "payments.stripe" in stderr. `credentials.unknown_purpose` is the one string that proves
-    // this specific structured code — not USAGE — is what actually fired.
+    // The CODE, not only a purpose name: `USAGE` also lists every purpose, so a branch collapsed
+    // to `deps.io.stderr(USAGE); return 2;` would still print "payments.stripe".
     expect(h.err.join("\n")).toContain("credentials.unknown_purpose");
     expect(h.err.join("\n")).toContain("payments.stripe");
   });
@@ -158,18 +140,15 @@ describe("waitron-credentials set", () => {
     );
     expect(code).not.toBe(0);
     // The PARAMS by value, not just the code: swapping the two ternary arms that build them is an
-    // easy, operator-facing bug, and a bare `toContain(code)` stays green through it — the
-    // operator would be told the failure came from stdin while `--file` sat in the same message.
-    // `keyring.test.ts` already closed exactly this gap for `key_ring_incomplete`.
+    // easy, operator-facing bug, and a bare `toContain(code)` stays green through it.
     expect(h.err.join("\n")).toContain(
       'credentials.payload_unreadable {"source":"file","path":"/missing.json"}',
     );
   });
 
   it("rejects a failed stdin read instead of throwing", async () => {
-    // Simulates what bin.ts's TTY guard does — readStdin rejecting — without needing a real
-    // process or terminal. Proves cli.ts's own wrapping (not just bin.ts's) is what stands between
-    // this and an uncaught rejection.
+    // What bin.ts's TTY guard does — readStdin rejecting — without a real terminal: cli.ts's own
+    // wrapping, not just bin.ts's, must turn it into an exit code.
     const h = harness();
     h.deps.io.readStdin = () => Promise.reject(new Error("stdin is a TTY"));
     const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
@@ -203,9 +182,7 @@ describe("waitron-credentials set", () => {
 
   // One test per operand of `set`'s three-part shape guard, each asserting the EXACT exit code.
   // `not.toBe(0)` is not enough here: dropping `typeof parsed !== "object"` still rejects a bare
-  // scalar, just via `validatePayload` with exit 1 instead of the guard with exit 2, so a
-  // non-zero assertion stays green while the operand it is meant to pin is gone. The same guard in
-  // `store.ts` already has one test per operand; this is that standard carried into the CLI.
+  // scalar, just via `validatePayload` with exit 1 instead of the guard with exit 2.
   it("rejects valid JSON that is not an object (an array)", async () => {
     const h = harness(JSON.stringify(["sk_live_LEAK"]));
     const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
@@ -242,12 +219,7 @@ describe("waitron-credentials set", () => {
     // an ordinary, expected rejection.
     const h = harness(STRIPE_JSON);
     const failing = new Error("connection lost");
-    // The fake stubs `withWriteLock`, not `transaction`: `withTransaction` now opens its
-    // transaction by handing the body to the file's write lock
-    // (`packages/db/src/tenancy.ts:44`) rather than by calling `db.transaction`. Stubbing the old
-    // seam left the real `withWriteLock` missing from the fake, and the case failed with
-    // `TypeError: db.withWriteLock is not a function` instead of the error it is about. Only the
-    // fake moved — the assertion below is unchanged.
+    // `withWriteLock`, because `withTransaction` opens its transaction through it.
     h.deps.db = { withWriteLock: () => Promise.reject(failing) } as unknown as CliDeps["db"];
     await expect(runCli(["set", "--purpose", "payments.stripe"], h.deps)).rejects.toBe(failing);
   });
@@ -322,11 +294,8 @@ describe("waitron-credentials delete", () => {
   });
 
   it("rejects an unknown purpose with usage, not a not-found reply", async () => {
-    // Guards `!isPurpose(purpose)` in cli.ts's combined check: an unknown purpose and a
-    // known-but-never-provisioned purpose both end up with `deleteCredential` finding no matching
-    // row, so both currently return a non-zero code — 2/USAGE for the former, 1/"no such
-    // credential" for the latter. A plain `code !== 0` check cannot tell them apart; asserting the
-    // exact code and USAGE text is what makes this mutation-checkable.
+    // Without `!isPurpose(purpose)` an unknown purpose would reach `deleteCredential`, find no
+    // row and exit 1 like a known-but-unprovisioned one; only the exact code tells them apart.
     const h = harness();
     const code = await runCli(["delete", "--purpose", "nope"], h.deps);
     expect(code).toBe(2);
@@ -361,14 +330,8 @@ describe("waitron-credentials rotate", () => {
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 
-    // ROTATED_RING, not the default RING: with the single-key RING every other test in this file
-    // uses, the row just written is ALREADY on the ring's current version, so rotateCredentials
-    // finds nothing to decrypt and reports `rotated 0` — a run in which no plaintext ever existed
-    // to leak. Verified directly: tightening the regex below to
-    // /^rotated 0, already current \d+$/m against the single-key RING PASSES, meaning the old
-    // version of this test would have passed identically against a stub that always returned
-    // `{rotated: 0, alreadyCurrent: 0}`. ROTATED_RING's `previous` matches RING's own key material,
-    // so the row genuinely gets read, decrypted and re-sealed.
+    // ROTATED_RING, not RING: under RING the row just written is already current, so nothing is
+    // decrypted and there is no plaintext to leak.
     const h = harness("", {}, ROTATED_RING);
     const code = await runCli(["rotate"], h.deps);
     expect(code).toBe(0);
@@ -380,10 +343,8 @@ describe("waitron-credentials rotate", () => {
   });
 
   it("rejects rather than crashes when rows still need a key the ring no longer carries", async () => {
-    // The single likeliest operator mistake: running `rotate` after `WAITRON_CREDENTIALS_KEY_PREVIOUS`
-    // was already dropped, while rows are still stamped with that retired version. Same
-    // fail-fast, resolve-don't-reject contract every other command in this file gets from
-    // `reportFailure` — `rotate` did not have it until this test was added.
+    // The likeliest operator mistake: running `rotate` after `WAITRON_CREDENTIALS_KEY_PREVIOUS`
+    // was already dropped, while rows are still stamped with that retired version.
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--purpose", "payments.stripe"], set.deps);
 

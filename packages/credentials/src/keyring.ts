@@ -19,19 +19,12 @@ export interface KeyRing {
 }
 
 /**
- * Reads and VALIDATES the ring once, from an environment-shaped record rather than `process.env`
- * directly, so tests need no global mutation and the host can pass whatever it loaded config from.
- *
- * Validates the ring's SHAPE — present, correctly base64-encoded, correctly sized, a version number
- * for every key, no version collision — loudly, rather than at the first decrypt of the first
- * credential at three in the morning. It does NOT validate that a key's bytes are the ones that
- * actually sealed any stored row: swapping `WAITRON_CREDENTIALS_KEY` for a different-but-valid
- * 32-byte key, without bumping `_VERSION` and without setting `_PREVIOUS`, is accepted here cleanly.
- * `rotate` then reports `rotated 0, already current 1` — a clean-looking maintenance run — and every
- * read afterwards throws `credentials.decrypt_failed`, at exactly the moment this comment used to
- * claim it would pre-empt. Catching that needs a stored-row probe (attempt a real decrypt against a
- * known row before accepting the ring), which this function deliberately does not do — a known
- * limit, not an oversight.
+ * Validates the ring's SHAPE — present, 32 bytes once base64-decoded, a version for every key, no
+ * version collision — and not that a key's bytes are the ones that sealed any stored row. Replacing
+ * `WAITRON_CREDENTIALS_KEY` with a different valid key under an unchanged
+ * `WAITRON_CREDENTIALS_KEY_VERSION` is accepted here; rows stamped with that version are then
+ * skipped by `rotate` as already current, and every read of them throws
+ * `credentials.decrypt_failed`.
  */
 export function loadKeyRing(env: Record<string, string | undefined>): KeyRing {
   const current: KeyEntry = {
@@ -56,22 +49,9 @@ export function loadKeyRing(env: Record<string, string | undefined>): KeyRing {
     key: readKey(env, PREVIOUS),
     version: readVersion(env, PREVIOUS_VERSION, null),
   };
-  // Two members sharing a version has two real consequences, even though loadKeyRing itself
-  // refuses to construct such a ring (this guard is what refuses it): a caller could still build a
-  // KeyRing object by hand, bypassing loadKeyRing entirely, so the properties below describe that
-  // hand-built shape rather than something any committed test constructs. `keyForVersion` checks
-  // `current` before `previous`, so a collision permanently SHADOWS
-  // `previous`'s key for that version number — a row actually sealed under the distinct `previous`
-  // key material decrypts with the wrong bytes and fails GCM authentication; it is never silently
-  // misread. And in `rotateCredentials`, every row stamped with the shared version number satisfies
-  // `row.keyVersion === ring.current.version` and takes the "already current" branch, so a rotate
-  // run against such a ring re-seals NOTHING and reports the whole vault as clean — masking a
-  // stalled rotation, not performing one. (It does NOT let a rotate that forgot to bump the version
-  // "re-seal every row with the same key while reporting success", as this comment previously
-  // claimed: the already-current skip fires before any re-seal could happen.) This is NOT a
-  // "missing" case — both variables were supplied — so it gets its own code rather than reusing
-  // `key_ring_incomplete`, whose params would otherwise tell an operator to set a variable they
-  // have already set.
+  // A shared version would let `keyForVersion`, which checks `current` first, shadow `previous`'s
+  // key, and `rotateCredentials` would count every row on that version as already current and
+  // re-seal nothing. Its own code, not `key_ring_incomplete`: both variables were set.
   if (previous.version === current.version) {
     throw new AppError("credentials.key_ring_version_collision", {
       version: current.version,
@@ -112,12 +92,8 @@ function readVersion(
     throw new AppError("credentials.key_version_invalid", { variable, reason: "empty" });
   }
   const value = Number(raw);
-  // Number("") is 0 and Number("1.5") is 1.5, so both a blank and a fractional version must be
-  // rejected explicitly — parseInt would silently accept "1.5" as 1 and "1abc" as 1. `raw` NEVER
-  // appears in the thrown error: an operator who transposed WAITRON_CREDENTIALS_KEY and
-  // WAITRON_CREDENTIALS_KEY_VERSION (or templated both from one value) hands this function key
-  // material, and this package's own bin.ts prints an AppError's params verbatim to stderr — a
-  // shape classification is all the operator needs to fix the mistake.
+  // `raw` NEVER appears in the thrown error: a transposed key and version variable hands this
+  // function key material, and `bin.ts` prints an AppError's params to stderr.
   if (!Number.isInteger(value)) {
     throw new AppError("credentials.key_version_invalid", { variable, reason: "not-an-integer" });
   }

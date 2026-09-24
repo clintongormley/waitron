@@ -1,13 +1,6 @@
-// Runs the entry point against a REAL migrated venue directory — the two SQLite files the product
-// opens — because what this file decides is WHERE the vault lives, and a typecheck cannot see that.
-//
-// Both handles `openVenueDatabase` returns are typed on the whole schema barrel
-// (`packages/db/src/client.ts:44-54`), so passing the NODE handle where the venue handle belongs
-// compiles cleanly and is refused by the engine at the first query. `tenant_credentials` is
-// classified `local` (`./classification.ts`), which names whose rows they are, not a file:
-// `packages/migrations/src/apply.ts:99` applies every set to `store.venue` and leaves the node file
-// empty. The `set`/`list` round trip below is what holds the entry point to the file its own
-// migrations actually created.
+// Runs the entry point against a real migrated venue directory. Both handles `openVenueDatabase`
+// returns are one type, `Database`, so passing the node handle where the venue one belongs
+// compiles; the `set`/`list` round trip below is what holds the vault to the venue file.
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -72,7 +65,6 @@ describe("waitron-credentials against a real venue directory", () => {
     if (venueDir !== undefined) await rm(venueDir, { recursive: true, force: true });
   });
 
-  /** Every stored credential, read back through the product's opener on the VENUE handle. */
   async function storedPurposes(): Promise<string[]> {
     const store = await openVenueDatabase(venueDir);
     try {
@@ -86,8 +78,6 @@ describe("waitron-credentials against a real venue directory", () => {
   }
 
   it("the directory starts with no credentials, so a row below can only come from the command", async () => {
-    // The control: without it every assertion here would pass against a directory the command
-    // never wrote to.
     expect(await storedPurposes()).toEqual([]);
   });
 
@@ -119,9 +109,6 @@ describe("waitron-credentials against a real venue directory", () => {
   });
 
   it("refuses an EMPTY WAITRON_VENUE_DIR rather than resolving it to the working directory", async () => {
-    // `join("", "venue.db")` is the RELATIVE `venue.db`, so an empty value would stand a vault up
-    // wherever the process happens to be running — the same refusal `resolveVenueDir` in
-    // `packages/provisioning/src/cli.ts:645` carries for the same variable.
     const h = capture();
     expect(await runBin(["list"], { ...KEY_ENV, WAITRON_VENUE_DIR: "" }, h.io)).toBe(2);
     expect(h.err.join("\n")).toContain("WAITRON_VENUE_DIR");
@@ -131,8 +118,6 @@ describe("waitron-credentials against a real venue directory", () => {
     const h = capture();
     const code = await runBin(["list"], { WAITRON_VENUE_DIR: venueDir }, h.io);
     expect(code).toBe(1);
-    // The code itself, not `Error` — a bare `toBeInstanceOf(Error)` would pass for a driver fault
-    // too (CLAUDE.md §4).
     expect(h.err.join("\n")).toContain("credentials.key_missing");
   });
 

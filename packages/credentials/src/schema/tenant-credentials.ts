@@ -3,18 +3,10 @@ import { check, primaryKey } from "drizzle-orm/sqlite-core";
 import { binary, count, label, nowIso, table, tsString } from "@waitron/db";
 
 /**
- * The credentials for one purpose, sealed. The payload is a JSON object of string fields
- * whose names this package validates but whose MEANING it never learns — `secretKey` is a string
- * here and a Stripe key only to the host that reads it. That is what keeps a deployment-data table
- * out of the adapters' way; see the design's §3.
- *
- * The row carries no plaintext at all, not even a field-name list: `ciphertext` covers the whole
- * JSON object, so an operator with SELECT on this table learns which purposes are provisioned
- * and when they were last written — plus `key_version`, and the ciphertext's own
- * LENGTH. That length is not nothing: AES-256-GCM is length-preserving (ciphertext length tracks
- * plaintext length, modulo the fixed 16-byte tag carried separately in `auth_tag`), so for
- * `fiscal.aeat` the row's `octet_length(ciphertext)` reveals the certificate blob's approximate
- * size to anyone with SELECT. Nothing here reveals field names or values.
+ * The credentials for one purpose, sealed. The row carries no plaintext, not even field names:
+ * `ciphertext` covers the whole JSON object. A reader of the table still learns which purposes are
+ * provisioned, when, on which key version, and each payload's length — GCM ciphertext is as long as
+ * its plaintext, so `fiscal.aeat`'s row reveals the certificate's approximate size.
  */
 export const tenantCredentials = table(
   "tenant_credentials",

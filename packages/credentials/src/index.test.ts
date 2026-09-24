@@ -25,22 +25,14 @@ describe("the public surface", () => {
   });
 
   it("does not export the CLI", () => {
-    // `runCli` (cli.ts) and bin.ts's entry point are the provisioning tool's own surface, reached
-    // through the bin — never through this library barrel. The exact-list assertion above already
-    // pins this (an export of `runCli` would fail it), but this makes the intent explicit rather
-    // than incidental.
     expect(Object.keys(api)).not.toContain("runCli");
   });
 });
 
 /**
- * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
- * runs it, which is why tenant-credentials.ts's PK/check block shows as uncovered even though
- * every other test in this package imports the table. Calling `getTableConfig` forces the callback
- * to run, and the assertions below are the meaningful check that tenant_credentials' constraints
- * actually exist under the names the migration and cipher/store depend
- * on — not a coverage stunt. Mirrors packages/scheduler/src/index.test.ts and
- * packages/payments/src/index.test.ts.
+ * drizzle invokes a table's `(t) => [...]` extraConfig callback LAZILY, so a plain import never
+ * runs it. `getTableConfig` forces it, and the assertions pin the constraint names the migration
+ * declares.
  */
 describe("tenant_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares tenant_credentials' primary key on purpose, no foreign key, and its checks", () => {
@@ -59,18 +51,8 @@ describe("tenant_credentials constraint declarations (forces the lazy extraConfi
 });
 
 /**
- * A COMPILE-TIME case, and since the storage swap the only one on this subject: it goes red if a
- * column stops DECLARING `Uint8Array`. `pnpm --filter @waitron/credentials typecheck` is what runs
- * it.
- *
- * The RUNTIME half it used to sit beside — `credentials.test.ts`'s "hands the three sealed columns
- * back as plain Uint8Arrays, not node Buffers" — was deleted, because on this engine it can no
- * longer fail. `node:sqlite` hands a BLOB back as a plain `Uint8Array` whatever the column
- * declares (measured 2026-09-22 on Node v26.7.0, selecting a `blob` column back through
- * `openVenueDatabase`: `constructor.name` is `Uint8Array` and `Buffer.isBuffer` is `false`), so no
- * suite here can tell the column's `fromDriver` from the driver's own value. Nothing now checks at
- * RUNTIME that what a read hands back is not a node Buffer; `credentials.test.ts`'s own header
- * records that deletion and the argument behind it.
+ * A COMPILE-TIME case: it goes red if a column stops DECLARING `Uint8Array`.
+ * `pnpm --filter @waitron/credentials typecheck` is what runs it.
  */
 describe("what a read hands back for the three sealed columns", () => {
   it("types them as Uint8Array, not as a node Buffer", () => {
