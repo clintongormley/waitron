@@ -2756,16 +2756,12 @@ image constraints under *Detail → Box image*.
   (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080
   to about 270, tests included), `packages/printing` (#572, about 1,040 to about 350, tests
   included), `packages/bookings` (#574, about 1,020 to about 270, tests included),
-  `packages/credentials` (#577, about 990 to about 410, tests included) and `packages/shared` (#579,
-  about 945 to about 330, tests included). A pruning pull request
+  `packages/credentials` (#577, about 990 to about 410, tests included), `packages/shared` (#579,
+  about 945 to about 330, tests included) and `packages/scheduler` (#581, about 820 to about 350,
+  tests included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577
-  and #579 and left for the package that owns each, all still OPEN:
-  - The journal-table reason in the `drizzle.config.ts` of `scheduler` (#577 fixed credentials')
-    ("`generate` would … silently re-apply its own from zero") is wrong:
-    drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
-    the set with older timestamps would never run (measured by #555's review with the real
-    `runMigrations`; workforce's, payments' and fiscal-verifactu's configs now say so).
+  #579 and #581 and left for the package that owns each, all still OPEN:
   - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
     and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
     engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
@@ -2963,6 +2959,21 @@ image constraints under *Detail → Box image*.
     records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
     says the descriptor is the only place bookings is named, while
     `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
+  - Found by #581 (`packages/scheduler`). CLAUDE.md §3 says the nested `tx.transaction(...)` in
+    `enqueueSuccessor` confines a losing attempt's own writes; its body is one insert, which SQLite
+    backs out by itself, so there it changes nothing today — #581's review replaced the nested call
+    with a bare insert and `store.test.ts` and `store.concurrency.test.ts` still passed (24 tests).
+    `store.ts` now says so; CLAUDE.md §3 needs the same narrowing through a pull request (lane C
+    item C3.12b). `insertClose` in `packages/reporting/src/record-daily-close.ts` may be the same
+    single-insert case (read, not run). The reason "v8 reports phantom uncovered branches" given
+    for excluding barrel `index.ts` files from coverage did not hold in scheduler: with the
+    exclusion removed, both barrels reported 0 branches at 100% and the totals did not move. So
+    scheduler's two barrel excludes in `vitest.config.ts` can go (a config change, not made), and
+    the same reason is still given in the configs of workforce, credentials, bookings,
+    payments-sumup, workforce-es, server-kit, dashboard-kit and fiscal-none (not re-measured
+    there). `claimGap` uses an untargeted `.onConflictDoNothing()` on a table with two unique
+    constraints (the `id` primary key and `scheduled_runs_key`); CLAUDE.md §3 asks for a named
+    target there, though `id` is freshly generated (read, not run).
   - Found by #579 (`packages/shared`). A money amount can pass the twelve-integer-digit bound on its
     way into cents: `assertMoney` checks the integer digits before rounding, so `decimalToCents`
     turns `999999999999.999` into 100000000000000 cents, and `centsToDecimal` turns that back into
@@ -3021,7 +3032,9 @@ image constraints under *Detail → Box image*.
   `migrations.test.ts` stayed green without core. Second, `applyMigrations` over the real manifest
   with core moved: every set migrated cleanly with core AFTER it except `media`, refused `no such
   table: main.products`, because `media/drizzle/0001_image_references.sql` creates triggers ON
-  core's `products`. So: `scheduler` and `identity`'s `migrations.ts` say the set migrates before
+  core's `products`. So (2026-09-24: #581 moved scheduler's to one line in
+  `packages/scheduler/src/schema/schema-conformance.test.ts`, "No prerequisites"): `scheduler` and
+  `identity`'s `migrations.ts` say the set migrates before
   core; `credentials`' says the same, plus that the code needs core present (`credentialProvisioned`
   reads `tenants`, the drain reads `change_log`); the two `migrations.test.ts` suites no longer
   list core; the manifest test is now "puts core first; media, which creates triggers on core's
@@ -4819,7 +4832,8 @@ it; and a correction must not decrement a count where it should drop it.
   and `packages/db/drizzle/0001_behavioural_triggers.sql`, for the hash reason above.
 - **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
   claim — DONE (2026-09-23, PR #516).** Neither set needs core to have
-  run first; both now say so, with the experiment in the `tenants` foreign key entry above.
+  run first; both now say so, with the experiment in the `tenants` foreign key entry above
+  (2026-09-24: scheduler's now says it in its `schema-conformance.test.ts`, #581).
 - **The grep receipt in `apps/server/src/promote-endpoint-e2e.test.ts` — DONE (2026-09-23, PR
   #516).** #492 had already reworded "no matches" to "only these three
   comment lines", and that held when run: `grep -rn WAITRON_ADMIN_DATABASE_URL apps packages

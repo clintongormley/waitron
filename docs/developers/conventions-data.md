@@ -1118,7 +1118,10 @@ two-column `UNIQUE`.
 `tx.transaction(...)`, which the adapter emits as `savepoint` / `release` / `rollback to` whenever a
 transaction is already open (`packages/store/src/node-sqlite-adapter.ts` — SQLite refuses a `begin`
 inside a `begin`). What that buys is CONFINEMENT: a losing attempt's own partial writes are backed
-out with it rather than left for the enclosing transaction to commit.
+out with it rather than left for the enclosing transaction to commit. In `enqueueSuccessor` the
+nested body is one insert, which SQLite backs out by itself, so there it confines nothing today:
+with the nested call replaced by a bare insert, `store.test.ts` and `store.concurrency.test.ts`
+still passed, 24 tests (#581's review, 2026-09-24).
 
 HISTORICAL, PostgreSQL, and the cost that put the savepoints there in the first place. Measured on
 PostgreSQL 18.6 (`postgres:18-alpine`, 2026-09-21): in one transaction, an insert into a second table
@@ -1127,12 +1130,13 @@ aborted, commands ignored until end of transaction block`, `COMMIT` printed `ROL
 table held 0 rows afterwards — the control being the same sequence without the duplicate key, which
 left 1 row. `enqueueSuccessor` caught the duplicate key a lost race produces and returned `false`,
 with no savepoint. Its only caller writes the run completion first and enqueues second on the same
-transaction — `completeRun` at `packages/scheduler/src/run.ts:217`, `enqueueSuccessor` at `:231` — so
+transaction — `completeRun` at `packages/scheduler/src/run.ts:181`, `enqueueSuccessor` at `:195` — so
 the completion was already written when the abort happened, and it went away when the transaction
 committed as a rollback. The run stayed `running` with a `started_at` that never cleared, which is
 the state another runner reclaims as stale once it is older than `staleAfterMs` (one hour by default,
-`DEFAULTS` in `packages/scheduler/src/derive.ts`). Nothing raised an error at any point. The guard is
-the loser's second enqueue in `packages/scheduler/src/store.concurrency.test.ts`.
+`DEFAULTS` in `packages/scheduler/src/derive.ts`). Nothing raised an error at any point. The loser's-second-enqueue case that guarded it is no longer
+in `packages/scheduler/src/store.concurrency.test.ts`; its "enqueueSuccessor's duplicate-key catch"
+cases cover the catch itself (2026-09-24).
 
 Since 2026-09-21 `withTransaction` ends every transaction with a drain of `change_log`
 (`packages/db/src/tenancy.ts`). On PostgreSQL that made the mistake above at least loud, because a
