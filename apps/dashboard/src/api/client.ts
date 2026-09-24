@@ -3133,20 +3133,22 @@ export class DashboardApi {
   }
 
   /** `POST /api/backup/apply` — configure + enable backups from the wizard; returns the fresh status.
-   * Rejects with a `backup.*` `{ code }` (env-managed, non-primary, an unstorable/too-short key, a bad
-   * schedule/destination) the screen surfaces via `codeMessage`. */
+   * Rejects with a `backup.*` `{ code }` (env-managed, non-primary, an unstorable/too-short key, a key
+   * different from the one the box already holds, a bad schedule/destination) the screen surfaces via
+   * `codeMessage`. */
   applyBackup(body: BackupApplyBody): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/apply", "POST", body);
   }
 
   /** `GET /api/backup/recovery-key` — the EFFECTIVE running recovery key so an admin can re-record it
-   * (the rotate screen re-shows the OLD key before changing it). `null` when no backup is configured. */
+   * (the rotate screen re-shows the OLD key before changing it). `null` when the box holds no key. */
   getBackupRecoveryKey(): Promise<{ key: string | null }> {
     return this.#request<{ key: string | null }>("/api/backup/recovery-key", "GET");
   }
 
   /** `POST /api/backup/rotate` — change the recovery key, reusing the running destination/schedule/
-   * retention; returns the fresh status. Archives taken before the rotate still need the OLD key. */
+   * retention, or changing the key alone on a box with no destination; returns the fresh status.
+   * Archives taken before the rotate still need the OLD key. */
   rotateBackupKey(body: { recoveryKey: string }): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/rotate", "POST", body);
   }

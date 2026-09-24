@@ -164,7 +164,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountBackupApi } from "./backup-api.js";
-import { loadBackupConfig } from "./backup-config.js";
+import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -2049,6 +2049,8 @@ export async function startServer(
   // reads this same holder — so both refer to one map. It is process-lived and empty until the first
   // sweep tick after boot.
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
+  const readRecoveryKey = async (): Promise<string | undefined> =>
+    loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
     isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
@@ -2187,6 +2189,7 @@ export async function startServer(
       supervisor: backupSupervisor,
       db,
       stateDir: config.stateDir,
+      readRecoveryKey,
     },
     log,
   );

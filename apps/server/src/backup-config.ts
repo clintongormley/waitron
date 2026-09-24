@@ -194,6 +194,20 @@ function parseDestinations(env: Env): BackupDestination[] {
 }
 
 /**
+ * The recovery key on its own, without the archive destination `loadBackupConfig` requires first.
+ * Unset or empty is `undefined`; a key under `MIN_PASSPHRASE_LENGTH` throws
+ * `backup.recovery_key_too_short`, the archive's floor.
+ */
+export function loadRecoveryKey(env: Env): string | undefined {
+  const recoveryKey = env.WAITRON_BACKUP_RECOVERY_KEY;
+  if (isUnset(recoveryKey)) return undefined;
+  if (recoveryKey.length < MIN_PASSPHRASE_LENGTH) {
+    throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+  }
+  return recoveryKey;
+}
+
+/**
  * Enabled iff at least one destination is configured (`WAITRON_BACKUP_DIR` and/or
  * `WAITRON_BACKUP_DESTINATIONS` — see `parseDestinations`); with neither set this returns
  * `undefined` and no backup duty runs, the same off-switch `loadTunnelConfig` uses for an empty
@@ -207,11 +221,8 @@ export function loadBackupConfig(env: Env): BackupConfig | undefined {
   const destinations = parseDestinations(env);
   if (destinations.length === 0) return undefined;
 
-  const recoveryKey = env.WAITRON_BACKUP_RECOVERY_KEY;
-  if (isUnset(recoveryKey)) throw new AppError("backup.recovery_key_missing", {});
-  if (recoveryKey.length < MIN_PASSPHRASE_LENGTH) {
-    throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
-  }
+  const recoveryKey = loadRecoveryKey(env);
+  if (recoveryKey === undefined) throw new AppError("backup.recovery_key_missing", {});
 
   return {
     destinations,
