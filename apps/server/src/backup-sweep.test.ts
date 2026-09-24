@@ -207,6 +207,38 @@ describe("runOnce (fan-out)", () => {
     ]);
   });
 
+  it("lets other work run while it derives the key", async () => {
+    const order: string[] = [];
+    let timer!: Promise<void>;
+    const sweepDeps = deps([
+      new (class extends FakeBackend {
+        override async put(key: string, bytes: Uint8Array) {
+          order.push("encrypted");
+          await super.put(key, bytes);
+        }
+      })("a"),
+    ]);
+    // The key is read once, as the encryption's argument, so the timer is set just before it
+    // starts. The read count below fails the test if an earlier read is ever added.
+    let keyReads = 0;
+    Object.defineProperty(sweepDeps, "recoveryKey", {
+      get: () => {
+        keyReads += 1;
+        timer = new Promise<void>((resolve) =>
+          setTimeout(() => {
+            order.push("timer");
+            resolve();
+          }, 0),
+        );
+        return "recovery-key-1";
+      },
+    });
+    await runOnce(sweepDeps);
+    await timer;
+    expect(keyReads).toBe(1);
+    expect(order).toEqual(["timer", "encrypted"]);
+  });
+
   it("fail-visible: a throwing manifest build ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const boom = new Error("journal unreadable");

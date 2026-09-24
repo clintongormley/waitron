@@ -15,7 +15,7 @@ const MIN_ENTRY_BYTES = 4 + 8;
 /** Pack named entries into ONE deterministic binary container: `MAGIC(4) | version(1) |
  * entryCount(u32 LE) | [ nameLen(u32 LE) | name(utf8) | dataLen(u64 LE) | data ]*`, in the order
  * given. Entirely in-memory (`Buffer.concat`) — no streaming, a deliberate v1 deferral. This is the
- * container that gets encrypted ONCE as a whole by `encryptArtifact` (artifact-cipher.ts); it does
+ * container that gets encrypted ONCE as a whole by the artifact cipher (artifact-cipher.ts); it does
  * no encryption itself. */
 export function packArchive(entries: ArchiveEntry[]): Buffer {
   const header = Buffer.alloc(MAGIC.length + 1 + 4);

@@ -39,7 +39,7 @@ import type { Database } from "@waitron/db";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
-import { encryptArtifact } from "./artifact-cipher.js";
+import { encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { BackupSchedule } from "./backup-config.js";
@@ -193,7 +193,7 @@ export async function runOnce(
     await chmod(staged, 0o600);
     const dumpBytes = await readFile(staged);
     const entries = assembleArchiveEntries(manifest, dumpBytes, parts);
-    const ciphertext = encryptArtifact(packArchive(entries), deps.recoveryKey);
+    const ciphertext = await encryptArtifactAsync(packArchive(entries), deps.recoveryKey);
     const key = backupArchiveKey(stamp);
     // Fan out to every backend concurrently; each keeps its own try/catch so a THROWING failure is
     // logged and swallowed rather than rejecting the batch — a throwing backend never costs the

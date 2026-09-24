@@ -4228,6 +4228,14 @@ sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing 
 rejoin-level case with sidecars on disk.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
+Every synchronous `deriveKey` caller still blocks the event loop while it derives, among them:
+`encodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts:286`, through
+`encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts:83`) —
+`decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts:358`, on the request path,
+decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeState`
+(`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
+`decryptBundle` (`apps/server/src/recovery-bundle.ts:44` and `:140`). Task 2b moved the backup
+sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
 **Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
 backup going after a pause only "if Litestream uploads a fresh full copy on restart". Measurement 1
 saw no new full copy, yet a restore after the restart held every sale, so it recorded
