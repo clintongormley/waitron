@@ -2789,10 +2789,28 @@ image constraints under *Detail → Box image*.
   and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included) and
   `packages/fiscal` (#592, about 690 to about 245, tests included) and `packages/payments-sumup`
   with `packages/migrations` (#597, about 1,090 to about 800, tests included) and `packages/core`
-  (#598, about 1,870 to about 660, tests included). A pruning pull request
+  (#598, about 1,870 to about 660, tests included) and the small packages as one pull request
+  (#600, about 2,980 to about 1,720, tests included: `apps/print-agent`, `print-agent`,
+  `server-kit`, `tunnel`, `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`,
+  `fiscal-none`, `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages,
+  `ui-core` and `dashboard-kit`). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597 and #598 and left for the package that owns each, all still OPEN:
+  #579, #581, #585, #589, #592, #597, #598 and #600 and left for the package that owns each, all
+  still OPEN:
+  - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
+    comments AND test titles still say an unscreened malformed id raises PostgreSQL's 22P02 or
+    becomes an opaque 500, although ids are text columns now: `till-api.test.ts` lines 1689, 1773,
+    2071, 2214, 2330, 2584, 2867, 2888, 3125 (title), 3129, 3153 (title) and 3159;
+    `till-api.courses.test.ts` 475, 730 and 756; `till-api.status.test.ts` 222 and 234; and
+    `catalogue-api.test.ts` 2592 (line numbers on `9a9adb80`). The wording to copy is at
+    `management-api.device-profiles.test.ts:31`. Also found by reading only, not run: nothing the
+    review could find copies `node_membership` from the primary to a standby, so a promoting
+    standby may take `nextStandings`' fallback that appends it with an empty `contactUrl`
+    (`packages/membership`), which `routableServers` then drops. The slice-2 plan
+    (`docs/superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md`) and the
+    2026-09-03 reserved-standby spec cite line numbers in `membership`, `apps/print-agent/src/config.ts`
+    and `sync-enrolment/src/classification.ts` that #600 moved; they are historical and were left.
   - Found by #598 (`packages/core`), not fixable in a comments-only change. Test titles still
     carry claims the comments no longer make: `incidents.test.ts:463` says orphan raises de-dup
     "via NULLS NOT DISTINCT" (PostgreSQL wording); `record-void.test.ts:340` and
@@ -3040,18 +3058,16 @@ image constraints under *Detail → Box image*.
     commit message; `docs/developers/testing-guide.md` has no paragraph holding it, and
     `venue-service` still carries it in its config (#597 cut `payments-sumup`'s to a pointer at
     CLAUDE.md §4).
-  - The same false comments outside bookings, found by #574: "the lanes run in parallel" in
-    `packages/fiscal-none/drizzle.config.ts`, `packages/fiscal-none/src/migrations.ts` and
-    `packages/workforce-es/drizzle.config.ts`; "a mismatch surfaces as a runtime shape error a view
+  - The same false comments outside bookings, found by #574: "a mismatch surfaces as a runtime shape error a view
     test catches" (no test compares client and server shapes) in about 15 places in
     `apps/dashboard/src/api/client.ts`; "client validation mirrors the op's checks" in
     `apps/dashboard/src/widgets/purchase-form.ts`; "per-venue timezone is a later slice" in
     `apps/dashboard/src/date-utils.ts` (`locations.time_zone` exists); PostgreSQL's `22P02`
     described as current in `apps/server`'s `print-api.printer-wiring.test.ts`, `print-api.test.ts`
-    and `recipe-api.test.ts`; `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
-    records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
-    says the descriptor is the only place bookings is named, while
-    `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
+    and `recipe-api.test.ts`; and `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
+    records a deleted setup, which it no longer does. (#600 removed the same claim from
+    `fiscal-none` and `workforce-es`, and `composition/src/modules.ts`'s "the only place bookings is
+    named".)
   - Found by #588 (`packages/layouts`), not fixable in a comments-only change. Two test titles in
     `packages/layouts/src/canvas-store.db.test.ts` (lines 144 and 249) still quote PostgreSQL's
     error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
@@ -4400,7 +4416,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   with a `NotSupportedError`; installed Chrome 153 left it pending with no error. Whether a real
   person's browser ever hits it is untested. Mechanism: the attempt's `catch`
   (`apps/dashboard/src/screens/login-screen.ts:709-716`, from #305) stays quiet only for
-  `NotAllowedError` and `AbortError`, and `codeOf` (`packages/dashboard-kit/src/codes.ts:38-40`)
+  `NotAllowedError` and `AbortError`, and `codeOf` (`packages/dashboard-kit/src/codes.ts:36-38`)
   returns any `code` it finds, so a browser error's old numeric `code` (9 for `NotSupportedError`)
   wins over the fallback and, matching no registered message, shows the generic sentence. The
   passkey button's `catch` (`:672-674`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
@@ -5084,13 +5100,10 @@ What the preparation tasks left, with F1's own answers where it found them:
     and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
   - Follow-up: every other `maxWorkers: 1` config whose comment gives the coverage reason, apart
     from `payments`, which carries its own measurement, still says the pin is needed without having
-    measured it; the same one-worker-against-several coverage comparison would settle each. One of
-    those comments, in `packages/diagnostics/vitest.config.ts`, also still says (#579 fixed
-    `packages/shared`'s) the pre-push hook runs a whole-workspace
-    `pnpm -r test:coverage`. The hook has run no package tests since #338; its only test run is the
-    root `pnpm vitest run --coverage`. #515, the dashboard-kit coverage branch and the apps/server
-    coverage branch fixed the same words in server-kit, dashboard-kit, dashboard-modules and
-    `apps/server/vitest.config.ts`.
+    measured it; the same one-worker-against-several coverage comparison would settle each. The
+    claim that the pre-push hook runs a whole-workspace `pnpm -r test:coverage` is gone from every
+    config (`packages/diagnostics/vitest.config.ts`'s last, by #600); the hook has run no package
+    tests since #338.
 - **Dead code and doc sweeps owed to the rollout's final sweep** — **DONE** (2026-09-23). The unused
   `seedTenantWithSumUpKey` was deleted by PR #516; the file's real-SumUp case seals no credential and
   passes, because the seat reads its credential only on first use, and that case's name and the file
