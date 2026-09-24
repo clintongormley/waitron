@@ -1,12 +1,8 @@
-// packages/layouts/src/default-canvases.ts
 import type { FormFactor, CanvasDef } from "./canvas.js";
 
 /**
- * Built-in default canvases (design §4.3) — the "return-a-default-when-unauthored" pattern, one per
- * form factor. A venue starts from / copies one; the later store slice returns
- * these when a device's canvas is unauthored. Spans are sized to each tab's own grid, not copied from
- * CARD_CONTRACTS' defaults: a tab holding one big card (floor-plan, table-order) gives it the tab's
- * full width, while the till's counter tab splits its columns among several cards sharing the row.
+ * What `getCanvasForFormFactor` returns when no canvas of that form factor is stored. Spans are
+ * sized to each tab's own grid, not copied from CARD_CONTRACTS' defaults.
  */
 const TILL: CanvasDef = {
   formFactor: "till",

@@ -3,20 +3,11 @@ import { refusalError } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./canvas-store.js";
 
-// The duplicate-name → canvas.name_taken and referenced-delete → canvas.in_use translations, proven
-// end to end against a real migrated database in canvas-store.db.test.ts. Here we pin the
-// translator's branches directly with crafted errors — no DB — so the re-throw branches are covered
-// deterministically. `translateWriteError` is exported from canvas-store.ts for exactly this, not
-// from the package barrel. Mirrors identity's `asEmailTaken` unit tests (staff.test.ts).
-//
 // Each crafted refusal comes from `refusalError`, whose own suite holds it equal to the engine's.
 describe("translateWriteError", () => {
   it("translates a unique violation that named no key to canvas.name_taken", () => {
-    // The fallback branch: a unique violation whose target cannot be identified still translates,
-    // because the name key is the only unique an insert/update can trip on an author-supplied value
-    // (a primary-key clash is a cryptographically-unreachable newId() collision, and an UPDATE
-    // never changes `id`). The message is the shape SQLite uses when the index is over an
-    // EXPRESSION: it names the index and no columns, so `constraintTarget` returns undefined.
+    // The shape SQLite uses for an index over an EXPRESSION: it names the index and no columns, so
+    // `constraintTarget` returns undefined.
     let thrown: unknown;
     try {
       translateWriteError({
@@ -41,10 +32,8 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.code).toBe("canvas.name_taken");
   });
 
-  // A unique violation on a DIFFERENT canvases key (the primary key, or any unique added later)
-  // must NOT be mislabelled canvas.name_taken — it is re-thrown untouched. Proof-by-deletion: drop
-  // the target gate and this fails (the error becomes name_taken). A primary-key collision has its
-  // own result code, which `UNIQUE_VIOLATION` also holds, so it reaches the branch.
+  // A primary-key collision has its own result code, which `UNIQUE_VIOLATION` also holds, so it
+  // reaches the unique branch.
   it("re-throws a unique violation on canvases whose key is not (name)", () => {
     const original = {
       cause: refusalError({ primaryKey: { table: "canvases", column: "id" } }),
@@ -58,8 +47,6 @@ describe("translateWriteError", () => {
     expect(thrown).toBe(original);
   });
 
-  // A restrict refusal (1811) — a delete of a canvas a profile still references → canvas.in_use, no
-  // params. Proof-by-deletion: drop the 1811 branch and this becomes the re-throw.
   it("translates a restrict refusal to canvas.in_use", () => {
     let thrown: unknown;
     try {

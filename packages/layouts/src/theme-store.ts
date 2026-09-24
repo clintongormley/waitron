@@ -5,32 +5,17 @@ import type { ThemeOverride } from "./canvas.js";
 import { validateThemeOverride } from "./theme.js";
 
 /**
- * The get/put service over `tenant_themes` (design §4/§9, SP-A.2 §16.3). ONE row, keyed on `id = 1`,
- * which doubles as the `ON CONFLICT` target — the `putReceipt` shape.
- *
- * Every function takes the caller's transaction, opened with `withTransaction(deps.db, …)`.
- * Exercised against a real migrated database in `theme-store.test.ts`.
- *
- * `putTenantTheme` runs, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate,
- * before any DB write, proven by-deletion in the suite; (2) `validateThemeOverride` — fail-closed on
- * an invalid `theme` (throws `theme.invalid` before the write); (3) an `INSERT … ON CONFLICT
- * (id) DO UPDATE`. `getTenantTheme` casts the opaque JSON document back to `ThemeOverride` WITHOUT
- * re-validating (the write validated it, the only writer is this service — the same
- * return-a-typed-shape rationale `canvas-store.ts` documents). The `as` cast re-attaches the shape
- * the plain-JSON column drops (it carries no `@waitron/layouts` type, to avoid a
- * `@waitron/layouts` → `@waitron/db` circular dependency, see
- * `packages/db/src/schema/tenant-themes.ts`).
+ * `getTenantTheme` reads the document back without re-validating it: `putTenantTheme` validates
+ * before it writes.
+ * The `as` cast restores a type the JSON column does not carry: this package depends on
+ * `@waitron/db`, so the column cannot name one of its types without a dependency cycle.
  */
-
-/** The authored theme override, or `undefined` when nobody has picked one (get-with-default
- * = undefined; the caller falls back to the design-system defaults, no row is seeded — design §9). */
 export async function getTenantTheme(tx: Transaction): Promise<ThemeOverride | undefined> {
   const [row] = await tx.select({ theme: tenantThemes.theme }).from(tenantThemes);
   if (row === undefined) return undefined;
   return row.theme as ThemeOverride;
 }
 
-/** Author (create or replace) the base theme. Manager/admin only (`layout.configure`). */
 export async function putTenantTheme(
   tx: Transaction,
   input: { managementSessionId: string; theme: unknown },

@@ -35,7 +35,8 @@ import { ALL_MODULES } from "./modules.js";
  * `devices.device_profile_id` → `device_profiles.id` key survived the regeneration with `ON DELETE
  * restrict`, the store opens with `pragma foreign_keys = on` (`packages/store/src/index.ts`), and
  * `translateWriteError` already reads this engine's restrict code
- * (`packages/layouts/src/device-profile-store.test.ts:79-91`).
+ * (`packages/layouts/src/device-profile-store.test.ts`, "translates a restrict refusal to
+ * device_profile.in_use").
  */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
@@ -524,7 +525,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     // Create a profile, then bind a device to it (fixture setup), reusing the venue's provisioned
     // location. The `device_profile_id` key is ON DELETE restrict, so the DELETE trips the engine's
     // restrict refusal, which the store translates to device_profile.in_use → the house 409
-    // (`packages/layouts/src/device-profile-store.test.ts:79-91`).
+    // (`packages/layouts/src/device-profile-store.test.ts`, "translates a restrict refusal to
+    // device_profile.in_use").
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },

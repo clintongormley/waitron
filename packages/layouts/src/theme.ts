@@ -3,18 +3,9 @@ import "./errors.js";
 import type { ThemeOverride } from "./canvas.js";
 
 /**
- * The `--wt-*` tokens a theme override may set (design §9). An ALLOWLIST, fail-closed: a theme can only
- * touch chrome tokens, never an arbitrary CSS custom property, so it can never smuggle a property the
- * design system does not expose.
- *
- * PROVISIONAL SET. Every name here is a REAL token from the design-system registry
- * (`packages/ui-core/src/tokens/{colors,structure}.css`) — `theme-registry.test.ts` proves it every run,
- * failing on any name that is not declared there, so this allowlist can never drift onto a phantom
- * (an earlier draft allowlisted four tokens that never existed — `--wt-color-primary-text`,
- * `--wt-color-surface-text`, `--wt-color-accent`, bare `--wt-radius`). Nothing renders these in
- * SP-A.1, so the DEFINITIVE themeable subset is finalised in the theme-editor slice, where the owner
- * decides which tokens are exposed. Do NOT hand-add a name without confirming it exists in that
- * registry — the guard will reject it.
+ * An allowlist, so a theme can never set an arbitrary CSS custom property. Each name must be
+ * declared in `packages/ui-core/src/tokens/{colors,structure}.css`, which `theme-registry.test.ts`
+ * checks.
  */
 export const THEMEABLE_TOKENS: readonly string[] = [
   "--wt-color-primary",
@@ -26,22 +17,15 @@ export const THEMEABLE_TOKENS: readonly string[] = [
   "--wt-font-family",
 ];
 
-/** Value cap (design §9). Carried in `too_long` as the cap, never the offending length (CLAUDE.md §1). */
 export const MAX_THEME_VALUE_LENGTH = 64;
 
-// A conservative charset for a token value: letters, digits, spaces and the punctuation that appears in
-// colours, lengths, and font stacks (#, %, ., ,, (), -, /). Notably EXCLUDES ; { } : < > " ' \ so a
-// value cannot break out of a `--token: value;` declaration into another rule (CSS-injection safe).
+// Excludes ; { } : < > " ' \ so a value cannot break out of its `--token: value;` declaration.
 const SAFE_VALUE = /^[A-Za-z0-9 #%.,()\-/]+$/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/**
- * Validate an untrusted theme override (design §9). Returns it on success; throws `theme.invalid`.
- * Only allowlisted tokens, only safe bounded values — the un-allowlisted token name is never echoed.
- */
 export function validateThemeOverride(input: unknown): ThemeOverride {
   if (!isPlainObject(input)) throw new AppError("theme.invalid", { reason: "not_object" });
   if (!isPlainObject(input.tokens)) throw new AppError("theme.invalid", { reason: "bad_tokens" });

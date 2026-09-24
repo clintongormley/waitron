@@ -1,4 +1,3 @@
-// packages/layouts/src/validate-canvas.test.ts
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
@@ -53,8 +52,6 @@ describe("validateCanvas — structure", () => {
     expect(reason(() => validateCanvas({ ...ok, formFactor: 3 }))).toBe("bad_form_factor");
   });
   it("ignores a `capabilities` key on the input (relocated to the device profile, Task 9)", () => {
-    // Capabilities no longer live on the canvas; validateCanvas neither reads nor emits them, and a
-    // stray `capabilities` key (from a pre-cutover payload) is silently dropped rather than validated.
     const out = validateCanvas({ ...ok, capabilities: ["definitely-not-a-flag"] });
     expect("capabilities" in out).toBe(false);
   });
@@ -288,7 +285,6 @@ describe("validateCanvas — cards", () => {
     const p = validateCanvas(
       withCards([{ type: "notifications", colSpan: 1, rowSpan: 1, config: {}, visibleWhen: [] }]),
     );
-    // Empty must NOT survive as `[]` — a renderer would misread it as "no state matches ⇒ never render".
     expect(p.tabs[0].cards[0].visibleWhen).toBeUndefined();
   });
   it("copies a kept visibleWhen so the result does not alias the input", () => {
@@ -302,8 +298,7 @@ describe("validateCanvas — cards", () => {
     expect(p.tabs[0].cards[0].visibleWhen).not.toBe(input);
   });
   it("does not alias the input card config", () => {
-    // kds (non-selling) so a single product-grid card is enough — a till would throw missing_required
-    // before returning, never reaching the aliasing assertion (assertSaleCritical fires only for till).
+    // kds, not till: a till canvas without every sale-critical card throws before returning.
     const input = {
       formFactor: "kds",
       capabilities: [],

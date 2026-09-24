@@ -2,11 +2,6 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import "./index.js";
 
-// One assertion per receipt.* / canvas.* / theme.* code: each is constructible via
-// `new AppError(code, params)` carrying the params errors.ts declares for it. The construction
-// typechecks ONLY because errors.ts's `declare module "@waitron/shared"` augmentation is loaded —
-// index.js imports it — which is what makes the codes and their param shapes real for a consumer,
-// mirroring packages/membership/src/errors.test.ts.
 describe("the receipt / canvas / theme error codes carry their declared params", () => {
   it("constructs receipt.invalid with the optional field + maxLength context", () => {
     const error = new AppError("receipt.invalid", {

@@ -1,11 +1,9 @@
-// The entire public surface of @waitron/layouts. Re-exports only — no logic here.
 export type { ReceiptConfig } from "./types.js";
 export { DEFAULT_RECEIPT } from "./defaults.js";
 export type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 export { MAX_RECEIPT_FIELD_LENGTH, validateReceiptConfig } from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
-// Layout-canvas data model (SP-A.1).
 export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS, kindOfFormFactor } from "./canvas.js";
 export type {
   FormFactor,
@@ -19,7 +17,6 @@ export type {
 } from "./canvas.js";
 export { CARD_CONTRACTS, SALE_CRITICAL_CARDS, GRID_MAX_COLUMNS } from "./card-contract.js";
 export type { CardContract } from "./card-contract.js";
-// MAX_TAB_TITLE_LENGTH / validateCanvas are already re-exported above.
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
 export { DEFAULT_CANVASES } from "./default-canvases.js";
 export {
@@ -49,7 +46,6 @@ export type { DeviceProfileRow } from "./device-profile-store.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
 export { getReceipt, putReceipt } from "./receipt-store.js";
 
-// Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
-// this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts (and
-// guarded tree-wide by scripts/errors-reachable.test.ts).
+// Keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from the public
+// barrel (the rule is in packages/shared/src/errors.ts).
 import "./errors.js";

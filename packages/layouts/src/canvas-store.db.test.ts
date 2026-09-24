@@ -18,27 +18,15 @@ import {
   updateCanvas,
 } from "./canvas-store.js";
 
-// One real migrated SQLite database, carrying the core and identity sets in that order: the core
-// set creates `canvases`, and the identity set creates the `persons`/`management_sessions` tables
-// `authorizeManager` reads. Every store call below runs inside `withTransaction`, the shape the
-// management routes use.
-//
-// What it does NOT show: no assertion here is about who may write `canvases`. This engine has no
-// roles and no grants — one process opens one file — so there is no such property left for a suite
-// to assert, and the store's own gates are the only refusal. Every assertion below is the store's
-// behaviour, which the engine does not touch.
-
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
-/** Run `fn` in one transaction — the shape the management routes wrap every store call in. */
 function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
-/** Seed a person of `role` and an open management session for them. Returns the session id the
- * store's authorizeManager gate resolves. Through drizzle rather than raw SQL: `persons.id` and
- * `created_at` take their value from the table's `$defaultFn`, which is not a SQL DEFAULT, so a raw
- * insert naming neither is refused `NOT NULL constraint failed: persons.id`. */
+/** Through drizzle rather than raw SQL: `persons.id` and `created_at` take their value from the
+ * table's `$defaultFn`, which is not a SQL DEFAULT, so a raw insert naming neither is refused
+ * `NOT NULL constraint failed: persons.id`. */
 async function seedSession(role: PersonRoleValue): Promise<string> {
   const [person] = await suite.db
     .insert(persons)
@@ -50,15 +38,11 @@ async function seedSession(role: PersonRoleValue): Promise<string> {
   return session.token;
 }
 
-/** The AppError code a rejected store call threw, or a describing string when it was not an AppError
- * (so a call that DID NOT throw — e.g. an authorizeManager gate deleted — reports plainly). */
 async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   const error = await captureError(fn);
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-/** Rows counted outside the store's own reads, so a refused or rolled-back write is visible here
- * as an absence. No `::int` cast: SQLite's `count(*)` already arrives as a number. */
 async function rowCount(): Promise<number> {
   const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from canvases`);
   return rows.rows[0]!.n;
@@ -158,11 +142,6 @@ describe("layout canvas store against a real migrated database", () => {
   });
 
   it("translates a delete of a profile-referenced canvas to canvas.in_use (23001 → 409), canvas survives", async () => {
-    // A device profile's FK device_profiles_canvas_fk → canvases(id) is ON DELETE RESTRICT, so
-    // deleting a canvas a profile still references trips a restrict refusal (errcode 1811), which
-    // deleteCanvas translates (via translateWriteError) into the domain canvas.in_use — a clean
-    // 409, not the raw DB error a 500 would surface. Proof-by-deletion: remove the try/catch in
-    // deleteCanvas and this fails with the raw refusal. RESTRICT means the canvas survives.
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     const { id } = await inTx((tx) =>
@@ -172,8 +151,7 @@ describe("layout canvas store against a real migrated database", () => {
         definition: phoneCanvas("Bound"),
       }),
     );
-    // Seed a device profile that binds the canvas — setup, not the thing under test. Through
-    // drizzle, for the `$defaultFn` reason `seedSession` states.
+    // Through drizzle, for the `$defaultFn` reason `seedSession` states.
     await suite.db
       .insert(deviceProfiles)
       .values({ name: "Binding profile", formFactor: "till", canvasId: id, capabilities: [] });
@@ -185,9 +163,6 @@ describe("layout canvas store against a real migrated database", () => {
   });
 
   it("throws canvas.not_found when updating an absent id", async () => {
-    // The write-path no-row guard: `.returning({ id })` comes back empty, so updateCanvas throws
-    // rather than reporting a silent success. Proof-by-deletion: drop the `updated.length === 0` check
-    // and this call resolves, failing the assertion. A well-formed uuid that names no row hits it.
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     const code = await codeOf(() =>
@@ -239,10 +214,6 @@ describe("layout canvas store against a real migrated database", () => {
   });
 
   it("refuses a create from a staff-role session — the authorizeManager gate (differential)", async () => {
-    // The by-deletion proof: staff holds no layout.configure, so authorizeManager throws
-    // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from
-    // createCanvas makes this succeed → codeOf returns "did not throw…" and a row lands, failing both
-    // assertions.
     await seedTenant(suite.db);
     const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
@@ -261,8 +232,7 @@ describe("layout canvas store against a real migrated database", () => {
   it("rejects an invalid definition with canvas.invalid before any INSERT", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
-    // authorize FIRST (manager is permitted), THEN validate — so an invalid definition from an
-    // AUTHORISED actor is what proves validate runs before the write. `{}` has no formFactor.
+    // A manager passes the gate, so this refusal is validation's. `{}` has no formFactor.
     const code = await codeOf(() =>
       inTx((tx) =>
         createCanvas(tx, {
@@ -277,10 +247,6 @@ describe("layout canvas store against a real migrated database", () => {
   });
 
   it("translates a duplicate name to canvas.name_taken (23505 → clean 409), no second row", async () => {
-    // The per-tenant `canvases_tenant_name_key` unique fires on the SECOND create with the same
-    // name; canvas-store catches the driver's 23505 and re-throws it as the domain canvas.name_taken
-    // — a duplicate must not surface as a raw 500. Here that runs against the real constraint;
-    // canvas-store.test.ts pins the translator's own branches on crafted errors instead.
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     await inTx((tx) =>
@@ -304,7 +270,6 @@ describe("layout canvas store against a real migrated database", () => {
   });
 
   it("translates a duplicate name on UPDATE to canvas.name_taken", async () => {
-    // Renaming one canvas onto another's name trips the same unique on the UPDATE path.
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     await inTx((tx) =>
@@ -336,24 +301,9 @@ describe("layout canvas store against a real migrated database", () => {
 });
 
 /**
- * The property `translateWriteError`'s restrict branch rests on, read off the real migrated schema.
- *
- * It used to match a CONSTRAINT NAME, so a refusal from some other foreign key re-threw. SQLite
- * reports every foreign-key refusal as the identical `FOREIGN KEY constraint failed` — no table,
- * no column, no name (`packages/db/src/constraint-target.ts`) — so the branch can only ask the
- * CLASS, and what keeps `canvas.in_use` honest is that no other key can raise 1811 inside the one
- * statement each writer wraps: `canvases` declares no foreign key of its own to trip, and exactly
- * one key references it.
- *
- * That is a fact about the SCHEMA, which is why it is checked here rather than in the crafted-error
- * unit suite — where the two refusals are byte-for-byte identical and no assertion can separate
- * them. Add a second key into `canvases`, or a key out of it, and this fails; `canvas.in_use`
- * would then be reported for a refusal the store never read.
- *
- * The "no key OUT of it" half needs its own control, because an empty answer is also what a broken
- * query returns: the same disjunct over `device_profiles`, in the twin of this case in
- * `device-profile-store.db.test.ts`, DOES return that table's outgoing `canvas_id` key. So the
- * query finds outgoing keys where there are any, and `canvases` has none.
+ * The schema half of what `translateWriteError`'s restrict branch rests on (see its doc). An empty
+ * "key out of canvases" answer is also what a broken query returns; the control is the same query
+ * in device-profile-store.db.test.ts, which does find that table's outgoing `canvas_id` key.
  */
 describe("what can refuse a write to canvases", () => {
   it("has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it", async () => {

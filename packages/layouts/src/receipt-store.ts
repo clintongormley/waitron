@@ -6,26 +6,17 @@ import type { ReceiptConfig } from "./types.js";
 import { validateReceiptConfig } from "./validate.js";
 
 /**
- * The get/put service over `tenant_receipts` (SP-B4; design §9). ONE row, keyed on `id = 1`, which
- * doubles as the `ON CONFLICT` target — the tenant_themes shape. Every function
- * takes the caller's transaction (`withTransaction`). Exercised against a real migrated database
- * in receipt-store.test.ts.
- *
- * `putReceipt` runs, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
- * any DB write, proven by-deletion; (2) `validateReceiptConfig` — fail-closed (throws `receipt.invalid`
- * before the write); (3) `INSERT … ON CONFLICT (id) DO UPDATE`. `getReceipt` casts the opaque
- * JSON document back WITHOUT re-validating (the write validated it, the only writer is this service) and
- * returns DEFAULT_RECEIPT when there is no row (the get-with-default the till boot relies on).
+ * `getReceipt` reads the document back without re-validating it: `putReceipt` validates before it
+ * writes.
+ * The `as` cast restores a type the JSON column does not carry: this package depends on
+ * `@waitron/db`, so the column cannot name one of its types without a dependency cycle.
  */
-
-/** The authored receipt trim, or DEFAULT_RECEIPT (`{}`) when nobody has authored one. */
 export async function getReceipt(tx: Transaction): Promise<ReceiptConfig> {
   const [row] = await tx.select({ receipt: tenantReceipts.receipt }).from(tenantReceipts);
   if (row === undefined) return DEFAULT_RECEIPT;
   return row.receipt as ReceiptConfig;
 }
 
-/** Author (create or replace) the receipt trim. Manager/admin only (`layout.configure`). */
 export async function putReceipt(
   tx: Transaction,
   input: { managementSessionId: string; receipt: unknown },

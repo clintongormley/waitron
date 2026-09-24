@@ -1,26 +1,10 @@
-// packages/layouts/src/canvas.ts
-/**
- * Canonical types for the layout-CANVAS model (design §4): a canvas is a dashboard for one form
- * factor — 1+ tabs, each tab a grid, every screen a card. The dashboard + till keep bundle-decoupled
- * local copies of these shapes.
- */
+// `apps/till/src/layout.ts` and the dashboard keep their own copies of these shapes.
 
-/** The device form factors a canvas can target (design §4.1 — form factor is the sizing guardrail). */
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
-/**
- * The device kinds a form factor collapses to (design §9). Re-homed here from the `device_kind`
- * enum in @waitron/db so it survives that declaration's deletion; the values still match the
- * column's (`kds_station`/`handheld`/`till`) so nothing downstream re-maps.
- */
 export type DeviceKind = "kds_station" | "handheld" | "till";
 
-/**
- * The device kind a form factor implies — phone and tablet are both `handheld`. The `satisfies
- * Record<FormFactor, DeviceKind>` map is the exhaustiveness proof: a new form factor fails to compile
- * until it gets a row here.
- */
 export function kindOfFormFactor(ff: FormFactor): DeviceKind {
   const kinds = {
     till: "till",
@@ -31,11 +15,6 @@ export function kindOfFormFactor(ff: FormFactor): DeviceKind {
   return kinds[ff];
 }
 
-/**
- * The card catalogue — the single source of truth for placeable card kinds. "Big" cards fill a tab
- * (floor-plan, kds-board, expo, table-order, table-layout-editor); "small" cards share a grid. Adding
- * a card is a one-line change here + a contract in card-contract.ts.
- */
 export const CARD_TYPES = [
   "product-grid",
   "basket",
@@ -52,11 +31,7 @@ export const CARD_TYPES = [
 ] as const;
 export type CardType = (typeof CARD_TYPES)[number];
 
-/**
- * Server-enforced device-capability flags a device profile may carry (design §5, layer 2) —
- * generalising the hardcoded assertNotHandheld firewall. Capabilities live on the device profile
- * (`device-profile.ts`), not the canvas; enforcement is `assertDeviceCapability` (apps/server).
- */
+/** Carried by a device profile, not a canvas. Enforced by `assertDeviceCapability`, apps/server. */
 export const CAPABILITY_FLAGS = [
   "integrated-card-payment",
   "open-cash-drawer",
@@ -65,20 +40,16 @@ export const CAPABILITY_FLAGS = [
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 
-/** One placed card in a tab's grid. `colSpan`/`rowSpan` size it (HA Sections model, design §4.1). */
 export interface CardInstance {
   type: CardType;
   colSpan: number;
   rowSpan: number;
   config: Record<string, unknown>;
-  /**
-   * Runtime-visibility states (design §6 axis 3) that make this card render, a SUBSET of the card
-   * type's declared `visibilityStates`. Absent or empty ⇒ always render.
-   */
+  /** States that make this card render, a subset of its contract's `visibilityStates`. Absent or
+   * empty means always render. */
   visibleWhen?: string[];
 }
 
-/** A tab: a titled grid of a fixed `columns` count holding placed cards (design §4.1). */
 export interface TabDef {
   key: string;
   title: string;
@@ -86,16 +57,10 @@ export interface TabDef {
   cards: CardInstance[];
 }
 
-/** A theme override: allowlisted `--wt-*` token → value (design §9). */
 export interface ThemeOverride {
   tokens: Record<string, string>;
 }
 
-/**
- * A whole layout canvas (design §4.1): a form factor, its tabs, an optional theme. Capabilities NO
- * LONGER live here — they relocated onto the device profile (device-profile design 2026-09-05 §5.3,
- * Task 9): a canvas is the DISPLAY, capabilities are facts about the BOX, resolved through the profile.
- */
 export interface CanvasDef {
   formFactor: FormFactor;
   tabs: TabDef[];

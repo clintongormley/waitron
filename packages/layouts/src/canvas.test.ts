@@ -1,4 +1,3 @@
-// packages/layouts/src/canvas.test.ts
 import { describe, expect, it } from "vitest";
 import type { DeviceKind, FormFactor } from "./canvas.js";
 import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS, kindOfFormFactor } from "./canvas.js";
@@ -23,9 +22,6 @@ describe("catalogue tuples", () => {
 });
 
 describe("kindOfFormFactor", () => {
-  // Table over EVERY form factor (typed as Record<FormFactor, …>, so a new form factor fails to
-  // compile until it gets a row here) → the device kind it collapses to. Two form factors map to
-  // `handheld`; the mapping is many-to-one by design.
   const expected: Record<FormFactor, DeviceKind> = {
     till: "till",
     kds: "kds_station",
