@@ -25,16 +25,10 @@ import { FakeAsyncProvider } from "./testing/fake-async-provider.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
-// This mirrors async.wiring.test.ts's capstone composition (verify -> hasPaymentWithExternalRef ->
-// withTransaction{ settleInitiated + recordSale + associate }), but proves the SAME idempotency
-// under two deliveries arriving TOGETHER rather than under sequential redelivery.
-//
-// `resetPerTest` is left at its default: the suite's one case seeds inside its own body.
+// async.wiring.test.ts's composition, with two deliveries arriving together rather than in turn.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-// Both doubles wrap the suite handle, so they cannot be built until the database is open — hence a
-// hook rather than a module-level construction. `install` creates the fake backend's own
-// `fake_node_registrations`/`fake_fiscal_records` tables, which `recordSale` writes through it.
+// Both doubles wrap the suite handle, so they cannot be built until the database is open.
 let backend: FakeFiscalBackend;
 let provider: FakeAsyncProvider;
 
@@ -80,7 +74,6 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
         lineTotal: "10.00",
       },
     ],
-    // Immediate settlement, tip on the tender (zero here): sum(amount) 12.10 = total 12.10 + tip 0.00.
     settlement: {
       kind: "immediate",
       tenders: [{ method: "card", amount: "12.10", tipAmount: "0.00", settledAt }],
@@ -89,15 +82,6 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   };
 }
 
-/**
- * The real orchestration, with no gate in it.
- *
- * It had one on PostgreSQL: the holder paused after `settleInitiated` had taken the payment row's
- * `FOR UPDATE` lock, so the second delivery could be started and PROVEN to block on it. There is
- * no row lock to hold open here, and a paused transaction would not let the second delivery start
- * at all — one writer holds the venue file at a time
- * (`packages/store/src/write-queue.ts`) — so the pause and the two connections are gone together.
- */
 async function orchestrate(
   db: Database,
   s: SeededForSale,
@@ -124,25 +108,10 @@ async function orchestrate(
 }
 
 /**
- * LOSS, stated rather than left to be noticed: what this suite asserted about WAITING is gone. The
- * PostgreSQL version could show the second delivery still unsettled after a 200ms pause while the
- * first held its lock, which distinguished "blocked" from "ran second". This version cannot make
- * that distinction and does not try to; what it still discriminates is the OUTCOME — exactly one
- * sale for one settlement, which is the fiscal invariant (`CLAUDE.md` §5: an invoice number is
- * never reused, and a second one for this settlement could not be withdrawn afterwards).
- *
- * The arbiter is `settleInitiated`'s state-guarded UPDATE (`store.ts`, it matches only a row still
- * `initiated`), not anything in this file.
- *
- * Proof by deletion, 2026-09-22: with `eq(payments.state, "initiated")` removed from that UPDATE's
- * `where` and nothing else changed, this case fails — and it fails INSIDE the second delivery's
- * `recordSale`, on `UNIQUE constraint failed: sales.working_order_id`
- * (`packages/core/src/record-sale.ts:317`). That is the receipt for the thing a passing run cannot
- * show on its own: both deliveries really do get past `hasPaymentWithExternalRef` — which reads
- * outside the transaction — and both really do reach the settle, so the single sale below is the
- * guard's doing and not an artifact of the second delivery giving up early. The guard was restored
- * immediately; the command was
- * `pnpm --filter @waitron/payments exec vitest run src/async-settle.concurrency.test.ts`.
+ * Both deliveries pass `hasPaymentWithExternalRef`, which reads outside the transaction, and reach
+ * the settle; the arbiter is `settleInitiated`'s UPDATE matching only a row still `initiated`
+ * (store.ts). Weaker than its name: it asserts the outcome — one sale for one settlement — and
+ * cannot observe one delivery waiting on the other.
  */
 describe("two simultaneous deliveries of the same settlement", () => {
   it("chains exactly one sale — the second delivery's UPDATE matches nothing once the first has committed", async () => {
@@ -172,8 +141,6 @@ describe("two simultaneous deliveries of the same settlement", () => {
     expect(chained).toHaveLength(1);
 
     const sales = await suite.db.execute<{ count: number }>(
-      // `count(*)::text` on PostgreSQL. SQLite has no `::` cast; `cast(… as int)` is the spelling
-      // `packages/db/src/testing/venue-db.test.ts` settled on, and the count arrives as a number.
       sql`select cast(count(*) as int) as count from sales`,
     );
     expect(sales.rows[0]!.count).toBe(1); // never two invoice numbers for one settlement

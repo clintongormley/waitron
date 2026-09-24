@@ -8,12 +8,7 @@ import type {
   SettlementReportSource,
 } from "../reconcile.js";
 
-/**
- * A genuine DB-backed `PaymentReconciler` double, not a stub: it runs the REAL sweep against the
- * real tables, with a simulated settlement report and a reversal that only records what it was
- * asked to reverse. That is the point of the ported design — the fake proves the shipping
- * algorithm, never a second copy of it. NOT re-exported from the package barrel.
- */
+/** Runs the real sweep, with a given settlement report and a reversal that only records its calls. */
 export class FakeReconciler implements PaymentReconciler {
   readonly provider = "fake";
   /** Every payment reference this reconciler was asked to reverse, in order. */
@@ -36,8 +31,6 @@ export class FakeReconciler implements PaymentReconciler {
         },
         incidents: recordIncidentOnce,
         settlementLagMs: this.settlementLagMs,
-        // The all-zero origin sentinel: this DB-backed double is not a provisioned node, and no suite
-        // using it asserts on captured origin (sync origin attribution is proven in the server suite).
         nodeId: "00000000-0000-0000-0000-000000000000",
       },
       period,

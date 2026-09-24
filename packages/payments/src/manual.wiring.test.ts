@@ -19,11 +19,6 @@ import { MANUAL_PROVIDER, recordManualCardPayment } from "./manual.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
-// The manual-mode capstone: unlike the integrated wiring (wiring.test.ts), there is no network step
-// and no separate collect() before the transaction — recordManualCardPayment runs INSIDE the sale
-// transaction, so the payment, the sale, and the association commit atomically. That is the whole
-// point: manual mode has no §4 orphan window.
-
 const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   setup: (db) => FakeFiscalBackend.install(db),
@@ -45,8 +40,6 @@ const steadyClock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-/** Builds the RecordSaleInput for one 12.10 card sale, taking the tender's settledAt off `settledAt`
- * (always set for a manual tender, so the sale always chains). */
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
     tillId: brandTillId(s.tillId),
@@ -133,11 +126,6 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       }),
     ).rejects.toBe(boom);
 
-    // `cast(… as text)`, not `count(*)::text`: the cast this carried was refused before the
-    // statement ran — `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's
-    // parser. The value stays a STRING so the assertion below is untouched — measured on node
-    // v26.7.0, `select cast(count(*) as text)` over three rows returns `"3"` (`typeof "string"`)
-    // where the bare `count(*)` returns the number `3`.
     const rows = await pg.db.execute<{ count: string }>(
       sql`select cast(count(*) as text) as count from payments where working_order_id = ${s.workingOrderId}`,
     );

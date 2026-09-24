@@ -18,19 +18,10 @@ import type { Seeded } from "../../test/seed.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  // One `delete from` per table in place of `truncate payment_refunds, payments cascade`: SQLite
-  // has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time. Child
-  // before parent, because deleting `payments` while a `payment_refunds` row still points at it is
-  // refused with `FOREIGN KEY constraint failed`. Receipt: `src/reconcile.test.ts`'s own hook.
+  // Child before parent: a `payment_refunds` row points at its payment.
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
 });
-
-// Nothing carries from one test to the next: `useVenueDb` empties every data table after each one
-// (`resetPerTest` defaults to true and this suite does not set it), which
-// `packages/db/src/testing/venue-db.test.ts` pins in both directions. So the `beforeEach` above
-// and the per-test `freshNif` (../../test/seed.js) are belt-and-braces rather than what keeps two
-// tests off each other's `tenants_country_tax_id_key`.
 
 async function seedTenant(): Promise<Seeded> {
   return seedWorkingOrder(pg.db, freshNif());
@@ -75,7 +66,6 @@ describe("FakePaymentProvider.collect", () => {
     const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", failed.paymentRef));
     expect(row?.state).toBe("failed");
 
-    // The flag is one-shot: the very next collect succeeds again.
     const recovered = await collect(provider, s);
     expect(recovered.state).toBe("captured");
     expect(recovered.settledAt).not.toBeNull();
@@ -208,7 +198,6 @@ describe("FakePaymentProvider.collect offline", () => {
   });
 });
 
-// helper: offline-accept a payment for `s`, then associate it to a fresh sale, returning the ref.
 async function acceptOfflineAndAssociate(
   provider: FakePaymentProvider,
   s: Seeded,
@@ -276,9 +265,6 @@ describe("FakePaymentProvider.forward", () => {
   });
 
   it("returns all-zeros when there is nothing to forward", async () => {
-    // A real seeded tenant, not a random id: the claim must come back empty because this tenant's
-    // QUEUE is empty, which is what the fake's forward is being asked about — a tenant that cannot
-    // own rows at all would assert the same thing against a broken claim predicate.
     await seedTenant();
     const provider = new FakePaymentProvider(pg.db);
     const result = await provider.forward(new Date());

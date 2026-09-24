@@ -21,7 +21,6 @@ import { freshNif } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 import { deviceCardReaders } from "./device-card-readers.js";
 
-// What this suite covers is the primary key and the two foreign keys.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 interface Seeded {
@@ -29,14 +28,8 @@ interface Seeded {
   readerId: string;
 }
 
-/**
- * Seeds a location, a `till`-form-factor device profile, a till, one device bound to that till, and
- * one card reader — the rows device_card_readers' device and reader FKs point at.
- *
- * Through the table definitions rather than raw SQL: `id` and `created_at` are `$defaultFn`
- * generators only the insert BUILDER runs, and `invoice_locales` is a list the column's own
- * mapping encodes (the same reason `packages/payments/test/seed.ts` gives at `seedWorkingOrder`).
- */
+/** Through the table definitions rather than raw SQL: `id` and `created_at` are `$defaultFn`
+ * generators only the insert BUILDER runs. */
 async function seedDeviceAndReader(db: Database): Promise<Seeded> {
   // One `tenants` row so the database looks like a provisioned one; nothing below references it.
   await db
@@ -87,7 +80,6 @@ describe("device_card_readers", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
 
-    // The mapping is mutable — DELETE clears the device's default (unlike an append-only ledger).
     await withTransaction(db, async (tx) => {
       await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
@@ -118,20 +110,14 @@ describe("device_card_readers", () => {
         await tx.insert(deviceCardReaders).values({ deviceId, readerId: reader2!.id });
       }),
     );
-    // SQLite reports a duplicate key two ways — a unique index (2067) and a primary key (1555);
-    // `UNIQUE_VIOLATION` holds both (`packages/db/src/sql-state.ts`).
     expect(isRefusal(dup, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("refuses a device or a reader that does not exist", async () => {
     const db = suite.db;
     const { deviceId, readerId } = await seedDeviceAndReader(db);
-    // LOSS: this case used to assert `/device_card_readers_device_fk/` and
-    // `/device_card_readers_reader_fk/` on the message, which told the two keys apart. SQLite
-    // reports every foreign-key refusal as the six words `FOREIGN KEY constraint failed` and names
-    // neither the constraint nor the column (`packages/db/src/constraint-target.ts`), so that half
-    // has no replacement. Each statement below still carries exactly ONE unknown id against a
-    // seeded real one, so which key fired is fixed by the statement rather than by the message.
+    // This engine's foreign-key refusal names no key, so each statement carries exactly ONE unknown
+    // id: the statement, not the message, fixes which key fired.
     const noDevice = await captureError(() =>
       withTransaction(db, async (tx) => {
         await tx.insert(deviceCardReaders).values({ deviceId: randomUUID(), readerId });

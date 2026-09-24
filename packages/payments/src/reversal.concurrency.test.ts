@@ -1,5 +1,3 @@
-// Two refunds of one payment, started together: the venue file's write queue is what keeps them
-// from both reading the same running total.
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -15,38 +13,10 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 const SETTLED = new Date("2026-07-23T10:00:00Z");
 
 /**
- * What this case USED to observe, and what it observes now.
- *
- * On PostgreSQL it took two connections, had the first hold `recordRefund`'s `FOR UPDATE` lock on
- * the payment row, and asserted that the second `recordRefund` was still unsettled after a 200ms
- * pause and that it took at least 150ms to finish. Neither half survives the engine change:
- * `recordRefund` (`store.ts`) takes no row lock now — read it, there is no `for update` in it —
- * and SQLite opens one write connection per file, so there is no second backend to block.
- *
- * **The product claim underneath it does survive, and it is the one worth keeping.**
- * `recordRefund` is a read-modify-write over a running total: it sums the payment's succeeded
- * `payment_refunds` rows, refuses the write if this refund would take the total past the capture,
- * and only then inserts. Two of those overlapping would each read `alreadyRefunded = 0` and each
- * decide it was a PARTIAL refund, leaving a fully-refunded payment reading `partially_refunded`
- * with 20.00 returned against a 20.00 capture and neither write knowing about the other. What
- * stops that now is the write queue — `withTransaction` (`packages/db/src/tenancy.ts`) runs its
- * body inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues `begin
- * immediate`, awaits the body and `commit`s, so the second `begin` does not run until the first
- * `commit` has returned.
- *
- * LOSS, stated rather than left to be noticed: this no longer proves anything about WAITING. The
- * PostgreSQL version could tell "blocked on a lock" from "ran to completion first"; this one
- * cannot, and would pass just as well against an engine that ran the two bodies one after the
- * other for any other reason. What it still discriminates is the outcome — see the control below.
- *
- * Control, 2026-09-22, run on this file: with the two `recordRefund` calls started on the same
- * handle but WITHOUT `withTransaction` around them (`suite.db` passed straight in, which
- * type-checks because `Database` is assignable to `Transaction`), both read `alreadyRefunded = 0`
- * and both return `partially_refunded` — the case fails on the two-states assertion below,
- * `expected [ 'partially_refunded', 'partially_refunded' ] to deeply equal
- * [ 'partially_refunded', 'refunded' ]`. Restoring `withTransaction` passes. Both readings came
- * from `pnpm --filter @waitron/payments exec vitest run src/reversal.concurrency.test.ts`, back to
- * back.
+ * `recordRefund` reads the running total and then writes. Two started together must not both read
+ * the same total: `withTransaction` runs each body under the venue file's write lock, so the second
+ * reads after the first commits. Weaker than its name: it asserts the outcome and cannot observe one
+ * refund waiting on the other.
  */
 describe("concurrent reversals of one payment", () => {
   it("two refunds started together sum against one running total: 12 + 8 on a 20.00 capture ends refunded", async () => {
@@ -61,9 +31,8 @@ describe("concurrent reversals of one payment", () => {
       }),
     );
 
-    // Started together, not awaited in turn: nothing but the write queue keeps the second body out
-    // of the first one's transaction. Which of the two runs first is not asserted — 12 then 8 and
-    // 8 then 12 both end at the capture, and the invariant is the total, not the order.
+    // Started together, not awaited in turn. Which runs first is not asserted: either order ends
+    // at the capture.
     const [first, second] = await Promise.all([
       withTransaction(suite.db, (tx) => recordRefund(tx, { ...key, amount: decimal("12.00") })),
       withTransaction(suite.db, (tx) => recordRefund(tx, { ...key, amount: decimal("8.00") })),

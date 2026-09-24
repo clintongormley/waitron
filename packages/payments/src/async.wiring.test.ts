@@ -25,11 +25,8 @@ import { FakeAsyncProvider } from "./testing/fake-async-provider.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
-// The Mode 3 capstone: it composes the REAL neutral pieces the way the (deferred) app-level webhook
-// endpoint will — verify -> hasPaymentWithExternalRef -> withTransaction{ settleInitiated + recordSale + associate } —
-// with no `apps/` layer. It is a second consumer of `@waitron/core` (a dev dependency), exactly like
-// wiring.test.ts. `recordSale` runs INSIDE the same transaction as settle + associate, so the sale
-// chains atomically with the tender settlement.
+// Composes the real pieces as an app-level webhook endpoint would, with no `apps/` layer:
+// verify -> hasPaymentWithExternalRef -> one transaction { settleInitiated + recordSale + associate }.
 
 const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
@@ -72,8 +69,6 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
         lineTotal: "10.00",
       },
     ],
-    // Immediate settlement, tip on the tender (zero here): sum(amount) 12.10 = total 12.10 + tip 0.00.
-    // A null `settledAt` (redelivery/expiry paths never reach here) would make `settleSale` refuse it.
     settlement: {
       kind: "immediate",
       tenders: [{ method: "card", amount: "12.10", tipAmount: "0.00", settledAt }],
@@ -164,12 +159,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const second = await orchestrate(provider, backend, s, payload); // at-least-once redelivery
     expect(second).toBeNull();
 
-    // Exactly one sale exists for this tenant's till/series (invoice_number 1, never a second).
-    // `cast(… as text)`, not `count(*)::text`: the cast this carried was refused before the
-    // statement ran — `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's
-    // parser. The value stays a STRING so the assertion below is untouched — measured on node
-    // v26.7.0, `select cast(count(*) as text)` over three rows returns `"3"` (`typeof "string"`)
-    // where the bare `count(*)` returns the number `3`.
+    // Exactly one sale: invoice_number 1, never a second.
     const sales = await pg.db.execute<{ count: string }>(
       sql`select cast(count(*) as text) as count from sales`,
     );

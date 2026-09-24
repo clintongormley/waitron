@@ -18,7 +18,7 @@ import {
   tillsForWorkingOrders,
 } from "./store.js";
 
-/** Half-open `[from, to)`. A daily sweep is yesterday; a monthly one is the 1st to the 1st. */
+/** Half-open `[from, to)`. */
 export interface ReconcilePeriod {
   from: Date;
   to: Date;
@@ -27,14 +27,10 @@ export interface ReconcilePeriod {
 /**
  * One settlement the processor says actually cleared.
  *
- * `references` is a LIST, and that is load-bearing rather than defensive: our `external_ref` holds
- * whichever identifier the inbound path carried, and for a hosted payment that is the hosted
- * session id, while settlement data keys by the payment/charge id and never by the session. A
- * single-keyed record would leave every hosted payment reading as `unsettled` for ever and every
- * hosted settlement reading as `missingLocal` — wrong for exactly the mode this audit exists to
- * protect. The adapter therefore supplies every processor identifier that could match a local
- * `external_ref`, resolved from the processor's own data, so matching works even when our inbound
- * notification never arrived.
+ * `references` is a list because our `external_ref` holds whichever identifier the inbound path
+ * carried — for a hosted payment, the hosted session id — while settlement data keys by the
+ * payment/charge id. The adapter supplies every processor identifier that could match a local
+ * `external_ref`.
  */
 export interface SettlementRecord {
   references: string[];
@@ -46,21 +42,17 @@ export interface SettlementRecord {
 }
 
 /**
- * The processor's settlement report for a window — the vendor half of the audit. The neutral seam
- * never names any vendor concept.
+ * The processor's settlement report for a window.
  *
- * An implementer MUST return only the settlements belonging to this taxpayer's settlement identity.
- * A source over a processor account shared with anyone else has to narrow the fetch itself, using
- * whatever the vendor offers: every settlement it returns that has no local row fails the sweep's
- * targeted existence check and lands in `missingLocal`, so a report that is too wide fills the
- * sweep's authoritative result with money that is not ours, on every run.
+ * An implementer MUST return only the settlements belonging to this taxpayer's settlement identity:
+ * every returned settlement with no local row lands in `missingLocal`.
  */
 export interface SettlementReportSource {
   fetch(window: ReconcilePeriod): Promise<SettlementRecord[]>;
 }
 
-/** Reverse one payment in full at the processor — the orphan self-heal. The adapter chooses how.
- * Throws when the payment cannot be addressed at the processor. */
+/** Reverse one payment in full at the processor. Throws when the payment cannot be addressed at the
+ * processor. */
 export type ReversalFn = (paymentRef: string) => Promise<void>;
 
 /**
@@ -90,11 +82,9 @@ export interface PaymentMismatch {
   workingOrderId: string | null;
 }
 
-/** The outcome of one sweep. A tenant with nothing to check answers all-empty / zeros. */
 export interface PaymentReconcileResult {
   period: ReconcilePeriod;
-  /** LOCAL rows examined — not report entries, so a tenant with no local rows and a non-empty
-   * report answers `checked: 0` alongside a non-empty `missingLocal`. */
+  /** LOCAL rows examined, not report entries. */
   checked: number;
   unsettled: PaymentMismatch[];
   lostSettlement: PaymentMismatch[];
@@ -105,25 +95,15 @@ export interface PaymentReconcileResult {
   /** Orphans actually reversed this sweep. */
   remediated: number;
   /**
-   * Orphans this sweep CLAIMED and then could not reverse, with the structured reason each failed
-   * for. Present because the result is the audit's authoritative record and this is the one finding
-   * that is otherwise unrecoverable: the five mismatch classes are re-detected by any sweep whose
-   * period covers them again, and their incidents stay open regardless of cadence — but a claimed
-   * orphan carries a permanent `reconcile_remediated_at` marker unconditionally, whichever sweep
-   * stamped it, so a failure dropped here is dropped for good. The `payment.reconcile_remediation_failed`
-   * incident alone cannot carry it — the open-incident dedup keys on `(till, code, sale_id)`,
-   * so a still-open incident from an earlier sweep silently swallows this sweep's new failures.
+   * Orphans this sweep claimed and then could not reverse, with each reason. No later sweep
+   * re-examines a claimed orphan (its marker is permanent), and the
+   * `payment.reconcile_remediation_failed` incident can be swallowed by an earlier still-open one on
+   * the same `(till, code, sale_id)` key — so a failure not recorded here can be lost for good.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
 }
 
-/**
- * The audit seam: one implementer per SETTLEMENT IDENTITY (per `provider` id), never one per
- * capture mechanism. A vendor whose synchronous and hosted adapters share a `provider` id is
- * audited by ONE reconciler covering all of them. Manual mode implements nothing — its audit is
- * external. `now` is passed in, exactly as `forward(now)` takes it: the in-flight tolerance and
- * every `detectedAt` need a clock, and an injected one is what makes the boundary testable.
- */
+/** One implementer per settlement identity (per `provider` id), never one per capture mechanism. */
 export interface PaymentReconciler {
   readonly provider: string;
   reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult>;
@@ -133,13 +113,8 @@ export interface PaymentReconciler {
 export type MismatchClass = "unsettled" | "lostSettlement" | "orphan" | "drift";
 
 /**
- * A discriminated union rather than one flat shape: `settled` is null-or-not depending on WHICH
- * class a row fell into, and this says exactly which — `unsettled` never has a match (that is what
- * makes it unsettled), `lostSettlement` and `drift` are only ever raised WITH a matched settlement,
- * and only `orphan` is genuinely either. That means a `drift` row's `settled` is `SettlementRecord`
- * at the type level, not `SettlementRecord | null` — so a consumer that only handles `drift` (like
- * `incidentFor`) can read `settled.amount` directly, with no impossible null case to fabricate a
- * fallback for.
+ * `settled` is non-null exactly where the class guarantees a matched settlement: never for
+ * `unsettled`, always for `lostSettlement` and `drift`, either for `orphan`.
  */
 export type ClassifiedRow =
   | { klass: "unsettled"; row: ReconcilableRow; settled: null }
@@ -157,12 +132,10 @@ export interface Classification {
 
 /**
  * Classify one sweep's local rows against the processor's report. Pure: no I/O, no clock of its
- * own, no transaction — every input is an argument, which is what lets the money-critical rules be
- * tested exhaustively without a database.
+ * own, no transaction.
  *
  * The classes are INDEPENDENT predicates, not a switch: an orphan whose settlement has not appeared
- * yet is genuinely both `orphan` and `unsettled`, and the result says so rather than picking a
- * winner (fiscal's three classes are mutually exclusive; these are not).
+ * yet can be both `orphan` and `unsettled`, and the result lists it under both.
  */
 export function classify(
   rows: ReconcilableRow[],
@@ -189,7 +162,6 @@ export function classify(
       continue;
     }
 
-    // Money we believe we hold. The orphan rule is local-only: it never consults the report.
     if (row.saleId === null && row.workingOrderStatus !== "open") {
       out.push({ klass: "orphan", row, settled: settled ?? null });
     }
@@ -209,22 +181,17 @@ export function classify(
   };
 }
 
-/** Seven days: long enough for the ordinary clearing delay of a card processor, short enough that a
- * genuinely lost settlement surfaces the same week. A vendor property, so it is a dependency rather
- * than a constant the sweep hard-codes. */
+/** Long enough for a card processor's ordinary clearing delay, short enough that a lost settlement
+ * surfaces the same week. */
 export const DEFAULT_SETTLEMENT_LAG_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ReconcileDeps {
   db: Database;
-  /** The settlement identity being audited — one `provider` id, however many capture mechanisms
-   * write it. */
   provider: string;
   report: SettlementReportSource;
   reverse: ReversalFn;
   incidents: IncidentSink;
   settlementLagMs: number;
-  /** This node's id — the reconcile sweep's node identity, forwarded here to identify the node for
-   * the record path. */
   nodeId: string;
 }
 
@@ -247,35 +214,24 @@ const SEVERITY = {
 } as const;
 
 /**
- * The reconciliation sweep: audit one tenant's payments for one period against what the processor's
- * settlement report says actually cleared, classify every disagreement, raise an idempotent
- * incident per (till, class), and auto-reverse the one orphan shape that is unambiguously safe.
+ * Audit one period's payments against the processor's settlement report, raise incidents per till
+ * and class, and reverse the orphans that pass every gate.
  *
- * T1/T2, like `forward` and the fiscal sweep: a short read transaction, then the report fetch
- * OUTSIDE every transaction, then a short write transaction for incidents and markers, then the
- * reversals — also outside every transaction, because each is a network call.
- *
- * Two deliberate divergences from the fiscal sweep:
- *
- *   - the report is fetched even when T1 read NOTHING. Fiscal skips its network call on an empty
- *     period because a record it never wrote cannot exist; here, zero local rows plus a non-empty
- *     report IS the silent-data-loss case (every inbound settlement missed), so skipping would
- *     blind the sweep to exactly what it exists for;
- *   - the remediation marker is stamped BEFORE the reversal, not after. There is no persisted
- *     per-reversal idempotency key yet, so a crash between "the processor refunded" and "we
- *     recorded it" would let the next sweep refund again. Stamping first makes the failure mode an
- *     UNDER-remediated orphan carrying an open incident, never a double refund.
+ * T1 reads, the report fetch runs outside every transaction, T2 writes incidents and markers, and
+ * the reversals run outside every transaction (each is a network call). The report is fetched even
+ * when T1 read nothing: zero local rows against a non-empty report is the silent-data-loss case.
+ * The remediation marker is stamped BEFORE the reversal, so a crash between the processor refunding
+ * and us recording it leaves an under-remediated orphan, never a double refund.
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
   period: ReconcilePeriod,
   now: Date,
 ): Promise<PaymentReconcileResult> {
-  // T1 — our rows for the period. No network call inside it.
+  // T1 — our rows for the period.
   const rows = await withTransaction(deps.db, (tx) => listReconcilable(tx, deps.provider, period));
 
-  // Network — outside every transaction, over a window widened by the settlement lag, because a
-  // payment captured at the end of the period settles days after it.
+  // Widened by the settlement lag: a payment captured at the end of the period settles days after.
   const records = await deps.report.fetch({
     from: period.from,
     to: new Date(period.to.getTime() + deps.settlementLagMs),
@@ -296,25 +252,15 @@ export async function reconcilePayments(
   };
   for (const entry of classified.rows) result[entry.klass].push(mismatchOf(entry));
 
-  // `classify` emits INDEPENDENT predicates, so a drifting orphan is TWO entries over one row and
-  // the `orphan` entry carries no knowledge of the `drift` one. This set is the join, keyed on
-  // paymentRef — which the sweep already treats as unique per row. Built here, before T2 opens,
-  // because it depends only on `classified`: see the batching comments on `existingReferences` and
-  // `tillsForWorkingOrders` below for why this file keeps the write transaction minimal.
+  // A drifting orphan is two independent entries over one row; this set joins them.
   const driftedRefs = new Set(
     classified.rows.filter((e) => e.klass === "drift").map((e) => e.row.paymentRef),
   );
 
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
-  // sweep will reverse. One short write transaction.
+  // sweep will reverse.
   const remediable: ReconcilableRow[] = [];
   await withTransaction(deps.db, async (tx) => {
-    // One batched existence check for the WHOLE sweep's unmatched settlements, not one per
-    // settlement: T2 is a write transaction, so N round trips here would lengthen lock contention
-    // with the concurrent sweeps this feature explicitly supports, and a tenant with zero local
-    // rows against a large report (the exact silent-data-loss case this sweep exists to catch)
-    // is precisely the shape that would make that N largest. See `existingReferences` for why the
-    // check itself stays unbounded by period and by state.
     const allReferences = new Set<string>();
     for (const record of classified.unmatched) {
       for (const reference of record.references) allReferences.add(reference);
@@ -328,42 +274,17 @@ export async function reconcilePayments(
       result.missingLocal.push(missingLocalMismatch(record));
     }
 
-    // Decide what happens to each orphan, and record WHY on every one of them. The gates narrow to
-    // money that can actually be handed back, and their ORDER is what a human is shown when a row
-    // trips more than one, so it is deliberate:
-    //
-    //   - ABANDONED working order only. On a `settled` one a sale exists, so the orphan may be a
-    //     lost associate-back and refunding would take back money the customer owes against a live
-    //     invoice (see the design's orphan section).
-    //   - state `captured` only. This gate is not a preference: the local state machine has NO path
-    //     out of `settled`, and the reversal pre-check accepts `captured` for a void and
-    //     `captured`/`partially_refunded` for a refund — `settled` is in neither set. A `settled`
-    //     orphan claimed here would stamp the marker, fail its reversal, and, because the marker is
-    //     permanent by design, never be retried by any later sweep: the customer's money kept for
-    //     good, on every occurrence. It is reported and incident-raised instead, exactly like a
-    //     `settled`-working-order orphan. DO NOT drop this gate to "cover more orphans" until
-    //     `settled` has a reversal path.
-    //   - not already claimed by an earlier or concurrent sweep. This precedes the drift gate below
-    //     for the same permanence reason as the state gate above: the marker an earlier (or
-    //     concurrent, race-losing) sweep stamped is permanent, so settling a drift on a row that is
-    //     already claimed can never unblock a reversal — it has either already happened or already
-    //     failed for good. Reporting `amountDrifted` on such a row would point a human at a fix that
-    //     cannot do anything; `alreadyClaimed` is the gate whose resolution (there is none, for this
-    //     row) is actually accurate.
-    //   - amount carries no recorded DISAGREEMENT with the processor. A drifting row is the one case
-    //     where the sweep would move money at a figure it has, in the same pass, proven
-    //     untrustworthy: the reversal primitive sends no amount, so the processor refunds ITS figure
-    //     while we record OURS. Sending our amount instead is NOT the fix — when the processor's
-    //     charge is the smaller of the two it exceeds the charge, the refund is refused, and the
-    //     marker is already stamped, so it becomes money kept for good. Gated out and reported: no
-    //     marker is stamped, so the row stays in the audited state set and ANY sweep whose period
-    //     covers it again will re-detect it; and the `payment.reconcile_drift` and
-    //     `payment.reconcile_orphan` incidents stay OPEN (the dedup index is partial on
-    //     `acknowledged_at IS NULL`), so the human signal persists regardless of cadence. The
-    //     separate `drift` incident carries both figures.
-    //
-    // Every orphan gets exactly one entry in this map, which is what lets `incidentFor` read it
-    // without a fallback.
+    // Gate ORDER decides which reason a row tripping several gates reports.
+    //   - `workingOrderNotAbandoned`: on a `settled` working order a sale exists, so the orphan may
+    //     be a lost associate-back and refunding would hand back money owed against a live invoice.
+    //   - `stateNotCaptured`: a `settled` payment has no reversal path, so claiming it would stamp a
+    //     permanent marker for a reversal that must fail. Keep this gate until it has one.
+    //   - `alreadyClaimed`: an earlier sweep, or a concurrent one that won the race, owns the
+    //     reversal. It precedes the drift gate because that reversal has already happened or already
+    //     failed for good, so settling the drift cannot unblock it.
+    //   - `amountDrifted`: the reversal sends no amount, so the processor would refund its figure
+    //     while we record ours. Sending our amount is no fix: where the processor's charge is the
+    //     smaller, the refund is refused after the permanent marker is stamped.
     const remediation = new Map<string, OrphanRemediation>();
     for (const entry of classified.rows) {
       if (entry.klass !== "orphan") continue;
@@ -399,11 +320,8 @@ export async function reconcilePayments(
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
   });
 
-  // Reversals — outside every transaction. See the marker-ordering note above. One failure does
-  // not abort the pass: every remaining orphan still gets its turn. Every failure is recorded on
-  // the RESULT as well as aggregated into an incident, because the incident can be swallowed by an
-  // earlier sweep's still-open one and a claimed orphan is never re-examined (see
-  // `PaymentReconcileResult.remediationFailures`).
+  // One failure does not abort the pass. See `PaymentReconcileResult.remediationFailures` for why
+  // failures go on the result as well as into an incident.
   const failures: RemediationFailure[] = [];
   for (const row of remediable) {
     const reason = await remediate(deps, row);
@@ -419,11 +337,9 @@ export async function reconcilePayments(
   return result;
 }
 
-/** Raises one AGGREGATE incident per (till, class) over the classified rows, returning how many
- * were really inserted (`recordIncidentOnce` reports its own de-duplication, so a re-detected
- * still-open condition is not counted twice). Aggregate rather than one incident per payment: the
- * open-incident dedup index keys on `(till, code, sale_id)` and these rows frequently share
- * a null sale_id, so N same-key incidents would silently collapse into whichever won the race. */
+/** One aggregate incident per (till, class), returning how many were really inserted. Aggregate
+ * because the open-incident dedup keys on `(till, code, sale_id)` and these rows often share a null
+ * sale_id, so per-payment incidents would collapse into one. */
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
@@ -453,11 +369,7 @@ async function raiseRowIncidents(
   return raised;
 }
 
-/** Builds one class's aggregate incident. Params are structured data — a list plus its count —
- * never prose: the display layer localises from the code. `group` is homogeneous by construction
- * (`raiseRowIncidents` groups by `` `${tillId}|${klass}` ``), so the `drift` branch casts to that
- * narrower member of the `ClassifiedRow` union instead of null-checking a case classify() never
- * produces. */
+/** Params are structured data, never prose: the display layer localises from the code. */
 function incidentFor(
   klass: MismatchClass,
   group: ClassifiedRow[],
@@ -470,9 +382,7 @@ function incidentFor(
       payments: group.map(({ row }) => ({
         paymentRef: row.paymentRef,
         amount: row.amount,
-        // Never null here: classify() reaches "unsettled" only for a captured/settled row
-        // (initiated rows `continue` earlier), and both states always stamp settled_at at insert
-        // time — normalised to ISO-8601, unlike the raw `mode: "string"` Postgres format.
+        // Non-null: `listReconcilable` selects non-initiated rows by a `settled_at` range.
         settledAt: new Date(row.settledAt!).toISOString(),
       })),
     });
@@ -495,16 +405,12 @@ function incidentFor(
         amount: row.amount,
         workingOrderId: row.workingOrderId,
         workingOrderStatus: row.workingOrderStatus,
-        // Never undefined: the claim loop above sets an entry for EVERY orphan entry in
-        // `classified.rows`, and this branch groups over that same array.
+        // The claim loop sets an entry for every orphan.
         remediation: remediation.get(row.paymentRef)!,
       })),
     });
   }
-  // klass === "drift": classify() only ever pushes a "drift" row alongside its matched settlement
-  // (see its `else if` arm), so every entry here really does carry one — the cast makes that
-  // invariant explicit instead of fabricating a `captured === settled` fallback for a case that
-  // cannot occur.
+  // `raiseRowIncidents` groups by class, so every entry here is a `drift` one.
   const driftGroup = group as Extract<ClassifiedRow, { klass: "drift" }>[];
   return new AppError(CODE.drift, {
     count,
@@ -516,17 +422,8 @@ function incidentFor(
   });
 }
 
-/** Raises the aggregate `missingLocal` incident for the settlements the processor attributed back to
- * one of our working orders. An unattributed settlement has no till, so it cannot be an incident at
- * all — it is reported in the result and left to the caller.
- *
- * Resolves every hinted settlement's till in ONE batched query (`tillsForWorkingOrders`), not one
- * per settlement — the same reasoning as `existingReferences`'s batching above: this runs inside T2,
- * a write transaction, so N round trips here would lengthen lock contention with the concurrent
- * sweeps this feature explicitly supports (see `reconcile.concurrency.test.ts`), and a large report
- * with many hinted settlements is precisely the shape that makes that N largest. A hint whose working
- * order does not resolve is still skipped (absent from the map), exactly as the unbatched lookup's
- * `undefined` return skipped it. */
+/** A settlement with no hint, or whose hinted working order does not exist, has no till: it is
+ * reported in the result and raises no incident. */
 async function raiseMissingLocal(
   tx: Transaction,
   deps: ReconcileDeps,
@@ -593,20 +490,8 @@ function missingLocalMismatch(record: SettlementRecord): PaymentMismatch {
   };
 }
 
-/**
- * Reverse one claimed orphan at the processor, outside every transaction (it is a network call).
- * Returns `null` when the money went back, or a structured failure reason when it did not — the
- * refused payment's `AppError` code, or the literal `"unknown"` for a non-`AppError` failure.
- *
- * A refusal is not fatal to the sweep and is never retried: the marker was already stamped in T2.
- * This function raises no incident itself — the caller aggregates every failure from this sweep
- * into one incident per till (see `raiseRemediationFailures`), for the same reason
- * `raiseRowIncidents` aggregates: these payments have a null `sale_id` by definition, so incidents
- * raised one per payment would race for a single open-incident dedup slot and silently collapse. A
- * payment the adapter cannot address at all (a hosted payment, whose stored reference is not the
- * one the reversal path needs) lands here too, by design — visible, bounded, and fixed for free
- * when that reference gap closes.
- */
+/** Returns `null` when the money went back, else the refusal's `AppError` code or `"unknown"`. Never
+ * retried: the marker was stamped in T2. */
 async function remediate(deps: ReconcileDeps, row: ReconcilableRow): Promise<string | null> {
   try {
     await deps.reverse(row.paymentRef);
@@ -616,16 +501,12 @@ async function remediate(deps: ReconcileDeps, row: ReconcilableRow): Promise<str
   }
 }
 
-/** One orphan whose reversal this sweep attempted and the processor refused. */
 interface RemediationFailure {
   row: ReconcilableRow;
   reason: string;
 }
 
-/** Raises one AGGREGATE `remediation_failed` incident per till over this sweep's failed reversals —
- * mirrors `raiseRowIncidents`/`raiseMissingLocal`. Opens its own short transaction: the reversals
- * that produced these failures already ran outside every transaction, so this is the first and only
- * transaction the failure path needs. Returns how many incidents were really inserted. */
+/** One aggregate incident per till, in its own transaction: the reversals ran after T2 committed. */
 async function raiseRemediationFailures(
   deps: ReconcileDeps,
   failures: RemediationFailure[],

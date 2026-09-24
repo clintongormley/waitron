@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 /**
- * See packages/fiscal/src/no-hardcoded-margin.test.ts for why this narrow `ImportMeta.glob` type
- * is declared locally rather than pulled in via a `vite/client` triple-slash reference: this
- * package deliberately carries no dependency beyond `@waitron/db`, `@waitron/shared` and
- * `vitest`, and adding `vite` solely for a type reference would be a dependency bought for a
- * comment.
+ * Declared locally rather than through a `vite/client` reference, which would add a `vite`
+ * dependency for one type.
  */
 declare global {
   interface ImportMeta {
@@ -16,6 +13,8 @@ declare global {
   }
 }
 
+// Weaker than the suite's name: it scans the non-test `.ts` files under `src/` only, and never
+// reads a comment.
 const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
   query: "?raw",
   import: "default",
@@ -24,8 +23,7 @@ const sources = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"], {
 
 describe("the source glob itself", () => {
   it("discovers provider.ts, store.ts and the fake", () => {
-    // Without this, every check below passes vacuously against an empty set — the exact shape
-    // of vacuous test this project has already shipped seven of.
+    // Without this, every check below passes vacuously against an empty set.
     const names = Object.keys(sources);
     expect(names.some((n) => n.endsWith("provider.ts"))).toBe(true);
     expect(names.some((n) => n.endsWith("store.ts"))).toBe(true);
@@ -34,21 +32,8 @@ describe("the source glob itself", () => {
 });
 
 /**
- * Blanks `/* ... *\/` block comments to equivalent whitespace (preserving line numbers) and drops
- * trailing `// ...` line comments, mirroring packages/fiscal/src/no-regime-vocabulary.test.ts's own
- * `stripComments` verbatim (packages/db/src/english-only.ts no longer strips comments — since
- * 2026-09-07 it scans comment prose and blanks only quotations): a legitimate mention of provider/SDK
- * vocabulary inside a COMMENT (`provider.ts`'s own doc comments cite "the terminal" when explaining
- * why no method takes a transaction handle across a network call) must not trip a vocabulary guard,
- * while the same word used as a real identifier must still fail it.
- *
- * Not imported from `@waitron/db`: neither helper is exported from `english-only.ts` (both are
- * private, unexported functions), and `english-only.ts` itself is not re-exported from
- * `@waitron/db`'s public barrel. Reaching them would mean either exporting a test-scanning helper
- * through a package's PRODUCTION surface for the sake of one test file in a different package, or a
- * deep, non-barrel import that reaches past exactly the kind of encapsulation this package's own
- * barrel deliberately enforces elsewhere. Neither is worth it for two small, self-contained regexes,
- * so they are replicated verbatim here instead.
+ * A mention inside a COMMENT must not trip the guard, while the same word in code must. A copy of
+ * packages/fiscal/src/no-regime-vocabulary.test.ts's `stripComments`.
  */
 function stripComments(source: string): string {
   const blockBlanked = source.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "));
@@ -58,39 +43,21 @@ function stripComments(source: string): string {
     .join("\n");
 }
 
-/**
- * What the scan below actually checks — every discovered file's source with comments stripped, so
- * a legitimate comment mention never counts as a leak while real code still does.
- */
 const strippedSources: Record<string, string> = Object.fromEntries(
   Object.entries(sources).map(([path, source]) => [path, stripComments(source)]),
 );
 
 /**
- * Whether `source` mentions `term` as any part of an identifier, in any casing.
- *
- * A deliberately blunt case-insensitive substring test — stronger than the sibling
- * packages/fiscal/src/no-regime-vocabulary.test.ts's boundary-aware matcher, and correct for THIS
- * package: every FORBIDDEN term is provider/SDK vocabulary we want gone in every casing and every
- * compound form — whole words (`terminal`), lowercase-led compounds (`stripeClient`), PascalCase
- * compounds (`PaymentIntent`, `ConnectionToken`), and acronym-adjacent compounds (`APIStripeClient`,
- * `NFCReader`) alike. Comments are stripped from `source` before this runs, so a legitimate mention
- * in prose never reaches here. Unlike fiscal's `chain` (a fragment of ordinary words like
- * `unchained`), none of these terms is an English fragment that needs boundary nuance — and even
- * the CS-legitimate "terminal state" is intentionally banned here (use `finalState`), so bluntness
- * is the intended behaviour, not a compromise.
+ * A deliberately blunt case-insensitive substring test: every FORBIDDEN term is banned in every
+ * casing and compound form, and none is an English fragment that needs word boundaries. Even
+ * "terminal state" is intentionally banned (use `finalState`).
  */
 function mentionsTerm(source: string, term: string): boolean {
   return source.toLowerCase().includes(term.toLowerCase());
 }
 
-// Provider/SDK vocabulary. A second provider (Adyen, SumUp) brings its own names and its own
-// tables and must touch nothing in this neutral package; a term here naming a Stripe/terminal
-// concept has leaked across the boundary this guard exists to hold.
-// "reader" and "readerid" are deliberately NOT here: a card reader is neutral, provider-agnostic
-// domain vocabulary this package owns (a `card_readers` table with a `provider` discriminator and an
-// opaque `provider_ref`). A provider-specific reader still carries a banned provider token, so the
-// boundary holds regardless — `stripeReader` trips "stripe", `terminalReader` trips "terminal".
+// "reader" is deliberately NOT here: a card reader is provider-neutral vocabulary this package owns,
+// and a provider-specific reader still trips its provider's token (`stripeReader`).
 const FORBIDDEN = [
   "stripe",
   "adyen",

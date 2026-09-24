@@ -1,4 +1,3 @@
-// The entire public surface of @waitron/payments. Re-exports only — no logic here.
 export type {
   AsyncPaymentProvider,
   CardDetails,
@@ -13,9 +12,8 @@ export type {
   PaymentState,
   ProviderCapabilities,
 } from "./provider.js";
-// The fake is NOT re-exported here — packages that need it import it from
-// "@waitron/payments/src/testing/fake-provider.js" in test files only, so a production import of
-// the package surface cannot reach a test double by autocomplete (mirrors packages/fiscal).
+// The test doubles under ./testing/ are NOT re-exported, so a production import of the package
+// cannot reach one.
 export {
   assertReversible,
   associatePaymentWithSale,
@@ -93,10 +91,6 @@ export type {
   VendorReader,
 } from "./card-provider.js";
 export { cardProviderById, selectCardProviders } from "./card-provider.js";
-// The two reader tables (this module owns them) — re-exported from the package root so the host's
-// payments API reads and writes them the way it reads `@waitron/db`'s tables, rather than
-// deep-importing the schema. The Drizzle snapshot is still built from `./schema/index.js` alone;
-// this re-export is the runtime/TS surface only.
 export { cardReaders } from "./schema/card-readers.js";
 export { deviceCardReaders } from "./schema/device-card-readers.js";
 

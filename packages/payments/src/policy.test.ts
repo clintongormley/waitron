@@ -35,8 +35,6 @@ describe("resolveOfflineDecision (the pure gate)", () => {
 describe("getPaymentPolicy", () => {
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
   beforeEach(async () => {
-    // `delete from` in place of `truncate payment_policy cascade`: SQLite has neither TRUNCATE nor
-    // CASCADE. Receipt: `src/reconcile.test.ts`'s own hook.
     await pg.db.execute(sql`delete from payment_policy`);
   });
 

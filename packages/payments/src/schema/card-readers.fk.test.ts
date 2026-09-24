@@ -12,8 +12,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { cardReaders } from "./card-readers.js";
 
-// What this suite covers — the shape, the defaults and the unique index — is what a schema can
-// still refuse on its own.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("card_readers", () => {
@@ -26,7 +24,6 @@ describe("card_readers", () => {
         .values({ provider: "sumup", providerRef: "rdr_1", name: "Counter" });
     });
 
-    // Round-trips: the row is readable and its defaults are what the schema promises.
     const stored = await withTransaction(db, (tx) =>
       tx.select().from(cardReaders).where(eq(cardReaders.providerRef, "rdr_1")),
     );
@@ -37,7 +34,6 @@ describe("card_readers", () => {
     expect(stored[0]!.disabledAt).toBeNull();
     expect(stored[0]!.unpairedAt).toBeNull();
 
-    // The (provider, provider_ref) unique rejects a second reader with the same ref.
     const dup = await captureError(() =>
       withTransaction(db, async (tx) => {
         await tx
@@ -45,12 +41,8 @@ describe("card_readers", () => {
           .values({ provider: "sumup", providerRef: "rdr_1", name: "Dup" });
       }),
     );
-    // SQLite reports a result code on `errcode`, and a duplicate key two ways — a unique index
-    // (2067) and a primary key (1555) — so the class comes from `UNIQUE_VIOLATION`
-    // (`packages/db/src/sql-state.ts`), which holds both.
     expect(isRefusal(dup, UNIQUE_VIOLATION)).toBe(true);
-    // SQLite names the COLUMNS of the index it refused, not the constraint's name, so the assertion
-    // is on the columns. A message naming these two columns can only have come from this index.
+    // This engine names the refused index's COLUMNS, not the constraint.
     expect(engineErrorMessage(dup)).toMatch(
       /UNIQUE constraint failed: card_readers\.provider, card_readers\.provider_ref/,
     );

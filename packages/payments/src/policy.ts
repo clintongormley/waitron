@@ -30,13 +30,8 @@ export async function getPaymentPolicy(tx: Transaction): Promise<PaymentPolicyRo
   } as PaymentPolicyRow;
 }
 
-/**
- * The pure offline-acceptance gate. Given the venue's policy (or `undefined` when unconfigured),
- * the per-transaction staff consent, and the amount, decide whether an offline card may be accepted.
- * Fail-safe: no consent, no policy row, `cash_only`, or over the cap all refuse. Only a configured
- * `accept_offline` policy, with explicit consent, at or under the cap accepts. Nothing goes offline
- * silently — three independent gates must all pass.
- */
+/** Fail-safe: only a configured `accept_offline` policy, with explicit staff consent, at or under
+ * the cap accepts. */
 export function resolveOfflineDecision(
   policy: PaymentPolicyRow | undefined,
   allowOffline: boolean,
@@ -45,7 +40,6 @@ export function resolveOfflineDecision(
   if (!allowOffline) return "refuse";
   if (policy === undefined) return "refuse";
   if (policy.offlineMode !== "accept_offline") return "refuse";
-  // compareDecimal(amount, cap) > 0 means amount > cap → over the cap → refuse.
   if (compareDecimal(amount, decimal(policy.offlineAmountCap)) > 0) return "refuse";
   return "accept";
 }

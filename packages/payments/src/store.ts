@@ -15,22 +15,14 @@ import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { CardDetails, PaymentState } from "./provider.js";
 
-/** A payment row as the store reads it back. `state` is a `PaymentState`; `settledAt` is the raw
- * timestamptz string, left as a string so no timezone normalisation happens on the way through,
- * and `amount` is the exact decimal literal for the column's count of cents — never a float
- * either way. */
+/** `amount` is the exact decimal for the column's count of cents, never a float. */
 export interface PaymentRow {
   id: string;
   state: PaymentState;
   amount: string;
   saleId: string | null;
   settledAt: string | null;
-  /** The processor's own reference (e.g. a Stripe PaymentIntent id) / a manual acquirer ref; null
-   * when none. Read-side of the `external_ref` column, needed by the reversal path to address the
-   * processor. */
   externalRef: string | null;
-  /** Card-present facts for the receipt's card block, set once at capture by a provider that
-   * supplies them (SumUp); null for cash/manual/offline/failed and for providers that do not. */
   cardScheme: string | null;
   cardLast4: string | null;
   cardEntryMode: string | null;
@@ -47,20 +39,11 @@ interface NewPayment {
   provider: string;
   paymentRef: string;
   amount: Decimal;
-  /** Optional human acquirer reference (e.g. a standalone bank terminal's operation number). Set by
-   * manual tenders today, and reusable by integrated adapters later for the acquirer reference (as
-   * `payments.external_ref`'s own schema comment notes); null when no such reference applies. */
   externalRef?: string;
-  /** Card-present facts, persisted at capture. Optional: only providers that supply them (SumUp)
-   * set it; cash/manual/offline/failed leave it undefined, so the columns stay NULL. */
   card?: CardDetails;
 }
 
-/**
- * Cross the storage boundary for one row: a money column counts whole cents, and every amount
- * this module hands back is the exact decimal literal for it. Nothing above this line sees a
- * count of cents.
- */
+/** The storage boundary: a money column counts whole cents, and nothing above this sees a count. */
 function withDecimalAmount<T extends { amount: number }>(
   row: T,
 ): Omit<T, "amount"> & { amount: Decimal } {
@@ -101,8 +84,6 @@ async function insertPayment(
   });
 }
 
-/** Insert a captured payment — the single-message `collect` success. state=captured, settledAt set
- * (the tender-settlement time that feeds `RecordSaleTender.settledAt`). */
 export async function insertCapturedPayment(
   tx: Transaction,
   params: NewPayment & { settledAt: Date },
@@ -110,9 +91,8 @@ export async function insertCapturedPayment(
   await insertPayment(tx, params, "captured", params.settledAt.toISOString());
 }
 
-/** Insert an offline-accepted payment — state=accepted_offline, settledAt SET (the acceptance
- * time that feeds `RecordSaleTender.settledAt`, so the sale chains immediately). `forward()` later
- * advances it to `settled` or `declined`. Written only when the offline gate accepted. */
+/** Written only once the offline gate has accepted; `forward()` later advances it to `settled` or
+ * `declined`. */
 export async function insertAcceptedOffline(
   tx: Transaction,
   params: NewPayment & { settledAt: Date },
@@ -120,10 +100,8 @@ export async function insertAcceptedOffline(
   await insertPayment(tx, params, "accepted_offline", params.settledAt.toISOString());
 }
 
-/** Insert a failed payment — the network refused. state=failed, settledAt null. Persisted so a
- * declined attempt still leaves an audit record. Takes `Omit<NewPayment, "externalRef">`: a failed
- * attempt never settled on a terminal, so it must never carry a human acquirer reference — the type
- * forbids one being supplied, guaranteeing `external_ref` stays NULL for `state = failed`. */
+/** Persisted so a declined attempt still leaves an audit record. The type forbids an
+ * `externalRef`: a failed attempt never settled on a terminal. */
 export async function insertFailedPayment(
   tx: Transaction,
   params: Omit<NewPayment, "externalRef">,
@@ -131,17 +109,13 @@ export async function insertFailedPayment(
   await insertPayment(tx, params, "failed", null);
 }
 
-/** Insert an in-flight payment — state=attempting, settledAt null. Committed BEFORE a provider's
- * network call (T1) so a crash mid-network leaves a recoverable row and the `payment_ref` (the
- * caller's idempotency anchor) is already claimed. Resolved by `captureAttempting`/`failAttempting`
- * (T2). Only network-driving integrated adapters use it; manual mode never does. */
+/** Committed BEFORE a provider's network call, so a crash mid-network leaves a recoverable row and
+ * the `payment_ref` is already claimed. Resolved by `captureAttempting`/`failAttempting`. */
 export async function insertAttempting(tx: Transaction, params: NewPayment): Promise<void> {
   await insertPayment(tx, params, "attempting", null);
 }
 
-/** Resolve an `attempting` row to `captured` (T2 success): sets `settled_at` (the tender-settlement
- * time) and `external_ref` (the processor's own reference, e.g. a Stripe PaymentIntent id). Matches
- * only a row still `attempting`; if none matches, throws `payment.not_found`. */
+/** Matches only a row still `attempting`; otherwise throws `payment.not_found`. */
 export async function captureAttempting(
   tx: Transaction,
   params: Key & { settledAt: Date; externalRef: string; card?: CardDetails },
@@ -153,8 +127,7 @@ export async function captureAttempting(
   });
 }
 
-/** Resolve an `attempting` row to `failed` (T2 failure — the network refused or timed out). Matches
- * only a row still `attempting`; if none matches, throws `payment.not_found`. */
+/** Matches only a row still `attempting`; otherwise throws `payment.not_found`. */
 export async function failAttempting(tx: Transaction, params: Key): Promise<PaymentRow> {
   return resolveAttempting(tx, params, "failed", {});
 }
@@ -175,10 +148,6 @@ async function resolveAttempting(
       cardLast4: extra.card?.last4 ?? null,
       cardEntryMode: extra.card?.entryMode ?? null,
       cardAuthCode: extra.card?.authCode ?? null,
-      // Every `updated_at` stamp in this file reads this process's clock, which is also what the
-      // column's own `$defaultFn(nowIso)` writes on the insert. The PostgreSQL `now()` this
-      // replaced read the DATABASE's clock, once per transaction; this engine has no such function
-      // and the statement failed outright with `no such function: now`.
       updatedAt: nowIso(),
     })
     .where(and(keyWhere(params), eq(payments.state, "attempting")))
@@ -192,8 +161,8 @@ async function resolveAttempting(
   return withDecimalAmount(row);
 }
 
-/** Reverse a captured payment in full — a same-day void, distinct from a refund (which records a
- * refund movement instead). Valid only from `captured`; anything else throws `payment.not_voidable`. */
+/** Reverse a captured payment in full, recording no refund row. Only from `captured`; otherwise
+ * throws `payment.not_voidable`. */
 export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentRow> {
   const row = await requireRow(tx, params);
   if (row.state !== "captured") {
@@ -203,10 +172,8 @@ export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentR
   return { ...row, state: "voided" };
 }
 
-/** Return captured funds, whole or partial. Refundable from `captured` or `partially_refunded`;
- * anything else throws `payment.not_refundable`. Throws `payment.refund_exceeds_capture` if the
- * running total of refunds would exceed what was captured. Sets the payment to `refunded` when the
- * running total reaches the captured amount, otherwise `partially_refunded`. */
+/** Refundable from `captured` or `partially_refunded`, else `payment.not_refundable`; throws
+ * `payment.refund_exceeds_capture` if the running total of refunds would exceed the capture. */
 export async function recordRefund(
   tx: Transaction,
   params: Key & { amount: Decimal; authorizedBy?: string },
@@ -247,11 +214,8 @@ export async function recordRefund(
   return { ...row, state };
 }
 
-/** Record a refund the processor REFUSED — a `payment_refunds` row with `state='failed'`. The
- * payment's own state is unchanged (nothing was returned), and this refund is excluded from
- * `recordRefund`'s balance sum, so a later succeeded refund of the same amount is still allowed.
- * It reads no running total and transitions no payment, so it goes through `getPaymentByRef`
- * rather than `requireRow`; the two differ only in what they do when the payment is absent. */
+/** A refund the processor REFUSED. The payment's state is unchanged and `recordRefund`'s balance
+ * sum excludes this row, so a later refund of the same amount is still allowed. */
 export async function recordFailedRefund(
   tx: Transaction,
   params: Key & { amount: Decimal; authorizedBy?: string },
@@ -273,22 +237,12 @@ export async function recordFailedRefund(
   });
 }
 
-/** Set the payment's `sale_id` once `recordSale` has written the sale row — the Option B
- * associate-back. Call inside the sale transaction (before it commits) so the association commits
- * atomically with the sale, not after it (see the wiring test).
- *
- * The link is write-once: the UPDATE only matches a row whose `sale_id` is still NULL, so a
- * second call against an already-associated payment never re-points it at a different sale. When
- * the UPDATE matches nothing, a follow-up SELECT disambiguates why: no row at all throws
- * `payment.not_found`, a row that already carries a `sale_id` throws `payment.already_associated`. */
+/** Call inside the sale's own transaction, so the association commits with the sale. Write-once: a
+ * payment that already has a `sale_id` throws `payment.already_associated` and is never re-pointed. */
 export async function associatePaymentWithSale(
   tx: Transaction,
   params: Key & { saleId: string; readerId?: string },
 ): Promise<void> {
-  // `readerId` (the `card_readers.id` that took this payment, when known — an integrated card sale
-  // routed to a reader) is stamped in the SAME write-once UPDATE as `sale_id`, so a payment carries
-  // the reader it settled on. Omitted for a manual/cash tender and for the async settlement path
-  // (webhook), where no reader drove the collect.
   const [row] = await tx
     .update(payments)
     .set({
@@ -321,11 +275,8 @@ export async function getPaymentByRef(
   return row === undefined ? undefined : withDecimalAmount(row);
 }
 
-/** A captured (or offline-accepted) payment found for a working order — the §4 capture-idempotency
- * pre-check's result. `saleId` NULL is the "collect committed, P3 never ran" recovery window; set
- * means the sale is already filed and the pay is a replay. `amount`/`settledAt`/`externalRef` are the
- * settled-at string as read and the exact decimal literal for the stored amount, so the recovery
- * path can reconstruct the tender and associate this exact row. */
+/** `saleId` null: the payment committed but the sale was never written (the recovery window).
+ * Set: the sale is filed and this pay is a replay. */
 export interface CapturedPaymentForOrder {
   id: string;
   paymentRef: string;
@@ -347,25 +298,10 @@ const CAPTURED_FOR_ORDER_COLUMNS = {
   provider: payments.provider,
 };
 
-/** The §4 capture-idempotency pre-check: has this working order already got a captured (or
- * offline-accepted) payment for this provider? Read-only, over existing columns/`payments_working_order_idx`.
- * A `failed`/`attempting` row is NOT captured, so a legitimately-declined card stays re-chargeable and
- * a lost-T2 `attempting` orphan is never mistaken for a completed capture (§4).
- *
- * At most one captured/accepted_offline payment exists per working order BY CONSTRUCTION, not by a DB
- * constraint (`payments` carries no unique index over `(provider, working_order_id)`
- * restricted to those states): Task 1 derives the Stripe PaymentIntent-creation idempotency key from
- * the working-order id (`wo_<id>`, `packages/payments-stripe`), so every retry drives the SAME
- * PaymentIntent to at most one capture — and this pre-check is itself the thing that stops a caller
- * from proceeding to a second `collect` once the first capture exists (spec §4). Split-tender (more
- * than one payment per working order) is out of scope for this slice. `ORDER BY settled_at DESC
- * NULLS LAST` makes the read deterministic regardless, and if that invariant is ever violated it
- * returns the MOST RECENT captured row rather than an arbitrary one — this is a pre-check, so it
- * degrades rather than throwing on an unexpected second row. `NULLS LAST` is load-bearing despite
- * `settled_at` always being set for `captured`/`accepted_offline` "by construction": Postgres sorts
- * `DESC` as NULLS FIRST by default, so a plain `desc()` would rank a hypothetical NULL-`settled_at`
- * captured row ahead of a genuinely settled one — the opposite of "most recent" — the moment that
- * invariant is ever violated. */
+/** The capture-idempotency pre-check (spec §4). A `failed` or `attempting` row does not count, so
+ * a declined card stays re-chargeable. At most one captured payment per working order holds by
+ * construction, not by a constraint; if there are two, the most recently settled one is returned
+ * rather than throwing. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { provider: string; workingOrderId: string },
@@ -373,12 +309,7 @@ export async function findCapturedPaymentForWorkingOrder(
   return selectCapturedForWorkingOrder(tx, key);
 }
 
-/** The shared body of both captured-payment reads: the most-recent captured/accepted-offline payment
- * for a working order, optionally narrowed to ONE provider. `provider` omitted selects
- * across every provider — Drizzle's `and()` drops an `undefined` clause, so the same query serves the
- * provider-filtered §4 pre-check and the ticket path's any-provider read. The `desc nulls last`
- * ordering and the at-most-one-per-order invariant are documented on
- * `findCapturedPaymentForWorkingOrder`. */
+/** `provider` omitted spans every provider: drizzle's `and()` drops an `undefined` clause. */
 async function selectCapturedForWorkingOrder(
   tx: Transaction,
   key: { workingOrderId: string; provider?: string },
@@ -398,12 +329,6 @@ async function selectCapturedForWorkingOrder(
   return row === undefined ? undefined : (withDecimalAmount(row) as CapturedPaymentForOrder);
 }
 
-/** The captured/accepted-offline payment for a working order, WITHOUT filtering by provider, for
- * callers that know the working order but not which provider settled it.
- * Returns null when none (a cash sale, or a card sale whose payment row is absent). Shares
- * `selectCapturedForWorkingOrder` with the provider-filtered read above, passing no `provider` so the
- * query spans every provider; the only difference is the null (not undefined) empty return this
- * caller wants. */
 export async function findCapturedPaymentForWorkingOrderAnyProvider(
   tx: Transaction,
   key: { workingOrderId: string },
@@ -411,8 +336,6 @@ export async function findCapturedPaymentForWorkingOrderAnyProvider(
   return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
 }
 
-/** A payment row looked up by (provider, paymentRef) — the lookup a provider uses when it holds only
- * its own reference (e.g. the fake's `void`/`refund`). */
 export async function findPaymentByRef(
   tx: Transaction,
   provider: string,
@@ -426,9 +349,6 @@ export async function findPaymentByRef(
   return row === undefined ? undefined : withDecimalAmount(row);
 }
 
-/** One accepted-offline payment claimed for a forward pass. `saleId` is null only for an orphan
- * (accepted but never associated); the fake/adapter uses `workingOrderId` to find the till for the
- * decline incident. */
 export interface ForwardablePayment {
   paymentRef: string;
   workingOrderId: string;
@@ -443,11 +363,6 @@ const FORWARDABLE_COLUMNS = {
   amount: payments.amount,
 };
 
-/** The forward queue's one read, shared by the two exported entry points below. They differ only
- * in what the CALLER does with the transaction afterwards — which is the whole of the difference
- * between a claim and a list here — so the statement itself lives in one place and a column added
- * to `FORWARDABLE_COLUMNS` or a change of ordering is made once. The `where` IS the queue's
- * membership test: this provider's payments still in `accepted_offline`. */
 async function selectForwardable(tx: Transaction, provider: string): Promise<ForwardablePayment[]> {
   const rows = await tx
     .select(FORWARDABLE_COLUMNS)
@@ -458,28 +373,13 @@ async function selectForwardable(tx: Transaction, provider: string): Promise<For
 }
 
 /**
- * Claim this provider's accepted-offline payments for a forward pass, so concurrent `forward`
- * passes partition the queue and never double-advance a row. State IS the queue (no outbox table).
- * Ordered by `created_at` for a stable pass.
+ * State IS the queue: there is no claim column, so this stamps nothing (pinned in `store.test.ts`).
  *
- * **What makes this a claim is the CALLER's transaction, not anything in the statement.** So what
- * partitions the queue is that this selection and the state-guarded advances after it commit
- * together; the same selection taken outside a transaction carries no claim at all. Serialising two
- * such passes needs the caller's transaction to be a `withTransaction` one, which runs its body
- * inside `db.withWriteLock` (`packages/db/src/tenancy.ts:44`) and so through the queue that issues
- * `begin immediate` (`packages/store/src/write-queue.ts:51`). **No caller does that today**:
- * `FakePaymentProvider.forward` opens a bare `db.transaction`, which is not queued, and nothing in
- * production calls `forward` at all — so a second concurrent pass is a shape nothing here has been
- * run against.
- *
- * **It must stamp nothing.** There is no claim column on `payments` — state IS the queue — so a
- * claim built as an UPDATE would have to write a no-op over every row a forward pass merely looked
- * at. Pinned by `claimAcceptedOffline`'s case in `store.test.ts`, which compares every column
- * before and after.
- *
- * Shares the whole statement with `listAcceptedOffline` through `selectForwardable`. A REAL adapter
- * uses `listAcceptedOffline` instead, so nothing of its transaction is held across the processor
- * round-trip; the fake's single-transaction drain has no network call to split around.
+ * **What makes this a claim is the CALLER's transaction, not anything in the statement**: the
+ * selection and the state-guarded advances after it must commit together, and two passes are
+ * serialised only inside `withTransaction`, which takes the write lock. No caller does that today —
+ * `FakePaymentProvider.forward` opens a bare `db.transaction`, which is not queued — so two
+ * concurrent passes have not been run against this.
  */
 export async function claimAcceptedOffline(
   tx: Transaction,
@@ -488,14 +388,9 @@ export async function claimAcceptedOffline(
   return await selectForwardable(tx, provider);
 }
 
-/** Like `claimAcceptedOffline` but NOT called a claim — the T1 read a real adapter's `forward` uses
- * to list its pending offline payments before the (device) network sync, so nothing of this
- * transaction is held across the network call (T1/T2). Concurrency safety comes from the idempotent,
- * state-guarded `settleForwarded`/`declineForwarded` advances in T2 (each matches only a row still
- * `accepted_offline`) plus the race-safe incident dedup — two concurrent forwards listing the same
- * refs is harmless. The fake's single-transaction `forward` keeps using `claimAcceptedOffline`.
- * On this engine it is literally the same statement — `selectForwardable` — and what differs is
- * which one's transaction the caller goes on to write in; see `claimAcceptedOffline`. */
+/** The same statement as `claimAcceptedOffline`, for a real adapter whose network call must not
+ * run inside the transaction. Two passes listing the same rows are harmless: the advances each
+ * match only a row still `accepted_offline`. */
 export async function listAcceptedOffline(
   tx: Transaction,
   provider: string,
@@ -514,11 +409,8 @@ export interface AttemptingPayment {
   createdAt: string;
 }
 
-/** This provider's `attempting` rows, oldest first — the T1 read of a
- * `resolvePending` pass. Not called a claim, for the same reason `listAcceptedOffline` is not: the processor
- * lookup that follows is a network call, and the T2 advances (`captureAttempting` /
- * `failAttempting`) each match only a row still `attempting`, so two concurrent passes are
- * harmless. */
+/** Not a claim, like `listAcceptedOffline`: `captureAttempting`/`failAttempting` each match only a
+ * row still `attempting`, so two concurrent passes are harmless. */
 export async function listAttempting(
   tx: Transaction,
   provider: string,
@@ -537,10 +429,8 @@ export async function listAttempting(
   return rows.map(withDecimalAmount);
 }
 
-/** Stamp the processor's poll key onto an `attempting` row (T1.5 — after the create call returned,
- * before the poll). Matches only a row still `attempting`: a row already resolved keeps the
- * REFUNDABLE reference `captureAttempting` wrote, so a late stamp can never clobber it. A no-match
- * is silent, not an error — the race it loses to is a concurrent resolution, which is correct. */
+/** Matches only a row still `attempting`, so a late stamp never clobbers the refundable reference
+ * `captureAttempting` wrote. A no-match is silent: it lost to a concurrent resolution. */
 export async function stampAttemptingRef(
   tx: Transaction,
   params: Key,
@@ -552,23 +442,17 @@ export async function stampAttemptingRef(
     .where(and(keyWhere(params), eq(payments.state, "attempting")));
 }
 
-/** Advance a forwarded offline payment to `settled` (the network cleared it). Matches only a row
- * still `accepted_offline`, so re-running a completed forward is a no-op (idempotent). */
 export async function settleForwarded(tx: Transaction, params: Key): Promise<void> {
   return advanceAcceptedOffline(tx, params, "settled");
 }
 
-/** Advance a forwarded offline payment to `declined` (the network refused). Matches only a row
- * still `accepted_offline` (idempotent). The uncollected-receivable incident is raised by the
- * caller (the `forward` implementation), not here — keeping `@waitron/core` out of this neutral
- * store, exactly as fiscal's `drain` raises incidents in the adapter, not in `packages/fiscal`. */
+/** The uncollected-receivable incident is the caller's to raise, keeping `@waitron/core` out of
+ * this store. */
 export async function declineForwarded(tx: Transaction, params: Key): Promise<void> {
   return advanceAcceptedOffline(tx, params, "declined");
 }
 
-/** Shared body of `settleForwarded`/`declineForwarded`: advance a row still `accepted_offline` to
- * the given terminal state. Matches only a row still `accepted_offline`, so re-running a completed
- * forward is a no-op (idempotent) whichever state it targets. */
+/** Matches only a row still `accepted_offline`, so re-running a completed forward is a no-op. */
 async function advanceAcceptedOffline(
   tx: Transaction,
   params: Key,
@@ -580,18 +464,14 @@ async function advanceAcceptedOffline(
     .where(and(keyWhere(params), eq(payments.state, "accepted_offline")));
 }
 
-/** The row `settleInitiated` returns when it advances a hosted payment, enough for the app-level
- * orchestrator to chain `recordSale`: the still-open working order, the captured amount, and the
- * payment_ref association key. */
 export interface SettledInitiated {
   workingOrderId: string;
   amount: string;
   paymentRef: string;
 }
 
-/** Insert a minted-but-unpaid hosted payment — Mode 3's `initiate`. state=initiated, settledAt null,
- * external_ref = the hosted-payment id (required: it is the resolve/settle key the webhook carries).
- * The working order stays open until the inbound settlement advances this row. */
+/** A hosted payment minted but not yet paid. `externalRef` is required: it is the key the settling
+ * webhook carries. */
 export async function insertInitiated(
   tx: Transaction,
   params: NewPayment & { externalRef: string },
@@ -599,11 +479,9 @@ export async function insertInitiated(
   await insertPayment(tx, params, "initiated", null);
 }
 
-/** Advance a hosted payment still `initiated` -> `captured`, setting `settled_at`. Keyed by
- * `(provider, external_ref)` — all the inbound webhook carries — guarded by `state = 'initiated'`. Returns the row when it advanced, `null` when it matched
- * nothing (already captured — an at-least-once redelivery). That row-or-null is the idempotency
- * signal the orchestrator branches on: it chains `recordSale` only on a non-null return, so no second
- * invoice number is ever allocated. Mirrors `settleForwarded`'s state-guarded, idempotent advance. */
+/** Keyed by `(provider, external_ref)`, all the inbound webhook carries. Returns `null` when it
+ * matched nothing (an at-least-once redelivery); the caller chains `recordSale` only on a non-null
+ * return, so no second invoice number is allocated. */
 export async function settleInitiated(
   tx: Transaction,
   params: { provider: string; externalRef: string; settledAt: Date },
@@ -626,9 +504,6 @@ export async function settleInitiated(
   return row === undefined ? null : withDecimalAmount(row);
 }
 
-/** Advance a hosted payment still `initiated` -> `failed` (the customer abandoned / it expired).
- * State-guarded and idempotent, like `settleInitiated`; the working order stays open so staff can
- * take another tender. */
 export async function expireInitiated(
   tx: Transaction,
   params: { provider: string; externalRef: string },
@@ -645,10 +520,7 @@ export async function expireInitiated(
     );
 }
 
-/** Whether any payment of this provider, in any state, carries `externalRef` — the one question an
- * inbound webhook can ask with the identifiers it carries. `false` is the missingLocal case
- * reconcile audits; `true` for a row already past `initiated` is a redelivery. Runs on a plain
- * handle, before the settle transaction opens. */
+/** Any state counts: for a row already past `initiated`, `true` is a webhook redelivery. */
 export async function hasPaymentWithExternalRef(
   db: Database,
   provider: string,
@@ -666,19 +538,10 @@ function keyWhere(params: Key) {
   return and(eq(payments.provider, params.provider), eq(payments.paymentRef, params.paymentRef));
 }
 
-/** Read-only reversibility pre-check for integrated adapters: validates a payment can be reversed the
- * requested way BEFORE the adapter issues the processor's (irreversible) refund, so an invalid local
- * state fails fast without moving money. Mirrors the checks `recordVoid`/`recordRefund` enforce —
- * this is the pre-network read, and those stay the authoritative ones.
- *
- * What bounds a concurrent reversal slipping between this read and the write is no longer a row
- * lock, because `recordVoid`/`recordRefund` no longer take one (`requireRow`). The window is
- * unchanged in SHAPE and it was never closed by that lock either: this pre-check commits its own
- * transaction, the processor round-trip happens outside every transaction, and the reversal opens
- * a second one afterwards — `packages/payments-stripe/src/reverse.ts:85-101` is that sequence
- * written out. Reconcile still audits it.
- * Throws the same `payment.not_found`/`payment.not_voidable`/`payment.not_refundable`/
- * `payment.refund_exceeds_capture` those functions do. */
+/** The checks `recordVoid`/`recordRefund` make, run BEFORE the processor's irreversible refund so
+ * an invalid local state fails without moving money; those two stay authoritative. Nothing closes
+ * the window between this read and the reversal's write: the processor call runs outside every
+ * transaction. Reconcile audits it. */
 export async function assertReversible(
   tx: Transaction,
   params: Key & { kind: "void" | "refund"; amount?: Decimal },
@@ -722,12 +585,8 @@ export async function assertReversible(
 }
 
 /**
- * One row the reconcile sweep audits, joined to its working order for the till (every incident
- * needs one) and the status (the orphan rule). `auditedAt` is the NON-NULL tolerance anchor —
- * `settled_at` for a captured/settled row, `created_at` for an `initiated` one — so the classifier
- * needs no null branch on a column that, for the states this query returns, is never null anyway.
- * `createdAt` is separate from it and carried for one reason: it is the ordering anchor
- * `listReconcilable` merges its two arms on (see there).
+ * `auditedAt` is the non-null tolerance anchor: `settled_at`, or `created_at` for an `initiated`
+ * row. `createdAt` is the key `listReconcilable` merges its two queries on.
  */
 export interface ReconcilableRow {
   paymentRef: string;
@@ -739,40 +598,19 @@ export interface ReconcilableRow {
   createdAt: string;
   auditedAt: string;
   workingOrderId: string;
-  // Mirrors @waitron/db's working_order_status enum. `placed` was added by 0030 (7c) — a payment
-  // can join a placed order (Modes I/T), so the query's `workingOrders.status` now yields it and this
-  // pinned union must admit it too. The orphan rule below (`!== "open"`) and the auto-reverse gate
-  // (`!== "abandoned"`) both treat `placed` as a non-open, non-abandoned state by their existing
-  // inequalities; whether that is the right reconcile classification for a placed order is a
-  // question for the reconcile owner, not settled here.
+  // Mirrors @waitron/db's working_order_status enum. Reconcile's orphan rule (`!== "open"`) and
+  // auto-reverse gate (`!== "abandoned"`) treat `placed` as neither; whether that is right for a
+  // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   tillId: string;
   reconcileRemediatedAt: string | null;
 }
 
 /**
- * The reconcile sweep's T1 read: this provider's auditable rows for the period, joined to their
- * working order. Auditable means money we believe we hold (`captured`/`settled`, anchored on
- * `settled_at`) or money we believe is pending (`initiated`, anchored on `created_at` — it has no
- * settlement time yet). `accepted_offline` is deliberately absent: that queue belongs to
- * `forward()`. `failed`/`voided`/`refunded`/`partially_refunded` are absent too — nothing is
- * expected to settle for them, and `existingReferences` still sees them, so their settlements
- * never read as missingLocal.
- *
- * Filters compare the timestamp columns directly (no `to_char` wrapper), and the two state groups
- * are issued as TWO queries rather than one `OR`, deliberately. A single `OR` over two different
- * timestamp columns needs a usable index on BOTH arms before the planner will build a BitmapOr;
- * there is an index on `(provider, settled_at)` but none on `created_at`, so the OR form degrades to
- * a scan of the whole payments history on every sweep — for a venue with a year of payments, every
- * row, every night. Split, the `captured`/`settled` arm lines up with
- * `payments_reconcile_idx`'s `(provider, settled_at)` columns, and the `initiated` arm with its
- * `provider` column and then filters a set that is small and short-lived by nature (a minted-but-unpaid hosted
- * payment resolves or expires within minutes). A second index on `created_at` would buy the same
- * thing at the cost of another write-path index, which is why it is not the answer here.
- *
- * The two arms are merged on `created_at` then `payment_ref`, so the combined result keeps the
- * single query's created_at ordering AND is fully deterministic (the old single `ORDER BY
- * created_at` left same-instant rows in whatever order the plan produced them).
+ * Auditable: money we believe we hold (`captured`/`settled`, by `settled_at`) or believe is pending
+ * (`initiated`, by `created_at`). `accepted_offline` belongs to `forward()`. The other states are
+ * absent because nothing is expected to settle for them, and `existingReferences` still sees them,
+ * so their settlements never read as missingLocal.
  */
 export async function listReconcilable(
   tx: Transaction,
@@ -831,27 +669,13 @@ export async function listReconcilable(
   });
 }
 
-/** Postgres statements have a hard bind-parameter ceiling (65535); chunking an `IN` list keeps a
- * caller well under it regardless of how large the input is, rather than trusting every future
- * caller to stay small. Shared by `existingReferences` (a settlement report's references) and
- * `tillsForWorkingOrders` (a sweep's hinted working-order ids) — the same discipline, two lists. */
+/** Keeps an `IN` list under the engine's bind-parameter ceiling however large the input. */
 const CHUNK_SIZE = 1000;
 
 /**
- * Which of these processor references belongs to ANY payment of this provider — in any state, at
- * any time? The targeted existence check that stands between an unmatched settlement and a
- * `missingLocal` classification, batched into as few round trips as the bind-parameter ceiling
- * allows: the caller collects every reference across a whole sweep's unmatched settlements and
- * calls this ONCE (see `reconcilePayments`'s T2), rather than once per settlement. T2 is a WRITE
- * transaction, so one query per settlement there would also lengthen lock contention with the
- * concurrent sweeps this feature explicitly supports (see `reconcile.concurrency.test.ts`) — for a
- * tenant with zero local rows against a large report, the exact silent-data-loss case this audit
- * exists to catch, that is an unmatched settlement's worth of round trips inside the one
- * transaction every other sweep also has to get through.
- *
- * It is deliberately unbounded by period and by state: the report is fetched over a WIDER window
- * than the local rows (settlement lags capture by days), so a window-difference would manufacture
- * false positives for payments whose local row simply sits outside the audited period.
+ * Which of these references belongs to ANY payment of this provider? Deliberately unbounded by
+ * period and state: the report is fetched over a WIDER window than the local rows (settlement lags
+ * capture), so a bounded check would report payments outside the audited period as missingLocal.
  */
 export async function existingReferences(
   tx: Transaction,
@@ -866,9 +690,7 @@ export async function existingReferences(
       .select({ externalRef: payments.externalRef })
       .from(payments)
       .where(and(eq(payments.provider, provider), inArray(payments.externalRef, chunk)));
-    // `externalRef` is never null here: the WHERE clause matches only rows whose external_ref
-    // equals one of `chunk`'s (non-null) entries. The cast avoids a null check the query already
-    // forecloses, which would otherwise sit as a branch no test can legitimately take.
+    // Never null: the WHERE matched it against `chunk`.
     for (const row of rows) found.add(row.externalRef as string);
   }
   return found;
@@ -891,19 +713,7 @@ export async function markReconcileRemediated(
   return row !== undefined;
 }
 
-/**
- * The tills of many working orders, resolved in as few round trips as the bind-parameter ceiling
- * allows — every incident needs a till, and a payment reaches its till only through its working
- * order. Batched for the same reason `existingReferences` is: `raiseMissingLocal` collects every
- * hinted settlement's working-order id across a whole sweep and calls this ONCE (in `reconcile.ts`'s
- * T2, a write transaction), rather than once per hinted settlement — one query per settlement there
- * would lengthen lock contention with the concurrent sweeps this feature explicitly supports (see
- * `reconcile.concurrency.test.ts`), worst-case largest for a large report with few or no local rows.
- *
- * Returns a map keyed by `workingOrderId`; an id that does not exist is simply absent from it,
- * which the caller reads as "skip this hint" — the same contract the unbatched single-lookup form
- * expressed with `undefined`.
- */
+/** Keyed by working-order id; an id that does not exist is absent from the map. */
 export async function tillsForWorkingOrders(
   tx: Transaction,
   workingOrderIds: string[],
@@ -922,24 +732,9 @@ export async function tillsForWorkingOrders(
 }
 
 /**
- * The reversal paths' row fetch — the read `recordVoid` and `recordRefund` decide on before they
- * write. Throws `payment.not_found` when the payment is absent.
- *
- * This was `requireRowForUpdate` and it took `for update` on the payment row. What that arranged
- * was: two reversals of the SAME payment run one after the other rather than overlapping, so the
- * second one re-reads the state `recordVoid` checks and the `payment_refunds` total `recordRefund`
- * sums, instead of deciding on a snapshot the first reversal has already invalidated.
- *
- * There is no second reversal to overlap with. One write transaction runs on the venue file at a
- * time, so a read a write path takes is still true when its later statements run — the pattern is
- * stated once, with its measurement and its control, on `assertExtraListForWrite`
- * (`packages/catalogue/src/extras.ts`). SQLite has no row locks to take instead, and drizzle's
- * SQLite query builder has no `.for()` at all. Renamed with the clause: a function named for a
- * lock it does not take is a false claim, the same rename `packages/workforce/src/chain.ts` and
- * `packages/fiscal-verifactu/src/chain.ts` made for their chain heads.
- *
- * It stays a separate function from the read-only `getPaymentByRef`/`findPaymentByRef` because it
- * is the one that throws rather than returning `undefined`, which is all its two callers want.
+ * The read `recordVoid` and `recordRefund` decide on. It takes no lock: a caller's `withTransaction`
+ * holds the venue file's write lock, so the read is still true when they write — the pattern is
+ * stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  */
 async function requireRow(tx: Transaction, params: Key): Promise<PaymentRow> {
   const [row] = await tx.select(PAYMENT_COLUMNS).from(payments).where(keyWhere(params));

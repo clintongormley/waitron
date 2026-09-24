@@ -47,17 +47,9 @@ import { paymentPolicy } from "./schema/payment-policy.js";
 import * as schema from "./schema/index.js";
 
 /**
- * A coherence check on the package root, not a duplicate of schema-ownership.test.ts,
- * migrations.test.ts, store.test.ts or errors.reachability.test.ts — this proves `./index.js`
- * itself re-exports the right things, mirroring `packages/fiscal-verifactu/src/index.test.ts`'s
- * own reasoning: every other test in this package imports its subjects from a deep path
- * (`./store.js`, `./schema/payments.js`, …), so none of them would catch a re-export deleted from
- * the root.
- *
- * The two re-export barrels (`src/index.ts`, `src/schema/index.ts`) are excluded from coverage as
- * pure manifests — v8 reports phantom branches on re-export bindings, and their surface is asserted
- * structurally here and in schema-ownership.test.ts (see vitest.config.ts's note). `provider.ts`
- * and `errors.ts` stay IN coverage and reach 100% under the full suite.
+ * The other suites mostly import their subjects from a deep path, so this one is what catches a
+ * re-export deleted from the root. A type-only re-export is checked by `pnpm typecheck`: the
+ * annotations below are what point that check at the ROOT barrel.
  */
 describe("package public surface (./index.js)", () => {
   it("re-exports PAYMENTS_MIGRATIONS and the store functions from the package root", () => {
@@ -68,8 +60,6 @@ describe("package public surface (./index.js)", () => {
     expect(typeof recordRefund).toBe("function");
     expect(typeof associatePaymentWithSale).toBe("function");
     expect(typeof getPaymentByRef).toBe("function");
-    // resolvePending's two store reads (Task 1) — value exports, so a dropped re-export is caught
-    // only here, not by a type-only check.
     expect(typeof listAttempting).toBe("function");
     expect(typeof stampAttemptingRef).toBe("function");
     const attempting: AttemptingPayment = {
@@ -102,10 +92,6 @@ describe("package public surface (./index.js)", () => {
   });
 
   it("re-exports the provider types (PaymentProvider, PaymentResult) from the package root", () => {
-    // Both are type-only exports, so the meaningful check is that ./index.ts's re-export still
-    // type-checks against a real value shaped by ./provider.ts — a deleted re-export would fail
-    // this package's own `pnpm typecheck`, not this assertion, but the annotations below are
-    // what force that check to be against the ROOT barrel rather than a deep path.
     const result: PaymentResult = {
       provider: "fake",
       paymentRef: "pay-1",
@@ -119,9 +105,6 @@ describe("package public surface (./index.js)", () => {
   });
 
   it("re-exports the async (Mode 3) provider types from the package root", () => {
-    // Type-only exports: the meaningful check is that ./index.ts's re-export type-checks against a
-    // real value shaped by ./provider.ts — a deleted re-export fails this package's `pnpm typecheck`,
-    // and the annotations force that check against the ROOT barrel, not a deep path.
     const settlement: InboundSettlement = {
       provider: "fake",
       externalRef: "hosted-1",
@@ -150,8 +133,6 @@ describe("package public surface (./index.js)", () => {
 describe("the reconcile surface", () => {
   it("re-exports the sweep and its default lag from the package root", () => {
     expect(typeof reconcilePayments).toBe("function");
-    // `classify` is a type-erased runtime check too — a value export, unlike the interfaces below,
-    // so a dropped re-export would slip past every type-only check here and be caught only here.
     expect(typeof classify).toBe("function");
     expect(DEFAULT_SETTLEMENT_LAG_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
@@ -164,8 +145,6 @@ describe("the reconcile surface", () => {
   });
 
   it("types a PaymentReconciler an adapter can implement against the root barrel", () => {
-    // A structural check, exactly like the AsyncPaymentProvider one above: this is what a vendor
-    // package's own reconciler has to satisfy, so it must be reachable and complete from here.
     const reconciler: PaymentReconciler = {
       provider: "fake",
       reconcile: async (period): Promise<PaymentReconcileResult> => ({
@@ -185,17 +164,11 @@ describe("the reconcile surface", () => {
   });
 
   it("types an OrphanRemediation value from the root barrel", () => {
-    // Type-only export declared in ./errors.ts and re-exported from ./index.ts: nothing else in the
-    // repo imports it, so this is the only thing that would catch it being deleted from the root
-    // barrel — a deleted re-export fails this package's own `pnpm typecheck`, and the annotation
-    // below forces that check against the ROOT barrel, not the deep `./errors.js` path.
     const remediation: OrphanRemediation = "amountDrifted";
     expect(remediation).toBe("amountDrifted");
   });
 
   it("types a SettlementReportSource and a mismatch from the root barrel", () => {
-    // Both arguments named, not elided: the tenant is what a real source has to filter its report
-    // by, so the surface test has to prove the barrel still hands it one.
     const source: SettlementReportSource = {
       fetch: async (window): Promise<SettlementRecord[]> => [
         {
@@ -219,12 +192,8 @@ describe("the reconcile surface", () => {
 });
 
 /**
- * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
- * runs it, which is why `payments.ts` lines ~63-81 and `payment-refunds.ts`'s constraint block
- * show as uncovered even though every other test in this package imports these tables. Calling
- * `getTableConfig` forces the callback to run, and the assertions below are the meaningful check
- * that the constraints these tables declare actually exist under the names the rest of the
- * schema (FKs from other packages, migrations) depends on — not a coverage stunt.
+ * drizzle invokes each table's extraConfig callback LAZILY, so a plain import never runs it;
+ * `getTableConfig` forces it.
  */
 describe("schema constraint declarations (forces the lazy extraConfig callbacks)", () => {
   it("declares the payments table's unique, foreign-key, check and index constraints", () => {
@@ -269,23 +238,13 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
     expect(checkNames).toContain("payment_policy_cap_ck");
   });
 
-  // Future-proofing net for the lazy-callback problem above. The per-table blocks assert specific
-  // constraint names, but each also has to REMEMBER to call `getTableConfig` or that table's
-  // extraConfig lines go uncovered — which is exactly how `payment_policy` sank the package to
-  // 96.45% (< the 98% CI threshold) until its block was added. This iterates EVERY table the schema
-  // barrel exports and forces its callback, so a newly-added table is covered here automatically:
-  // adding a table can no longer silently drop coverage even before someone writes its named block.
-  // (Coverage isn't run by the pre-push hook — only in CI — so preventing the regression beats
-  // catching it.)
   it("forces the extraConfig callback of every owned schema table (new tables can't drop coverage)", () => {
-    // The barrel also exports the enum helpers `paymentState` and `paymentRefundState`, so cast to
-    // unknown[] first to let `is(v, SQLiteTable)` narrow to the tables only (mirrors
-    // schema-ownership.test.ts's filter, but narrowing for getTableConfig).
+    // The barrel also exports non-table values, hence `unknown[]` before narrowing to tables.
     const tables = (Object.values(schema) as unknown[]).filter((v): v is SQLiteTable =>
       is(v, SQLiteTable),
     );
     // Positive control: without it the loop below would pass vacuously against an empty set.
-    expect(tables.length).toBeGreaterThanOrEqual(3); // payments, payment_refunds, payment_policy
+    expect(tables.length).toBeGreaterThanOrEqual(3);
     for (const table of tables) {
       expect(() => getTableConfig(table)).not.toThrow();
     }

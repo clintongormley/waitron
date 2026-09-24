@@ -3,13 +3,11 @@ import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, label, money, newId, nowIso, table, tsString } from "@waitron/db";
 import { payments } from "./payments.js";
 
-/** One refund movement's outcome. 4a: `succeeded` (money returned) or `failed`. */
 export const paymentRefundState = enumType(["succeeded", "failed"]);
 
 /**
- * One row per refund — a distinct money movement referencing the original capture, never a
- * mutation of it. The aggregate (has the whole capture been returned, or only part?) is reflected
- * on `payments.state` (`refunded` / `partially_refunded`); this table is the itemised trail.
+ * One row per refund attempt, never a mutation of the capture; whether the whole capture has been
+ * returned is on `payments.state` (`refunded` / `partially_refunded`).
  */
 export const paymentRefunds = table(
   "payment_refunds",
@@ -20,8 +18,6 @@ export const paymentRefunds = table(
     paymentRef: label("payment_ref").notNull(),
     amount: money("amount").notNull(),
     state: paymentRefundState("state").notNull(),
-    /** The person who authorised this refund at the till (#7), NULL for automated (reconcile/manual)
-     * refunds. Plain uuid, no FK — the sale_voids.voided_by precedent. */
     authorizedBy: id("authorized_by"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },

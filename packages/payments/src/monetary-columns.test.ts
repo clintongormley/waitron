@@ -7,26 +7,11 @@ import { paymentPolicy, paymentRefunds, payments } from "./schema/index.js";
 
 /**
  * Every money column this package owns must be an `integer` — a count of whole cents, the shape
- * `packages/db/src/schema/columns.ts`'s `money` helper emits — and never `real`, `double
- * precision`, or any other float width. `payments.amount`/`payment_refunds.amount` carry currency
- * and feed straight into the captured-vs-refunded balance `payments.state` reflects; a binary
- * float here reintroduces the drift class exact amounts exist to remove.
+ * `packages/db/src/schema/columns.ts`'s `money` helper emits — and never a float: a binary float
+ * here reintroduces the drift exact amounts exist to remove.
  *
- * `integer` where this guard once said `bigint`, and with it goes the WIDTH half of the claim.
- * Against PostgreSQL the declared type separated an eight-byte column from a four-byte one, so
- * `PgBigInt53` was evidence that the whole twelve-integer-digit range fit. This engine has one
- * integer type and it is 64-bit however the column is declared (`packages/db/src/schema/columns.ts`
- * states this and `columns.test.ts` measures it), so there is no narrower width for a money column
- * to be declared as and nothing here can distinguish one. What is still checked, and is the part
- * that carries the drift class, is integer-versus-float.
- *
- * Whole cents rather than an exact decimal because the storage engine this column vocabulary is
- * being moved to has no exact decimal type. The decimal arithmetic itself did not move: it stays
- * above the column in `@waitron/shared`, and `store.ts` converts at the row.
- *
- * Unlike `fiscal-verifactu`'s own `monetary-columns.test.ts` — where `cuota_total`/`importe_total`
- * are deliberately `text`, because the fiscal fingerprint hashes those bytes verbatim — this package's amount
- * columns have no hash-chain constraint, so nothing here depends on the stored bytes.
+ * Checks integer-versus-float only, never WIDTH: this engine's integer is 64-bit however a column
+ * is declared, so there is no narrower width to catch.
  */
 const OWNED_TABLES = { payments, payment_refunds: paymentRefunds } as const;
 const MONEY_COLUMN = "amount";
@@ -53,8 +38,6 @@ function latestSnapshotColumnType(table: string, column: string): string | undef
   const parsed = JSON.parse(readFileSync(join(drizzleDir, "meta", latest), "utf8")) as {
     tables: Record<string, { columns: Record<string, { type: string }> }>;
   };
-  // Keyed by the bare table name: this engine has no schema qualifier, where the PostgreSQL
-  // snapshot this replaced keyed every table `public.<name>`.
   return parsed.tables[table]?.columns[column]?.type;
 }
 
@@ -83,8 +66,6 @@ describe("payments/payment_refunds monetary columns count whole cents, never flo
   });
 
   it("has teeth: the snapshot read finds a column that is there and nothing that is not", () => {
-    // The reader resolves real names rather than answering a constant: a column that is there
-    // comes back with its own type, and a name that is not there comes back undefined.
     expect(latestSnapshotColumnType("payments", "provider")).toBe("text");
     expect(latestSnapshotColumnType("payments", "no_such_column")).toBeUndefined();
     expect(latestSnapshotColumnType("no_such_table", "amount")).toBeUndefined();
@@ -98,9 +79,6 @@ describe("payments/payment_refunds monetary columns count whole cents, never flo
   });
 
   it("has teeth: the float pattern would catch a real regression", () => {
-    // A vacuous negative assertion (one that would pass against ANY string) is worse than no
-    // assertion at all — this proves the pattern above actually fires on the shape it exists to
-    // catch, mirroring `no-provider-vocabulary.test.ts`'s own "the guard has teeth" block.
     const offendingSql = 'create table "payments" (\n\t"amount" double precision not null\n);';
     expect(offendingSql.toLowerCase()).toMatch(/double precision/);
   });
