@@ -15,8 +15,9 @@ import { shiftTemplates } from "../src/schema/shift-templates.js";
 import { shifts } from "../src/schema/shifts.js";
 
 /**
- * A `WorkTimeRuleset` at the ET-statutory defaults. A suite overrides the one limit it exercises, so
- * the guardrail thresholds are the test's, never the engine's.
+ * A `WorkTimeRuleset` at what a default `convenio_config` row resolves to
+ * (packages/workforce-es/src/convenio.ts). A suite overrides the one limit it exercises, so the
+ * guardrail thresholds are the test's, never the engine's.
  */
 export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeRuleset {
   return {
@@ -232,7 +233,8 @@ export async function insertShiftSwap(
 }
 
 /** Appends through the real chain, so seeded rows are chained exactly as the write path does it.
- * `.transaction()` opens a savepoint inside a live tx, so this takes either handle. */
+ * `.transaction()` is a savepoint inside a live tx and a real transaction on a bare connection, so
+ * this takes either handle. */
 export async function insertTimeEntry(
   tx: Database | Transaction,
   params: {

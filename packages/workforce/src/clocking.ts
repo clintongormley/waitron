@@ -237,8 +237,8 @@ export class WorkforceBackend {
     return comparePlannedVsActual(plannedShifts, sessions);
   }
 
-  /** Published-only is an owner decision (2026-08-15): a draft shift (null `roster_version_id`) or a
-   * superseded version's shift must not manufacture phantom no-shows. */
+  /** Published-only is an owner decision (2026-08-15): a shift on a draft or superseded version, or
+   * on none, must not manufacture phantom no-shows. */
   private async plannedShiftsInPeriod(
     tx: Transaction,
     locationId: string,
@@ -577,8 +577,11 @@ export class WorkforceBackend {
     return version.status;
   }
 
-  /** `roster_versions_published_period_uq` is what guarantees one published version per period,
-   * not this. */
+  /**
+   * Demotes any incumbent `published` version for the SAME (location, exact period) as the version
+   * about to be published. `roster_versions_published_period_uq` is what guarantees one published
+   * version per period, not this.
+   */
   private async supersedePriorPublished(tx: Transaction, versionId: string): Promise<void> {
     const { rows } = await tx.execute<{ id: string }>(sql`
       select prior.id
@@ -809,9 +812,11 @@ function shiftDay(date: string, deltaDays: number): string {
  * `NaN >= NaN` is false, so an unparseable endpoint needs its own test.
  *
  * The only real interval check: `shifts_interval_ck` compares TEXT spellings and `addShift` stores the
- * caller's spelling verbatim, so a valid mixed-offset pair can still be refused by that CHECK as a raw
- * error, and `order by starts_at` misorders one. Normalising both endpoints, as `attemptAppend`
- * (./chain.ts) does for `event_at`, is the unmade fix: it would change what a caller reads back.
+ * caller's spelling verbatim, so a valid pair spelled differently (another offset, or `09:00:00Z`
+ * beside `09:00:00.500Z`) can still be refused by that CHECK as a raw error, and
+ * `order by starts_at` can misorder shifts spelled differently. Normalising both endpoints, as
+ * `attemptAppend` (./chain.ts) does for `event_at`, is the unmade fix: it would change what a
+ * caller reads back.
  */
 function assertShiftInterval(startsAt: string, endsAt: string): void {
   const startMs = Date.parse(startsAt);

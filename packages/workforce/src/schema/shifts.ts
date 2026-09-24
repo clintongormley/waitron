@@ -20,7 +20,8 @@ export const shifts = table(
     endsAt: tsString("ends_at").notNull(),
     endsOffsetMinutes: count("ends_offset_minutes").notNull(),
     role: label("role"),
-    /** Null while an unpublished draft; `publishRoster` sets it. */
+    /** Null for a shift on no version (deleting its version sets it null); `publishRoster` attaches
+     * such shifts at its location and in its period. */
     rosterVersionId: id("roster_version_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },

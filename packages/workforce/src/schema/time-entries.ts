@@ -113,7 +113,6 @@ export const timeEntries = table(
       name: "time_entries_correction_actor_fk",
     }).onDelete("restrict"),
     index("time_entries_person_event_idx").on(t.personId, t.eventAt),
-    // The projection looks up the corrections that target a given entry.
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
     // ±14h, the wall-offset domain `sales` uses.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),
@@ -143,7 +142,8 @@ export const timeEntries = table(
     // Only the whole-second UTC `toISOString()` form. The chain hashes `event_at` truncated to the
     // second, so a stored fractional second would recompute as tampered; and one spelling is what
     // makes text `<` and `order by` a time ordering. `appendToChain` truncates; this backstops any
-    // other writer. A glob does not check the calendar: `2026-02-31T10:00:00.000Z` passes.
+    // other writer. A glob does not check the calendar (`2026-02-31T10:00:00.000Z` passes), and
+    // like `time_entries_entry_hash_ck` it stops at a NUL byte, so anything after one passes.
     check(
       "time_entries_event_at_second_ck",
       sql`${t.eventAt} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'`,

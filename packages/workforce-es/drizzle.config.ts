@@ -3,7 +3,7 @@ import { defineConfig } from "drizzle-kit";
 export default defineConfig({
   dialect: "sqlite",
   // One config produces exactly one migration folder — this package's first, for `convenio_config`.
-  // Same reasoning as packages/workforce/drizzle.config.ts.
+  // Same reasoning as packages/credentials/drizzle.config.ts.
   out: "./drizzle",
   // Pointed at the schema entrypoint, NOT a glob: drizzle-kit builds its snapshot from the values
   // this module exports, so the explicit export list IS the snapshot's table list.

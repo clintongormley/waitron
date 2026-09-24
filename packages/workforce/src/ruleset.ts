@@ -2,9 +2,7 @@ import type { OvertimeModel } from "./projection.js";
 
 /**
  * The working-time parameters, with no collective-agreement figure hard-coded: packages/workforce-es
- * resolves its configuration row into this shape. `workSummary` reads `workingDaysPerWeek`,
- * `overtimeModel` and `dailyTargetMinutes`; `referencePeriodDays` and `compensationWindowDays` are
- * not yet read in this package; every other field is a `validateRoster` threshold.
+ * resolves its configuration row into this shape.
  */
 export interface WorkTimeRuleset {
   /** The daily-target denominator when `dailyTargetMinutes` is null. */

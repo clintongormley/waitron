@@ -37,8 +37,8 @@ declare module "@waitron/shared" {
     "roster.draft_exists": { locationId: string };
     /** A shift write named a roster version that is no longer a `draft`. */
     "roster.not_draft": { rosterVersionId: string };
-    /** The shift starts at or after its end. `reason` names which invariant failed; on add there is
-     * no shift id yet. */
+    /** An endpoint is unparseable, or the shift does not end after it starts. `reason` names
+     * which invariant failed; on add there is no shift id yet. */
     "shift.invalid": { reason: string };
     /** The target entry already carries an `approved` correction. A request row stays `requested`
      * after approval (approval is a second append), so its own status cannot show this. */

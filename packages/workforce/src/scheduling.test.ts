@@ -70,7 +70,8 @@ describe("publishRoster", () => {
   });
 
   it("attaches only same-location, in-period draft shifts (the predicates are not vacuous)", async () => {
-    // Three draft shifts differing in exactly one attribute each. publishedByPersonId is omitted here.
+    // Three null-version shifts differing in exactly one attribute each. publishedByPersonId is
+    // omitted here.
     const versionId = await insertRosterVersion(suite.db, {
       locationId,
       periodStart: "2026-03-02",
@@ -551,7 +552,7 @@ describe("getPlannedVsActual", () => {
       eventAt: outAt,
     });
   }
-  // `publishRoster` attaches every in-period null-version draft shift at `loc`.
+  // `publishRoster` attaches every in-period null-version shift at `loc`.
   async function publishWeek(loc: string): Promise<void> {
     const versionId = await insertRosterVersion(suite.db, {
       locationId: loc,
