@@ -2576,10 +2576,11 @@ image constraints under *Detail → Box image*.
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
   comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
   2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
-  about 3,250 to about 1,550) and `apps/setup` (#567, about 1,390 to about 310). A pruning pull
-  request cannot carry this file (the checker refuses it), so each one's line lands here as a
-  docs-only push after the merge. Found by #555, #558, #559, #561, #562 and #567 and left for the
-  package that owns each, all still OPEN:
+  about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310) and `packages/store`
+  (#568, about 1,120 to about 555, tests included). A pruning pull request cannot carry this file
+  (the checker refuses it), so each one's line lands here as a docs-only push after the merge.
+  Found by #555, #558, #559, #561, #562, #567 and #568 and left for the package that owns each, all
+  still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2710,6 +2711,16 @@ image constraints under *Detail → Box image*.
     checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
     `scripts/setup-wizard-fiscal-fields.test.ts` and `packages/fiscal-verifactu/src/venue-fields.ts`.
     Prune with those.
+  - `packages/store`, found by #568 and not changed: `isLocked` in `venue-lock.ts` reads `.errcode`
+    without a null check, so a thrown `null` would raise a `TypeError` (the driver throws real
+    errors). `CLAUDE.md` §3's read-routing rule says a read-only connection does not refuse an
+    `ATTACH`; #568's probe (Node v26.7.0) found one naming a file that does not exist IS refused
+    there (errcode 14, no file created), while an existing file and `:memory:` attach — narrow that
+    sentence in a pull request, since a root `CLAUDE.md` change takes the normal flow.
+    `packages/db/drizzle/0001_behavioural_triggers.sql` still points at `packages/store/src/index.ts`
+    by line number, which the prune moved; it is a migration file, so it was left. The slice-2 plan's
+    Task 6 Step 10 still finds the two comments it replaces by their opening words, but its line
+    numbers into `index.ts` and `index.test.ts` are out of date.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3234,7 +3245,8 @@ only, so this was a behaviour change rather than something SQLite forces.
 `readOnly: true` beside it. A statement goes to the reader only while one of the store's own
 transaction bodies is running and the caller's asynchronous context is outside it; everywhere else
 the writer is used, so migrations, archives and writes outside a transaction are unchanged. The rule
-and its measurements are in `packages/store/src/connections.ts`, and the cases in
+is in `packages/store/src/connections.ts`, its measurements in `docs/developers/conventions-data.md`
+(since #568 pruned them from the source), and the cases in
 `packages/store/src/index.test.ts` pin it — though not every one of them does: with the routing
 replaced by `return write;` the case `serves a read routed to the reader on a file with no tables in
 it` still passes, so it is a smoke test rather than a control, and it says so at its own site.
@@ -3247,11 +3259,12 @@ that transaction and commits or rolls back with it, which is what one connection
 refuses it. And `readOnly: true` refuses a write to the database FILE, not every write: measured
 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a connection, so a temporary table
 written from outside a running body would land on the reader and stay there — and the same holds
-for an `ATTACH` and for any connection-scoped pragma, because all three change a CONNECTION rather
+for an `ATTACH` of a file that exists (one of a missing file is refused, errcode 14 — measured by
+#568) and for any connection-scoped pragma, because all three change a CONNECTION rather
 than the file, so nothing refuses them and nothing routes them back. A temporary table and an
 `ATTACH` have no site in this tree: searched 2026-09-23, a `create temp table`/`create temporary
-table` grep over `packages`, `apps` and `scripts` matched nothing, and `packages/store/src/index.ts`
-records the same result for `ATTACH`. A connection-scoped pragma is a different matter — those are
+table` grep over `packages`, `apps` and `scripts` matched nothing, and the same search for `ATTACH`
+was recorded in `packages/store/src/index.ts` until #568 pruned it. A connection-scoped pragma is a different matter — those are
 issued through routed handles already. The one that runs on a request path,
 `pragma defer_foreign_keys = on` at `apps/server/src/configuration-transfer.ts:487`, is issued
 INSIDE the provisioning transaction's body, which is exactly where the routing sends a statement to
