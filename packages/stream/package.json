@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./litestream.js": "./src/litestream.ts",
-    "./testing/memory-store.js": "./src/testing/memory-store.ts"
+    "./testing/memory-store.js": "./src/testing/memory-store.ts",
+    "./testing/switchable-store.js": "./src/testing/switchable-store.ts",
+    "./testing/fake-litestream.js": "./src/testing/fake-litestream.ts"
   },
   "scripts": {
     "test": "vitest run",
