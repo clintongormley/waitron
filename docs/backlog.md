@@ -4482,10 +4482,12 @@ Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`
 `begin immediate` the operating system releases when the process dies; a second process is refused
 `provisioning.database_in_use`, while opens inside one process share it; restore and
 `waitron-rejoin` take it before changing any file; break-glass, `waitron-credentials`, two dev
-scripts and the Cloud backup fixture's capture open without it), landed as #566. Left open, the
-owner's call: a second container copy the lock refuses still counts as a failed start in the box's
-boot-failure counter (`apps/server/src/node-entry.ts`; three failures put the box on the recovery
-page) — default: leave it. Also left by #566's review, no behaviour change: the migrator's lock and
+scripts and the Cloud backup fixture's capture open without it), landed as #566. The question it
+left open was decided by the owner on 2026-09-24 and done in (this PR): a start the lock refuses no
+longer counts toward the recovery page (`apps/server/src/node-entry.ts` puts the count back), and
+the container's entrypoint now refuses any argument (`server.entry_arguments_refused`) instead of
+booting a second server when `docker compose run app <command>` is given no `--entrypoint`. Also
+left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into five test files.
 Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed pointer
@@ -4587,7 +4589,8 @@ Two things from T2 worth reading before T3 or anything near the box:
   root, which is what made the fail-open below reachable.** The `--entrypoint` is not cosmetic:
   measured against the real app image, the old
   call shape appends its arguments to the image's ENTRYPOINT and BOOTS A SERVER, exiting non-zero,
-  which `is_production` reads as "cannot establish" and then refuses every reset as production. The
+  which `is_production` reads as "cannot establish" and then refuses every reset as production
+  (since 2026-09-24 the entrypoint refuses the arguments instead of booting; still non-zero). The
   guard suite could not see it — its docker stub matched `*trading.env*` anywhere in the argument
   string — so the stub now models the entrypoint and a missing override fails behaviourally.
 - **`docker compose up -d` does not remove a service deleted from the file**, and `waitron.sh`
