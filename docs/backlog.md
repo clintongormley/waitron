@@ -4088,7 +4088,7 @@ budget — holders torn by a concurrent promotion, credential sealing, and sched
 Task 1b, session cookies stored only as hashes (the till's and the dashboard's cookie carry a
 random token, and `sessions` and `management_sessions` keep only its SHA-256 in a new `token_hash`
 column; identity's logins and sign-in ceremonies are reclassified `state`), is on branch
-`feat/sqlite-slice2-hashed-sessions`, PR pending. Every seeded dev venue holds a session row
+`feat/sqlite-slice2-hashed-sessions`, PR #554. Every seeded dev venue holds a session row
 (provisioning's `seed-device-profiles` step opens a management session and never ends it,
 `packages/provisioning/src/venue-apply.ts`), so each fails its migration until
 `wa-wt reset demo <name>` rebuilds it, and every existing login signs in again.
