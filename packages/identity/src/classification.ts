@@ -23,7 +23,11 @@ export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "a person's registered authenticators; copied to a standby, never drained back",
   ),
-  classify("recovery_codes", "state", "single-use account recovery proofs"),
+  classify(
+    "recovery_codes",
+    "state",
+    "single-use account recovery proofs; copied to a standby, never drained back",
+  ),
 
   // Logins and sign-in ceremonies.
   classify(

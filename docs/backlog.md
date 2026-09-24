@@ -4101,8 +4101,12 @@ titles and comments still promising "not a 500" from PostgreSQL's `22P02` remain
 on the branch: the mirror viewer's ambient `admin` session (`apps/server/src/mirror-session.ts`)
 used its fixed, public row id as its cookie, so a copy of the database, or a node served without
 the mirror's middleware, accepted that public value as an admin login. Its cookie is now a random
-token, minted afresh each time the viewer is seeded and stored only as a hash;
-`apps/server/src/mirror-session.test.ts` has a gated route without the middleware refusing the row id.
+token, minted afresh each time the viewer is seeded and stored only as a hash, and every trading
+boot whose mode is not `mirror` ends the viewer's session (`endMirrorViewer`), so a browser that
+kept the cookie is refused after a promoted mirror restarts or a mirror's database is booted as a
+primary; a later mirror boot revives it. `apps/server/src/mirror-session.test.ts` has a gated route
+without the middleware refusing the row id, and `apps/server/src/boot.mirror.test.ts` a primary boot
+refusing a kept cookie.
 Also left open: now that both ends are `state`, the keys #426 dropped could be declared again —
 `sessions` to `persons` and `tills`, and `management_sessions`, `totp_enrollments` and
 `google_oidc_states` to `persons` (`sessions` and `management_sessions` are rebuilt by

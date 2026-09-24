@@ -51,9 +51,9 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
   const run = createErrorBoundary(STATUS, "recovery-bundle.failed");
   app.post("/api/box/recovery-bundle", (c) =>
     run(c, log, async () => {
-      const managementSessionId = requireManagementSession(c); // throws 401 if absent
+      const token = requireManagementSession(c); // throws 401 if absent
       const { authorizedBy: personId } = await withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, { managementSessionId, permission: "system.manage" }),
+        authorizeManager(tx, { managementSessionId: token, permission: "system.manage" }),
       );
       const body = await readJsonBody<{ passphrase?: unknown }>(c);
       if (typeof body.passphrase !== "string" || body.passphrase === "") {
