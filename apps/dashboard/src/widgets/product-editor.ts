@@ -1335,7 +1335,8 @@ export class ProductEditor extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${(event: Event) => {
-          if (event.target === event.currentTarget) this.cancel(event);
+          // A close while `open` is false is the screen shutting the window, not the person.
+          if (event.target === event.currentTarget && this.open) this.cancel(event);
         }}
       >
         <wt-form-error-summary

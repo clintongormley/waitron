@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import {
   ProductEditor,
   productEditorField,
@@ -1178,6 +1178,32 @@ it("summarises each collapsed section so nothing filled in is invisible", async 
     "nombre para el cliente (en, es) · descripción (en) · imagen",
   );
   expect(section(el, "nutrition").getAttribute("summary")).toBe("Vegano");
+});
+
+it("reports a Cancel when its window is dismissed, never when the screen shuts it", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const cancelled = vi.fn();
+  el.addEventListener("wt-cancel", cancelled);
+  el.open = false;
+  await el.updateComplete;
+  await closeReportsDelivered();
+  expect(cancelled).not.toHaveBeenCalled();
+
+  el.open = true;
+  await el.updateComplete;
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const dismissed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  modal.shadowRoot!.querySelector("dialog")!.close();
+  await dismissed;
+  expect(cancelled).toHaveBeenCalledOnce();
 });
 
 it("suspends Save and Cancel while a nested window is open", async () => {

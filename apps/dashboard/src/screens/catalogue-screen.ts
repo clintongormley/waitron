@@ -447,8 +447,8 @@ export class CatalogueScreen extends LitElement {
    * produces a SECOND `wt-cancel` later: the `<dialog>` this screen just closed delivers its native
    * `close` event a task afterwards, `wt-dialog.ts` turns that into `wt-close`, and the form answers
    * with another cancel. By then a different form can be open, and an unchecked handler closes that
-   * one. What this check does NOT separate is the same kind reopened inside that one task — for that
-   * it would need a generation counter, as `modifiers-screen.ts` uses for its own reopen case.
+   * one. The same kind reopened inside that task needs no check here: `wt-dialog.ts` drops the late
+   * report for a dialog that is open again.
    */
   #cancelList(kind: "extras" | "options"): void {
     if (this.#child.kind !== kind) return;

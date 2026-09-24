@@ -81,6 +81,9 @@ export class WtDialog extends LitElement {
   }
 
   private onClose(): void {
+    // The browser reports a close a task after it happens, so a dialog shut and reopened in between
+    // still gets the report; honouring it would shut the reopened dialog.
+    if (this.dialog.open) return;
     this.open = false;
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }

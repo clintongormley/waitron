@@ -14,7 +14,7 @@ import type {
 } from "../api/client.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
@@ -813,6 +813,52 @@ describe("catalogue-screen", () => {
       emit(editor(el), "wt-submit", { value: variantValue });
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", variantValue);
+    });
+
+    // Opening the variant shuts the parent's window first, and the browser reports that shut a task
+    // later. Neither a report that lands while the variant is still loading, nor one that lands
+    // after the variant's window is already showing, is the person cancelling.
+    it("keeps a variant opened from its parent when its load outlasts the parent's window closing", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      let release!: () => void;
+      const loaded = new Promise<ProductEditorValue>((resolve) => {
+        release = () => resolve(variantValue);
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      vi.mocked(api.getProductEditor).mockReturnValue(loaded);
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await flush(el);
+      await closeReportsDelivered();
+      release();
+      await flush(el);
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).value).toEqual(variantValue);
+      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+    });
+
+    it("keeps a variant opened from its parent when it loads before the closed window reports", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      // Long enough for the parent's window to have shut, short enough to finish inside the task.
+      vi.mocked(api.getProductEditor).mockImplementation(async () => {
+        for (let turn = 0; turn < 30; turn++) await Promise.resolve();
+        return variantValue;
+      });
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await flush(el);
+      await closeReportsDelivered();
+      await el.updateComplete;
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).value).toEqual(variantValue);
+      expect(location.pathname).toBe("/manage/catalogue/product/v1");
     });
 
     // Spec §15.6: removing a variant makes it Inactive, through its own page's write, and leaves

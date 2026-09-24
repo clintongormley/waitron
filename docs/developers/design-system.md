@@ -386,6 +386,13 @@ See `apps/dashboard/src/screens/profile-screen.ts` (`#closeModal`) for the full 
 one" for how to reproduce the race deterministically (dispatch the delayed `wt-close` by hand
 rather than depending on timing luck).
 
+Since 2026-09-24 `wt-dialog` itself drops a close report that arrives while its native dialog is
+open again, so a modal reopened before the report lands no longer emits `wt-close` at all
+(`packages/ui/src/components/wt-dialog.test.ts`, "stays open, and reports no close, when shut and
+reopened within one task"). A report for a dialog that is still shut does arrive, so a handler that
+turns `wt-close` into a Cancel checks that it is still meant to be open, as
+`apps/dashboard/src/widgets/product-editor.ts` does.
+
 Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
 to handle dismissal, including Escape. The native dialog keeps focus inside while open and
 returns focus to its trigger on close. Use `wt-dialog` for a compact confirmation.
