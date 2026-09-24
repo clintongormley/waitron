@@ -868,7 +868,7 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   in c64b96fb7 (2026-08-07, #63), where it guarded only paying and placing an order, and re-holding
   a retrieved order was routed through `#syncIfDirty` in 29b7234ae (2026-08-18, #101). **Next action:** give the till a way to save a label
   without re-sending the lines, so the stored extras and locked prices are kept.
-- **DONE (owner decision 2026-09-24, PR to be added): an extras list can no longer offer a product
+- **DONE (owner decision 2026-09-24, #578, main 6a6e2c614): an extras list can no longer offer a product
   with Active variants.** Saving an extras list that names such a product is refused
   `extras.product_has_variants` (409), naming the item; a save that would give a product an extras
   list offers an Active variant, from the parent's editor or the variant's own page, is refused
@@ -879,6 +879,16 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   (owner decision 2026-09-24), but the extras form's product picker lists top-level products only
   (`listProducts`, `packages/catalogue/src/operations.ts`), so a manager cannot choose one from the
   dashboard. **Next action:** decide whether the picker should list variants.
+- **A configuration transfer copies `extra_list_items` as a table, not through the extras list
+  save**, so it does not ask #578's `extras.product_has_variants` question
+  (`CATALOGUE_CONFIGURATION_TRANSFER`, `packages/catalogue/src/configuration-transfer.ts`). A source
+  venue saved under the rule carries no such item; one holding data written before #578 would carry
+  it across. Read, not run. **Next action:** none unless transfers from older venues matter.
+- **The two `till-sale.test.ts` cases named "…gained an Active variant" pass with the variant left
+  Inactive** (reported by #578's implementer, who removed the activation and saw both still pass),
+  so their billing assertions do not depend on the variant being Active. #578 added a check that the
+  setup really makes it Active; the cases themselves were not redesigned. **Next action:** give each
+  an assertion that fails when the variant is Inactive, or rename them to what they prove.
 - **The header of the shipped `packages/media/drizzle/0001_image_references.sql` still describes
   `product_variants.image`,** now a dropped table. It stays unedited, for the reason given under
   Task 1.
