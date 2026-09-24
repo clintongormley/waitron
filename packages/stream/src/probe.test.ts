@@ -137,9 +137,11 @@ describe("probeBucket", () => {
     });
     const denied = createMemoryObjectStore();
     denied.failNext({ operation: "list", error: failure(403, "AccessDenied") });
-    await expect(probeBucket(denied, NONCE)).resolves.toMatchObject({
+    // A key without the list permission is named by the step it failed, not as a general refusal.
+    await expect(probeBucket(denied, NONCE)).resolves.toEqual({
       ok: false,
-      reason: "access_denied",
+      reason: "list_failed",
+      detail: "AccessDenied (403)",
     });
   });
 

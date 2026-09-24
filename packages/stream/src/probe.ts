@@ -150,7 +150,10 @@ function failed(error: unknown, otherwise: ProbeFailure): ProbeResult {
     const { status, name } = error.params;
     const detail = status === null ? name : `${name} (${status})`;
     if (status === null) throw error;
-    if (status === 403) return { ok: false, reason: "access_denied", detail };
+    // At the listing step a 403 is the missing list permission, which the owner is told by name.
+    if (status === 403 && otherwise !== "list_failed") {
+      return { ok: false, reason: "access_denied", detail };
+    }
     if (status === 501) return { ok: false, reason: "conditional_write_unsupported", detail };
     return { ok: false, reason: otherwise, detail };
   }
