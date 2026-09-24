@@ -4519,13 +4519,13 @@ check behind the settings screen's Test button), landed as #569. Nothing calls i
 Task 5. Left open by #569's review, the owner's call: pruning sends one delete request per file,
 where S3's `DeleteObjects` removes up to 1000 per request — using it would change the bucket
 interface the plan fixed, and not every S3-compatible store has been checked for it. The other
-choice #569 left, one code for a listed file outside the venue's folder, is taken: the S3 store now
-reports it as `backup.stream_name_invalid` with `field: "listedKey"`, as pruning's own check does
-(owner, 2026-09-24). Also left: `@waitron/store` is missing from the English-only guard's
-`GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned — I believe this
-predates #569 (the package dates from #489); and nothing in the package has been run against a real
-bucket — the unit tests drive the real S3 client over a scripted network, and Task 10's loop test
-is the first run against a real S3-compatible server.
+choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
+now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
+pruning's own check uses (owner, 2026-09-24). Also left: `@waitron/store` is missing from the
+English-only guard's `GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned
+— I believe this predates #569 (the package dates from #489); and nothing in the package has been
+run against a real bucket — the unit tests drive the real S3 client over a scripted network, and
+Task 10's loop test is the first run against a real S3-compatible server.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's

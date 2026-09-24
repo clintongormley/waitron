@@ -13,9 +13,9 @@ export interface ListedObject {
 
 /**
  * The four bucket operations the stream needs. Keys are relative to the owner's configured prefix.
- * `put` throws `backup.stream_precondition_failed` when its condition does not hold, and `list`
- * throws `backup.stream_name_invalid` for a listed key outside the prefix asked for; every other
- * failure is `backup.stream_request_failed`.
+ * `put` throws `backup.stream_precondition_failed` when its condition does not hold; the S3 store's
+ * `list` throws `backup.stream_name_invalid` for a listed key outside the prefix asked for; every
+ * other failure is `backup.stream_request_failed`.
  */
 export interface ObjectStore {
   get(key: string): Promise<StoredObject | null>;
