@@ -1745,6 +1745,7 @@ export class TillApp extends LitElement {
           ...(line.workingOrderLineId === undefined
             ? {}
             : { workingOrderLineId: line.workingOrderLineId }),
+          ...(live === undefined ? { notOffered: true as const } : {}),
           ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
           ...(picks.notOffered.length === 0 ? {} : { notOfferedExtras: picks.notOffered }),
           ...(answers.options.length === 0 ? {} : { options: answers.options }),

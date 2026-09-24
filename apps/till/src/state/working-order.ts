@@ -101,6 +101,10 @@ export interface OrderLine {
   extras?: SelectedExtra[];
   /** Never sent on the wire; ABSENT (never `[]`) when there are none. */
   notOfferedExtras?: NotOfferedExtra[];
+  /** A retrieved line whose offer is not in the till's live list, which leaves out a sold-out or
+   * inactive product and every menu this zone does not show (`listMenuOffers`,
+   * `packages/catalogue/src/operations.ts`). Display only. */
+  notOffered?: true;
   /**
    * The line's answers to its dish's options lists, as the wire names them — one entry per answered
    * list. ABSENT when the dish answered none. A RETRIEVED line has these too, but not from the

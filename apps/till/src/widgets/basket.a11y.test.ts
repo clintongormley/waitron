@@ -44,12 +44,13 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  it("a retrieved basket marking a pick as not offered has no violations", async () => {
+  it("a retrieved basket marking a line and a pick as not offered has no violations", async () => {
     const store = new WorkingOrderStore();
     store.loadFrom("held-1", [
       {
         product: cafe,
         quantity: "2",
+        notOffered: true,
         notOfferedExtras: [{ productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 }],
       },
     ]);

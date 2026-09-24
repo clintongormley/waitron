@@ -2994,7 +2994,9 @@ describe("till-app", () => {
     emit(c, "retrieve-order", { id: "wo-seasonal" });
     await flush(el);
 
-    expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1" }]);
+    expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1", notOffered: true }]);
+    const basket = counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+    expect(basket.querySelector(".line")!.textContent).toContain(t("basket.not_offered"));
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 

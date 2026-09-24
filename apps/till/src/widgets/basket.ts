@@ -361,7 +361,9 @@ export class TillBasket extends LitElement {
       ${lines.map(
         (line, index) => html`
           <div class="line">
-            <span class="name">${this.#lineName(line)}</span>
+            <span class="name"
+              >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}</span
+            >
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line))}</span>
             <wt-button
