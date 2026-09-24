@@ -91,18 +91,37 @@ export async function pruneGenerations(
     .filter(([name, time]) => name !== live && time < cutoff)
     .map(([name]) => name)
     .sort();
-  for (const name of doomed) await deleteAll(store, keys.get(name)!);
+  for (const name of doomed) {
+    // The marker goes last: while any file of the generation remains, its name stays claimed.
+    const marker = markerKey(venueId, name);
+    const all = keys.get(name)!;
+    await deleteAll(
+      store,
+      all.filter((key) => key !== marker),
+    );
+    if (all.includes(marker)) await store.delete(marker);
+  }
   return doomed;
 }
 
+/** Stops starting deletes at the first failure, and answers only once those in flight have settled. */
 async function deleteAll(store: ObjectStore, keys: string[]): Promise<void> {
   let next = 0;
+  let failed = false;
   const worker = async () => {
-    while (next < keys.length) {
+    while (!failed && next < keys.length) {
       const key = keys[next]!;
       next += 1;
-      await store.delete(key);
+      try {
+        await store.delete(key);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(PRUNE_CONCURRENCY, keys.length) }, worker));
+  const workers = Array.from({ length: Math.min(PRUNE_CONCURRENCY, keys.length) }, worker);
+  const outcomes = await Promise.allSettled(workers);
+  const refusal = outcomes.find((outcome) => outcome.status === "rejected");
+  if (refusal !== undefined) throw refusal.reason;
 }

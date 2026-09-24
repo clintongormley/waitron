@@ -228,4 +228,71 @@ describe("pruneGenerations", () => {
     expect(inner.snapshot().size).toBe(0);
     expect(most).toBe(PRUNE_CONCURRENCY);
   });
+
+  // A generation whose marker is gone could be claimed again, and would then be streamed into
+  // on top of its own old files.
+  it("deletes a generation's marker last, and keeps it when a delete before it fails", async () => {
+    const root = `venues/${VENUE}/${gen(1)}/`;
+    const files = ["0000/a.ltx", "0000/b.ltx", "opened.json", "zz/after-the-marker.ltx"];
+    const fill = async () => {
+      const inner = createMemoryObjectStore({ now: () => T0 });
+      for (const file of files) await inner.put(`${root}${file}`, new Uint8Array([1]));
+      return inner;
+    };
+    const now = new Date(T0.getTime() + 2 * WINDOW);
+
+    const whole = await fill();
+    const order: string[] = [];
+    const recording: ObjectStore = {
+      ...whole,
+      async delete(key) {
+        order.push(key);
+        await whole.delete(key);
+      },
+    };
+    await pruneGenerations(recording, VENUE, gen(2), now, WINDOW);
+    expect(order).toHaveLength(files.length);
+    expect(order.at(-1)).toBe(markerKey(VENUE, gen(1)));
+
+    const inner = await fill();
+    const failing: ObjectStore = {
+      ...inner,
+      async delete(key) {
+        await new Promise((resolve) => setImmediate(resolve));
+        if (key === `${root}0000/a.ltx`) throw new Error("delete refused");
+        await inner.delete(key);
+      },
+    };
+    await expect(pruneGenerations(failing, VENUE, gen(2), now, WINDOW)).rejects.toThrow(
+      "delete refused",
+    );
+    expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
+  });
+
+  it("starts no further deletes once one has failed, and none after it has answered", async () => {
+    const inner = createMemoryObjectStore({ now: () => T0 });
+    for (let i = 0; i < 50; i += 1)
+      await inner.put(`venues/${VENUE}/${gen(1)}/0000/${i}.ltx`, new Uint8Array([1]));
+    let attempts = 0;
+    let finished = 0;
+    const store: ObjectStore = {
+      ...inner,
+      async delete(key) {
+        attempts += 1;
+        const first = attempts === 1;
+        await new Promise((resolve) => setImmediate(resolve));
+        if (first) throw new Error("delete refused");
+        await new Promise((resolve) => setImmediate(resolve));
+        await inner.delete(key);
+        finished += 1;
+      },
+    };
+    await expect(
+      pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+    ).rejects.toThrow("delete refused");
+    const atAnswer = { attempts, finished };
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect({ attempts, finished }).toEqual(atAnswer);
+    expect(attempts).toBeLessThanOrEqual(PRUNE_CONCURRENCY);
+  });
 });
