@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import {
   VENUE_HOLDER_FILE,
   VENUE_HOLDER_KINDS,
   VENUE_HOLDER_STALE_MS,
+  writeVenueHolder,
   type VenueHolder,
 } from "./venue-holder.js";
 
@@ -123,5 +124,15 @@ describe("isVenueHolderFresh", () => {
   it("is stale for a heartbeat a whole bound or more in the future", () => {
     expect(isVenueHolderFresh(HOLDER, at(-(VENUE_HOLDER_STALE_MS - 1)))).toBe(true);
     expect(isVenueHolderFresh(HOLDER, at(-VENUE_HOLDER_STALE_MS))).toBe(false);
+  });
+});
+
+describe("writeVenueHolder", () => {
+  it("throws the write's own error when its half-written copy cannot be removed either", () => {
+    const directory = tempDir();
+    mkdirSync(join(directory, `${VENUE_HOLDER_FILE}.partial`, "occupied"), { recursive: true });
+    expect(() => writeVenueHolder(directory, HOLDER)).toThrow(
+      expect.objectContaining({ code: "EISDIR", syscall: "open" }),
+    );
   });
 });

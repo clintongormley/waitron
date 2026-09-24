@@ -267,9 +267,9 @@ const heartbeats = new Map<string, NodeJS.Timeout>();
 
 /**
  * Called in the synchronous section that first takes a folder's lock. When the holder file cannot
- * be written or the watchdog thread cannot be created, it throws having left no file and no timer,
- * and the caller gives the lock back. Without the file, a process refused the folder cannot
- * tell this live holder from a frozen one.
+ * be written or the watchdog thread cannot be created, it throws having started no timer, after
+ * trying to remove the holder file, and the caller gives the lock back. Without the file, a process
+ * refused the folder cannot tell this live holder from a frozen one.
  */
 export function beginHolding(directory: string): void {
   const now = new Date().toISOString();

@@ -80,7 +80,11 @@ export function writeVenueHolder(directory: string, holder: VenueHolder): void {
     writeFileSync(working, `${JSON.stringify(holder)}\n`);
     renameSync(working, path);
   } catch (error) {
-    rmSync(working, { force: true });
+    try {
+      rmSync(working, { force: true });
+    } catch {
+      // The write's failure is the one the caller needs to see.
+    }
     throw error;
   }
 }
