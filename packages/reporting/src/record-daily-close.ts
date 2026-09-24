@@ -317,12 +317,12 @@ interface CloseRow {
 /**
  * Appends the immutable row in a savepoint (the adapter's nested `tx.transaction`). Its body is one
  * insert, which SQLite backs out by itself when refused, leaving the transaction usable, so today
- * it changes nothing (`bench/sqlite-failover/README.md`). Only a
- * `daily_closes_business_day_key` collision — a second close of the same day — is
- * translated to `close.already_closed`; anything else (a `daily_closes_sequence_key` collision,
- * which the write queue's one-writer-at-a-time should make unreachable, or an FK violation)
- * propagates raw, because masking it as "already closed" would hide a genuine single-writer bug for
- * a day that is NOT closed.
+ * it changes nothing (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it
+ * does not need"). Only a `daily_closes_business_day_key` collision — a second close of the same
+ * day — is translated to `close.already_closed`; anything else (a `daily_closes_sequence_key`
+ * collision, which the write queue's one-writer-at-a-time should make unreachable, or an FK
+ * violation) propagates raw, because masking it as "already closed" would hide a genuine
+ * single-writer bug for a day that is NOT closed.
  */
 async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
   try {

@@ -436,11 +436,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   a refusal and carrying on in the same `tx` is safe. Measured 2026-09-22 on `node:sqlite` (Node v26.7.0): inside one
   transaction a duplicate key (errcode 2067), a null in a `not null` column (1299) and an
   append-only trigger's `raise(abort)` (1811) each left the transaction usable and the rows written
-  beside them committed. The nested `tx.transaction(...)` in `appendToChain` stays for a different
-  reason, stated at its site: it confines a losing attempt's own writes. The ones in
+  beside them committed. The nested `tx.transaction(...)` in each `appendToChain`
+  (`packages/fiscal-verifactu/src/chain.ts`, `packages/workforce/src/chain.ts`) stays for a
+  different reason, stated at each site: it confines a losing attempt's own writes. The ones in
   `enqueueSuccessor` (`packages/scheduler/src/store.ts`) and `insertClose`
   (`packages/reporting/src/record-daily-close.ts`) wrap one insert, which the engine backs out by
-  itself, so today they confine nothing. **A TEST still catches such a
+  itself when refused, so today they confine nothing. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
   Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` (a SQLite
