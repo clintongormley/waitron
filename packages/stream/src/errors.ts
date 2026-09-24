@@ -17,7 +17,8 @@ declare module "@waitron/shared" {
      * box writing this venue. */
     "backup.stream_precondition_failed": { key: string };
     /** Any other failure talking to the bucket, after conflict retries are spent. `status` is the HTTP
-     * status, or null when no answer arrived at all. */
+     * status, or null when no answer arrived at all. One file refused inside a batch delete the bucket
+     * otherwise answered carries that answer's status (200) and the file's own error code as `name`. */
     "backup.stream_request_failed": {
       operation: BucketOperation;
       key: string;

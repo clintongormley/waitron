@@ -23,9 +23,9 @@ export interface ObjectStore {
   list(prefix: string): Promise<ListedObject[]>;
   delete(key: string): Promise<void>;
   /**
-   * Deletes every key, however the store does that in bulk. Rejects on the first key not deleted,
-   * naming it; once it has, it starts no further deletes and answers only when those already sent
-   * have settled.
+   * Deletes every key, however the store does that in bulk. Rejects at the first failure, naming the
+   * key refused or, when a whole request failed, the first key it carried; once it has, it starts no
+   * further deletes and answers only when those already sent have settled.
    */
   deleteMany(keys: string[]): Promise<void>;
 }
