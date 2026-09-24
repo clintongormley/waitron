@@ -14,6 +14,7 @@ import {
   readSealedStateRow,
   sealNodeState,
   unsealNodeState,
+  writeSealedStateRow,
   type SealedStateDeps,
 } from "./sealed-state.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -144,6 +145,22 @@ describe("sealNodeState / unsealNodeState", () => {
   });
 });
 
+describe("readSealedStateRow", () => {
+  it("reads only the named node's row", async () => {
+    const otherNode = "44444444-4444-4444-8444-444444444444";
+    const at = new Date("2026-09-23T10:00:00.000Z");
+    await withTransaction(suite.db, async (tx) => {
+      await writeSealedStateRow(tx, NODE_ID, Buffer.from("this node"), at);
+      await writeSealedStateRow(tx, otherNode, Buffer.from("other node"), at);
+    });
+    const read = (nodeId: string) =>
+      withTransaction(suite.db, (tx) => readSealedStateRow(tx, nodeId));
+    expect(Buffer.from((await read(NODE_ID))!).toString("utf8")).toBe("this node");
+    expect(Buffer.from((await read(otherNode))!).toString("utf8")).toBe("other node");
+    expect(await read("55555555-5555-4555-8555-555555555555")).toBeNull();
+  });
+});
+
 describe("createSealedStateRefresher", () => {
   it("writes this node's row, which the key opens to the state files and a manifest read off the database", async () => {
     const log = vi.fn();
@@ -229,11 +246,9 @@ describe("createSealedStateRefresher", () => {
     });
   });
 
-  it("answers failed when the logger throws, and the next refresh still runs and seals", async () => {
-    let calls = 0;
+  it("answers by what the refresh did whatever the logger does, and the next refresh still runs", async () => {
     const log = vi.fn(() => {
-      calls += 1;
-      if (calls <= 2) throw new Error("log sink down");
+      throw new Error("log sink down");
     });
     let reads = 0;
     const refresher = createSealedStateRefresher(
@@ -245,11 +260,37 @@ describe("createSealedStateRefresher", () => {
         },
       }),
     );
-    expect(await refresher.refresh()).toBe("failed");
     expect(await refresher.refresh()).toBe("sealed");
-    // The second refresh read the second key, so the row it left opens under that key alone.
+    expect(await refresher.refresh()).toBe("sealed");
+    // The second refresh committed its row under the second key, which replaced the first key's.
     const sealedNow = await row();
     expect(codeThrownBy(() => unsealNodeState(sealedNow!, OTHER_KEY))).toBe("nothing thrown");
+    expect(codeThrownBy(() => unsealNodeState(sealedNow!, KEY))).toBe(
+      "recovery.passphrase_invalid",
+    );
+    await rm(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(log).toHaveBeenCalledTimes(3);
+  });
+
+  it("answers failed without rejecting when the thrown value's code cannot be read, and the next refresh still runs", async () => {
+    const unreadable = {
+      get code(): never {
+        throw new Error("no code");
+      },
+    };
+    let reads = 0;
+    const refresher = createSealedStateRefresher(
+      deps({
+        readRecoveryKey: async () => {
+          reads += 1;
+          if (reads === 1) throw unreadable;
+          return KEY;
+        },
+      }),
+    );
+    expect(await refresher.refresh()).toBe("failed");
+    expect(await refresher.refresh()).toBe("sealed");
   });
 
   it("runs one refresh at a time, so a slow refresh cannot land after a newer one", async () => {

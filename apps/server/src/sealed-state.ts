@@ -89,15 +89,17 @@ export interface SealedStateRefresher {
  * Refreshes run one at a time, in call order: run side by side, a refresh holding an older key
  * could land after a newer one, leaving a row only a superseded key opens.
  *
- * Never rejects. A failure is logged with its code and the previous row is left as it was.
+ * Never rejects. A refresh that throws before its write commits answers "failed" and leaves the
+ * previous row as it was. The outcome is settled before anything is logged, so a logger that
+ * throws changes neither the outcome nor the row.
  */
 export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRefresher {
-  const once = async (): Promise<SealedStateOutcome> => {
+  type Attempt = readonly [SealedStateOutcome, Parameters<Logger>];
+  const attempt = async (): Promise<Attempt> => {
     try {
       const recoveryKey = await deps.readRecoveryKey();
       if (recoveryKey === undefined) {
-        deps.log("info", "backup.sealed_state_skipped", { reason: "no_recovery_key" });
-        return "no_key";
+        return ["no_key", ["info", "backup.sealed_state_skipped", { reason: "no_recovery_key" }]];
       }
       const now = deps.now();
       const manifest = await buildManifest({
@@ -115,18 +117,25 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
       // Sealed before the transaction opens, so the write lock is not held across the derivation.
       const sealed = await sealNodeState(entries, recoveryKey);
       await withTransaction(deps.db, (tx) => writeSealedStateRow(tx, deps.nodeId, sealed, now));
-      deps.log("info", "backup.sealed_state_refreshed", { entries: entries.length });
-      return "sealed";
+      return ["sealed", ["info", "backup.sealed_state_refreshed", { entries: entries.length }]];
     } catch (err) {
-      deps.log("warn", "backup.sealed_state_failed", failureFields(err));
-      return "failed";
+      return ["failed", ["warn", "backup.sealed_state_failed", failureFields(err)]];
     }
+  };
+  const once = async (): Promise<SealedStateOutcome> => {
+    const [outcome, line] = await attempt();
+    try {
+      deps.log(...line);
+    } catch {
+      // Logging is best effort; the outcome already stands.
+    }
+    return outcome;
   };
   let tail: Promise<SealedStateOutcome> = Promise.resolve("sealed");
   return {
     refresh: () => {
-      // Only a throwing logger reaches this catch; without it one rejection would reject every
-      // later refresh in the chain unrun.
+      // Reached only when building a failure's log fields throws, as reading an unreadable `code`
+      // does; without it one rejection would reject every later refresh in the chain unrun.
       tail = tail.then(once).catch((): SealedStateOutcome => "failed");
       return tail;
     },
