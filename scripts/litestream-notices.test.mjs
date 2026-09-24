@@ -9,6 +9,7 @@ import {
   NOTICE_NAME,
   escapeModulePath,
   generate,
+  main,
   noticeFiles,
   parseBuildInfo,
   readZip,
@@ -71,6 +72,7 @@ function buildinfo({
 }
 
 const TOOLCHAIN = "golang.org/toolchain@v0.0.1-go1.25.14.linux-amd64";
+const TOOLCHAIN_ARM64 = "golang.org/toolchain@v0.0.1-go1.25.14.linux-arm64";
 const PROXY = "https://proxy.golang.org";
 
 /**
@@ -102,19 +104,28 @@ const MIT = "MIT License\n\nCopyright (c) someone\n";
 const BSD = "Copyright (c) 2009 The Go Authors. All rights reserved.\n";
 const APACHE = "Apache License\nVersion 2.0, January 2004\n";
 
-/** Zips for Litestream, the toolchain and go-humanize, keyed by the URL the proxy serves each at. */
+/** A toolchain archive for `id`, holding a notice under `src/cmd/` and one under `testdata`. */
+const toolchainZip = (id) =>
+  makeZip({
+    [`${id}/LICENSE`]: BSD,
+    [`${id}/src/vendor/golang.org/x/net/LICENSE`]: BSD,
+    [`${id}/src/cmd/vendor/golang.org/x/mod/LICENSE`]: "compiler only\n",
+    [`${id}/src/internal/testdata/LICENSE`]: "fixture only\n",
+  });
+
+/**
+ * Zips for Litestream, the linux-amd64 and linux-arm64 toolchains and go-humanize, keyed by the
+ * URL the proxy serves each at.
+ */
 function standardZips() {
   return {
     [`${PROXY}/github.com/benbjohnson/litestream/@v/v0.5.17.zip`]: makeZip({
       "github.com/benbjohnson/litestream@v0.5.17/LICENSE": APACHE,
       "github.com/benbjohnson/litestream@v0.5.17/main.go": "package main\n",
     }),
-    [`${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-amd64.zip`]: makeZip({
-      [`${TOOLCHAIN}/LICENSE`]: BSD,
-      [`${TOOLCHAIN}/src/vendor/golang.org/x/net/LICENSE`]: BSD,
-      [`${TOOLCHAIN}/src/cmd/vendor/golang.org/x/mod/LICENSE`]: "compiler only\n",
-      [`${TOOLCHAIN}/src/internal/testdata/LICENSE`]: "fixture only\n",
-    }),
+    [`${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-amd64.zip`]: toolchainZip(TOOLCHAIN),
+    [`${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-arm64.zip`]:
+      toolchainZip(TOOLCHAIN_ARM64),
     [`${PROXY}/github.com/dustin/go-humanize/@v/v1.0.1.zip`]: makeZip({
       "github.com/dustin/go-humanize@v1.0.1/LICENSE": MIT,
     }),
@@ -122,7 +133,8 @@ function standardZips() {
 }
 
 describe("NOTICE_NAME", () => {
-  // Fails if the pattern turns case-sensitive, or stops allowing a suffix after `.`, `-` or `_`.
+  // Fails if the pattern turns case-sensitive, or stops allowing a prefix before the licence word or
+  // a suffix after `.`, `-` or `_`.
   it.each([
     "LICENSE",
     "LICENCE",
@@ -136,17 +148,30 @@ describe("NOTICE_NAME", () => {
     "NOTICE",
     "NOTICE.txt",
     "PATENTS",
+    "SQLITE-LICENSE",
+    "third_party.NOTICE.txt",
   ])("matches %s", (name) => {
     expect(NOTICE_NAME.test(name)).toBe(true);
   });
 
-  // Fails if the pattern loses its anchors, its separator requirement or its `.go` exclusion.
-  it.each(["license.go", "LICENSE_test.go", "notice.go", "LICENSES", "licensed.txt", "xLICENSE"])(
-    "does not match %s",
-    (name) => {
-      expect(NOTICE_NAME.test(name)).toBe(false);
-    },
-  );
+  // Fails if the pattern loses its anchors, its separator requirement or its exclusion of names
+  // ending in a listed source or script extension.
+  it.each([
+    "license.go",
+    "LICENSE_test.go",
+    "licenses_test.go",
+    "notice.go",
+    "notice.c",
+    "notice.h",
+    "check_license.sh",
+    "license-check.yml",
+    "LICENSES",
+    "licensed.txt",
+    "xLICENSE",
+    "SQLITELICENSE",
+  ])("does not match %s", (name) => {
+    expect(NOTICE_NAME.test(name)).toBe(false);
+  });
 });
 
 describe("parseBuildInfo", () => {
@@ -380,6 +405,27 @@ describe("renderNotices", () => {
     expect(text).toContain(`c.example/three@v3.0.0/LICENSE\n\n${MIT}`);
   });
 
+  // Fails if texts are merged before a missing final newline is added: the two would print as
+  // separate, identical blocks.
+  it("merges texts that differ only in a missing final newline", () => {
+    const text = renderNotices({
+      ...input,
+      modules: [
+        { path: "a.example/one", version: "v1.0.0", files: [{ path: "LICENSE", text: APACHE }] },
+        {
+          path: "b.example/two",
+          version: "v2.0.0",
+          files: [{ path: "LICENSE", text: APACHE.slice(0, -1) }],
+        },
+      ],
+    });
+    expect(text.split(APACHE)).toHaveLength(2);
+    expect(text).toContain("Distinct texts: 1\n");
+    expect(text).toContain(
+      `a.example/one@v1.0.0/LICENSE\nb.example/two@v2.0.0/LICENSE\n\n${APACHE}`,
+    );
+  });
+
   // Fails if a text without a final newline runs into the next separator, or the file does not
   // end with exactly one newline.
   it("keeps each text on lines of its own and ends the file with one newline", () => {
@@ -393,9 +439,9 @@ describe("renderNotices", () => {
 describe("generate", () => {
   const both = [buildinfo(), buildinfo({ goarch: "arm64" })];
 
-  // Fails if the toolchain is asked for another platform or version, a URL is not case-encoded,
-  // or a module both binaries list is downloaded twice.
-  it("downloads Litestream, the linux-amd64 toolchain and each dependency once", async () => {
+  // Fails if a platform's toolchain is not asked for, or is asked for at another version, a URL
+  // is not case-encoded, or a module both binaries list is downloaded twice.
+  it("downloads Litestream, each platform's toolchain and each dependency once", async () => {
     const zips = standardZips();
     zips[`${PROXY}/github.com/!azure/azcore/@v/v1.0.0-!r!c1.zip`] = makeZip({
       "github.com/Azure/azcore@v1.0.0-RC1/LICENSE.txt": MIT,
@@ -412,7 +458,48 @@ describe("generate", () => {
     expect([...proxy.urls].sort()).toEqual(Object.keys(zips).sort());
   });
 
-  // Fails if the toolchain's `src/cmd/` or any `testdata` directory is not skipped, if a
+  // Fails if one platform's toolchain stands in for every platform, or the toolchains are listed
+  // out of order.
+  it("reads the toolchain of each platform the binaries were built for", async () => {
+    const zips = standardZips();
+    zips[`${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-arm64.zip`] = makeZip({
+      [`${TOOLCHAIN_ARM64}/LICENSE`]: BSD,
+      [`${TOOLCHAIN_ARM64}/src/runtime/NOTICE`]: "arm64 only\n",
+    });
+    const proxy = fakeProxy(zips);
+    const text = await generate({
+      buildinfos: [buildinfo({ goarch: "arm64" }), buildinfo()],
+      fetch: proxy.fetch,
+    });
+    expect(proxy.urls).toEqual(
+      expect.arrayContaining([
+        `${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-amd64.zip`,
+        `${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-arm64.zip`,
+      ]),
+    );
+    expect(text).toContain(
+      [
+        "Modules (4):",
+        "github.com/benbjohnson/litestream v0.5.17",
+        "golang.org/toolchain v0.0.1-go1.25.14.linux-amd64",
+        "golang.org/toolchain v0.0.1-go1.25.14.linux-arm64",
+        "github.com/dustin/go-humanize v1.0.1",
+        "",
+      ].join("\n"),
+    );
+    expect(text).toContain(`${TOOLCHAIN_ARM64}/src/runtime/NOTICE\n\narm64 only\n`);
+  });
+
+  // Fails if a single binary's toolchain is fetched for a platform it was not built for.
+  it("reads only the toolchain of a single binary's platform", async () => {
+    const proxy = fakeProxy(standardZips());
+    await generate({ buildinfos: [buildinfo({ goarch: "arm64" })], fetch: proxy.fetch });
+    expect(proxy.urls.filter((url) => url.includes("/golang.org/toolchain/"))).toEqual([
+      `${PROXY}/golang.org/toolchain/@v/v0.0.1-go1.25.14.linux-arm64.zip`,
+    ]);
+  });
+
+  // Fails if either toolchain's `src/cmd/` or any `testdata` directory is not skipped, if a
   // dependency only one binary lists is dropped, or if a text two modules share is printed twice.
   it("renders every module's notices once each, skipping the compiler's tree and test fixtures", async () => {
     const zips = standardZips();
@@ -434,9 +521,10 @@ describe("generate", () => {
     });
     expect(text).toContain(
       [
-        "Modules (4):",
+        "Modules (5):",
         "github.com/benbjohnson/litestream v0.5.17",
-        `golang.org/toolchain v0.0.1-go1.25.14.linux-amd64`,
+        "golang.org/toolchain v0.0.1-go1.25.14.linux-amd64",
+        "golang.org/toolchain v0.0.1-go1.25.14.linux-arm64",
         "example.com/arm-only v1.0.0",
         "github.com/dustin/go-humanize v1.0.1",
       ].join("\n"),
@@ -445,6 +533,8 @@ describe("generate", () => {
       [
         `${TOOLCHAIN}/LICENSE`,
         `${TOOLCHAIN}/src/vendor/golang.org/x/net/LICENSE`,
+        `${TOOLCHAIN_ARM64}/LICENSE`,
+        `${TOOLCHAIN_ARM64}/src/vendor/golang.org/x/net/LICENSE`,
         "example.com/arm-only@v1.0.0/COPYING",
         "",
         BSD,
@@ -565,5 +655,59 @@ describe("generate", () => {
     await expect(generate({ buildinfos: both, fetch: fakeProxy(zips).fetch })).rejects.toThrow(
       /github\.com\/dustin\/go-humanize@v1\.0\.1: .*utf-8/i,
     );
+  });
+
+  // Fails if the decoder strips a leading byte-order mark, which is its default.
+  it("keeps a byte-order mark at the start of a notice", async () => {
+    const zips = standardZips();
+    zips[`${PROXY}/github.com/dustin/go-humanize/@v/v1.0.1.zip`] = makeZip({
+      "github.com/dustin/go-humanize@v1.0.1/LICENSE": Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from(MIT),
+      ]),
+    });
+    const text = await generate({ buildinfos: both, fetch: fakeProxy(zips).fetch });
+    expect(text).toContain(`github.com/dustin/go-humanize@v1.0.1/LICENSE\n\n\uFEFF${MIT}`);
+  });
+});
+
+describe("main", () => {
+  const USAGE = "usage: node scripts/litestream-notices.mjs <out> <go version -m output>...";
+
+  const run = async (argv) => {
+    const out = [];
+    const err = [];
+    const code = await main(argv, {
+      fetch: fakeProxy(standardZips()).fetch,
+      stdout: (line) => out.push(line),
+      stderr: (line) => err.push(line),
+    });
+    return { code, out, err };
+  };
+
+  // Fails if a missing output path or a missing input is not refused with the usage line.
+  it.each([
+    ["no arguments", []],
+    ["an output path but no input", ["out.txt"]],
+  ])("exits 2 with the usage line given %s", async (_, argv) => {
+    expect(await run(argv)).toEqual({ code: 2, out: [], err: [USAGE] });
+  });
+
+  // Fails if the inputs are not read from the named files, the output's directory is not made,
+  // or the rendered text is not what is written.
+  it("writes the notices for the named inputs, making the output's directory", async () => {
+    const dir = tempDir();
+    const inputs = [join(dir, "amd64.txt"), join(dir, "arm64.txt")];
+    writeFileSync(inputs[0], buildinfo());
+    writeFileSync(inputs[1], buildinfo({ goarch: "arm64" }));
+    const out = join(dir, "nested", "deeper", "NOTICES.txt");
+
+    expect(await run([out, ...inputs])).toEqual({ code: 0, out: [`wrote ${out}`], err: [] });
+    const expected = await generate({
+      buildinfos: [buildinfo(), buildinfo({ goarch: "arm64" })],
+      fetch: fakeProxy(standardZips()).fetch,
+    });
+    expect(readFileSync(out, "utf8")).toBe(expected);
+    expect(expected).toContain("linux/amd64, linux/arm64");
   });
 });

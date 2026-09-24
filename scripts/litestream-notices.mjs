@@ -2,7 +2,8 @@
  * `node scripts/litestream-notices.mjs <out> <go version -m output>...` — writes the licence and
  * notice texts of everything compiled into the pinned Litestream binary. Litestream is a statically
  * linked Go program, so it carries every Go module it was built from plus the Go standard library
- * and runtime; each module's notice files are copied unmodified from its zip on proxy.golang.org.
+ * and runtime; each module's notice files are copied from its zip on proxy.golang.org unchanged,
+ * except that a text with no final newline is given one.
  * The inputs are `go version -m` run on the pinned linux binaries the box image installs
  * (`deploy/Dockerfile`, the `litestream` stage).
  */
@@ -13,8 +14,12 @@ import { pathToFileURL } from "node:url";
 import { TextDecoder } from "node:util";
 import { inflateRawSync } from "node:zlib";
 
-/** A notice file's base name. A `.go` file named after a licence is source code, not a notice. */
-export const NOTICE_NAME = /^(?:licen[cs]e|copying|notice|patents)(?:[._-].*)?(?<!\.go)$/i;
+/**
+ * A notice file's base name, which may put words before the licence word (`SQLITE-LICENSE`). A
+ * name ending in one of the source or script extensions listed at its end is refused.
+ */
+export const NOTICE_NAME =
+  /^(?:[a-z0-9]+[._-])*(?:licen[cs]e|copying|notice|patents)(?:[._-].*)?(?<!\.(?:go|s|c|h|cc|cpp|sh|py|js|ts|yml|yaml))$/i;
 
 const PROXY = "https://proxy.golang.org";
 const TOOLCHAIN = "golang.org/toolchain";
@@ -179,9 +184,10 @@ export function renderNotices({ litestream, go, platforms, modules }) {
   const texts = new Map();
   for (const { path, version, files } of modules) {
     for (const file of files) {
-      const carriers = texts.get(file.text) ?? [];
+      const text = file.text.endsWith("\n") ? file.text : `${file.text}\n`;
+      const carriers = texts.get(text) ?? [];
       carriers.push(`${path}@${version}/${file.path}`);
-      texts.set(file.text, carriers);
+      texts.set(text, carriers);
     }
   }
 
@@ -197,13 +203,15 @@ export function renderNotices({ litestream, go, platforms, modules }) {
     "",
     "How it was made: `go version -m` was run on the pinned Litestream release binaries for",
     `${platforms.join(", ")}, which lists the Go modules each binary was built from. Each module's`,
-    "archive was downloaded from proxy.golang.org, and every licence, notice, copying or patents file",
-    "in it was copied here unmodified, from any directory except test fixtures (testdata) and hidden",
-    "tooling directories such as .github. A file in a subdirectory is included whether or not the",
-    "program uses that directory's code. The Go standard library and runtime come from the",
-    `golang.org/toolchain module for ${go}, leaving out src/cmd/, which holds the compiler and`,
-    "tools rather than code built into programs. Litestream's own licence is included as its module's",
-    "LICENSE file.",
+    "archive was downloaded from proxy.golang.org, and every file named as a licence, notice, copying",
+    "or patents file was copied here, other than names ending in an extension the generator lists as",
+    "source code or a script, from any directory except test fixtures (testdata) and hidden tooling",
+    "directories such as .github. Each text is unchanged, except that one with no final newline is",
+    "given one. A file in a subdirectory is included whether or not the program uses that",
+    "directory's code. The Go standard library and runtime",
+    `come from the golang.org/toolchain module, one version for ${go} on each of those platforms,`,
+    "leaving out src/cmd/, which holds the compiler and tools rather than code built into programs.",
+    "Litestream's own licence is included as its module's LICENSE file.",
     "",
     "Identical texts are printed once, below the list of every file that carries them.",
     "",
@@ -214,9 +222,7 @@ export function renderNotices({ litestream, go, platforms, modules }) {
     "",
   ].join("\n");
 
-  const body = [...texts].map(([text, carriers]) =>
-    [RULE, ...carriers, "", text.endsWith("\n") ? text : `${text}\n`].join("\n"),
-  );
+  const body = [...texts].map(([text, carriers]) => [RULE, ...carriers, "", text].join("\n"));
   return `${head}${body.join("")}`;
 }
 
@@ -271,11 +277,12 @@ export async function generate({ buildinfos, fetch = globalThis.fetch, concurren
   const deps = new Map(
     infos.flatMap((info) => info.deps).map((dep) => [`${dep.path} ${dep.version}`, dep]),
   );
-  // The licence texts in the toolchain do not differ by platform, so one archive serves them all.
-  const toolchain = { path: TOOLCHAIN, version: `v0.0.1-${go}.linux-amd64` };
-  const modules = [main, toolchain, ...[...deps.keys()].sort().map((key) => deps.get(key))];
+  const toolchains = distinct(infos.map((info) => `v0.0.1-${go}.${info.goos}-${info.goarch}`)).map(
+    (version) => ({ path: TOOLCHAIN, version }),
+  );
+  const modules = [main, ...toolchains, ...[...deps.keys()].sort().map((key) => deps.get(key))];
 
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   const withNotices = await mapBounded(modules, concurrency, async (module) => {
     const id = `${module.path}@${module.version}`;
     const url = `${PROXY}/${escapeModulePath(module.path)}/@v/${escapeModulePath(module.version)}.zip`;
@@ -284,7 +291,7 @@ export async function generate({ buildinfos, fetch = globalThis.fetch, concurren
       if (!response.ok)
         throw new Error(`${url} answered ${response.status} ${response.statusText}`);
       const zip = readZip(Buffer.from(await response.arrayBuffer()));
-      const skip = module === toolchain ? TOOLCHAIN_SKIP : [];
+      const skip = module.path === TOOLCHAIN ? TOOLCHAIN_SKIP : [];
       const paths = noticeFiles(zip.names, `${id}/`, { skip });
       if (paths.length === 0) throw new Error(`no notice file in ${url}`);
       const files = paths.map((path) => ({
@@ -305,17 +312,33 @@ export async function generate({ buildinfos, fetch = globalThis.fetch, concurren
   });
 }
 
-// The process wiring alone; the suite calls `generate` with the downloads injected.
-/* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [out, ...inputs] = process.argv.slice(2);
+/**
+ * @param {string[]} argv
+ * @param {object} io
+ * @param {(line: string) => void} io.stdout
+ * @param {(line: string) => void} io.stderr
+ * @param {Parameters<typeof generate>[0]["fetch"]} [io.fetch]
+ * @returns {Promise<number>} the exit status
+ */
+export async function main(argv, { stdout, stderr, fetch }) {
+  const [out, ...inputs] = argv;
   if (out === undefined || inputs.length === 0) {
-    console.error("usage: node scripts/litestream-notices.mjs <out> <go version -m output>...");
-    process.exit(2);
+    stderr("usage: node scripts/litestream-notices.mjs <out> <go version -m output>...");
+    return 2;
   }
-  const text = await generate({ buildinfos: inputs.map((file) => readFileSync(file, "utf8")) });
+  const buildinfos = inputs.map((file) => readFileSync(file, "utf8"));
+  const text = await generate({ buildinfos, fetch });
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, text);
-  console.log(`wrote ${out}`);
+  stdout(`wrote ${out}`);
+  return 0;
+}
+
+/* v8 ignore start */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await main(process.argv.slice(2), {
+    stdout: console.log,
+    stderr: console.error,
+  });
 }
 /* v8 ignore stop */
