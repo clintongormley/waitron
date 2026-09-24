@@ -313,12 +313,61 @@ describe("list", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("skips an entry the store lists without a time, rather than inventing one", async () => {
-    const body =
-      `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated>` +
-      `<Contents><Key>waitron/x</Key></Contents></ListBucketResult>`;
-    const { store } = storeOver([{ status: 200, headers: xml, body }]);
-    await expect(store.list("")).resolves.toEqual([]);
+  const listing = (contents: string, tail = "<IsTruncated>false</IsTruncated>") =>
+    `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult>${tail}${contents}</ListBucketResult>`;
+  const entry = (key: string) =>
+    `<Contents><Key>${key}</Key><LastModified>2026-09-23T10:00:00.000Z</LastModified></Contents>`;
+  const refusal = (name: string) => ({
+    code: "backup.stream_request_failed",
+    params: { operation: "list", key: "venues/v1/", status: 200, name },
+  });
+
+  it.each([
+    ["another folder under the configured root", "waitron/venues/v2/a"],
+    ["a key outside the configured root", "elsewhere/venues/v1/a"],
+    ["a key that only shares the prefix's first characters", "waitron/venues/v1"],
+  ])("refuses a listing that names %s", async (_, key) => {
+    const { store } = storeOver([
+      { status: 200, headers: xml, body: listing(entry("waitron/venues/v1/a") + entry(key)) },
+    ]);
+    expect(await rejection(store.list("venues/v1/"))).toEqual(refusal("KeyOutsidePrefix"));
+  });
+
+  it.each([
+    ["no time", "<Contents><Key>waitron/venues/v1/a</Key></Contents>"],
+    ["no key", "<Contents><LastModified>2026-09-23T10:00:00.000Z</LastModified></Contents>"],
+  ])(
+    "refuses a listing with an entry that has %s, rather than answering without it",
+    async (_, contents) => {
+      const { store } = storeOver([{ status: 200, headers: xml, body: listing(contents) }]);
+      expect(await rejection(store.list("venues/v1/"))).toEqual(refusal("IncompleteListing"));
+    },
+  );
+
+  it("refuses a page that says more follow but gives no token to fetch them", async () => {
+    const { store, sent } = storeOver([
+      {
+        status: 200,
+        headers: xml,
+        body: listing(entry("waitron/venues/v1/a"), "<IsTruncated>true</IsTruncated>"),
+      },
+    ]);
+    expect(await rejection(store.list("venues/v1/"))).toEqual(refusal("MissingContinuationToken"));
+    expect(sent).toHaveLength(1);
+  });
+
+  it("refuses a continuation token it has already followed, rather than asking again", async () => {
+    const again = listing(
+      entry("waitron/venues/v1/a"),
+      "<IsTruncated>true</IsTruncated><NextContinuationToken>t1</NextContinuationToken>",
+    );
+    const { store, sent } = storeOver([
+      { status: 200, headers: xml, body: again },
+      { status: 200, headers: xml, body: again },
+      { status: 200, headers: xml, body: again },
+    ]);
+    expect(await rejection(store.list("venues/v1/"))).toEqual(refusal("RepeatedContinuationToken"));
+    expect(sent).toHaveLength(2);
   });
 
   it("a refused listing is a request failure", async () => {

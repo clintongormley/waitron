@@ -73,6 +73,9 @@ export async function pruneGenerations(
   const newest = new Map<string, number>();
   const keys = new Map<string, string[]>();
   for (const object of await store.list(root)) {
+    if (!object.key.startsWith(root)) {
+      throw new AppError("backup.stream_name_invalid", { field: "listedKey", value: object.key });
+    }
     const rest = object.key.slice(root.length);
     const slash = rest.indexOf("/");
     if (slash <= 0) continue;

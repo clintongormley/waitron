@@ -147,8 +147,12 @@ export function createS3ObjectStore(
       }
     },
 
+    // Pruning deletes what this answers, so an answer that cannot be complete, or names a key outside
+    // the prefix asked for, is refused whole rather than trimmed.
     async list(prefix) {
+      const wanted = root + prefix;
       const found: ListedObject[] = [];
+      const followed = new Set<string>();
       let token: string | undefined;
       do {
         let page: ListObjectsV2CommandOutput;
@@ -156,18 +160,28 @@ export function createS3ObjectStore(
           page = await client.send(
             new ListObjectsV2Command({
               Bucket: config.bucket,
-              Prefix: root + prefix,
+              Prefix: wanted,
               ContinuationToken: token,
             }),
           );
         } catch (error) {
           throw requestFailed("list", prefix, statusOf(error), nameOf(error));
         }
+        const refuse = (name: string) =>
+          requestFailed("list", prefix, page.$metadata.httpStatusCode ?? null, name);
         for (const object of page.Contents ?? []) {
-          if (object.Key === undefined || object.LastModified === undefined) continue;
+          if (object.Key === undefined || object.LastModified === undefined)
+            throw refuse("IncompleteListing");
+          if (!object.Key.startsWith(wanted)) throw refuse("KeyOutsidePrefix");
           found.push({ key: object.Key.slice(root.length), lastModified: object.LastModified });
         }
-        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+        token = undefined;
+        if (page.IsTruncated) {
+          token = page.NextContinuationToken;
+          if (token === undefined) throw refuse("MissingContinuationToken");
+          if (followed.has(token)) throw refuse("RepeatedContinuationToken");
+          followed.add(token);
+        }
       } while (token !== undefined);
       return found;
     },

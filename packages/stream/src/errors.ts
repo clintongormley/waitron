@@ -23,7 +23,8 @@ declare module "@waitron/shared" {
     };
     /** `current.json` is not a pointer this package wrote; `reason` names the check that failed. */
     "backup.stream_pointer_invalid": { reason: string };
-    /** A venue id, node id, term, time or window that cannot form a key or a generation name. */
+    /** A venue id, node id, term, time or window that cannot form a key or a generation name, or a
+     * listed key outside the venue's folder. */
     "backup.stream_name_invalid": { field: string; value: string };
   }
 }
