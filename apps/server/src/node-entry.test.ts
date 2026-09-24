@@ -1,14 +1,21 @@
+import { type ChildProcess, spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import type { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { openVenueDatabase } from "@waitron/db";
+import { openVenueDatabase, type VenueHolder } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
+import {
+  FRESH,
+  levelFor,
+  readRecoveryState,
+  writeRecoveryState,
+  type RecoveryState,
+} from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
 
@@ -28,6 +35,9 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
     loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
     readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
     writeRecoveryState: vi.fn(() => Promise.resolve()),
+    // A plain call: these suites name a state directory that does not exist, and the real lock
+    // opens a file in it. The lock's own cases below pass the real one or a recording one.
+    withRecoveryLock: <T>(_stateDir: string, body: () => Promise<T>) => body(),
     startServer: vi.fn<StartServer>(() => Promise.resolve({ close: () => Promise.resolve() })),
     serveRecovery: vi.fn(() => Promise.resolve()),
     installShutdownHandlers: vi.fn(),
@@ -169,7 +179,7 @@ describe("runEntry", () => {
     expect(d.serveRecovery).not.toHaveBeenCalled();
   });
 
-  it("leaves the counter as it was when another process holds the venue folder, however often", async () => {
+  it("leaves the counter as it was when a LIVE process holds the venue folder, however often", async () => {
     // Already one real failure on the books, so a refusal that counted would reach the recovery
     // level on the second attempt, and one that reset to FRESH would lose the real failure.
     const before: RecoveryState = {
@@ -181,12 +191,20 @@ describe("runEntry", () => {
     const volume = recoveryVolume(before);
     const inUse = () =>
       Promise.reject(new AppError("provisioning.database_in_use", { database: "/venue" }));
+    const at = new Date("2026-09-24T12:00:00.000Z");
+    const live: VenueHolder = {
+      kind: "server",
+      pid: 7,
+      host: "box",
+      lockedAt: "2026-09-24T11:00:00.000Z",
+      heartbeatAt: "2026-09-24T11:59:55.000Z",
+    };
     for (const refusing of [
       { runStagedRestore: vi.fn(inUse) },
       { assertNotAhead: vi.fn(inUse) },
       { startServer: vi.fn(inUse) },
     ]) {
-      const d = deps({ ...volume.deps, ...refusing });
+      const d = deps({ ...volume.deps, ...refusing, readVenueHolder: () => live, now: () => at });
       await expect(runEntry(d)).rejects.toMatchObject({ code: "provisioning.database_in_use" });
       expect(volume.current()).toEqual(before);
     }
@@ -969,6 +987,380 @@ async function onVenue(venueDir: string, statement: SQL): Promise<void> {
     await store.close();
   }
 }
+
+describe("every change to recovery.json happens inside the recovery lock", () => {
+  /** A volume whose read and write record whether the lock was held at the time. */
+  function lockedVolume(initial: RecoveryState) {
+    let stored = initial;
+    let held = 0;
+    const outside: string[] = [];
+    return {
+      current: () => stored,
+      outside,
+      deps: {
+        withRecoveryLock: async <T>(stateDir: string, body: () => Promise<T>) => {
+          expect(stateDir).toBe("/state");
+          held += 1;
+          try {
+            return await body();
+          } finally {
+            held -= 1;
+          }
+        },
+        readRecoveryState: vi.fn(() => Promise.resolve(stored)),
+        writeRecoveryState: vi.fn((_stateDir: string, next: RecoveryState) => {
+          if (held === 0) outside.push(`write ${next.failures} ${next.lastErrorCode}`);
+          stored = next;
+          return Promise.resolve();
+        }),
+      },
+    };
+  }
+
+  const inUse = () =>
+    Promise.reject(new AppError("provisioning.database_in_use", { database: "/venue" }));
+  const at = new Date("2026-09-24T12:00:00.000Z");
+  const holder = (heartbeatAt: string): VenueHolder => ({
+    kind: "server",
+    pid: 7,
+    host: "box",
+    lockedAt: "2026-09-24T11:00:00.000Z",
+    heartbeatAt,
+  });
+
+  it("the count before the boot, and the classified failure after it", async () => {
+    const volume = lockedVolume(FRESH);
+    await expect(
+      runEntry(
+        deps({
+          ...volume.deps,
+          startServer: vi.fn(() =>
+            Promise.reject(
+              new AppError("migrations.set_missing", { name: "core", folder: "/app/drizzle" }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(volume.deps.writeRecoveryState).toHaveBeenCalledTimes(2);
+    expect(volume.outside).toEqual([]);
+  });
+
+  it("the undo of a start a live holder refused, and the count of one a stalled holder refused", async () => {
+    for (const heartbeatAt of ["2026-09-24T11:59:55.000Z", "2026-09-24T11:59:00.000Z"]) {
+      const volume = lockedVolume(FRESH);
+      await expect(
+        runEntry(
+          deps({
+            ...volume.deps,
+            startServer: vi.fn(inUse),
+            readVenueHolder: () => holder(heartbeatAt),
+            now: () => at,
+          }),
+        ),
+      ).rejects.toThrow();
+      expect(volume.deps.writeRecoveryState).toHaveBeenCalledTimes(2);
+      expect(volume.outside).toEqual([]);
+    }
+  });
+
+  it("the stayed-up clear", async () => {
+    const volume = lockedVolume({ ...FRESH, failures: 2 });
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    await runEntry(deps({ ...volume.deps, scheduleStayedUp }));
+    scheduleStayedUp.mock.calls[0]![1]();
+    await vi.waitFor(() => expect(volume.current()).toStrictEqual(FRESH));
+    expect(volume.outside).toEqual([]);
+  });
+
+  it("the recovery page's retry", async () => {
+    const volume = lockedVolume({ ...FRESH, failures: 3, level: levelFor(3) });
+    let served: Hono | undefined;
+    const exit = vi.fn();
+    await runEntry(
+      deps({
+        ...volume.deps,
+        serveRecovery: (app: Hono) => {
+          served = app;
+          return Promise.resolve(undefined);
+        },
+        exit,
+      }),
+    );
+    await served!.request("/recovery-api/retry", { method: "POST" });
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
+    expect(volume.current()).toStrictEqual(FRESH);
+    expect(volume.outside).toEqual([]);
+  });
+});
+
+describe("a start refused the venue folder by a holder with an injected heartbeat", () => {
+  const at = new Date("2026-09-24T12:00:00.000Z");
+  const inUse = () =>
+    Promise.reject(new AppError("provisioning.database_in_use", { database: "/venue" }));
+
+  it("names the live holder's kind in its log line", async () => {
+    const log = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          startServer: vi.fn(inUse),
+          readVenueHolder: () => ({
+            kind: "rejoin",
+            pid: 7,
+            host: "box",
+            lockedAt: "2026-09-24T11:00:00.000Z",
+            heartbeatAt: "2026-09-24T11:59:31.000Z",
+          }),
+          now: () => at,
+          log,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(log).toHaveBeenCalledWith("warn", "recovery.venue_held", { holderKind: "rejoin" });
+  });
+
+  it("a live holder's refusal keeps what another writer put in recovery.json meanwhile", async () => {
+    const live: VenueHolder = {
+      kind: "server",
+      pid: 7,
+      host: "box",
+      lockedAt: "2026-09-24T11:00:00.000Z",
+      heartbeatAt: "2026-09-24T11:59:55.000Z",
+    };
+    const before: RecoveryState = { ...FRESH, failures: 1, lastErrorCode: "x" };
+    const otherStart = (current: RecoveryState) => ({
+      ...current,
+      failures: current.failures + 1,
+      lastErrorCode: "provisioning.database_ahead",
+    });
+    for (const [label, meanwhile, expected] of [
+      [
+        "another start's failure",
+        otherStart,
+        { failures: 2, lastErrorCode: "provisioning.database_ahead" },
+      ],
+      ["the running server's clear", () => FRESH, FRESH],
+    ] as const) {
+      const volume = recoveryVolume(before);
+      await expect(
+        runEntry(
+          deps({
+            ...volume.deps,
+            startServer: vi.fn(() => {
+              void volume.deps.writeRecoveryState("/state", meanwhile(volume.current()));
+              return inUse();
+            }),
+            readVenueHolder: () => live,
+            now: () => at,
+          }),
+        ),
+        label,
+      ).rejects.toThrow();
+      expect(volume.current(), label).toMatchObject(expected);
+    }
+  });
+
+  it("reads the holder from the VENUE directory", async () => {
+    const readVenueHolder = vi.fn(() => null);
+    await expect(
+      runEntry(deps({ startServer: vi.fn(inUse), readVenueHolder, now: () => at })),
+    ).rejects.toThrow();
+    expect(readVenueHolder).toHaveBeenCalledWith("/venue");
+  });
+
+  it("counts a refusal by a holder whose heartbeat is exactly the stale bound old", async () => {
+    const volume = recoveryVolume(FRESH);
+    const log = vi.fn();
+    await expect(
+      runEntry(
+        deps({
+          ...volume.deps,
+          startServer: vi.fn(inUse),
+          readVenueHolder: () => ({
+            kind: "provisioning",
+            pid: 7,
+            host: "box",
+            lockedAt: "2026-09-24T11:00:00.000Z",
+            heartbeatAt: "2026-09-24T11:59:30.000Z",
+          }),
+          now: () => at,
+          log,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    expect(volume.current()).toStrictEqual({
+      failures: 1,
+      level: "normal",
+      lastErrorCode: "provisioning.database_holder_stalled",
+      lastFailureAt: at.toISOString(),
+      holderKind: "provisioning",
+    });
+    expect(log).toHaveBeenCalledWith("warn", "recovery.venue_holder_stalled", {
+      holderKind: "provisioning",
+      lockedAt: "2026-09-24T11:00:00.000Z",
+      heartbeatAt: "2026-09-24T11:59:30.000Z",
+    });
+  });
+});
+
+// A real second process holds the venue folder through `@waitron/db`'s own lock, which writes the
+// holder file beside it. The refused start runs the real ahead check (which opens the folder and is
+// refused), the real holder reader, and the real `recovery.json` read, write and lock in a temporary
+// state directory. Only the clock is moved, to make the live holder's heartbeat look old.
+describe("a start refused the venue folder by a real second process", () => {
+  const HOLDER_TIMEOUT_MS = 20_000;
+  const TEST_TIMEOUT_MS = 60_000;
+  const holders: ChildProcess[] = [];
+  const dirs: string[] = [];
+  afterEach(async () => {
+    for (const child of holders.splice(0)) child.kill("SIGKILL");
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function tempDir(prefix: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), prefix));
+    dirs.push(dir);
+    return dir;
+  }
+
+  /** Starts a process that holds `venueDir` until killed. `kind` names it through the store's
+   *  holder file; `null` holds the bare engine lock and writes no holder file, as a process of an
+   *  image from before the holder file existed would. The timer references the bare connection
+   *  because a collected one closes and lets the lock go: with `--expose-gc`, one `gc()` in such a
+   *  holder let a second process take the lock (2026-09-24, Node v26.7.0). */
+  async function holdVenue(venueDir: string, kind: string | null): Promise<void> {
+    const script =
+      kind === null
+        ? `import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "node:fs";
+mkdirSync(process.argv[1], { recursive: true });
+const connection = new DatabaseSync(process.argv[1] + "/venue.lock");
+connection.exec("begin immediate");
+process.stdout.write("held");
+setInterval(() => connection, 1000);`
+        : `const db = await import(${JSON.stringify(import.meta.resolve("@waitron/db"))});
+db.setVenueHolderKind(${JSON.stringify(kind)});
+await db.lockVenueDatabase(process.argv[1]);
+process.stdout.write("held");
+setInterval(() => {}, 1000);`;
+    const child = spawn(
+      process.execPath,
+      ["--import", import.meta.resolve("tsx"), "--input-type=module", "-e", script, venueDir],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    holders.push(child);
+    const deadline = setTimeout(() => child.kill("SIGKILL"), HOLDER_TIMEOUT_MS);
+    child.on("exit", () => clearTimeout(deadline));
+    await new Promise<void>((resolve, reject) => {
+      child.stdout.on("data", (chunk: Buffer) => chunk.toString().includes("held") && resolve());
+      child.on("exit", (code) => reject(new Error(`holder exited before holding (${code})`)));
+    });
+  }
+
+  async function refusedStart(stateDir: string, venueDir: string, now: () => Date, log = vi.fn()) {
+    await expect(
+      runEntry(
+        deps({
+          stateDir,
+          venueDir,
+          assertNotAhead: undefined,
+          runStagedRestore: vi.fn(() => Promise.resolve(false)),
+          readRecoveryState,
+          writeRecoveryState,
+          withRecoveryLock: undefined,
+          now,
+          log,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+  }
+
+  async function recoveryPage(stateDir: string, venueDir: string): Promise<string> {
+    let served: Hono | undefined;
+    await runEntry(
+      deps({
+        stateDir,
+        venueDir,
+        readRecoveryState,
+        writeRecoveryState,
+        withRecoveryLock: undefined,
+        serveRecovery: (app: Hono) => {
+          served = app;
+          return Promise.resolve(undefined);
+        },
+      }),
+    );
+    return await (await served!.request("/")).text();
+  }
+
+  const oneFailure: RecoveryState = {
+    failures: 1,
+    level: "normal",
+    lastErrorCode: "migrations.set_missing",
+    lastFailureAt: "2026-09-20T10:00:00.000Z",
+  };
+
+  it(
+    "a live holder: the count stays as it was, and the log names the holder's kind",
+    async () => {
+      const stateDir = await tempDir("wt-entry-state-");
+      const venueDir = join(await tempDir("wt-entry-venue-"), "venue");
+      await writeRecoveryState(stateDir, oneFailure);
+      await holdVenue(venueDir, "restore");
+      const log = vi.fn();
+      await refusedStart(stateDir, venueDir, () => new Date(), log);
+      expect(await readRecoveryState(stateDir)).toStrictEqual(oneFailure);
+      expect(log).toHaveBeenCalledWith("warn", "recovery.venue_held", { holderKind: "restore" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a stalled holder: each refusal counts, and the third reaches the page naming the holder",
+    async () => {
+      const stateDir = await tempDir("wt-entry-state-");
+      const venueDir = join(await tempDir("wt-entry-venue-"), "venue");
+      await holdVenue(venueDir, "restore");
+      // The live holder rewrites its heartbeat every 5 s; a clock a minute ahead reads it as old.
+      const later = () => new Date(Date.now() + 60_000);
+      for (let start = 0; start < 3; start += 1) await refusedStart(stateDir, venueDir, later);
+      expect(await readRecoveryState(stateDir)).toMatchObject({
+        failures: 3,
+        level: "recovery",
+        lastErrorCode: "provisioning.database_holder_stalled",
+        holderKind: "restore",
+      });
+      const page = await recoveryPage(stateDir, venueDir);
+      expect(page).toContain("a restore from a backup");
+      expect(page).toContain("una restauración desde una copia de seguridad");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a holder with no holder file: each refusal counts, and the page names no particular program",
+    async () => {
+      const stateDir = await tempDir("wt-entry-state-");
+      const venueDir = join(await tempDir("wt-entry-venue-"), "venue");
+      await holdVenue(venueDir, null);
+      for (let start = 0; start < 3; start += 1) {
+        await refusedStart(stateDir, venueDir, () => new Date());
+      }
+      const state = await readRecoveryState(stateDir);
+      expect(state).toMatchObject({
+        failures: 3,
+        level: "recovery",
+        lastErrorCode: "provisioning.database_holder_stalled",
+      });
+      expect(state).not.toHaveProperty("holderKind");
+      const page = await recoveryPage(stateDir, venueDir);
+      expect(page).toContain("another Waitron program");
+      expect(page).toContain("otro programa de Waitron");
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
 
 describe("assertNotAhead", () => {
   const core = manifestSets().find((set) => set.name === "core")!;

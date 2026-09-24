@@ -5,7 +5,12 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { openVenueDatabase } from "@waitron/db";
+import {
+  isVenueHolderFresh,
+  openVenueDatabase,
+  readVenueHolder,
+  type VenueHolder,
+} from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 // Aliased: this module exports its own `assertNotAhead` — the wrapper that opens the venue
 // directory — and `EntryDeps` has a field of the same name.
@@ -29,10 +34,14 @@ import {
 } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
+import { withRecoveryLock } from "./recovery-lock.js";
 import {
   FRESH,
   afterFailure,
   readRecoveryState,
+  updateRecoveryState,
+  withFailureCode,
+  withoutAttempt,
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
@@ -204,6 +213,11 @@ export interface EntryDeps {
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
   readRecoveryState: (stateDir: string) => Promise<RecoveryState>;
   writeRecoveryState: (stateDir: string, state: RecoveryState) => Promise<void>;
+  /** Held around every change to `recovery.json`; defaults to the real cross-process lock. */
+  withRecoveryLock?: <T>(stateDir: string, body: () => Promise<T>) => Promise<T>;
+  /** Reads the holder file beside `venue.lock`; defaults to the real reader. */
+  readVenueHolder?: (venueDir: string) => VenueHolder | null;
+  now?: () => Date;
   startServer: (
     env: NodeJS.ProcessEnv,
     base?: NodeJS.ProcessEnv,
@@ -247,6 +261,26 @@ const DEFAULT_EXIT = (code: number): void => process.exit(code);
 /* v8 ignore stop */
 
 /**
+ * One change to `recovery.json`, read and written under the recovery lock, so a clear the running
+ * server makes and a failure another start records are never overwritten by a count read before
+ * them.
+ */
+function changeState(
+  deps: EntryDeps,
+  change: (current: RecoveryState) => RecoveryState,
+): Promise<{ before: RecoveryState; after: RecoveryState }> {
+  return updateRecoveryState(
+    {
+      lock: deps.withRecoveryLock ?? withRecoveryLock,
+      read: deps.readRecoveryState,
+      write: deps.writeRecoveryState,
+    },
+    deps.stateDir,
+    change,
+  );
+}
+
+/**
  * Persist the escalation state, REPORTING a write failure rather than letting it become the
  * outcome. Used everywhere the write is not the point of the moment: on the failure path the boot's
  * own error is what an operator needs, in the stayed-up callback a floating rejection would kill a
@@ -255,9 +289,12 @@ const DEFAULT_EXIT = (code: number): void => process.exit(code);
  * counter, which is allowed to throw: a state volume that cannot be written is a box that can never
  * escalate, and the server would fail on the same volume moments later anyway.
  */
-async function persistState(deps: EntryDeps, next: RecoveryState): Promise<void> {
+async function persistState(
+  deps: EntryDeps,
+  change: (current: RecoveryState) => RecoveryState,
+): Promise<void> {
   try {
-    await deps.writeRecoveryState(deps.stateDir, next);
+    await changeState(deps, change);
   } catch (error) {
     deps.log("warn", "recovery.state_write_failed", { errorCode: codeOf(error) });
   }
@@ -405,9 +442,13 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     throw new AppError("server.entry_arguments_refused", {});
   }
 
+  // A plain read, outside the lock: it decides only whether this start boots or serves the page,
+  // and `readRecoveryState` never throws, which the page path depends on. Every change below
+  // re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
   const logDir = deps.logDir ?? join(deps.stateDir, "logs");
   const exit = deps.exit ?? DEFAULT_EXIT;
+  const now = deps.now ?? (() => new Date());
 
   if (state.level === "recovery") {
     // The page's log tail is the SERVER's rotating file (`<logDir>/waitron.log`). A box escalated
@@ -429,7 +470,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
         // so a zero count IS "normal" and a hand-written level could not pin a box either way. The
         // exit is the whole retry — Docker's restart policy performs the restart (spec §9.3).
         onRetry: async () => {
-          await persistState(deps, FRESH);
+          await persistState(deps, () => FRESH);
           exit(0);
         },
       }),
@@ -447,7 +488,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   // Consequence, accepted: an attempt CUT SHORT counts too — three power-cycles during a long cold
   // restore land a box on the page, where the retry button clears it. A counter that only counted
   // completed failures could not count the boot that hangs, which is the case it exists for.
-  await deps.writeRecoveryState(deps.stateDir, afterFailure(state, BOOT_INCOMPLETE, new Date()));
+  const attempt = await changeState(deps, (current) =>
+    afterFailure(current, BOOT_INCOMPLETE, now()),
+  );
 
   let server: { close(): Promise<void> };
   try {
@@ -494,19 +537,55 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     // The installer's channel first, so the real reason survives even if the state write fails.
     (deps.reportFailure ?? (() => {}))(failureDetail(error));
     const code = classifyBootFailure(error);
-    // Another process holds the venue folder, usually the running server with this start a second
-    // copy beside it, so the count read above goes back. The cost: a folder held by something stuck
-    // never reaches the page. Otherwise the same count as the pre-boot write — one attempt is one
-    // failure, not two — now carrying the classified code. Rethrown: exits non-zero.
-    await persistState(
-      deps,
-      code === "provisioning.database_in_use" ? state : afterFailure(state, code, new Date()),
-    );
+    const at = now();
+    if (code === "provisioning.database_in_use") {
+      await recordRefusal(deps, attempt, at);
+    } else {
+      // The count the pre-boot write made stands — one attempt is one failure, not two — now
+      // carrying the classified code.
+      await persistState(deps, (current) => withFailureCode(current, code, at));
+    }
     throw error;
   }
 
   deps.installShutdownHandlers(server);
-  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, FRESH));
+  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, () => FRESH));
+}
+
+/**
+ * Another process holds the venue folder. Its holder file (written by `@waitron/store` beside
+ * `venue.lock`) says whether it is alive. A fresh heartbeat is a live holder, usually the running
+ * server with this start a second copy beside it: this start's count comes back off. A stale,
+ * missing or unreadable file counts, so a folder held by something stuck reaches the page.
+ *
+ * Missing counts because the holder writes its file in the same synchronous step that takes the
+ * lock (`packages/store/src/venue-lock.ts`): a live holder without one is a start refused within
+ * that instant, or a process of an image from before the file existed.
+ *
+ * Stale here is `VENUE_HOLDER_STALE_MS`, 30 s, while the holder's own watchdog kills it only after
+ * `WATCHDOG_KILL_MS`, 120 s (`packages/store/src/venue-liveness.ts`). The gap is deliberate: a long
+ * synchronous statement such as a backup's `VACUUM INTO` stops the heartbeat without the holder being
+ * stuck, and killing it would be worse than counting a start or two against it.
+ */
+async function recordRefusal(
+  deps: EntryDeps,
+  attempt: { before: RecoveryState; after: RecoveryState },
+  at: Date,
+): Promise<void> {
+  const holder = (deps.readVenueHolder ?? readVenueHolder)(deps.venueDir);
+  if (holder !== null && isVenueHolderFresh(holder, at)) {
+    deps.log("warn", "recovery.venue_held", { holderKind: holder.kind });
+    await persistState(deps, (current) => withoutAttempt(current, attempt.before, attempt.after));
+    return;
+  }
+  deps.log("warn", "recovery.venue_holder_stalled", {
+    holderKind: holder?.kind ?? null,
+    lockedAt: holder?.lockedAt ?? null,
+    heartbeatAt: holder?.heartbeatAt ?? null,
+  });
+  await persistState(deps, (current) =>
+    withFailureCode(current, "provisioning.database_holder_stalled", at, holder?.kind),
+  );
 }
 
 /* v8 ignore start -- the real process wiring: `process.env`, a timer and `process.exit`. Every

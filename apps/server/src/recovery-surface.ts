@@ -4,6 +4,7 @@ import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ErrorCode } from "@waitron/shared";
+import type { VenueHolderKind } from "@waitron/db";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
 const MAX_LOG_LINES = 200;
@@ -64,6 +65,48 @@ export interface OperatorText {
   title: string;
   /** What they should do about it. */
   action: string;
+  /** The same two, in Spanish, where the entry has them. */
+  es?: { title: string; action: string };
+}
+
+const HOLDER_STALLED = "provisioning.database_holder_stalled";
+
+/** Each kind's name on the page. `script` and an unknown holder share the last row. */
+const HOLDER_NAMES: Readonly<Record<VenueHolderKind, { en: string; es: string }>> = {
+  server: { en: "the Waitron server", es: "el servidor de Waitron" },
+  restore: {
+    en: "a restore from a backup",
+    es: "una restauración desde una copia de seguridad",
+  },
+  rejoin: {
+    en: "a rejoin of this box to its venue",
+    es: "la reincorporación de este equipo a su local",
+  },
+  provisioning: {
+    en: "the Waitron setup command",
+    es: "el comando de configuración de Waitron",
+  },
+  script: { en: "another Waitron program", es: "otro programa de Waitron" },
+};
+
+/**
+ * The text for `provisioning.database_holder_stalled`, naming the holder through `HOLDER_NAMES`
+ * alone: the kind comes from `recovery.json`, which `readRecoveryState` keeps only when it is a
+ * member of the set. "Two minutes" is the holder's own watchdog bound (`WATCHDOG_KILL_MS`,
+ * `packages/store/src/venue-liveness.ts`); a holder of an older image has none, hence "normally".
+ */
+function holderStalledText(kind: VenueHolderKind | undefined): OperatorText {
+  const name = HOLDER_NAMES[kind ?? "script"];
+  return {
+    title: `The box's database is held by ${name.en}, which appears to have stopped responding.`,
+    action:
+      "Wait two minutes, then press Retry: Waitron normally ends a program of its own that stops responding within that time. If it fails again, ask whoever installed this box to look at it.",
+    es: {
+      title: `La base de datos de este equipo está ocupada por ${name.es}, que parece haber dejado de responder.`,
+      action:
+        "Espera dos minutos y pulsa «Retry a normal boot»: Waitron normalmente cierra en ese tiempo un programa propio que deja de responder. Si vuelve a fallar, pide ayuda a quien instaló este equipo.",
+    },
+  };
 }
 
 /**
@@ -183,6 +226,8 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     title: "The installed software is incomplete.",
     action: "Reinstall Waitron on this box.",
   },
+  // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
+  [HOLDER_STALLED]: holderStalledText(undefined),
 };
 
 /**
@@ -210,7 +255,9 @@ export const GENERIC_TEXT: OperatorText = {
  * `toString` or `constructor` would find a FUNCTION — which `??` does not replace and whose `title`
  * is `undefined`, crashing the one page a failed box can still serve.
  */
-function operatorText(lastErrorCode: string | null): OperatorText {
+function operatorText(state: RecoveryState): OperatorText {
+  const { lastErrorCode } = state;
+  if (lastErrorCode === HOLDER_STALLED) return holderStalledText(state.holderKind);
   if (lastErrorCode === null) return GENERIC_TEXT;
   if (!Object.hasOwn(OPERATOR_TEXT, lastErrorCode)) return GENERIC_TEXT;
   const entries: Readonly<Record<string, OperatorText | undefined>> = OPERATOR_TEXT;
@@ -220,7 +267,7 @@ function operatorText(lastErrorCode: string | null): OperatorText {
 function renderPage(state: RecoveryState, logLines: string[]): string {
   const errorCode = state.lastErrorCode === null ? "none" : escapeHtml(state.lastErrorCode);
   const failureAt = state.lastFailureAt === null ? "never" : escapeHtml(state.lastFailureAt);
-  const text = operatorText(state.lastErrorCode);
+  const text = operatorText(state);
   const tail =
     logLines.length === 0 ? "(no log yet)" : logLines.map((line) => escapeHtml(line)).join("\n");
   // The curated strings go through `escapeHtml` too. They are fixed and safe, but routing every
@@ -237,7 +284,13 @@ function renderPage(state: RecoveryState, logLines: string[]): string {
 <body>
 <h1>Waitron did not start</h1>
 <p>${escapeHtml(text.title)}</p>
-<p>${escapeHtml(text.action)}</p>
+<p>${escapeHtml(text.action)}</p>${
+    text.es === undefined
+      ? ""
+      : `
+<p lang="es">${escapeHtml(text.es.title)}</p>
+<p lang="es">${escapeHtml(text.es.action)}</p>`
+  }
 <form method="post" action="/recovery-api/retry">
 <button type="submit">Retry a normal boot</button>
 </form>

@@ -48,5 +48,12 @@ declare module "@waitron/shared" {
      * secret.
      */
     "provisioning.database_in_use": { database: string };
+    /**
+     * A start was refused `provisioning.database_in_use` by a holder whose holder file was stale,
+     * missing or unreadable (`@waitron/store`'s `venue-holder.ts`). The container entrypoint
+     * records it in `recovery.json` so the refusal counts towards the recovery page; nothing throws
+     * it. `holderKind` is the holder file's kind, one of a closed set, or null without a file.
+     */
+    "provisioning.database_holder_stalled": { holderKind: string | null };
   }
 }
