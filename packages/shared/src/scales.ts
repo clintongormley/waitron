@@ -117,34 +117,32 @@ export function basisPointsToDecimal(count: number): Decimal {
 export const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
- * `malformed` is the caller's own scale code, so a row holding a quantity and a rate says which was
- * malformed. Overflow is `shared.decimal_overflow` for every scale, as the typed converters throw.
+ * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
+ *
+ * Not the quantity bound: a raw read can be a total, `cast(sum(...) as text)`, and quantities that
+ * each fit nine integer digits can sum past them. A count past what a number holds exactly would
+ * drop digits without saying so, so that is refused, in the scale's own code.
  */
-function rawCount(
-  value: string,
-  scale: number,
-  maxIntegerDigits: number,
-  malformed: "shared.invalid_thousandths" | "shared.invalid_basis_points",
-): number {
+export function rawThousandthsToDecimal(value: string): Decimal {
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
-    throw new AppError(malformed, { value: String(value) });
+    throw new AppError("shared.invalid_thousandths", { value: String(value) });
   }
-  return boundedCount(BigInt(value), value, scale, maxIntegerDigits);
+  const count = Number(value);
+  if (!Number.isSafeInteger(count)) {
+    throw new AppError("shared.invalid_thousandths", { value });
+  }
+  return thousandthsToDecimal(count);
 }
 
 /**
- * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
- * A sum past nine integer digits is refused here, since no column type below refuses it.
+ * The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT. Bounded at
+ * the rate's three integer digits, refused past them with `shared.decimal_overflow`.
  */
-export function rawThousandthsToDecimal(value: string): Decimal {
-  return thousandthsToDecimal(
-    rawCount(value, QUANTITY_SCALE, MAX_QUANTITY_INTEGER_DIGITS, "shared.invalid_thousandths"),
-  );
-}
-
-/** The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT. */
 export function rawBasisPointsToDecimal(value: string): Decimal {
+  if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
+    throw new AppError("shared.invalid_basis_points", { value: String(value) });
+  }
   return basisPointsToDecimal(
-    rawCount(value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS, "shared.invalid_basis_points"),
+    boundedCount(BigInt(value), value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS),
   );
 }

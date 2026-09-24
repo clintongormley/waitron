@@ -40,9 +40,8 @@ export async function computeTopSellers(
   const nodeClause = nodeScopeClause(input.nodeId);
   // Every sum is taken by the engine over whole-number counts and handed over as TEXT, so a parent's
   // figures are exact and never re-added here: the total counts whole cents (`rawCentsToDecimal`),
-  // the quantity whole thousandths (`rawThousandthsToDecimal`, which refuses a sum past nine integer
-  // digits with `shared.decimal_overflow`). One row per (parent, variant group); the group with no
-  // variant name carries the parent's own sales and is not a nested row.
+  // the quantity whole thousandths (`rawThousandthsToDecimal`). One row per (parent, variant group);
+  // the group with no variant name carries the parent's own sales and is not a nested row.
   const { rows } = await tx.execute<{
     name: string;
     parent_quantity: string;
