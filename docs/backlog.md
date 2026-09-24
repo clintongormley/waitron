@@ -2798,11 +2798,26 @@ image constraints under *Detail → Box image*.
   (#602, every `.ts` and `.mjs` file, about 4,870 to about 2,770 counted with the same `grep -cE`;
   the `.sh` files and `write-path-tables.json` are outside the checker and were left) and
   `packages/catalogue` (#603, about 3,560 to about 2,200 counted with a parse-tree walk over every
-  `.ts` file, tests included). A pruning pull request
+  `.ts` file, tests included) and `packages/ui` (#604, about 1,144 to about 503 with the `grep -cE`
+  count, tests included; comments inside `css` and `html` template literals are strings and were
+  left). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602 and #603 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603 and #604 and left for the package that owns each, all
   still OPEN:
+  - Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
+    is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
+    `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
+    `shape: t.shape ?? "round"` from `#placementOf`, so dragging, nudging or rotating a shapeless
+    table changes it (read from the code, not run). `packages/ui/brand/README.md` still lists four
+    generated icon files and says the generator "reproduced all four derived files"; it also writes
+    `icon-192.png` and `icon-512.png` (#604 fixed the same list in `build-icons.mjs`).
+    `packages/ui/vitest.config.ts` and `stryker.config.json` still exclude
+    `src/tokens/token-test-helpers.ts`, which moved to `packages/ui-core` in #519 (the entry
+    "`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests" below still names it
+    there too). A reviewer believes the `demo/**` coverage exclusion matches nothing and that
+    `**/ui-core/**` is there because `packages/ui-core` starts with `packages/ui` (CLAUDE.md §4's
+    unanchored-include trap); neither was tested.
   - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
     source twice and order sources differently from run to run**: `recomputeProductDerivations`
     (`packages/recipes/src/recipes.ts`) feeds it ingredient rows in no fixed order, and #603's
