@@ -75,7 +75,6 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     );
     expect(row!.zoneId).toBe(zoneId);
 
-    // The FK rejects a zone_id that names no row at all.
     const eRandom = await captureError(() =>
       inTx((tx) =>
         tx.update(diningTables).set({ zoneId: ABSENT_ZONE }).where(eq(diningTables.id, tableId)),

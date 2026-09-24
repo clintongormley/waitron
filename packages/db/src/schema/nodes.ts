@@ -3,28 +3,20 @@ import type { Endorsement } from "@waitron/membership";
 import { locations } from "./tenants.js";
 
 /**
- * A compute node that runs a venue's POS and operates as its SIF (#33 — the "server" of that
- * design; called `node` here because in US restaurant English "server" means a waiter, and this
- * is a machine, not a person). One node per venue today; active-active/failover (a `role` column,
- * a second node) are later specs.
+ * A compute node that runs a venue's POS and operates as its SIF (called `node` here because in
+ * US restaurant English "server" means a waiter, and this is a machine, not a person).
  *
  * Which role a node plays — a `primary` that writes and originates, or a read-only `mirror` — lives
  * on `node_roles` (`./node-roles.ts`), keyed by node id: a `local` table, because a node holding
  * another node's copy of the database must read its own role or none. Do not add a `role` column
  * here for the mirror/primary split — that concept already has its table. Deliberately
- * regime-neutral, like `tills`: the Veri*Factu SIF identity (`NúmeroInstalación`,
- * `IdSistemaInformatico`) lives in the module-owned `registro_sif` table, keyed by node (the SIF is
- * the node — #33).
+ * regime-neutral, like `tills`: the Veri*Factu SIF identity lives in the module-owned
+ * `registro_sif` table, keyed by node.
  *
- * `filing_module`/`tax_module` are nullable and stamped at provision time from the location's
- * territory (Task D1); the authoritative per-sale value stays `sales.fiscal_backend` — these are
- * the node's recorded modules, so the running SIF knows its backend without re-resolving. Nullable
- * to keep the reshape off every existing bare-node fixture (`seedNode`, `seedNodesForSifContention`,
- * `drain-fixtures`); pre-production, so a later NOT NULL tightening is free.
+ * `filing_module`/`tax_module` are stamped at provision time from the location's territory; the
+ * authoritative per-sale value stays `sales.fiscal_backend` — these are the node's recorded
+ * modules, so the running SIF knows its backend without re-resolving.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as ./sales.ts.
 export const nodes = table("nodes", {
   id: id("id").primaryKey().$defaultFn(newId),
   locationId: id("location_id")
@@ -35,22 +27,17 @@ export const nodes = table("nodes", {
   name: label("name").notNull(),
   filingModule: label("filing_module"),
   taxModule: label("tax_module"),
-  // The node's Ed25519 identity PUBLIC key (base64 SPKI DER), the membership trust anchor (design
-  // §4). Nullable like filing_module/tax_module above: pre-production, and bare-node fixtures carry
-  // none — a keyless node is simply not a trust anchor (readMembershipTrustSet filters nulls). The
-  // PRIVATE half is sealed in the vault (`apps/server/src/node-identity.ts`), never here. Nothing
-  // carries the primary's nodes row to a mirror today: the bundle carries identity and dial details
-  // only (mirror-bundle.ts's header), and the row copy that used to went with the deleted replication.
-  // Set at provision by setNodePublicKey. Nothing in the database refuses another writer: this
-  // engine has no roles and no grants.
+  // The node's Ed25519 identity PUBLIC key (base64 SPKI DER), the membership trust anchor. A keyless
+  // node is simply not a trust anchor (readMembershipTrustSet filters nulls). The PRIVATE half is
+  // sealed in the vault (`apps/server/src/node-identity.ts`), never here. Set at provision by
+  // setNodePublicKey. Nothing in the database refuses another writer: this engine has no roles and
+  // no grants.
   publicKey: label("public_key"),
-  // The primary's ENDORSEMENT of this node's public_key (design §4/§6 R2): a signed
+  // The primary's ENDORSEMENT of this node's public_key: a signed
   // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document
-  // this node later signs, chaining back to setup. Public data — the exact sibling of `public_key`
-  // above — so it lives here, not in the secret vault (whose exact-match string-only payload cannot
-  // hold it). Nullable: only a reserved STANDBY carries one; a fresh primary is self-trusted and has
-  // NULL. Set at adopt by insertReservedNodeTx, which is the only writer by convention — see
-  // public_key above. Read at R3 promotion to attach to the minted membership document.
+  // this node later signs, chaining back to setup. Public data, so it lives here, not in the secret
+  // vault. Nullable: only a reserved STANDBY carries one; a fresh primary is self-trusted and has
+  // NULL. Set at adopt by insertReservedNodeTx, the only writer by convention.
   endorsement: json<Endorsement>("endorsement"),
   createdAt: ts("created_at").notNull().$defaultFn(now),
 });

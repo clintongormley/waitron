@@ -38,8 +38,8 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     return withTransaction(suite.db, fn);
   }
 
-  // The Drizzle builder rather than raw SQL: `id` and `created_at` are `$defaultFn` columns applied
-  // CLIENT-side, so a raw `insert` is refused NOT NULL before any constraint under test is reached.
+  // Drizzle rather than raw SQL: `id` and `created_at` are `$defaultFn` columns a raw insert does
+  // not fill.
   async function seedStation(location: string, name: string, isDefault = false): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -65,9 +65,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("carries ordered timing thresholds with sane defaults (KDS order-timing alerts)", async () => {
-    // The three per-station bands (warm/overdue/forgotten) default 5/10/15 minutes, and the
-    // kitchen_stations_thresholds_ordered CHECK rejects an out-of-order UPDATE. The ordering guard
-    // is the deletion-proof target — dropping the CHECK lets warm=20 (>= overdue=10) through.
     const id = await seedStation(LOCATION_A, "Timing station");
     const [row] = await inTx((tx) =>
       tx
@@ -80,22 +77,19 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
         .where(eq(kitchenStations.id, id)),
     );
     expect(row).toMatchObject({ w: 5, o: 10, f: 15 });
-    // An out-of-order update (warm=20 >= overdue=10) violates the CHECK.
     const e = await captureError(() =>
       inTx((tx) =>
         tx.update(kitchenStations).set({ warmAfterMinutes: 20 }).where(eq(kitchenStations.id, id)),
       ),
     );
     expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
-    // SQLite names the constraint in the message when it has one, the way PostgreSQL did.
+    // SQLite names the constraint in the message when it has one.
     expect(engineErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
   });
 
   it("rejects a SECOND default station per location (the WHERE is_default partial unique)", async () => {
-    // Exactly one default per location: the first is_default row is accepted, a second at the SAME
-    // location is refused. A non-default second row is fine (only is_default rows are indexed), and
-    // a default at a DIFFERENT location is fine (the index keys on location too) — both asserted so
-    // the failure is the partial predicate, not a plain (location_id, name) unique.
+    // A non-default sibling and a default at another location are both accepted, so the refusal is
+    // the partial predicate and not a plain unique.
     await seedStation(LOCATION_A, "Default one", true);
     await seedStation(LOCATION_A, "Non-default sibling", false);
     await seedStation(LOCATION_A2, "Default elsewhere", true);
@@ -104,14 +98,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("the partial unique index is what blocks the second default (proof by deletion of the index)", async () => {
-    // Drop the index and the second default at the same location now succeeds — proving the
-    // partial `CREATE UNIQUE INDEX … WHERE is_default` is the guard, not some other constraint. The
-    // index is recreated in a `finally` so every other test still meets it.
-    //
-    // Not inside a rolled-back transaction, unlike the PostgreSQL version: `withTransaction` IS the
-    // file's single write transaction here (`packages/db/src/tenancy.ts`), so a DDL statement and
-    // the rows it is proving against cannot be unwound together without also unwinding the seeding
-    // this suite shares across its cases (`resetPerTest: false`).
+    // The index is recreated in a `finally` so every other case still meets it.
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
     await suite.db.insert(locations).values({
       id: probeLocation,
@@ -126,7 +113,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     expect(index?.sql).toContain("is_default");
     try {
       suite.db.run(sql`drop index kitchen_stations_default_key`);
-      // With the index gone, a second default at the same location goes through.
       await seedStation(probeLocation, "Probe default two", true);
       const [counted] = await inTx((tx) =>
         tx
@@ -136,12 +122,9 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
             and(eq(kitchenStations.locationId, probeLocation), eq(kitchenStations.isDefault, true)),
           ),
       );
-      expect(counted!.n).toBe(2); // two defaults coexist once the partial unique is dropped.
+      expect(counted!.n).toBe(2);
     } finally {
-      // The probe rows go FIRST: they are the two defaults the index refuses, so recreating it over
-      // them fails with `UNIQUE constraint failed: kitchen_stations.location_id` — which is itself
-      // a second reading of the same guard, seen 2026-09-22 when this `finally` ran the other way
-      // round.
+      // The probe rows go first: recreating the index over their two defaults would fail.
       await suite.db.delete(kitchenStations).where(eq(kitchenStations.locationId, probeLocation));
       suite.db.run(sql.raw(index!.sql));
     }

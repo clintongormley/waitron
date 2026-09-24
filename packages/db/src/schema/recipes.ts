@@ -30,17 +30,11 @@ export const ingredients = table(
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
-  // The `dietary_origin` PostgreSQL enum TYPE refused a value outside the set on its own; the SQLite
-  // text column that replaces it does not, so the refusal is written here instead. The values are
-  // read off the column (`enumCheck`), so the vocabulary is still declared once, above.
   (t) => [check("ingredients_dietary_origin_ck", enumCheck(t.dietaryOrigin))],
 );
 
-/** The flat composition: which ingredients a product is made of. No quantity this slice (allergen
- * presence is qualitative). One row per (product, ingredient). */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as ./sales.ts.
+/** The flat composition: which ingredients a product is made of. No quantity (allergen presence
+ * is qualitative). */
 export const recipeLines = table(
   "recipe_lines",
   {

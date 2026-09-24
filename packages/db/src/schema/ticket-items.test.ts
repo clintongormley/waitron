@@ -15,18 +15,12 @@ import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
 
-// What this suite proves is the schema's own behaviour — the produced Drizzle export's column
-// mapping, the additive away_at/note columns, the per-line UNIQUE that stops a concurrent
-// double-fire, and the working_order_lines ON DELETE CASCADE.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
-// Café solo is this package's placeholder line description (park-retrieve.test.ts): the locale
-// trigger checks description KEYS against the venue's invoice_locales (['es'] here), and this
-// literal already passes english-only.ts's SPANISH_WORDS guard as test DATA.
+// The locale trigger checks description KEYS against the venue's invoice_locales (['es'] here).
 const DESCRIPTIONS_A = { es: "Café solo" };
 
-// Captured at seed time (the ids the inserts below need as foreign-key targets).
 let nodeA = "";
 let productA = "";
 let stationA = "";
@@ -65,7 +59,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       })
       .returning({ id: products.id });
     productA = prodA!.id;
-    // The venue's default station — the FK target for ticket_items.station_id.
     const [station] = await db
       .insert(kitchenStations)
       .values({ locationId: LOCATION_A, name: "Cocina", isDefault: true })
@@ -73,9 +66,8 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     stationA = station!.id;
   });
 
-  // Everything goes through the Drizzle builder rather than raw SQL: `id`, `queued_at` and the
-  // parents' own `id`s are `$defaultFn` columns applied CLIENT-side, so a raw `insert` reaches none
-  // of them and the row is refused NOT NULL.
+  // The Drizzle builder rather than raw SQL: `id` and `queued_at` are `$defaultFn` columns
+  // applied CLIENT-side, so a raw insert is refused NOT NULL.
   async function seedOrderLine(
     till: string,
     node: string,
@@ -140,7 +132,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
-    // Advance queued → preparing → ready — the per-line kitchen lifecycle (§2d).
     await inTx((tx) =>
       tx
         .update(ticketItems)
@@ -161,12 +152,11 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row!.nodeId).toBe(nodeA);
     expect(row!.queuedAt).not.toBeNull();
     expect(row!.readyAt).not.toBeNull();
-    // The away_at column (KDS-3, §2a) is NULL before the pass dispatches the item.
+    // NULL until the pass dispatches the item.
     expect(row!.awayAt).toBeNull();
   });
 
   it("stamps away_at (the pass dispatch) and reads it back through the Drizzle export", async () => {
-    // The KDS-3 §2a terminal display step: after `ready`, the expo/pass stamps `away_at`.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     await inTx((tx) =>
@@ -180,12 +170,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("carries a nullable note column (spec §2/§3, NON-FISCAL)", async () => {
-    // Per-line kitchen customisation snapshotted from the working-order line at fire time (like
-    // station_id/course_id). NON-FISCAL: never read into a filed record.
-    //
-    // `pragma table_info` replaces `information_schema.columns`; it reports the DECLARED type in
-    // the case the DDL wrote it, and has no `udt_name` counterpart, so the old `data_type`/
-    // `udt_name` pair collapses to one reading.
+    // `pragma table_info` reports the DECLARED type in the case the DDL wrote it.
     const meta = suite.db
       .all<{ name: string; type: string; notnull: number }>(
         sql`select name, type, "notnull" from pragma_table_info('ticket_items') where name = 'note'`,
@@ -204,8 +189,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("rejects a second ticket item for the same line (the per-line UNIQUE — the concurrent-fire guard)", async () => {
-    // One ticket item per working_order_line. This is the guard §7 names for a concurrent
-    // double-fire — two rounds firing at once collide here rather than duplicating the item.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     await seedTicket(nodeA, orderId, lineId, stationA);
     const e = await captureError(() => seedTicket(nodeA, orderId, lineId, stationA));
@@ -213,14 +196,12 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("cascades a ticket item away when its working_order_line is deleted (ON DELETE CASCADE)", async () => {
-    // The (working_order_line_id) → working_order_lines FK is ON DELETE CASCADE. Deleting the line
-    // (the parent order is open, so working_order_lines_require_open_parent permits it) removes the
-    // ticket item with it, which is how a cancelled/abandoned line's item is cleaned up.
+    // The parent order is open, so working_order_lines_require_open_parent permits the delete.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     expect(countTicket(id)).toBe(1);
     await suite.db.delete(workingOrderLines).where(eq(workingOrderLines.id, lineId));
-    expect(countTicket(id)).toBe(0); // the ticket item went with the line — the cascade fired.
+    expect(countTicket(id)).toBe(0);
   });
 
   function countTicket(id: string): number {

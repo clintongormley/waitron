@@ -11,8 +11,7 @@ import { catalogues, categories, products } from "./catalogue.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { locations, tenants } from "./tenants.js";
 
-// What this proves is the hand-written (station_id) → kitchen_stations foreign keys on
-// categories/products.
+// What this proves is the (station_id) → kitchen_stations foreign keys on categories/products.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
@@ -79,7 +78,6 @@ describe("categories.station_id / products.station_id routing FKs", () => {
     );
     expect(row!.stationId).toBe(stationA);
 
-    // … a station that names no row at all is refused (FK existence) …
     const eRandom = await captureError(() =>
       inTx((tx) =>
         tx.update(categories).set({ stationId: RANDOM_UUID }).where(eq(categories.id, categoryA)),

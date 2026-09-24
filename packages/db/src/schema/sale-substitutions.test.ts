@@ -23,18 +23,11 @@ beforeEach(() => {
   TILL_A1 = randomUUID();
 });
 
-/**
- * The generic-layer substitution link (`sale_substitutions`) and the recipient
- * columns on `sales` (`counterparty_*`). docs/superpowers/plans/2026-08-02-f3-canje.md §2.1.
- */
-
 let LOCATION_A = randomUUID();
 let TILL_A1 = randomUUID();
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
-// sales.node_id is NOT NULL since the node-id rekey (2026-08-03); insertSale writes the sale's node,
-// which the (node_id) → nodes FK requires.
 let nodeA = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
@@ -63,9 +56,6 @@ async function seed(db: Database): Promise<void> {
   seriesA = a.id;
 }
 
-// Raw insert of a sale HEADER — deliberately raw `sql`, not the drizzle `sales` object, so the RED
-// phase of the counterparty-column tests fails on the real cause ("column counterparty_tax_id does
-// not exist", i.e. the migration is absent) rather than on a TypeScript compile error.
 let invoiceCounter = 0;
 async function insertSale(
   db: Database,
@@ -78,22 +68,16 @@ async function insertSale(
   } = {},
 ): Promise<string> {
   const tillId = opts.tillId ?? TILL_A1;
-  // node_id is NOT NULL.
   const nodeId = opts.nodeId ?? nodeA;
   const seriesId = opts.seriesId ?? seriesA;
   const locales = opts.invoiceLocales ?? ["es", "ca"];
   const cp = opts.counterparty ?? null;
   invoiceCounter += 1;
-  // `invoice_locales` is a JSON array in a TEXT column now, so the locale list binds as one JSON
-  // string rather than being built as SQL. The `array[…]::text[]` expression this replaces is
-  // refused at prepare here — `near "['es','ca']": syntax error` for the literal form, and
-  // `unrecognized token: ":"` for the cast (node v26.7.0, `node:sqlite`).
   const localesJson = JSON.stringify(locales);
   const [row] = await rows<{ id: string }>(
     db,
     // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
-    // rather than a SQL DEFAULT, which a raw insert never reaches — and `'[]'::jsonb` has lost its
-    // cast for the same reason the locale list did.
+    // rather than a SQL DEFAULT, which a raw insert never reaches.
     sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${randomUUID()}, ${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
            100, '[]', ${locales[0]}, ${localesJson}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
@@ -122,32 +106,14 @@ describe("sale_substitutions — schema shape", () => {
   });
 
   it("creates sale_substitutions as an append-only table", async () => {
-    // `information_schema.tables` and `pg_trigger` do not exist on this engine — run as written
-    // these statements died with `no such table: information_schema.tables` and, for the trigger
-    // read, `unrecognized token: ":"` from its `::regclass` cast (measured on this suite).
-    // `sqlite_master` answers both questions: it holds tables and triggers alike, with a
-    // `tbl_name` saying which table a trigger is on.
     const table = await rows<{ name: string }>(
       db,
       sql`select name from sqlite_master where type = 'table' and name = 'sale_substitutions'`,
     );
     expect(table).toHaveLength(1);
 
-    // WHAT THE GUARD LIST LOST, and it is not only a rename. The two names this case pinned were
-    // `sale_substitutions_enforce_immutability` and `sale_substitutions_block_truncate`. Read off
-    // this package's own migrated database, the triggers now on the table are
-    // `sale_substitutions_append_only_delete` and `sale_substitutions_append_only_update` — one
-    // per statement kind, because a SQLite trigger is declared for one of INSERT, UPDATE or
-    // DELETE rather than a list of them.
-    //
-    // The truncate guard has no successor and is not meant to have one: SQLite has no TRUNCATE
-    // statement at all, so there is nothing for a trigger to intercept. `truncate table
-    // sale_substitutions` is refused by the PARSER with `near "truncate": syntax error` (node
-    // v26.7.0, `node:sqlite`) — measured, not assumed. The suite's own TRUNCATE case went with it;
-    // the note on this describe block says so.
-    //
-    // The names are read off the table rather than filtered by a list, so a guard added or
-    // renamed shows up here as a changed list instead of passing unnoticed.
+    // Read off the table rather than filtered by a list, so a guard added or renamed shows up
+    // here as a changed list instead of passing unnoticed.
     const guards = await rows<{ name: string }>(
       db,
       sql`select name from sqlite_master
@@ -160,11 +126,7 @@ describe("sale_substitutions — schema shape", () => {
   });
 
   it("adds the three nullable counterparty columns to sales", async () => {
-    // `pragma_table_info` for `information_schema.columns`, which does not exist here. All three
-    // values carry across for these columns: the name, the declared type (`lower(type)` because
-    // the pragma answers in upper case), and `notnull` 0 for `is_nullable` 'YES'. Unlike the json
-    // columns in `catalogue.test.ts`, nothing is lost — these really are plain text columns on
-    // both engines.
+    // `lower(type)`: the pragma reports the type in the case the DDL declared it.
     const cols = await rows<{ name: string; type: string; notnull: number }>(
       db,
       sql`select name, lower(type) as type, "notnull" from pragma_table_info('sales')
@@ -210,8 +172,6 @@ describe("sale_substitutions — the N:1 link", () => {
     await insertSubstitution(db, { substitutionSaleId: f3SaleId, substitutedSaleId: ticket2 });
     const linked = await rows<{ n: number }>(
       db,
-      // `count(*)` without a cast: SQLite has no cast operator, and none is needed — measured on
-      // this engine, `select count(*) as n` hands back a JavaScript `number`.
       sql`select count(*) as n from sale_substitutions
             where substitution_sale_id = ${f3SaleId}`,
     );
@@ -219,8 +179,6 @@ describe("sale_substitutions — the N:1 link", () => {
   });
 
   it("refuses to substitute the same ticket twice (unique substituted_sale_id)", async () => {
-    // The DB control for "a ticket is substituted at most once" (plan §2.1, decision 4). A second
-    // F3 (or the same one) naming an already-substituted ticket violates the unique index.
     const secondF3 = await insertSale(db, {
       counterparty: { taxId: "B88888888", legalName: "Beacon Corp SL", countryCode: "ES" },
     });
@@ -228,12 +186,8 @@ describe("sale_substitutions — the N:1 link", () => {
     const error = await captureError(() =>
       insertSubstitution(db, { substitutionSaleId: secondF3, substitutedSaleId: ticket1 }),
     );
-    // The index's NAME (`sale_substitutions_substituted_key`, 0000_baseline.sql) is no longer in
-    // the refusal: this engine names the table and the key column instead — measured
-    // `UNIQUE constraint failed: sale_substitutions.substituted_sale_id`. That pair IS the index's
-    // identity here, and the class rules out a NOT NULL on the same column. The control in the
-    // other direction is the fan-out case above: a second link with a DIFFERENT substituted ticket
-    // is accepted, so the index discriminates on the ticket rather than refusing any second row.
+    // The refusal names the table and key column, not the index. The control is the fan-out case
+    // above: a second link with a DIFFERENT substituted ticket is accepted.
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "sale_substitutions",
@@ -249,11 +203,7 @@ describe("sale_substitutions — the N:1 link", () => {
         substitutedSaleId: "99999999-9999-4999-8999-999999999999",
       }),
     );
-    // Class only, and nothing narrower is available: a foreign-key refusal here is the whole
-    // message `FOREIGN KEY constraint failed` and names no table or column (measured on this case;
-    // `../constraint-target.ts` records the same gap). The old `23503` named no particular key
-    // either, so this pins what the case always pinned — that the link with the absent parent is
-    // the statement refused, while the link to a real ticket in the case above is accepted.
+    // Class only: a foreign-key refusal names no table or column.
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
@@ -288,20 +238,9 @@ describe("sale_substitutions — immutability", () => {
   });
 
   it("stops the owner too, via the trigger backstop", async () => {
-    // The trigger stops the owner. `triggerRaised` is the predicate rather than a result code
-    // alone, because this engine reports a trigger's own RAISE(ABORT) and an `ON DELETE RESTRICT`
-    // refusal under the SAME code (1811, `../sql-state.ts`) — and `sale_substitutions` holds two
-    // RESTRICT foreign keys, so a code-only assertion here would accept the wrong refusal. The
-    // text is the whole identity and `packages/store/src/append-only.ts` chooses it.
-    //
-    // WHAT THE OLD ASSERTION HELD AND THIS ONE CANNOT: the refused STATEMENT KIND. The PostgreSQL
-    // guard raised `... : UPDATE is not permitted`, so the message itself said which statement had
-    // been stopped; the trigger text here is the same sentence for both. What still separates them
-    // is that each statement is issued on its own below and each must be refused, and that the two
-    // per-event triggers are pinned by name in the schema-shape case at the top of this file. The
-    // PROOF BY DELETION recorded here previously was taken against the PostgreSQL trigger in
-    // migration 0014, which no longer exists — it does not carry to these triggers and is not
-    // restated as if it did.
+    // `triggerRaised`, not a result code alone: a trigger's RAISE(ABORT) and an `ON DELETE
+    // RESTRICT` refusal share a code (`../sql-state.ts`), and this table holds two RESTRICT keys.
+    // The refusal text is the same for UPDATE and DELETE, so it does not say which was stopped.
     const update = await captureError(() =>
       db.execute(sql`update sale_substitutions set substituted_sale_id = substitution_sale_id`),
     );
@@ -312,25 +251,6 @@ describe("sale_substitutions — immutability", () => {
     );
     expect(triggerRaised(remove, "sale_substitutions is append-only")).toBe(true);
   });
-
-  // A CASE WAS DELETED HERE: "stops the owner truncating the table, via the statement trigger".
-  //
-  // What it held: that `truncate table sale_substitutions`, run as the owner, was refused by a
-  // BEFORE TRUNCATE statement trigger (`sale_substitutions_block_truncate`) with SQLSTATE WT001,
-  // because a row trigger does not fire on PostgreSQL's TRUNCATE and nothing referenced the table
-  // by a foreign key.
-  //
-  // Why it is gone rather than converted: this engine has no TRUNCATE statement, so there is no
-  // write for a trigger to intercept and no trigger. `truncate table sale_substitutions` is
-  // refused by the PARSER — `near "truncate": syntax error` (node v26.7.0, `node:sqlite`),
-  // measured against this package's migrated database. Kept and re-pointed at that message, the
-  // case would have read as a green immutability check while proving only that SQLite cannot
-  // parse a word.
-  //
-  // What still holds the property: nothing, and nothing needs to. The table cannot be emptied by a
-  // statement that does not exist. The DELETE half of the same protection is alive and is asserted
-  // by "stops the owner too, via the trigger backstop" just above, through
-  // `sale_substitutions_append_only_delete`.
 });
 
 describe("sales — counterparty columns", () => {
@@ -374,11 +294,9 @@ describe("sales — counterparty columns", () => {
   });
 
   it("refuses to update a recipient column, via the trigger backstop", async () => {
-    // The counterparty columns inherit sales' table-wide immutability with no new DDL — the same
-    // receipt corrects_sale_id/fiscal_state rely on. Owner path, asserted on the trigger's own
-    // RAISE(ABORT) text for the reason the sale_substitutions case above states: the result code
-    // alone cannot tell this guard from a RESTRICT refusal. The insert two lines up is the control
-    // — the table takes a new row and refuses only the rewrite.
+    // Asserted on the trigger's own text: the result code alone cannot tell this guard from a
+    // RESTRICT refusal. The insert below is the control — the table takes a new row and refuses
+    // only the rewrite.
     const id = await insertSale(db, {
       counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });

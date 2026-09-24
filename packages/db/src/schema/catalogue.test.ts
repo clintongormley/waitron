@@ -1,21 +1,6 @@
-// WHAT THE COLUMN-SHAPE CASES BELOW LOST, because every loss is something that used to be checked
-// and now cannot be.
-//
-// They read PostgreSQL's `information_schema.columns`, which does not exist on this engine — run
-// as written, each one dies with `no such table: information_schema.columns` (measured on this
-// suite, node v26.7.0). The replacement is `pragma_table_info`, following
-// `packages/payments/src/migrations.test.ts`, and one fact did not survive the move: the column
-// TYPE no longer separates a `jsonb` column from a plain `text` one. Dumped from this package's
-// own migrated database, `pragma_table_info('products')` gives `type` `TEXT` for `name`,
-// `customer_name`, `allergens`, `image` and all three `diet*` columns alike, and the statement
-// `sqlite_master` holds for the table declares every one of them `text` too — so neither the
-// catalogue nor the DDL text can tell them apart. `packages/db/src/schema/columns.ts` says the
-// same thing from the other end: a json column is `text(name, { mode: "json" })`.
-//
-// So `data_type: "jsonb"` and `data_type: "text"` are gone from the assertions below. What is
-// still checked, and what still fails if it breaks: that the column EXISTS, that it is nullable or
-// NOT NULL (`pragma_table_info`'s `notnull`, 1 or 0, replacing `is_nullable`'s 'NO'/'YES'), and —
-// in the `descriptions` case — that a column is ABSENT.
+// What the column-shape cases do NOT check: a column's type. On this engine a json column and a
+// plain text one both report `TEXT`, so the cases check only that a column exists, whether it is
+// NOT NULL, and, in the `descriptions` case, that a column is absent.
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -29,7 +14,6 @@ import { catalogues } from "./catalogue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-// Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
   await suite.db.execute(sql`delete from products`);
   await suite.db.execute(sql`delete from catalogues`);
@@ -41,21 +25,12 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
   return Array.isArray(result) ? result : result.rows;
 }
 
-/**
- * One row of `pragma_table_info`, the two columns these cases read. `notnull` is 1 for a NOT NULL
- * column and 0 otherwise. A `type` rather than an `interface` so it satisfies `db.execute`'s
- * `Record<string, unknown>` row constraint, as `packages/payments/src/migrations.test.ts` does.
- */
+/** A `type` rather than an `interface` so it satisfies `db.execute`'s row constraint. */
 type ColumnRow = { name: string; notnull: number };
 
-/**
- * Fixture timestamp for the raw inserts below, which reach no `$defaultFn` generator. Written in
- * the shape a `ts` column actually stores — `toISOString()`'s output (`./columns.ts`) — so the
- * fixture is a row the write path could have produced.
- */
+/** In the shape a `ts` column stores, so the raw inserts write a row the write path could have. */
 const AT = "2026-07-20T19:20:30.000Z";
 
-/** `pragma_table_info` for `table`, the replacement for a scan of `information_schema.columns`. */
 async function columnsOf(db: Database, table: string): Promise<ColumnRow[]> {
   return rows<ColumnRow>(db, sql`select name, "notnull" from pragma_table_info(${table})`);
 }
@@ -68,31 +43,21 @@ describe("catalogue — menu, taxonomy and priced items", () => {
   });
 
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
-    // Seed the real FK parent FIRST so the two INSERTs below reach the CHECK constraints instead of
-    // tripping products' catalogue_id foreign key. The previous version of this test inserted
-    // gen_random_uuid() for the key, so it threw an FK violation whether or not the CHECKs
-    // existed — and it never exercised an invalid vat_class at all. (F1, whole-branch review.)
+    // A real parent row, so the INSERTs below reach the CHECKs rather than the foreign key.
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })
       .returning({ id: catalogues.id });
 
-    // `id`, `created_at` and `updated_at` are named explicitly for the same reason the parent row
-    // is seeded first: a statement that never reaches the CHECK cannot test it. All three are
-    // `$defaultFn` JavaScript generators rather than SQL DEFAULTs (`./catalogue.ts`), which a raw
-    // insert never reaches — measured on this case, omitting them refuses with
-    // `NOT NULL constraint failed: products.id`, and then `products.created_at`, with neither CHECK
-    // consulted. Raw SQL and not drizzle, because the values under test are ones the column's
-    // TypeScript type rejects.
+    // `id` and the timestamps are named because their defaults are `$defaultFn` generators a raw
+    // insert never reaches; raw SQL because the TypeScript type rejects the values under test.
     const insertProduct = (pricingUnit: string, vatClass: string): ReturnType<typeof sql> =>
       sql`insert into products (id, catalogue_id, name, pricing_unit, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${catalogue.id}, 'Fixture', ${pricingUnit}, 100, ${vatClass}, ${AT}, ${AT})`;
 
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
     const pricingError = await captureError(() => db.execute(insertProduct("bogus", "general")));
     expect(isRefusal(pricingError, CHECK_VIOLATION)).toBe(true);
-    // A CHECK refusal reports the constraint's NAME and no key (`../constraint-target.ts`), so the
-    // name is what says WHICH of the two fired — the half of this case the class alone cannot
-    // carry. Measured here: errcode 275, `CHECK constraint failed: products_pricing_unit_ck`.
+    // The class alone cannot say WHICH of the two CHECKs fired; the constraint's name can.
     expect(engineErrorMessage(pricingError)).toBe(
       "CHECK constraint failed: products_pricing_unit_ck",
     );
@@ -108,9 +73,6 @@ describe("catalogue — menu, taxonomy and priced items", () => {
   });
 
   it("has a snapshot category column on both line tables and catalogue_id on locations", async () => {
-    // `pragma_table_info` takes ONE table, so the single cross-table scan becomes three reads and
-    // the "three rows came back" count becomes three named presence checks — which says more, not
-    // less: the old count of 3 would also have been satisfied by the wrong three rows.
     const present = async (table: string, column: string) =>
       (await columnsOf(db, table)).some((c) => c.name === column);
     expect(await present("sale_lines", "category")).toBe(true);
@@ -122,8 +84,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     const cols = (await columnsOf(db, "products"))
       .filter((c) => ["name", "customer_name", "descriptions"].includes(c.name))
       .sort((a, b) => a.name.localeCompare(b.name));
-    // A two-entry list, so `descriptions` being ABSENT is still what the assertion turns on — the
-    // half of this case that the type loss does not touch.
+    // A two-entry list, so `descriptions` being ABSENT is what the assertion turns on.
     expect(cols).toEqual([
       { name: "customer_name", notnull: 0 },
       { name: "name", notnull: 1 },
@@ -147,9 +108,6 @@ describe("catalogue — menu, taxonomy and priced items", () => {
   });
 
   it("products carries a nullable image text column", async () => {
-    // The image column is a path REFERENCE (a content-addressed filename), never bytes — nullable
-    // because a product legitimately has no photo (distinct from allergens' null, which is a
-    // PENDING state that the code reads; image null just means "no picture").
     const col = (await columnsOf(db, "products")).find((c) => c.name === "image");
     expect(col).toEqual({ name: "image", notnull: 0 });
   });

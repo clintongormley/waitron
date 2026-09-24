@@ -4,26 +4,15 @@ import { count, enumCheck, enumType, flag, id, label, newId, table } from "./col
 import { locations } from "./tenants.js";
 
 /**
- * How a printer is reached (printing subsystem, §0/§2b). `usb` and `bluetooth` are LOCAL transports
- * keyed on a stable device id (`local_key`: the USB serial, the Bluetooth MAC); `network_tcp`
- * (ESC/POS over TCP:9100) is keyed on `host`. Any agent serving the venue drives whichever devices it
- * can currently see — the binding is discovered at run time, not stored. `cloud_poll` (Star CloudPRNT
- * / Epson Server Direct Print — the printer firmware dials out and polls for jobs) is carried in the
- * vocabulary FROM DAY ONE, its adapter a fast-follow (§3e): an additive value already present is a
- * config choice later, not a destructive migration. One `enumType` declaration, matching
- * `order_flow`'s precedent: the values are written once here and reach the database as this table's
- * `printers_transport_ck`.
+ * How a printer is reached. `local_key` is the USB serial or the Bluetooth MAC; `cloud_poll` is a
+ * printer whose firmware dials out and polls for jobs.
  */
 export const printTransport = enumType(["usb", "network_tcp", "bluetooth", "cloud_poll"]);
 
-/**
- * What a printer prints, for the KDS station→printer routing Slice B consumes (§2b). `station`
- * (default): one ticket per kitchen station. `order`: one ticket per whole order. Carried now, read
- * by Slice B — one `enumType` declaration matching the `bump_mode`/`fire_control_mode` precedent.
- */
+/** What a printer prints: `station`, one ticket per kitchen station; `order`, one per whole order. */
 export const printTicketScope = enumType(["station", "order"]);
 
-/** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm (design 2026-09-14). */
+/** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm. */
 export const printPaperWidth = enumType(["58mm", "80mm"]);
 /** The print head's dot density; it sets the QR dot size for the legal 30-40 mm. */
 export const printResolution = enumType(["180dpi", "203dpi"]);
@@ -31,19 +20,9 @@ export const printResolution = enumType(["180dpi", "203dpi"]);
 export const printCharacterSet = enumType(["wpc1252", "pc858", "plain"]);
 
 /**
- * A managed PRINTER (§2b) — central config, distributed execution. All config lives centrally (the one
- * Impresoras dashboard); the actual printing runs on the local `print_agents` agent that serves it.
- * Location scoped (a `location_id` FK, `onDelete restrict`, the
- * `devices` shape).
- *
- * No stored agent binding: which agent serves a printer is discovered at run time from the devices an
- * agent can see, so the connection columns describe the DEVICE, not an agent. They are transport-
- * specific and all NULLABLE at the column level; which one a row must carry is the
- * `printers_transport_fields_ck` check below — usb and bluetooth need `local_key`, network_tcp needs
- * `host`, cloud_poll needs `poll_id`.
- *
- * The partial UNIQUE `printers_local_key_key` below — on (location_id, local_key) WHERE local_key
- * IS NOT NULL — is one registered printer per physical USB/BT device per venue.
+ * A managed printer. Config lives centrally; printing runs on whichever `print_agents` agent can see
+ * the device. No agent binding is stored, so the connection columns describe the device, and
+ * `printers_transport_fields_ck` says which one each transport must carry.
  */
 export const printers = table(
   "printers",
@@ -54,26 +33,16 @@ export const printers = table(
       /* v8 ignore start */
       .references(() => locations.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
-    // The human label ("Impresora Cocina"), shown in the Impresoras management surface.
     name: label("name").notNull(),
     transport: printTransport("transport").notNull(),
-    // usb: the device serial; bluetooth: the MAC. The stable device id an agent matches to bind at run
-    // time. NULL for network_tcp/cloud_poll. Unique per location when set (partial index).
+    // The stable device id an agent matches at run time.
     localKey: label("local_key"),
-    // network_tcp: the printer's local IP/host.
     host: label("host"),
-    // network_tcp: the ESC/POS port. DEFAULT 9100 (the deli-hardware ReceiptPrinter port); nullable so
-    // a usb/bluetooth/cloud_poll printer need not carry it.
     port: count("port").default(9100),
-    // cloud_poll: the printer's poll identifier (the vendor endpoint key).
     pollId: label("poll_id"),
-    // cloud_poll: scrypt hash of the printer's poll token — the firmware authenticates its poll. Never
-    // the plaintext.
     pollTokenHash: label("poll_token_hash"),
-    // What the printer prints (Slice B routing). DEFAULT 'station' so an existing printer stays inert.
     ticketScope: printTicketScope("ticket_scope").notNull().default("station"),
-    // Layout settings (design 2026-09-14). Defaults match the TM-T88III: 80mm, 180 dpi, character
-    // table 16 (WPC1252).
+    // Defaults match the TM-T88III: 80mm, 180 dpi, character table 16 (WPC1252).
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
     characterSet: printCharacterSet("character_set").notNull().default("wpc1252"),
@@ -83,9 +52,7 @@ export const printers = table(
     active: flag("active").notNull().default(true),
   },
   (t) => [
-    // One registered printer per physical USB/BT device per venue. Partial, so the network_tcp and
-    // cloud_poll rows, which carry no local_key, are unconstrained. The index keeps the name it was
-    // created under.
+    // One registered printer per physical USB/BT device per venue.
     uniqueIndex("printers_local_key_key")
       .on(t.locationId, t.localKey)
       .where(sql`${t.localKey} is not null`),
@@ -95,9 +62,6 @@ export const printers = table(
     check("printers_resolution_ck", enumCheck(t.resolution)),
     check("printers_character_set_ck", enumCheck(t.characterSet)),
     check("printers_character_table_ck", sql`${t.characterTable} between 0 and 255`),
-    // Each transport needs the connection column it is reached by; the columns are nullable so that
-    // the other three transports need not carry it. A transport outside the four satisfies no arm,
-    // so this check refuses such a row as well as `printers_transport_ck` above does.
     check(
       "printers_transport_fields_ck",
       sql`(${t.transport} = 'usb' and ${t.localKey} is not null)

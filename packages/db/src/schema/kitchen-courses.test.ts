@@ -18,8 +18,6 @@ const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // Seeded once in beforeAll: a product (for the products.course_id FK proof) and a course to
-  // route to.
   let productA = "";
   let courseA = "";
 
@@ -59,8 +57,8 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     return withTransaction(suite.db, fn);
   }
 
-  // The Drizzle builder rather than raw SQL: `id` and `created_at` are `$defaultFn` columns applied
-  // CLIENT-side, so a raw `insert` is refused NOT NULL.
+  // Drizzle rather than raw SQL: `id` and `created_at` are `$defaultFn` columns a raw insert does
+  // not fill.
   async function seedCourse(location: string, name: string, displayOrder = 0): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -95,11 +93,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   });
 
   it("fire_control accepts the three labels and refuses a fourth", async () => {
-    // PostgreSQL held these labels in an ENUM TYPE, so this case read `pg_enum` and cast a literal,
-    // with a non-label cast raising `22P02` as the control. The regenerated SQLite column is `text`
-    // with an `in (...)` CHECK (`packages/db/src/schema/columns.ts`'s `enumType`/`enumCheck`), so
-    // the same question is asked by WRITING each label: there is no type to interrogate, and the
-    // constraint is the only thing that knows the set.
+    // The column is `text` with an `in (...)` CHECK, so the set is tested by writing each label.
     for (const label of ["waiter", "kitchen", "expo"] as const) {
       await inTx((tx) =>
         tx.update(locations).set({ fireControl: label }).where(eq(locations.id, LOCATION_A2)),
@@ -112,9 +106,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       );
       expect(row!.fireControl).toBe(label);
     }
-    // The control in the other direction: a value that is not a label is refused by the CHECK, so
-    // the three accepted above are genuinely being validated. Raw SQL, because the column's type
-    // admits only the three labels.
+    // Control: a non-label is refused. Raw SQL, because the column's type admits only the labels.
     const e = await captureError(() =>
       inTx(async (tx) => {
         tx.run(sql`update locations set fire_control = 'nope' where id = ${LOCATION_A2}`);
@@ -136,7 +128,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     );
     expect(row!.courseId).toBe(courseA);
 
-    // … a course that names no row at all is refused (FK existence) …
     const eRandom = await captureError(() =>
       inTx((tx) =>
         tx.update(products).set({ courseId: RANDOM_UUID }).where(eq(products.id, productA)),
@@ -146,16 +137,9 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   });
 
   it("wires all three course columns with a foreign key to kitchen_courses", async () => {
-    // The behavioural proof above covers products.course_id; working_order_lines.course_id and
-    // ticket_items.course_id use the IDENTICAL DDL. Asserting each of the three structurally
-    // catches a copy-paste error in the target or the column list — a course FK pointing at
-    // kitchen_stations, say — that the single behavioural test would not reach.
-    //
-    // `pragma foreign_key_list` replaces `pg_get_constraintdef`: it reads the LIVE catalogue the
-    // same way, but it reports no constraint NAME, because SQLite does not store one for a foreign
-    // key. So the three are found by their owning table and column instead of by
-    // `products_course_fk` and its two siblings, and if one of those names were needed again it
-    // could not be read back from this engine at all.
+    // The behavioural case above covers products.course_id only; this catches a copy-paste error
+    // in the other two, such as a course FK pointing at kitchen_stations. SQLite stores no name for
+    // a foreign key, so each is found by table and column.
     for (const table of ["products", "working_order_lines", "ticket_items"]) {
       const keys = suite.db.all<{ table: string; from: string; to: string }>(
         sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('${table}')`),

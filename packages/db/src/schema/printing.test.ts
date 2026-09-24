@@ -19,9 +19,7 @@ import { locations, tenants } from "./tenants.js";
 
 // What this suite proves is the column mapping, the defaults, the CHECKs and the foreign keys.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-// A location id that is never seeded — the negative for the direct location_id → locations.id FK.
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
-// A non-null token_hash fixture (shape only — the DB stores it as opaque text).
 const TOKEN_HASH = "scrypt$00$00";
 const HELLO = new TextEncoder().encode("Hello");
 
@@ -32,8 +30,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     await suite.db
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    // The location — the direct location_id → locations.id FK target. operation_description
-    // is Spanish test DATA, not a schema identifier, exactly as the sibling tests use 'Hostelería'.
     await suite.db.insert(locations).values({
       id: LOCATION_A,
       name: "Loc A",
@@ -46,9 +42,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return withTransaction(suite.db, fn);
   }
 
-  // Every seed goes through the Drizzle builder rather than raw SQL: `id`, `enrolled_at` and
-  // `created_at` are `$defaultFn` columns applied CLIENT-side, so a raw `insert` reaches none of
-  // them and the row is refused NOT NULL.
+  // Seeds go through Drizzle: `$defaultFn` columns are filled client-side, so a raw insert is
+  // refused NOT NULL.
   async function seedAgent(name: string): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -59,8 +54,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     });
   }
 
-  // A network_tcp printer (host satisfies the transport CHECK). No stored agent binding — an agent
-  // is discovered at run time, so a printer names none.
   async function seedPrinter(name: string): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -81,9 +74,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     });
   }
 
-  // Insert a printer with an arbitrary transport/field combination — the probe for the
-  // `printers_transport_fields_ck` CHECK and the `printers_local_key_key` partial UNIQUE. Only the
-  // fields relevant to a transport are supplied; the rest stay NULL.
   function insertPrinter(opts: {
     transport: "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
     name?: string;
@@ -135,18 +125,13 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("print_agent_pairing_codes no longer exists (join-and-accept replaced the pairing code)", () => {
-    // PostgreSQL answered `42P01` for a query against a missing relation, and that SQLSTATE was
-    // the assertion. `node:sqlite` reports `no such table: …` under the generic result code 1,
-    // which `packages/db/src/sql-state.ts` gives no class and which every other kind of statement
-    // error also carries — so a `captureError` on a select would pass for any reason at all. The
-    // catalogue answers the same question and discriminates: the name is either in `sqlite_master`
-    // or it is not.
+    // Read the catalogue rather than catch a failing select: `no such table` carries the generic
+    // result code every other statement error shares, so the catch would pass for any reason.
     const found = suite.db.all<{ name: string }>(
       sql`select name from sqlite_master where name = 'print_agent_pairing_codes'`,
     );
     expect(found).toEqual([]);
-    // The control, so this is not a query that would answer empty whatever it was asked: a table
-    // that IS there is found by the same read.
+    // Control: a table that is there is found by the same read.
     const control = suite.db.all<{ name: string }>(
       sql`select name from sqlite_master where name = 'print_agents'`,
     );
@@ -154,8 +139,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("allows many NULL node_id agents but at most one per node_id", async () => {
-    // Two manual agents (node_id NULL) coexist — SQLite, like PostgreSQL, holds NULLs distinct in
-    // a unique index.
     await seedAgent("till A");
     await seedAgent("till B");
 
@@ -186,10 +169,10 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const [row] = await inTx((tx) => tx.select().from(printers).where(eq(printers.id, id)));
     expect(row!.name).toBe("Kitchen printer");
     expect(row!.transport).toBe("network_tcp");
-    expect(row!.localKey).toBeNull(); // network_tcp carries no local_key
+    expect(row!.localKey).toBeNull();
     expect(row!.host).toBe("10.0.0.5");
-    expect(row!.port).toBe(9100); // the column default applied
-    expect(row!.ticketScope).toBe("station"); // the enum default
+    expect(row!.port).toBe(9100);
+    expect(row!.ticketScope).toBe("station");
     expect(row!.paperWidth).toBe("80mm");
     expect(row!.resolution).toBe("180dpi");
     expect(row!.characterSet).toBe("wpc1252");
@@ -222,7 +205,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("printers: the transport-fields CHECK admits a well-formed cloud_poll printer", async () => {
-    // cloud_poll needs only poll_id (it self-polls; usb/bluetooth/network_tcp are covered below).
     const [cloud] = await insertPrinter({
       transport: "cloud_poll",
       name: "Cloud printer",
@@ -236,7 +218,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   it("print_jobs: round-trips the binary payload and the delivery lifecycle columns", async () => {
     const printer = await seedPrinter("Printer for job");
     const id = await seedJob(printer);
-    // The agent runtime transitions queued → printing → done via UPDATE.
     await inTx((tx) =>
       tx
         .update(printJobs)
@@ -249,10 +230,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(row!.kind).toBe("document");
     expect(row!.attempts).toBe(1);
     expect(row!.deliveredAt).not.toBeNull();
-    // payload round-trips as the exact bytes, handed back as a plain Uint8Array by the shared
-    // `binary` column (columns.ts). `Buffer.isBuffer` is the DISCRIMINATING assertion here: a node
-    // Buffer IS a Uint8Array, so `instanceof Uint8Array` would hold either way. The decode below
-    // checks the bytes, not the type — `TextDecoder` reads the same "Hello" out of a Buffer.
+    // `Buffer.isBuffer` is the discriminating assertion: a Buffer is also a Uint8Array, so
+    // `instanceof Uint8Array` would hold either way.
     expect(Buffer.isBuffer(row!.payload)).toBe(false);
     expect(new TextDecoder().decode(row!.payload)).toBe("Hello");
   });
@@ -278,8 +257,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     { kind: null, refusal: NOT_NULL_VIOLATION },
   ])("print_jobs: refuses kind $kind", async ({ kind, refusal }) => {
     const printer = await seedPrinter(`Bad kind ${kind}`);
-    // Raw SQL, because `kind`'s TypeScript type admits only the two labels. `id` and `created_at`
-    // are stated because both are `$defaultFn` columns Drizzle fills client-side.
+    // Raw SQL, because `kind`'s TypeScript type admits only the two labels; `id` and `created_at`
+    // are `$defaultFn` columns, so the statement supplies them.
     const error = await captureError(() =>
       inTx(async (tx) =>
         tx.run(
@@ -291,8 +270,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     );
     expect(isRefusal(error, refusal)).toBe(true);
   });
-
-  // ---- central-printer-provisioning: local_key / bluetooth / claimed_by ---------------------
 
   it("printers: rejects a usb printer with no local_key (the transport-fields CHECK)", async () => {
     const e = await captureError(() => insertPrinter({ transport: "usb", localKey: null }));
@@ -328,16 +305,13 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("printers: the old (agent_id) FK and the agent_id/usb_path columns are gone", () => {
-    // Decision #2: prove the drop by reading the live catalogue back, do not assume DROP COLUMN
-    // cascaded. `pragma foreign_key_list` and `pragma table_info` replace `pg_constraint` and
-    // `information_schema.columns` — with one thing lost: SQLite stores NO NAME for a foreign key,
-    // so `printers_agent_fk` cannot be asked for by name. The wider question survives, and is the
-    // one that matters: no foreign key on `printers` points at `print_agents` at all.
+    // SQLite stores no name for a foreign key, so this asks whether any key on `printers` points
+    // at `print_agents`.
     const keys = suite.db.all<{ table: string }>(
       sql.raw(`select "table" from pragma_foreign_key_list('printers')`),
     );
     expect(keys.filter((key) => key.table === "print_agents")).toEqual([]);
-    // The control: the read does find the foreign key that IS there.
+    // Control: the read finds the foreign key that is there.
     expect(keys.filter((key) => key.table === "locations")).toHaveLength(1);
     const cols = suite.db.all<{ name: string }>(
       sql`select name from pragma_table_info('printers')
@@ -361,7 +335,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
         .returning({ id: printJobs.id }),
     );
     expect(claimed[0]!.id).toBeDefined();
-    // NULL claimed_by skips the foreign key (a queued job).
     const queued = await seedJob(printerA);
     expect(queued).toBeDefined();
   });

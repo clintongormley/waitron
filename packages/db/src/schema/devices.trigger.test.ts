@@ -1,15 +1,10 @@
 /**
- * The device BINDING RULE: a `kds`-profile device binds a kitchen station and no register, and every
- * other form factor binds a register and no station. The deciding value — the profile's form factor
- * — lives in another table, so no CHECK constraint can express it; the rule is two triggers,
- * `device_binding_rule_insert` and `device_binding_rule_update`, in
- * `packages/db/drizzle/0001_behavioural_triggers.sql`.
+ * The device binding rule: a `kds`-profile device binds a kitchen station and no register, and every
+ * other form factor binds a register and no station. The form factor lives in another table, so the
+ * rule is two triggers in `packages/db/drizzle/0001_behavioural_triggers.sql`.
  *
- * WHAT THIS SUITE ADDS to `scripts/behavioural-triggers.test.ts`, which pins the same two triggers
- * by name and refuses a write against each arm: every case here goes through the DRIZZLE builder,
- * so it is the shape the application writes — `id`, `enrolled_at` and `created_at` are `$defaultFn`
- * columns applied CLIENT-side, and a rule that only held for hand-written SQL would pass there and
- * fail here.
+ * `scripts/behavioural-triggers.test.ts` pins the same triggers with hand-written SQL; every case here
+ * writes through the Drizzle builder, the shape the application writes.
  */
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -60,8 +55,6 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     tillProfileId = tillProfile!.id;
   });
 
-  // Through the Drizzle builder, since `id`, `enrolled_at` and `created_at` are `$defaultFn`
-  // columns applied CLIENT-side.
   async function insertDevice(fields: {
     profileId: string;
     stationId: string | null;
@@ -112,9 +105,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
   });
 
   it("rejects a register (non-kds) device that also names a station", async () => {
-    // The symmetric ELSE-branch case: a till-profile device that names a valid register AND a
-    // stray station. This exercises the `station_id is not null` disjunct, which the NULL-register
-    // case above cannot reach.
+    // Reaches the `station_id is not null` disjunct, which the NULL-register case cannot.
     const error = await captureError(() =>
       insertDevice({ profileId: tillProfileId, stationId, tillId, label: "Till with station" }),
     );
@@ -122,9 +113,6 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
   });
 
   it("a binding-changing UPDATE is still enforced (the WHEN did not disable it)", async () => {
-    // Seed a valid till device, then UPDATE it into a bad state (add a stray station). The update
-    // trigger's condition sees station_id change, fires, and the rule rejects — proving the gate
-    // narrows WHEN the trigger runs, not WHETHER it enforces.
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
@@ -138,16 +126,13 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
   });
 
   it("reactivation re-validates the binding: the WHEN watches active false→true (BUG D)", async () => {
-    // A device deactivated, its profile then changed to an incompatible form factor (permitted
-    // WHILE the device is inactive — the drift guard blocks only ACTIVE devices), must be
-    // re-validated when it is switched back on. Without the `active false→true` disjunct in the
-    // update trigger's condition, the trigger never re-runs on an active-only change and the
+    // A profile's form factor may change while its device is inactive, so reactivation must
+    // re-validate: without the `active` false→true disjunct in the update trigger's WHEN, the
     // invalid binding lands.
     const [profile] = await db
       .insert(deviceProfiles)
       .values({ name: "Reactivate till", formFactor: "till" })
       .returning({ id: deviceProfiles.id });
-    // A valid till device (register, no station) on that profile, then deactivated.
     await insertDevice({
       profileId: profile!.id,
       stationId: null,
@@ -155,13 +140,10 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
       label: "Reactivate me",
     });
     await db.update(devices).set({ active: false }).where(eq(devices.label, "Reactivate me"));
-    // Flip the profile to kds — allowed because the referencing device is now inactive.
     await db
       .update(deviceProfiles)
       .set({ formFactor: "kds" })
       .where(eq(deviceProfiles.id, profile!.id));
-    // Reactivating must now be REJECTED: the profile is kds but the device binds a register and no
-    // station.
     const error = await captureError(() =>
       db.update(devices).set({ active: true }).where(eq(devices.label, "Reactivate me")),
     );
@@ -169,14 +151,9 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
   });
 
   it("a non-binding UPDATE (last_seen_at touch) does not fire the trigger", async () => {
-    // requireDevice touches last_seen_at on every authenticated request. That UPDATE changes no
-    // binding column, so the update trigger's condition is false and the device_profiles lookup
-    // never runs — the performance point of the two-trigger split. It must succeed.
-    //
-    // This device's binding is VALID, so the case would pass with the gate deleted too. What
-    // separates the two is the same heartbeat run against a device the rule would refuse:
-    // `scripts/behavioural-triggers.test.ts`, "says nothing about an update that touches no binding
-    // column".
+    // This device's binding is valid, so the case would pass with the WHEN gate deleted too. What
+    // separates the two is `scripts/behavioural-triggers.test.ts`, "says nothing about an update
+    // that touches no binding column".
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
@@ -194,9 +171,6 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     expect(row!.lastSeenAt).not.toBeNull();
   });
 
-  // Prove by deletion (CLAUDE.md §1/§4): with the trigger dropped, the insert the trigger rejects
-  // above now SUCCEEDS — so the trigger is provably what enforces the rule, not a foreign key or a
-  // CHECK. The trigger's own text is read back first so it can be recreated afterwards.
   it("prove-by-deletion: dropping the trigger lets the bad insert succeed", async () => {
     const [stored] = db.all<{ sql: string }>(
       sql`select sql from sqlite_master

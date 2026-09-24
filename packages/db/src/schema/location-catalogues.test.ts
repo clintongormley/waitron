@@ -33,8 +33,8 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
     return withTransaction(suite.db, fn);
   }
 
-  // An additional menu in the location's menu list, beyond its default. The Drizzle builder rather
-  // than raw SQL: `catalogues.id` and its `created_at` are `$defaultFn` columns applied CLIENT-side.
+  // The Drizzle builder rather than raw SQL: `catalogues.id` and its `created_at` are `$defaultFn`
+  // columns applied CLIENT-side.
   async function seedCatalogue(name: string): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx.insert(catalogues).values({ name }).returning({ id: catalogues.id });
@@ -56,7 +56,6 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
     );
     expect(row!.locationId).toBe(LOCATION_A);
     expect(row!.catalogueId).toBe(catalogue);
-    // A membership row is REMOVED via DELETE — detach.
     const deleted = await inTx((tx) =>
       tx
         .delete(locationCatalogues)
@@ -76,8 +75,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
     const catalogue = await seedCatalogue("Carta de vinos");
     await seedMembership(LOCATION_A, catalogue);
     const e = await captureError(() => seedMembership(LOCATION_A, catalogue));
-    // PostgreSQL folded a primary-key collision into `23505` with every other unique index; SQLite
-    // reports it under its own result code, which is why the class is a list (`../sql-state.ts`).
+    // A primary-key collision has its own result code, which is why the class is a list.
     expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 });

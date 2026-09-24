@@ -15,23 +15,11 @@ import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 /**
- * Checks settlement schema shape, coverage on settlement, the post-settlement tender guard,
- * immutability and tender constraints. The behavioural matrix below pins each guard's refusal.
- *
- * LOSSES, from the storage swap:
- *  - the TRUNCATE case is deleted. SQLite has no `TRUNCATE` statement at all, and no trigger event
- *    for `DROP TABLE`, so the statement-level guard that blocked a table-wide wipe has no
- *    counterpart (`packages/store/src/append-only.ts` states this in its own words). A caller that
- *    can issue DDL can still empty this table, and nothing refuses it.
- *  - the shape assertions read the catalogue differently. `pg_trigger`, `pg_constraint` and
- *    `information_schema` are replaced by `sqlite_master` and the `pragma_*` tables, and the
- *    append-only pair is now `sale_settlements_append_only_update`/`_delete` — the triggers
- *    `@waitron/store` installs from a set's `appendOnlyTables` list — rather than a per-table
- *    `enforce_immutability`/`block_truncate` pair the migration wrote.
- *  - each refusal is now its trigger's own `RAISE(ABORT, …)` text, not a SQLSTATE. The coverage
- *    refusal in particular used to NAME the two amounts that did not match; it is a fixed sentence
- *    here (`packages/db/src/trigger-refusals.ts`), so a failing settlement no longer says by how
- *    much it was short.
+ * What this file does NOT check:
+ *  - a table-wide wipe: there is no trigger event for `DROP TABLE`, so a caller that can issue DDL
+ *    can still empty this table (`packages/store/src/append-only.ts`).
+ *  - by how much a failing settlement was short: the coverage refusal is a fixed sentence
+ *    (`packages/db/src/trigger-refusals.ts`).
  */
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -39,7 +27,6 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
-// sales.node_id is NOT NULL; recordSale writes this node.
 let nodeA = "";
 
 async function seed(db: Database): Promise<void> {
@@ -81,8 +68,6 @@ async function recordSale(
         issuedAt: AT,
         issuedOffsetMinutes: 120,
         total,
-        // The filed per-rate VAT breakdown; `[]` — this file stages mis-summed settlements, not the
-        // breakdown, and the column just needs a valid NOT NULL array.
         vatBreakdown: [],
         locale: "es",
         invoiceLocales: ["es", "ca"],
@@ -136,8 +121,6 @@ describe("sale settlements — schema shape", () => {
     );
     expect(cols).toHaveLength(1);
 
-    // SQLite has no `pg_constraint`: a named CHECK lives only in the table's own `CREATE TABLE`
-    // text, so the names are read out of that.
     const ddl = ddlOf("tenders");
     expect(ddl).toContain(`CONSTRAINT "tenders_amount_ck"`);
     expect(ddl).toContain(`CONSTRAINT "tenders_tip_amount_ck"`);
@@ -149,8 +132,7 @@ describe("sale settlements — schema shape", () => {
     );
     expect(settlements).toHaveLength(1);
 
-    // Append-only: the pair `@waitron/store` installs for every table a module declared
-    // `appendOnly()`. There is no third, TRUNCATE-blocking trigger — see this file's header.
+    // The append-only pair `@waitron/store` installs for every table declared `appendOnly()`.
     expect(triggersOn("sale_settlements")).toEqual([
       "sale_settlements_append_only_delete",
       "sale_settlements_append_only_update",
@@ -185,10 +167,8 @@ describe("sale settlements — coverage on the settlement INSERT", () => {
   });
 
   it("accepts a settlement whose tenders sum to total plus tips", async () => {
-    // €70 sale, paid €75 of which €5 is tip: sum(amount) 75 = total 70 + tips 5. The negative
-    // control for the coverage guard — with or without the trigger, this must succeed, so a
-    // deletion that made the mis-summed case pass could not accidentally make THIS one start
-    // failing.
+    // €70 sale, paid €75 of which €5 is tip: sum(amount) 75 = total 70 + tips 5. The control for
+    // the coverage guard: a guard that refused every settlement would fail here.
     const saleId = await recordSale(suite.db, 7000, [
       { method: "card", amount: 7500, tipAmount: 500 },
     ]);
@@ -218,7 +198,6 @@ describe("sale settlements — append-only", () => {
 
   beforeEach(async () => {
     await seed(suite.db);
-    // A covered sale, so the settlement INSERT passes coverage and lands.
     const saleId = await recordSale(suite.db, 1000, [{ method: "card", amount: 1000 }]);
     const [row] = await suite.db
       .insert(saleSettlements)

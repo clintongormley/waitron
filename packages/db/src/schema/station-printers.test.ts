@@ -34,8 +34,8 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     return withTransaction(suite.db, fn);
   }
 
-  // The Drizzle builder rather than raw SQL throughout: `id` and `created_at` on both parent tables
-  // are `$defaultFn` columns applied CLIENT-side, so a raw `insert` reaches neither.
+  // Drizzle rather than raw SQL: `id` and `created_at` are `$defaultFn` columns a raw insert does
+  // not fill.
   async function seedStation(name: string): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -46,8 +46,7 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     });
   }
 
-  // A cloud_poll printer (needs only poll_id — no agent, so no print_agents fixture) satisfies the
-  // printers transport CHECK, keeping this suite to the two tables the mapping actually references.
+  // cloud_poll needs only `poll_id`, so the suite needs no other printer fixture.
   async function seedPrinter(name: string, pollId: string): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx
@@ -73,7 +72,6 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     );
     expect(row!.stationId).toBe(station);
     expect(row!.printerId).toBe(printer);
-    // A mapping row is REMOVED via DELETE — detach in §3a.
     const deleted = await inTx((tx) =>
       tx
         .delete(stationPrinters)
