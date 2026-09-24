@@ -192,7 +192,8 @@ beforeAll(async () => {
     await stampDeployment(db, "preproduction");
     await setSingletonRole(db, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
   });
-  // The control keeps the column default ('primary', 'primary') — the singleton primary that owns both.
+  // The control writes no `node_roles` row, so it reads as ('primary', 'primary') through
+  // `readDeploymentAxes`'s missing-row fallback — the singleton primary that owns both.
   primaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");

@@ -1141,7 +1141,7 @@ declare module "@waitron/shared" {
      */
     "device.pairing_closed": Record<string, never>;
     /**
-     * This database already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
+     * This node already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
      * needs room, and an uncapped pending list is a denial-of-service on the admin's attention). Per
      * KIND, so ten agents mid-install cannot lock devices out. HTTP 429.
      */
@@ -1168,9 +1168,9 @@ declare module "@waitron/shared" {
      */
     "device.join_revoked": Record<string, never>;
     /**
-     * No pending join request with that id in this tenant — never existed, already accepted or denied,
-     * or lapsed past its TTL. All fold into one code: the admin's recovery is the same in every case,
-     * and the joiner must knock again.
+     * No pending join request with that id held by this node — never existed, already accepted or
+     * denied, or lapsed past its TTL. All fold into one code: the admin's recovery is the same in
+     * every case, and the joiner must knock again.
      * `join_request.*` names the domain concept. HTTP 404.
      */
     "join_request.not_found": Record<string, never>;
@@ -1311,7 +1311,7 @@ declare module "@waitron/shared" {
      * A local-secondary promote (promotion runbook design §5a) was called on a node that is a
      * read-only MIRROR (its `node_roles.mode` is `'mirror'`). A mirror holds no SIF and cannot
      * become the submitter by a bare `singleton_role` flip — it needs the mirror→primary path
-     * (fresh-SIF mint from the pre-reserved identity, §5b), a later slice. Refused with THIS code
+     * (`promoteMirrorToPrimary`, promote.ts; §5b). Refused with THIS code
      * BEFORE the write, giving a clean domain error rather than the raw `node_roles_role_valid_ck`
      * CHECK violation the `(mirror, primary)` write would otherwise raise (the CHECK is the
      * backstop). `mode` is the node's own configured role, already in its config and not a secret —

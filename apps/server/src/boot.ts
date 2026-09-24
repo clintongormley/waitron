@@ -1350,13 +1350,11 @@ export async function startServer(
   // writes inside a GET, and the promote POST is exempt by name. Nothing copies the venue's rows onto
   // a mirror; `mirror-bundle.ts`'s header says what the deleted replication used to supply and that no
   // replacement has landed. A primary is today's flow.
-  // Read ONCE here into a refreshable holder that the promote action
-  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its write — so a mode flip would
-  // take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
-  // flip the mode: a local-secondary promote refreshes this holder without changing its value
-  // ('primary' stays 'primary'). What FLIPS this node's `node_roles.mode` to 'primary' to open the
-  // read-only gate live is the mirror→primary path (spec §5b), a later slice. The store is already
-  // open, so this read is free.
+  // Read ONCE here into a refreshable holder that both promote actions refresh after their
+  // write (design §10; the refresh is in promote.ts). `promoteLocalSecondaryToPrimary` never
+  // changes the mode, so its refresh leaves this holder at 'primary'. What flips this node's
+  // `node_roles.mode` to 'primary' is `promoteMirrorToPrimary` (promote.ts, spec §5b). The store
+  // is already open, so this read is free.
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
   // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this

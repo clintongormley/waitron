@@ -5,7 +5,7 @@ import type { SignedMembershipDocument } from "@waitron/membership";
 
 /**
  * The venue's current membership document (membership & rejoin wire-protocol, design §3). A whole-
- * database operational singleton, like `deployment` and `mirror_config`.
+ * database operational singleton, like `deployment`.
  *
  * The signed document is stored as ONE unit (the `document` jsonb column holds the whole
  * `SignedMembershipDocument`), never a per-row synced table — a row-image would not carry a

@@ -94,8 +94,8 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *  - The device-auth + join codes: `device.unauthorized` (the guard's fold of missing/unknown/revoked,
  *    401, and the join-status route's own cookie screen), `device.forbidden_station` (a device bumping
  *    another station's item, 403), `device.pairing_closed` (a knock while the venue's window is shut,
- *    403 — the ORDINARY state, not an anomaly), `device.join_full` (the tenant already holds the cap of
- *    pending device requests, 429) and `device.join_rate_limited` (the knock flood guard, 429 —
+ *    403 — the ORDINARY state, not an anomaly), `device.join_full` (this node already holds the cap
+ *    of pending device requests, 429) and `device.join_rate_limited` (the knock flood guard, 429 —
  *    `enrol-rate-limit.ts` throws it at the TOP of the knock handler, before any DB work).
  *  - The accept-time binding + join faults. The knock's devMode auto-accept runs
  *    `acceptDeviceJoinRequest` in the same transaction (which is why `join-requests.js` is imported for

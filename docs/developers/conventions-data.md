@@ -310,7 +310,7 @@ with at most three reads; `working-order.test.ts` checks the single call and
 
 **Tables the application code may read and never write**
 
-## Five tables are read-only to the application, and one guard is the whole of the enforcement
+## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
 
 `tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
 2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (slice-2
@@ -881,6 +881,18 @@ request had already read. The sixth, `join_requests.location_id`, is the node's 
 is checked by nothing when the row is written, and its refusal moved to accept, where the accepted row
 (`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
 this guard pass — that is the one wrong answer §2.1 rules out.
+
+**What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
+which of three ties it uses: a `node_id` column every read and write names (`node_roles`,
+`mirror_config`, `join_requests`), a seal only that node's key opens (`tenant_credentials`), or rows
+the transaction that wrote them deletes (`change_log`). Identity's `local` tables
+(`packages/identity/src/classification.ts`) state none of the three; slice-2 Task 1b reclassifies
+them `state` (plan `2026-09-23-sqlite-slice2-stream-and-cold-restore.md`, Task 1b and owner decision
+O1). Pinned, each by deleting the node filter and watching a case fail: the `node_roles` and
+`mirror_config` readers (`packages/db/src/node-roles.test.ts`), and every node filter on
+`join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a
+node-filtered read of the same id (the "belong to the node" cases in
+`apps/server/src/join-requests.test.ts`).
 
 HISTORICAL, kept for the mechanism it records: while `ledger`/`state` tables were PUBLISHED for
 PostgreSQL logical replication (removed 2026-09-19), such a table also needed a PRIMARY KEY, not a

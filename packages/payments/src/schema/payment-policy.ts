@@ -4,8 +4,8 @@ import { count, label, money, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * The venue's offline-acceptance policy — at most one row, `id` pinned to 1 (the `deployment` /
- * `mirror_config` / `node_membership` singleton shape in `@waitron/db`). `offline_mode` governs
- * whether the offline opt-in is ever available (`accept_offline` | `cash_only`);
+ * `node_membership` singleton shape in `@waitron/db`). `offline_mode` governs whether the offline
+ * opt-in is ever available (`accept_offline` | `cash_only`);
  * `offline_amount_cap` bounds even an opted-in acceptance. Modelled as explicit configuration, never
  * inferred from connectivity. The ABSENCE of the row is fail-safe: no row means no offline acceptance
  * at all (see `resolveOfflineDecision`). Mutable config, so no append-only trigger.

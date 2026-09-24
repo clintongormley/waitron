@@ -15,8 +15,7 @@ import {
 } from "@waitron/db";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
- * `id` pinned to 1 (the `deployment` / `mirror_config` / `node_membership` singleton shape in
- * `@waitron/db`). */
+ * `id` pinned to 1 (the `deployment` / `node_membership` singleton shape in `@waitron/db`). */
 export const contentLanguages = table(
   "content_languages",
   {

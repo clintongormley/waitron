@@ -215,7 +215,9 @@ export async function setSingletonRoleTx(
     });
 }
 
-/** One node's stored break-glass verifier, or `null` when it has none. Never the secret. */
+/** One node's stored break-glass verifier, or `null` when it has none. Never the secret. No
+ * {@link nodeRolesTableExists} probe: its one caller, `verifyBreakGlass` behind the promote route,
+ * runs only on a server that has already applied its migrations. */
 export async function readBreakGlassVerifier(
   db: Database | Transaction,
   nodeId: string,

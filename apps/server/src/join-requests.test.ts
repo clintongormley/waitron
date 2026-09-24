@@ -27,9 +27,9 @@
  *    `cd2838e4a`, whose SUBJECT is about the dev stack but whose body names this among its four
  *    conversions; `apps/server/src/join-requests.ts:66-72` states what replaced it.
  *
- *    The KEY-SCOPE half — that the allocation guard must be database-wide rather than
- *    per-location — went with `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered
- *    by nothing.
+ *    The KEY-SCOPE half — that numbers and the cap are allocated per node rather than per
+ *    location, while the write queue still serialises every creator on the file — went with
+ *    `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered by nothing.
  *
  * ## One correction to this file's own previous header
  *

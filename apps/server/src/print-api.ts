@@ -108,7 +108,7 @@ const RECENT_JOBS_LIMIT = 100;
  *  - Agent auth: `agent.unauthorized` (the `requireAgent` fold of missing/unknown/revoked, 401).
  *  - The knock (join-and-accept, the shared join_requests mechanism): `device.pairing_closed` (a knock
  *    while the venue's window is shut, 403 — the ORDINARY state, not an anomaly), `device.join_full`
- *    (the database already holds the per-KIND cap of pending requests, 429) and
+ *    (this node already holds the per-KIND cap of pending requests, 429) and
  *    `device.join_rate_limited` (the knock flood guard, 429, thrown BEFORE any DB work). These are the
  *    SHARED device knock codes: the agent joins through the same mechanism a device does, and its client
  *    reads the HTTP status, not the code string, so there is no `agent.*` sibling to mint.

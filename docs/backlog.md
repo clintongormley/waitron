@@ -2548,8 +2548,9 @@ image constraints under *Detail → Box image*.
   [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep the
   job log on the next sighting — it is the cheapest evidence there is.
 - **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
-  `scripts/write-path-tables.test.ts` (LANDED #430, 2026-09-19) covers the four tables `app_user` may
-  read and never write — `tenants`, `nodes`, `deployment`, `mirror_config` — and nothing else. The
+  `scripts/write-path-tables.test.ts` (LANDED #430, 2026-09-19) covers the tables request code may
+  read and never write — those `scripts/write-path-tables.json` lists, `tenants`, `nodes`,
+  `deployment`, `mirror_config` and `node_roles` — and nothing else. The
   slice-1 design asks for more: everything else should become a guard that reads the source, not a
   convention with nothing checking it. Many tables refuse an insert, an update or a delete only through
   the grant, with no trigger backing it, and TRUNCATE is wider still — no table grants it and only ten
@@ -3932,6 +3933,10 @@ singleton role and break-glass verifier off `deployment`; `mirror_config` and `j
 `node_id`), is on branch `feat/sqlite-slice2-node-keyed-rows` (PR number added at land). A dev venue
 holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt reset demo <name>`
 rebuilds it.
+`apps/server/src/rejoin-command.test.ts`'s check that every database file and sidecar is gone does
+not test the wipe. The check predates this branch (aabdde6a8, #489): with `db-wipe.ts`'s `SIDECARS`
+cut to `[""]` it still passes 18 of 18, because closing the handles removes the sidecars. It needs a
+case that leaves sidecars on disk.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
 **Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
@@ -4108,7 +4113,9 @@ What the preparation tasks left, with F1's own answers where it found them:
   `applyMigrations` puts every set on the venue handle, so after a real migrate `venue.db` holds 121
   tables including `change_log` and `node.db` holds none. So whoever wires the `local` class to
   `node.db` decides this — either `change_log` is reclassified to the file its writers live on, or
-  the triggers stop writing it directly and something above them does (P3).
+  the triggers stop writing it directly and something above them does (P3). Settled by the slice-2
+  spec §2: every table stays in `venue.db`, so `change_log` and the triggers writing it share a
+  file.
 - **The three claim helpers were stripped, and two of them had become identity functions — CLOSED by
   T2.** `claimLock` and `claimLockedRows` are deleted and each is inlined into its one caller;
   `claimRows` stays, because it builds a real `update … returning`. What the deletion turned up is the
@@ -4562,9 +4569,9 @@ before, and it is accepted for exactly as long as Waitron is pre-production. Wha
 of it depends on how PostgreSQL replicates: `packages/membership` whole (documents, signing,
 canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
-`ledger` / `state` / `local` classification — which after the flip chooses which database FILE a table
-lives in. Read the residuals below as requirements for what failover is rebuilt INTO, not as
-descriptions of code that exists today.
+`ledger` / `state` / `local` classification — which no longer chooses a database file: every table
+is in `venue.db` (slice-2 spec §2). Read the residuals below as requirements for what failover is
+rebuilt INTO, not as descriptions of code that exists today.
 
 Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
 that slice 3 has to restore:

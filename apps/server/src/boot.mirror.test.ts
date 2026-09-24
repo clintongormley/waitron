@@ -204,7 +204,8 @@ beforeAll(async () => {
   await seedIdentity(db.primary);
   await seedIdentity(db.noConfig);
   // Stamp all three preproduction (matching WAITRON_ENV so the deployment guard passes), then flip
-  // the two mirror directories' mode. The primary one keeps the column default ('primary').
+  // the two mirror directories' mode. The primary one writes no `node_roles` row, so it reads as
+  // 'primary' through `readDeploymentAxes`'s missing-row fallback.
   await stampDeployment(db.mirror, "preproduction");
   await setDeploymentMode(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
   await stampDeployment(db.primary, "preproduction");
@@ -469,8 +470,9 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
   }, 60_000);
 
   it("primary boot of the same identity mounts the mirror-bundle endpoint + operational groups (control: the mirror's absence is real)", async () => {
-    // The other direction (CLAUDE.md §1): the SAME identity, stamped 'primary' (mode column default),
-    // mounts the primary-only surfaces the mirror suppresses. The prove-by-deletion control — flip
+    // The other direction (CLAUDE.md §1): the SAME identity with no `node_roles` row, so 'primary'
+    // through the reader's missing-row fallback, mounts the primary-only surfaces the mirror
+    // suppresses. The prove-by-deletion control — flip
     // boot.ts's `isMirror` / singleton gating and the mirror's 403/404s above become the 401s/non-404s
     // below; keep both and the two disagree, which is the whole point.
     const port = await freePort();

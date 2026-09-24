@@ -5,6 +5,7 @@
  * that means the same on every node. `local` — a row that belongs to one node and means nothing to
  * another; the table's reason says what ties a row to its node: a `node_id` column every read and
  * write names, a seal only that node's key opens, or rows the transaction that wrote them deletes.
+ * Identity's `local` tables state none of these until slice-2 Task 1b reclassifies them `state`.
  *
  * No foreign key joins a `local` table to a `ledger`/`state` one — guard:
  * `scripts/two-file-foreign-keys.test.ts`, which reads drizzle's GENERATED snapshots, so a key only

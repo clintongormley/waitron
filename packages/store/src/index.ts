@@ -12,7 +12,8 @@ export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 import { createWriteQueue } from "./write-queue.js";
 
-/** The two database files, named after what each holds. */
+/** The two database files. Every table is in the venue file; the node file is created empty
+ * (`packages/migrations/src/apply.ts`). */
 const VENUE_FILE = "venue.db";
 const NODE_FILE = "node.db";
 

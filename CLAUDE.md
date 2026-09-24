@@ -387,8 +387,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).
-- **Five tables request code may read and never write — `tenants`, `nodes`, `deployment`,
-  `mirror_config`, `node_roles` — and the database does not refuse the write.** The engine is a
+- **The tables `scripts/write-path-tables.json` lists — `tenants`, `nodes`, `deployment`,
+  `mirror_config`, `node_roles` — request code may read and never write, and the database does not
+  refuse the write.** The engine is a
   file with no roles or permissions, so the guard below is the whole of the enforcement. A write of
   one of them belongs on a path that opens the store deliberately for it, never on the handle a
   request is served on. Guard: `scripts/write-path-tables.test.ts`, weaker than its name in three
@@ -520,11 +521,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   write names (`node_roles`, `mirror_config`, `join_requests`), a seal only that node's key opens
   (`tenant_credentials`), or rows the transaction that wrote them deletes (`change_log`). A node
   holding another node's copy of `venue.db` must read its own rows or none. No guard makes a new
-  `local` table say which. What is pinned, each by deleting the node filter and watching a case
-  fail: the `node_roles` and `mirror_config` readers (`packages/db/src/node-roles.test.ts`), and
-  every node filter on `join_requests` in `apps/server/src/join-requests.ts` but deny's delete,
-  which runs only after a node-filtered read of the same id (the "belong to the node" cases in
-  `apps/server/src/join-requests.test.ts`).
+  `local` table say which, and identity's `local` tables (`packages/identity/src/classification.ts`)
+  state none of these until slice-2 Task 1b reclassifies them `state`. Which node filters a
+  deletion pins: [conventions-data.md](docs/developers/conventions-data.md).
 - **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
   puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
   descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has

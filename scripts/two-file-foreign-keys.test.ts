@@ -166,7 +166,7 @@ describe("negative controls", () => {
     expect(violationOf(edge("persons", "sessions"), classes)).toContain("[state -> local]");
   });
 
-  it("says nothing about a key that stays inside one file", () => {
+  it("says nothing about a key between two tables on the same side", () => {
     // Both `state`: the keys this rule leaves alone.
     expect(violationOf(edge("webauthn_credentials", "persons"), classes)).toBeNull();
     // Both `local`.

@@ -5,7 +5,7 @@ import { count, json, nowIso, table, tsString } from "./columns.js";
 /**
  * The owner-authored base THEME (design §4, SP-A.2 §16.3).
  *
- * ONE ROW: `id` is pinned to 1 by `tenant_themes_singleton_ck`, the `deployment` / `mirror_config` /
+ * ONE ROW: `id` is pinned to 1 by `tenant_themes_singleton_ck`, the `deployment` /
  * `node_membership` shape in this package, and that id doubles as the `ON CONFLICT` target the
  * service upserts against. A database whose owner has never picked a theme simply has no row —
  * get-with-default returns "no override" rather than seeding one (no backfill; the database is

@@ -196,9 +196,9 @@ async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
  *
  * **Every migration set is applied to the VENUE handle, and the node file stays empty**, as
  * `applyMigrations` does, for the reason it states (`packages/migrations/src/apply.ts`) — `local`
- * tables included, since a class names whose rows a table holds, not which file. A later slice that moves tables into the
- * node file would need this function to learn which handle to migrate — and the node handle is
- * deliberately not exposed until something needs it.
+ * tables included, since a class names whose rows a table holds, not which file. A later slice
+ * that moves tables into the node file would need this function to learn which handle to migrate
+ * — and the node handle is deliberately not exposed until something needs it.
  *
  * The accessor throws rather than returning `undefined` when read before `beforeAll` has run: that
  * is the whole point, since `undefined` turns a setup failure into `Cannot read properties of
