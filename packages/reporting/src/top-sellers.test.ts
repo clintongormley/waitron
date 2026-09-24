@@ -22,7 +22,7 @@ const noonUtc = new Date("2026-08-04T10:00:00Z").toISOString();
 
 // Every product below carries a STAFF name and a customer-facing name that deliberately differ, so a
 // test that reads the customer text instead of the staff name fails rather than passing by
-// coincidence (this branch has already shipped one report defect for exactly that reason).
+// coincidence. Cost: a report reading the customer-facing text shipped once.
 const coffeeName = "Coffee";
 const coffeeText = { es: "Café" };
 const toastName = "Toast";

@@ -1,7 +1,4 @@
-// Side-effect only: registers this package's `close.*` codes on the shared `ErrorParams` registry by
-// declaration merging. See ./errors.ts for the codes and the reasoning. THIS direct `import
-// "./errors.js"` is what loads the augmentation (CLAUDE.md §3: every file that throws a code imports
-// its registry directly).
+// Side-effect import: registers the `close.*` codes this file throws (./errors.ts).
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
@@ -20,37 +17,25 @@ import type {
 import type { DailyClose } from "./types.js";
 
 /**
- * The single active writer's path for one frozen daily close (cierre Z, design §"The close
- * operation"), run inside the caller's transaction. It reads the node's chain head, computes
- * the VAT-exact close (8a), reconciles the physical cash counts against it per till, and appends one
- * immutable, hash-chained `daily_closes` row — advancing the head in the same transaction.
+ * Records one frozen daily close (cierre Z) inside the caller's transaction: reads the node's chain
+ * head, computes the close, reconciles the physical cash counts against it per till, and appends one
+ * hash-chained `daily_closes` row, advancing the head in the same transaction.
  *
- * Still single-writer, but no longer by a `SELECT … FOR UPDATE` on the chain head: one write
- * transaction runs on the venue file at a time, so two closers cannot both read the same head and
- * assign the same sequence number ({@link selectHead}, and `assertExtraListForWrite` in
- * `packages/catalogue/src/extras.ts` for the measurement and its control). The workforce time-entry
- * chain (`packages/workforce/src/chain.ts`) and the fiscal huella chain
- * (`packages/fiscal-verifactu/src/chain.ts`) made the same change. There is NO retry loop — unlike
- * those two, whose head must be CREATED on first use and so was briefly raced; a collision here is a
- * real bug, not something a retry fixes.
+ * Two closers cannot read the same head, because one write transaction runs on the venue file at a
+ * time (`assertExtraListForWrite` in `packages/catalogue/src/extras.ts` carries the receipt). There
+ * is no retry: a sequence collision here is a bug, not a race.
  *
- * The immutability is the table's, not this function's: `daily_closes` is declared
- * `appendOnly("daily_closes", "ledger", LEDGER)` in `packages/db/src/classification.ts`, which
- * `applyMigrations` turns into the refusing trigger pair (`packages/migrations/src/apply.ts`, its
- * `installAppendOnlyTriggers` call).
+ * The immutability is the table's, not this function's: `daily_closes` is declared `appendOnly` in
+ * `packages/db/src/classification.ts`.
  */
 export async function recordDailyClose(
   tx: Transaction,
   input: RecordDailyCloseInput,
 ): Promise<DailyCloseRecord> {
-  // 1. Validate the supplied cash counts up front — fail before reading the chain head.
   const counts = validateCashCounts(input.cashCounts);
 
-  // 2. Read this node's chain head. What keeps two closers from reading the same head and then
-  //    assigning the same next sequence number is the write queue, not a clause here — selectHead.
   const head = await readChainHead(tx, input.nodeId);
 
-  // 3. Compute the VAT-exact close (8a): a deterministic read over the day's immutable records.
   const close = await computeDailyClose(tx, {
     nodeId: input.nodeId,
     businessDay: input.businessDay,
@@ -58,15 +43,12 @@ export async function recordDailyClose(
     dayCutover: input.dayCutover,
   });
 
-  // 4. Reconcile the physical counts against the close's cash takings, per till → the frozen document.
   const snapshot = reconcile(close, counts);
 
-  // 5. Hash. Truncate closedAt to whole seconds BEFORE it enters BOTH the row and the digest — the
-  //    single choke point — so a stored close re-verifies: Postgres keeps sub-second precision that a
-  //    second-granular read-back drops, and hashing at whole-second granularity is what keeps the
-  //    committed digest and the recomputed one identical (mirrors chain.ts's truncateToWholeSecond).
   const sequenceNo = head.sequenceNo + 1;
   const prevEntryHash = head.lastEntryHash;
+  // Whole seconds, because that is all the hash commits to (`toEpochSeconds`); the row stores the
+  // same instant.
   const closedAt = truncateToWholeSecond(new Date());
   const entryHash = computeCloseEntryHash(
     {
@@ -80,8 +62,6 @@ export async function recordDailyClose(
     prevEntryHash,
   );
 
-  // 6. Append the immutable row. A second close of the same day trips
-  //    daily_closes_business_day_key → close.already_closed.
   const id = await insertClose(tx, {
     nodeId: input.nodeId,
     businessDay: input.businessDay,
@@ -93,13 +73,13 @@ export async function recordDailyClose(
     snapshot,
   });
 
-  // 7. Advance the head, in the same transaction as the read in step 2.
+  // In the same transaction as the close, so the head always names the true tip, which
+  // verifyDailyCloseChain's tail check relies on.
   await tx
     .update(dailyCloseChain)
     .set({ sequenceNo, lastEntryHash: entryHash })
     .where(eq(dailyCloseChain.nodeId, input.nodeId));
 
-  // 8.
   return {
     id,
     nodeId: input.nodeId,
@@ -114,11 +94,8 @@ export async function recordDailyClose(
 }
 
 /**
- * The table and columns a second close of the same day collides on: `daily_closes_business_day_key`,
- * declared `UNIQUE("node_id","business_day")` in migration `0033` line 236, in `packages/db/drizzle/`
- * (the baseline's three-column version, which carried the retired tenant column, was dropped
- * at line 17 of the same file).
- * Its sibling `daily_closes_sequence_key` differs in the second column alone.
+ * The key a second close of the same day collides on, `daily_closes_business_day_key`. Its sibling
+ * `daily_closes_sequence_key` differs in the second column alone.
  */
 const BUSINESS_DAY_KEY: ConstraintTarget = {
   table: "daily_closes",
@@ -127,8 +104,6 @@ const BUSINESS_DAY_KEY: ConstraintTarget = {
 
 const ZERO = decimal("0.00");
 
-/** Floors a Date to whole-second granularity, preserving the instant. `Math.floor` matches Postgres
- * `date_trunc('second', …)` for the (always positive) instants a close records. */
 function truncateToWholeSecond(when: Date): Date {
   return new Date(Math.floor(when.getTime() / 1000) * 1000);
 }
@@ -141,10 +116,8 @@ interface ParsedCount {
   countedCash: Decimal;
 }
 
-/** Parses a supplied money figure and rejects a negative or non-numeric one. The field is a plain
- * `string` on the input interface — an operator's cash count crosses the boundary as untrusted text —
- * so it is validated here into a `Decimal` rather than trusted (the §3 defect class: "safe values" is
- * a property of the caller, not the code). `reason` is a stable English discriminator, never a user
+/** Parses a supplied money figure and rejects a negative or non-numeric one: an operator's cash
+ * count arrives as untrusted text. `reason` is a stable English discriminator, never a user
  * sentence. */
 function requireNonNegativeMoney(tillId: TillId, field: string, raw: string): Decimal {
   let value: Decimal;
@@ -186,8 +159,8 @@ function validateCashCounts(cashCounts: readonly CashCountInput[]): ParsedCount[
 /**
  * Reconciles the physical counts against the close's per-till cash takings and assembles the frozen
  * snapshot. `cashVariance = countedCash − (openingFloat + cashTakings − payouts)`: positive is an
- * overage, negative a shortage. `cashTakings` is COPIED from `close.cash.byTill[].cashTakings` (the
- * fiscal record), never re-derived. Two faults are caught here because they need the computed close:
+ * overage, negative a shortage. `cashTakings` is copied from `close.cash.byTill[].cashTakings`,
+ * never re-derived. Two faults are caught here because they need the computed close:
  * a till whose sales added cash (`cashTakings > 0`) that was left uncounted, and a count for a till
  * with no tender activity in the close at all.
  */
@@ -225,8 +198,8 @@ function reconcile(close: DailyClose, counts: readonly ParsedCount[]): DailyClos
     };
   });
 
-  // Deterministic order (branch-free code-unit compare, matching the hash's own canonicalisation) so
-  // the frozen document reads the same however the counts were enumerated.
+  // Code-unit order, as the hash sorts it, so the frozen document reads the same however the counts
+  // were enumerated.
   byTill.sort((a, b) => Number(a.tillId > b.tillId) - Number(a.tillId < b.tillId));
 
   const nodeVariance = byTill.reduce<Decimal>((sum, r) => addDecimal(sum, r.cashVariance), ZERO);
@@ -238,27 +211,7 @@ interface ChainHead {
   lastEntryHash: string;
 }
 
-/**
- * This node's chain head, or `undefined` when it has none yet.
- *
- * This was `selectHeadForUpdate` and it took `for update` on the head row: the sequence number read
- * here decides the NEXT one several statements later (step 5 in `recordDailyClose`), so a second
- * close reading the same head would compute the same position. There is no second close to overlap
- * with — one write transaction runs on the venue file at a time, and the pattern is stated once,
- * with its measurement and its control, on `assertExtraListForWrite`
- * (`packages/catalogue/src/extras.ts`). Drizzle's SQLite query builder has no `.for()` at all.
- * Renamed with the clause: a function named for a lock it does not take is a false claim, the same
- * rename `packages/workforce/src/chain.ts` and `packages/fiscal-verifactu/src/chain.ts` made.
- *
- * The lock was never the only thing keeping two closes off one sequence number. Both unique
- * indexes survive on this engine — `daily_closes_sequence_key` on `(node_id, sequence_no)` and
- * `daily_closes_business_day_key` on `(node_id, business_day)`, declared at
- * `packages/db/drizzle/0000_baseline.sql:665-666` — and each is now watched REFUSING a real
- * duplicate, by `surfaces a sequence-key collision RAW, not masked as close.already_closed` and by
- * `reports the business-day key as the table and columns insertClose recognises`, both in
- * `record-daily-close.test.ts`. Each drives the refusal through the engine rather than crafting an
- * error, and reads back which index collided.
- */
+/** This node's chain head, or `undefined` when it has none yet. */
 async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {
   const [row] = await tx
     .select({
@@ -271,16 +224,8 @@ async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | 
 }
 
 /**
- * This node's chain head, creating it if it has none yet.
- *
- * `insert … on conflict do nothing` then a re-select, not an upsert-returning. On PostgreSQL that
- * shape was about a concurrent uncommitted insert; here it is the plain read-back of whichever row
- * exists, and it is still two statements because a single `… returning` gives nothing back for a
- * conflicting row and would leave the caller with no head to act on.
- *
- * This was `lockChainHead` and it took no lock of its own — {@link selectHead} did, and that clause
- * is gone for the reason stated there. Renamed with it, the same way
- * `packages/workforce/src/chain.ts` renamed its own.
+ * This node's chain head, creating it if it has none yet. The insert is followed by a re-select
+ * rather than a `returning`, which gives nothing back for a conflicting row.
  */
 async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
   const existing = await selectHead(tx, nodeId);
@@ -314,14 +259,13 @@ interface CloseRow {
 }
 
 /**
- * Appends the immutable row in a savepoint (the adapter's nested `tx.transaction`). Its body is one
- * insert, which SQLite backs out by itself when refused, leaving the transaction usable, so today
- * it changes nothing (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it
- * does not need"). Only a `daily_closes_business_day_key` collision — a second close of the same
- * day — is translated to `close.already_closed`; anything else (a `daily_closes_sequence_key`
- * collision, which the write queue's one-writer-at-a-time should make unreachable, or an FK
- * violation) propagates raw, because masking it as "already closed" would hide a genuine
- * single-writer bug for a day that is NOT closed.
+ * Appends the row in a savepoint (a nested `tx.transaction`). Its body is one insert, which SQLite
+ * backs out by itself when refused, leaving the transaction usable, so today the savepoint confines
+ * nothing (`docs/developers/conventions-data.md` has the probe). Only a
+ * `daily_closes_business_day_key` collision — a second close of the same day — becomes
+ * `close.already_closed`; anything else, a `daily_closes_sequence_key` collision included,
+ * propagates raw, because reporting it as "already closed" would hide a single-writer bug for a day
+ * that is NOT closed.
  */
 async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
   try {
@@ -344,13 +288,7 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
 
 /**
  * Is this (or anything it wraps) a unique violation on the business-day key — a second close of the
- * same (node, business day)?
- *
- * Why the question needs both the SQLSTATE and the key is `refusalOn`'s own doc
- * (`packages/db/src/constraint-target.ts`). What is specific to this caller: the sibling the
- * SQLSTATE alone would let through is `daily_closes_sequence_key`, and a sequence collision should
- * be unreachable while one write transaction runs on the venue file at a time, so reporting one as
- * "already closed" would hide a single-writer bug for a day that is NOT closed.
+ * same (node, business day)? The unique code alone would also match `daily_closes_sequence_key`.
  *
  * Exported for the crafted-error unit tests, not from the barrel.
  */

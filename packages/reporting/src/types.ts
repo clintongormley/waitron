@@ -1,14 +1,11 @@
 import type { Decimal, NodeId, TillId, TimingBand } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
 
-/** A tender method, mirroring `tender_method` in packages/db/src/schema/sales.ts. */
+/** A tender method, mirroring `tenderMethod` in packages/db/src/schema/sales.ts. */
 export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 
 export interface DailyCloseInput {
-  /** Omit → aggregate across ALL the tenant's nodes (every node in the database), the same
-   * venue-wide shape `PeriodVatInput` allows. Node-grain callers (the fiscal daily close, the
-   * dashboard's per-till daily-close view) pass a node; the dashboard OVERVIEW omits it so its
-   * takings/counts aggregate the whole venue (report-api overview, membership promotion R3a). */
+  /** Omit → aggregate across every node in the database (the whole venue). */
   nodeId?: NodeId;
   /** Local calendar date of the business day, "YYYY-MM-DD". */
   businessDay: string;
@@ -19,7 +16,7 @@ export interface DailyCloseInput {
 }
 
 export interface PeriodVatInput {
-  /** Omit → aggregate across ALL the tenant's nodes (every node in the database). */
+  /** Omit → aggregate across every node in the database. */
   nodeId?: NodeId;
   /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
   fromBusinessDay: string;
@@ -39,13 +36,13 @@ export interface TopSellersInput extends PeriodVatInput {
 }
 
 /** One product in the top-sellers list: every line frozen under this STAFF `name` (a sales report
- * shows the staff name, never the customer-facing text — see `docs/developers/products.md`),
- * including lines sold as the product itself, with its variants nested underneath. */
+ * shows the staff name, never the customer-facing text — `docs/developers/products.md`), including
+ * lines sold as the product itself, with its variants nested underneath. */
 export interface TopSeller {
   /** The frozen `sale_lines.name` — the parent's staff name on a variant line. */
   name: string;
   /** Σ line quantity over the range, at three decimal places; corrections net in, so it can
-   * fall. The column counts whole thousandths and the sum is converted once, on the way out. */
+   * fall. */
   quantity: Decimal;
   /** Σ line_total over the range, as an amount; corrections net in. */
   total: Decimal;
@@ -73,14 +70,13 @@ export interface VatReturnInput {
   period: LiquidationPeriod;
 }
 
-/** What an input-VAT line was spent on (mirrors the `purchase_vat_kind` enum): `ordinary` =
+/** What an input-VAT line was spent on (mirrors `purchaseVatKind`): `ordinary` =
  * operaciones corrientes (casilla 28/29); `capital` = bienes de inversión (casilla 30/31). */
 export type PurchaseVatKind = "ordinary" | "capital";
 
-/** One deducible line, grouped by (rate, kind). `tax` is the deductible cuota (Σ of the filed
- * per-invoice cuotas × deductible_proportion/10000 — the column counts whole basis points — rounded
- * per invoice line), never re-rounded on the monthly base — the same exactness rule the output side
- * follows. */
+/** One deducible line, grouped by (rate, kind). `tax` is the deductible cuota: each filed invoice
+ * line's cuota × its invoice's deductible proportion, rounded per line and then summed, never
+ * re-rounded on the period's base. */
 export interface InputVatRateLine {
   rate: Decimal;
   base: Decimal;
@@ -124,7 +120,7 @@ export interface VatRateLine {
   rate: Decimal;
   /** Net taxable base at this rate (corrections netted). */
   base: Decimal;
-  /** Net tax at this rate (the fiscal cuota — English identifier, per the english-only guard). */
+  /** Net tax at this rate (the fiscal cuota). */
   tax: Decimal;
 }
 export interface VatSummary {
@@ -164,9 +160,7 @@ export interface CloseCounts {
 }
 
 export interface DailyClose {
-  /** The node this close is grain-scoped to, or omitted for a venue-wide close (mirrors
-   * `DailyCloseInput.nodeId`). The fiscal `recordDailyClose` always supplies a node; the venue-wide
-   * overview does not read this field. */
+  /** The node this close covers, or omitted for a venue-wide close (`DailyCloseInput.nodeId`). */
   nodeId?: NodeId;
   businessDay: string;
   timeZone: string;
@@ -175,22 +169,21 @@ export interface DailyClose {
   counts: CloseCounts;
 }
 
-/** The manager overview's overdue-orders query: THIS node's currently-open kitchen orders, scoped
- * exactly as the other `/reports` routes are (design §7.4). No business-day range — the read is a
- * live snapshot of right now, not a closed historical period. */
+/** The manager overview's overdue-orders query: THIS node's currently-open kitchen orders. No
+ * business-day range — the read is a live snapshot of right now. */
 export interface OverdueOrdersInput {
   nodeId: NodeId;
 }
 
-/** One currently-open order whose worst UNSERVED line has crossed into `overdue` or `forgotten`
- * (design §7.4) — the manager overview's "orders taking too long" list, worst-first. `stationName`
+/** One currently-open order whose worst UNSERVED line has crossed into `overdue` or `forgotten` —
+ * the manager overview's "orders taking too long" list, worst-first. `stationName`
  * and `ageMinutes` describe that WORST line (an order can span several stations; this is the one
  * driving the escalation), not necessarily the order's oldest or first-fired line. */
 export interface OverdueOrder {
   orderId: string;
   orderNumber: number;
   /** The dining table this order is served at (a tab's back-pointer or a counter delivery), or
-   *  `null` for a bare walk-up — the same optionality `ExpoOrder.tableLabel` carries. */
+   *  `null` for a bare walk-up. */
   tableLabel: string | null;
   stationName: string;
   ageMinutes: number;

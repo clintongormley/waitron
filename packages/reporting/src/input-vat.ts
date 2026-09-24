@@ -25,61 +25,35 @@ const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
 
 /**
  * The modelo 303 input-VAT (*IVA deducible/soportado*) aggregate over one liquidation period
- * (month/quarter/year), for one obligado (tenant), across ALL nodes — the input-side counterpart to
- * `computeVatReturn`. Reads `purchase_invoice_vat` joined to its `purchase_invoices` header, filtered
- * to `regime = 'general'` (recargo de equivalencia is non-deductible and off the 303, spec §D4),
- * bucketed by `received_on` civil date in the period (the deduction period, spec §D3), grouped by
- * (rate, kind).
+ * (month/quarter/year), across ALL nodes — the input-side counterpart to `computeVatReturn`. Reads
+ * `purchase_invoice_vat` joined to its `purchase_invoices` header, `regime = 'general'` only
+ * (recargo de equivalencia is not deductible and not on the 303), bucketed by the civil
+ * `received_on` date, grouped by (rate, kind).
  *
- * `base` is summed in full; the deductible `tax` (cuota) is `Σ round(filed cuota ×
- * deductible_proportion/10000)` — the divisor is ten thousand because the column counts whole BASIS
- * POINTS, so a full proportion is 10000 — rounded PER invoice line, then summed, never re-rounded on
- * the monthly base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`"
- * exactness rule the output side follows (#76/#66); with the default full proportion it collapses to
- * `Σ` of the filed cuotas verbatim. It spans every node in the database: one tenant per database, so no tenant
- * predicate is needed (mirrors `aggregateVatByRate`).
+ * `base` is summed in full; the deductible `tax` is `Σ round(filed cuota × deductible_proportion /
+ * 10000)`, rounded PER invoice line and then summed, never re-rounded on the period's base — the
+ * exactness rule the output side follows. With the default full proportion it is the sum of the
+ * filed cuotas.
  *
- * The result carries every (rate, kind) line UNFILTERED — the casilla 28/29 (corrientes) vs 30/31
- * (bienes de inversión) split is applied DOWNSTREAM in `mapModelo303`, which sums `deductible.byRate`
- * by `kind`; this aggregate deliberately does not pre-filter to one kind.
+ * Every (rate, kind) line is returned; `mapModelo303` splits casillas 28/29 (corrientes) from 30/31
+ * (bienes de inversión) by `kind`.
  */
 export async function computeInputVat(
   tx: Transaction,
   input: InputVatInput,
 ): Promise<InputVatReturn> {
-  // Caller preconditions validated BEFORE any query (plain Error, shared with computeVatReturn).
   validatePeriod(input.year, input.period);
 
   const dateFilter = periodDateFilter(sql`p.received_on`, input.year, input.period);
 
-  // `purchase_invoice_vat.base` and `.tax` count whole cents, and `deductible_proportion` counts
-  // whole basis points — 10000 of them is the whole of the tax. The rounding goes to whole CENTS,
-  // half away from zero, PER invoice line and only then summed, which is the per-invoice exactness
-  // rule the output side follows.
+  // `base` and `tax` count whole cents and `deductible_proportion` whole basis points (10000 is the
+  // whole tax). This engine has no exact decimal type: `/ 10000` between integers truncates, and
+  // `/ 10000.0` is floating point, whose result `rawCentsToDecimal` refuses. So the rounding is done
+  // in integers: `(abs(x) + 5000) / 10000` rounds the magnitude half up, and the sign multiplied
+  // back makes it half away from zero, as `percentOf` rounds. A rectificativa's negative cuota is
+  // why the sign cannot be dropped.
   //
-  // WHY THE EXPRESSION LOOKS LIKE THAT. It was `round(v.tax * p.deductible_proportion::numeric /
-  // 10000, 0)`. This engine has no exact decimal type: `/ 10000` between two integers is INTEGER
-  // division, which truncates, and `/ 10000.0` is binary floating point, whose `round` then answers
-  // a REAL — and a real read back as text renders `"0.0"`, which `rawCentsToDecimal` refuses
-  // outright. So the whole thing is done in integers: `(abs(x) + 5000) / 10000` is half-up on the
-  // MAGNITUDE, and multiplying the sign back on makes that half away from zero, matching
-  // PostgreSQL's `round(numeric, 0)` and `@waitron/shared`'s `percentOf`. A rectificativa's negative
-  // cuota is the reason the sign cannot be dropped.
-  //
-  // Measured against PGlite 0.5.8 (PostgreSQL 18.3), 2026-09-22: 220 (tax, proportion) pairs — 22
-  // cuotas including zero, negatives and every exact-tie magnitude × 10 proportions including 0,
-  // 10000 and three that land on a tie — compared with `round(t * p::numeric / 10000, 0)::text`.
-  // The integer form above agreed on 220 of 220. The floating form disagreed on 220 of 220, which
-  // is the control in the other direction, and it is not a near miss: every answer carried a
-  // decimal point the reader would have thrown on.
-  //
-  // Each sum is a count of whole cents read raw, handed over as TEXT by `cast(… as text)` and
-  // converted by `rawCentsToDecimal`; see its doc comment.
-  //
-  // The rate is grouped on the column itself: a whole number of basis points has one spelling, so
-  // two spellings of one rate cannot split into two lines — the normalisation happens in
-  // `decimalToBasisPoints` on the way in. The output side still reads its rate out of a JSON
-  // document, where two spellings ARE possible, so `aggregateVatByRate` keeps normalising.
+  // The rate is grouped on the column itself: a count of basis points has one spelling.
   const { rows } = await tx.execute<{
     rate: string;
     kind: PurchaseVatKind;

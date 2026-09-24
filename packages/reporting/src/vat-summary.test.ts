@@ -123,8 +123,7 @@ describe("computeVatSummary", () => {
     // Two invoices, same rate, at a rounding boundary where the two groupings DISAGREE:
     //   per invoice: 0.03 * 21% = 0.0063 → 0.01 each → 0.02 total
     //   summed base: 0.06 * 21% = 0.0126 → 0.01 total
-    // Asserting 0.02 fails if the query grouped by rate only rather than by (sale, rate) — the
-    // load-bearing per-invoice rounding of design §4/§D6. A single-invoice case cannot tell them apart.
+    // The filed per-invoice figures sum to 0.02; a summed-base recompute would give 0.01.
     for (const invoiceNumber of [1, 2]) {
       await seedSale(suite.db, venue, {
         invoiceNumber,
@@ -161,8 +160,7 @@ describe("computeVatSummary", () => {
   });
 
   it("excludes another node in the SAME tenant (the node predicate)", async () => {
-    // A second node under the same tenant is excluded by the node predicate.
-    // `s.node_id = ${input.nodeId}` excludes it. Dropping that predicate would count 300.00, not 100.00.
+    // A second node is excluded by the node predicate; dropping it would count 300.00, not 100.00.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
@@ -186,9 +184,8 @@ describe("computeVatSummary", () => {
 
   it("reports the filed difference-method tax exactly for catalogue sales", async () => {
     // A gross-inclusive catalogue sale files its cuota by the DIFFERENCE method (gross − base), which
-    // can land a rounding céntimo away from round(base × rate). We file such a desglose directly and
-    // assert the summary returns THAT figure, not the multiplicative recompute the old sale_lines
-    // query produced (21.00 and 5.00 below).
+    // can land a rounding céntimo away from round(base × rate). The summary must return the filed
+    // figure, not the multiplicative recompute (21.00 and 5.00 below).
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
@@ -212,8 +209,7 @@ describe("computeVatSummary", () => {
 
   it("nets a correction's negative filed breakdown into the rate", async () => {
     // Both original and correction file difference-method cuotas. The filed net (18.89) differs from
-    // the multiplicative net the old query gave (21.00 − 2.10 = 18.90), so this fails until the
-    // summary reads the filed breakdown.
+    // the multiplicative net (21.00 − 2.10 = 18.90).
     const original = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,

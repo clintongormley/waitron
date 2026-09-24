@@ -58,20 +58,15 @@ describe("businessDayRangeClause", () => {
   const CUTOVER = "05:00";
 
   it("a single-day range (from == to) matches the = businessDay form at a boundary instant", async () => {
-    // 2026-08-04 05:00 Madrid = 2026-08-04T03:00Z is exactly the cutover; one second earlier belongs
-    // to the prior business day. Evaluating both predicates for those two instants pins that the range
-    // clause EXTENDS `businessDayClause` — same answer, both directions, at the boundary that separates
-    // the two days. (Only timeZone/dayCutover/day(s) matter to the date maths — tenant/node are unread,
-    // hence the minimal cast objects.)
+    // 2026-08-04 05:00 Madrid = 2026-08-04T03:00Z is exactly the cutover; a millisecond earlier
+    // belongs to the prior business day. Both clauses must agree, both directions, at that boundary.
+    // Only the clock and the day(s) are read, hence the minimal cast objects.
     for (const [instant, day, expected] of [
       ["2026-08-04T03:00:00.000Z", "2026-08-04", true],
       ["2026-08-04T02:59:59.999Z", "2026-08-04", false],
     ] as const) {
-      // A bound string, not a cast literal: a timestamp column is TEXT on this engine and both
-      // clauses compare against a canonical ISO bound, so the instant under test is written the
-      // way a stored stamp is written. The two values keep the instants the case was built on;
-      // the milliseconds are new, and are what the engine's own writers produce
-      // (`Date.prototype.toISOString`).
+      // Written the way a stored stamp is written: a timestamp column is TEXT in `toISOString()`'s
+      // spelling.
       const column = sql`${instant}`;
       const dayInput = { businessDay: day, timeZone: TZ, dayCutover: CUTOVER } as DailyCloseInput;
       const rangeInput = {
@@ -80,10 +75,7 @@ describe("businessDayRangeClause", () => {
         timeZone: TZ,
         dayCutover: CUTOVER,
       } as PeriodVatInput;
-      // A RAW select reaches no column mapping, so a predicate comes back as the engine's own 1/0
-      // rather than as a boolean — the same class the residue guard's header names. The case still
-      // asserts the two predicates agree and that they agree with `expected`; only the spelling of
-      // the value being compared changed.
+      // A RAW select reaches no column mapping, so a predicate comes back as the engine's 1/0.
       const { rows } = await suite.db.execute<{ eq: 0 | 1; range: 0 | 1 }>(
         sql`select ${businessDayClause(column, dayInput)} as eq, ${businessDayRangeClause(column, rangeInput)} as range`,
       );
@@ -95,14 +87,8 @@ describe("businessDayRangeClause", () => {
 
 describe("currentBusinessDay / businessDayOf", () => {
   it("shifts a pre-cutover instant to the PREVIOUS business day (deterministic literal clock)", () => {
-    // 2026-03-01 04:30 UTC = 05:30 Madrid (CET, UTC+1 in winter, before the last-Sunday-of-March DST
-    // change). With a 06:00 cutover, 05:30 local still belongs to the PREVIOUS business day. Without
-    // the cutover shift the date would be 2026-03-01, so this literal case pins the shift maths and
-    // never touches the wall clock — the day is fixed by the literal, not by the clock.
-    //
-    // The literal is a `Date` rather than a `timestamptz` SQL fragment, and there is no transaction:
-    // `businessDayOf` computes in JavaScript now, because this engine has neither `at time zone` nor
-    // a zone database. The instant and the expected answer are unchanged.
+    // 2026-03-01 04:30 UTC = 05:30 Madrid (CET, UTC+1 in winter). With a 06:00 cutover, 05:30 local
+    // still belongs to the PREVIOUS business day; without the cutover shift it would be 2026-03-01.
     const day = businessDayOf(new Date("2026-03-01T04:30:00.000Z"), {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
@@ -110,11 +96,9 @@ describe("currentBusinessDay / businessDayOf", () => {
     expect(day).toBe("2026-02-28");
   });
 
-  // A venue WEST of UTC, both sides of its DST change, because every other case in this package
-  // uses Europe/Madrid and a negative offset is the arm none of them reaches. The four expected
-  // days are PostgreSQL's own, read off PGlite 0.5.8 (PostgreSQL 18.3) on 2026-09-22 from
-  // `((<instant> at time zone 'America/New_York') - '04:00'::interval)::date` — the expression this
-  // function replaced — not worked out by hand here.
+  // A venue WEST of UTC, both sides of its DST change: every other case here uses Europe/Madrid, so
+  // none reaches a negative offset. The expected days were read off PostgreSQL's `at time zone` on
+  // 2026-09-22, not worked out by hand.
   it.each([
     ["2026-08-04T07:59:59.999Z", "2026-08-03"], // 03:59 local, EDT (UTC-4): before the cutover
     ["2026-08-04T08:00:00.000Z", "2026-08-04"], // 04:00 local: the cutover itself

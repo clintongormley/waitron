@@ -11,8 +11,7 @@
 //
 // Everything shown here is deterministic logic over immutable commercial rows: the snapshot, the
 // per-till variance arithmetic, the hash chain. What a demo cannot show is what happens when two
-// closers run at once; that is `packages/reporting/src/record-daily-close.concurrency.test.ts`, whose own
-// header records which of its cases survived the move off PostgreSQL and which did not.
+// closers run at once; that is `packages/reporting/src/record-daily-close.concurrency.test.ts`.
 //
 // SQLite has no roles and no grants: nothing below demonstrates who may write.
 //

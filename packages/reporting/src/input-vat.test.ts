@@ -29,8 +29,7 @@ describe("computeInputVat", () => {
   it("sums the filed per-invoice tax exactly, never round(Σ base × rate)", async () => {
     // Two received invoices whose supplier filed a difference-method cuota: 20.99, not
     // round(100 × 21%) = 21.00. The deducible aggregate must sum the FILED cuotas (20.99 + 20.99 =
-    // 41.98), never re-round on the monthly base (which would give round(200 × 21%) = 42.00) — the
-    // exactness rule inherited from the output side (#76/#66).
+    // 41.98), never re-round on the monthly base (which would give round(200 × 21%) = 42.00).
     await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "A1",
       issuedOn: "2026-08-01",
@@ -122,7 +121,7 @@ describe("computeInputVat", () => {
   });
 
   it("applies deductible_proportion per invoice (the prorrata seam), scaling only the tax", async () => {
-    // Spec §6/§9: the base is reported in full; only the deductible cuota is scaled by the proportion.
+    // The base is reported in full; only the deductible cuota is scaled by the proportion.
     // 42.00 × 50% = 21.00.
     await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P1",
@@ -157,16 +156,11 @@ describe("computeInputVat", () => {
   });
 
   it("reads base, tax and the rate as whole counts, summed then converted once", async () => {
-    // Written straight to the tables as INTEGERS, past `seedPurchaseInvoice`'s own converters, so
-    // this pins what the columns hold rather than what the fixture does with them. Two lines of
-    // 2099 cents sum to 4198 = 41.98 at a full proportion; a query that read the columns as euros
-    // would report "4198.00". The rate is 2100 basis points and must be reported as "21.00": read
-    // as a decimal it would say "2100.00".
-    //
-    // It writes through the table definitions rather than in raw SQL, which is a conversion and
-    // not a loosening: `purchase_invoices.id` is supplied by `$defaultFn(newId)` in JavaScript on
-    // this engine, so a raw INSERT naming no id is refused `NOT NULL constraint failed`. The
-    // values below are still the raw integer counts, which is what the case is about.
+    // Written as INTEGERS, past `seedPurchaseInvoice`'s converters, so this pins what the columns
+    // hold. Two lines of 2099 cents sum to 4198 = 41.98 at a full proportion; a query that read the
+    // columns as euros would report "4198.00". The rate is 2100 basis points and must be reported
+    // as "21.00", not "2100.00". Through the table definitions because `purchase_invoices.id` comes
+    // from a JavaScript `$defaultFn` that a raw INSERT never reaches.
     const [invoice] = await suite.db
       .insert(purchaseInvoices)
       .values({

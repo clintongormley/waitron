@@ -1,27 +1,9 @@
 /**
  * `verifyDailyCloseChain` catches a committed chain that was tampered with after it was frozen.
- *
- * ## What this suite was
- *
- * It ran against real PostgreSQL through `useTemplateDb` and corrupted the chain with the trigger
- * disabled. PostgreSQL has `ALTER TABLE … DISABLE TRIGGER`; SQLite has no such statement, so
- * {@link bypassingImmutability} drops each of `daily_closes`' two append-only triggers, mutates,
- * and recreates each one from the exact `CREATE TRIGGER` text SQLite stored for it — the same
- * mechanism, and for the same stated reason, as `buildResetPlan`/`applyReset` in
- * `packages/db/src/testing/venue-db.ts`. There is no `ENABLE ALWAYS` to restore afterwards: that
- * flag existed so a replication apply worker could not skip the trigger, and there is no
- * replication here.
- *
- * The four subjects below are unchanged: an edited snapshot, a deleted middle close, a deleted tip,
- * and a deleted head. `daily_close_chain` is NOT append-only
- * (`packages/db/src/classification.ts` classifies it without `appendOnly`), so the last of them
- * deletes the head directly and needs no bypass — on PostgreSQL it went through the same helper
- * only because that helper was the file's one mutation path.
- *
- * Named for what separates it from the sibling `verify-daily-close-chain.test.ts`: every break here
- * is staged by mutating rows `recordDailyClose` itself wrote, with `daily_closes`' append-only
- * triggers dropped ({@link bypassingImmutability}); that file crafts its breaks with raw INSERTs,
- * drops no trigger, and is where the pure row-walk cases live.
+ * Every break here mutates rows `recordDailyClose` itself wrote: `daily_closes` rows with that
+ * table's append-only triggers dropped ({@link bypassingImmutability}), and the `daily_close_chain`
+ * head directly, since it has no such trigger. The sibling `verify-daily-close-chain.test.ts` stages
+ * its breaks with INSERTs and with UPDATEs of `daily_close_chain`, so it drops no trigger.
  */
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -39,8 +21,6 @@ const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let venue: SeededVenue;
-// A fresh venue per test; `useVenueDb`'s reset empties the append-only tables between tests by
-// dropping and recreating their triggers, so each test starts from an empty database.
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
@@ -63,19 +43,9 @@ function verify() {
 }
 
 /**
- * Mutates `daily_closes` with its append-only triggers out of the way, then puts them back exactly
- * as they were found — the tamper an attacker with write access would perform, staged so the test
- * can then ask the verifier about it.
- *
- * The drop, the mutation and the recreate share ONE transaction, so a failing mutation rolls the
- * dropped triggers back in with it and the next test still meets a protected table. Each trigger is
- * recreated from its own `sqlite_master.sql` text rather than from a statement written here: the
- * text is what SQLite needs to rebuild it, and replaying it verbatim is the only way to be sure the
- * table is left as it was found.
- *
- * Control, run 2026-09-22: with the drop loop removed and everything else the same, the three
- * mutating cases fail with `Error: daily_closes is append-only` — so the triggers are live and this
- * helper is doing something, rather than stepping around protection that was never installed.
+ * Mutates `daily_closes` with its append-only triggers dropped, then recreates each from its own
+ * `sqlite_master.sql` text, so the table is left as it was found. The drop, the mutation and the
+ * recreate share ONE transaction, so a failing mutation rolls the dropped triggers back with it.
  */
 async function bypassingImmutability(mutate: (tx: Transaction) => Promise<unknown>): Promise<void> {
   await suite.db.transaction(async (tx) => {
@@ -100,12 +70,8 @@ describe("verifyDailyCloseChain against a tampered committed chain", () => {
     const second = await record("2026-08-05", []);
     expect(await verify()).toEqual({ ok: true }); // control: the intact chain verifies
 
-    // Rewrite close 2's frozen snapshot. entry_hash is left untouched, so it no longer recomputes.
-    // Read-mutate-write through the column's own mapping rather than through a JSON function: the
-    // column is `text(..., { mode: "json" })` (`packages/db/src/schema/columns.ts`), so what
-    // Drizzle writes back is `JSON.stringify` of this object — the same encoding the close was
-    // stored with. `jsonb_set`, which this case used on PostgreSQL, has no counterpart that is
-    // guaranteed to reproduce that encoding.
+    // Rewrite close 2's frozen snapshot, leaving entry_hash untouched. Read-mutate-write through the
+    // column's own mapping, so the tampered value is stored in the same encoding as the original.
     await bypassingImmutability(async (tx) => {
       const [row] = await tx
         .select({ snapshot: dailyCloses.snapshot })
@@ -139,9 +105,8 @@ describe("verifyDailyCloseChain against a tampered committed chain", () => {
   });
 
   it("catches the LATEST close deleted (tail truncation the row walk cannot see)", async () => {
-    // The gap a `daily_closes`-only walk is blind to: delete the tip and the survivors [1, 2] are a
-    // perfectly consistent chain. Only the head — advanced in the SAME transaction as the close, so
-    // it still records sequence_no = 3 / last_entry_hash = <hash 3> — reveals the shortfall.
+    // Delete the tip and the survivors [1, 2] are a consistent chain; only the head, which still
+    // records sequence_no = 3, reveals the shortfall.
     await record("2026-08-04", []);
     await record("2026-08-05", []);
     const third = await record("2026-08-06", []);
@@ -154,10 +119,8 @@ describe("verifyDailyCloseChain against a tampered committed chain", () => {
   });
 
   it("catches the chain head itself deleted while closes survive", async () => {
-    // The tail-truncation check leans on the head as its authority; delete the head AND the head
-    // cross-check has nothing to compare against — the survivors [1, 2] walk clean and would report
-    // ok. But because `recordDailyClose` writes the head and the first close in ONE transaction,
-    // closes-without-head never occurs naturally, so it is unambiguously a tamper.
+    // Without the head the survivors [1, 2] walk clean; `recordDailyClose` writes the head and the
+    // first close in ONE transaction, so closes without a head are a tamper.
     await record("2026-08-04", []);
     await record("2026-08-05", []);
     expect(await verify()).toEqual({ ok: true }); // control: head present, chain intact

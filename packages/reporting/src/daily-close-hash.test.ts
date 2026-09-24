@@ -93,13 +93,11 @@ describe("computeCloseEntryHash", () => {
   });
 
   it("is order-independent of object key order in the snapshot", () => {
-    // A jsonb round-trip re-orders object keys — the stored snapshot Task 4 reads back does not
-    // preserve write-time key order — so the canonicalisation must sort keys or verification breaks.
+    // The digest must not depend on object key order.
     const ordered = content();
     const rekeyed = content({
       snapshot: {
-        // top-level keys reversed, and one nested object's keys reversed, exactly as a jsonb
-        // read-back might present them.
+        // top-level keys reversed, and one nested object's keys reversed.
         cashReconciliation: {
           nodeVariance: "0.00",
           byTill: reconciliation().map((t) => ({

@@ -4,19 +4,14 @@ import { activeSalesClause, businessDayClause, nodeScopeClause } from "./busines
 import type { CloseCounts, DailyCloseInput } from "./types.js";
 
 /**
- * Operational record counts for one node — or the whole venue when `input.nodeId` is
- * omitted — over one business day. `sales` and `corrections` are issued-in-day (excluding voided;
- * `sales` also excludes F3-canje substitutes — same exclusions as the VAT half). `voids` counts void
- * EVENTS whose voided_at falls in the day, for this node's sales. The node predicate is applied via
- * `nodeScopeClause` only when a node is fixed (a venue-wide overview omits it).
+ * Operational record counts for one node — or the whole venue when `input.nodeId` is omitted — over
+ * one business day. `sales` and `corrections` are issued in the day, with the VAT summary's
+ * exclusions (`activeSalesClause`). `voids` counts void EVENTS whose voided_at falls in the day.
  */
 export async function computeCloseCounts(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<CloseCounts> {
-  // `filter (where …)` survives the engine change — SQLite has had it since 3.30 and this build is
-  // 3.53.4 (`select sqlite_version()`, node 26.7.0). What went is the `::int`: `count(*)` already
-  // answers an integer here, measured on the same build.
   const issued = await tx.execute<{ sales: number; corrections: number }>(sql`
     select
       count(*) filter (where s.corrects_sale_id is null) as sales,

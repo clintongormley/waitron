@@ -13,17 +13,15 @@ import type { TopSeller, TopSellersInput } from "./types.js";
 
 /**
  * The dashboard's top-N products over a closed business-day range, ranked by summed line quantity,
- * each with its variants nested underneath (spec §6). A filed line carries no catalogue reference,
+ * each with its variants nested underneath. A filed line carries no catalogue reference,
  * so the frozen STAFF names are the buckets: a parent row is every line whose `name` matches —
  * including lines sold as the product itself, with no variant — and a nested row is one non-blank
  * `variant_name` within it. `limit` counts parent rows. The customer-facing text is never read.
  *
- * Same predicates as the VAT roll-up (`aggregateVatByRate`): the node predicate applies only when
- * `nodeId` is given, `activeSalesClause` drops voided sales and F3-canje substitutes, and
+ * Same predicates as the VAT roll-up: voided sales and F3-canje substitutes are dropped, and
  * corrections are NOT excluded — their negative lines net quantity and total down.
  *
- * Invalid inputs are a caller precondition and throw a plain `Error` (matching `business-day.ts`'s
- * validators — no registered error code), before any query runs. Consumed by the `/reports` routes.
+ * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */
 export async function computeTopSellers(
   tx: Transaction,
@@ -38,10 +36,9 @@ export async function computeTopSellers(
     );
   }
   const nodeClause = nodeScopeClause(input.nodeId);
-  // Every sum is taken by the engine over whole-number counts and handed over as TEXT, so a parent's
-  // figures are exact and never re-added here: the total counts whole cents (`rawCentsToDecimal`),
-  // the quantity whole thousandths (`rawThousandthsToDecimal`). One row per (parent, variant group);
-  // the group with no variant name carries the parent's own sales and is not a nested row.
+  // Every sum is taken by the engine over integer counts (cents, thousandths) and handed over as
+  // TEXT, so a parent's figures are exact and never re-added here. One row per (parent, variant
+  // group); the group with no variant name carries the parent's own sales and is not a nested row.
   const { rows } = await tx.execute<{
     name: string;
     parent_quantity: string;

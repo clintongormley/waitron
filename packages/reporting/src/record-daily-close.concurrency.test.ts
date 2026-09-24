@@ -1,32 +1,11 @@
 /**
- * Closes started together leave one row per business day, on one contiguous chain.
+ * Closes started together leave one row per business day, on one contiguous chain. Every case here
+ * starts more than one `recordDailyClose` without awaiting the first; what serialises them is the
+ * venue file's write queue (`withTransaction`, `packages/db/src/tenancy.ts`).
  *
- * Named for what separates it from the sibling `record-daily-close.test.ts`: every case here starts
- * more than one `recordDailyClose` without awaiting the first, where that file awaits each close
- * before the next — it contains no `Promise.all`, and its same-day refusal case says `sequential`
- * in its own name.
- *
- * ## What this suite was, and what converting it cost
- *
- * It ran against real PostgreSQL through `useTemplateDb`, opened one backend per closer, and was
- * written around the `select … for update` on the `daily_close_chain` head row that
- * `recordDailyClose` took. That clause is gone — SQLite has no row locks — and what serialises
- * closers now is the venue file's write queue: `withTransaction` (`packages/db/src/tenancy.ts`)
- * runs its body inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues
- * `begin immediate` / `commit` around it. The mechanism, its measurement and its control in the
- * other direction are recorded once on `racePair` (`packages/catalogue/test/fixtures.ts`).
- *
- * **Two cases did not survive:**
- *
- * 1. `runs its writers on distinct backend processes` — `pg_backend_pid()` has no counterpart and
- *    there are no backends. Nothing now confirms the closers below are genuinely separate callers;
- *    what they are is separate `withTransaction` calls started without awaiting each other.
- * 2. `blocks a second closer while the chain head is locked (the single-writer lock)` — it held the
- *    head row on one connection and asserted SQLSTATE `55P03` from the other's `lock_timeout`.
- *    There is no lock to hold, no second writer and no `lock_timeout`, so the case is deleted
- *    outright rather than reworded. It was one of this file's two proof-by-deletion targets (remove
- *    `.for("update")` and the second closer sails through); that control cannot be re-run, because
- *    the clause it deleted is already deleted.
+ * Weaker than its name: no case holds one closer inside its transaction and checks that a second is
+ * kept out, and nothing confirms the closers are separate callers beyond their being separate
+ * `withTransaction` calls started without awaiting each other.
  */
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -44,10 +23,6 @@ const WRITERS = 10;
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let venue: SeededVenue;
-// A fresh venue per test. On PostgreSQL this had to mint a new TENANT each time, because
-// `daily_closes` was append-only and un-truncatable so nothing could clear it; `useVenueDb`'s reset
-// drops each append-only trigger, empties the table and recreates the trigger from its own stored
-// text (`packages/db/src/testing/venue-db.ts`), so each test starts from an empty database.
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
@@ -104,11 +79,8 @@ describe("recordDailyClose under concurrent closers", () => {
   });
 
   it("assigns every one of many concurrent closes a distinct, gap-free sequence and a valid chain", async () => {
-    // The direction the brief named ("double sequence / duplicate"). Pre-create the head, then
-    // start N closes of DISTINCT business days together — so `daily_closes_business_day_key` does
-    // NOT catch a lost race, and only serialisation keeps the sequence numbers distinct. On
-    // PostgreSQL without the head lock these racers read the same head, computed the same next
-    // sequence and collided on `daily_closes_sequence_key`. Here they queue.
+    // Closes of DISTINCT business days, so `daily_closes_business_day_key` cannot catch a lost race
+    // and only serialisation keeps the sequence numbers distinct.
     await record("2026-08-01", []); // head → sequence 1
 
     const days = Array.from(

@@ -24,12 +24,10 @@ export interface TillReconciliation {
 }
 
 /**
- * The frozen close document stored verbatim in `daily_closes.snapshot` (jsonb) and covered by the
- * close's `entry_hash`. This is the PRECISE snapshot: `close` is the exact `computeDailyClose`
- * output, not the opaque `unknown` the db package's structural `DailyCloseSnapshot` carries (db
- * cannot import reporting — reporting depends on db, not the reverse). Kept structurally compatible
- * with that db interface so Task 3 can insert without a cast: every `Decimal` here is a `string`
- * there, and `DailyClose` is assignable to `unknown`.
+ * The frozen close document stored in `daily_closes.snapshot` and covered by the close's
+ * `entry_hash`. The precise type: `@waitron/db`'s structural `DailyCloseSnapshot` carries `close` as
+ * `unknown`, because db cannot import reporting. Kept assignable to that interface so a close
+ * inserts without a cast.
  */
 export interface DailyCloseSnapshot {
   /** The VAT-exact `computeDailyClose` output (vat summary, cash-up, counts). */
@@ -42,13 +40,9 @@ export interface DailyCloseSnapshot {
 }
 
 /**
- * One till's supplied cash count — the RAW operator input `recordDailyClose` reconciles. The money
- * fields are plain `string`, not `Decimal`: they cross the boundary unvalidated (a till screen, an
- * API body), and `recordDailyClose` is what proves each one is a non-negative money literal —
- * rejecting a negative or non-numeric value with `close.invalid_cash_input` and only then branding it.
- * Typing them `Decimal` here would assert a validation that has not happened yet — precisely the "safe
- * values is a property of the caller, not the code" defect class the house guards against. The
- * validated, canonical figures live on {@link TillReconciliation} (the output), which IS `Decimal`.
+ * One till's supplied cash count — the raw operator input `recordDailyClose` reconciles. The money
+ * fields are plain `string`, not `Decimal`, because nothing has validated them yet;
+ * `recordDailyClose` refuses a negative or non-numeric one with `close.invalid_cash_input`.
  */
 export interface CashCountInput {
   tillId: TillId;
@@ -58,9 +52,8 @@ export interface CashCountInput {
 }
 
 /**
- * The input to `recordDailyClose` (Task 3): the same identity `computeDailyClose` takes, plus the
- * counting actor and the per-till physical cash counts. `closedBy` is an identity person id (plain
- * uuid string — the person schema is a later slice, and the close must not depend on it).
+ * The input to `recordDailyClose`: the same identity `computeDailyClose` takes, plus the counting
+ * actor and the per-till physical cash counts. `closedBy` is an identity person id.
  */
 export interface RecordDailyCloseInput {
   nodeId: NodeId;

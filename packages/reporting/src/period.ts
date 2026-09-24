@@ -16,9 +16,8 @@ export type LiquidationPeriod =
  * The single source of the modelo 303 month/quarter token grammar: "01".."12" → a monthly period,
  * "1T".."4T" → a quarterly one, anything else → `undefined`. The token is trimmed and uppercased
  * first, so " 1t " parses as "1T". ANNUAL is deliberately NOT a token — there is no annual modelo 303
- * file (the annual resumen is modelo 390), so it is never derived from a período string. Both the
- * export route's request screen and the DR303 writer's `formatPeriod` validate through this one
- * function so the accepted set cannot drift between them.
+ * file (the annual resumen is modelo 390). The export route and the DR303 writer's `formatPeriod`
+ * both validate through this function, so the accepted set cannot drift between them.
  */
 export function parsePeriodToken(token: string): LiquidationPeriod | undefined {
   const t = token.trim().toUpperCase();
@@ -29,10 +28,9 @@ export function parsePeriodToken(token: string): LiquidationPeriod | undefined {
 }
 
 /**
- * A bad year/period is a caller precondition — a plain Error (matching business-day.ts's validators,
- * no registered code), thrown BEFORE any query. The year is bounded to four digits for the reason
- * the monthly note recorded: a typo year make_date still accepts (226 AD) matches no rows and returns
- * a plausible-but-EMPTY period (the quiet, worse direction for a fiscal filing).
+ * A bad year/period is a caller precondition — a plain Error, thrown before any query. The year is
+ * bounded to four digits because a typo year (226, 20226) would match no rows and return a
+ * plausible but EMPTY period, the quiet, worse direction for a fiscal filing.
  */
 export function validatePeriod(year: number, period: LiquidationPeriod): void {
   if (!Number.isInteger(year) || year < 1000 || year > 9999) {
@@ -76,18 +74,9 @@ function firstOfMonth(year: number, month: number): string {
  * The half-open civil-date window `[first day of (year, firstMonth), that day + months)` as a
  * predicate on a date-valued SQL expression.
  *
- * Both bounds are computed here and bound as `"YYYY-MM-DD"` strings rather than built in SQL. The
- * expression this replaced was `make_date(...)` and `+ interval '1 month'`, neither of which exists
- * on this engine; the calendar arithmetic moved onto `Date.UTC`, which carries a month past
- * December into the next year the way the interval did. Both sides of every comparison are a civil
- * date in the one fixed `"YYYY-MM-DD"` spelling — `received_on` is stored that way and the output
- * side's `filedDateExpr` is `date(...)`, whose output is that shape — so a string comparison IS a
- * date comparison here.
- *
- * Measured against PGlite 0.5.8 (PostgreSQL 18.3) on 2026-09-22: the 68 (year, period) pairs of
- * four years × twelve months, four quarters and the year produced identical `lo`/`hi` pairs, 0
- * disagreements — 1999, 2024 (a leap year) and 2100 (not one) included. Computing the upper bound
- * as thirty days per month instead disagrees on 49 of the 68, which is the control.
+ * Both sides of every comparison are a civil date in the fixed `"YYYY-MM-DD"` spelling —
+ * `received_on` is stored that way, and SQLite's `date(...)`, which the output side's `filedDate`
+ * uses, returns that shape — so a string comparison is a date comparison here.
  */
 function civilDateWindow(dateExpr: SQL, year: number, firstMonth: number, months: number): SQL {
   const lower = firstOfMonth(year, firstMonth);

@@ -101,15 +101,10 @@ describe("computeCashUp", () => {
   });
 
   it("reads the money columns as counts of whole cents, summed then converted once", async () => {
-    // Written straight to the table as INTEGERS, past `seedTender`'s own decimalToCents, so this
-    // pins what the column holds rather than what the fixture does with it. 12345 + 5 = 12350 cents
-    // is 123.50, and 250 + 0 = 250 cents is 2.50. A query that read the column as euros would
-    // report "12350.00" and "250.00".
-    //
-    // Through the table definition rather than in raw SQL, which is a conversion and not a
-    // loosening: `tenders.id` is supplied by `$defaultFn(newId)` in JavaScript on this engine, so a
-    // raw INSERT naming no id is refused `NOT NULL constraint failed`. The values are still the raw
-    // integer counts, which is what this case is about.
+    // Written as INTEGERS, past `seedTender`'s conversion, so this pins what the column holds.
+    // 12345 + 5 = 12350 cents is 123.50, and 250 + 0 = 250 cents is 2.50; a query that read the
+    // column as euros would report "12350.00" and "250.00". Through the table definition because
+    // `tenders.id` comes from a JavaScript `$defaultFn` that a raw INSERT never reaches.
     const saleId = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: settledNoon,
