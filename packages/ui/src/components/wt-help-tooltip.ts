@@ -66,7 +66,6 @@ export class WtHelpTooltip extends LitElement {
 
   private onToggle(event: ToggleEvent): void {
     this.open = event.newState === "open";
-    // Listens only while this popover is open: added here, removed below or in disconnectedCallback.
     if (this.open) {
       document.addEventListener("keydown", this.onDocumentKeydown, { capture: true });
     } else {
@@ -80,12 +79,9 @@ export class WtHelpTooltip extends LitElement {
   }
 
   private onTriggerClick(event: MouseEvent): void {
-    // popovertarget below makes this button the popover's declared invoker, which is what exempts
-    // it from light-dismiss — without that, the browser closes the popover between pointerdown and
-    // click on every trusted click (proven with three real userEvent.click calls: open stayed true
-    // throughout instead of toggling), so this handler always saw it already closed and reopened
-    // it. Being an invoker also gives the click a native show/hide default action of its own, which
-    // this suppresses so only the logic below runs.
+    // `popovertarget` makes this button the declared invoker, which exempts it from light-dismiss;
+    // otherwise a trusted click closes the popover before this handler runs, and it reopens it. Being
+    // an invoker also gives the click a native toggle of its own, suppressed here.
     event.preventDefault();
     if (this.popup.matches(":popover-open")) {
       this.popup.hidePopover();
@@ -96,18 +92,9 @@ export class WtHelpTooltip extends LitElement {
     this.positionTooltip();
   }
 
-  /** Escape closes only this tooltip, never an enclosing dismissible dialog too. A REAL click on
-   * this button grants user activation, and with that the browser's own popover Escape-dismiss
-   * already stays scoped to just the topmost popover on its own — a dismissible <wt-dialog> around
-   * a real-click-opened tooltip stays open on Escape even with this listener removed entirely (see
-   * wt-help-tooltip.test.ts's real-click nested-dialog test). What actually needs this listener is
-   * a popover shown WITHOUT a real click on its own trigger — e.g. a synthetic click driven by
-   * another component, or a direct showPopover() call — where focus never lands inside this
-   * component at all, so a keydown bound to the button or the popup (as wt-row-actions binds its
-   * own equivalent guard) never sees the key: a bare Escape there closes both the popover and the
-   * enclosing dialog in one press (that file's guard test proves this by deletion). This has to be
-   * a CAPTURE-phase document listener rather than a per-element one for exactly that reason; it is
-   * attached only while the popover is open (see onToggle). */
+  /** Escape closes only this tooltip, never an enclosing dismissible dialog too. A popover opened
+   * without a real click on its trigger never has focus inside this component, so only a
+   * capture-phase document listener sees the key (wt-help-tooltip.guard.test.ts). */
   private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -116,9 +103,7 @@ export class WtHelpTooltip extends LitElement {
     this.trigger.focus();
   };
 
-  /** Centre under the trigger, then clamp to the viewport so an edge-anchored tooltip stays readable.
-   * Pixel margins live here rather than in CSS because the arithmetic is viewport-relative; this is
-   * the same shape as wt-row-actions. */
+  /** Pixel margins live here rather than in CSS because the arithmetic is viewport-relative. */
   private positionTooltip(): void {
     const anchor = this.trigger.getBoundingClientRect();
     const popup = this.popup.getBoundingClientRect();

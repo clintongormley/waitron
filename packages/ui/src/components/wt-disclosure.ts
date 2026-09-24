@@ -5,21 +5,11 @@ import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
 /**
- * A collapsible section: a header button showing a heading and an optional one-line summary, over a
- * slotted body that hides when collapsed. The product editor folds its optional sections (Kitchen,
- * Descriptors, Nutritional info) behind these.
- *
- * `has-error` is the invariant that makes this more than a plain toggle: a section holding a
- * validation error must not be hidden, so while `has-error` is set the section is forced open and
- * the header click is inert — a person cannot collapse a section away from the error they still have
- * to fix.
+ * A section holding a validation error must not be hidden: while `has-error` is set the section is
+ * forced open and the header click is inert.
  */
 @customElement("wt-disclosure")
 export class WtDisclosure extends LitElement {
-  // Every interactive primitive delegates focus, so `.focus()` on the host reaches the control
-  // inside — here the header button (design-system.md, "Focus delegation"). Nothing calls it on a
-  // disclosure today: the rule is here so the first consumer that does is not met by a host that
-  // takes focus and leaves the button untouched.
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [
@@ -103,20 +93,15 @@ export class WtDisclosure extends LitElement {
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
-  // Ties the header button to the body region it controls, so assistive technology announces the
-  // relationship. Per-instance so several disclosures on one page never share an id.
   private readonly bodyId = uniqueId("wt-disclosure-body");
 
   override willUpdate(changed: PropertyValues<this>): void {
-    // An error must never be hidden — surface it by opening the section as soon as has-error is set.
-    // A cleared error leaves the section OPEN and only makes the header live again: collapsing it
-    // the moment the last error in it is fixed would hide the field being typed into.
+    // A cleared error leaves the section open: collapsing it the moment the last error is fixed would
+    // hide the field being typed into.
     if (changed.has("hasError") && this.hasError) this.open = true;
   }
 
   private onToggle(event: Event): void {
-    // While has-error holds the section open, the header is inert — the person has to keep the error
-    // in view until they resolve it.
     if (this.hasError) return;
     event.stopPropagation();
     this.open = !this.open;

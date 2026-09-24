@@ -7,10 +7,8 @@ import "./wt-dialog.js";
 
 afterEach(cleanup);
 
-// First in this file on purpose: it opens the tooltip with a synthetic click, so no real click has
-// happened in this document yet. That is the case the document keydown handler exists for — once a
-// real click has granted user activation, the browser's own popover Escape-dismiss closes the
-// tooltip anyway and the handler's work is invisible.
+// First in this file on purpose: no real click may have granted user activation yet, or the browser's
+// own popover Escape-dismiss closes the tooltip and the component's handler goes unexercised.
 test("Escape closes a tooltip that was opened without a real click, moves focus to its button and goes no further", async () => {
   const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
   const button = el.shadowRoot!.querySelector("button")!;
@@ -37,12 +35,7 @@ test("Escape closes a tooltip that was opened without a real click, moves focus 
 });
 
 test("toggles closed on a second click and back open on a third", async () => {
-  // A real click triggers an "auto" popover's light-dismiss between pointerdown and click UNLESS
-  // the trigger is the popover's declared invoker (popovertarget) — without that, onTriggerClick
-  // always observed the popover already closed and reopened it, so a second tap on "?" just made
-  // the bubble flash instead of closing it. Proven with three real userEvent.click calls (a
-  // synthetic button.click() does not exercise light-dismiss at all, which is why the other tests
-  // in this file that use it would not have caught this).
+  // Real clicks: a synthetic button.click() does not exercise light-dismiss.
   const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
   const button = el.shadowRoot!.querySelector("button")!;
   const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -66,8 +59,6 @@ test("opens explanatory content from an accessible question-mark button", async 
   expect(button.textContent?.trim()).toBe("?");
   expect(button.getAttribute("aria-label")).toBe("About email addresses");
   expect(button.getAttribute("aria-expanded")).toBe("false");
-  // The popover element is now always in the DOM (that's what lets showPopover() measure it
-  // before the first paint) — closed is ":popover-open" being false, not the element being absent.
   expect(tip.matches(":popover-open")).toBe(false);
 
   await userEvent.click(button);
@@ -93,9 +84,7 @@ test("closes when the user clicks anywhere outside it", async () => {
   const outside = document.createElement("button");
   outside.textContent = "Outside";
   host.append(outside);
-  // A native "auto" popover's own light-dismiss only reacts to a real, trusted click — a
-  // synthetic dispatchEvent would not exercise it, so this goes through userEvent like
-  // wt-row-actions' equivalent test.
+  // Light-dismiss reacts only to a trusted click.
   await userEvent.click(outside);
   expect(tip.matches(":popover-open")).toBe(false);
 });
@@ -115,9 +104,7 @@ test("Escape closes it and returns focus to its button", async () => {
   const el = await mount('<wt-help-tooltip aria-label="Help">Explanation</wt-help-tooltip>');
   const button = el.shadowRoot!.querySelector("button")!;
   const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-  // A real click, not the synthetic button.click() the positioning/aria tests below use, so the
-  // trigger is actually focused — Escape is a real keypress and the browser delivers it to
-  // whatever has focus.
+  // A real click, so the trigger has focus when the Escape arrives.
   await userEvent.click(button);
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
 
@@ -146,10 +133,8 @@ test("keeps an edge-anchored tooltip inside the viewport", async () => {
   await userEvent.click(edgeButton);
   await vi.waitFor(() => expect(edgeTip.matches(":popover-open")).toBe(true));
   const box = edgeTip.getBoundingClientRect();
-  // The exact 8px margin from positionTooltip(), not a bare "inside the window" check: a
-  // shrink-to-fit fixed box WRAPS narrower at the viewport edge instead of overflowing, so
-  // `right <= innerWidth` alone holds even with the clamp deleted entirely. Pinning the exact
-  // margin is what catches that.
+  // The 8px margin, not merely "inside the window": a shrink-to-fit box wraps narrower at the edge,
+  // so `right <= innerWidth` holds without any clamp.
   expect(box.right).toBeLessThanOrEqual(innerWidth - 8);
   expect(box.left).toBeGreaterThanOrEqual(8);
 
@@ -218,23 +203,15 @@ test("names the tooltip to its trigger while open", async () => {
   const button = el.shadowRoot!.querySelector("button")!;
   const tip = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
   await userEvent.click(button);
-  // this.open only flips once the popover's asynchronous "toggle" event fires, so a single
-  // updateComplete right after the click can race it — vi.waitFor polls past that race instead of
-  // taking one snapshot, and fails on its own timeout rather than hanging on a missed event.
+  // `open` flips on the asynchronous "toggle" event, which one updateComplete can miss.
   await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("true"));
   expect(tip.id).not.toBe("");
-  // The "wt-help-tooltip-N" shape, not just non-emptiness: uniqueId() always appends a "-N"
-  // counter, so emptying the prefix still leaves a non-empty id such as "-3".
+  // The whole shape: uniqueId() appends "-N", so an emptied prefix still leaves a non-empty id.
   expect(tip.id).toMatch(/^wt-help-tooltip-\d+$/);
   expect(button.getAttribute("aria-describedby")).toBe(tip.id);
 });
 
 test("closing a tooltip nested in an open modal dialog leaves the dialog open", async () => {
-  // The setup wizard now puts every screen inside a modal <dialog> (showModal()), so every
-  // tooltip in it is a popover nested inside a top-layer dialog — a case task-2 (the dialog) and
-  // task-3 (this popover) each land without the other in view. Popovers and modal dialogs both
-  // live in the browser's top layer, and Escape is meant to close only the topmost one; this
-  // proves that holds for this specific nesting rather than assuming it from the spec.
   const el = await mount(
     '<wt-dialog open heading="Venue"><wt-help-tooltip aria-label="Help with province">Body</wt-help-tooltip></wt-dialog>',
   );
@@ -249,16 +226,10 @@ test("closing a tooltip nested in an open modal dialog leaves the dialog open", 
   await tooltip.updateComplete;
   const button = tooltip.shadowRoot!.querySelector("button")!;
   const tip = tooltip.shadowRoot!.querySelector("[popover]") as HTMLElement;
-  // A real click so the trigger is actually focused. With a real click, a bare Escape already
-  // closes only the popover here even with wt-help-tooltip's own document-keydown guard removed
-  // entirely — a real click grants user activation, and the browser's own popover Escape-dismiss
-  // already respects the top-layer ordering in that case. The guard test at the top of this file
-  // is the one with teeth for that handler: it needs no real click anywhere to have happened yet,
-  // which is why it has to run first.
+  // A real click. The case without one, which needs the component's own Escape handler, is in
+  // wt-help-tooltip.guard.test.ts.
   await userEvent.click(button);
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
-  // The popover's own bounds stay on screen even nested inside the dialog's top-layer stacking
-  // context — the same clamp exercised in the edge-anchored test above.
   const box = tip.getBoundingClientRect();
   expect(box.right).toBeLessThanOrEqual(window.innerWidth);
   expect(box.left).toBeGreaterThanOrEqual(0);

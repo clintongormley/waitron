@@ -47,23 +47,14 @@ test("associates the heading with the dialog so it has an accessible name", asyn
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
   const heading = el.shadowRoot!.querySelector("h2")!;
   expect(heading.id).not.toBe("");
-  // Pins down the actual "wt-dialog-heading-N" shape, not just non-emptiness: uniqueId() always
-  // appends a "-N" counter suffix, so a mutant that empties out just the "wt-dialog-heading"
-  // prefix argument still produces a non-empty id (e.g. "-3") and would slip past a bare
-  // `.not.toBe("")` check.
+  // The whole shape: uniqueId() appends "-N", so an emptied prefix still leaves a non-empty id.
   expect(heading.id).toMatch(/^wt-dialog-heading-\d+$/);
   expect(dialog.getAttribute("aria-labelledby")).toBe(heading.id);
 });
 
 test("declares an explicit dialog role, not just the native element's implicit one", async () => {
-  // A native <dialog> already gets an implicit ARIA role of "dialog" once shown modally, so this
-  // looks redundant — but it isn't purely decorative. axe-core's "aria-dialog-name" rule (the one
-  // that actually verifies aria-labelledby/aria-label above) only runs against elements carrying
-  // an *explicit* role="dialog"/"alertdialog" attribute; it does not infer the implicit role of a
-  // bare <dialog>. Confirmed empirically: with this attribute removed, deleting
-  // aria-labelledby/aria-label from a dialog produced zero axe violations, even though the dialog
-  // was left with no accessible name at all — see wt-dialog.a11y.test.ts and
-  // docs/developers/design-system.md. Losing this attribute silently blinds that test.
+  // axe's aria-dialog-name rule checks only an explicit role, so without it wt-dialog.a11y.test.ts
+  // cannot see a dialog with no accessible name.
   const el = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
   const dialog = el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
   expect(dialog.getAttribute("role")).toBe("dialog");
@@ -90,9 +81,6 @@ test("emits wt-close when the native dialog closes", async () => {
 });
 
 test("wt-close bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
-  // See wt-input.test.ts's identical-purpose test for why the nested-shadow-root + document
-  // listener is required to make bubbles and composed both load-bearing (a light-DOM mount()
-  // can't distinguish "composed: false" from "composed: true" at all).
   const el = (await mountInShadowRoot("<wt-dialog>body</wt-dialog>")) as Openable;
   el.open = true;
   await el.updateComplete;
@@ -106,11 +94,6 @@ test("wt-close bubbles and crosses shadow boundaries, so an ancestor outside a w
 });
 
 test("setting open = false closes the dialog via the reactive property path", async () => {
-  // Distinct from "emits wt-close when the native dialog closes" above: that test only exercises
-  // onClose()'s own path (native <dialog> close event -> this.open = false). This drives the
-  // reverse direction — setting `open = false` directly — which is what updated()'s
-  // `if (!this.open && this.dialog.open) this.dialog.close()` guard exists for, and which no
-  // other test in this file reaches.
   const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
   el.open = true;
   await el.updateComplete;
@@ -174,11 +157,7 @@ test("paints its shadow from the shadow-2 token", async () => {
 });
 
 test("backdrop paints from the scrim token", async () => {
-  // The backdrop pseudo-element only exists once the dialog is a genuine
-  // modal (showModal(), not just `open`), so this must open it first.
-  // getComputedStyle(el, "::backdrop") is a real, working read in this
-  // browser-mode (Playwright/Chromium) test setup — confirmed empirically
-  // before writing this test.
+  // ::backdrop exists only once the dialog is modal.
   const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable;
   el.open = true;
   await el.updateComplete;

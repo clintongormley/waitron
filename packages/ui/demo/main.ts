@@ -22,11 +22,8 @@ import "../src/components/wt-toast.js";
 registerIcons({
   check: "M2 8 L6 12 L14 4",
   cart: "M1 2 h3 l2 8 h7 l2 -6 H5",
-  // The same centred cross apps/dashboard/src/icons.ts registers for the round add button.
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
-  // wt-row-actions requires its consuming app to register this — an unregistered name renders
-  // nothing, leaving its trigger a blank button (apps/dashboard/src/icons.ts registers the same
-  // path for the real app).
+  // An unregistered icon renders nothing, leaving wt-row-actions' trigger a blank button.
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
   "chevron-down": "M3 6 L8 11 L13 6",
@@ -225,9 +222,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     },
   ];
 
-  // A second, independent wt-data-table exercising the toolbar: search, a column filter, a
-  // chosen starting sort, and a remembered view. viewKey is per-theme so the light and dark
-  // panels (both mounted on this page) don't share one session-storage entry.
+  // viewKey is per theme so the light and dark panels don't share one session-storage entry.
   const searchTable =
     el.querySelector<WtDataTable<{ name: string; category: string; price: number }>>(
       ".demo-search-table",
@@ -309,12 +304,9 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   for (const price of el.querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>(
     "wt-price-input",
   )) {
-    // The trailing unit button cycles through a few units, so both the wt-unit-click event and the
-    // button itself are visibly exercised (the real editor opens a unit picker here instead).
     price.addEventListener("wt-unit-click", () => {
       price.unit = PRICE_UNITS[(PRICE_UNITS.indexOf(price.unit) + 1) % PRICE_UNITS.length];
     });
-    // Typing clears the field's error, the same way the member modal clears its name error.
     price.addEventListener("wt-change", () => {
       price.error = "";
     });

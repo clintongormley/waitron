@@ -1,26 +1,10 @@
-// Derives every generated brand file from the two hand-editable sources beside it,
-// waitron-mark.svg and waitron-wordmark.svg:
-//
-//   waitron-lockup.svg          mark + wordmark, composed
-//   public/favicon.svg          mark on a square canvas, with a dark-mode rule
-//   public/favicon.ico          16/32/48 rasters of the mark, PNG-in-ICO
-//   public/apple-touch-icon.png 180x180 of the mark over an opaque ground
-//
-// The geometry is never copied by hand: every output above reads the same source body, so redrawing
-// the mark is one edit plus one command rather than four hand-edits kept in step. The outputs are
-// COMMITTED, though, and nothing checks a committed output against its source — edit a source, skip
-// this script, and the whole gate stays green on stale derivatives. Run it after editing either
-// source.
+// Writes every derived brand file from waitron-mark.svg and waitron-wordmark.svg. The outputs are
+// committed and nothing checks them against their sources, so run this after editing either source:
 //
 //   node packages/ui/brand/build-icons.mjs
 //
-// Hand-run, not a build step: Inkscape is not a workspace dependency, so nothing in CI or the hook
-// can call it. Set INKSCAPE to point at a binary that is not on PATH.
-//
-// `Buffer` and `process` are imported rather than taken as globals because this file matches none of
-// the globs in eslint.config.js's scripts block (apps/server/scripts, packages/provisioning/scripts,
-// scripts/) — it therefore has no globals at all, and importing them is what keeps it lint-clean
-// without widening that block, whose narrow grant is deliberate.
+// Set INKSCAPE to point at a binary that is not on PATH. `Buffer` and `process` are imported because
+// no eslint.config.js block grants this file Node globals.
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -36,12 +20,8 @@ const MARK_BLUE_DARK = "#4c8dff"; // mirrors --wt-color-primary dark; hand-kept 
 const ICON_CANVAS = 136; // mark is 124.64 x 117.09, so this leaves an even margin on the long axis
 
 /**
- * A source SVG's drawable body, its box, and the colour its root declares.
- *
- * The body must carry NO fill of its own: a `fill` presentation attribute on an inner element beats
- * an inherited CSS rule, so a body that painted itself would make the favicon's dark-mode rule inert
- * — which is exactly what happened once. That is why the sources put their colour on the root <svg>
- * and this refuses a body that has taken it back.
+ * The body must carry no fill of its own: a `fill` attribute on an inner element beats an inherited
+ * CSS rule, so it would make the favicon's dark-mode rule inert.
  */
 function readSource(name) {
   const svg = readFileSync(join(here, name), "utf8");

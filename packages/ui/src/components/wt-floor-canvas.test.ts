@@ -12,8 +12,7 @@ interface Canvas extends HTMLElement {
   editable: boolean;
   gridSnap: boolean;
   copy: Partial<FloorCanvasCopy>;
-  // Declared @state() private on the component; named here so a test can drive and read the two
-  // pieces of internal placement bookkeeping the rendered output is built from.
+  // Private state on the component, exposed here so a test can drive and read it.
   selectedId: string | null;
   draft: { id: string; posX: number; posY: number } | null;
   updateComplete: Promise<unknown>;
@@ -323,8 +322,6 @@ test("a table's accessible name comes from its occupancy content, not an aria-la
     oneTable("t1", { label: "4", state: "open-tab", tabTotal: "47.50", pendingToServe: 3 }),
   ]);
   const btn = tokenEl(el, "t1");
-  // An aria-label here would flatten the name to a bare label; FP-1's card carries none, so the name
-  // is computed from the token content — which is what conveys the occupancy state to a screen reader.
   expect(btn.hasAttribute("aria-label")).toBe(false);
   const token = btn.querySelector("wt-table-token")!;
   expect(token.shadowRoot!.querySelector(".label")!.textContent!.trim()).toBe("4");
@@ -423,8 +420,6 @@ test("an arrow-key nudge at the edge stays clamped in range", async () => {
 });
 
 test("a second pointerdown mid-drag is ignored, so the first drag still commits", async () => {
-  // Two tables: pointer 1 owns a drag on t1; a stray pointer 2 pressing t2 mid-gesture must NOT seize
-  // `#drag` — otherwise pointer 1's pointerup no longer matches the owner and its drop is lost entirely.
   const el = await mountCanvas(
     [oneTable("t1", { posX: 500, posY: 500 }), oneTable("t2", { posX: 200, posY: 200 })],
     { editable: true, gridSnap: true },
@@ -518,8 +513,6 @@ test("a pointercancel aborts the drag without committing a placement", async () 
 });
 
 test("the canvas chrome follows a --wt-* token override on the host", async () => {
-  // The design-system contract for a new primitive: a host token override reaches the shadow chrome.
-  // The `.canvas` border is `1px solid var(--wt-color-border)`, so overriding that token repaints it.
   const el = await mountCanvas([oneTable("t1")]);
   host.style.setProperty("--wt-color-border", "rgb(9, 8, 7)");
   const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!;

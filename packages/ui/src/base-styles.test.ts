@@ -4,9 +4,7 @@ import { cleanup, mount } from "./test-helpers.js";
 
 afterEach(cleanup);
 
-// Every shared stylesheet this module exports must read colour from `--wt-*` tokens, never a literal
-// hex — a hardcoded chrome colour would not follow the user's theme. Parameterised so a new shared
-// stylesheet added here is covered by naming it in the table.
+// Checks for hex literals only, and only in the stylesheets named in this table.
 test.each([
   ["selectStyles", selectStyles],
   ["floorTrayStyles", floorTrayStyles],

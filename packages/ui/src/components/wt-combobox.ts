@@ -186,8 +186,7 @@ export class WtCombobox extends LitElement {
       stable semantic id instead of a generated one. It is NOT a native form association — no
       primitive in this design system has one (design-system.md → Forms). */
   @property() name = "";
-  // wt-button and wt-dialog forward the host's own aria-label the same way: it is the accessible
-  // name whenever there is no visible `label` to point aria-labelledby at.
+  // The host's aria-label is the accessible name whenever there is no visible `label`.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
@@ -261,11 +260,9 @@ export class WtCombobox extends LitElement {
     return this.options.find((o) => o.value === this.value)?.label ?? "";
   }
 
-  // Hiding the panel does NOT move focus out of the search box. Measured in Chromium 2026-09-13:
-  // after hidePopover() has set display: none, shadowRoot.activeElement is still .search, and the
-  // next keydown is delivered there before the browser reconciles focus. So closing the panel in
-  // updated() does not by itself stop a disabled control being changed by keyboard — this guard
-  // does, and the "disabling an open panel" test goes red without it.
+  // Refused while disabled rather than trusting that closing the panel on disable stops a keyboard
+  // change: whether a keystroke can still reach the hidden panel's search box is unsettled (see the
+  // "disabling an open panel" entry in docs/backlog.md).
   private commitSelection(optionValue: string, sourceEvent: Event): void {
     if (this.disabled) return;
     if (this.multiple) {
@@ -281,7 +278,7 @@ export class WtCombobox extends LitElement {
   }
 
   /** Announces the typed text; creating the option is the consumer's, never this component's. */
-  // Guarded for the same measured reason as commitSelection: the hidden panel keeps keyboard focus.
+  // Guarded for the same reason as commitSelection.
   private addNew(sourceEvent: Event): void {
     if (this.disabled) return;
     sourceEvent.stopPropagation();
@@ -364,10 +361,8 @@ export class WtCombobox extends LitElement {
       // Opening synchronously makes its dimensions available before the first paint.
       this.popup.showPopover();
       this.searchInput.focus();
-      // Clearing the search changes which rows the panel holds, so it has to be measured against
-      // the rendered list rather than the one the previous filter left behind. The await resolves
-      // on a microtask, still ahead of the frame this click paints — pinned by the test named
-      // "positions the popup against the trigger before the first painted frame".
+      // Clearing the search changes the rows, so measure the re-rendered list. The await resolves on
+      // a microtask, still ahead of the frame this click paints.
       await this.updateComplete;
       this.positionPopup();
     }
@@ -380,8 +375,7 @@ export class WtCombobox extends LitElement {
     this.popup.style.width = `${anchor.width}px`;
     const popup = this.popup.getBoundingClientRect();
     // Left-aligned with the trigger, pulled left only far enough to keep the panel inside the
-    // viewport's 8px right gutter — never pushed RIGHT of its trigger. (wt-row-actions floors this
-    // at 8px instead, because its popup is RIGHT-aligned and so can compute a negative left.)
+    // viewport's 8px right gutter.
     const maxLeft = Math.max(0, innerWidth - popup.width - 8);
     this.popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
     this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;

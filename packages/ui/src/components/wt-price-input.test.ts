@@ -50,9 +50,6 @@ test("emits wt-change with the typed value", async () => {
 });
 
 test("wt-change bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
-  // See wt-input.test.ts's identical-purpose test: only a nested shadow root plus a document
-  // listener makes both `bubbles` and `composed` load-bearing, so a mutant flipping either to
-  // false is caught.
   const el = await mountInShadowRoot("<wt-price-input></wt-price-input>");
   let received: CustomEvent<{ value: string }> | undefined;
   document.addEventListener(

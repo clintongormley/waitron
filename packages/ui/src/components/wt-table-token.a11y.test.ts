@@ -12,7 +12,6 @@ interface Token extends HTMLElement {
   updateComplete: Promise<unknown>;
 }
 
-/** A fully-typed floor table; overrides tweak the occupancy/status fields a case exercises. */
 function tableData(overrides: Partial<FloorTable> = {}): FloorTable {
   return {
     id: "t1",
@@ -30,8 +29,7 @@ function tableData(overrides: Partial<FloorTable> = {}): FloorTable {
   };
 }
 
-/** Mounts a themed token and assigns its `.table`/`.labels` (the element renders `nothing` until the
- *  table prop is set, so a second `updateComplete` is awaited after assignment). */
+/** The token renders nothing until `.table` is set, hence the second `updateComplete`. */
 async function mountToken(t: FloorTable, theme: "light" | "dark"): Promise<Token> {
   const el = (await mountThemed("<wt-table-token></wt-table-token>", theme)) as Token;
   el.table = t;
@@ -40,12 +38,8 @@ async function mountToken(t: FloorTable, theme: "light" | "dark"): Promise<Token
   return el;
 }
 
-// The canvas a11y suite covers the token AS DRAWN ON THE MAP; this is the primitive-specific check the
-// canvas suite does not replace — the token contrast/labelling on its own, across both themes.
 describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (theme) => {
   test("a rich open-tab token (total + to-serve badge + status badge) is accessible", async () => {
-    // The busiest variant: state accent, running total, the to-serve badge, and a DATA-coloured manual
-    // status badge (whose arbitrary colour rides an inline border/swatch, never the text background).
     await mountToken(
       tableData({
         state: "open-tab",
@@ -69,8 +63,6 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
-  // KDS order-timing alerts (design §7.3, fix round 1): the map/canvas token's order-timing accent +
-  // forgotten marker, across both themes — the a11y case the LIST-card suite cannot cover.
   test("a warm-band token (steady accent, no marker) is accessible", async () => {
     await mountToken(tableData({ state: "open-tab", timingBand: "warm" }), theme);
     await expectNoA11yViolations(host);

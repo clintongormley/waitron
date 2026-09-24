@@ -32,9 +32,7 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  // No `heading` — the accessible name has to come from the forwarded aria-label fallback
-  // instead. This was one of the real ARIA defects: without it, an open heading-less dialog has
-  // no accessible name at all.
+  // No `heading`, so the accessible name must come from the forwarded aria-label.
   test("open, heading-less, named via aria-label", async () => {
     const el = (await mountThemed(
       '<wt-dialog aria-label="Log out">Are you sure you want to leave?</wt-dialog>',
