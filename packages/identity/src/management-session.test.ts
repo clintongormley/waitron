@@ -58,12 +58,33 @@ describe("management session lifecycle", () => {
       Date.parse(before.expiresAt) + 9 * 60_000,
     );
   });
+  it("an ordinary read stores the new last-seen time on the session's own row", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const aged = minutesAgo(10);
+    await run((tx) => tx.execute(agedTo(aged, session.token)));
+    await run((tx) => resolveManagementSession(tx, session.token));
+    const [row] = (
+      await suite.db.execute<{ last_seen_at: string }>(
+        sql`select last_seen_at from management_sessions where person_id = ${personId}`,
+      )
+    ).rows;
+    expect(Date.parse(row!.last_seen_at)).toBeGreaterThan(Date.parse(aged) + 9 * 60_000);
+  });
+
   it("starts and resolves a session, returning the person's role and locale", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.token));
+    const [row] = (
+      await suite.db.execute<{ id: string }>(
+        sql`select id from management_sessions where person_id = ${personId}`,
+      )
+    ).rows;
     // `locale` is null for a seedPerson with no preference set; expiry is issued by the server.
+    // `sessionRowId` is the row's id, never the token, so a caller can name the row directly.
     expect(resolved).toEqual({
+      sessionRowId: row!.id,
       personId,
       role: "manager",
       email: null,

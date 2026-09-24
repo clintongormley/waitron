@@ -53,23 +53,25 @@ export async function startManagementSession(
  * status check below refuses a status that is not `active`);
  * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;
  * a pending person → `management_session.required`.
- * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role plus
- * their stored UI `locale` (`persons.locale`, `null` when they have set no preference).
+ * On success it bumps `last_seen_at` (the sliding window) and returns the session's row id, the
+ * person's current role and their stored UI `locale` (`persons.locale`, `null` when they have set no
+ * preference).
  */
 export async function resolveManagementSession(
   tx: Transaction,
   token: string,
   options: { touch?: boolean } = {},
 ): Promise<{
+  sessionRowId: string;
   personId: string;
   role: PersonRoleValue;
   email: string | null;
   locale: string | null;
   expiresAt: string;
 }> {
-  const tokenHash = hashSessionToken(token);
   const [row] = await tx
     .select({
+      sessionRowId: managementSessions.id,
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
       role: persons.role,
@@ -79,7 +81,12 @@ export async function resolveManagementSession(
     })
     .from(managementSessions)
     .innerJoin(persons, eq(persons.id, managementSessions.personId))
-    .where(and(eq(managementSessions.tokenHash, tokenHash), isNull(managementSessions.endedAt)));
+    .where(
+      and(
+        eq(managementSessions.tokenHash, hashSessionToken(token)),
+        isNull(managementSessions.endedAt),
+      ),
+    );
   if (row === undefined) throw new AppError("management_session.required", {});
   if (Date.now() - Date.parse(row.lastSeenAt) > IDLE_TIMEOUT_MS) {
     throw new AppError("management_session.expired", {});
@@ -93,9 +100,10 @@ export async function resolveManagementSession(
     await tx
       .update(managementSessions)
       .set({ lastSeenAt: nowIso() })
-      .where(and(eq(managementSessions.tokenHash, tokenHash), isNull(managementSessions.endedAt)));
+      .where(and(eq(managementSessions.id, row.sessionRowId), isNull(managementSessions.endedAt)));
   }
   return {
+    sessionRowId: row.sessionRowId,
     personId: row.personId,
     role: row.role as PersonRoleValue,
     email: row.email,
