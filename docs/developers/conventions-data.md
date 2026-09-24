@@ -1574,7 +1574,8 @@ no user-defined SQL functions at all. Kept as one dated sentence because the inc
 recognising if it recurs in another form. On 2026-09-12 a restore rebuilt an index with an empty
 `search_path` and the populated-image restore failed with `media_text_config` missing, until the
 media search functions named their schema as `public.media_text_config`. That function no longer
-exists — `packages/media/src/images.ts` records what replaced it.
+exists: image search now scores and filters in JavaScript (`listImages`,
+`packages/media/src/images.ts`).
 
 ## Default optional input only when it is absent
 
