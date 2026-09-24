@@ -210,6 +210,13 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
+     * The container's start-up program was given arguments, which it never takes: `docker compose
+     * run app <command>` appends `<command>` to it. No params: the arguments are operator input.
+     * `runEntry` (`node-entry.ts`) prints the first and a count of the rest on stdout, and never
+     * writes them to the recovery state.
+     */
+    "server.entry_arguments_refused": Record<string, never>;
+    /**
      * The cluster never accepted a connection within a bounded wait — the database is down, still
      * starting, or reachable at a different address. NOTHING RAISES IT TODAY: the storage switch
      * deleted both the connection retry this described (`waitForPostgres`) and the networked

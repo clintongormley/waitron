@@ -15,6 +15,7 @@ type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<vo
 
 function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
   return {
+    args: [] as readonly string[],
     baseEnv: {},
     stateDir: "/state",
     venueDir: "/venue",
@@ -35,7 +36,121 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
   };
 }
 
+/** A state volume holding one `recovery.json`, so consecutive starts see each other's writes. */
+function recoveryVolume(initial: RecoveryState) {
+  let stored = initial;
+  return {
+    current: () => stored,
+    deps: {
+      readRecoveryState: vi.fn(() => Promise.resolve(stored)),
+      writeRecoveryState: vi.fn((_stateDir: string, next: RecoveryState) => {
+        stored = next;
+        return Promise.resolve();
+      }),
+    },
+  };
+}
+
 describe("runEntry", () => {
+  it("refuses ANY argument before it reads or writes the counter or opens the venue folder", async () => {
+    const reportFailure = vi.fn();
+    const d = deps({
+      args: ["/app/bin-restore.js", "--passphrase", "SENTINEL_SECRET"],
+      reportFailure,
+      runStagedRestore: vi.fn(() => Promise.resolve(false)),
+    });
+    await expect(runEntry(d)).rejects.toMatchObject({ code: "server.entry_arguments_refused" });
+    expect(d.readRecoveryState).not.toHaveBeenCalled();
+    expect(d.writeRecoveryState).not.toHaveBeenCalled();
+    expect(d.runStagedRestore).not.toHaveBeenCalled();
+    expect(d.assertNotAhead).not.toHaveBeenCalled();
+    expect(d.loadBoxEnv).not.toHaveBeenCalled();
+    expect(d.startServer).not.toHaveBeenCalled();
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+    const printed = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(printed).toContain("server.entry_arguments_refused");
+    expect(printed).toContain("/app/bin-restore.js");
+    expect(printed).toContain("and 2 more arguments, not shown");
+    expect(printed).not.toContain("--passphrase");
+    expect(printed).not.toContain("SENTINEL_SECRET");
+    expect(printed).toContain("docker compose run --rm --entrypoint node app /app/");
+  });
+
+  it("names the count of arguments after the first in the singular, and omits it when there are none", async () => {
+    for (const [args, expected] of [
+      [["sh"], "was given: sh\n"],
+      [["sh", "-c"], "was given: sh and 1 more argument, not shown\n"],
+    ] as const) {
+      const reportFailure = vi.fn();
+      await expect(runEntry(deps({ args: [...args], reportFailure }))).rejects.toMatchObject({
+        code: "server.entry_arguments_refused",
+      });
+      expect(String(reportFailure.mock.calls[0]?.[0])).toContain(expected);
+    }
+  });
+
+  it("refuses an argument at the recovery level too, rather than serving the page", async () => {
+    const d = deps({
+      args: ["sh"],
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+    });
+    await expect(runEntry(d)).rejects.toMatchObject({ code: "server.entry_arguments_refused" });
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("leaves the counter as it was when another process holds the venue folder, however often", async () => {
+    // Already one real failure on the books, so a refusal that counted would reach the recovery
+    // level on the second attempt, and one that reset to FRESH would lose the real failure.
+    const before: RecoveryState = {
+      failures: 1,
+      level: "normal",
+      lastErrorCode: "migrations.set_missing",
+      lastFailureAt: "2026-09-20T10:00:00.000Z",
+    };
+    const volume = recoveryVolume(before);
+    const inUse = () =>
+      Promise.reject(new AppError("provisioning.database_in_use", { database: "/venue" }));
+    for (const refusing of [
+      { runStagedRestore: vi.fn(inUse) },
+      { assertNotAhead: vi.fn(inUse) },
+      { startServer: vi.fn(inUse) },
+    ]) {
+      const d = deps({ ...volume.deps, ...refusing });
+      await expect(runEntry(d)).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+      expect(volume.current()).toEqual(before);
+    }
+
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    const d = deps({ ...volume.deps, startServer });
+    await runEntry(d);
+    expect(startServer).toHaveBeenCalled();
+    expect(d.serveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("still counts a boot that fails for any other reason, with its code", async () => {
+    const volume = recoveryVolume({ ...FRESH, failures: 1, lastErrorCode: "unknown" });
+    await expect(
+      runEntry(
+        deps({
+          ...volume.deps,
+          startServer: vi.fn(() =>
+            Promise.reject(
+              new AppError("migrations.set_missing", { name: "core", folder: "/app/drizzle" }),
+            ),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "migrations.set_missing" });
+    expect(volume.current()).toMatchObject({
+      failures: 2,
+      lastErrorCode: "migrations.set_missing",
+    });
+  });
+
   it("runs a staged restore over the VENUE DIRECTORY, before loading box identity", async () => {
     const order: string[] = [];
     await runEntry(

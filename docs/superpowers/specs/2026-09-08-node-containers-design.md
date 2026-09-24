@@ -447,7 +447,9 @@ last failure's error code + timestamp — in the state volume, so it survives th
 Docker performs, and per-node, never replicated. The level is always DERIVED from the count on
 read, never trusted from the file, so a hand-edited value cannot pin a box into recovery.
 
-Normal → **recovery** after 3 consecutive failed boots. The entrypoint increments the count
+Normal → **recovery** after 3 consecutive failed boots. (2026-09-24: a start refused
+`provisioning.database_in_use` — another process holding the venue folder — no longer counts; see
+`deploy/README.md`.) The entrypoint increments the count
 **before** starting the server, not in a failure handler: a boot that HANGS never throws, and a
 counter written only on a caught error would leave such a box restart-looping forever without ever
 escalating. It clears the count only on a boot that STAYS UP — `startServer` resolved (migrations
@@ -539,7 +541,8 @@ still needs them).
 
 **Operating:** the four CLIs run from the image, and HOW the entrypoint is bypassed differs by
 command — a distinction `deploy/README.md` must state, because getting it wrong re-runs the
-bootstrap in the middle of a cold restore:
+bootstrap in the middle of a cold restore (2026-09-24: the entrypoint now refuses any argument with
+`server.entry_arguments_refused` instead of booting; see `deploy/README.md`):
 
 - `docker compose exec` IGNORES the image's `ENTRYPOINT`, so a command that needs the server
   RUNNING is simply `docker compose exec app node /app/bin-break-glass.js …`.

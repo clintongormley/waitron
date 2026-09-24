@@ -186,8 +186,7 @@ Full design: `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md
 ## The operator CLIs — two different invocation forms
 
 The image has an `ENTRYPOINT` (`node /app/node-entry.js`) and no `CMD`, and the two ways of running a
-command against it treat that entrypoint differently. Getting this wrong re-runs the bootstrap in the
-middle of a cold restore, so it is worth reading twice:
+command against it treat that entrypoint differently:
 
 - **`docker compose exec` IGNORES the entrypoint.** A command that needs the server RUNNING is just:
 
@@ -203,7 +202,10 @@ middle of a cold restore, so it is worth reading twice:
   ```
 
 - **`docker compose run` APPENDS its arguments to the entrypoint.** The commands that need the
-  server STOPPED must override it explicitly, or the entrypoint boots a second server first:
+  server STOPPED must override it explicitly. The entrypoint takes no arguments and refuses any it
+  is given: it exits non-zero with `server.entry_arguments_refused` before it opens anything,
+  printing the first argument it received, how many more followed (never their values), and the
+  form below:
 
   ```bash
   docker compose stop app
@@ -217,7 +219,9 @@ middle of a cold restore, so it is worth reading twice:
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
   before it writes, moves or removes any database, identity or secret file. Break-glass is the exception by design: it runs beside the
-  server and takes no lock.
+  server and takes no lock. A server start refused the same way — a second copy of the app beside
+  the running one — does not count toward the three failed starts that put the box on its recovery
+  page.
 
 ## The box's environment — `deploy/.env`
 

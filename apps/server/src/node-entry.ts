@@ -167,6 +167,8 @@ function landingConfigFrom(
 }
 
 export interface EntryDeps {
+  /** The arguments the process was started with, after the script's own path. */
+  args: readonly string[];
   /** The process environment, before the box's own env files are merged under it. */
   baseEnv: NodeJS.ProcessEnv;
   stateDir: string;
@@ -314,6 +316,22 @@ function failureDetail(error: unknown): string {
   return redactSecrets(lines.join("\n"));
 }
 
+/** What the installer's channel gets for a start given arguments: the code, the first argument, how
+ *  many followed, and the form that runs an operator command instead. The first argument is printed
+ *  because it normally names the command, which tells the operator what to correct, though it too
+ *  can carry a secret `redactSecrets` does not mask; the later ones are not printed. */
+function argumentsRefused(args: readonly string[]): string {
+  const more = args.length - 1;
+  const rest = more === 0 ? "" : ` and ${more} more argument${more === 1 ? "" : "s"}, not shown`;
+  return redactSecrets(
+    [
+      `server.entry_arguments_refused: this program takes no arguments, and was given: ${args[0]}${rest}`,
+      "To run an operator command, override the entrypoint:",
+      "  docker compose run --rm --entrypoint node app /app/<command>.js <arguments>",
+    ].join("\n"),
+  );
+}
+
 /**
  * Refuse a venue database carrying migrations this image does not ship: open the directory, compare
  * each set's journal against the migration files under `migrationsRoot`, close. The default for
@@ -376,6 +394,15 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * recovery.
  */
 export async function runEntry(deps: EntryDeps): Promise<void> {
+  // `docker compose run app <command>` appends `<command>` here. Booting instead would start a
+  // second server, and with the app stopped for a restore nothing holds the venue folder to refuse
+  // it. Before the level is read, so a box at the recovery level refuses too, and before the
+  // counter is written, so a mistyped command is not a failed start.
+  if (deps.args.length > 0) {
+    (deps.reportFailure ?? (() => {}))(argumentsRefused(deps.args));
+    throw new AppError("server.entry_arguments_refused", {});
+  }
+
   const state = await deps.readRecoveryState(deps.stateDir);
   const logDir = deps.logDir ?? join(deps.stateDir, "logs");
   const exit = deps.exit ?? DEFAULT_EXIT;
@@ -446,9 +473,15 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   } catch (error) {
     // The installer's channel first, so the real reason survives even if the state write fails.
     (deps.reportFailure ?? (() => {}))(failureDetail(error));
-    // Same count as the pre-boot write — one attempt is one failure, not two — now carrying the
-    // classified code for the page. Rethrown so the process exits non-zero and Docker restarts.
-    await persistState(deps, afterFailure(state, classifyBootFailure(error), new Date()));
+    const code = classifyBootFailure(error);
+    // Another process holds the venue folder, usually the running server with this start a second
+    // copy beside it, so the count read above goes back. The cost: a folder held by something stuck
+    // never reaches the page. Otherwise the same count as the pre-boot write — one attempt is one
+    // failure, not two — now carrying the classified code. Rethrown: exits non-zero.
+    await persistState(
+      deps,
+      code === "provisioning.database_in_use" ? state : afterFailure(state, code, new Date()),
+    );
     throw error;
   }
 
@@ -478,6 +511,7 @@ function bootThisProcess(): Promise<void> {
     () => new Date(),
   );
   return runEntry({
+    args: process.argv.slice(2),
     baseEnv: env,
     stateDir,
     venueDir,

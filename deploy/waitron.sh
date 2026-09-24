@@ -217,9 +217,10 @@ is_production() {
   # same shape as the stamp read below: `docker compose run`, so the image is whichever one .env
   # selects and the volume arrives where compose mounts it. `--entrypoint sh` is not decoration. This
   # image's ENTRYPOINT is `node /app/node-entry.js`, and `run` APPENDS its arguments to an entrypoint
-  # it was not told to replace, so without the override the container boots a server and exits
-  # non-zero, which lands here as "cannot establish" and refuses every reset as production. Receipt,
-  # measured both directions: the entrypoint case in scripts/waitron-sh.test.mjs. The state directory
+  # it was not told to replace, so without the override the container exits non-zero (the
+  # entrypoint refuses arguments, server.entry_arguments_refused), which lands here as "cannot
+  # establish" and refuses every reset as production. Receipt: the entrypoint case in
+  # scripts/waitron-sh.test.mjs. The state directory
   # comes from the image's own WAITRON_STATE_DIR, and `:?` REFUSES an unset one rather than reading
   # `/trading.env`, finding nothing and calling a live box unprovisioned. The __ABSENT__ sentinel
   # separates an absent file (an unprovisioned box — the read SUCCEEDED and found nothing) from a
