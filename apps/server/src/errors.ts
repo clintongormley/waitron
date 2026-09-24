@@ -308,10 +308,13 @@ declare module "@waitron/shared" {
      */
     "reader.battery_low": { reader: string; percent: number };
     /**
-     * The deployment holds one tenant per database. A basket line named a product the till cannot
-     * sell at its location — it is not in the location's assigned catalogue or is deactivated.
-     * `productId` is a uuid the caller already holds, not a secret, so echoing it is what makes
-     * the error actionable.
+     * NOTHING RAISES THIS ANY MORE. It named a product a basket line asked for that the location's
+     * catalogue did not sell; a sale line now names a zone's menu offer, and one not offered there
+     * is refused `service_zone.offer_not_allowed` instead (`priceOrderLines`,
+     * `apps/server/src/working-order.ts`). Registered and kept because a shipped code is never
+     * removed.
+     *
+     * `productId` was a uuid the caller already held, not a secret.
      *
      * `sale.*`, not `server.*`: it is a fact about the SALE the till is ringing, not about the
      * process (`tenant.not_found`'s note above gives the rule). Registered here by the same
@@ -1750,6 +1753,7 @@ declare module "@waitron/shared" {
      * once shipped. */
     "restore.hook_failed": { module: string; code: string };
     // The server's working-order paths throw these contributed venue-service codes directly.
+    "order.service_context_missing": { workingOrderId: string };
     "service_zone.mode_incompatible": {
       zoneId: string;
       expected: string;

@@ -1980,7 +1980,7 @@ export async function startServer(
       contentDefaultLanguage: venueLocale,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
-    core: { openTab: (tx, req) => openTab(tx, till, req) },
+    core: { openTab: (tx, req) => openTab(tx, till, { tableId: req.tableId }) },
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // The deployment holds one taxpayer per database. The dashboard's gated reporting surface on the

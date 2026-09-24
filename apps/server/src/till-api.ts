@@ -202,10 +202,10 @@ async function resolveHttpOrderZone(
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
-  return withTransaction(deps.db, async (tx) => {
-    if ((await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).length === 0) return undefined;
-    return (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId;
-  });
+  return withTransaction(
+    deps.db,
+    async (tx) => (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId,
+  );
 }
 
 /** The till app's closed card-provider union, as far as this surface hands it out (`apps/till`'s own
@@ -1288,7 +1288,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // (NON-FISCAL) — all forwarded to `parkOrder` → `priceOrderLines`, which validates them
         // against the dish's own definitions.
         lines: ({
-          productId?: string;
           menuItemId?: string;
           quantity: string;
           extras?: ExtraSelection[];
@@ -1368,7 +1367,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // (NON-FISCAL) — all forwarded to `updateHeldOrder`, which compares them against what the
         // stored line froze before deciding whether the edit is quantity-only.
         lines: ({
-          productId?: string;
           menuItemId?: string;
           quantity: string;
           extras?: ExtraSelection[];
@@ -1932,7 +1930,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{
-        lines?: { productId?: string; menuItemId?: string; quantity: string }[];
+        lines?: { menuItemId?: string; quantity: string }[];
       }>(c);
       const result = await withTransaction(deps.db, async (tx) => {
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
@@ -1954,14 +1952,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         // A round line MAY carry `extras` and `options` — threaded through `addTabRound` →
         // `priceOrderLines`, which validates both against the dish's own definitions and expands each
-        // pick into a child row. Optional, so a plain `{productId, quantity}` round is unchanged. A round
-        // line
-        // MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
+        // pick into a child row. A round line MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
         // line and snapshotted onto its ticket item at fire. Coursing editing (A3): a round line MAY carry
         // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
         // print) regardless of course, released later by `sendLines`.
         lines: ({
-          productId?: string;
           menuItemId?: string;
           quantity: string;
           courseId?: string | null;

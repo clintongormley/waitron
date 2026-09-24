@@ -672,36 +672,6 @@ describe("recordTillSale", () => {
     ).rejects.toMatchObject({ code: "sale.tender_shortfall" });
   });
 
-  // A variant (spec §1.2) is sold only through its parent's menu offer. On the plain `productId`
-  // path it is refused like an id the catalogue does not hold, rather than sold — and filed — under
-  // its own names as if it had no parent.
-  it("refuses a variant's id on the plain product path", async () => {
-    const { cfg, available } = await setupVenue();
-    const water = available.find((p) => p.name === "Agua mineral")!;
-    const variantId = await withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
-        .insert(products)
-        .values({
-          catalogueId: water.catalogueId,
-          parentId: water.id,
-          name: "Agua con gas",
-          pricingUnit: null,
-          unitPrice: null,
-          vatClass: null,
-          dietaryDeclarations: null,
-        })
-        .returning({ id: products.id });
-      return row!.id;
-    });
-
-    await expect(
-      recordTillSale({ db: suite.db, backend, clock }, cfg, {
-        lines: [{ productId: variantId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.unknown_product", params: { productId: variantId } });
-  });
-
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
     // `TillSaleResult.qr` defaults to "" when the regime offers no verification link
     // (`FiscalRecordRef.verificationUrl` is optional). `VerifactuBackend` always sets one, so this

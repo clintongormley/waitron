@@ -192,8 +192,8 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         unitPrice: "1.50",
         vatClass: "general",
       });
-      // Deliberately category-less: `listAvailableProducts` resolves its `category` to NULL (LEFT JOIN),
-      // so its priced line snapshots `category: null` — the other side of `parkOrder`'s `?? null`.
+      // Deliberately category-less, so its priced line snapshots `category: null` — the other side
+      // of `parkOrder`'s `?? null`.
       const agua = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: null,
@@ -1853,6 +1853,46 @@ describe("updateHeldOrder", () => {
     ]);
   });
 
+  // A JSON body can carry a `productId` the line types no longer declare. Beside a valid offer it is
+  // refused, on a new line and on an otherwise quantity-only edit of a stored one alike.
+  it("refuses a line naming a product beside its offer, parked or edited", async () => {
+    const { cfg, zoneId, cafeId, cafeOfferId } = await setupVenue();
+    const wireLine = (fields: object) => fields as { menuItemId: string; quantity: string };
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [wireLine({ menuItemId: cafeOfferId, productId: cafeId, quantity: "1" })],
+      }),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "lines" },
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafeOfferId, quantity: "1" }],
+    });
+    const [stored] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await expect(
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [
+          {
+            ...wireLine({ menuItemId: cafeOfferId, productId: cafeId, quantity: "2" }),
+            workingOrderLineId: stored!.id,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "lines" },
+    });
+  });
+
   it("keeps a quantity-only offer edit on the original line id and locked price", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();
@@ -2367,33 +2407,59 @@ const byProduct = (
   productId: string,
 ) => items.find((i) => i.productId === productId)!;
 
-describe("createOpenOrder empty-basket skips the full catalogue read (perf)", () => {
+describe("createOpenOrder's catalogue reads (perf)", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // A lineless order (every splitOffCheck, a lineless openTab, unjoin's new tab) has nothing to resolve
-  // or price, so priceOrderLines must NOT issue the full listAvailableProducts scan. Behaviour alone
-  // can't distinguish this (an empty basket yields an empty order either way), so SPY the catalogue read
-  // and assert it is skipped for [] and taken for a real line. Proven by deletion: remove the early
-  // return in priceOrderLines and the empty-lines case calls the spy → this test fails.
-  it("does NOT call listAvailableProducts for an empty basket", async () => {
+  // A lineless order (every splitOffCheck, a lineless openTab, unjoin's new tab) has nothing to
+  // price, so priceOrderLines reads nothing. Behaviour alone can't tell (an empty basket yields an
+  // empty order either way), so the location read is spied on, with a real line as the control.
+  it("reads nothing for an empty basket", async () => {
     const { cfg } = await setupVenue();
-    const spy = vi.spyOn(catalogue, "listAvailableProducts");
+    const spy = vi.spyOn(catalogue, "resolveAccessibleCatalogueIds");
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, randomUUID(), [], null);
     });
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("DOES call listAvailableProducts for a non-empty basket (negative control)", async () => {
+  // A sale reads only the location's invoice locales from the catalogue, never the whole product
+  // list the till's product picker draws on.
+  it("reads the location once, and never the product list, for a non-empty basket", async () => {
     const { cfg, cafeId } = await setupVenue();
     const offers = await counterOffers(cfg);
-    const spy = vi.spyOn(catalogue, "listAvailableProducts");
+    const locationRead = vi.spyOn(catalogue, "resolveAccessibleCatalogueIds");
+    const productList = vi.spyOn(catalogue, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, randomUUID(), offers.toOfferLines([line(cafeId)]), null, {
         zoneId: offers.zoneId,
       });
     });
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(productList).not.toHaveBeenCalled();
+    expect(locationRead).toHaveBeenCalledTimes(1);
+  });
+
+  // The line's customer text is keyed by the LOCATION's invoice locales, read at pricing time —
+  // not by the till's `cfg.invoiceLocales`, which this case leaves at one locale.
+  it("keys each stored line's customer text by the location's invoice locales", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const offers = await counterOffers(cfg);
+    await db
+      .update(locations)
+      .set({ invoiceLocales: [LOCALE, "en-GB"] })
+      .where(eq(locations.id, cfg.locationId));
+    const id = randomUUID();
+    await withTransaction(db, async (tx) => {
+      await createOpenOrder(tx, cfg, id, offers.toOfferLines([line(cafeId)]), null, {
+        zoneId: offers.zoneId,
+      });
+    });
+    const stored = await db
+      .select({ descriptions: workingOrderLines.descriptions })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(stored.map((row) => Object.keys(row.descriptions).sort())).toEqual([
+      ["en-GB", LOCALE].sort(),
+    ]);
   });
 });
 
@@ -5438,10 +5504,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       return attached;
     });
     // A child is priced at `dishQuantity × pickQuantity`, so half a kilo of dish carrying one extra
-    // would bill half an extra. THE OFFER PATH IS THE ONLY ONE THAT REFUSES IT: it reads the dish's
-    // pricing unit off the unit the dish carries, while the plain product path reads
-    // `products.pricing_unit`, which `assignProductUnit` leaves on `each`. The disagreement is
-    // recorded in docs/backlog.md; this pins the half that refuses.
+    // would bill half an extra.
     await expect(
       parkOrder({ db }, cfg, {
         id: randomUUID(),

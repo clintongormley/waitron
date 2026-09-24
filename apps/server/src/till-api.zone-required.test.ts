@@ -195,6 +195,11 @@ async function post(venue: Venue, path: string, body: object): Promise<Response>
   });
 }
 
+// A line as a JSON body can still send it: naming a product, which the line types no longer carry.
+function productLine(productId: string): { productId: string; quantity: string } {
+  return { productId, quantity: "1" };
+}
+
 const ROUTES = [
   ["/api/working-orders", (line: object) => ({ id: randomUUID(), lines: [line] })],
   [
@@ -261,7 +266,7 @@ describe("an order with no service context takes no lines", () => {
       withTransaction(suite.db, (tx) =>
         openTab(tx, venue.cfg, {
           tableId: venue.tableId,
-          lines: [{ productId: venue.water, quantity: "1" }],
+          lines: [productLine(venue.water)],
         }),
       ),
     ).rejects.toMatchObject({ code: "order.service_context_missing" });
@@ -288,7 +293,7 @@ describe("an order with no service context takes no lines", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        addTabRound(tx, venue.cfg, tabId, [{ productId: venue.water, quantity: "1" }]),
+        addTabRound(tx, venue.cfg, tabId, [productLine(venue.water)]),
       ),
     ).rejects.toMatchObject({
       code: "order.service_context_missing",

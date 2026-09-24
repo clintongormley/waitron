@@ -58,13 +58,13 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import {
   expandDietaryDeclarations,
-  listAvailableProducts,
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
   resolveAttachedModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
+  resolveAccessibleCatalogueIds,
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
@@ -78,8 +78,6 @@ import {
 import type {
   AttachedModifiers,
   BasketItemWithOptions,
-  AvailableProduct,
-  SelectedVariant,
   DietaryLabel,
   DietProfile,
   LockedLine,
@@ -258,32 +256,29 @@ async function resolveBasketModifiers(
 }
 
 /**
- * Price requested lines from a zone's menu offers, or from the legacy location catalogue when the
- * order has no service context. Return both the
- * insertable line snapshots and the basket result so a caller filing the same basket
- * can reuse it. Stored gross unit prices preserve the price agreed at add time.
+ * Price requested lines from the order's zone's menu offers. Return both the insertable line
+ * snapshots and the basket result so a caller filing the same basket can reuse it. Stored gross
+ * unit prices preserve the price agreed at add time.
  */
 async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  // KDS-2 (§2b): each line MAY carry an optional `courseId` OVERRIDE. Absent = fall to the product's
+  // KDS-2 (§2b): each line MAY carry an optional `courseId` OVERRIDE. Absent = fall to the offer's
   // default course; present (incl. `null`) = the line-level override. Only the tab round-send threads a
-  // value today (a future course picker); park/update pass none, so their lines take the product default.
+  // value today (a future course picker); park/update pass none, so their lines take the default.
   // Extras and options (spec §2.3, §3.4): a line MAY carry `options` — one answer per ACTIVE options
   // list its dish attaches, frozen onto the dish row as `option_snapshots` — and `extras`, whose picks
   // each become a CHILD row carrying the picked PRODUCT, its three frozen names, the offer's resolved
   // price and that product's vat class — its own, or its parent's where a variant leaves it blank,
-  // never the dish's. Both are validated against the definitions resolved for the whole basket
-  // above. Absent/empty = a plain single line, except that an ACTIVE options list must still be
-  // answered.
+  // never the dish's. Absent/empty = a plain single line, except that an ACTIVE options list must
+  // still be answered.
   //
   // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note`, which is
   // NON-FISCAL. It is trimmed and length-capped (`working_order.note_too_long`), and attaches to the
   // PARENT dish line only — a child modifier row carries none. Absent = NULL (not chosen); a
   // whitespace-only note folds to NULL.
   requestedLines: ({
-    productId?: string;
     menuItemId?: string;
     quantity: string;
     courseId?: string | null;
@@ -297,87 +292,46 @@ async function priceOrderLines(
   lineContexts: { workingOrderLineId: string; menuItemId: string }[];
 }> {
   if (requestedLines.length === 0) {
-    // An empty basket needs no catalogue read: nothing to resolve, no course override to screen, nothing
-    // to price. priceBasket([]) yields the correct empty PricedBasket shape (a pure call, no DB), so every
-    // splitOffCheck / lineless openTab / unjoin skips the full listAvailableProducts scan they used to pay
-    // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
+    // priceBasket([]) is a pure call, so a lineless splitOffCheck / openTab / unjoin reads nothing.
+    // Callers passing [] persist no lines and ignore `priced`.
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
-  const catalogue = await listAvailableProducts(tx, cfg.locationId);
-  const usesOffers = zoneId !== undefined;
-  const offerBySelectionId = new Map<
-    string,
-    Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneOffer>>
-  >();
-  if (usesOffers) {
-    const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId!);
-    const availableById = new Map(offers.offers.map((offer) => [offer.id, offer]));
-    for (const line of requestedLines) {
-      if (line.menuItemId === undefined || line.productId !== undefined) {
-        throw new AppError("management.request_invalid", { field: "lines" });
-      }
-      const offer = availableById.get(line.menuItemId);
-      if (offer === undefined) {
-        throw new AppError("service_zone.offer_not_allowed", {
-          zoneId: zoneId!,
-          menuItemId: line.menuItemId,
-        });
-      }
-      offerBySelectionId.set(line.menuItemId, offer);
-    }
+  if (zoneId === undefined) {
+    throw new AppError("order.service_context_missing", { workingOrderId });
   }
-  const available = usesOffers
-    ? [...offerBySelectionId.values()].map((offer) => ({
-        id: offer.id,
-        name: offer.name,
-        customerName: offer.customerName,
-        kitchenName: offer.kitchenName,
-        unit: offer.unit,
-        pricingUnit: offer.unit.hardwareUnit === null ? "each" : "weight",
-        unitPrice: offer.unitPrice,
-        vatClass: offer.vatClass as AvailableProduct["vatClass"],
-        category: offer.category,
-        allergens: offer.allergens,
-        diet: offer.diet as AvailableProduct["diet"],
-        dietDerivation: offer.dietDerivation as AvailableProduct["dietDerivation"],
-        dietOverride: offer.dietOverride as AvailableProduct["dietOverride"],
-        dietaryDeclarations: offer.dietaryDeclarations,
-        courseId: offer.courseId,
-        catalogueId: offer.menuId,
-        catalogueName: offer.menuName,
-      }))
-    : catalogue.products;
-  const invoiceLocales = catalogue.invoiceLocales;
+  const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId);
+  const availableById = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const lines = requestedLines.map((line) => {
+    // The wire body is JSON, so a line may still name a product the types no longer carry.
+    if (line.menuItemId === undefined || Object.hasOwn(line, "productId")) {
+      throw new AppError("management.request_invalid", { field: "lines" });
+    }
+    const offer = availableById.get(line.menuItemId);
+    if (offer === undefined) {
+      throw new AppError("service_zone.offer_not_allowed", {
+        zoneId,
+        menuItemId: line.menuItemId,
+      });
+    }
+    return { ...line, menuItemId: line.menuItemId, offer };
+  });
+  const { invoiceLocales } = await resolveAccessibleCatalogueIds(tx, cfg.locationId);
   // Read ONCE, before the line loop: the venue's default content language is what resolves a
   // product's, a variant's and a modifier's text below, and what re-keys each line's customer text
   // onto the invoice locales after pricing.
   const contentConfig = await readContentLanguages(tx, cfg.locale);
-  // `priceBasketWithOptions` selects by its historical `productId` field. In offer mode that selector
-  // is the menu-item id; keep the underlying product id separately for persisted rows and errors.
-  const lines = requestedLines.map((line) => ({
-    ...line,
-    productId: line.menuItemId ?? line.productId ?? "",
-  }));
-  const byId = new Map(available.map((p) => [p.id, p]));
 
   // ONE read per definition kind for the WHOLE basket, before the line loop below (CLAUDE.md §3).
   const modifiers = await resolveBasketModifiers(
     tx,
-    lines.map((line) => ({
-      productId: offerBySelectionId.get(line.productId)?.productId ?? line.productId,
-      menuItemId: line.menuItemId ?? null,
-    })),
+    lines.map((line) => ({ productId: line.offer.productId, menuItemId: line.menuItemId })),
     contentConfig.defaultLanguage,
     true,
   );
-  // A product with an Active variant is never sold as itself (spec §15.1). A line naming a menu
-  // offer is decided by `selectMenuVariant`; a plain-path line cannot name a variant, and neither
-  // can an extras pick, so either one naming such a product is refused below. One read for the
-  // whole basket: the plain-path dishes, and every product the basket's extras lists offer.
-  const requiresVariant = await parentsWithActiveVariants(tx, [
-    ...(usesOffers ? [] : lines.map((line) => line.productId)),
-    ...modifiers.extraProducts.keys(),
-  ]);
+  // A product with an Active variant is never sold as itself (spec §15.1). A line's own variant is
+  // decided by `selectMenuVariant`; an extras pick cannot name a variant, so a pick of such a
+  // product is refused below. One read for every product the basket's extras lists offer.
+  const requiresVariant = await parentsWithActiveVariants(tx, [...modifiers.extraProducts.keys()]);
 
   // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
   // does not itself carry: which product/course a PARENT row takes, and which PICKED product a CHILD
@@ -387,63 +341,25 @@ async function priceOrderLines(
     | {
         kind: "parent";
         productId: string;
-        menuItemId: string | null;
+        menuItemId: string;
         courseId: string | null;
         note: string | null;
       }
-    | { kind: "child"; productId: string; menuItemId: string | null };
+    | { kind: "child"; productId: string; menuItemId: string };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
-    const baseProduct = byId.get(line.productId);
-    if (baseProduct === undefined) {
-      throw new AppError("sale.unknown_product", { productId: line.productId });
-    }
-    // The DISH: the offer's product, whose extras and options lists a variant offers as its own
-    // (spec §4.4). The line itself is sold as the chosen variant when there is one.
-    const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
-    const offer = offerBySelectionId.get(line.productId);
-    // What this line sells, and the three names it freezes. An OFFER may name a variant, so it
-    // resolves through `selectMenuVariant`, which also refuses one not offered here now and returns
-    // the chosen row's effective selling values; the plain catalogue read never names a variant and
-    // carries no kitchen name, so it fills the same shape with the product's own. Both then go
-    // through `product-presentation.ts`, the ONE home of the blank-falls-back-to-the-staff-name rule.
-    const selection: SelectedVariant<AvailableProduct["unit"], string> =
-      offer === undefined
-        ? {
-            productId: underlyingProductId,
-            name: baseProduct.name,
-            customerName: baseProduct.customerName,
-            kitchenName: null,
-            variantName: null,
-            variantCustomerName: null,
-            variantKitchenName: null,
-            unitPrice: baseProduct.unitPrice,
-            unit: baseProduct.unit,
-            vatClass: baseProduct.vatClass,
-            category: baseProduct.category,
-            courseId: baseProduct.courseId,
-          }
-        : selectMenuVariant(offer, line.variantId ?? null);
-    if (!usesOffers && line.variantId !== undefined) {
-      throw new AppError("management.request_invalid", { field: "variantId" });
-    }
-    if (offer === undefined && requiresVariant.has(underlyingProductId)) {
-      throw new AppError("product.variant_required", { productId: underlyingProductId });
-    }
+    const { offer } = line;
+    // What this line sells, and the three names it freezes: `selectMenuVariant` refuses a variant
+    // not offered here now and returns the chosen row's effective selling values, which
+    // `product-presentation.ts` then resolves under the blank-falls-back-to-the-staff-name rule.
+    const selection = selectMenuVariant(offer, line.variantId ?? null);
     const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
     const product = {
-      ...baseProduct,
       name: selection.name,
       unitPrice: selection.unitPrice,
       unit: selection.unit,
-      // On the offer path the pricing unit is read off the unit the line carries, as it always was
-      // for an offer (see the weighed-dish refusal below).
-      pricingUnit: usesOffers
-        ? selection.unit.hardwareUnit === null
-          ? ("each" as const)
-          : ("weight" as const)
-        : baseProduct.pricingUnit,
+      pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: selection.vatClass as VatClass,
       category: selection.category,
       courseId: selection.courseId,
@@ -475,12 +391,11 @@ async function priceOrderLines(
 
     // Validate and freeze this dish's answers against the definitions resolved for the whole basket:
     // the options answers become the dish row's `option_snapshots`, and each extras pick becomes a
-    // child row carrying the picked product. Extras are held by the OFFER when there is one and by
-    // the product when there is not, which is why the key differs; options are always the product's.
+    // child row carrying the picked product. Extras are held by the offer, options by its product.
     const { extraChildren, optionSnapshots } = buildLineExtras(
       {
-        extras: modifiers.extrasByHolder.get(line.menuItemId ?? underlyingProductId) ?? [],
-        options: modifiers.optionsByProduct.get(underlyingProductId) ?? [],
+        extras: modifiers.extrasByHolder.get(line.menuItemId) ?? [],
+        options: modifiers.optionsByProduct.get(offer.productId) ?? [],
       },
       modifiers.extraProducts,
       { extras: line.extras, options: line.options },
@@ -495,12 +410,10 @@ async function priceOrderLines(
     // A child is priced at `dishQuantity × pickQuantity` (`priceBasketWithOptions`), so a dish sold by
     // WEIGHT would charge a fraction of each extra — 0.333 kg of fish carrying "one lemon" would bill
     // 0.333 lemons. Only a pick makes a child, so an options answer on a weighed dish stays
-    // allowed. NOTE the signal is the product's own `pricing_unit`, which `assignProductUnit` does
-    // not move — a product left on `each` while carrying a kg unit reaches the arithmetic above
-    // (docs/backlog.md).
+    // allowed.
     if (extraChildren.length > 0 && product.pricingUnit !== "each") {
       throw new AppError("extras.unsupported_product", {
-        productId: underlyingProductId,
+        productId: offer.productId,
         pricingUnit: product.pricingUnit,
       });
     }
@@ -536,7 +449,7 @@ async function priceOrderLines(
     lineMeta.push({
       kind: "parent",
       productId: selection.productId,
-      menuItemId: line.menuItemId ?? null,
+      menuItemId: line.menuItemId,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
     });
@@ -544,7 +457,7 @@ async function priceOrderLines(
       lineMeta.push({
         kind: "child",
         productId: child.productId,
-        menuItemId: line.menuItemId ?? null,
+        menuItemId: line.menuItemId,
       });
     }
   }
@@ -680,11 +593,10 @@ async function priceOrderLines(
       kitchenName: line.kitchenName ?? null,
     };
   });
-  const lineContexts = lineMeta.flatMap((meta, index) =>
-    meta.menuItemId === null
-      ? []
-      : [{ workingOrderLineId: ids[index]!, menuItemId: meta.menuItemId }],
-  );
+  const lineContexts = lineMeta.map((meta, index) => ({
+    workingOrderLineId: ids[index]!,
+    menuItemId: meta.menuItemId,
+  }));
   return { lineRows, priced, lineContexts };
 }
 
@@ -849,7 +761,6 @@ export interface ParkOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
   // `createOpenOrder`.
   lines: ({
-    productId?: string;
     menuItemId?: string;
     quantity: string;
     extras?: ExtraSelection[];
@@ -886,12 +797,10 @@ export async function createOpenOrder(
   cfg: TillConfig,
   id: string,
   // A line MAY carry `options` (ordering modifiers, Task 6) — passed straight to `priceOrderLines`,
-  // which validates them and expands the line into a parent dish row + child option rows. A walk-up
-  // counter sale threads them here; park/openTab pass a plain `{productId, quantity}` line (no options).
+  // which validates them and expands the line into a parent dish row + child option rows.
   // A line MAY also carry per-line `LineExtras` (NON-FISCAL) — likewise forwarded to `priceOrderLines`,
   // which validates + persists them on the parent dish line.
   lines: ({
-    productId?: string;
     menuItemId?: string;
     quantity: string;
     extras?: ExtraSelection[];
@@ -1061,7 +970,7 @@ export async function openTab(
   cfg: TillConfig,
   req: {
     tableId: string;
-    lines?: { productId?: string; menuItemId?: string; quantity: string }[];
+    lines?: { menuItemId?: string; quantity: string }[];
   },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
@@ -1648,10 +1557,8 @@ export async function addTabRound(
   // customisation (`LineExtras`): a line MAY carry a `note` (NON-FISCAL), persisted on the
   // parent dish line and snapshotted onto its ticket item at fire. Coursing editing (A3): a line MAY carry
   // `hold: true` — insert it HELD (no fire, no print) regardless of course; the marker is correlated onto
-  // the priced PARENT row below and read by `fireLines`. All optional, so existing callers (and the till's
-  // current `{productId, quantity}` send-round) are unchanged.
+  // the priced PARENT row below and read by `fireLines`.
   lines: ({
-    productId?: string;
     menuItemId?: string;
     quantity: string;
     courseId?: string | null;
@@ -2932,8 +2839,8 @@ export interface HeldOrder {
    * PARENT rows only, in `line_no` order — {@link getHeldOrder} filters `parent_line_id IS NULL` and
    * nests each dish's child extras lines under it as the `extras` array below, so this list needs no child
    * marker of its own. Contextual parent rows carry their stored offer and
-   * display snapshot so retrieval does not depend on the offer still being active. Product-only rows
-   * remain readable while older order paths are migrated to menu-item identity.
+   * display snapshot so retrieval does not depend on the offer still being active. A row with no
+   * stored offer is returned by its product alone.
    */
   lines: {
     /** The dish's frozen options answers — the six names per answered list, no ids (spec §2.3). */
@@ -3187,7 +3094,6 @@ export interface UpdateHeldOrderRequest {
   // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
   lines: ({
     workingOrderLineId?: string;
-    productId?: string;
     menuItemId?: string;
     quantity: string;
     extras?: ExtraSelection[];
@@ -3300,15 +3206,14 @@ export async function updateHeldOrder(
         return null;
       }
       const productId = stored.parentProductId ?? soldId;
-      const context = contextByLine.get(stored.id);
-      // An offer line sells the variant it names, else the offer's own product.
+      const { menuItemId } = line;
+      // An offer line sells the variant it names, else the offer's own product. A line naming a
+      // product goes to the replacement path, which refuses it.
       const sameIdentity =
-        line.menuItemId !== undefined
-          ? context?.menuItemId === line.menuItemId &&
-            line.productId === undefined &&
-            (line.variantId ?? productId) === soldId
-          : line.productId === soldId && line.menuItemId === undefined;
-      return sameIdentity ? { stored, productId, menuItemId: context?.menuItemId ?? null } : null;
+        contextByLine.get(stored.id)?.menuItemId === menuItemId &&
+        !Object.hasOwn(line, "productId") &&
+        (line.variantId ?? productId) === soldId;
+      return menuItemId !== undefined && sameIdentity ? { stored, productId, menuItemId } : null;
     });
     const sameBasket =
       req.lines.length === storedParents.length && sameLines.every((entry) => entry !== null);
@@ -3349,7 +3254,7 @@ export async function updateHeldOrder(
         try {
           frozen = buildLineExtras(
             {
-              extras: modifiers.extrasByHolder.get(menuItemId ?? productId) ?? [],
+              extras: modifiers.extrasByHolder.get(menuItemId) ?? [],
               options: modifiers.optionsByProduct.get(productId) ?? [],
             },
             modifiers.extraProducts,
@@ -3366,7 +3271,7 @@ export async function updateHeldOrder(
         // side has to refuse, and what its refusal does not cover.
         if (!sameOptionSelections(frozen.optionSnapshots, stored.optionSnapshots)) return null;
         const paired = matchExtraChildren(
-          modifiers.extrasByHolder.get(menuItemId ?? productId) ?? [],
+          modifiers.extrasByHolder.get(menuItemId) ?? [],
           frozen.extraChildren,
           childrenByParent.get(stored.id) ?? [],
           stored.quantity,
