@@ -1125,11 +1125,19 @@ export interface Till {
 // change these follow, and a mismatch surfaces as a runtime shape error a view test catches, not a
 // compile break.
 
-/** One top-sellers row (mirrors `@waitron/reporting`'s `TopSeller`) — the frozen `sale_lines`
- * STAFF name (`name`/`variant_name`, resolved by `staffPresentationName`; CLAUDE.md's three-name
- * table) plus its summed quantity and total, both decimal strings. A sales report shows the staff
- * name, so there is no locale map to resolve here. */
+/** One top-sellers row (mirrors `@waitron/reporting`'s `TopSeller`): the product's frozen STAFF name
+ * (`sale_lines.name`), its summed quantity and total as decimal strings, and one nested row per
+ * variant sold under it. A sales report shows the staff name, so there is no locale map here. */
 export interface TopSellerRow {
+  name: string;
+  quantity: string;
+  total: string;
+  variants: TopSellerVariantRow[];
+}
+
+/** One variant under a {@link TopSellerRow} (mirrors `TopSellerVariant`): the variant's own frozen
+ * staff name (`sale_lines.variant_name`) and its figures. */
+export interface TopSellerVariantRow {
   name: string;
   quantity: string;
   total: string;

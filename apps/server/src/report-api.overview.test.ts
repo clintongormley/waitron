@@ -48,8 +48,8 @@ const SEED = {
   lineQuantity: "2.000", // → topSellers[0].quantity
   lineTotal: "7.00", // → topSellers[0].total
   // Deliberately distinct: the STAFF name → topSellers[0].name; the customer-facing text is seeded
-  // too but never read by top-sellers (a sales report shows the staff name, CLAUDE.md's three-name
-  // table), so a test that reads the customer text instead would fail here.
+  // too but never read by top-sellers (a sales report shows the staff name, see
+  // `docs/developers/products.md`), so a test that reads the customer text instead would fail here.
   name: "Coffee",
   descriptions: { "es-ES": "Café con leche" },
 } as const;
@@ -225,7 +225,12 @@ interface OverviewBody {
   takings: { tenderTotal: string; tipTotal: string; grossTotal: string };
   counts: { sales: number; corrections: number; voids: number };
   openTables: { open: number; total: number };
-  topSellers: { name: string; quantity: string; total: string }[];
+  topSellers: {
+    name: string;
+    quantity: string;
+    total: string;
+    variants: { name: string; quantity: string; total: string }[];
+  }[];
 }
 
 describe("mountReportApi — /reports/overview", () => {
@@ -259,6 +264,7 @@ describe("mountReportApi — /reports/overview", () => {
         name: SEED.name,
         quantity: SEED.lineQuantity,
         total: SEED.lineTotal,
+        variants: [],
       },
     ]);
   });

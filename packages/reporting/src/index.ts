@@ -43,6 +43,7 @@ export type {
   TenderMethodLine,
   TillCashUp,
   TopSeller,
+  TopSellerVariant,
   TopSellersInput,
   VatRateLine,
   VatReturn,

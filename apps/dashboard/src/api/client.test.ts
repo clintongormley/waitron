@@ -2670,7 +2670,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
       takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
       counts: { sales: 37, corrections: 1, voids: 2 },
       openTables: { open: 3, total: 12 },
-      topSellers: [{ name: "Café", quantity: "18.000", total: "36.00" }],
+      topSellers: [{ name: "Café", quantity: "18.000", total: "36.00", variants: [] }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(overview));
     const api = new DashboardApi("", fetchImpl);
@@ -2707,7 +2707,14 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         tipTotal: "5.00",
       },
       counts: { sales: 12, corrections: 0, voids: 1 },
-      topSellers: [{ name: "Tapa", quantity: "9.000", total: "45.00" }],
+      topSellers: [
+        {
+          name: "Tapa",
+          quantity: "9.000",
+          total: "45.00",
+          variants: [{ name: "Tapa grande", quantity: "9.000", total: "45.00" }],
+        },
+      ],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(close));
     const api = new DashboardApi("", fetchImpl);
@@ -2729,7 +2736,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         taxTotal: "50.00",
         grossTotal: "550.00",
       },
-      topSellers: [{ name: "Menú", quantity: "120.000", total: "1440.00" }],
+      topSellers: [{ name: "Menú", quantity: "120.000", total: "1440.00", variants: [] }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(period));
     const api = new DashboardApi("", fetchImpl);

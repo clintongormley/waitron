@@ -7,7 +7,11 @@ import "@waitron/ui/src/components/wt-card.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
-import { renderTopSellers, type TopSellersLabels } from "../widgets/top-sellers-table.js";
+import {
+  renderTopSellers,
+  topSellersStyles,
+  type TopSellersLabels,
+} from "../widgets/top-sellers-table.js";
 import type { DashboardApi, OverdueOrder, SalesOverview } from "../api/client.js";
 
 /** Clock fallback for hosts that do not provide the shared observed-query cache. */
@@ -25,6 +29,7 @@ export class OverviewScreen extends LitElement {
   static override styles = [
     baseStyles,
     metricStyles,
+    topSellersStyles,
     css`
       :host {
         display: block;

@@ -38,18 +38,29 @@ export interface TopSellersInput extends PeriodVatInput {
   limit: number;
 }
 
-/** One seller in the top-sellers list, keyed on the frozen per-line `name` AND `variant_name`
- * snapshots (the STAFF names) — so a product's variants rank as separate sellers. A sales report
- * shows the staff name, never the customer-facing text (which a receipt or customer display shows
- * instead); see `packages/catalogue/src/product-presentation.ts`. */
+/** One product in the top-sellers list: every line frozen under this STAFF `name` (a sales report
+ * shows the staff name, never the customer-facing text — see `docs/developers/products.md`),
+ * including lines sold as the product itself, with its variants nested underneath. */
 export interface TopSeller {
-  /** The frozen `sale_lines.name`/`variant_name` staff names, resolved by `staffPresentationName` —
-   * the variant's own name on a variant line, the label the till's basket shows for it. */
+  /** The frozen `sale_lines.name` — the parent's staff name on a variant line. */
   name: string;
   /** Σ line quantity over the range, at three decimal places; corrections net in, so it can
    * fall. The column counts whole thousandths and the sum is converted once, on the way out. */
   quantity: Decimal;
   /** Σ line_total over the range, as an amount; corrections net in. */
+  total: Decimal;
+  /** One row per variant sold under this name, by quantity then name; `[]` when none was. */
+  variants: TopSellerVariant[];
+}
+
+/** One variant nested under a {@link TopSeller}: the lines of that parent frozen with this
+ * `sale_lines.variant_name`. */
+export interface TopSellerVariant {
+  /** The frozen `sale_lines.variant_name` — the variant's own staff name, alone. */
+  name: string;
+  /** Σ line quantity, as {@link TopSeller.quantity}. */
+  quantity: Decimal;
+  /** Σ line_total, as {@link TopSeller.total}. */
   total: Decimal;
 }
 

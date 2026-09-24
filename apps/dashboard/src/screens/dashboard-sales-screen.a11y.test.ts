@@ -27,7 +27,17 @@ const close: DailyCloseDto = {
     tipTotal: "5.00",
   },
   counts: { sales: 8, corrections: 0, voids: 1 },
-  topSellers: [{ name: "Café", quantity: "5", total: "10.00" }],
+  topSellers: [
+    {
+      name: "Café",
+      quantity: "5",
+      total: "10.00",
+      variants: [
+        { name: "Café doble", quantity: "3", total: "7.50" },
+        { name: "Café solo", quantity: "2", total: "2.50" },
+      ],
+    },
+  ],
 };
 
 const period: SalesPeriodDto = {
@@ -39,7 +49,14 @@ const period: SalesPeriodDto = {
     taxTotal: "210.00",
     grossTotal: "1210.00",
   },
-  topSellers: [{ name: "Croqueta", quantity: "40", total: "80.00" }],
+  topSellers: [
+    {
+      name: "Croqueta",
+      quantity: "40",
+      total: "80.00",
+      variants: [{ name: "Croqueta de jamón", quantity: "40", total: "80.00" }],
+    },
+  ],
 };
 
 function stubApi(): DashboardApi {

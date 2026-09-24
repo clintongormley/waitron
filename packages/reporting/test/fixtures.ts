@@ -141,11 +141,15 @@ export async function seedSale(
       name?: string;
       /** Frozen customer-facing label (receipt/invoice text); defaults to `{ "es-ES": "Item" }`. */
       descriptions?: Record<string, string>;
-      /** The frozen VARIANT staff name; absent means the line named no variant. Top-sellers groups
-       *  by it alongside `name`, so two variants of one product rank apart. */
+      /** The frozen kitchen name; absent means none was frozen. */
+      kitchenName?: string;
+      /** The frozen VARIANT staff name; absent means the line named no variant. Top-sellers nests
+       *  it under the line's `name`. */
       variantName?: string;
       /** The frozen VARIANT customer-facing label; absent means the line named no variant. */
       variantDescriptions?: Record<string, string>;
+      /** The frozen VARIANT kitchen name; absent means the line named no variant. */
+      variantKitchenName?: string;
       /** The line quantity as a decimal literal, converted at the insert; defaults to "1.000".
        *  May be negative on a rectificativa. */
       quantity?: string;
@@ -186,8 +190,10 @@ export async function seedSale(
       lineNo: i + 1,
       name: line.name ?? "Item",
       descriptions: line.descriptions ?? { "es-ES": "Item" },
+      kitchenName: line.kitchenName ?? null,
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
+      variantKitchenName: line.variantKitchenName ?? null,
       quantity: stringToThousandths(line.quantity ?? "1.000"),
       unitPrice: stringToCents(line.lineTotal),
       vatRate: stringToBasisPoints(line.vatRate),
