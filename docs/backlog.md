@@ -2805,12 +2805,28 @@ image constraints under *Detail → Box image*.
   parse-tree walk, tests included) and `apps/dashboard/src/api` + `src/widgets` (#610, about 2,830
   to about 980, parse-tree walk, tests included; the rest of `apps/dashboard` follows in one more
   pull request) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
-  `drizzle/` SQL untouched).
+  `drizzle/` SQL untouched) and `packages/venue-service` (#611, about 478 to about 220, parse-tree
+  walk, tests included).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609 and #610 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610 and #611 and left for the package that owns each, all
   still OPEN:
+  - Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
+    change. `apps/server/src/served-at-huella.test.ts` and `sale-till-source.receipt.test.ts` cite
+    `packages/venue-service/src/schema/service.ts:180` for `preparation_routes.id`, a line #611
+    moved: name `preparationRoutes.id` in `service.ts` instead. `apps/server/src/working-order.test.ts`
+    names a key `zone_service_policies_default_menu_zone_fk`; the real one is
+    `zone_service_policies_default_allowed_fk` (from #489). `apps/server/scripts/demo-seed/seed-floor.ts`
+    writes `department_hours` times as `HH:MM`, bypassing `storedTime`'s `HH:MM:SS` (from #489; the
+    dashboard slices both forms to five characters). The venue-service `migrations.test.ts` case
+    titled "… or at commit" asserts no refusal at commit, which is now testable because
+    `packages/store/src/node-sqlite-adapter.ts` rolls back a refused commit (since #489); a
+    commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
+    no longer shows an empty string refused: `unit_id` is plain text. The PostgreSQL-deferral
+    history ("DEFERRABLE INITIALLY DEFERRED", "three statements where PostgreSQL took two") is
+    still in `apps/server/src/till-api.test.ts`, `tabs.test.ts`, `served-at-huella.test.ts`,
+    `working-order.test.ts` and `testing/clear-provision-fixture.ts`.
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
     characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
@@ -3023,9 +3039,9 @@ image constraints under *Detail → Box image*.
     nothing); the ignore pairs there stay. Four
     identity schema files and six in `packages/fiscal-verifactu/src/schema` keep the ignore pairs
     with no reason; removing a pair is a code change, for whoever next changes that package's code.
-  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media`,
-    `venue-service` and `workforce-es` say an unnamed unique constraint reaches the factory's
-    refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
+  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media`
+    and `workforce-es` (#611 fixed `venue-service`'s) say an unnamed unique constraint reaches the
+    factory's refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
     (`packages/db/src/testing/schema-conformance.ts`).
   - Identity code, found by #559 and not changed: `setEmail` in `packages/identity/src/staff.ts`,
     unlike `updatePersonDetails`, never checks the new email against other people's pending
@@ -3155,9 +3171,9 @@ image constraints under *Detail → Box image*.
     the end of their file: `apps/server/src/boot.test.ts:2761`, `join-requests.test.ts:388` and
     `:700`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
     and `:227`, `till-api.fiscal-sale-paths.test.ts:662`, `till-api.ts:895` and `:902`,
-    `till-sale.test.ts:255`, `working-order.test.ts:103` (all under `apps/server/src`),
-    `packages/venue-service/src/operations.ts:351` (the `scripts/catalogue-engine-neutral.test.ts`
-    pointers were removed by #602)
+    `till-sale.test.ts:255`, `working-order.test.ts:103` (all under `apps/server/src`)
+    (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602, and
+    `packages/venue-service/src/operations.ts`'s by #611)
     — name the file and the column instead, with each package's pruning. In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
     repeats the first case under another name (a test change, not a comment one). The same
@@ -3192,9 +3208,8 @@ image constraints under *Detail → Box image*.
     `bookings.test.ts` and `migrations.test.ts` still say "tenant", and `floor.test.ts` inserts
     `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
     `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
-    commit message; `docs/developers/testing-guide.md` has no paragraph holding it, and
-    `venue-service` still carries it in its config (#597 cut `payments-sumup`'s to a pointer at
-    CLAUDE.md §4).
+    commit message; `docs/developers/testing-guide.md` has no paragraph holding it (#597 and #611 cut
+    `payments-sumup`'s and `venue-service`'s config copies to a pointer at CLAUDE.md §4).
   - The same false comments outside bookings, found by #574 (#610 removed the dashboard API
     client's "runtime shape error a view test catches" and `purchase-form.ts`'s "client validation
     mirrors the op's checks"): "per-venue timezone is a later slice" in
