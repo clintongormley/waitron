@@ -220,6 +220,9 @@ export class ModifiersScreen extends LitElement {
       if (generation === this.#generation[modal]) this.#setDependants(modal, null, true);
     }
   }
+  /** The extras and options saves' refusals that name an input — `extras.invalid`, `options.invalid`,
+   * `extras.product_has_variants` and both `*.translation_required` codes — declare `field`
+   * (packages/catalogue/src/errors.ts). */
   #fieldOf(error: unknown): string {
     const params =
       typeof error === "object" && error !== null && "params" in error ? error.params : null;

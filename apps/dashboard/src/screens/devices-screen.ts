@@ -312,6 +312,7 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** Denying cannot be undone, so it takes a second, confirming click. */
   #onDeny(id: string): void {
     if (this.armedDenyId === id) {
       this.armedDenyId = null;
@@ -655,6 +656,7 @@ export class DevicesScreen extends LitElement {
     </wt-card>`;
   }
 
+  /** No join number is shown or fetched for the row (design §1.2 rule 1). */
   #renderJoinRequest(request: JoinRequestRow): TemplateResult {
     const armed = this.armedDenyId === request.id;
     return html`<li data-test="join-row-${request.id}">

@@ -202,7 +202,8 @@ export class RecipeScreen extends LitElement {
     void this.#loadRecipe();
   }
 
-  /** A slow earlier load must not overwrite, or report an error over, a product picked since. */
+  /** A load whose product is no longer the selected one is dropped, result and error alike;
+   * reselecting the same product is not told apart. */
   async #loadRecipe(): Promise<void> {
     const productId = this.selectedProductId;
     this.errorKey = null;

@@ -238,7 +238,6 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftInactivityMinutes = raw === "" || Number.isNaN(minutes) ? null : minutes;
   }
 
-  /** Rebuilt in the declared flag order, not click order. */
   #onCapToggle(event: CustomEvent<{ checked: boolean }>, flag: CapabilityFlag): void {
     event.stopPropagation();
     this.draftCapabilities = toggleMembership(

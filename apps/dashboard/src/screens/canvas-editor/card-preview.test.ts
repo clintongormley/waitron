@@ -77,6 +77,7 @@ describe("cardPreview", () => {
   });
 
   it("renders the total and tender-pay silhouettes as pure shapes with no text", () => {
+    // These silhouettes carry no text: a literal here would show untranslated in other locales.
     for (const type of ["total", "tender-pay"] as const) {
       const host = renderPreview(type);
       const root = host.querySelector<HTMLElement>(`[data-preview="${type}"]`)!;
