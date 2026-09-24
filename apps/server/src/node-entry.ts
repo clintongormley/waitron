@@ -167,8 +167,7 @@ function landingConfigFrom(
 }
 
 export interface EntryDeps {
-  /** The arguments the process was started with, after the script's own path. Required, with no
-   *  default, because it feeds the refusal at the top of `runEntry`. */
+  /** The arguments the process was started with, after the script's own path. */
   args: readonly string[];
   /** The process environment, before the box's own env files are merged under it. */
   baseEnv: NodeJS.ProcessEnv;
@@ -317,12 +316,16 @@ function failureDetail(error: unknown): string {
   return redactSecrets(lines.join("\n"));
 }
 
-/** What the installer's channel gets for a start given arguments: the code, what was received, and
- *  the form that runs an operator command instead. */
+/** What the installer's channel gets for a start given arguments: the code, the first argument, how
+ *  many followed, and the form that runs an operator command instead. The first argument is printed
+ *  because it normally names the command, which tells the operator what to correct, though it too
+ *  can carry a secret `redactSecrets` does not mask; the later ones are not printed. */
 function argumentsRefused(args: readonly string[]): string {
+  const more = args.length - 1;
+  const rest = more === 0 ? "" : ` and ${more} more argument${more === 1 ? "" : "s"}, not shown`;
   return redactSecrets(
     [
-      `server.entry_arguments_refused: this program takes no arguments, and was given: ${args.join(" ")}`,
+      `server.entry_arguments_refused: this program takes no arguments, and was given: ${args[0]}${rest}`,
       "To run an operator command, override the entrypoint:",
       "  docker compose run --rm --entrypoint node app /app/<command>.js <arguments>",
     ].join("\n"),
@@ -472,11 +475,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     (deps.reportFailure ?? (() => {}))(failureDetail(error));
     const code = classifyBootFailure(error);
     // Another process holds the venue folder, usually the running server with this start a second
-    // copy beside it, so the count read above goes back. Put back rather than locking before the
-    // pre-boot write: the steps take the lock themselves and `startServer`'s store keeps it for the
-    // process's life, so an earlier lock would change who owns it. The cost: a folder held by
-    // something stuck never reaches the page. Otherwise the same count as the pre-boot write — one
-    // attempt is one failure, not two — now carrying the classified code. Rethrown: exits non-zero.
+    // copy beside it, so the count read above goes back. The cost: a folder held by something stuck
+    // never reaches the page. Otherwise the same count as the pre-boot write — one attempt is one
+    // failure, not two — now carrying the classified code. Rethrown: exits non-zero.
     await persistState(
       deps,
       code === "provisioning.database_in_use" ? state : afterFailure(state, code, new Date()),

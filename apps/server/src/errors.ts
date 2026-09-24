@@ -211,8 +211,9 @@ declare module "@waitron/shared" {
     "server.mirror_bind_exposed": { host: string };
     /**
      * The container's start-up program was given arguments, which it never takes: `docker compose
-     * run app <command>` appends `<command>` to it. No params: the arguments are operator input,
-     * printed on stdout by `runEntry` (`node-entry.ts`) and never written to the recovery state.
+     * run app <command>` appends `<command>` to it. No params: the arguments are operator input.
+     * `runEntry` (`node-entry.ts`) prints the first and a count of the rest on stdout, and never
+     * writes them to the recovery state.
      */
     "server.entry_arguments_refused": Record<string, never>;
     /**

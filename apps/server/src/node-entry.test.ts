@@ -55,7 +55,7 @@ describe("runEntry", () => {
   it("refuses ANY argument before it reads or writes the counter or opens the venue folder", async () => {
     const reportFailure = vi.fn();
     const d = deps({
-      args: ["/app/bin-restore.js", "--artifact", "/backups/venue.enc"],
+      args: ["/app/bin-restore.js", "--passphrase", "SENTINEL_SECRET"],
       reportFailure,
       runStagedRestore: vi.fn(() => Promise.resolve(false)),
     });
@@ -69,8 +69,24 @@ describe("runEntry", () => {
     expect(d.serveRecovery).not.toHaveBeenCalled();
     const printed = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     expect(printed).toContain("server.entry_arguments_refused");
-    expect(printed).toContain("/app/bin-restore.js --artifact /backups/venue.enc");
+    expect(printed).toContain("/app/bin-restore.js");
+    expect(printed).toContain("and 2 more arguments, not shown");
+    expect(printed).not.toContain("--passphrase");
+    expect(printed).not.toContain("SENTINEL_SECRET");
     expect(printed).toContain("docker compose run --rm --entrypoint node app /app/");
+  });
+
+  it("names the count of arguments after the first in the singular, and omits it when there are none", async () => {
+    for (const [args, expected] of [
+      [["sh"], "was given: sh\n"],
+      [["sh", "-c"], "was given: sh and 1 more argument, not shown\n"],
+    ] as const) {
+      const reportFailure = vi.fn();
+      await expect(runEntry(deps({ args: [...args], reportFailure }))).rejects.toMatchObject({
+        code: "server.entry_arguments_refused",
+      });
+      expect(String(reportFailure.mock.calls[0]?.[0])).toContain(expected);
+    }
   });
 
   it("refuses an argument at the recovery level too, rather than serving the page", async () => {

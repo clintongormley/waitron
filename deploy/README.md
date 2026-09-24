@@ -204,7 +204,8 @@ command against it treat that entrypoint differently:
 - **`docker compose run` APPENDS its arguments to the entrypoint.** The commands that need the
   server STOPPED must override it explicitly. The entrypoint takes no arguments and refuses any it
   is given: it exits non-zero with `server.entry_arguments_refused` before it opens anything,
-  printing the arguments it received and the form below:
+  printing the first argument it received, how many more followed (never their values), and the
+  form below:
 
   ```bash
   docker compose stop app
