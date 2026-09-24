@@ -4499,7 +4499,16 @@ scripts and the Cloud backup fixture's capture open without it), landed as #566.
 left open was decided by the owner on 2026-09-24 and done in #573: a start the lock refuses no
 longer counts toward the recovery page (`apps/server/src/node-entry.ts` puts the count back), and
 the container's entrypoint now refuses any argument (`server.entry_arguments_refused`) instead of
-booting a second server when `docker compose run app <command>` is given no `--entrypoint`. Also
+booting a second server when `docker compose run app <command>` is given no `--entrypoint`. Left
+open by #573's review, the owner's call, each reproduced by its Codex seat with a real second
+process: (1) a venue folder held by a STUCK process now restart-loops the box and never reaches the
+recovery page, because every refused start puts the count back; (2) the recovery file is read at
+the start and written at the end with no lock of its own, so a refused start can put back a count
+the running server cleared meanwhile, or erase a real failure another start recorded — and, older
+than #573, its pre-boot write of the count plus one can push a server restarting at that moment onto
+the page; closing either needs a lock or a check-before-write on `recovery.json`; (3) only an
+unwrapped `provisioning.database_in_use` is recognised — a wrapped one, or the store's raw
+`VenueInUseError`, would still count (no path wraps them today). Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into five test files.
