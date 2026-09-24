@@ -1629,6 +1629,31 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.6.2)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.0))
 
+  packages/stream:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1136.0
+        version: 3.1136.0
+      '@waitron/membership':
+        specifier: workspace:*
+        version: link:../membership
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.6.2
+      '@vitest/coverage-v8':
+        specifier: ^4.1.11
+        version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.2)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.0))
+
   packages/sync-enrolment:
     dependencies:
       drizzle-orm:
