@@ -71,8 +71,12 @@ const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["na
  * class. That is sound only while each writer's `try` wraps ONE statement on `device_profiles`,
  * `canvas_id` is the only key out of it and `devices.device_profile_id` the only key into it — the
  * schema half is pinned by `has ONE key out of device_profiles and ONE key into it`
- * (device-profile-store.db.test.ts). Widen a `try` to a second statement and its refusals would be
- * translated, with nothing to catch it.
+ * (device-profile-store.db.test.ts). Widen a `try` to a second statement and its foreign-key
+ * (787) and 1811 refusals would be translated as this table's, with nothing to catch it.
+ *
+ * 1811 is also every trigger's `RAISE(ABORT)`, so `device_profile_form_factor_locked` refusing an
+ * update arrives here as `device_profile.in_use` too (docs/backlog.md: "`RESTRICT_VIOLATION` and
+ * `TRIGGER_ABORT` are the same number").
  *
  * Exported for device-profile-store.test.ts, not from the package barrel.
  */

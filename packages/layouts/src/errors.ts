@@ -1,11 +1,10 @@
-// A bare import, so the block below augments the real "@waitron/shared" module rather than
-// declaring a new ambient one.
 import "@waitron/shared";
 import type { CardType } from "./canvas.js";
 
-// No param ever echoes a caller-supplied value: `reason` is a fixed enum, `field` and `configKey`
-// carry a key's name and never its value, `maxLength` is the policy cap, `tabIndex` locates a tab
-// by position, `card` is only ever a valid CardType, and `token` only ever an allowlisted token.
+// No param echoes a caller-supplied value, except `configKey`: for a key outside the card's
+// contract it is the caller's own key string (never its value). `reason` is a fixed enum, `field`
+// names a known receipt field, `maxLength` is the policy cap, `tabIndex` locates a tab by position,
+// `card` is only ever a valid CardType, and `token` only ever an allowlisted token.
 declare module "@waitron/shared" {
   interface ErrorParams {
     "receipt.invalid": {

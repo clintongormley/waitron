@@ -36,8 +36,8 @@ const CANVAS_NAME: ConstraintTarget = { table: "canvases", columns: ["name"] };
  * sound only while each writer's `try` wraps ONE statement on `canvases` and
  * `device_profiles.canvas_id` is the only key into `canvases` — the second half is pinned by
  * `has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it`
- * (canvas-store.db.test.ts). Widen a `try` to a second statement and its refusals would be reported
- * as `canvas.in_use`, with nothing to catch it.
+ * (canvas-store.db.test.ts). Widen a `try` to a second statement and its RESTRICT or trigger
+ * refusals (both 1811) would be reported as `canvas.in_use`, with nothing to catch it.
  *
  * Exported for canvas-store.test.ts, not from the package barrel.
  */

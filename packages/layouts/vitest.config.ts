@@ -9,8 +9,6 @@ export default defineConfig({
     // own (`packages/db/src/testing/venue-db.ts`).
     testTimeout: 30_000,
     hookTimeout: 60_000,
-    // No `maxWorkers`: unlike packages/scheduler and packages/credentials, this package is
-    // multi-fork.
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
