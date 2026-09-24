@@ -2,7 +2,7 @@ import { canonicalize, signBytes, verifyBytes } from "@waitron/membership";
 import type { CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { holdsExactly, isPreconditionFailure } from "./conditional.js";
+import { putOwnBytes } from "./conditional.js";
 import { isKeySegment, parseGenerationName, venuePrefix } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 
@@ -129,16 +129,10 @@ export async function writePointer(
   const problem = pointerProblem(pointer);
   if (problem !== null) throw invalid(problem);
   if (pointer.body.venueId !== venueId) throw invalid("other_venue");
-  const key = pointerKey(venueId);
-  const bytes = encode(pointer);
-  try {
-    await store.put(
-      key,
-      bytes,
-      previousEtag === null ? { ifNoneMatch: "*" } : { ifMatch: previousEtag },
-    );
-  } catch (error) {
-    if (isPreconditionFailure(error) && (await holdsExactly(store, key, bytes))) return;
-    throw error;
-  }
+  await putOwnBytes(
+    store,
+    pointerKey(venueId),
+    encode(pointer),
+    previousEtag === null ? { ifNoneMatch: "*" } : { ifMatch: previousEtag },
+  );
 }

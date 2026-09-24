@@ -1,7 +1,9 @@
+import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { ObjectStore, PutCondition } from "./object-store.js";
 import { PROBE_PREFIX, probeBucket } from "./probe.js";
+import { createS3ObjectStore } from "./s3-store.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
 
 const NONCE = "nonce-1";
@@ -9,6 +11,80 @@ const KEY = `${PROBE_PREFIX}${NONCE}.json`;
 
 function failure(status: number | null, name: string): AppError {
   return new AppError("backup.stream_request_failed", { operation: "put", key: KEY, status, name });
+}
+
+function landedRefusal(): AppError {
+  return new AppError("backup.stream_precondition_failed", { key: KEY });
+}
+
+type Request = {
+  method: string;
+  path: string;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+  body?: unknown;
+};
+
+/**
+ * One honest object behind the real S3 client, answering its requests: conditions are honoured, and
+ * the write numbered `lostAnswer` lands and is then answered 500, so the client sends it again.
+ */
+function bucketLosingAnswer(lostAnswer: number) {
+  let held: Uint8Array | undefined;
+  let etag = "";
+  let writes = 0;
+  const methods: string[] = [];
+  const answer = (statusCode: number, headers: Record<string, string>, body = "") => ({
+    response: { statusCode, headers, body: Readable.from([Buffer.from(body)]) },
+  });
+  const refuse = (statusCode: number, code: string) =>
+    answer(
+      statusCode,
+      { "content-type": "application/xml" },
+      `<Error><Code>${code}</Code></Error>`,
+    );
+  const handler = {
+    async handle(request: Request) {
+      methods.push(request.method);
+      if (request.method === "PUT") {
+        const ifNoneMatch = request.headers["if-none-match"];
+        const ifMatch = request.headers["if-match"];
+        if ((ifNoneMatch === "*" && held) || (ifMatch !== undefined && ifMatch !== etag))
+          return refuse(412, "PreconditionFailed");
+        held = new Uint8Array(request.body as Uint8Array);
+        writes += 1;
+        etag = `"v${writes}"`;
+        return writes === lostAnswer ? refuse(500, "InternalError") : answer(200, { etag });
+      }
+      if (request.method === "DELETE") {
+        held = undefined;
+        return answer(204, {});
+      }
+      if (request.query["list-type"] !== undefined) {
+        const contents = held
+          ? `<Contents><Key>root/${KEY}</Key><LastModified>2026-09-23T10:00:00.000Z</LastModified></Contents>`
+          : "";
+        return answer(
+          200,
+          { "content-type": "application/xml" },
+          `<ListBucketResult><IsTruncated>false</IsTruncated>${contents}</ListBucketResult>`,
+        );
+      }
+      return held ? answer(200, { etag }, Buffer.from(held).toString()) : refuse(404, "NoSuchKey");
+    },
+  };
+  const store = createS3ObjectStore(
+    {
+      endpoint: "https://s3.example.test",
+      region: "us-east-1",
+      bucket: "owner-bucket",
+      prefix: "root",
+      accessKeyId: "AKIAEXAMPLE0000",
+      secretAccessKey: "not-a-real-secret",
+    },
+    { requestHandler: handler as never, sleep: async () => undefined },
+  );
+  return { store, methods, held: () => held };
 }
 
 /** A store whose `put` rewrites or drops the condition before the honest store sees it. */
@@ -207,6 +283,63 @@ describe("probeBucket", () => {
       });
     },
   );
+
+  it("passes when its first write landed but was answered as refused, and leaves nothing behind", async () => {
+    const store = createMemoryObjectStore();
+    store.failNext({ operation: "put", error: landedRefusal(), landed: true });
+    await expect(probeBucket(store, NONCE)).resolves.toEqual({ ok: true });
+    expect([...store.snapshot().keys()]).toEqual([]);
+  });
+
+  it("cleans up a first write that landed but was answered as refused, when a later step fails", async () => {
+    const store = createMemoryObjectStore();
+    store.failNext({ operation: "put", error: landedRefusal(), landed: true });
+    store.failNext({ operation: "list", error: failure(403, "AccessDenied") });
+    await expect(probeBucket(store, NONCE)).resolves.toMatchObject({
+      ok: false,
+      reason: "list_failed",
+    });
+    expect([...store.snapshot().keys()]).toEqual([]);
+  });
+
+  it("reports a first write refused over an object it did not write, and leaves that object alone", async () => {
+    const store = createMemoryObjectStore();
+    await store.put(KEY, new TextEncoder().encode("someone else's"));
+    await expect(probeBucket(store, NONCE)).resolves.toMatchObject({
+      ok: false,
+      reason: "write_failed",
+    });
+    expect(new TextDecoder().decode(store.snapshot().get(KEY)?.body)).toBe("someone else's");
+  });
+
+  it.each([
+    [1, "the first write"],
+    [2, "the replacing write"],
+  ])(
+    "passes through the real S3 client when %i (%s) lands, is answered 500, and the resend is refused",
+    async (lostAnswer) => {
+      const bucket = bucketLosingAnswer(lostAnswer);
+      await expect(probeBucket(bucket.store, NONCE)).resolves.toEqual({ ok: true });
+      expect(bucket.held()).toBeUndefined();
+      // Four conditional writes, plus the client's one resend of the write that lost its answer.
+      expect(bucket.methods.filter((method) => method === "PUT")).toHaveLength(5);
+    },
+  );
+
+  it("keeps its answer when the clean-up's delete throws before returning a promise", async () => {
+    const inner = createMemoryObjectStore();
+    const store: ObjectStore = {
+      ...inner,
+      delete: () => {
+        throw new Error("thrown at once");
+      },
+    };
+    await expect(probeBucket(store, NONCE)).resolves.toEqual({
+      ok: false,
+      reason: "delete_failed",
+      detail: "thrown at once",
+    });
+  });
 
   it("uses a fresh random name when none is given", async () => {
     const store = createMemoryObjectStore();

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { canonicalize } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { holdsExactly, isPreconditionFailure } from "./conditional.js";
+import { putOwnBytes } from "./conditional.js";
 import { parseGenerationName, venuePrefix } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 
@@ -37,16 +37,10 @@ export async function claimGeneration(
   generation: string,
 ): Promise<void> {
   const { term, nodeId } = parsed("generation", generation);
-  const key = markerKey(venueId, generation);
   const bytes = new TextEncoder().encode(
     canonicalize({ generation, venueId, term, nodeId, nonce: randomUUID() }),
   );
-  try {
-    await store.put(key, bytes, { ifNoneMatch: "*" });
-  } catch (error) {
-    if (isPreconditionFailure(error) && (await holdsExactly(store, key, bytes))) return;
-    throw error;
-  }
+  await putOwnBytes(store, markerKey(venueId, generation), bytes, { ifNoneMatch: "*" });
 }
 
 /**
