@@ -6,26 +6,13 @@ import { createOptionList, getOptionList, updateOptionList } from "./options.js"
 import { racePair } from "../test/fixtures.js";
 
 /**
- * Two saves of different options lists, each claiming a label of the other, started together.
- *
- * The defect this was written against is a `writeLabels` that deletes a list's labels before it
- * checks which list they belong to. On PostgreSQL, with the two saves genuinely overlapping, that
- * version ended one of them in `40P01 deadlock detected` — the receipt is in this file's history.
- * There is one writer here, so a deadlock is not a shape the engine can produce; what still
- * catches that defect is the last assertion, which reads both lists back unchanged. A save that
- * deleted first and checked afterwards would move a label between the lists and fail it.
- *
- * Every assertion below is the one this case carried on PostgreSQL. `racePair`
- * (`test/fixtures.ts`) carries the receipt that the two really do not interleave.
+ * Two saves of different options lists, each claiming a label of the other, started together. What
+ * catches a `writeLabels` that deletes before its ownership check is the options.test.ts case
+ * "refuses a foreign label id before deleting the list's own labels".
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
-/**
- * The domain code a save was refused with — or, when the failure came from the database rather than
- * from the code, the error itself. Drizzle wraps a driver error in a `Failed query:` error that
- * carries no `code` of its own and keeps the original on `cause`, so reading `code` alone reports
- * `undefined` for exactly the failure this test exists to catch.
- */
+/** The domain code a save was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {
   const error = reason as { code?: unknown; cause?: { code?: unknown } };
   return error.code ?? error.cause?.code ?? reason;

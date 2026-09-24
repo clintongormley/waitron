@@ -6,9 +6,6 @@ import "./errors.js";
 
 export type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 
-// The four shapes below live in `modifier-list-types.ts`, the browser-safe LEAF the dashboard
-// imports; this file keeps the code that validates them and re-exports them so existing imports are
-// unchanged.
 export type {
   OptionLabel,
   OptionLabelInput,
@@ -26,20 +23,15 @@ function record(value: unknown, field: string): Record<string, unknown> {
 function keys(value: Record<string, unknown>, allowed: string[], field: string) {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) invalid(`${field}.${key}`);
 }
-/** The staff name: plain text, required, and blank is the same as missing. */
 function staffName(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") invalid(field);
   return value;
 }
 /**
  * The translated customer name: absent, null, or a map holding no text anywhere means "fall back to
- * the staff name". Every key must be a language code and every value text. This is the same handling
- * `nullableTranslations` gives a product's and a variant's customer name (product-editor-input.ts),
- * so the same body is accepted here and there — with one deliberate difference: a bad language key
- * is reported as `options.invalid` carrying the field path, where the product path lets
- * `contentLanguageCode`'s own `content.language_invalid` out with no field on it. An option-list save
- * submits a translated map for the list AND one per label, so a refusal that names no field cannot be
- * put beside the input that caused it (CLAUDE.md §3).
+ * the staff name". A bad language key is deliberately `options.invalid` carrying the field path, not
+ * `content.language_invalid`: one save submits a map for the list AND one per label, so a refusal
+ * that names no field cannot be put beside its input (CLAUDE.md §3).
  */
 function translations(value: unknown, field: string): Record<string, string> | null {
   if (value === undefined || value === null) return null;
@@ -54,7 +46,6 @@ function translations(value: unknown, field: string): Record<string, string> | n
   }
   return nonBlankTranslations({ ...map } as Record<string, string>);
 }
-/** The kitchen name: plain text, and blank is the same as missing. */
 function kitchenName(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") invalid(field);
@@ -66,9 +57,8 @@ function flag(value: unknown, field: string): boolean {
   return value;
 }
 /**
- * `isUuid` accepts either case and so does a PostgreSQL `uuid` column, which hands the value back
- * lower-cased. Lower-casing here is what makes a body's own ids comparable to each other and to the
- * stored rows — the same normalisation `product-editor-input.ts` applies.
+ * `isUuid` accepts either case and an id column compares byte for byte (packages/shared/src/ids.ts),
+ * so lower-casing is what makes a body's ids comparable to each other and to the stored rows.
  */
 function id(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) invalid(field);
@@ -152,11 +142,9 @@ export function validateOptionSelections(
     const sentLabelId = row.labelId;
     if (typeof sentListId !== "string") invalid("listId");
     if (typeof sentLabelId !== "string") invalid("labelId");
-    // Lower-cased for the same reason `id` above lower-cases an authored id: the stored rows come
-    // back from their `uuid` columns lower-cased, so an answer sent in upper case has to be folded
-    // before it is compared to them. Deliberately NOT `id()`: a `labelId` that is no uuid at all
-    // stays `options.label_required` — the list does not carry it — rather than becoming a shape
-    // fault, which is what this function's docblock promises.
+    // Lower-cased for the same reason `id` above lower-cases an authored id. Deliberately NOT
+    // `id()`: a `labelId` that is no uuid at all stays `options.label_required` — the list does not
+    // carry it — rather than becoming a shape fault.
     const listId = sentListId.toLowerCase();
     const labelId = sentLabelId.toLowerCase();
     if (!offered.has(listId) || answers.has(listId)) invalid("listId");

@@ -11,36 +11,11 @@ import { racePair } from "../test/fixtures.js";
 
 /**
  * A save of a product's attachment list, started together with a DELETE of one of the lists it
- * names.
- *
- * On PostgreSQL this needed THREE transactions — a blocker holding one attachment row `for update`
- * so the save parked at a chosen point, then the save, then the delete — and it existed because
- * the two could deadlock: before `assertRefsExist` took the referenced list rows' locks, both
- * kinds reported `40P01 deadlock detected` for one of the two transactions. The save held the
- * target's ATTACHMENT row and wanted the LIST row for its insert's foreign key, while the delete
- * held the LIST row and wanted that same attachment row for its cascade.
- *
- * One write transaction runs on the venue file at a time, so none of that choreography can be
- * staged and the deadlock is not a shape the engine can produce. What the two cases below still
- * assert is what they always asserted about the OUTCOME: both transactions complete, neither is
- * refused, and the dish is left carrying nothing. `racePair` (`test/fixtures.ts`) carries the
- * measurement that they do not interleave.
- *
- * ONE CASE WENT. "lets two products attach the same list at once, without either waiting for the
- * other" existed to prove `lockList`'s lock was SHARED (`for key share`, not `for update`), and
- * its negative control was changing that one word and watching the second save hang. There is no
- * lock, and two saves of any kind now DO wait for each other — so the property it asserted is
- * false here by design, not merely unmeasurable. Its outcome half, that two products can each
- * carry the same list, is `product-modifiers.test.ts`'s "lets two different products each carry
- * the same list".
+ * names: both transactions complete, neither is refused, and the dish is left carrying nothing.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
-/**
- * The domain code a transaction was refused with — or, when the failure came from the database
- * rather than from the code, the error itself. Drizzle wraps a driver error in a `Failed query:`
- * error that carries no `code` of its own and keeps the original on `cause`.
- */
+/** The domain code a transaction was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {
   const error = reason as { code?: unknown; cause?: { code?: unknown } };
   return error.code ?? error.cause?.code ?? reason;
@@ -50,7 +25,6 @@ function refusalCode(reason: unknown): unknown {
 let dish = "";
 let topping = "";
 
-// `useVenueDb` empties every data table after each test, so the products are re-made per test.
 beforeEach(async () => {
   await withTransaction(suite.db, async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Deli" });
@@ -122,8 +96,6 @@ it.each(["extras", "options"] as const)(
 
     const settled = await racePair(
       suite.db,
-      // Nothing else in this transaction: the save under test is the whole of it, exactly as a
-      // route handler runs it.
       (tx) => writeProductModifiers(tx, dish, [{ kind, id: target }]),
       (tx) => remove(tx, target),
     );

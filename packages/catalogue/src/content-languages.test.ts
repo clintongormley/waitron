@@ -17,11 +17,9 @@ import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
 import { units } from "./schema/units.js";
 
-// These tests exercise configuration queries, against one SQLite file with the real migrations
-// applied. Every row below is written through its drizzle table: an `id` comes from the table's own
-// `$defaultFn` rather than from a SQL default, and a `json()` column stores JSON TEXT, so a raw
-// insert with a `::jsonb` cast has neither an id nor a cast that means anything here. The
-// serialisation cases that used to live beside this file are in content-languages.concurrency.test.ts.
+// Every row below is written through its drizzle table: an `id` comes from the table's own
+// `$defaultFn` rather than from a SQL default. The serialisation cases are in
+// content-languages.concurrency.test.ts.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {

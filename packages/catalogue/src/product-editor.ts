@@ -104,8 +104,8 @@ export async function readProductEditor(
   return {
     ...row,
     inherited: null,
-    // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
-    // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
+    // `readProductModifiers` keys its map by the LOWER-CASED product id, so an upper-cased
+    // `productId` argument would find nothing.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],
     variants: await listProductVariants(tx, productId),
   };

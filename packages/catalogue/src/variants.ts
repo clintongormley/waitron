@@ -63,11 +63,6 @@ function blankInherited(written: object): Partial<Record<(typeof INHERITED_KEYS)
 
 /**
  * The product exists and is not itself a variant; returns the catalogue its variants are created in.
- *
- * This took `select … for update` on the product's row, so that two variant saves of the same
- * product could not overlap. One write transaction runs on the venue file at a time, so there is
- * no second save to overlap with; the mechanism and the receipt are on `assertExtraListForWrite`
- * (extras.ts), which is where this package states the pattern once.
  */
 async function assertProductForWrite(
   tx: Transaction,

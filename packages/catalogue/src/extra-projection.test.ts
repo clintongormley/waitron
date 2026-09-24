@@ -19,10 +19,6 @@ import { readProductModifiers, writeProductModifiers } from "./product-modifiers
 import * as productModifiers from "./product-modifiers.js";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 
-// Publishing an extras list on a menu offer is authoring configuration, run here against one
-// SQLite file with the real migrations applied. The grants walkthrough this file used to end with
-// is gone with the grants themselves; the cases about a save racing a list edit are in
-// extras.concurrency.test.ts.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -144,7 +140,7 @@ describe("what a menu offer publishes", () => {
 
     const published = await run((tx) => readMenuExtras(tx, [offers.burger]));
 
-    // Bacon is the plan's three-price case: the product says 3.00, the list item says 1.50, this
+    // Bacon is the three-price case: the product says 3.00, the list item says 1.50, this
     // menu offer says 1.00, and the menu wins. Cheese, olives and ham carry no menu row at all and
     // are still offered — a menu offer that narrows nothing offers the whole list.
     expect(
@@ -410,14 +406,11 @@ describe("what a product's own extras lists offer", () => {
     const spy = vi.spyOn(productModifiers, "readProductModifiers");
     try {
       const supplied = await run((tx) => readProductExtras(tx, [ids.burger], attachments));
-      // The caller's map is the answer to the question this read's first statement would have
-      // asked, so it does not ask it: the order path reads `product_modifiers` once per basket
-      // (`resolveBasketModifiers`, apps/server/src/working-order.ts).
+      // The caller's map answers this read's first question, so it does not ask it.
       expect(spy).not.toHaveBeenCalled();
       expect(supplied).toEqual(control);
 
-      // The control in the other direction: with no map supplied the read does ask, and answers
-      // the same — so the assertion above is about the query, not about the result being empty.
+      // With no map supplied the read does ask, and answers the same.
       const reread = await run((tx) => readProductExtras(tx, [ids.burger]));
       expect(spy).toHaveBeenCalledTimes(1);
       expect(reread).toEqual(control);
@@ -753,7 +746,7 @@ describe("the menu publication in the catalogue's configuration transfer", () =>
 
   it("copies a publication after both parents it names, and its overrides after it", () => {
     // `importConfigurationTables` inserts in this order and deletes in its reverse
-    // (apps/server/src/configuration-transfer.ts), so each parent has to come first.
+    // (apps/server/src/configuration-transfer.ts).
     expect(transferred.indexOf("menu_items")).toBeLessThan(
       transferred.indexOf("menu_item_extra_lists"),
     );
@@ -814,9 +807,7 @@ describe("what deleting an extras list would touch", () => {
 
     await run((tx) => deleteExtraList(tx, list.id));
 
-    // Run rather than read off the foreign-key clause: the publication goes through
-    // `menu_item_extra_lists_list_fk` and its overrides through `menu_item_extra_items_list_fk`,
-    // both ON DELETE CASCADE.
+    // The publication and its overrides go by ON DELETE CASCADE.
     expect(await countRows("menu_item_extra_lists")).toBe(0);
     expect(await countRows("menu_item_extra_items")).toBe(0);
     expect(await run((tx) => readMenuExtras(tx, [offers.burger]))).toEqual(new Map());

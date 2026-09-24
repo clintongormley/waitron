@@ -21,8 +21,8 @@ import {
 import { createUnit } from "./units.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
-// Aggregate round-trips. The two transactions started together, and the cases that used to sit in
-// a real-PostgreSQL sibling, are in variants.db.test.ts.
+// Aggregate round-trips. The cases with two transactions started together are in
+// variants.db.test.ts.
 const fx = useCatalogueDb();
 let productId: string;
 let offerId: string;

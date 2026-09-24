@@ -42,17 +42,14 @@ function ids(value: unknown, field: string): string[] {
 /**
  * The product's ordered attachment list: each entry names one list and which KIND of list it is, and
  * the array's order is the order a diner is offered them. Ids are lower-cased by {@link id}, so a
- * duplicate that differs only in case is still a duplicate — the same normalisation
- * `writeProductModifiers` (product-modifiers.ts) applies before it writes.
+ * duplicate that differs only in case is still a duplicate.
  *
  * A repeated (kind, id) pair is refused rather than collapsed: the list is ordered, so a caller who
- * sent the same list twice meant something this model cannot express, and the write side refuses it
- * too (`assertRefsExist`, product-modifiers.ts). The same id under the two DIFFERENT kinds is two
- * different lists and is allowed.
+ * sent the same list twice meant something this model cannot express. The same id under the two
+ * DIFFERENT kinds is two different lists and is allowed.
  *
- * Refusals name the entry (`modifiers.0.kind`), not the whole field, which is how the sibling
- * `variants` screen below reports and what `assertRefsExist` throws when the ids are checked against
- * the stored lists. Only a problem with the array ITSELF names the bare field.
+ * Refusals name the entry (`modifiers.0.kind`), not the whole field. Only a problem with the array
+ * ITSELF names the bare field.
  *
  * What this does NOT check is that the ids name real lists — that needs the transaction, and it is
  * `assertRefsExist`'s job at write time.

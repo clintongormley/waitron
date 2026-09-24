@@ -153,7 +153,7 @@ it("reports a malformed create body before an unknown catalogue", async () => {
 });
 
 it("saves a product with exactly one variant, or none", async () => {
-  // Spec §15.1: one variant is allowed; the server no longer requires a second.
+  // Spec §15.1: one variant is allowed.
   const one = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, { ...input, variants: [input.variants[0]!] }, "en"),
   );
@@ -177,7 +177,7 @@ describe("a removed variant in the parent's editor", () => {
 
   it("reads back with active false, and saving the read value back keeps it Inactive", async () => {
     const saved = await save(null, input);
-    // Large is left out of the body, which is how a variant has always been removed.
+    // Large is left out of the body, which is how a variant is removed.
     await save(saved.id, { ...saved, variants: [saved.variants[0]!] });
     const value = await read(saved.id);
     expect(flags(value)).toEqual([
@@ -275,8 +275,8 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
   const staleDiet = { origins: ["dairy"], pending: false };
   await withTransaction(fx.db, async (tx) => {
     // Through the table on both sides: a `json()` column stores JSON TEXT, so the write needs the
-    // column's own mapping in place of the `::jsonb` casts, and the read needs it to hand back a
-    // parsed value rather than the stored string.
+    // column's own mapping, and the read needs it to hand back a parsed value rather than the
+    // stored string.
     await tx
       .update(products)
       .set({
@@ -308,10 +308,8 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
 });
 
 it("rolls back product and variants when a supporting association fails", async () => {
-  // An attachment naming no stored list is the failure this reaches for. It used to name an
-  // option group and come back `modifier.invalid`; the product body now carries `modifiers`, and
-  // the refusal is `assertRefsExist`'s (product-modifiers.ts) `product.invalid`. What the test is
-  // actually about — the product and its variants roll back with it — is unchanged.
+  // An attachment naming no stored list is the failure this reaches for: the product and its
+  // variants roll back with it.
   await expect(
     withTransaction(fx.db, (tx) =>
       saveProductEditor(

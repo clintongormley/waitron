@@ -12,13 +12,8 @@ import { racePair } from "../test/fixtures.js";
 
 /**
  * An authoring transaction and a change of the venue's DEFAULT LANGUAGE do not interleave, and
- * whichever runs second validates against the other's committed state.
- *
- * That is the whole subject, and it survived the storage switch; what arranged it did not.
- * `findContentTranslationGap` and `writeContentLanguages` used to take
- * `pg_advisory_xact_lock(hashtextextended('content-languages', 0))` as their first statement, and
- * this file used to watch the second backend block on it. There is one writer on this engine:
- * `racePair` (`test/fixtures.ts`) carries the mechanism, the measurement and its control.
+ * whichever runs second validates against the other's committed state. `racePair`
+ * (`test/fixtures.ts`) carries the mechanism, the measurement and its control.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 

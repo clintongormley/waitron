@@ -48,7 +48,4 @@ export * from "./dietary-declarations.js";
 export * from "./product-editor.js";
 export * from "./product-presentation.js";
 export * from "./option-snapshot-labels.js";
-// `ProductRouting`/`ProductEditorBody` have no operational home file to travel through (unlike
-// `Product`, `Unit`, `ProductVariant`, `ProductEditorInput`/`Value`, which each re-export from their
-// own module), so surface them from the leaf directly.
 export type { ProductRouting, ProductEditorBody } from "./product-types.js";

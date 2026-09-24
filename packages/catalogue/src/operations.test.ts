@@ -296,20 +296,11 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Two rows written with the SAME `created_at`, the earlier insert carrying the LEXICALLY GREATER
-  // id, so insert order and id order disagree and the read has to come back as one or the other.
-  // Ties are ordinary rather than contrived: `created_at` is an ISO string at millisecond
-  // resolution and two authoring transactions land inside one millisecond most of the time (22 of
-  // 30 pairs, measured 2026-09-22).
-  //
-  // What settles the tie is the `group by products.id`, not the `id` in the `order by`: the group
-  // key is the table's primary key, so the engine walks that index and hands the rows back in id
-  // order. Deleting `products.id` from `listProducts`'s `orderBy` therefore moves nothing here —
-  // this case pins the ORDER the read returns, and nothing pins that tiebreak.
-  //
-  // Note what it does NOT give: `id` is a random v4 UUID, so which of two same-millisecond rows
-  // comes first is decided afresh on every run. A caller that needs creation order cannot get it
-  // from these two columns.
+  // Two rows with the SAME `created_at`, the earlier insert carrying the LEXICALLY GREATER id, so
+  // insert order and id order disagree. `created_at` is at millisecond resolution, so ties are
+  // ordinary. Weaker than it looks: the `group by products.id` settles the tie, so this pins the
+  // ORDER the read returns and nothing pins the `id` in `listProducts`'s `orderBy`. And `id` is a
+  // random v4 UUID, so a caller that needs creation order cannot get it from these two columns.
   it("settles a created_at tie on the product id rather than on insert order", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
@@ -631,8 +622,7 @@ describe("catalogue operations", () => {
         vatClass: "general",
       });
       expect(p.active).toBe(true);
-      // `{ active: false }` deactivates through the same edit route (the headless deactivateProduct
-      // stays for the till/other callers)…
+      // `{ active: false }` deactivates through the edit route…
       await updateProduct(tx, p.id, { active: false });
       const deactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
       expect(deactivated.active).toBe(false);
@@ -657,7 +647,7 @@ describe("catalogue operations", () => {
         active: false,
       });
       expect(hidden.active).toBe(false);
-      // Omitting `active` leaves the column default (true) — today's behaviour, unchanged.
+      // Omitting `active` leaves the column default (true).
       const shown = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: null,
@@ -793,7 +783,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  // A product with no recipe still publishes exactly the manual value (today's behavior).
+  // A product with no recipe publishes exactly the manual value.
   it("createProduct publishes the manual allergen map when there is no recipe", async () => {
     const result = await withTransaction(fx.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -863,9 +853,8 @@ describe("catalogue operations", () => {
     expect(seen.manualAllergens).toEqual({ gluten: { presence: "contains" } });
   });
 
-  // The management read exposes the staff diet OVERRIDE distinctly from the published `diet` union, so
-  // the dashboard's diet-override editor (Task 8b) seeds its tri-state controls from the manual value —
-  // the diet twin of `manualAllergens` above. A product with no override reads `dietOverride: null`.
+  // The management read exposes the staff diet OVERRIDE distinctly from the published `diet`, so
+  // the dashboard's editor can seed its controls from the manual value. No override reads `null`.
   it("exposes diet_override on the management product read", async () => {
     const [withOverride, without] = await withTransaction(fx.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -913,9 +902,7 @@ describe("catalogue operations", () => {
     expect(seen).toBeNull();
   });
 
-  // A caller-supplied id that names no product is a SILENT no-op, exactly as every other patch field
-  // is (image/active/…) — updateProduct does not pre-check existence, and republishOverlays' SELECT
-  // returns no row, so nothing is written.
+  // A caller-supplied id that names no product is a SILENT no-op, as for every other patch field.
   it("updateProduct with allergens on a nonexistent id does not throw and affects no row", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -937,7 +924,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  // ── Diet derivation + override republish (Task 3) ────────────────────────────────────────────────
+  // ── Diet derivation + override republish ─────────────────────────────────────────────────────────
   const readDiet = (tx: Transaction, id: string) =>
     tx
       .select({
@@ -948,9 +935,8 @@ describe("catalogue operations", () => {
       .from(products)
       .where(eq(products.id, id));
 
-  // CAUTIOUS posture: at create there is no recipe, so the published `diet` is the override overlaid
-  // on the EMPTY, PENDING derived profile — a bare product with no override reads vegan/vegetarian
-  // "unknown" (never a positive claim on an unreviewed plate), mirroring the allergen twin's `pending`.
+  // CAUTIOUS posture: with no recipe and no override, vegan/vegetarian read "unknown" — never a
+  // positive claim on an unreviewed plate.
   it("createProduct with no override publishes an unknown (cautious) diet profile", async () => {
     const [row] = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -1005,8 +991,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Step 7 of the brief: a forced vegan override WINS over an uncategorised (pending) recipe — the
-  // pending derivation alone would read vegan "unknown", the override forces "yes".
+  // The pending derivation alone would read vegan "unknown"; the override forces "yes".
   it("a forced vegan override wins over an uncategorised (pending) recipe", async () => {
     const [before, after] = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -1346,9 +1331,7 @@ describe("catalogue operations", () => {
   });
 
   // The default lives in `locations.catalogue_id`, never as a `location_catalogues` row, so the
-  // member-remove op can never strip a location's default menu — calling it with the default id is a
-  // no-op on the member table. This is the guard that keeps a location from dropping to zero sellable
-  // menus via the remove route.
+  // remove route cannot drop a location to zero sellable menus.
   it("removeCatalogueFromLocation never removes the default (it is not a member row)", async () => {
     await asTenant(async (tx) => {
       const main = await createCatalogue(tx, { name: "Main" });
@@ -1412,11 +1395,9 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Re-setting the same catalogue as default must NOT insert a redundant `location_catalogues` member
-  // row for it (leaving it as both default and member) — the `defaultId !== catalogueId` branch skips
-  // the keep-sellable add. `listAccessibleCatalogues` de-duplicates, so it CANNOT see a redundant row;
-  // this asserts the member count DIRECTLY, so deleting that branch (which would then add the row) turns
-  // this test red. (Proven by deletion: `defaultId !== catalogueId` removed → member count becomes 1.)
+  // Re-setting the same catalogue as default must NOT insert a redundant member row for it.
+  // `listAccessibleCatalogues` de-duplicates and so cannot see one; this counts member rows
+  // DIRECTLY.
   it("setLocationDefaultCatalogue is idempotent when the catalogue is already the default", async () => {
     await asTenant(async (tx) => {
       const casa = await createCatalogue(tx, { name: "Casa" });
@@ -1456,9 +1437,6 @@ describe("catalogue operations", () => {
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const [available] = (await listAvailableProducts(tx, locationId)).products;
       expect(available!.category).toBeNull();
-      // KDS-2: a product with no default course reports `courseId: null` (the till's course picker reads
-      // this as "no pre-selected default"). The non-null path is proven end-to-end by the server's
-      // ring-time course resolver (it reads this field as `<override> ?? product.course_id`).
       expect(available!.courseId).toBeNull();
     });
   });

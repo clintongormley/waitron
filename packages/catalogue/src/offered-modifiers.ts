@@ -24,10 +24,9 @@ export interface ModifierHolder {
 /**
  * Every extras and options definition a set of dishes attaches, read together.
  *
- * Both the ORDER path and the two sell-side reads resolve this from one body, which is what keeps
- * them in step: what a till is offered has to be exactly the set
- * `validateExtraSelections`/`validateOptionSelections` (extra-contract.ts, option-contract.ts) will
- * answer, or a required list the till never drew refuses the order.
+ * The ORDER path and the sell-side reads resolve this from one body so they stay in step: what a
+ * till is offered has to be exactly the set the selection validators will answer, or a required list
+ * the till never drew refuses the order.
  */
 export interface AttachedModifiers {
   /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
@@ -39,11 +38,8 @@ export interface AttachedModifiers {
 }
 
 /**
- * {@link AttachedModifiers} plus the attachment walk that produced it — each product's ordered
- * attachment list, keyed as `readProductModifiers` keys it, by the LOWER-CASED product id.
- *
- * Not published: the walk is how {@link readOfferedModifiers} interleaves a dish's extras and
- * options into the one order a till draws (spec §5), and that is the only thing that reads it.
+ * {@link AttachedModifiers} plus each product's ordered attachment list, keyed by the LOWER-CASED
+ * product id, which {@link readOfferedModifiers} walks to interleave extras and options (spec §5).
  */
 interface WalkedAttachments extends AttachedModifiers {
   attachments: ReadonlyMap<string, ProductModifierRef[]>;
@@ -53,10 +49,8 @@ interface WalkedAttachments extends AttachedModifiers {
  * Resolve {@link AttachedModifiers} for a set of dishes: a bounded number of queries whatever the
  * number of dishes, and never one per dish (CLAUDE.md §3).
  *
- * INACTIVE lists come back too, carrying their own `active` flag, because the two validators read
- * that flag to answer only the active lists of the set they are handed — so the order path has to
- * hand them the whole set. A read that DRAWS the lists filters them itself; {@link
- * readOfferedModifiers} does.
+ * INACTIVE lists come back too, because the two validators read each list's `active` flag
+ * themselves. A read that DRAWS the lists filters them itself.
  */
 export async function resolveAttachedModifiers(
   tx: Transaction,
@@ -66,7 +60,6 @@ export async function resolveAttachedModifiers(
   return { extrasByHolder, optionsByProduct };
 }
 
-/** {@link resolveAttachedModifiers}'s body, keeping the walk it read on the way. */
 async function walkAttachedModifiers(
   tx: Transaction,
   dishes: readonly ModifierHolder[],
@@ -78,14 +71,9 @@ async function walkAttachedModifiers(
   const productOnlyIds = [
     ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [dish.productId] : []))),
   ];
-  // Every dish's attachments, read ONCE: the options side below needs them for the whole set, and
-  // `readProductExtras` would otherwise ask the same table for the same ids on the same transaction
-  // as its own first statement. Awaited in turn with the reads below, never in parallel
-  // (CLAUDE.md §3).
+  // Read ONCE and handed to `readProductExtras`, which would otherwise read the same rows again.
   const attachments = await readProductModifiers(tx, productIds);
 
-  // Each dish is read on the side its own identity puts it on. The two key spaces are distinct
-  // ids, so nothing collides.
   const extrasByHolder = new Map<string, ResolvedExtraList[]>();
   if (menuItemIds.length > 0) {
     for (const [holder, lists] of await readMenuExtras(tx, menuItemIds)) {
@@ -121,10 +109,7 @@ async function walkAttachedModifiers(
 }
 
 /** The `products` columns an offered extras item borrows — everything its own row deliberately does
- * not duplicate (spec §3.1). Named apart from `ExtraProductFacts`
- * (apps/server/src/modifier-selection.ts), which is the ORDER path's different shape of the same
- * row: that one carries customer text already resolved to one language, this one carries the raw
- * map plus the allergens and dietary labels a picker draws. */
+ * not duplicate (spec §3.1). */
 type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
 const activeVariant = alias(products, "active_variant");
@@ -184,35 +169,16 @@ type WalkedList =
 
 /**
  * The ordered extras and options lists each dish offers a till, keyed by the MENU-ITEM id when the
- * dish was reached through an offer and by the PRODUCT id when it was not — the same holder keying
- * {@link AttachedModifiers.extrasByHolder} uses, and the same LOWER-CASED form the uuid columns
- * hand back, so a caller holding an upper-cased id lower-cases it before looking one up.
+ * dish was reached through an offer and by the PRODUCT id when it was not, LOWER-CASED.
  *
- * The walk is the product's own `product_modifiers.sort` order on BOTH paths (spec §5: the one
- * ordered list a product exposes). A menu offer changes what is IN an extras entry — its items
- * narrowed and repriced by `menu_item_extra_items` (spec §3.2) — and whether the entry is there at
- * all, because a list the offer does not publish has no resolved version to draw; it does not move
- * the entry, so `menu_item_extra_lists.display_order` decides nothing here.
+ * The order is the product's own `product_modifiers.sort` on BOTH paths (spec §5). A menu offer
+ * changes what is IN an extras entry, and whether it is there at all; it does not move the entry, so
+ * `menu_item_extra_lists.display_order` decides nothing here.
  *
- * Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels: that is
- * exactly what `validateExtraSelections` (extra-contract.ts:246,277) and
- * `validateOptionSelections` (option-contract.ts:148,171) will accept an answer from. An item whose
- * `products` row has gone is left out, for the reason `priceItems` (extra-projection.ts) leaves out
- * an item it cannot price: there is nothing to draw it with. That is the safe direction — the
- * validator would still accept a pick of it — and it is the same read-committed race that file
- * documents, not a state the `ON DELETE RESTRICT` key allows at any one instant.
- *
- * An item whose product is Inactive or Unavailable is left out too (spec §15.6): the till sells
- * nothing that is not both. The order path refuses a pick of one on its own read
- * (`resolveBasketModifiers`, `apps/server/src/working-order.ts`).
- *
- * So is a product that has an Active variant, which is never sold as itself (spec §15.1): the
- * order path refuses a pick of one with `product.variant_required` (`priceOrderLines`,
- * `apps/server/src/working-order.ts`).
- *
- * A bounded number of queries whatever the number of dishes: {@link walkAttachedModifiers}'s — the
- * same set {@link resolveAttachedModifiers} issues — plus one for the products the offered items
- * name.
+ * Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels: exactly what
+ * `validateExtraSelections` and `validateOptionSelections` will accept an answer from. An extras
+ * item is left out when its product row is missing, Inactive or Unavailable (spec §15.6), or has an
+ * Active variant (spec §15.1). The order path refuses a pick of the last three on its own read.
  */
 export async function readOfferedModifiers(
   tx: Transaction,
@@ -263,10 +229,9 @@ export async function readOfferedModifiers(
             name: entry.list.name,
             customerName: entry.list.customerName,
             kitchenName: entry.list.kitchenName,
-            // Dropped when it names no label still on offer. `option_lists.default_label_id` carries
-            // no foreign key (schema/options.ts) and nothing re-checks it after a label is
-            // withdrawn, so a till preselecting it would send an answer
-            // `validateOptionSelections` refuses with `options.label_required`.
+            // Dropped when it names no label still on offer: `option_lists.default_label_id` carries
+            // no foreign key, and a till preselecting a withdrawn label would send an answer
+            // `validateOptionSelections` refuses.
             defaultLabelId: labels.some((label) => label.id === entry.list.defaultLabelId)
               ? entry.list.defaultLabelId
               : null,

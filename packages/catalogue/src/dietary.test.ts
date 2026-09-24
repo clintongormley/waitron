@@ -109,7 +109,6 @@ describe("validateContainsTag (Task 4)", () => {
   it("accepts meat/fish only — an otherwise-valid origin is rejected", () => {
     expect(validateContainsTag("meat")).toBe("meat");
     expect(validateContainsTag("fish")).toBe("fish");
-    // "plant" is a valid ORIGIN but not a contains-tag → rejected.
     expect(() => validateContainsTag("plant")).toThrow(/diet.invalid_origin/);
     expect(() => validateContainsTag("wombat")).toThrow(/diet.invalid_origin/);
     expect(() => validateContainsTag(7)).toThrow(/diet.invalid_origin/);

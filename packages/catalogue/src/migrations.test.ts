@@ -29,7 +29,7 @@ import { productUnits, unitSeedStates, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 
 // One SQLite file with the core set and this package's set applied, which is what the product
-// opens. There is no second target and no role dimension any more: one process holds one file.
+// opens.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   timeoutMs: 60_000,
@@ -62,9 +62,8 @@ const TABLES = [
 /**
  * One table's columns, as the engine's own catalogue reports them.
  *
- * `pragma table_info` replaces `information_schema.columns`, which SQLite does not have. `pk` is 0
- * for an ordinary column and the column's 1-based position in the primary key otherwise, which is
- * what makes a composite key readable in declaration order.
+ * `pk` is 0 for an ordinary column and the column's 1-based position in the primary key otherwise,
+ * which is what makes a composite key readable in declaration order.
  */
 async function columnsOf(table: string) {
   return (
@@ -82,18 +81,12 @@ describe("the catalogue migration set carries no tenant column", () => {
   });
 
   /**
-   * The keys and links, read through the three catalogues SQLite has in place of `pg_constraint`.
+   * The keys and links, read through the catalogues SQLite has.
    *
    * **A foreign key and a primary key have no NAME here**, which is a fact about the generated
    * schema and not only about this test: drizzle-kit emits a SQLite foreign key as a bare
    * `FOREIGN KEY (…) REFERENCES …` clause with no `CONSTRAINT <name>` before it, and a primary key
-   * as `PRIMARY KEY(…)`. So the map that used to be keyed by `menu_items_section_fk` is keyed by
-   * the table and columns the key is declared ON, and every fact the PostgreSQL definition string
-   * carried — which table and columns, which parent table and columns, and the delete action — is
-   * still here. Every entry below was checked one at a time against the `pg_get_constraintdef`
-   * strings this replaced; the three that changed WORDING rather than meaning are the two
-   * `content_languages` checks (`schema/menu.ts` carries the measurement for each) and nothing
-   * else, and one of those two lost half its subject — see the third case's note.
+   * as `PRIMARY KEY(…)`. So the map is keyed by the table and columns the key is declared ON.
    *
    * CHECK constraints keep their names, because drizzle writes those as `CONSTRAINT "<name>"
    * CHECK(…)`; they are read out of the stored `CREATE TABLE` text, which is the only place SQLite
@@ -199,12 +192,10 @@ describe("the catalogue migration set carries no tenant column", () => {
 
     expect(checks).toEqual({
       content_languages_singleton_ck: `"content_languages"."id" = 1`,
-      // `default_language = ANY (languages)` on PostgreSQL. The list is JSON text here, and the
-      // membership test matches the QUOTED token so one code cannot match a prefix of a longer
-      // one; `schema/menu.ts` carries the measurement.
+      // The list is JSON text, and the membership test matches the QUOTED token so one code cannot
+      // match a prefix of a longer one.
       content_languages_default_ck: `instr("content_languages"."languages", '"' || "content_languages"."default_language" || '"') > 0`,
-      // The PostgreSQL check also refused a NULL ENTRY in the list. That half does not carry, and
-      // no check can express it here — `schema/menu.ts` states why. What is left is the count.
+      // This does not refuse a NULL ENTRY in the list; `schema/menu.ts` says what does.
       content_languages_list_ck: `json_array_length("content_languages"."languages") between 1 and 200`,
       menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
       units_precision_ck: `"units"."precision" between 0 and 3`,
@@ -289,7 +280,7 @@ describe("the one-row catalogue tables hold at most one row", () => {
       db.insert(contentLanguages).values({ id: 2, defaultLanguage: "es", languages: ["es"] }),
     );
     expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
-    // A CHECK is the one refusal class SQLite still names, so this half survives unchanged.
+    // A CHECK is the one refusal class SQLite still names.
     expect(engineErrorMessage(second)).toContain("content_languages_singleton_ck");
     const duplicate = await captureError(() =>
       db.insert(contentLanguages).values({ defaultLanguage: "es", languages: ["es"] }),
@@ -401,12 +392,10 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
    * The statement is refused, as a foreign-key violation.
    *
    * **`key` is the assertion's LABEL, and nothing checks it against the engine.** SQLite reports a
-   * foreign-key refusal as the six words `FOREIGN KEY constraint failed` and names neither the
-   * constraint nor the column — measured, and written up on `constraintTarget`
-   * (`packages/db/src/constraint-target.ts`). So the `toContain(<constraint name>)` half of this
-   * helper is gone, with no replacement available from the engine; what still discriminates is
-   * that each call below sends a statement with exactly ONE wrong value, so the class plus the
-   * statement say which key fired.
+   * foreign-key refusal as `FOREIGN KEY constraint failed` and names neither the constraint nor the
+   * column (`constraintTarget`, `packages/db/src/constraint-target.ts`). What discriminates is that
+   * each call below sends a statement with exactly ONE wrong value, so the class plus the statement
+   * say which key fired.
    */
   async function refusal(write: () => Promise<unknown>, key: string) {
     const error = await captureError(write);
@@ -583,7 +572,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       db.delete(products).where(sql`${products.id} = ${c.soupBowlId}`),
     );
     // `on delete restrict` is refused through the engine's own trigger machinery, so it reports
-    // errcode 1811 (SQLITE_CONSTRAINT_TRIGGER) rather than a plain key's 787 — measured here.
+    // errcode 1811 (SQLITE_CONSTRAINT_TRIGGER) rather than a plain key's 787.
     expect(error).toMatchObject({ errcode: 1811, message: "FOREIGN KEY constraint failed" });
     await db.delete(menuItems).where(sql`${menuItems.id} = ${c.menuItemId}`);
     expect(await db.select().from(menuItemVariantOverrides)).toEqual([]);

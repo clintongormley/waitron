@@ -180,9 +180,8 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
       { product: weight("24.90", "reduced"), quantity: "0.320" }, // 7.97 gross, 7.25 net base
     ]);
     expect(r.grossLineTotals).toEqual([decimal("3.00"), decimal("7.97")]);
-    // The per-UNIT gross (stored as `working_order_lines.unit_price_gross`) is the gross unit itself,
-    // NOT multiplied by quantity — distinct from `grossLineTotals` for any quantity ≠ 1: café 1.50 (not
-    // 3.00) and jamón 24.90/kg (not 7.97). `priceLockedLines` reads exactly these back to file the lock.
+    // The per-UNIT gross is NOT multiplied by quantity: café 1.50 (not 3.00) and jamón 24.90/kg
+    // (not 7.97).
     expect(r.grossUnitPrices).toEqual([decimal("1.50"), decimal("24.90")]);
     // The gross line total is what the operator/customer sees (and what the working-order draft
     // stores in `working_order_lines.line_total`); the FILED fiscal line keeps the NET base.
@@ -201,10 +200,8 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
   });
 });
 
-// A dish + its selected options price as a PARENT line followed by its CHILD lines, all flowing
-// through the SAME `priceRows` arithmetic core — a child is just another priced row (grossUnit = the
-// option's price delta, rate = its vatClass override or the dish's rate, quantity = the DISH's
-// quantity, name/descriptions = the option's own label, category = the parent's).
+// A dish + its selected options price as a PARENT line followed by its CHILD lines, through the
+// same arithmetic core as a plain basket.
 describe("priceBasketWithOptions — parent + child priced lines", () => {
   const opt = (
     priceDelta: string,
@@ -368,8 +365,7 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
         ],
       },
     ];
-    // An option with no `quantity` field must produce the identical priced result to one with
-    // `quantity: 1` — the no-per-option-count path is unchanged from before this feature.
+    // An option with no `quantity` field must price exactly as one with `quantity: 1`.
     expect(priceBasketWithOptions(build())).toEqual(priceBasketWithOptions(build(1)));
   });
 
@@ -385,14 +381,12 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
   });
 });
 
-// Pure arithmetic — no database involved, so these are plain unit tests: `priceLockedLines`
-// reprices from the STORED gross unit exactly as
-// `priceBasket` prices from the live catalogue, and both funnel through the same `priceRows`
-// core.
+// `priceLockedLines` reprices from the STORED gross unit exactly as `priceBasket` prices from the
+// live catalogue.
 describe("priceLockedLines — files a locked line to the walk-up VAT breakdown", () => {
   it("prices locked lines to the difference-method VAT breakdown (base 4.55 / tax 0.95), like a walk-up", () => {
     // café×1 (gross 1.50) + agua×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95
-    // (NOT round(4.55×21%)=0.96) — the exact property working-order.pay-and-dispatch.test.ts:363-378 pins.
+    // (NOT round(4.55×21%)=0.96).
     const priced = priceLockedLines([
       {
         grossUnitPrice: "1.50",
@@ -447,10 +441,8 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
   });
 
   it("is byte-identical to re-pricing the same products — mixed rates and a weighed line", () => {
-    // The whole point: filing a retrieved order from the stored lock produces the SAME
-    // PricedLines/vatBreakdown as re-pricing the same product at the same gross would. A locked
-    // line carries `grossUnitPrice`/`vatRate` where a basket carries `unitPrice`/`vatClass`; feed
-    // both the same gross figures and the outputs must be deep-equal to the céntimo.
+    // Filing a retrieved order from the stored lock produces the SAME result as re-pricing the same
+    // product at the same gross, to the céntimo.
     const basket = [
       { product: each("8.50", "general"), quantity: "2" }, // 21% each
       { product: weight("24.90", "reduced"), quantity: "0.320" }, // 10% weighed

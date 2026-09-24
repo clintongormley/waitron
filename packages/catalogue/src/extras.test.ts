@@ -30,14 +30,8 @@ import {
 import { writeProductModifiers } from "./product-modifiers.js";
 import { setProductVariants, type VariantWrite } from "./variants.js";
 
-// One SQLite file with the real migrations applied. The grants walkthrough this file used to end
-// with is gone with the grants themselves, and the concurrent-save cases live in
-// extras.concurrency.test.ts.
-// Only the tenant row is seeded outside each test's own setup: with no `content_languages` row,
-// `readContentLanguages` falls back to the language passed in
-// (packages/catalogue/src/content-languages.ts), and `useVenueDb` empties every data table after
-// each test on its own (packages/db/src/testing/venue-db.ts), which is why the three products
-// below are re-made per test.
+// With no `content_languages` row, `readContentLanguages` falls back to the language passed in.
+// `useVenueDb` empties every data table after each test, so the products are re-made per test.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -47,9 +41,8 @@ const SECOND_UNKNOWN_ID = "88888888-8888-4888-8888-888888888888";
 
 /**
  * Three breads with three DIFFERENT names and three DIFFERENT unit prices, so a read that picks up
- * the wrong row is visible in both the id and the resolved price. Created with `unitId: null` and
- * `categoryId: null` so no `product_units` or `product_categories` row points at them — which is
- * what lets the product-delete probe below name the one foreign key it is about.
+ * the wrong row is visible in both the id and the resolved price. No unit or category, so the
+ * product-delete probe below meets only the extras item's key.
  */
 const breads: { sourdough: string; focaccia: string; rye: string } = {
   sourdough: "",
@@ -135,19 +128,15 @@ describe("extra list CRUD", () => {
   });
 
   it("returns the lists in sort order then id order, each with its items in sort order", async () => {
-    // Written straight to the tables: `sort` is not part of the authoring body, so a list saved
-    // through `createExtraList` always keeps the column default. The three rows are inserted in an
-    // order that matches neither the expected order nor plain id order, so the assertion fails if
-    // either half of the ordering is dropped.
+    // Written straight to the tables: `sort` is not part of the authoring body. Inserted in an order
+    // that matches neither the expected order nor plain id order, so dropping either half fails.
     const late = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const second = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const third = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     await fx.db.execute(sql`
       insert into extra_lists (id, name, sort) values
         (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
-    // Each row carries its own `id`: the column's value comes from the table's `$defaultFn`, which
-    // drizzle runs per insert and a raw statement never reaches (`NOT NULL constraint failed:
-    // extra_list_items.id` without it). The list rows above already name theirs.
+    // Each row names its own `id`: the column default is a drizzle `$defaultFn`, which raw SQL skips.
     await fx.db.execute(sql`
       insert into extra_list_items (id, list_id, product_id, sort) values
         (${newId()}, ${second}, ${breads.focaccia}, 1),
@@ -197,8 +186,7 @@ describe("extra list CRUD", () => {
   });
 
   it("updates an item whose id the body sends in upper case", async () => {
-    // Hex letters, so upper-casing the id below actually changes it. PostgreSQL stores a uuid
-    // case-insensitively and hands it back lower-cased, which is what the body has to match.
+    // Hex letters, so upper-casing the id below actually changes it.
     const itemId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     const created = await run((tx) =>
       createExtraList(
@@ -227,9 +215,8 @@ describe("extra list CRUD", () => {
   it("treats a list's own items as its own when the list id arrives in upper case", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
 
-    // A `uuid` column compares case-insensitively, so an upper-cased list id still names this list;
-    // what must not happen is the list's own items reading as another list's because the comparison
-    // moved into JavaScript.
+    // What must not happen is the list's own items reading as another list's because the id
+    // comparison happens in JavaScript.
     const updated = await run((tx) =>
       updateExtraList(
         tx,
@@ -637,30 +624,13 @@ describe("what the database refuses under an extras list", () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     expect(created.items.map((item) => item.productId)).toContain(breads.rye);
 
-    // Done as direct SQL because no route and no write path removes a product ROW — only test
-    // fixtures do. Searched on 2026-09-19: `grep -rn 'app\.delete(' apps/server/src --include="*.ts"`
-    // lists every DELETE route and none of them is products, and `grep -rn '\.delete(products)'
-    // packages apps --include="*.ts"` and `grep -rn 'delete from products' packages apps
-    // --include="*.ts"` find only test files, fixtures, and the comments — this one among them —
-    // that quote the commands. The dashboard's `#deleteProduct`
-    // (apps/dashboard/src/screens/catalogue-screen.ts) sets `available: false` through the product
-    // editor rather than deleting anything. The constraint name is asserted below so a key that
-    // stopped being ON DELETE RESTRICT, or a different row refusing first, fails here rather than
-    // passing.
     const error = await captureError(() =>
       Promise.resolve(fx.db.execute(sql`delete from products where id = ${breads.rye}`)),
     );
 
-    // `RESTRICT_VIOLATION` (1811), not `FOREIGN_KEY_VIOLATION` (787): SQLite implements
-    // `ON DELETE RESTRICT` with an internal trigger, so a RESTRICT refusal arrives under the
-    // TRIGGER reason and is a different class from a write naming a missing parent
-    // (`packages/db/src/sql-state.ts`). That is the same distinction PostgreSQL drew with `23001`
-    // against `23503`.
-    //
-    // The constraint NAME half of this assertion is gone with no replacement: SQLite's whole
-    // message here is `FOREIGN KEY constraint failed`, naming neither the key nor the column
-    // (`packages/db/src/constraint-target.ts`). The class is what is left, and it still separates
-    // a RESTRICT key from a NO ACTION one, which is what this case is about.
+    // `RESTRICT_VIOLATION`, not `FOREIGN_KEY_VIOLATION`: SQLite reports a RESTRICT refusal under
+    // the TRIGGER reason (`packages/db/src/sql-state.ts`). Its message names no key, so the class is
+    // all that separates a RESTRICT key from a NO ACTION one.
     expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
   });
 
@@ -669,9 +639,7 @@ describe("what the database refuses under an extras list", () => {
       createExtraList(tx, { name: "Sides", items: [{ productId: breads.rye }] }, "en"),
     );
 
-    // `isProductPrice` (modifier-limits.ts) refuses a leading minus before the write, so a negative
-    // price cannot arrive through the contract; this is the database backstop under that. An item's
-    // price becomes a sale line and so reaches a fiscal record.
+    // The database backstop under `isProductPrice` (modifier-limits.ts).
     const error = await captureError(() =>
       Promise.resolve(
         fx.db.execute(
@@ -682,16 +650,13 @@ describe("what the database refuses under an extras list", () => {
     );
 
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    // A CHECK is the one class SQLite names, so this half is unchanged.
     expect(engineErrorMessage(error)).toContain("extra_list_items_price_ck");
   });
 
   it("refuses a second item naming the same product in one list", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
 
-    // `parseExtraListInput` already refuses the pair in one authoring body (extra-contract.ts); this
-    // index is what enforces the same rule in the database, reached here by a direct insert that
-    // goes through no contract at all.
+    // The database backstop under `parseExtraListInput`, reached by a direct insert.
     const error = await captureError(() =>
       Promise.resolve(
         fx.db.execute(
@@ -700,8 +665,7 @@ describe("what the database refuses under an extras list", () => {
       ),
     );
 
-    // SQLite names the KEY that collided rather than the index, so `refusalOn` asks the question
-    // the index name used to answer (`packages/db/src/constraint-target.ts`).
+    // SQLite names the columns that collided, not the index.
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "extra_list_items",
@@ -718,7 +682,7 @@ describe("extra lists in the catalogue's configuration transfer", () => {
     expect(transferred).toContain("extra_lists");
     expect(transferred).toContain("extra_list_items");
     // `importConfigurationTables` inserts in this order and deletes in its reverse
-    // (apps/server/src/configuration-transfer.ts), so the parent has to come first.
+    // (apps/server/src/configuration-transfer.ts).
     expect(transferred.indexOf("extra_lists")).toBeLessThan(
       transferred.indexOf("extra_list_items"),
     );

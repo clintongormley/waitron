@@ -25,24 +25,16 @@ import { seedVenue } from "../test/fixtures.js";
  * lines, `total` and VAT breakdown. It seeds a venue and a catalogue, reads the sellable products
  * with `listAvailableProducts`, prices a basket with `priceBasket`, and hands the resulting
  * `{ lines, total, vatBreakdown }` straight to `@waitron/core`'s `recordSale`. Nothing here computes
- * a price or a breakdown by hand — every fiscal figure originates in the catalogue and flows through
- * the two functions under Tasks 3 and 5.
- *
- * The dependency is one-directional: `@waitron/catalogue` depends on `@waitron/core`, and core never
- * imports catalogue (verified: `packages/core/package.json` names no `@waitron/catalogue`), so
- * importing `recordSale` here introduces no cycle.
+ * a price or a breakdown by hand — every fiscal figure originates in the catalogue.
  *
  * This suite proves the DATA FLOW across three packages. A `FakeFiscalBackend` stands in for the
- * regime backend, exactly as `packages/core`'s own
- * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by
- * `packages/fiscal-verifactu`'s e2e suite (the runnable `catalogue-demo.ts` that used to be the
- * other half of that sentence was deleted on 2026-09-22 with the storage swap).
+ * regime backend.
  */
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   // `FakeFiscalBackend.recordSale`/`registerNode` read and write their own
   // `fake_node_registrations`/`fake_fiscal_records` tables, and nothing creates those tables except
-  // this call — the identical setup `packages/core`'s `record-sale.test.ts` performs.
+  // this call.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
@@ -51,12 +43,9 @@ const suite = useVenueDb({
  * A `FakeFiscalBackend` that records the `SaleForFiscalRecord` its `recordSale` was last handed, so
  * the test can assert on the total and breakdown that actually crossed the fiscal boundary.
  *
- * **Realisation of the brief's `fakeBackend.lastSale`.** The base `FakeFiscalBackend`
- * (`@waitron/fiscal/src/testing/fake-backend.js`) has no `lastSale` affordance and does not persist
- * `vatBreakdown` at all (its `fake_fiscal_records` table has no such column). A subclass adding the
- * capture is used rather than an object spread of an instance: `record-sale.test.ts` records that
- * `{ ...fake }` produces an object with NONE of the interface's methods, because they are
- * non-enumerable prototype methods — so a subclass overriding the one method is the working shape.
+ * The base `FakeFiscalBackend` does not persist `vatBreakdown` at all. A subclass adding the capture
+ * is used rather than an object spread of an instance: `{ ...fake }` produces an object with NONE of
+ * the interface's methods, because they are non-enumerable prototype methods.
  */
 class CapturingFakeBackend extends FakeFiscalBackend {
   lastSale: SaleForFiscalRecord | undefined;
@@ -69,8 +58,7 @@ class CapturingFakeBackend extends FakeFiscalBackend {
 
 /**
  * A fixed, confident clock. `recordSale` reads `now()` exactly once and never touches
- * `anchor`/`currentAnchor`, so both are stubs — the identical shape every clock literal in
- * `record-sale.test.ts` and the e2e fixtures documents.
+ * `anchor`/`currentAnchor`, so both are stubs.
  */
 const clock: TrustedClock = {
   now: () => ({
@@ -163,7 +151,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     // The backend received the pricing's own `total` and breakdown VERBATIM — recordSale filed the
     // supplied difference-method breakdown rather than re-deriving one from `lines`. (If recordSale
     // ignored the supplied breakdown and derived its own, the captured tax would be 0.73, not 0.72,
-    // and this `toEqual` would fail — the RED this seam is proven against.)
+    // and this `toEqual` would fail.)
     expect(backend.lastSale).toBeDefined();
     expect(backend.lastSale!.total).toBe(priced!.total);
     expect(backend.lastSale!.vatBreakdown).toEqual(priced!.vatBreakdown);
@@ -176,8 +164,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     // customer-facing snapshot falls back to it because this product carries no customer name.
     // `descriptions` comes back as its stored TEXT here, not as an object: the json codec belongs
     // to the column declaration (`packages/db/src/schema/orders.ts`) and a raw `execute` never
-    // reaches it. Parsed at the read, the way the other raw-SQL readers of a json column on this
-    // engine do (`packages/fiscal-verifactu/src/canje-columns.test.ts`).
+    // reaches it.
     const { rows } = await suite.db.execute<{
       category: string | null;
       name: string;

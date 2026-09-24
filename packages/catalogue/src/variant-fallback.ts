@@ -7,42 +7,32 @@ import { productUnits } from "./schema/units.js";
 /**
  * The one place a variant's blanks are read as its parent's (spec
  * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §1.2, as revised by §15.2 and
- * §15.3). The V-numbered decisions and the Review Focus items cited in this module and its tests are
- * in the plan, `docs/superpowers/plans/2026-09-23-variants-as-products.md`.
+ * §15.3).
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
  * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exceptions are
  * the category list, the reporting category and the unit, which a variant inherits by having NO
- * `product_categories` or `product_units` row of its own (V12) — see the owner joins at the end.
+ * `product_categories` or `product_units` row of its own — see the owner joins at the end.
  * The three names are never inherited — a blank customer or kitchen name falls back to the
- * variant's OWN staff name, the rule every product follows — nor is anything that says what the row
+ * variant's OWN staff name — nor is anything that says what the row
  * is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`,
  * `available`, `sold_alone`), or when it was written.
  *
- * The catalogue's product reads, and the order path's read of an extras item, take their inherited
- * values from here, so the nullability of the four columns a variant may leave blank (`vat_class`,
- * `pricing_unit`, `unit_price`, `dietary_declarations`) stops here for reads that go through
- * `effectiveProductColumns`: their callers see non-null types. The exception is deliberate: a
- * variant's own price is read raw, and may be blank, in the variant list
- * (`ProductVariant.unitPrice`) and in the menu price chain (`readOfferVariants`), and the product
- * editor (`readProductEditor`) reads a variant's own price, VAT class and dietary declarations raw,
- * blanks included. The catalogue's
- * reads keyed on CATEGORY MEMBERSHIP read each product's OWN `product_categories` rows, so a variant
- * that inherits its parent's categories is not
- * listed under them there — a category's product list and its delete preview (`categories.ts`) are
- * two; `readProductCategories` refuses a variant's id (`product.not_found`) under its default
- * `"top-level"` scope. Reads keyed on an ORDER
- * LINE's product, which is the variant on a variant line — the kitchen's station routing and its
- * allergen and dietary display (`apps/server/src/working-order.ts`) — read their values from here
- * too, and preparation routes (`packages/venue-service/src/operations.ts`) read their CATEGORY from
- * here.
+ * The nullability of the four columns a variant may leave blank (`vat_class`, `pricing_unit`,
+ * `unit_price`, `dietary_declarations`) stops here for reads that go through
+ * `effectiveProductColumns`: their callers see non-null types. A variant's own price is read raw, and
+ * may be blank, in the variant list (`ProductVariant.unitPrice`) and in the menu price chain
+ * (`readOfferVariants`), and the product editor (`readProductEditor`) reads a variant's own price,
+ * VAT class and dietary declarations raw, blanks included. Reads keyed on CATEGORY MEMBERSHIP read
+ * each product's OWN `product_categories` rows, so a variant that inherits its parent's categories is
+ * not listed under them there.
  */
 
 /** A `products` row with no parent: a product in its own right, never a variant. */
 export const isTopLevelProduct = isNull(products.parentId);
 
 /** The `pricing_unit` to store when a row's unit is cleared: 'each' for a product with no parent,
- * blank for a variant, which then follows its parent's unit and pricing unit (V12). */
+ * blank for a variant, which then follows its parent's unit and pricing unit. */
 export function clearedPricingUnit(): SQL {
   return sql`case when ${products.parentId} is null then 'each' end`;
 }
@@ -50,10 +40,7 @@ export function clearedPricingUnit(): SQL {
 /**
  * Which rows a read or write of ONE product by id may find. `"top-level"` finds only a product with
  * no parent, so a variant's id answers exactly as an id that names no product; `"any"` finds a
- * variant too. `"any"` is passed only by the product editor's save (`saveProductEditor`, in its
- * read of the stored row and its `replaceProductCategories` call) and by the routing write that
- * follows it (`applyRouting` in `apps/server/src/catalogue-api.ts`, calling `setProductStation` and
- * `setProductCourse`).
+ * variant too.
  */
 export type ProductScope = "top-level" | "any";
 
@@ -142,7 +129,7 @@ export const INHERITED_KEYS = Object.keys(
 /**
  * `.leftJoin(productUnits, unitOwnerJoin)`: the `product_units` row of the product whose unit
  * applies — the row's own when it has one, otherwise its parent's. A variant stores NO unit row to
- * inherit (V12), and a top-level product with none reads as Each: its parent id is null, so the
+ * inherit, and a top-level product with none reads as Each: its parent id is null, so the
  * join finds nothing. Joined this way the read stays ONE query whatever the number of products.
  */
 export const unitOwnerJoin = eq(

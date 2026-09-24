@@ -69,8 +69,7 @@ const DIET_LABEL_FIELDS = ["vegan", "vegetarian", "halal", "kosher"] as const;
  * (`diet.invalid_label`, naming the field + echoing the value); `addContains`/`removeContains` must be
  * arrays of contains-tags ({@link validateContainsTag}); and the two contains sides must be disjoint
  * ({@link assertDietOverrideDisjoint} → `diet.add_remove_conflict`). `null` is a no-op (no override).
- * Returns the narrowed override. Defence-in-depth at the core (CLAUDE.md §3) — the twin of
- * `validateAllergens`, so diet writes are as guarded as allergen writes regardless of caller. */
+ * Returns the narrowed override. */
 export function validateDietOverride(value: DietOverride | null): DietOverride | null {
   if (value == null) return null;
   for (const field of DIET_LABEL_FIELDS) {
@@ -119,8 +118,7 @@ export function overlayDietProfile(
   return out;
 }
 
-/** Reject an override that both adds and removes the same contains-tag. Defence-in-depth at the core
- * (CLAUDE.md §3). */
+/** Reject an override that both adds and removes the same contains-tag. */
 export function assertDietOverrideDisjoint(override: DietOverride | null): void {
   if (!override?.addContains || !override.removeContains) return;
   const removing = new Set<string>(override.removeContains);

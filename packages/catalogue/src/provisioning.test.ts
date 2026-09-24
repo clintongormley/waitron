@@ -16,18 +16,13 @@ import { contentLanguages } from "./schema/menu.js";
 import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
 
-// This suite checks seeded values and idempotence; it makes no privilege or contention claim.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 /**
- * Every write and read below goes through its drizzle table.
- *
- * Two reasons, and both are engine facts rather than style. A row's `id` comes from the table's
- * own `$defaultFn` and not from a SQL default, so a raw `insert` naming the other columns is
- * refused `NOT NULL constraint failed: locations.id`. And a `json`/`labelList` column stores JSON
- * TEXT: a raw `select` hands back the string, where the column's read mapping hands back the map
- * or the list these assertions are written against. The expected values are untouched; what
- * changed is the door the row goes through.
+ * Every write and read below goes through its drizzle table. A row's `id` comes from the table's
+ * own `$defaultFn` and not from a SQL default, and a `json`/`labelList` column stores JSON TEXT: a
+ * raw `select` hands back the string, where the column's read mapping hands back the map or the list
+ * these assertions are written against.
  */
 async function venue(country: string, province: string, receipt: string) {
   await seedTenant(suite.db);
@@ -73,9 +68,8 @@ describe("catalogue provisioning", () => {
     // Spain is hard-coded to the same three languages whatever the province. The four Spanish rows
     // vary both inputs the seed could plausibly read — province AND receipt locale — and all four
     // expect one identical set: that sameness is the hard-code, written where it can be read. The
-    // varied receipt column is what keeps it checkable, so do not level it: with the three en-GB
-    // rows changed to es-ES, a seed deriving the Spanish default from the receipt locale passed all
-    // eight tests instead of failing three. See the comment in provisioning.ts.
+    // varied receipt column is what keeps it checkable, so do not level it. See the comment in
+    // provisioning.ts.
     ["ES", "Madrid", "en-GB", "es", ["es", "ca", "en"]],
     ["ES", "Barcelona", "es-ES", "es", ["es", "ca", "en"]],
     ["ES", "A Coruña", "en-GB", "es", ["es", "ca", "en"]],

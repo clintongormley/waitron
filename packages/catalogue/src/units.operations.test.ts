@@ -29,8 +29,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db
 
 /**
  * Both rows go through their drizzle tables: `catalogues.id` and `products.id` come from each
- * table's own `$defaultFn` rather than from a SQL default, so a raw insert naming the other columns
- * is refused `NOT NULL constraint failed: catalogues.id`.
+ * table's own `$defaultFn` rather than from a SQL default.
  */
 async function product(tx: Transaction, name: string) {
   const [menu] = await tx
@@ -167,8 +166,6 @@ describe("unit operations", () => {
     });
   });
 
-  // The contract the single-statement reassignment settled on: an id the source unit does not
-  // currently hold is not an error, it is simply not matched.
   it("skips an unknown product id instead of failing the reassignment", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
@@ -212,11 +209,8 @@ describe("unit operations", () => {
   });
 
   it("rejects excess precision before anything downstream can round it", async () => {
-    // The database never rounds a quantity: the column holds a whole count of thousandths and
-    // `decimalToThousandths` owns the third place, so storage has no rounding of its own for this
-    // case to be checked against. A SQL-side control cannot exist here either — the engine has no
-    // exact decimal type, so `round(1.2345, 3)` is 1.234 and `cast(1.2345 as numeric(12,3))` keeps
-    // all four places (node:sqlite, Node v26.7.0; receipt in docs/developers/conventions-data.md).
+    // The database never rounds a quantity; `decimalToThousandths` owns the third place.
+    // Receipt: docs/developers/conventions-data.md.
     expect(stringToThousandths("1.2345")).toBe(1235);
     expect(() => assertQuantityPrecision("1.2345", 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),

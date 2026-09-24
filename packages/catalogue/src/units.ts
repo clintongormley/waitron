@@ -17,16 +17,9 @@ import "./errors.js";
 import type { Unit, SellableUnit } from "./product-types.js";
 export type { Unit, SellableUnit } from "./product-types.js";
 
-/** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
-/** The unit a product reads as when it has NO stored unit. It is NEVER written to the units table or a
- * product_units row (a no-unit product simply has no row); `sellableUnit()` returns it for the null
- * join so Product/AvailableProduct.unit stay non-null and the sale/receipt paths are unchanged.
- *
- * Its id is a SENTINEL UUID, not "": the live order path writes `offer.unit.id` into
- * `working_line_contexts.unit_id` (`uuid NOT NULL`, no FK — venue-service schema/service.ts:278,
- * operations.ts:870), so the id must be a valid UUID. This matches the till's own "each" fallback id
- * (apps/till/src/widgets/product-name.ts:28) so server and till agree. Nothing looks it up as a real
- * unit and it never reaches product_units. */
+/** The unit a product reads as when it has NO stored unit. It is NEVER written to `units` or
+ * `product_units`. Its id matches the till's own "each" fallback
+ * (apps/till/src/widgets/product-name.ts) so server and till agree. */
 export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
 export const EACH_UNIT: SellableUnit = {
   id: EACH_UNIT_ID,
@@ -148,10 +141,7 @@ export async function assignProductUnit(
   productId: string,
   unitId: string,
 ): Promise<void> {
-  // A plain existence read. It took `for key share` on PostgreSQL, holding the unit's row against
-  // a concurrent delete until the upsert below had written the row that points at it. There is no
-  // concurrent delete: one write transaction runs on the venue file at a time, the pattern this
-  // package states once on `assertExtraListForWrite` (extras.ts).
+  // No row lock: `withTransaction` is the venue file's one write lock (packages/db/src/tenancy.ts).
   const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (unit === undefined) throw new AppError("unit.not_found", { unitId });
   const [product] = await tx
@@ -165,15 +155,10 @@ export async function assignProductUnit(
   });
 }
 
-/** Move the listed products onto the target unit, in ONE statement scoped to the products still on
- * `sourceUnitId`. Both halves matter: a product another manager has already moved elsewhere since
- * the caller's list was read is left where it is rather than overwritten, and a single UPDATE takes
- * its work in one scan instead of interleaving N separate statements across a loop. An id that is
- * not currently on `sourceUnitId` —
- * an unknown id included — matches no row and is skipped, never an error. A
- * `null` target instead deletes those rows and, in the same transaction, sets a top-level product's
- * `pricing_unit` to `'each'` and a variant's to blank, so the product becomes Each and the variant
- * reads its parent's unit and pricing unit. */
+/** Move the listed products onto the target unit, scoped to the products still on `sourceUnitId`:
+ * one another manager has already moved elsewhere is left where it is, and an id not currently on
+ * `sourceUnitId` (an unknown id included) is skipped, never an error. A `null` target instead
+ * deletes those rows, so the product becomes Each and a variant reads its parent's unit. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   sourceUnitId: string,
@@ -209,7 +194,7 @@ export async function clearProductUnit(tx: Transaction, productId: string): Prom
   await tx.delete(productUnits).where(eq(productUnits.productId, productId));
 }
 
-/** The products that assign this unit, each with its availability, ordered stably by product id. */
+/** The products that assign this unit, ordered by product id. */
 export async function productsUsingUnit(
   tx: Transaction,
   unitId: string,
@@ -223,9 +208,7 @@ export async function productsUsingUnit(
 }
 
 export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
-  // `for update` here held the unit's row so that a concurrent assignment could not add a
-  // reference between the reference count below and the delete. Nothing can: one write transaction
-  // runs on the venue file at a time (`assertExtraListForWrite`, extras.ts).
+  // No row lock: `withTransaction` is the venue file's one write lock (packages/db/src/tenancy.ts).
   const [existing] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (existing === undefined) throw new AppError("unit.not_found", { unitId });
   const references = await productsUsingUnit(tx, unitId);

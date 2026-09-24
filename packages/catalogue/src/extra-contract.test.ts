@@ -174,9 +174,6 @@ describe("extra list authoring contract", () => {
   });
 
   it("refuses a pick bound above what the column can hold", () => {
-    // `min_picks`, `max_picks` and `max_quantity` are PostgreSQL `integer` columns (schema/extras.ts),
-    // so a value above 2147483647 that the contract lets through reaches the driver as
-    // `22003 value out of range for type integer`, carrying no field for an editor to show.
     expect(() =>
       parseExtraListInput({ ...breadsBody, minPicks: 99999999999, maxPicks: null }),
     ).toThrowError(
@@ -263,15 +260,9 @@ describe("extra list authoring contract", () => {
     );
   });
 
-  // A default is taken when a field is ABSENT and never when it is present and null — the rule
-  // `CLAUDE.md` §3 states as "default optional request fields only when absent". `value ?? default`
-  // is the shape that breaks it, and it breaks silently: an explicit null would be defaulted rather
-  // than refused, so a client clearing a field would look like a client that never sent it. The
-  // suite that used to hold this pair went with the old modifier contract in Task 13 of
-  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`; these two are its heirs.
-  // Proven by mutation, not by passing: with `bool`'s `value === undefined` widened to
-  // `value == null` and `whole`'s guard likewise, each expectation below fails and the rest of the
-  // file stays green.
+  // A default is taken when a field is ABSENT and never when it is present and null (CLAUDE.md §3).
+  // `value ?? default` breaks it silently: a client clearing a field would look like one that never
+  // sent it.
   it("refuses an explicit null where a default is only taken on absence", () => {
     expect(() => parseExtraListInput({ ...breadsBody, active: null })).toThrowError(
       expect.objectContaining({ code: "extras.invalid", params: { field: "active" } }),
@@ -336,10 +327,8 @@ describe("extra selections at order time", () => {
     ]);
   });
 
-  // A `uuid` column hands its value back lower-cased, so the stored ids are lower case while a body
-  // may send the same uuid in either case — `isUuid` accepts both. The ids here carry LETTERS
-  // deliberately: the digit-only fixtures above are unchanged by `toUpperCase`, so a probe built on
-  // them would pass whether this held or not (CLAUDE.md §1).
+  // The ids here carry LETTERS deliberately: the digit-only fixtures above are unchanged by
+  // `toUpperCase`, so a probe built on them would pass whether this held or not.
   it("accepts picks whose ids are upper case, and answers with the stored lower-case ids", () => {
     const letteredListId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     const letteredProductId = "ffffffff-eeee-4ddd-8ccc-bbbbbbbbbbbb";
@@ -399,12 +388,7 @@ describe("extra selections at order time", () => {
 
   it("refuses an order-time quantity above the contract's shared ceiling, as a shape fault", () => {
     // A count the LIST refuses is `extras.limit_exceeded`; a number above the ceiling `whole` holds
-    // every integer in this contract to is a bad shape, so it is refused with a field path like any
-    // other malformed value. That ceiling is the contract's, not this field's own: `minPicks`,
-    // `maxPicks` and `maxQuantity` are `integer` columns (schema/extras.ts) and an order-time
-    // `quantity` is not a column at all — the child `working_order_lines` row an extra is designed
-    // to become holds its quantity as a count of whole thousandths (packages/db/src/schema/orders.ts,
-    // columns.ts `quantity`).
+    // every integer in this contract to is a bad shape, refused with a field path.
     expect(() =>
       validateExtraSelections(
         [breads({ minPicks: 0, maxPicks: null })],

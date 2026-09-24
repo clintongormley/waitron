@@ -47,12 +47,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         cross join tenants t
         where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
-      // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: the deli writes its
-      // menu in Spanish, Catalan and English, and nothing in setup asks which languages a venue
-      // wants. Driving the list from the venue's region and its own choices is the proper fix —
-      // docs/backlog.md → A9, "Product languages are hard-coded at setup". Every other country
-      // keeps taking its one language from geography, so the hard-code does not spread. All of it
-      // is editable from the dashboard afterwards.
+      // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: nothing in setup asks
+      // which languages a venue wants. docs/backlog.md → "Product languages are hard-coded at setup".
       const languages =
         country === "ES"
           ? ["es", "ca", "en"]
@@ -68,13 +64,9 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       // The default has to be one of the languages: `content_languages_default_ck`.
       const defaultLanguage = languages[0]!;
       // Every write below goes through its drizzle table rather than through raw SQL, because
-      // the column defaults these rows rely on are no longer SQL defaults: `id`, `created_at` and
-      // `updated_at` are supplied by `$defaultFn` in JavaScript
+      // `id`, `created_at` and `updated_at` are supplied by `$defaultFn` in JavaScript
       // (`packages/db/src/schema/columns.ts`), so a raw `insert into catalogues (name)` writes a
-      // null id and is refused `NOT NULL constraint failed: catalogues.id`. The same route also
-      // hands `languages`, `name` and `abbreviation` to the column mappings that serialise them —
-      // those columns store JSON TEXT here, so the `::jsonb` casts and the `array[…]` constructor
-      // they replaced have no counterpart to translate into.
+      // null id and is refused.
       await tx
         .insert(contentLanguages)
         .values({ defaultLanguage, languages })

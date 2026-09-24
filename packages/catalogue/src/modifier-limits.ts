@@ -2,7 +2,7 @@
 // apply exactly the same checks in the browser and report a bad value beside its own field rather
 // than as a failed save.
 
-/** The largest quantity a modifier may store: PostgreSQL's `integer` maximum. */
+/** The largest quantity a modifier may store. */
 export const MAX_MODIFIER_INTEGER = 2147483647;
 
 /**
