@@ -25,10 +25,10 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
  * push, which takes seconds.
  *
  * `claimed_at` is stamped once per BATCH, so a large batch to a slow printer can age its unsent
- * tail past the lease, and another agent in the venue can then re-claim a network printer's unsent
- * jobs and print them while the first is still pushing. Delivery is deliberately at-least-once: a
- * reclaim can reprint a job that printed but whose `done` report was lost, which is accepted over a
- * dropped kitchen ticket.
+ * tail past the lease. Another agent in the venue can then re-claim a network printer's unsent jobs
+ * and print them while the first still sends every job it pulled, so those jobs print twice.
+ * Delivery is deliberately at-least-once: a reclaim can also reprint a job that printed but whose
+ * `done` report was lost. A double print is accepted over a dropped kitchen ticket.
  */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
