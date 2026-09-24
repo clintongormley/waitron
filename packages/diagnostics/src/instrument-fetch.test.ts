@@ -90,7 +90,7 @@ describe("createInstrumentedFetch", () => {
       makeId: () => "rid-4",
     });
     // `new URL("http://[", "http://local")` genuinely throws (invalid IPv6 host), so the raw-path
-    // fallback keeps the unparsed string. Deleting the try/catch makes this call reject.
+    // fallback keeps the unparsed string.
     const raw = "http://[";
     await f(raw);
     const end = log.snapshot().at(-1)!;
@@ -188,7 +188,6 @@ describe("createInstrumentedFetch", () => {
       headers: { "x-existing": "kept" },
     });
     await f(req);
-    // Old code stringified the Request to "[object Request]": method "GET", wrong path, header dropped.
     expect(seenHeaders?.get("x-request-id")).toBe("rid-req");
     expect(seenHeaders?.get("x-existing")).toBe("kept");
     const end = log.snapshot().at(-1)!;

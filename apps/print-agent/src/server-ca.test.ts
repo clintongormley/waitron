@@ -109,9 +109,7 @@ describe("createServerTrustingFetch", () => {
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);
-    // caEndpointFetch hands back a DIFFERENT, unrelated CA — so the box's real CA is never trusted
-    // and verification must fail. This is the negative control: it proves we are verifying, not
-    // accepting every certificate.
+    // The negative control: the endpoint hands back an unrelated CA, so verification must fail.
     const unrelated = mintCa("localhost").caPem;
     const trusting = await createServerTrustingFetch({
       serverUrl: origin,
@@ -133,19 +131,14 @@ describe("createServerTrustingFetch", () => {
     });
     const res = await trusting(`${origin}/x`);
     expect(res.status).toBe(200);
-    // It asked the plain-HTTP landing route on port 80 of the server's host.
     expect(responder.calls).toEqual(["http://localhost/ca.crt"]);
-    // And it persisted the CA for a restart to trust immediately.
     expect(await readFile(join(stateDir, "server-ca.crt"), "utf8")).toBe(material.caPem);
   });
 
   it("rejects a server whose CA was not fetched (verification stays on, not accept-all)", async () => {
-    // A server presenting a cert whose CA we did NOT fetch must still fail — proving the wrapper
-    // verifies rather than accepting every certificate. This guards only the negative half.
-    // Public-root RETENTION (a promoted cloud primary's public-root-signed cert still verifying) is
-    // verified live by the run-it review: it needs a real public-root-signed server and cannot be
-    // asserted hermetically, so deleting `...rootCertificates` from the dispatcher's `ca` would not
-    // fail this case. The rootCertificates assertion below only guards that the spread source exists.
+    // Guards only the negative half: deleting `...rootCertificates` from the dispatcher's `ca`
+    // would not fail this case, because public-root retention needs a real public-root-signed
+    // server.
     const boxMaterial = mintCa("localhost");
     const otherServer = mintCa("localhost"); // a different CA, not fetched
     const { server, origin } = await startHttps(otherServer);
@@ -160,15 +153,8 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("on a verification failure, refetches the CA and retries once when it changed (rotation)", async () => {
-    // The reimaged-box path, exercised for real — the ONLY case that runs the catch → refresh → retry
-    // branch. Boot pins the OLD CA (the endpoint still serves old at clock=0, so no change at boot),
-    // while the HTTPS server already presents the NEW leaf. An hour later the endpoint serves the NEW
-    // CA. The first request FAILS verification (the pinned old CA cannot verify the new leaf), the
-    // module refetches, sees the CA changed, rebuilds trust, and the retry succeeds.
-    //
-    // Boot must serve OLD (not NEW): if the endpoint served NEW at boot, boot's own refresh() would
-    // pin it before any request and the retry branch would never run — the vacuous-pass this case
-    // exists to avoid (fresh-review I1).
+    // The ONLY case that runs the catch → refresh → retry branch. Boot must serve the OLD CA:
+    // served NEW, boot's own refresh() would pin it and the retry branch would never run.
     const oldMaterial = mintCa("localhost");
     await writeFile(join(stateDir, "server-ca.crt"), oldMaterial.caPem, { mode: 0o644 });
     const newMaterial = mintCa("localhost");
@@ -195,12 +181,8 @@ describe("createServerTrustingFetch", () => {
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);
-    // The endpoint keeps handing back an UNRELATED CA, so every request fails verification and would
-    // refetch every time if unthrottled. The clock must ADVANCE between boot and the first failure —
-    // a constant clock collides boot's own refresh() (which sets lastFetchAt) with the post-failure
-    // refetch, throttling it away and making the .toBe(2) below impossible (fresh-review B1). So:
-    // boot fetches at clock=0 (lastFetchAt=0); advance past the hour so the FIRST failure refetches;
-    // the SECOND failure is inside that new hour and must NOT.
+    // The clock must ADVANCE between boot and the first failure, or boot's own refresh() would
+    // throttle the post-failure refetch away too.
     let clock = 0;
     const responder = caResponder(mintCa("localhost").caPem);
     const trusting = await createServerTrustingFetch({
@@ -241,8 +223,7 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("ignores a non-200 from /ca.crt and pins nothing (operator-cert box has no CA to serve)", async () => {
-    // Covers refresh()'s `!res.ok` branch. A 404 must not pin a body; the agent falls back to public
-    // roots, so the self-signed server still fails verification — proving nothing was pinned.
+    // The self-signed server still failing verification proves nothing was pinned.
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);
@@ -256,7 +237,6 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("ignores an empty /ca.crt body", async () => {
-    // Covers refresh()'s `pem.trim() === ""` branch: a blank body is not a CA and is never persisted.
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);
@@ -270,12 +250,8 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("a failed first-boot fetch retries after the short interval, not an hour", async () => {
-    // The agent container starts before the app's landing listener binds, so the boot /ca.crt fetch
-    // usually fails. That must NOT burn the hourly throttle: until the first CA is obtained the retry
-    // interval is short (INITIAL_RETRY_INTERVAL_MS = 10s), and only a PINNED CA falls back to hourly.
-    // Here the endpoint 500s at boot (nothing pinned), then serves the real CA; ten seconds later a
-    // verify-failing request triggers a refresh that succeeds. Were the interval an hour, the refresh
-    // at clock=10s would be throttled away and the request would throw — so a 200 proves the short path.
+    // Were the interval an hour, the refresh at clock=10s would be throttled away and the request
+    // would throw.
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);
@@ -300,9 +276,6 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("with a usable cached CA, boot does not block on a hung /ca.crt", async () => {
-    // A cached CA already serves trust, so boot must refresh in the background rather than await a
-    // slow landing endpoint (which would also stall the 9110 setup page). A never-resolving CA fetch
-    // must not stop the factory resolving nor the returned fetch verifying against the cached CA.
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);
@@ -319,8 +292,6 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("with no cached CA, boot is bounded and returns a working pass-through when /ca.crt hangs", async () => {
-    // No cached CA and a hung landing endpoint: boot bounds its single fetch by caFetchTimeoutMs so it
-    // cannot stall, and falls back to a plain pass-through (no dispatcher) until a CA is obtained.
     const base = (async () => new Response("ok", { status: 200 })) as typeof fetch;
     const hung = (() => new Promise<Response>(() => {})) as typeof fetch;
     const trusting = await createServerTrustingFetch({
@@ -335,9 +306,7 @@ describe("createServerTrustingFetch", () => {
   });
 
   it("keeps in-memory trust when the CA cannot be persisted (best-effort cache)", async () => {
-    // A stateDir that cannot hold the file (here, a child of a regular file) makes mkdir/write/rename
-    // throw. That must not reject the factory: in-memory trust is already built, so the agent runs and
-    // only the on-disk copy is skipped.
+    // A child of a regular file, so mkdir/write/rename throw.
     const material = mintCa("localhost");
     const { server, origin } = await startHttps(material);
     servers.push(server);

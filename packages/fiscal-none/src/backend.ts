@@ -14,11 +14,9 @@ import type { Transaction } from "@waitron/db";
  * writes NOTHING — no tables, no chain, no submission — and returns the empty shape the interface
  * demands.
  *
- * Methods declare only the parameters they use and drop the rest: a no-op needs none of its
- * inputs, and TypeScript's structural typing lets a method with fewer parameters satisfy the
- * interface's fuller signature. The `_tx` retained on the write methods is the interface's leading
- * transaction handle, kept (though unused) so a reader sees these are the same write seam the real
- * regime uses — the none backend simply has nothing to write into it.
+ * Methods declare parameters only up to the last one they use, and TypeScript's structural typing
+ * lets a method with fewer parameters satisfy the interface's fuller signature. That is why the
+ * write methods keep an unused leading `_tx`: the input they do read comes after it.
  *
  * `state: "recorded"` is deliberate, not a placeholder: the state means "the legally-required
  * record exists locally", which for a venue with no fiscal regime is vacuously true. Reporting it

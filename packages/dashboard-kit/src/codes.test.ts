@@ -27,10 +27,6 @@ it("degrades an unregistered code to GENERIC, never the raw code", () => {
 });
 
 it("degrades a prototype-chain code (toString/constructor) to GENERIC, never undefined", () => {
-  // A code colliding with an Object.prototype member resolves the inherited method under a `??`
-  // (truthy → skips GENERIC → pickLocale returns undefined, a blank banner). The Object.hasOwn guard
-  // is what keeps GENERIC firing here — proven by deletion: swap the guard for `messages[code] ??
-  // GENERIC` and these assertions go red (an inherited function, then undefined from pickLocale).
   for (const code of ["toString", "constructor", "valueOf", "hasOwnProperty"]) {
     expect(codeMessage(code, "en")).toBe("Something went wrong, try again");
   }

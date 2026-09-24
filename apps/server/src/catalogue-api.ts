@@ -206,7 +206,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // customer-facing name map with no text in the default content language. Both are CLIENT request
   // faults → 400. Listed
   // explicitly as the house style requires; the `?? 400` default
-  // (`packages/server-kit/src/error-boundary.ts:57`) already covers them.
+  // (`packages/server-kit/src/error-boundary.ts:32`) already covers them.
   "options.invalid": 400,
   "options.translation_required": 400,
   // An id naming no list. The default would make this a 400, so this entry is what makes it a 404.

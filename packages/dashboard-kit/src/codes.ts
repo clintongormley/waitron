@@ -1,10 +1,8 @@
 import { currentLocale, pickLocale } from "./i18n.js";
 
-// The dashboard's error/status CODE → localised copy resolver. Lifted from
-// apps/dashboard/src/i18n/codes.ts, backed by a registry a module fills at load rather than the app's
-// module-level CODE_MESSAGES literal. It carries a load-bearing guarantee: an operator must NEVER see
-// a raw wire code — an unregistered code degrades to GENERIC, so codeMessage returns only ever a
-// sentence, never a code and never undefined.
+// The dashboard's error/status CODE → localised copy resolver, backed by a registry a module fills at
+// load. An operator must NEVER see a raw wire code — an unregistered code degrades to GENERIC, so
+// codeMessage returns only ever a sentence, never a code and never undefined.
 
 // The message shown for any code not in the registry — the same copy as `server.internal`: an unmapped
 // code and an internal error are the same thing to the operator (something failed, retry is the move).

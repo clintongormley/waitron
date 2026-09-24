@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBluetoothctlHost, parseBluetoothctlDevices, parsePairResult } from "./bluetooth.js";
 
-// `bluetoothctl` output shapes synthesised in the tool's documented format (ANSI colour codes and \r
-// included) — the box had no Bluetooth adapter at capture time (task-6-hardware-facts.md), so this is
-// NOT a real capture; the exact shape is to confirm at the Step 6c receipt. The parsers are proven
-// against this shape, not a cleaned-up ideal.
+// Synthesised in the tool's documented format (ANSI colour codes and \r included), NOT a real
+// capture.
 const DEVICES_OUTPUT =
   "[0;94m[NEW][0m Device AA:BB:CC:DD:EE:FF Star TSP100\r\n" +
   "[NEW] Device 11:22:33:44:55:66 HP Printer\r\n" +
@@ -15,7 +13,6 @@ describe("parseBluetoothctlDevices", () => {
     expect(parseBluetoothctlDevices(DEVICES_OUTPUT)).toEqual([
       { mac: "AA:BB:CC:DD:EE:FF", name: "Star TSP100" },
       { mac: "11:22:33:44:55:66", name: "HP Printer" },
-      // A device whose "name" is just its MAC in dashes has no real name — reported without one.
       { mac: "99:88:77:66:55:44" },
     ]);
   });

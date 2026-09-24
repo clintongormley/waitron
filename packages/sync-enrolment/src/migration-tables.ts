@@ -1,45 +1,25 @@
 /**
  * The set of tables a migration SET leaves in existence, read as TEXT (never executed).
  *
- * Both classification guards — `scripts/classification-complete.test.ts` (tree-wide) and
- * `packages/db/src/classification.test.ts` (core) — must agree. A scanner that only counted
- * `CREATE TABLE` would keep a dropped table forever and put them in permanent disagreement, so this
- * subtracts on `DROP TABLE`, and follows `ALTER TABLE … RENAME TO` from the old name to the new.
- *
- * ORDER IS THE CONTRACT: the caller passes one migration set's SQL in the order the migrations
- * apply, because create → drop → create must resolve to "present" and the reverse to "absent". Both
- * callers approximate that order by sorting paths: `packages/db/src/classification.test.ts` sorts
- * the file names at the top of core's set, and `migrationSqlFiles` (`./testing/migration-sets.ts`)
- * sorts every `.sql` path in a set by the whole path. drizzle names each migration after its
- * zero-padded number, so on 2026-09-23 the sorted `.sql` names of every set matched its journal's
- * order.
+ * ORDER IS THE CONTRACT: the caller passes one set's SQL in the order the migrations apply, because
+ * create → drop → create must resolve to "present" and the reverse to "absent".
  */
 
-/** `CREATE TABLE ["public".]"<name>"` — the name backtick-quoted (what every `CREATE TABLE` under
- * a package's `drizzle` directory is now), double-quoted (still the spelling of the fixture sets
- * under `packages/db/test`) or bare; schema-qualified or not; IF NOT EXISTS or not. Each spelling has its
- * own case in `migration-tables.test.ts`. SQLite accepts `[bracket]` quoting as well — sqlite3 3.51.0
- * created a table from `CREATE TABLE [brack]` — and that is NOT handled here: a set emitting it would
- * read as creating no tables at all, which is exactly what the backtick did before this tolerance.
- * The name capture is digit-tolerant (`[a-z0-9_]+`, `i` flag): real table names carry digits. */
+/**
+ * SQLite's `[bracket]` quoting is NOT handled: a set emitting it would read as creating no tables.
+ */
 const CREATE_TABLE =
   /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?/gi;
 
-/** `DROP TABLE [IF EXISTS] ["public".]"<name>"`, the same tolerances. A trailing CASCADE/RESTRICT is
- * outside the capture and does not need matching. */
 const DROP_TABLE =
   /\bdrop\s+table\s+(?:if\s+exists\s+)?["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?/gi;
 
-/** `ALTER TABLE <old> RENAME TO <new>`, the same tolerances on both names: the last step of
- * drizzle-kit's rebuild of a table (build `__new_<name>`, copy, drop, rename). `RENAME COLUMN … TO`
- * does not match, because `TO` must follow the table name's single `RENAME`. */
+/** The last step of drizzle-kit's table rebuild. `RENAME COLUMN … TO` does not match. */
 const RENAME_TABLE =
   /\balter\s+table\s+["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?\s+rename\s+to\s+["`]?([a-z0-9_]+)["`]?/gi;
 
-/** Blank block comments, `--` line comments, and `'…'` string literals to whitespace, preserving line
- * count (so a CREATE/DROP TABLE mentioned in prose or a literal is ignored). Naive by design — the
- * same scanner `module-graph-honesty.test.ts` uses, whose header records why a real parser is not
- * worth it here. */
+/** Blanks comments and string literals, so a CREATE/DROP TABLE mentioned in prose or a literal is
+ * ignored. Naive by design. */
 function stripSql(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
@@ -49,9 +29,6 @@ function stripSql(source: string): string {
     .replace(/'(?:[^']|'')*'/g, (literal) => literal.replace(/[^\n]/g, " "));
 }
 
-/** One statement's position and what it does, so a file's CREATEs, DROPs and RENAMEs apply in the
- * order they appear WITHIN the file as well as across files. A rename is a drop of the old name and
- * a create of the new one at the same position. */
 interface Statement {
   index: number;
   table: string;

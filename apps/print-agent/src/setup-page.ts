@@ -7,29 +7,18 @@ import type {
 } from "@waitron/print-agent";
 import { Hono } from "hono";
 
-/**
- * The LAN setup/status page (base spec §2.3). It has no database and no secret: it reads the live
- * `AgentStatus` the loop publishes, renders one card per phase, and — when the server address is not
- * pinned by env — lets the operator enter it, writing the same `config.json` the Host reads. A second
- * card drives box-local Bluetooth pairing (Scan → Pair), acting only on the box's own radio (#289).
- */
 export interface SetupDeps {
   status: () => AgentStatus;
   config: () => Promise<AgentConfig | null>;
   saveConfig: (config: AgentConfig) => Promise<void>;
-  /** True when `WAITRON_SERVER_URL` pins the address: the form becomes read-only and POST is refused,
-   * so the page can never override a compose-supplied server. */
+  /** True when `WAITRON_SERVER_URL` pins the address: the form is read-only and POST is refused. */
   envLocked: boolean;
   defaultName: string;
-  /** A box-local Bluetooth inquiry — `host.scan(["bluetooth"])`. */
   scanBluetooth: () => Promise<DiscoveredDevice[]>;
-  /** Bonds a Bluetooth printer by MAC — `host.pair(mac)`. */
   pairBluetooth: (mac: string) => Promise<PairResult>;
 }
 
-/** Minimal HTML-entity escaping for the untrusted strings the page interpolates — the agent's name,
- * a server-sent `lastError`, a Bluetooth device name/MAC. Without it a crafted string could inject
- * markup into the page. */
+/** For every untrusted string the page interpolates, such as a server-sent `lastError`. */
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -87,7 +76,6 @@ function layout(body: string): string {
 function formCard(deps: SetupDeps, savedUrl: string, error?: string): string {
   const name = escapeHtml(deps.defaultName);
   if (deps.envLocked) {
-    // The address is pinned by env; show it read-only with no way to save over it.
     return `<h1>Waitron print agent</h1>
 <p>This agent's server address is set by its container and cannot be changed here.</p>
 <dl><dt>Server address</dt><dd>${escapeHtml(savedUrl)}</dd></dl>`;
@@ -104,15 +92,11 @@ ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
 </form>`;
 }
 
-// `unconfigured` renders the form, handled by the caller before this is reached — so the switch here
-// is exhaustive over the five connected phases and needs no default.
 function statusCard(status: AgentStatus & { phase: Exclude<AgentPhase, "unconfigured"> }): string {
   const server = escapeHtml(status.current ?? status.serverUrl ?? "the server");
   switch (status.phase) {
     case "pending": {
-      // The verification code is persisted while pending (AgentConfig.pendingVerificationNumber), so it
-      // survives a restart and is normally always here. The fallback covers only a wiped state directory
-      // and stays truthful — a plain restart re-polls the same request, it does NOT mint a fresh code.
+      // The code survives a restart; only a wiped state directory reaches the fallback.
       const body =
         status.verificationCode !== undefined
           ? `<p>Waiting for approval — verification code <strong>${escapeHtml(status.verificationCode)}</strong></p>
@@ -141,8 +125,7 @@ ${lastError}
 </dl>`;
     }
     case "unauthorized":
-      // Reached from two paths — a `not_approved` status (the admin DENIED) and a pull `unauthorized`
-      // (a live token was REVOKED) — so the copy names both.
+      // Reached both when the admin DENIED the join and when a live token was REVOKED.
       return `<h1>Waitron print agent</h1>
 <p>This agent was denied or revoked — restart it to ask to join again.</p>`;
     case "unreachable": {
@@ -153,14 +136,12 @@ ${lastError}
       return `<h1>Waitron print agent</h1>
 <p>Can't reach ${server} right now — retrying.</p>${detail}`;
     }
-    // `unconfigured` is handled before this function is called (it renders the form), so it never
-    // reaches the switch.
   }
 }
 
-/** The box-local Bluetooth pairing card: a Scan button, the last scan's found list (each with a Pair
- * button), and the last pair outcome. `scanned === undefined` means "not scanned yet" (no list shown);
- * an empty array means a scan that found nothing. */
+/**
+ * `scanned === undefined` means "not scanned yet"; an empty array means a scan that found nothing.
+ */
 function bluetoothCard(state: {
   scanned?: DiscoveredDevice[];
   pair?: { mac: string; result: PairResult };
@@ -202,9 +183,7 @@ export function createSetupApp(deps: SetupDeps): Hono {
       const saved = await deps.config();
       return formCard(deps, saved?.serverUrl ?? "");
     }
-    // Past the form, the phase's own card names the server it follows, so an env-locked agent needs no
-    // separate address line. The guard rules out `unconfigured`, but `AgentStatus` is one interface so
-    // the narrowing does not reshape the object type — hence the assertion of the proven phase.
+    // `AgentStatus` is one interface, so the guard above does not narrow it; hence the assertion.
     const connected = status as AgentStatus & { phase: Exclude<AgentPhase, "unconfigured"> };
     return statusCard(connected);
   };
@@ -220,7 +199,6 @@ export function createSetupApp(deps: SetupDeps): Hono {
 
   app.post("/setup", async (c) => {
     if (deps.envLocked) {
-      // The address is pinned by env; the page must not be able to write over it (§2.3).
       return c.text("The server address is fixed by this agent's container.", 405);
     }
     const form = await c.req.parseBody();

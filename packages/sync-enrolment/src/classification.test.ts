@@ -17,8 +17,8 @@ describe("classify", () => {
   });
 
   it("does not mark a table append-only, whatever its class", () => {
-    // `toEqual` rather than a check on the one key: the marker is what `orderedMigrationSets`
-    // filters on, so a `classify` that started setting it would protect every ledger table again.
+    // The marker is what `orderedMigrationSets` filters on, so a `classify` that set it would
+    // protect every ledger table.
     expect(classify("payments", "ledger", "r").appendOnly).toBeUndefined();
   });
 });
@@ -34,8 +34,6 @@ describe("appendOnly", () => {
   });
 
   it("marks a `state` table too — the class and the marker are independent", () => {
-    // `order_amendments` is the real instance: classified `state`, and one of the ten tables
-    // PostgreSQL's `reject_mutation()` triggers protected.
     expect(appendOnly("order_amendments", "state", "hash-chained").appendOnly).toBe(true);
   });
 });
@@ -68,9 +66,7 @@ describe("appendOnlyTablesIn", () => {
   ];
 
   it("returns the names of the marked tables and nothing else", () => {
-    // Both classes and both markers are present above, because the marker is orthogonal to the
-    // class in both directions: a `ledger` table that is NOT append-only and a `state` table that
-    // IS. A filter written on the class instead would get both of those wrong.
+    // A filter written on the class instead would get both directions above wrong.
     expect(appendOnlyTablesIn(set)).toEqual(["sale_voids", "order_amendments"]);
   });
 

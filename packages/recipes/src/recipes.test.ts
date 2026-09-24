@@ -85,8 +85,6 @@ describe("recipe composition and allergen derivation", () => {
     expect(await publishedAllergens(productId)).toBeNull();
   });
 
-  // The diet roll-up mirrors the allergen roll-up: the fold only reads
-  // `ingredients.dietary_origin` rows and writes `products.diet_derivation`/`diet`.
   it("recomputeProductDerivations (diet): an uncategorised ingredient makes the product diet-pending", async () => {
     const row = await withTransaction(fx.db, async (tx) => {
       // one plant ingredient (categorised) + one NULL-origin ingredient (uncategorised)
@@ -107,9 +105,7 @@ describe("recipe composition and allergen derivation", () => {
     expect(row.diet).toMatchObject({ vegan: "unknown", vegetarian: "unknown" });
   });
 
-  // Task 8/simplify merged the allergen and diet roll-ups into one fold over one recipe read
-  // (`recomputeProductDerivations`). Pin that the two `pending` flags it writes stay independent:
-  // an ingredient can be allergen-REVIEWED (allergens: {}) while its origin is still uncategorised
+  // An ingredient can be allergen-REVIEWED (allergens: {}) while its origin is still uncategorised
   // (dietaryOrigin omitted → null), and that must publish allergen-pending false / diet-pending true
   // — not let one column's "reviewed" state bleed into the other's.
   it("recomputeProductDerivations: allergen-pending and diet-pending are independent", async () => {
@@ -207,10 +203,6 @@ describe("recipe composition and allergen derivation", () => {
     expect(diet).toMatchObject({ vegan: "yes", vegetarian: "yes" });
   });
 
-  // THE gate test (Task 8a): an ORIGIN-ONLY ingredient edit — no allergen change — must fan out and
-  // re-derive the product's diet. Proves the widened fan-out guard: with the guard still gated on
-  // `patch.allergens !== undefined` alone this fails (the product stays vegan); widened to fire on
-  // `patch.dietaryOrigin !== undefined` too it passes.
   it("propagates an ORIGIN-ONLY ingredient edit and re-derives the product diet", async () => {
     const diet = await withTransaction(fx.db, async (tx) => {
       const tofu = await createIngredient(tx, { name: "tofu", dietaryOrigin: "plant" });

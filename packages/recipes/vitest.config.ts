@@ -16,9 +16,7 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel with no logic of its own; test/** holds the database
-      // fixtures. Both are test infrastructure, not measured product code, so they are excluded from
-      // the coverage thresholds below (the same barrel exclusion packages/catalogue's own
-      // vitest.config.ts records).
+      // fixtures.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "test/**"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

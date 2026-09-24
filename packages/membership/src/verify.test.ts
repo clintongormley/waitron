@@ -6,8 +6,6 @@ import { signDocumentBody, verifyMembershipDocument } from "./verify.js";
 import type { SignedMembershipDocument, TrustSet } from "./types.js";
 
 describe("verifyMembershipDocument", () => {
-  // Shared across the two MAX_ENDORSEMENTS boundary cases: the length gate fires on array size
-  // regardless of content, so a single trivially-shaped entry serves both.
   const endorsement = { nodeId: "X", publicKey: "k", endorsedBy: "A", signature: "s" };
 
   it("accepts a document signed by a directly-trusted primary", () => {
@@ -49,9 +47,7 @@ describe("verifyMembershipDocument", () => {
   });
 
   it("rejects an offered-but-unchaining endorsement as endorsement_invalid", () => {
-    // B signs; its key is offered via an endorsement by A, but A is not in the trust set, so the
-    // endorsement cannot chain back to an anchor. Because the document DID offer endorsements, this
-    // is endorsement_invalid, not untrusted_signer (design §4's two distinct failure modes).
+    // A is not in the trust set, so B's endorsement cannot chain back to an anchor.
     const a = generateNodeKeyPair();
     const b = generateNodeKeyPair();
     const doc: SignedMembershipDocument = {
@@ -74,10 +70,6 @@ describe("verifyMembershipDocument", () => {
   });
 
   it("rejects an honestly-signed document with a field injected into a node after signing", () => {
-    // The reviewer's runtime repro: sign a valid document, then inject an unsigned field into a
-    // node. The signature still verifies against the (unchanged) canonical body, but strict-shape
-    // validation rejects the extra key as malformed BEFORE the signature is consulted — so the
-    // injected field can never reach the caller with valid:true.
     const a = generateNodeKeyPair();
     const trust: TrustSet = { A: a.publicKey };
     const doc = signDoc(sampleBody(1), "A", a.privateKey);
@@ -92,9 +84,6 @@ describe("verifyMembershipDocument", () => {
   });
 
   it("rejects a document carrying more than MAX_ENDORSEMENTS (8) endorsements as malformed", () => {
-    // The length cap fires on the array size regardless of endorsement content, so trivially-shaped
-    // but structurally-valid entries suffice. 9 (MAX_ENDORSEMENTS + 1) must be rejected before any
-    // signature or trust is consulted; 8 stays structurally acceptable.
     const doc = {
       ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       endorsements: Array.from({ length: 9 }, () => endorsement),
@@ -103,9 +92,6 @@ describe("verifyMembershipDocument", () => {
   });
 
   it("passes a document carrying exactly MAX_ENDORSEMENTS (8) endorsements through the length gate", () => {
-    // The other half of the boundary: 8 must clear the cap so a `>` → `>=` off-by-one would be
-    // caught. These trivially-shaped endorsements don't chain to a trusted signer, so verification
-    // still fails — but for a NON-length reason, never "malformed" on account of the count.
     const doc = {
       ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       endorsements: Array.from({ length: 8 }, () => endorsement),
@@ -115,8 +101,6 @@ describe("verifyMembershipDocument", () => {
     if (!result.valid) expect(result.reason).not.toBe("malformed");
   });
 
-  // Build a body carrying `count` structurally-valid nodes, each with a distinct nodeId so the
-  // strict per-node shape is never the reason for rejection — only the length gate is under test.
   const bodyWithNodes = (count: number) => ({
     term: 1,
     nodes: Array.from({ length: count }, (_, i) => ({
@@ -127,8 +111,6 @@ describe("verifyMembershipDocument", () => {
   });
 
   it("rejects a document carrying more than MAX_NODES (8) nodes as malformed", () => {
-    // 9 (MAX_NODES + 1) valid nodes must be rejected by the length gate before any per-node scan,
-    // signature or trust is consulted — a memory/DoS bound, not a topology assertion.
     const doc = {
       ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       body: bodyWithNodes(9),
@@ -137,9 +119,6 @@ describe("verifyMembershipDocument", () => {
   });
 
   it("passes a document carrying exactly MAX_NODES (8) nodes through the length gate", () => {
-    // The other half of the boundary: 8 must clear the cap so a `>` → `>=` off-by-one would be
-    // caught. These nodes are structurally valid, so verification fails only for a NON-length
-    // reason (the signer isn't trusted), never "malformed" on account of the node count.
     const doc = {
       ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       body: bodyWithNodes(8),
@@ -150,9 +129,7 @@ describe("verifyMembershipDocument", () => {
   });
 });
 
-// The structural guards reject adversarial input as data (never throw). Each case below is a
-// document that is well-formed except for one field, so it exercises exactly one guard branch and
-// must be classified `malformed` before trust or signature are ever consulted (design §4).
+// Each case is well-formed except for one field, so it exercises exactly one guard branch.
 describe("verifyMembershipDocument structural validation", () => {
   const validNode = { nodeId: "A", contactUrl: "https://a", standing: "serving-primary" };
   const validBody = { term: 1, nodes: [validNode] };
@@ -210,8 +187,7 @@ describe("verifyMembershipDocument structural validation", () => {
       "endorsement signature not a string",
       { ...valid, endorsements: [{ nodeId: "B", publicKey: "k", endorsedBy: "A" }] },
     ],
-    // strict-shape: an EXTRA (unsigned) key at ANY level is rejected, so a verified document is
-    // exactly its signed content (spec §3). Without these the guards accept an injected field.
+    // strict shape: an extra key at any level
     [
       "node with an extra field",
       { ...valid, body: { ...validBody, nodes: [{ ...validNode, extra: 1 }] } },

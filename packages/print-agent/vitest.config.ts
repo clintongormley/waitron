@@ -11,7 +11,6 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // src/index.ts is a pure re-export barrel (excluded like the sibling packages exclude theirs).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

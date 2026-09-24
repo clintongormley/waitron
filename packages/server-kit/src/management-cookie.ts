@@ -1,25 +1,13 @@
-// Side-effect: loads this package's errors.ts, which co-declares `management_session.required` (the
-// code `requireManagementSession` below throws). Load-bearing here — `@waitron/identity` also owns and
-// declares that code, but this package does not import identity, so the augmentation reaches this file
-// only through this line. See the note atop `errors.ts`.
+// This package does not import `@waitron/identity`, so `management_session.required` reaches this
+// file only through this line.
 import "./errors.js";
 import { AppError, isUuid } from "@waitron/shared";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
-/**
- * The name of the browser management-session cookie — the till's `waitron_till_session` parallel for
- * the dashboard. One constant so the set/clear/require helpers below cannot drift on the spelling.
- */
 export const MANAGEMENT_COOKIE = "waitron_management_session";
 
-/**
- * Writes the session's token into the management cookie. `httpOnly` so no browser script can read
- * it (the token is a bearer credential; the session row stores only its hash —
- * `@waitron/identity`'s `session-token.ts`); `sameSite: "Strict"` so it never rides a cross-site
- * request; `path: "/"` so it covers the whole dashboard. `secure` is caller-supplied — TRUE on a
- * production HTTPS host, FALSE on loopback dev where there is no TLS to attach it to.
- */
+/** `secure` is caller-supplied: false where there is no TLS to attach it to, as on loopback dev. */
 export function setManagementCookie(c: Context, token: string, secure: boolean): void {
   setCookie(c, MANAGEMENT_COOKIE, token, {
     httpOnly: true,
@@ -29,30 +17,16 @@ export function setManagementCookie(c: Context, token: string, secure: boolean):
   });
 }
 
-/**
- * Clears the management cookie (sign-out). `path` must match the one `setManagementCookie` wrote
- * with, or the browser keeps the original alongside the expiry the delete emits.
- */
+/** `path` must match `setManagementCookie`'s, or the browser keeps the original cookie. */
 export function clearManagementCookie(c: Context): void {
   deleteCookie(c, MANAGEMENT_COOKIE, { path: "/" });
 }
 
-/**
- * The management session token carried by the request's cookie, or `null` when the cookie is
- * absent. The till's `readSessionToken` parallel — the non-throwing read the idempotent logout
- * composes with `isUuid`, and the base `requireManagementSession` builds its shape check on.
- */
 export function readManagementSessionToken(c: Context): string | null {
   return getCookie(c, MANAGEMENT_COOKIE) ?? null;
 }
 
-/**
- * Reads the request's management cookie and returns its token, or throws
- * `management_session.required` when the cookie is absent OR not a UUID. This screens the cookie's
- * SHAPE only — the live-session lookup, by the token's hash, happens in `resolveManagementSession`
- * (`@waitron/identity`). Reuses `isUuid` from `@waitron/shared` so the anchored-UUID regex has one
- * home.
- */
+/** Screens the cookie's SHAPE only; the live-session lookup is `@waitron/identity`'s. */
 export function requireManagementSession(c: Context): string {
   const token = readManagementSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("management_session.required", {});

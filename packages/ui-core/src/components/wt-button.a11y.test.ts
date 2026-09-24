@@ -12,7 +12,6 @@ describe.each(["light", "dark"] as const)("wt-button a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  // The icon-only form is one of the three real ARIA defects a hand review previously found:
   // wt-icon's SVG is aria-hidden and there's no text content, so without a forwarded aria-label
   // the button has no accessible name at all.
   test("icon-only button", async () => {

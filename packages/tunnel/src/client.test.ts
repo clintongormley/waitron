@@ -54,22 +54,19 @@ it("splices a client request down to the local service and back", async () => {
 
 describe("runTunnelClient handshake + splice edge cases", () => {
   it("feeds the post-`go` leftover to the local service before piping (the splice-leftover trap)", async () => {
-    // Echo server: prefixes "echo:" so we can see the leftover bytes made the round trip.
     local = createServer((s: Socket) =>
       s.on("data", (d: Buffer) => s.write(Buffer.concat([Buffer.from("echo:"), d]))),
     );
     const localPort = await new Promise<number>((r) =>
       local!.listen(0, () => r((local!.address() as AddressInfo).port)),
     );
-    // The relay coalesces `ack`, `go`, and the cloud's first bytes into ONE write, so decodeFrame's
-    // `rest` is non-empty. If the client dropped `rest` instead of writing it to the local socket
-    // first, the echo would never fire and this test would time out.
+    // `ack`, `go` and the cloud's first bytes go out in ONE write, so decodeFrame's `rest` is
+    // non-empty; a client that dropped it would time out here.
     let afterGo: (v: string) => void = () => {};
     const seen = new Promise<string>((res) => (afterGo = res));
     scripted = await scriptRelay((box, index) => {
       void onceRegister(box).then(() => {
-        // Only the first connection is paired; its replacement (the `go` consumes a pool slot, so the
-        // client dials a fresh one) stays idle, or every splice would trigger another and loop.
+        // Only the first connection is paired, or every splice's replacement would splice and loop.
         if (index > 0) {
           box.write(encodeFrame({ t: "ack" }));
           return;
@@ -101,8 +98,6 @@ describe("runTunnelClient handshake + splice edge cases", () => {
   });
 
   it("tears down a connection that receives a garbage frame and replaces it in the pool", async () => {
-    // box[0] registers, is acked, then gets a malformed (non-JSON) line: decodeFrame throws, the
-    // client must destroy ONLY that connection and dial a replacement. box[1] acks and stays idle.
     let replaced: () => void = () => {};
     const replacement = new Promise<void>((res) => (replaced = res));
     scripted = await scriptRelay((box, index) => {
@@ -129,8 +124,6 @@ describe("runTunnelClient handshake + splice edge cases", () => {
   });
 
   it("keeps a default-size pool of four connections", async () => {
-    // poolSize omitted → default 4: the client should open (and keep) four registered idle
-    // connections. Every box connection is simply acked and left idle.
     scripted = await scriptRelay((box) => {
       void onceRegister(box).then(() => box.write(encodeFrame({ t: "ack" })));
     });
@@ -171,9 +164,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
-      // The first dial is rejected, driving a redial; without this the client waits the default
-      // 1000ms backoff first, so the test would burn ~1s of real time (assertions are count/log-based,
-      // duration-independent).
+      // Otherwise the redial waits the default 1000ms backoff in real time.
       minBackoffMs: 1,
       sleep: realSleep,
       signal: ac.signal,
@@ -185,8 +176,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
   });
 
   it("replaces a connection the relay resets mid-handshake", async () => {
-    // A hard RST (resetAndDestroy) surfaces on the box as an 'error' (ECONNRESET), not a graceful
-    // close — exercising the connection's error handler. The dead slot is replaced.
+    // A hard RST surfaces on the box as an 'error', not a graceful close.
     let replaced: () => void = () => {};
     const replacement = new Promise<void>((res) => (replaced = res));
     scripted = await scriptRelay((box, index) => {
@@ -203,8 +193,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
       token: "t",
       localPort: 1,
       poolSize: 1,
-      // The relay resets the first dial, driving a redial; without this the client waits the default
-      // 1000ms backoff first, adding ~1s of real time (the assertion is count-based, duration-independent).
+      // Otherwise the redial waits the default 1000ms backoff in real time.
       minBackoffMs: 1,
       sleep: realSleep,
       signal: ac.signal,
@@ -215,10 +204,8 @@ describe("runTunnelClient handshake + splice edge cases", () => {
   });
 
   it("starts the heartbeat once, however many times the relay acks", async () => {
-    // A second `ack` on a registered connection must not start a second heartbeat loop beside the
-    // first. Each loop opens with one `sleep(heartbeatMs)`, so the count of those calls is the count
-    // of loops. The sleep waits 60s, far longer than the test runs (the abort in afterEach cancels
-    // it), so neither loop gets past its first nap.
+    // Each loop opens with one `sleep(heartbeatMs)`, so the count of those calls is the count of
+    // loops; the 60s sleep keeps either loop from getting past its first nap.
     const heartbeatNaps: number[] = [];
     let registeredTwice: () => void = () => {};
     const acks = new Promise<void>((res) => (registeredTwice = res));
@@ -253,9 +240,7 @@ describe("runTunnelClient handshake + splice edge cases", () => {
   });
 
   it("ignores a frame it has no use for and still splices on the `go` that follows", async () => {
-    // `ping` is a box→relay frame; arriving from the relay it means nothing to the client, which
-    // must keep reading rather than drop the connection. The relay then pairs it (`go`). A splice
-    // also dials a replacement, but only after `tunnel.paired` is logged, so a replacement dial
+    // A splice dials its replacement only after `tunnel.paired` is logged, so a replacement dial
     // arriving FIRST means the ignored frame killed the connection.
     let outcome: (o: "paired" | "replaced") => void = () => {};
     const settled = new Promise<"paired" | "replaced">((res) => (outcome = res));

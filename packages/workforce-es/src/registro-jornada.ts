@@ -5,10 +5,6 @@ import { localWallClock, type Period, type WorkSession } from "@waitron/workforc
  * (ET art. 34.9, RD-ley 8/2019). `packages/workforce` computes the immutable clock stream and its
  * projection in English; this package, EXEMPT from the English-only guard, renders that projection
  * into the legal record's own vocabulary and framing.
- *
- * Slice 3 owns no tables: `exportTimeRecord` is a pure render over `WorkSession[]` (already
- * reprojected, so approved corrections are reflected). The convenio tables, ruleset numbers and
- * payroll adapters are D2/D3.
  */
 
 /**

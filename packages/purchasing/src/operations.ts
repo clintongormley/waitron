@@ -27,7 +27,6 @@ import type {
 /**
  * Received supplier invoices and VAT lines share the caller's transaction.
  * This is the mutable commercial/accounting lane: no fiscal fingerprint, chain or allocated invoice number.
- * All SQL is built with Drizzle query builders — no string concatenation.
  */
 
 const ZERO = decimal("0.00");
@@ -111,7 +110,7 @@ function mapLine(row: LineRow): PurchaseInvoiceLine {
   };
 }
 
-/** The prorrata seam must be a percentage 0–100 (spec §9); anything else is a caller bug. */
+/** The prorrata seam must be a percentage 0–100; anything else is a caller bug. */
 function validateProportion(proportion: Decimal | undefined): void {
   if (proportion === undefined) return;
   if (compareDecimal(proportion, ZERO) < 0 || compareDecimal(proportion, HUNDRED) > 0) {
@@ -140,10 +139,8 @@ function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
  * omitted `kind` falls to (`ordinary`) is reflected without a re-read. Callers that do not need the
  * rows discard them.
  *
- * A rate still reads back at two decimal places, so a caller that wrote "21" gets "21.00". That is
- * the conversion pair's doing and no longer the column's: a rate column holds a count of basis
- * points and carries no scale of its own. Pinned by the unscaled-literal case in
- * `operations.test.ts`.
+ * A rate reads back at two decimal places, so a caller that wrote "21" gets "21.00": a rate column
+ * holds a count of basis points and carries no scale of its own.
  */
 async function insertLines(
   tx: Transaction,
@@ -168,10 +165,6 @@ async function insertLines(
  * Order RETURNING'd line rows exactly as `selectLines`' `orderBy(asc(rate), asc(id))` would: by rate
  * ascending — a stored rate is a count of basis points, so subtracting the two counts is the same
  * ordering the column's own `asc` gives — ties broken by `id`. Sorts in place.
- *
- * That the two orderings agree on the tie-break is checked rather than asserted: the same-rate
- * case in `operations.test.ts` builds three lines at one rate and compares this sort, line for
- * line, with the order the database hands back.
  */
 function sortLineRows(rows: LineRowWithId[]): LineRowWithId[] {
   return rows.sort((a, b) => {
@@ -208,8 +201,7 @@ export async function createPurchaseInvoice(
 
   // RETURNING the STORED header + line tuples, so the result is the row as stored, with the
   // database's column defaults applied (`regime` → general, `deductible_proportion` → 10000 basis
-  // points, line `kind` → ordinary) — the catalogue/recipes `.values(...).returning(COLUMNS)`
-  // house pattern this module follows.
+  // points, line `kind` → ordinary).
   let header: Omit<PurchaseInvoice, "lines">;
   try {
     const [row] = await tx
@@ -298,7 +290,7 @@ export async function listPurchaseInvoices(
 
 /**
  * Patch a received invoice: any subset of header fields, and optionally a full REPLACEMENT of its
- * VAT lines (validated like create — fixing a mis-keyed rate is the motivating case). Throws
+ * VAT lines (validated like create). Throws
  * `purchase.not_found` when no invoice with `id` is visible. `updated_at` is always bumped.
  */
 export async function updatePurchaseInvoice(

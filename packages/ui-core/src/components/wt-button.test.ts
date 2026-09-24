@@ -67,10 +67,7 @@ test("emits click when enabled", async () => {
 });
 
 test("does not forward a host type attribute to the inner button (no submit-type support)", async () => {
-  // Full form association via ElementInternals is out of scope. A shadow-DOM <button
-  // type="submit"> is not form-associated and never fires a real submit — keeping a `type`
-  // property around would document behaviour that does not work. The inner button must always
-  // render type="button" regardless of what a caller sets on the host.
+  // The inner button must always render type="button" regardless of what a caller sets on the host.
   const el = await mount('<wt-button type="submit">x</wt-button>');
   const inner = el.shadowRoot!.querySelector("button")!;
   expect(inner.getAttribute("type")).toBe("button");

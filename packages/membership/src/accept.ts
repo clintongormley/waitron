@@ -2,10 +2,11 @@ import type { AcceptResult, SignedMembershipDocument, TrustSet } from "./types.j
 import { verifyMembershipDocument } from "./verify.js";
 
 /**
- * The two-part membership fence (design §4): a document is adopted only if it is BOTH authentic
- * (signature + trust chain) AND strictly newer than the one currently held. Note the asymmetry the
- * spec relies on (§5): this can only ever raise the held term (accept a demotion/eviction); it never
- * grants authority. `currentTerm === null` means nothing is held yet.
+ * A document is adopted only if it is BOTH authentic (signature and trust chain) AND strictly newer
+ * than the one held. The asymmetry — this can only ever raise the held term (accept a demotion or
+ * eviction), never grant authority — is what §5 of
+ * `docs/superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md` relies on.
+ * `currentTerm === null` means nothing is held yet.
  */
 export function acceptMembershipDocument(
   incoming: SignedMembershipDocument,

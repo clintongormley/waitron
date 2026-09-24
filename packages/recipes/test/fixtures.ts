@@ -17,13 +17,8 @@ export interface SeededVenue {
 }
 
 /**
- * Seed tenant, location and node.
- *
- * The location goes in through the drizzle table rather than a hand-written `insert`: `id` is
- * generated in JavaScript now (`$defaultFn`, not a SQL default), so a raw insert that omits it
- * reaches a NOT NULL column with nothing in it, and `invoice_locales` is a JSON array in a text
- * column rather than a PostgreSQL array, so `array['en-GB']` has no meaning here. Going through the
- * table gets both from the column vocabulary instead of restating them.
+ * Seed tenant, location and node. The location goes in through the drizzle table because `id` is a
+ * `$defaultFn`, not a SQL default, and `invoice_locales` is a JSON array in a text column.
  */
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   await seedTenant(db);
@@ -58,11 +53,8 @@ export async function seedProduct(db: Database): Promise<string> {
 }
 
 /**
- * Share the migrated database; each ingredient case starts with empty ingredient tables.
- *
- * Two `delete`s rather than one `truncate`: SQLite has no TRUNCATE statement at all
- * (`near "truncate": syntax error`). The lines go first and the ingredients second, which is the
- * order the `truncate` named them in — `recipe_lines` holds the foreign key.
+ * Share the migrated database; each ingredient case starts with empty ingredient tables. The lines
+ * go first — `recipe_lines` holds the foreign key.
  */
 export function useIngredientDb(): { readonly db: Database } {
   const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });

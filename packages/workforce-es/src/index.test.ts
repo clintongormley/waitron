@@ -23,11 +23,7 @@ describe("the public surface", () => {
 
 /**
  * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import or a plain
- * select never runs it, which is why convenio-config.ts's FK/unique/index/check block shows as
- * uncovered even though the resolver imports the table. Calling `getTableConfig` forces the callback
- * to run, and the assertions below are the meaningful check that convenio_config's constraints exist
- * under the names the baseline uses — not a coverage stunt. Mirrors
- * packages/workforce/src/index.test.ts.
+ * select never runs it. Calling `getTableConfig` forces the callback to run.
  */
 describe("convenio_config constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares convenio_config's foreign keys, unique key and working-days check", () => {

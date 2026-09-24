@@ -23,12 +23,10 @@ const suite = useVenueDb({
 // the tables between tests.
 //
 // `id` and `created_at` come from the table's `$defaultFn`, which drizzle runs per insert rather
-// than the database supplying a DEFAULT, so each RAW insert below names both itself. The raw form
-// is kept where a test is setting a specific STORED count — the two premium scales — because that
-// is the value the resolver's mapping is being read against.
+// than the database supplying a DEFAULT, so each RAW insert below names both itself.
 
 /** The ruleset a DEFAULT convenio_config row resolves to — every field the ET statutory floor or
- * today's default. This is the value that must reproduce current behaviour (§3). */
+ * today's default. */
 const DEFAULT_RULESET: WorkTimeRuleset = {
   workingDaysPerWeek: 5,
   overtimeModel: "daily-accrual",
@@ -59,9 +57,6 @@ describe("resolveWorkTimeRuleset", () => {
 
   it("resolves a fully-customised row, mapping the period_net enum and the scaled premiums", async () => {
     // Every field set to a distinct non-default, so a mapping that dropped or crossed a column shows.
-    // Proves the underscored DB enum maps to the hyphenated generic OvertimeModel, and that the two
-    // premium columns, each stored as a scaled count of its own (basis points and cents), reach the
-    // ruleset as the percentage and the amount.
     const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (
@@ -96,10 +91,9 @@ describe("resolveWorkTimeRuleset", () => {
     });
   });
 
-  // The night premium is a PERCENTAGE (25.00 means 25%, owner 2026-09-18) stored as a count of
-  // whole basis points, so the column and the ruleset field hold numbers a hundredfold apart. These
-  // two insert the STORED count by raw SQL and read the ruleset's percentage back; the half-percent
-  // case is there because it is the one a fraction-versus-percentage mix-up cannot round away.
+  // The night premium is a PERCENTAGE stored as a count of whole basis points, so the column and the
+  // ruleset field hold numbers a hundredfold apart. The half-percent case is the one a
+  // fraction-versus-percentage mix-up cannot round away.
   it("reads a whole-percent night premium back as a percentage", async () => {
     const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`

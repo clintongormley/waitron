@@ -1,14 +1,11 @@
 // A bare side-effect import so TypeScript augments the real "@waitron/shared" module rather than
-// declaring a fresh ambient one — the idiom packages/reporting, packages/identity use.
+// declaring a fresh ambient one.
 import "@waitron/shared";
 
 /**
- * packages/purchasing's contribution to the shared error registry, by declaration merging — the
- * DOMAIN-CONCEPT, lowercase, dot-namespaced convention, never the package name. The concept here is
- * the received purchase invoice, so the prefix is `purchase.*` — grepped against
- * the registry first: never `purchasing.*` (the package name) or `invoice.*` (which would collide
- * with the invoices WE issue). Thrown by the CRUD operations; every file that throws one imports
- * "./errors.js" so the augmentation is reachable from this package's own barrel.
+ * packages/purchasing's contribution to the shared error registry, by declaration merging. The
+ * concept here is the received purchase invoice, so the prefix is `purchase.*`: never `purchasing.*`
+ * (the package name) or `invoice.*` (which would collide with the invoices WE issue).
  *
  * Codes are never renamed once shipped: a wrong one is deprecated and a new one added beside it.
  */

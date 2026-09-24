@@ -4,7 +4,7 @@ import { STRIPE_CARD_PROVIDER } from "@waitron/payments-stripe";
 
 /**
  * Every card-payment provider seat, in composition order. The server twin of `ALL_MODULES`
- * (`packages/composition/src/modules.ts`): the pool (Task 10) and any route that lists providers
+ * (`packages/composition/src/modules.ts`): the pool and any route that lists providers
  * read this instead of naming a provider package directly. `scripts/module-seams.test.ts` guards
  * that `apps/server/src` reaches a provider package only through this registry or the allowlisted
  * files still migrating behind it.

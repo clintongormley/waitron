@@ -39,9 +39,7 @@ describe("resolveSignerKey", () => {
   });
 
   it("resolves a 2-hop chain given in reverse dependency order (multi-pass fixpoint)", () => {
-    // A is trusted at setup; B is endorsed by A; C is endorsed by B. The endorsements are listed in
-    // REVERSE dependency order, so resolving C requires the loop to admit B on pass 1 and then C on
-    // pass 2 — exercising the second pass of the `while (changed)` fixpoint that ordered inputs skip.
+    // Listed in REVERSE dependency order, so resolving C needs the loop's second pass.
     const a = generateNodeKeyPair();
     const b = generateNodeKeyPair();
     const c = generateNodeKeyPair();
@@ -54,10 +52,7 @@ describe("resolveSignerKey", () => {
   });
 
   it("does not let an endorsement re-bind a setup-trusted key to a rogue key", () => {
-    // A is anchored at setup. A self-endorsement (signed by A's real key, so it verifies) tries to
-    // swap A's key for a rogue one. The `trusted.has(e.nodeId) → continue` guard protects setup
-    // anchors: A is already trusted, so the endorsement is skipped and A keeps its setup key. Pins
-    // that guard — without it a validly-signed endorsement could overwrite a setup anchor.
+    // A validly-signed self-endorsement must not replace A's setup key.
     const a = generateNodeKeyPair();
     const rogue = generateNodeKeyPair();
     const trust: TrustSet = { A: a.publicKey };

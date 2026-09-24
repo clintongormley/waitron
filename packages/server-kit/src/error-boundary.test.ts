@@ -8,11 +8,7 @@ import type { Logger, LogLevel } from "./logger.js";
 // This package's own registry augmentation (`management.request_invalid`, `management_session.required`).
 import "./errors.js";
 
-// The boundary is generic infrastructure, so this test exercises it with representative codes owned by
-// OTHER packages — `tenant.not_found` / `session.required` / `recovery.state_incomplete`
-// (`apps/server`), which are not in server-kit's own registry. Declared test-locally (identical params
-// to their real homes) purely so the fixtures typecheck in isolation; AppError validates nothing at
-// runtime, so this changes no assertion or behaviour.
+// Test-local codes, declared only so the fixtures typecheck; AppError validates nothing at runtime.
 declare module "@waitron/shared" {
   interface ErrorParams {
     "tenant.not_found": { id: string };
@@ -23,8 +19,6 @@ declare module "@waitron/shared" {
 
 type Line = { level: LogLevel; event: string; fields: Record<string, unknown> };
 
-/** A collecting logger — the same shape `till-api.test.ts` uses — so each test asserts on the REAL
- * structured lines the boundary emits, not on a mock. */
 function collect(lines: Line[]): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
@@ -41,14 +35,12 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     const res = await app.request("/ok");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    // The happy path touches the logger not at all.
     expect(lines).toEqual([]);
   });
 
   it("maps an AppError whose code IS in the map to that status and logs it at warn", async () => {
     const lines: Line[] = [];
-    // A map assigning a NON-default status (404, not the `?? 400` fallback) proves the boundary
-    // reads the map it was handed.
+    // A NON-default status proves the boundary reads the map it was handed.
     const status: Record<string, ContentfulStatusCode> = { "tenant.not_found": 404 };
     const boundary = createErrorBoundary(status, "widget.failed");
     const id = randomUUID();
@@ -60,17 +52,12 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     const res = await app.request("/boom");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: { code: "tenant.not_found", params: { id } } });
-    // Logged at WARN with the code and its params (never the error's `.message`).
     expect(lines).toEqual([{ level: "warn", event: "tenant.not_found", fields: { id } }]);
   });
 
   it("maps an AppError whose code is mapped to 500 to that status but still logs it at warn", async () => {
     const lines: Line[] = [];
-    // A server-fault AppError (a box that has lost its own secret files): the map assigns it 500, so
-    // the RESPONSE is a structured 500 — but log severity keys off AppError-vs-not, not the status, so
-    // a deliberate/expected AppError is logged at WARN even when re-emitted at a 5xx (the same
-    // convention `setup-api.ts`'s `mirror.bundle_fetch_failed` → 502 follows). Only an unexpected
-    // non-AppError takes the `error`/opaque-500 branch.
+    // Log severity keys off AppError-vs-not, never the status.
     const status: Record<string, ContentfulStatusCode> = { "recovery.state_incomplete": 500 };
     const boundary = createErrorBoundary(status, "widget.failed");
     const app = new Hono();
@@ -85,7 +72,6 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     expect(await res.json()).toEqual({
       error: { code: "recovery.state_incomplete", params: { missing: "trading.env" } },
     });
-    // Logged at WARN (AppError → warn regardless of the 5xx status), with the code and its params.
     expect(lines).toEqual([
       { level: "warn", event: "recovery.state_incomplete", fields: { missing: "trading.env" } },
     ]);
@@ -113,8 +99,7 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     const boundary = createErrorBoundary(status, "widget.failed");
     const app = new Hono();
     app.get("/boom", (c) => {
-      // The request-id middleware seeds this on the real request; here we set it directly so the
-      // boundary reads it out of context (`c.get("requestId")`) onto the structured warn line.
+      // The request-id middleware seeds this on a real request.
       c.set("requestId", "req-xyz");
       return boundary(c, collect(lines), () =>
         Promise.reject(new AppError("tenant.not_found", { id: "s1" })),
@@ -137,12 +122,9 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     const res = await app.request("/crash");
     expect(res.status).toBe(500);
     const raw = await res.text();
-    // Only the opaque code — no params, and nothing of the caught value's `.message`.
     expect(JSON.parse(raw)).toEqual({ error: { code: "server.internal" } });
     expect(raw).not.toContain(secret);
     expect(raw).not.toContain("s3cr3t");
-    // Logged at ERROR under the EXACT tag the factory was given, with `codeOf`'s classification of an
-    // unclassified value ("unknown") — never the message.
     expect(lines).toEqual([
       { level: "error", event: "widget.failed", fields: { errorCode: "unknown" } },
     ]);

@@ -2,12 +2,10 @@ import type { networkInterfaces } from "node:os";
 import type { DiscoveredDevice } from "@waitron/print-agent";
 import { forEachBounded } from "./pool.js";
 
-/** Enumerate the box's own IPv4 subnets, bound the port-9100 sweep and merge discovery results.
- * `linux-devices.ts` supplies interfaces and `tcp-probe.ts` supplies byte-free TCP connections.
- * Network hardware receipt: central-printer-provisioning design §7, 2026-09-11 addendum. */
-
-/** The widest network the sweep will cover — a /22. Anything wider (a Docker bridge's /16, a wide
- * corporate range) is skipped: sixty-five thousand connects is not a LAN scan, it is a flood. */
+/**
+ * A /22. Anything wider, such as a Docker bridge's /16, is skipped: that is a flood, not a LAN
+ * scan.
+ */
 export const MAX_SWEEP_HOSTS = 1024;
 export const SWEEP_PORT = 9100;
 const DEFAULT_CONCURRENCY = 64;
@@ -51,16 +49,11 @@ export function hostsInSubnet(cidr: string): string[] {
 }
 
 export interface SweepCandidateDeps {
-  /** Injected for tests; the live sweep passes `os.networkInterfaces`. */
   interfaces: typeof networkInterfaces;
 }
 
-/** The addresses to probe: every non-internal IPv4 interface's subnet, each address once, with every
- * one of the box's own addresses removed (two NICs on one subnet would otherwise probe each other and
- * every host twice). Docker's bridges are not filtered by name — their /16 falls to
- * {@link hostsInSubnet}'s cap, and a venue legitimately on a 172.x /24 is kept. Unlike the server's
- * `listBoxIpv4` this does not read the default route: the agent imports nothing from `apps/server`,
- * and the cap already bounds a bridge. */
+/** Docker's bridges are not filtered by name: their /16 falls to {@link hostsInSubnet}'s cap, and a
+ * venue legitimately on a 172.x /24 is kept. */
 export function sweepCandidates(deps: SweepCandidateDeps): string[] {
   const own = new Set<string>();
   const cidrs: string[] = [];
@@ -86,15 +79,12 @@ export function sweepCandidates(deps: SweepCandidateDeps): string[] {
 export interface SweepOptions {
   hosts: string[];
   port: number;
-  /** Resolves `true` when a TCP connection to `host:port` is accepted within `timeoutMs`; `false` or a
-   * throw both mean closed. */
+  /** `false` or a throw both mean closed. */
   connect: (host: string, port: number, timeoutMs: number) => Promise<boolean>;
   concurrency?: number;
   timeoutMs?: number;
 }
 
-/** Try every host with at most `concurrency` connects in flight; report the accepting ones in the
- * order given. */
 export async function sweepPort(opts: SweepOptions): Promise<DiscoveredDevice[]> {
   const concurrency = opts.concurrency ?? DEFAULT_CONCURRENCY;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -111,8 +101,7 @@ export async function sweepPort(opts: SweepOptions): Promise<DiscoveredDevice[]>
     .map((host) => ({ transport: "network_tcp", host, port: opts.port }));
 }
 
-/** The announced (mDNS) list first — it carries the printer's own name, make and model — then every
- * swept device whose `host:port` the announced list did not already name. */
+/** The announced (mDNS) entries win: they carry the printer's own name, make and model. */
 export function mergeDiscovered(
   announced: DiscoveredDevice[],
   swept: DiscoveredDevice[],

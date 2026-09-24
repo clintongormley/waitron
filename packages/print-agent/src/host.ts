@@ -3,11 +3,7 @@ import type { PrintTransport, PrinterTarget, Transport, TransportKind } from "./
 
 export type { TransportKind } from "./transport.js";
 
-/**
- * The seam between the agent's logic and the machine it runs on (base spec §2.1). A container host reads
- * env + a state directory and serves a setup page; a native till host later reads a settings screen.
- * The loop never touches the filesystem, a clock, a timer or a logger directly — only this.
- */
+/** The loop never touches the filesystem, a clock, a timer or a logger directly — only the Host. */
 export interface AgentConfig {
   serverUrl: string;
   name: string;
@@ -93,9 +89,6 @@ export interface Host {
   sleep(ms: number): Promise<void>;
   log: HostLog;
   status(status: AgentStatus): void;
-  // The device seam (design §7). This deliberately supersedes the spec's sketch of §7
-  // (`visibleKeys()` / `resolve(target)` / `ResolvedSink`): the shipped shape is `visibleDevices()`,
-  // `resolve(job)` and a `scan(kinds?)` the loop drives inside a discovery window.
   /** Devices with a stable local handle right now — reported to the server on every pull. */
   visibleDevices(): Promise<VisibleDevice[]>;
   /** An active discovery pass over the given transports (all discoverable kinds when omitted); run

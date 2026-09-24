@@ -321,7 +321,8 @@ export interface WaitronModule {
   readonly name: string;
   /** Module version. Every package is 0.0.0 today (workspace-locked); real once modules distribute. */
   readonly version: string;
-  /** Compatibility — recorded now, enforced in SP-1c. Inert while everything is workspace-locked. */
+  /** Migration sets this one depends on, with version ranges. `orderedMigrationSets` refuses a
+   * malformed, missing, incompatible or cyclic edge and orders migrations by this graph. */
   readonly requires?: {
     readonly core?: string;
     readonly modules?: Readonly<Record<string, string>>;

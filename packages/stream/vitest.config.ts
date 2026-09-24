@@ -4,8 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // One worker: @vitest/coverage-v8 under-merges branch coverage across workers under a
-    // whole-workspace `pnpm -r test:coverage` (the packages/tunnel and packages/shared precedent).
+    // One worker: v8 coverage under-merges across workers under load.
     maxWorkers: 1,
     coverage: {
       provider: "v8",

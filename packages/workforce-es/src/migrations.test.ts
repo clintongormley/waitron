@@ -19,10 +19,9 @@ import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedLocation } from "../test/fixtures.js";
 
 /** The two columns whose value comes from the table's `$defaultFn` rather than from a SQL DEFAULT.
- * Drizzle runs those functions per insert, so a RAW insert has to supply them itself — without them
- * the statement is refused `NOT NULL constraint failed: convenio_config.id` (measured on
- * node:sqlite, Node v26.7.0). Every insert below is deliberately raw, because what it is proving is
- * the DEFAULT the MIGRATION declares for each rule column, not the value drizzle would send. */
+ * Drizzle runs those functions per insert, so a RAW insert has to supply them itself. Every insert
+ * below is deliberately raw, because what it is proving is the DEFAULT the MIGRATION declares for
+ * each rule column, not the value drizzle would send. */
 function rowIdentity() {
   return sql`${newId()}, ${nowIso()}`;
 }
@@ -31,9 +30,6 @@ let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core for the setup, which seeds its `tenants` and `locations`, and for `convenio_config`'s
-  // foreign key onto `locations`. Listed in manifest order; every case here also passes with the two
-  // sets reversed (measured 2026-09-23).
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
@@ -43,9 +39,6 @@ const suite = useVenueDb({
 
 describe("the workforce-es (convenio_config) migration set", () => {
   it("defaults every rule to the ET statutory floor / today's default for a bare row", async () => {
-    // A DEFAULT row — only location_id supplied. Every rule takes its column default,
-    // which is exactly what lets D2.0 reproduce current behaviour: 5-day week, daily-accrual headline,
-    // the ET guardrail limits, false split-break, and NULL premiums (never an invented figure).
     await suite.db.execute(sql`
       insert into convenio_config (id, created_at, location_id)
       values (${rowIdentity()}, ${locationId})`);
@@ -86,8 +79,6 @@ describe("the workforce-es (convenio_config) migration set", () => {
   });
 
   it("rejects working_days_per_week outside 1..7 (the div-by-zero guard)", async () => {
-    // The projection divides the contracted week by working_days_per_week, so zero would produce a
-    // NaN daily target. The check makes the database refuse it. Deleting the check lets 0 through.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into convenio_config (id, created_at, location_id, working_days_per_week)
@@ -98,11 +89,8 @@ describe("the workforce-es (convenio_config) migration set", () => {
   });
 
   it("rejects an overtime_model outside the enum", async () => {
-    // The refusal the PostgreSQL enum TYPE performed on its own is now a named CHECK constraint on
-    // a plain text column (`convenio-config.ts`'s `enumCheck`), so the class the engine reports is
-    // a check violation rather than the old `22P02` invalid_text_representation. The constraint
-    // name is asserted as well: a check-class assertion alone would also be satisfied by the
-    // working-days check the case above drives.
+    // The constraint name is asserted as well: a check-class assertion alone would also be
+    // satisfied by the working-days check the case above drives.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into convenio_config (id, created_at, location_id, overtime_model)
@@ -123,9 +111,7 @@ describe("the workforce-es (convenio_config) migration set", () => {
     );
     // SQLite names the TABLE AND COLUMN a unique index was declared on, never the index's own
     // name, so the key is identified by its target here rather than by the string
-    // `convenio_config_location_uq` (measured on node:sqlite, Node v26.7.0: the whole message is
-    // `UNIQUE constraint failed: convenio_config.location_id`). `refusalOn` asks both halves —
-    // the class and the key — on one layer of the wrapped error.
+    // `convenio_config_location_uq`.
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "convenio_config",
@@ -135,9 +121,6 @@ describe("the workforce-es (convenio_config) migration set", () => {
   });
 
   it("rejects a row whose location does not exist", async () => {
-    // A well-formed id that names no location. It is a literal rather than a generated one:
-    // `gen_random_uuid()` is a PostgreSQL function, and the identity of the value does not matter
-    // to what is being proven — only that no `locations` row carries it.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into convenio_config (id, created_at, location_id)
@@ -149,10 +132,6 @@ describe("the workforce-es (convenio_config) migration set", () => {
   });
 });
 
-// SQLite has no `information_schema` and no `pg_indexes`; the catalogue is reached through the
-// PRAGMA functions instead. `pragma table_info` lists a table's columns and `pragma index_list` its
-// indexes, with `pragma index_info` naming the columns one index keys on — which is what the old
-// `indexdef` substring was being read for.
 describe("convenio_config carries no tenant column", () => {
   it("has no tenant_id column", async () => {
     const rows = await suite.db.execute<{ name: string }>(

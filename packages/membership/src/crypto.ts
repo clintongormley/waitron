@@ -4,8 +4,6 @@ import type { NodeKeyPair } from "./types.js";
 import "./errors.js";
 
 export function generateNodeKeyPair(): NodeKeyPair {
-  // No try/catch: generateKeyPairSync("ed25519") does not throw for this fixed, supported algorithm,
-  // so a catch here would be untestable dead code (R2). Only signing (below) can hit a bad key.
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   return {
     publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
@@ -36,10 +34,8 @@ export function verifyBytes(message: string, signatureB64: string, publicKeyB64:
     });
     return verify(null, Buffer.from(message, "utf8"), key, Buffer.from(signatureB64, "base64"));
   } catch {
-    // Fail closed on any malformed wire input — a bad public key (createPublicKey throws) or,
-    // defensively, a throwing verify() on some runtime. Both mean "cannot trust this" → false. The
-    // key travels in adversarial input (a document from the wire), so this is a data failure, not a
-    // thrown error. The malformed-public-key test exercises this catch, so it stays covered.
+    // Fail closed: the key arrives in wire input, so a malformed one means "cannot trust this", not
+    // an error.
     return false;
   }
 }

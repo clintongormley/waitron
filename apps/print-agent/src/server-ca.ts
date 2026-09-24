@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { rootCertificates } from "node:tls";
 import { Agent } from "undici";
 
-/** TLS verification failures undici surfaces on `error.cause.code` — the cases a reimaged box (new
- * self-signed CA) produces. A non-verify failure (refused, DNS, timeout) is NOT in this set, so it is
- * rethrown untouched for the loop to fold into "unreachable". */
+/** The TLS verification failures a reimaged box (new self-signed CA) produces, as undici surfaces them
+ * on `error.cause.code`. */
 const VERIFY_ERROR_CODES = new Set([
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
   "SELF_SIGNED_CERT_IN_CHAIN",
@@ -56,7 +55,6 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
   const caPath = join(opts.stateDir, CA_FILE);
   const caUrl = opts.serverUrl === undefined ? undefined : caUrlFor(opts.serverUrl);
 
-  // A plain-http or unconfigured agent needs no CA work: hand back the base fetch untouched.
   if (caUrl === undefined) return baseFetch;
 
   let caPem: string | undefined;
@@ -79,10 +77,8 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
     /* none yet */
   }
 
-  /** Fetch /ca.crt, throttled. Returns true when the CA bytes changed. Until the first CA is
-   * obtained the throttle is short (a failed first-boot fetch must not disable printing for an
-   * hour); once a CA is pinned the hourly interval covers rotation. Best-effort: a persistence
-   * failure never rejects — in-memory trust is already updated. */
+  /** True when the CA bytes changed. The throttle is short until the first CA is obtained, so a failed
+   * first-boot fetch does not disable printing for an hour. */
   const refresh = async (): Promise<boolean> => {
     const interval = caPem === undefined ? INITIAL_RETRY_INTERVAL_MS : REFRESH_INTERVAL_MS;
     if (now() - lastFetchAt < interval) return false;
@@ -105,16 +101,14 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
       await writeFile(tmp, pem, { mode: 0o644 });
       await rename(tmp, caPath);
     } catch (error) {
-      // Best-effort cache: in-memory trust is already updated; only the on-disk copy failed.
       log("server CA persist failed", { caUrl, error: String(error) });
     }
     log(changed ? "server CA changed" : "server CA pinned", { caUrl });
     return true;
   };
 
-  // Boot: a usable cached CA already serves trust, so refresh in the background rather than blocking
-  // the agent loop and the 9110 setup page on a slow /ca.crt. With no cached CA, try once but bound
-  // the wait so a hung landing endpoint cannot stall boot.
+  // A cached CA already serves trust, so refresh in the background; with none, bound the wait so a
+  // hung landing endpoint cannot stall boot.
   if (caPem !== undefined) {
     void refresh();
   } else {

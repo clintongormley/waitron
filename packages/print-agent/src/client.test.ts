@@ -8,8 +8,6 @@ function reply(status: number, body?: unknown): Response {
   });
 }
 
-/** A `fetch` stub that resolves one canned {@link reply}, mirroring the `vi.fn().mockResolvedValue`
- * shape the other suites use. */
 function stub(status: number, body?: unknown): typeof fetch {
   return vi.fn().mockResolvedValue(reply(status, body)) as unknown as typeof fetch;
 }
@@ -100,8 +98,7 @@ describe("createClient — probeNode", () => {
   });
 
   it("a 200 whose body is the literal null is bad_reply", async () => {
-    // `typeof null === "object"`, so the shape guard's null check is the ONLY thing standing between
-    // a `null` body and a property read on it. A server answering `null` is malformed, not reachable.
+    // `typeof null === "object"`, so the shape guard's null check is the only thing refusing this.
     const client = createClient({ fetch: vi.fn().mockResolvedValue(reply(200, null)) });
     expect(await client.probeNode(URL_A)).toMatchObject({
       ok: false,
@@ -110,8 +107,6 @@ describe("createClient — probeNode", () => {
   });
 
   it("a fetch that throws a non-Error still yields unreachable, with the value stringified", async () => {
-    // A rejection is not guaranteed to be an Error — a `fetch` polyfill or a host object can reject
-    // with anything. The detail must still be a readable string rather than "undefined".
     const client = createClient({ fetch: vi.fn().mockRejectedValue("socket hang up") });
     expect(await client.probeNode(URL_A)).toEqual({
       ok: false,
@@ -120,9 +115,6 @@ describe("createClient — probeNode", () => {
   });
 
   it("a rejection that cannot be stringified is still unreachable, not a throw", async () => {
-    // The module's contract is that NO network condition escapes as an exception. A rejection value
-    // is not guaranteed to be stringifiable — an object whose `toString` throws would otherwise carry
-    // that throw out of the catch block and past the caller's `await`.
     const hostile = {
       toString() {
         throw new Error("hostile toString");
@@ -330,7 +322,6 @@ describe("createClient — pullJobs", () => {
     expect(result.value.nodeId).toBe("n1");
     expect(result.value.servers).toEqual([{ url: "http://a.test", nodeId: "n1" }]);
     expect(result.value.jobs[0]!.payload).toEqual(new Uint8Array([1, 2, 3]));
-    // A reply with no discoveryUntil field opens no discovery window.
     expect(result.value.discoveryUntil).toBeNull();
     expect(fetchImpl.mock.calls[0]![0]).toBe(`${URL_A}/print-api/agent/jobs`);
     expect(fetchImpl.mock.calls[0]![1].headers.authorization).toBe("Bearer a1.secret");

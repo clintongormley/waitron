@@ -14,10 +14,6 @@ import {
 } from "./operations.js";
 import type { CreatePurchaseInvoiceInput, PurchaseRegime } from "./types.js";
 
-// A real SQLite venue database in a temporary directory, opened by the product's own opener
-// (`packages/db/src/testing/venue-db.ts`) — not an in-memory one, so a suite gets the storage a box
-// gets. There are no roles on this engine, and what these cases cover is the CRUD and validation
-// logic.
 const fx = usePurchasingDb();
 
 const d = (s: string): Decimal => s as Decimal;
@@ -75,7 +71,6 @@ describe("purchase-invoice operations", () => {
     // Lines come back in a stable order (rate asc): the 10% capital-goods line first, then the 21%.
     expect(created.lines.map((l) => l.rate)).toEqual(["10.00", "21.00"]);
     expect(created.lines.map((l) => l.kind)).toEqual(["capital", "ordinary"]);
-    // Read-back equals what create returned.
     expect(fetched).toEqual(created);
   });
 
@@ -83,7 +78,7 @@ describe("purchase-invoice operations", () => {
     // Three lines at the SAME rate exercise the id tie-break in create's RETURNING sort. `created` is
     // built from RETURNING and sorted in JS; `fetched` is read back via selectLines' `orderBy(asc(rate),
     // asc(id))`. They must be line-for-line identical — which is what says the JS id compare
-    // reproduces the order the database returns, the ordering the old insert-then-re-read gave.
+    // reproduces the order the database returns.
     const { created, fetched } = await asApp(async (tx) => {
       const created = await createPurchaseInvoice(tx, {
         header: { ...baseInput().header, supplierInvoiceNumber: "SAME-RATE" },
@@ -137,15 +132,12 @@ describe("purchase-invoice operations", () => {
     }));
     expect(all.map((i) => i.supplierInvoiceNumber).sort()).toEqual(["AUG", "JUL"]);
     expect(augustOnly.map((i) => i.supplierInvoiceNumber)).toEqual(["AUG"]);
-    // The listed invoices carry their lines too.
     expect(augustOnly[0]?.lines).toHaveLength(1);
   });
 
   it("stores a money amount as a count of whole cents", async () => {
     // Reading the columns raw, because every assertion that goes through a purchasing function
-    // round-trips both conversions and so passes whatever the units are. `rate` is read here too,
-    // as the whole number it now is; what it stores is basis points rather than cents, which this
-    // row cannot show — see the case below for what that distinction does and does not pin.
+    // round-trips both conversions and so passes whatever the units are.
     const rows = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, baseInput());
       const [header] = await tx
@@ -195,10 +187,9 @@ describe("purchase-invoice operations", () => {
     // What these two numbers pin is that the column holds a whole count at two decimal places, so
     // 10.50 survives where a whole-percent column would round it away. What they do NOT pin is
     // WHICH conversion produced the count: a rate and an amount share the scale, so the two agree on
-    // every value below 1000.00 and part only in what they refuse above it. Checked by substitution
-    // — writing both rate columns with `decimalToCents` instead leaves every case in this file
-    // passing — and nothing this package admits reaches the value where they part, because
-    // `validateLines` and `validateProportion` refuse anything above 100 before the insert.
+    // every value below 1000.00 and part only in what they refuse above it. Nothing this package
+    // admits reaches the value where they part, because `validateLines` and `validateProportion`
+    // refuse anything above 100 before the insert.
     const rows = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, {
         header: { ...baseInput().header, deductibleProportion: d("50.00") },
@@ -219,9 +210,7 @@ describe("purchase-invoice operations", () => {
   });
 
   it("reads an unscaled rate literal back at two places", async () => {
-    // The claim `insertLines` makes, checked rather than asserted: "21" in, "21.00" out. It is the
-    // basis-point conversion that does this now — a rate column is an integer and has no scale of
-    // its own — and `created` comes from the INSERT's RETURNING, so nothing re-read it either.
+    // `created` comes from the INSERT's RETURNING, so nothing re-read it.
     const created = await asApp((tx) =>
       createPurchaseInvoice(tx, {
         header: { ...baseInput().header, deductibleProportion: d("50") },
@@ -371,17 +360,8 @@ describe("purchase-invoice operations", () => {
     // duplicate must surface as itself, never as a spurious purchase.duplicate. The refusal used
     // here is a `regime` outside the column's vocabulary, which `createPurchaseInvoice` does not
     // validate — only the proportion and the lines are checked before the header insert — so it
-    // reaches the database and comes back as a driver error rather than an AppError.
-    //
-    // It has been two other refusals before this one, and each was retired when the column stopped
-    // refusing: an overflow on `total`, then an out-of-range date (`2026-02-30`). A day is text on
-    // this engine and an amount is a 64-bit integer, so neither refuses anything the rest of the
-    // system admits. What refuses here is the `purchase_invoices_regime_ck` CHECK, which the schema
-    // carries because the engine has no enum type of its own
-    // (`packages/db/src/schema/purchase-invoices.ts`). Measured, this insert alone against a
-    // migrated file: `CHECK constraint failed: purchase_invoices_regime_ck`, extended result code
-    // 275 — with the same row under a legal `regime` inserting as the control, so the refusal is
-    // that one value's and not the row's shape.
+    // reaches the database and comes back as a driver error rather than an AppError. What refuses
+    // is the `purchase_invoices_regime_ck` CHECK (`packages/db/src/schema/purchase-invoices.ts`).
     //
     // Caught OUTSIDE the transaction, so what is captured is the error `withTransaction` propagates
     // rather than one read mid-flight.

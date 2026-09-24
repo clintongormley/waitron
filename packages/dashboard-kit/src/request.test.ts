@@ -52,7 +52,7 @@ it("reports a successful request after the server accepts it", async () => {
 it("resolves undefined for a 2xx with an empty body (the 204 mutation routes)", async () => {
   // The empty-body branch keys off `res.text() === ""`, NOT the status (see createRequest's header);
   // the WHATWG Response constructor forbids a body on a 204, so a 200 with an empty body exercises
-  // exactly that branch. The 204 routes (logout/updatePerson/…) hit it in the browser identically.
+  // exactly that branch.
   const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(new Response("", { status: 200 }));
   const request = createRequest({ fetchImpl });
 

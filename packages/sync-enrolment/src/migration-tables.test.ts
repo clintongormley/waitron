@@ -41,9 +41,7 @@ describe("tablesCreatedBy", () => {
     ).toEqual(new Set(["t"]));
   });
 
-  // SQLite matches table names without regard to case: on node:sqlite (Node v26.7.0),
-  // `DROP TABLE devices` removed a table created as `"Devices"`, and `CREATE TABLE tills` after
-  // `CREATE TABLE Tills` was refused "table tills already exists".
+  // SQLite matches table names without regard to case.
   it("reads table names without regard to case, reporting them in lower case", () => {
     expect(
       tablesCreatedBy([
@@ -71,10 +69,7 @@ describe("tablesCreatedBy", () => {
     ).toEqual(new Set(["kept"]));
   });
 
-  // The dialect the tree emits since the SQLite flip: backtick-quoted identifiers. The CREATE is
-  // copied from `packages/db/drizzle/0000_baseline.sql`; the FOREIGN KEY line from
-  // `packages/workforce/drizzle/0000_baseline.sql` — it names `persons`, which is NOT a table this
-  // set creates, so a scanner matching REFERENCES would over-report here.
+  // `persons` is referenced but NOT created, so a scanner matching REFERENCES would over-report.
   it("collects a backtick-quoted created table, the spelling the SQLite baselines use", () => {
     expect(
       tablesCreatedBy([
@@ -84,11 +79,8 @@ describe("tablesCreatedBy", () => {
     ).toEqual(new Set(["locations", "absences"]));
   });
 
-  // The CREATE here is deliberately the OTHER spelling: with both statements backtick-quoted, an
-  // empty result would satisfy this case whether or not the DROP was recognised. Creating under a
-  // spelling the scanner already reads leaves the backtick DROP as the only thing being measured —
-  // it prints `Set{ 'absences' }` when that tolerance is missing. The `IF EXISTS` spelling was
-  // checked against sqlite3 3.51.0, not copied from a file.
+  // The CREATE is deliberately the OTHER spelling: with both backtick-quoted, an empty result would
+  // pass whether or not the DROP was recognised.
   it("removes a table a later backtick-quoted DROP TABLE drops", () => {
     expect(
       tablesCreatedBy([
@@ -98,10 +90,6 @@ describe("tablesCreatedBy", () => {
     ).toEqual(new Set());
   });
 
-  // drizzle-kit's rebuild of a table whose column SQLite cannot ALTER, in the shape
-  // `packages/db/drizzle/0003_variant_inherited_nullable.sql` emits: build `__new_<name>`, copy,
-  // drop the original, rename the new one into its place. The rebuilt table is still there; the
-  // temporary name is not.
   it("follows a rebuild's rename, keeping the table and dropping the temporary name", () => {
     expect(
       tablesCreatedBy([

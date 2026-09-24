@@ -1,10 +1,8 @@
 import type { NodeStanding, SignedMembershipDocument } from "./types.js";
 
 /**
- * This node's standing in a held document, or `undefined` when the node is absent from the chart
- * (design §3). A pure lookup over `document.body.nodes` — no verification: a held document was already
- * verified by its adoption path (or self-signed at promotion), so reading it back for a role decision
- * is reading our own authoritative state, exactly as the deployment axes are.
+ * No verification here: a held document was either accepted by `acceptMembershipDocument` or signed
+ * by this node.
  */
 export function standingOf(
   document: SignedMembershipDocument,
@@ -14,15 +12,9 @@ export function standingOf(
 }
 
 /**
- * Whether a standing fences a node OUT OF SERVING (design §3): `sell-only` (fenced, still a member)
- * and `evicted` (retired, gone for good) are fenced;
- * `serving-primary` and `serving-secondary` both serve (a serving-secondary sells, holds no
- * singletons). An `undefined` standing — a node ABSENT from the chart — is NOT fenced: promotion's
- * `nextStandings` preserves every node and demotes the outgoing primary to `sell-only` rather than
- * dropping it (standings.ts), so a node that was ever in the chart stays in it; fencing an unnamed
- * node on an incomplete chart would be the wrong direction. `evicted` is produced by `evictNode`
- * (standings.ts), the retire/evict decommission path, when a fenced `sell-only` node retires ITSELF
- * (`apps/server/src/retire.ts`).
+ * A node ABSENT from the chart is NOT fenced: `nextStandings` demotes rather than drops, so a node
+ * that was ever in the chart stays in it, and fencing an unnamed node on an incomplete chart would
+ * be the wrong direction.
  */
 export function isFencedStanding(
   standing: NodeStanding | undefined,
@@ -30,21 +22,12 @@ export function isFencedStanding(
   return standing === "sell-only" || standing === "evicted";
 }
 
-/**
- * The nodeId of the node holding `serving-primary` in a document — the current primary, i.e. the
- * CARRIER a retiring node hands the venue to (parent design §5.1's "the node that will carry
- * the partition forward", 2026-09-04 note); `retireSelf` refuses `node.retire_no_carrier` when there
- * is none. `undefined` when no node serves as primary (an incomplete
- * or all-fenced chart). At most one node holds serving-primary (the singleton), so the first match is
- * it. A pure lookup over `document.body.nodes` — no verification: the held document was verified when
- * adopted (membership-adopt.ts) or self-signed at promotion.
- */
+/** At most one node holds `serving-primary`, so the first match is it. */
 export function servingPrimaryNodeId(document: SignedMembershipDocument): string | undefined {
   return document.body.nodes.find((n) => n.standing === "serving-primary")?.nodeId;
 }
 
-/** The standings a till may route to, best first — `evicted` is absent because such a node has left
- * the venue (till-reroute design §3.2). */
+/** The standings a till may route to, best first. */
 const ROUTABLE: readonly NodeStanding[] = ["serving-primary", "serving-secondary", "sell-only"];
 
 export interface RoutableServer {

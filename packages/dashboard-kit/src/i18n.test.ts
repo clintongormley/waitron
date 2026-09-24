@@ -65,8 +65,6 @@ describe("resolveNameTable", () => {
   });
 
   it("renders a prototype-chain token as itself, not the inherited member", () => {
-    // Own-key check, not truthiness: `toString`/`constructor` are on Object.prototype, so a `??`-style
-    // lookup would resolve the inherited member. Object.hasOwn keeps the raw-token fallback true here.
     for (const token of ["toString", "constructor", "hasOwnProperty", "valueOf"]) {
       expect(resolveNameTable(table, token)).toBe(token);
     }
