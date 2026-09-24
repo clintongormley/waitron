@@ -51,19 +51,6 @@ import {
   worstBand,
 } from "./index.js";
 
-/**
- * A coherence check on the package root, not a duplicate of `errors.test.ts` / `ids.test.ts` /
- * `money.test.ts`. Those files already exercise every function in depth; this one only proves
- * that `./index.js` — the package's ENTIRE public surface, per its own comment — actually
- * re-exports each of them, so a consumer importing from the package root, rather than reaching
- * into `./errors.js` / `./ids.js` / `./money.js` directly, gets a surface that actually works.
- *
- * This is not merely a style nicety: `./index.js`'s re-exports are re-export BINDINGS, and a
- * binding that is declared but never actually imported anywhere shows as its own uncovered
- * function under coverage-v8 — a real (if trivial) gap, since a typo in one export's local name
- * (re-exporting the wrong symbol under the right name) would otherwise pass every other test in
- * this package untouched.
- */
 describe("package public surface (./index.js)", () => {
   it("re-exports AppError, isAppError and hasCode", () => {
     const error = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });

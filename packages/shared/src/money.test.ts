@@ -20,9 +20,6 @@ describe("decimal", () => {
   });
 
   it("preserves the scale it was given", () => {
-    // "1.50" and "1.5" are the same quantity but not the same literal, and the literal is what
-    // gets stored and later hashed. Normalising the scale here would silently reformat a value
-    // on its way to storage.
     expect(decimal("1.50")).toBe("1.50");
     expect(decimal("1.5")).toBe("1.5");
   });
@@ -32,27 +29,15 @@ describe("decimal", () => {
   });
 
   it("normalises negative zero to positive zero", () => {
-    // -0.00 and 0.00 are the same amount, and a sign on zero would propagate into a stored
-    // literal and then into a hash input where it would not compare equal.
     expect(decimal("-0.00")).toBe("0.00");
   });
 
   it("leaves a positive zero exactly as given", () => {
-    // Deliberately not routed through another function's parse-and-reformat (isZeroDecimal,
-    // negateDecimal): those reconstruct their own string from the parsed magnitude and scale,
-    // so a decimal() that mis-detects "0.00" as needing its sign stripped (mistaking it for the
-    // negative-zero case, which strips the FIRST character) produces ".00" internally, which
-    // then reparses to the same value everywhere else — invisible except when decimal()'s own
-    // literal return value is checked directly, which is what this assertion does.
     expect(decimal("0.00")).toBe("0.00");
     expect(decimal("0")).toBe("0");
   });
 
   it("rejects a non-string value at runtime, defending callers who bypass the type system", () => {
-    // decimal(value: string) makes this unreachable from TypeScript, but the whole point of a
-    // structured error at a package boundary (spec §9) is that the boundary is also crossed by
-    // callers who never typechecked against it — plain JS, an `as any`, a value that arrived
-    // over the wire. The runtime guard exists for exactly that caller.
     expect(() => decimal(123 as unknown as string)).toThrowError(AppError);
   });
 
@@ -61,8 +46,6 @@ describe("decimal", () => {
   });
 
   it("rejects a comma decimal separator", () => {
-    // Spanish input conventions make "1,50" a realistic value to receive from a UI that
-    // formatted before it stored — the exact thing spec §9 forbids.
     expect(() => decimal("1,50")).toThrowError(AppError);
   });
 
@@ -112,9 +95,6 @@ describe("addDecimal", () => {
   });
 
   it("adds the case IEEE 754 gets wrong", () => {
-    // 0.1 + 0.2 === 0.30000000000000004 in binary64. This single assertion is the reason the
-    // whole module exists, and it is the one an implementation that quietly reached for Number
-    // cannot pass.
     expect(addDecimal(decimal("0.1"), decimal("0.2"))).toBe("0.3");
   });
 
@@ -123,10 +103,6 @@ describe("addDecimal", () => {
   });
 
   it("aligns the right operand when it is the narrower one", () => {
-    // The test above always puts the wider-scale operand on the right, so `align`'s scaling
-    // multiplication for its OWN `right` value never runs with a nonzero exponent — a mutant
-    // that changes that multiplication to a division survives every other test in this file
-    // untouched. Swapping the argument order here is what actually exercises it.
     expect(addDecimal(decimal("2.25"), decimal("1.5"))).toBe("3.75");
   });
 
@@ -135,8 +111,7 @@ describe("addDecimal", () => {
   });
 
   it("handles a magnitude past 2 ** 53", () => {
-    // 9007199254740993 is the first integer binary64 cannot represent. An implementation that
-    // scaled to integer cents through Number would silently return the wrong total here.
+    // 9007199254740993 is the first integer binary64 cannot represent.
     expect(addDecimal(decimal("9007199254740992"), decimal("1"))).toBe("9007199254740993");
   });
 
@@ -161,8 +136,6 @@ describe("subtractDecimal", () => {
 
 describe("multiplyDecimal", () => {
   it("sums the scales of its operands", () => {
-    // 3 x 1.25 = 3.75 exactly. Truncating to the wider operand's scale here would quietly lose
-    // a third decimal place on any unit price that has one.
     expect(multiplyDecimal(decimal("3"), decimal("1.25"))).toBe("3.75");
   });
 
@@ -188,16 +161,12 @@ describe("divideDecimal", () => {
   });
 
   it("handles a fractional divisor exactly", () => {
-    // Every other case uses an integer (scale-0) divisor, so the `10^b.scale` alignment factor is
-    // always ×1 and never actually exercised — a mutant dropping it would survive. A divisor with
-    // its own decimals forces that factor to matter.
     expect(divideDecimal(decimal("1"), decimal("0.5"), 2)).toBe("2.00");
     expect(divideDecimal(decimal("1"), decimal("0.4"), 2)).toBe("2.50");
     expect(divideDecimal(decimal("2.5"), decimal("0.25"), 2)).toBe("10.00");
   });
 
   it("reproduces a VAT-style base*rate/100 to two places", () => {
-    // 111.10 * 21 / 100 = 23.331 → 23.33
     expect(
       divideDecimal(multiplyDecimal(decimal("111.10"), decimal("21")), decimal("100"), 2),
     ).toBe("23.33");
@@ -208,9 +177,6 @@ describe("divideDecimal", () => {
   });
 
   it("does not produce a signed zero when a negative dividend rounds to zero", () => {
-    // -1 / 1000 = -0.001, which rounds to zero at scale 2. A sign surviving onto that zero would
-    // produce "-0.00", which does not compare equal to "0.00" as a stored literal even though the
-    // amounts are the same — the same defect `decimal()` itself guards against.
     expect(divideDecimal(decimal("-1"), decimal("1000"), 2)).toBe("0.00");
   });
 });
@@ -225,11 +191,6 @@ describe("negateDecimal and isZeroDecimal", () => {
   });
 
   it("negates to a magnitude narrower than its scale, so the digits need left-padding", () => {
-    // Every other negative-result case in this file has enough digits that padStart is a
-    // no-op. This one doesn't: magnitude 5 at scale 2 needs padding to "005" before the decimal
-    // point is inserted. A rewrite that derives the sign from `units.toString()` starting with
-    // "-" rather than negating the magnitude first would insert the padding zeros on the wrong
-    // side of that character and produce "0.-5" instead of "-0.05".
     expect(negateDecimal(decimal("0.05"))).toBe("-0.05");
   });
 
@@ -242,8 +203,7 @@ describe("negateDecimal and isZeroDecimal", () => {
 
 describe("compareDecimal", () => {
   it("compares across differing scales", () => {
-    // "1.5" sorts before "1.50" as a string. Anything comparing these lexically gets the wrong
-    // answer for exactly the values that are equal.
+    // "1.5" sorts before "1.50" as a string.
     expect(compareDecimal(decimal("1.5"), decimal("1.50"))).toBe(0);
   });
 
@@ -267,9 +227,6 @@ describe("sumDecimals", () => {
   });
 
   it("sums a hundred cent amounts without drift", () => {
-    // In binary64 this accumulates visible error by around the fortieth term. The assertion is
-    // the exact literal, not a tolerance — a tolerance is how a one-cent divergence between the
-    // commercial invoice and the fiscal record gets through a test suite.
     const lines = Array.from({ length: 100 }, () => decimal("0.07"));
     expect(sumDecimals(lines)).toBe("7.00");
   });
@@ -285,9 +242,7 @@ describe("toScale", () => {
   });
 
   it("rounds half away from zero, matching the record serialisation policy", () => {
-    // The boundary case. `1.005` in binary64 is 1.00499999999999989..., so any implementation
-    // that routes through Number rounds this DOWN to "1.00" and disagrees with the fiscal
-    // record by one cent.
+    // `1.005` in binary64 is 1.00499999999999989...
     expect(toScale(decimal("1.005"), 2)).toBe("1.01");
   });
 
@@ -335,8 +290,6 @@ describe("assertMoney", () => {
   });
 
   it("accepts a value whose extra decimals are within the integer bound", () => {
-    // assertMoney checks magnitude only. Scaling to two places is toScale's job, and fusing
-    // them would make it impossible to check an intermediate at full precision.
     expect(assertMoney(decimal("1.23456"))).toBe("1.23456");
   });
 });

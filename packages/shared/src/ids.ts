@@ -1,20 +1,8 @@
 import { AppError } from "./errors.js";
 
 /**
- * Exported, `declare`d and never defined. Exported because `Branded` is exported and referencing
- * a non-exported symbol in an exported type trips TS4023 under `declaration: true`; `declare`d
- * because the symbol has no runtime existence at all — it is erased entirely, so a branded id
- * costs nothing at runtime and is byte-identical to the string it wraps.
- *
- * A `unique symbol` rather than a string-keyed marker such as `{ __brand: "SaleId" }`, because
- * a string key is forgeable: any object literal with that property satisfies the type, and the
- * key shows up in `keyof`, in autocomplete and in `JSON.stringify` output. A unique symbol
- * declared here cannot be produced anywhere else in the repo.
- *
- * Rejected alternative: wrapper classes (`class SaleId { constructor(readonly value: string) }`).
- * They brand just as well but allocate on every construction and stop the value being passed
- * straight into a Drizzle bind parameter, so every query site grows a `.value` that is easy to
- * forget in exactly one place.
+ * `declare`d because it has no runtime existence, so a branded id is the plain string at runtime.
+ * A unique symbol rather than a string key, because any object literal can forge a string key.
  */
 export declare const idBrand: unique symbol;
 
@@ -31,39 +19,24 @@ export type SaleLineId = Branded<string, "SaleLineId">;
 export type TenderId = Branded<string, "TenderId">;
 export type FiscalRecordId = Branded<string, "FiscalRecordId">;
 
-// Anchored at both ends. An unanchored pattern accepts a well-formed uuid followed by anything
-// at all, and the trailing content then travels onward as part of a bind value.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Anchored UUID shape check, sharing the same `UUID_PATTERN` the branded-id constructors validate
- * against. Either case passes: every character of a UUID is a hex digit, so `A` and `a` are the
- * same value. Callers screen a cookie or request id through this so a malformed one fails as a
- * clean client fault rather than travelling into a query as a bind value.
- *
- * This says only whether the value is well-formed. It does not settle its SPELLING — see
- * {@link normaliseUuid}, which is what a caller that goes on to STORE or COMPARE the value needs.
+ * Whether the value is UUID-shaped, in either case. It does not settle the spelling: a caller that
+ * stores or compares the value needs {@link normaliseUuid}.
  */
 export function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
 /**
- * The one place a UUID's spelling is settled: validated, then folded to lower case.
+ * Validates a UUID and folds it to lower case. An id column is text and compares byte for byte,
+ * so an id stored in one case is not found by a lookup in the other; the spelling is settled here,
+ * where an id is parsed (owner decision, 2026-09-21).
  *
- * An id column is plain `text` (`packages/db/src/schema/columns.ts`) and text compares byte for
- * byte, so an id stored in one case is not found by a lookup in the other. Folding at the boundary
- * that PARSES an id — here, and in the branded constructors below, which all route through this —
- * is what makes every column hold one spelling, so no write path has to remember (owner decision,
- * 2026-09-21).
- *
- * The fold is confined to UUID-shaped values ON PURPOSE, and the validation is what confines it.
- * Case is meaningless inside a UUID and meaningful in plenty of ids this system also carries — a
- * Stripe object id, a SumUp pairing code, an AEAT invoice number — none of which is UUID-shaped.
- * A caller that hands one of those to this function gets a refusal, not a corrupted value.
- *
- * `kind` names the id for the refusal only; a rejected value is echoed back exactly as the caller
- * spelled it, because the message exists to show them their own bytes.
+ * The fold is confined to UUID-shaped values on purpose: case matters in other ids this system
+ * carries (a Stripe object id, an AEAT invoice number), and those get a refusal, not a fold.
+ * `kind` names the id in the refusal.
  */
 export function normaliseUuid(value: string, kind: string): string {
   if (!UUID_PATTERN.test(value)) {

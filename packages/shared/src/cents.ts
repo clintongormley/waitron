@@ -3,37 +3,10 @@ import { assertMoney, decimal, MONEY_SCALE, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 
-// The one sanctioned crossing between a money COLUMN and the amount type.
-//
-// A money column stores a count of whole cents, while every arithmetic and every printed or
-// hashed literal above the storage boundary is an exact `Decimal`. The functions that convert
-// between those two forms — `decimalToCents`, `centsToDecimal`, `rawCentsToDecimal` and
-// `stringToCents`, which is `decimal()` followed by `decimalToCents` — are declared here and
-// nowhere else in the tree. This returns this file alone:
-//
-//   git grep -n 'function decimalToCents\|function centsToDecimal\|function rawCentsToDecimal\|function stringToCents' -- packages apps
-//
-// That is why it is a file of its own rather than more exports in `./money.ts`: that file is
-// checked, as text, for the absence of `Number(` and every other float-shaped token
-// (`conventions.test.ts`), and keeping the check that strict is worth more than the convenience
-// of one module.
-//
-// The claim that they are declared nowhere else is about these functions, not about the number
-// type in general, and the difference matters because plenty of code crosses into a number without coming through
-// here. A caller that already holds a `Decimal` may take it further whenever it needs a number to
-// format, compare or hand to a library — display formatting and `packages/workforce-es`'s
-// `convenio.ts` both do, and some of those call sites carry their own note saying why it is safe
-// there. A card provider's minor units are a separate conversion with separate converters
-// (`toMinorUnits` in `packages/payments-stripe/src/client.ts` and
-// `packages/payments-sumup/src/client.ts`), reached from an amount and never from a column.
-// What is confined to this file is the crossing between a STORED COUNT OF CENTS and a `Decimal`;
-// nothing outside it reads or writes that form. Nothing enforces either property.
-//
-// Every direction is exact. A count of cents is an integer, and the widest amount this system
-// admits — 12 integer digits, guarded by `assertMoney` — is 99999999999999 cents against a safe
-// integer of 9007199254740991, so no amount in range can lose a cent to the number type. Nothing
-// here rounds a float: the rounding that does happen is `toScale`'s, in BigInt, half away from
-// zero.
+// The crossing between a money column's stored count of whole cents and a `Decimal`. A file of its
+// own because `conventions.test.ts` fails `./money.ts` on any `Number(`. Exact for every amount in
+// range: the widest `assertMoney` admits is 99999999999999 cents, inside `Number.MAX_SAFE_INTEGER`,
+// and the only rounding is `toScale`'s, in BigInt.
 
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
@@ -65,43 +38,20 @@ export function centsToDecimal(cents: number): Decimal {
 /**
  * The amount for a count of cents read by RAW SQL, where the count arrives as TEXT.
  *
- * A raw read hands back whatever the driver makes of the value, and on this engine an uncast
- * integer arrives as a JavaScript NUMBER. So the caller must cast the expression to text in the
- * query — spelled `cast(x as text)`, because this engine has no `::` cast operator — and that
- * string is what this function takes.
- *
- * Measured on this engine 2026-09-22 (`node:sqlite`, Node v26.7.0) over
- * `probe(amount integer not null)` holding 1234 and 2147483648, with a node script printing
- * `typeof` for every value it read:
- *
- *   expression                              result
- *   cast(amount as text)                    "1234" string
- *   cast(sum(amount) as text)               "2147484882" string
- *   cast(coalesce(sum(amount), 0) as text)  "0" string, over no rows
- *   amount — CONTROL, no cast               1234 NUMBER
- *   sum(amount) — CONTROL, no cast          2147484882 NUMBER
- *
- * The two controls are what make the reading mean anything: they are why the cast exists, and they
- * fail LOUDLY rather than silently — an uncast read reaches the `typeof value !== "string"` line
- * below and throws `shared.invalid_cents`, so a caller that forgets the cast finds out.
- *
- * NOT a cast to an integer type, and this is the part that is easy to get wrong when adding a call
- * site: `cast(x as integer)` would hand back a number this function refuses, and a fixed-scale
- * rendering would be worse — a count of 7734 cents written as "7734.00" is a plausible string a
- * hundred times the amount, which `RAW_COUNT_PATTERN` refuses for exactly that reason.
- *
- * None of this applies to a typed drizzle `.select()` over a schema column — the column's own
- * mapping converts the value, so those call sites use `centsToDecimal` directly and need no cast.
- * This function is for `tx.execute` and for a `sql` fragment inside a select list, which are
- * untyped on both ends.
+ * This engine hands an uncast integer to a raw read as a JavaScript number, which is refused here
+ * with `shared.invalid_cents`; the query casts it with `cast(x as text)` (the engine has no `::`).
+ * Not `cast(x as integer)`, which still arrives as a number, and not a fixed-scale rendering: 7734
+ * cents written "7734.00" reads as a hundred times the amount, so a point is refused. A typed
+ * drizzle `.select()` over a schema column needs `centsToDecimal` instead. Receipt:
+ * `docs/developers/conventions-data.md`.
  */
 export function rawCentsToDecimal(value: string): Decimal {
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
     throw new AppError("shared.invalid_cents", { value: String(value) });
   }
   const cents = Number(value);
-  // Not the money bound: a total can be wider than any one amount (pinned in `cents.test.ts`). A
-  // count past what a number holds exactly would drop digits without saying so.
+  // Not the money bound: a total can be wider than any one amount. A count past what a number
+  // holds exactly would drop digits without saying so.
   if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value });
   }

@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 /**
- * Vite supplies `import.meta.glob` at runtime — Vitest always runs through Vite's transform
- * pipeline, whether or not the `vite` package itself is resolvable from this workspace member —
- * but its *type* normally comes from a `/// <reference types="vite/client" />`, which requires
- * `vite` to be an installed, resolvable package. This package deliberately carries no
- * dependency beyond `vitest` (see package.json's own comment on why), so rather than add `vite`
- * as a devDependency solely to pull in that reference, this narrowly types the one member this
- * file actually calls.
+ * Vite supplies `import.meta.glob` at runtime, but its type normally comes from `vite/client`,
+ * and `vite` does not resolve from this package, so this types the one member this file calls.
  */
 declare global {
   interface ImportMeta {
@@ -18,9 +13,7 @@ declare global {
   }
 }
 
-// `?raw` so the sources are read as text and never evaluated. The negative pattern excluding
-// *.test.ts is load-bearing regardless: this file's own forbidden-token lists contain the very
-// tokens being searched for, and a guard that flags itself is a guard nobody keeps.
+// `?raw` so the sources are read as text and never evaluated.
 const sources = import.meta.glob(["./*.ts", "!./*.test.ts"], {
   query: "?raw",
   import: "default",
@@ -37,8 +30,6 @@ function sourceOf(name: string): string {
 
 describe("the source glob itself", () => {
   it("discovers every module in this package", () => {
-    // Without this the whole file degrades silently: a glob that matches nothing makes every
-    // check below vacuously pass while reporting green.
     expect(Object.keys(sources).length).toBeGreaterThanOrEqual(3);
   });
 
@@ -63,16 +54,10 @@ describe("money.ts never touches a float", () => {
   });
 
   it("exports no numeric conversion", () => {
-    // The absence of an export is the policy. `Object.hasOwn`-style existence checks on the
-    // module object would work too, but a text check also catches a conversion added as a
-    // non-exported helper that a colleague then exports next week.
     expect(source).not.toMatch(/export\s+(?:function|const)\s+to(?:Number|Float)/);
   });
 
   it("still uses number for scales, which are counts rather than quantities", () => {
-    // Stated as a positive assertion so the rule above is not misread as "no `number` type in
-    // this file". An exponent is a count of digit positions; it is exactly representable and
-    // has nothing to do with money.
     expect(source).toContain("scale: number");
   });
 });
@@ -89,8 +74,7 @@ describe("cents.ts crosses into the number type without rounding one", () => {
     ["Math.abs", "Math.abs"],
   ])("contains no %s", (_label, token) => {
     // This file is allowed the number constructor — converting a count of cents is what it is
-    // for — and nothing else from the float family. A rounding done here would be done on a
-    // float, whereas the rounding that belongs to money happens in `money.ts` in BigInt.
+    // for — and nothing else from the float family.
     expect(source).not.toContain(token);
   });
 
@@ -110,10 +94,6 @@ describe("scales.ts crosses into the number type without rounding one", () => {
     ["Math.floor", "Math.floor"],
     ["Math.abs", "Math.abs"],
   ])("contains no %s", (_label, token) => {
-    // The same allowance `cents.ts` gets and for the same reason: converting a count is what
-    // this file is for, and nothing else from the float family belongs in it. A rounding done
-    // here would be done on a float; the rounding that belongs to a scale happens in `money.ts`
-    // in BigInt.
     expect(source).not.toContain(token);
   });
 
@@ -125,7 +105,7 @@ describe("scales.ts crosses into the number type without rounding one", () => {
 describe("errors never carry prose", () => {
   it.each(Object.entries(sources))("%s throws only AppError", (_path, source) => {
     // `new Error("...")` anywhere in this package would produce a message no translation table
-    // can key off, which is the precise failure spec §9 names.
+    // can key off.
     expect(source).not.toMatch(/throw new Error\(/);
   });
 });

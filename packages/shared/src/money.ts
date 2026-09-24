@@ -2,28 +2,22 @@ import { AppError } from "./errors.js";
 import type { Branded } from "./ids.js";
 
 /**
- * An exact decimal, held as its literal string. NOT a number, and deliberately not convertible
- * to one — see the closing note in this file.
- *
- * The scale is part of the value: "1.5" and "1.50" are equal in magnitude but are different
- * literals, and the literal is what is stored and later hashed. Every operation here states what
- * it does to the scale.
+ * An exact decimal, held as its literal string, and deliberately not convertible to a number (see
+ * the closing note). The scale is part of the value: "1.5" and "1.50" are equal in magnitude but
+ * different literals, and a literal is what gets printed and hashed.
  */
 export type Decimal = Branded<string, "Decimal">;
 
 export const MONEY_SCALE = 2;
 export const MAX_MONEY_INTEGER_DIGITS = 12;
 
-// Anchored, no exponent, no leading plus, no leading zeros, at least one digit either side of
-// the point when a point is present.
 const DECIMAL_PATTERN = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
 export function decimal(value: string): Decimal {
   if (typeof value !== "string" || !DECIMAL_PATTERN.test(value)) {
     throw new AppError("shared.invalid_decimal", { value: String(value) });
   }
-  // A sign on a zero magnitude would survive into a stored literal and then into a hash input,
-  // where "-0.00" does not compare equal to "0.00" even though the amounts do.
+  // "-0.00" and "0.00" are one amount and two different literals, so the sign is dropped.
   if (value.startsWith("-") && !/[1-9]/.test(value)) {
     return value.slice(1) as Decimal;
   }
@@ -48,8 +42,7 @@ function partsOf(value: Decimal): Parts {
 function fromParts({ units, scale }: Parts): Decimal {
   const negative = units < 0n;
   const magnitude = negative ? -units : units;
-  // padStart guarantees at least one integer digit, so "5" at scale 2 renders "0.05" rather
-  // than ".05" — which the pattern would reject on the way back in.
+  // At least one integer digit: "5" at scale 2 is "0.05", never ".05", which `decimal` refuses.
   const digits = magnitude.toString().padStart(scale + 1, "0");
   const body =
     scale === 0
@@ -89,9 +82,7 @@ export function subtractDecimal(left: Decimal, right: Decimal): Decimal {
 
 /**
  * Result scale is the SUM of the operand scales — the exact product, with nothing discarded.
- * Truncating to the wider operand's scale would lose a digit on any unit price carrying three
- * decimals, which is a normal thing for a unit price to carry. Rounding to a storable scale is
- * `toScale`'s job and happens once, at the point of storage, not on every intermediate.
+ * Rounding to a storable scale is `toScale`'s job, done once rather than on every intermediate.
  */
 export function multiplyDecimal(left: Decimal, right: Decimal): Decimal {
   const a = partsOf(left);
@@ -99,19 +90,14 @@ export function multiplyDecimal(left: Decimal, right: Decimal): Decimal {
   return fromParts({ units: a.units * b.units, scale: a.scale + b.scale });
 }
 
-/** Non-negative `numerator / denominator`, rounded half away from zero — shared by `toScale` and
- * `divideDecimal` so the rounding rule is written once. */
+/** Non-negative `numerator / denominator`, rounded half away from zero. */
 function roundedQuotient(numerator: bigint, denominator: bigint): bigint {
   const quotient = numerator / denominator;
   const remainder = numerator % denominator;
   return remainder * 2n >= denominator ? quotient + 1n : quotient;
 }
 
-/**
- * Exact quotient `dividend / divisor`, rounded half away from zero to `scale` places — the
- * division `@waitron/shared` otherwise lacks (an earlier `@waitron/core` VAT helper, since removed,
- * reimplemented this file's private codec for want of it). Computed entirely in BigInt: never a JS number.
- */
+/** `dividend / divisor`, rounded half away from zero to `scale` places, in BigInt throughout. */
 export function divideDecimal(dividend: Decimal, divisor: Decimal, scale: number): Decimal {
   const a = partsOf(dividend);
   const b = partsOf(divisor);
@@ -130,28 +116,15 @@ export function divideDecimal(dividend: Decimal, divisor: Decimal, scale: number
 }
 
 /**
- * `ratePercent`% of `amount`, exact and rounded half away from zero to `scale` places (money
- * scale by default). `ratePercent` is a PERCENTAGE literal as this system stores it ("21.00"
- * meaning 21%), so the division by 100 is folded in: amount * rate / 100.
- *
- * Exact throughout via the BigInt decimal ops above — the single implementation of the VAT
- * `base * rate / 100` formula, imported wherever a tax figure is derived from a base rather than
- * re-inlined (which is how it drifted into four copies before this was hoisted here).
+ * `ratePercent`% of `amount`, rounded half away from zero to `scale` places (money scale by
+ * default). `ratePercent` is a PERCENTAGE literal ("21.00" meaning 21%): amount * rate / 100.
  */
 export function percentOf(amount: Decimal, ratePercent: Decimal, scale = MONEY_SCALE): Decimal {
   return divideDecimal(multiplyDecimal(amount, ratePercent), "100" as Decimal, scale);
 }
 
 /**
- * Gross line amount: `unitPrice × quantity`, taken to money scale (rounded half away from zero) — the
- * exact product reduced to a storable figure in ONE place. Both operands arrive as literal strings (a
- * stored `unit_price_gross`, a rung-up quantity) and are validated through `decimal` before the
- * multiply; `multiplyDecimal` keeps the full product scale and `toScale` does the single rounding at
- * the money boundary, the same way `percentOf` composes the ops above.
- *
- * Sharing this one primitive is what keeps a rung-up basket row, the tab drawer's line and the printed
- * receipt from ever rounding differently — the guarantee `@waitron/till`'s `lineGross` was written to
- * give, now extended to every per-line gross by funnelling them all through here.
+ * Gross line amount: `unitPrice × quantity`, rounded once, half away from zero, to money scale.
  */
 export function grossOf(unitPrice: string, quantity: string): Decimal {
   return toScale(multiplyDecimal(decimal(unitPrice), decimal(quantity)), MONEY_SCALE);
@@ -179,11 +152,9 @@ export function sumDecimals(values: readonly Decimal[]): Decimal {
 }
 
 /**
- * Re-scales, rounding half away from zero — the same policy `@waitron/verifactu`'s field
- * formatting applies to a record literal. Choosing a different mode here would make the sale
- * total and the fiscal record disagree by one cent on exactly the values that sit on a boundary,
- * which is the defect class this module exists to prevent. Changing it is a primary-source
- * question, not an implementation choice.
+ * Re-scales, rounding half away from zero — the mode `@waitron/verifactu`'s `formatAmountExact`
+ * uses for a record literal. A different mode here would make the sale total and the fiscal record
+ * disagree by a cent on values that sit on a boundary.
  */
 export function toScale(value: Decimal, scale: number): Decimal {
   const current = partsOf(value);
@@ -194,20 +165,14 @@ export function toScale(value: Decimal, scale: number): Decimal {
   const divisor = 10n ** BigInt(current.scale - scale);
   const negative = current.units < 0n;
   const magnitude = negative ? -current.units : current.units;
-  // `roundedQuotient` computes "at or above half" as `remainder * 2n >= divisor`, entirely in
-  // integers. The familiar `remainder / divisor >= 0.5` is the same test written so that it
-  // needs a float.
   const rounded = roundedQuotient(magnitude, divisor);
   return fromParts({ units: negative ? -rounded : rounded, scale });
 }
 
 /**
- * Guards the magnitude a money amount may carry: twelve integer digits, `MAX_MONEY_INTEGER_DIGITS`.
- * That is this system's own bound, not a column type's — a money column holds a count of whole
- * cents in an eight-byte integer.
- *
- * Checks the integer digits only — scaling to two places is `toScale`'s job, and fusing the two
- * would make it impossible to hold an intermediate at full precision while still bounding it.
+ * Refuses an amount wider than `MAX_MONEY_INTEGER_DIGITS` integer digits with
+ * `shared.decimal_overflow`. The bound is this system's own; the column does not enforce one.
+ * Checks the integer digits only, so an intermediate at full precision can still be bounded.
  */
 export function assertMoney(value: Decimal): Decimal {
   const { units, scale } = partsOf(value);
@@ -222,12 +187,6 @@ export function assertMoney(value: Decimal): Decimal {
   return value;
 }
 
-// There is deliberately no `toNumber`, and this file names no float-shaped operation at all —
-// `conventions.test.ts` reads its text and fails on any of them. The sanctioned crossings into
-// the number type are a count of whole cents in `./cents.ts` and counts of thousandths and basis
-// points in `./scales.ts`; `cents.ts` is built on the exports above and on `scales.ts`'s literal
-// renderer and raw pattern. The only honest reason to want a float conversion is formatting for
-// display, and a display formatter takes the string. Exporting a conversion would put the float
-// path one autocomplete away from every call site in the repo, and the resulting defect is
-// invisible: totals that are individually plausible, disagree by a cent, and are already signed
-// into an immutable record by the time anyone reconciles them.
+// There is deliberately no `toNumber`, and `conventions.test.ts` fails this file's text on the
+// float-shaped operations it lists. The crossings into the number type are counts, in `./cents.ts`
+// and `./scales.ts`.

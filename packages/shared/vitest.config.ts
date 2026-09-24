@@ -4,46 +4,18 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the source. Without
-    // this exclude Vitest discovers them as real test files, so one interrupted mutation run
-    // makes every later test run fail confusingly.
+    // A crashed Stryker run leaves mutated copies of the source, tests included, in .stryker-tmp,
+    // and Vitest would collect them.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // Observed non-deterministic: @vitest/coverage-v8 merges per-worker V8 coverage across the
-    // parallel workers Vitest normally runs one test file per. With several small test files all
-    // importing the same shared module (errors.ts, ids.ts), that merge occasionally produces a
-    // phantom branch entry with no corresponding source location (confirmed by inspecting
-    // coverage-final.json's branchMap directly: an extra entry attributed to line 1 with a
-    // fnMap name of "get" that appears in no source file in this package) and reports it as
-    // uncovered, flipping the coverage gate between green and red across otherwise-identical
-    // runs of the same suite. This package is small enough (under 300ms) that running its test
-    // files sequentially costs nothing meaningful and removes the race entirely — reproduced
-    // clean across 5 consecutive runs with this set, versus failing roughly every other run
-    // without it.
+    // One file at a time in one worker: @vitest/coverage-v8's merge across workers has
+    // intermittently under-counted this package's branches, flipping the gate on unchanged code.
     fileParallelism: false,
-    // `fileParallelism: false` removes the within-package race, but under the pre-push hook's
-    // whole-workspace `pnpm -r test:coverage` this package still runs concurrently WITH the other
-    // packages under pnpm's oversubscription, and @vitest/coverage-v8's cross-fork merge under-counts
-    // this package's branches (an intermittent ~80% vs the real 100% in isolation — the same v8
-    // fork-merge under-count the `packages/payments` config documents). Pinning to a single fork
-    // removes that cross-fork merge entirely, so the gate is deterministic under `-r` load too. The
-    // suite is tiny (<300ms), so one fork costs nothing.
     maxWorkers: 1,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `exclude` replaces rather than merges, but Vitest 4's own default list is empty, so the
-      // spread adds nothing today; keep it so a later non-empty default is not dropped.
-      // src/index.ts is a pure re-export barrel with no logic of its own (see its own header
-      // comment) and is excluded for the same reason packages/db excludes drizzle.config.ts and
-      // packages/ui excludes its test-helpers: nothing here is worth gating on. It is also,
-      // independently, the one file in this package where @vitest/coverage-v8 has proven
-      // non-deterministic — an in-source `v8 ignore file` comment was tried first and did not
-      // reliably suppress it (see src/index.ts), which is why the exclusion lives here instead.
-      // The same misattribution leaks ONE statement out of the excluded barrel and into a file it
-      // imports: with index.test.ts in the run, sql-state.ts's `import` line reports 0 executions
-      // (deterministic across repeated runs; drop index.test.ts and it is 100%). The package gate
-      // reads the merged total, which is unaffected — do not chase that per-file row.
+      // src/index.ts is a re-export barrel, excluded here rather than in-file (see its header).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

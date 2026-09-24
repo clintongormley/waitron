@@ -2,47 +2,24 @@ import { AppError } from "./errors.js";
 import { decimal, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 
-// The sanctioned crossings between a SCALED-INTEGER column and the exact decimal type, for the
-// two scales that are not money. It also supplies money's literal renderer and raw pattern to
-// `./cents.ts`.
-//
-// A quantity column stores a count of whole thousandths and a rate column a count of whole basis
-// points, while every arithmetic and every printed literal above the storage boundary is an exact
-// `Decimal`, exactly as it is for an amount. The reason this is a second file rather than more
-// exports in `./cents.ts` is the reason the scales are separate at all: one conversion covering
-// all three would take a quantity and a rate and give the same answer for the same literal, and
-// that answer would be wrong for the QUANTITY. A rate and an amount happen to share a scale —
-// `RATE_SCALE` and `MONEY_SCALE` are both 2 — so one conversion would in fact serve both; a
-// quantity carries a third place, and there the answers part. 0.005 kg is 5 thousandths and reads
-// as 1 at the money scale, because `decimalToCents` rounds that third place half away from zero
-// rather than dropping it. So the shared conversion would not refuse anything and would not empty
-// the line: it would return a number five times too small (measured, and pinned by the 0.005
-// cases in `scales.test.ts`). The names are separate anyway, because a rate and an amount sharing
-// a scale today is a coincidence of this tax regime, not a property to build on.
-//
-// `./money.ts` is where the rounding happens — `toScale`, in BigInt, half away from zero. Nothing
-// here rounds a float; `conventions.test.ts` reads this file's text and fails on any float-shaped
-// operation but the number constructor these conversions exist for.
+// The crossings between a scaled-integer column and a `Decimal` for the two scales that are not
+// money: a quantity counts whole thousandths, a rate whole basis points. Kept apart from
+// `./cents.ts` because one conversion for every scale would misread a quantity: 0.005 kg is 5
+// thousandths, but 1 at the money scale. The only rounding is `toScale`'s, in BigInt.
 
 /** Three decimal places, so five grams is a quantity and not a rounding error. */
 export const QUANTITY_SCALE = 3;
 
 /**
- * Nine integer digits. The column is an eight-byte integer and takes a wider count silently, so
- * this bound is the only width limit (see the header of `packages/db/src/schema/columns.ts`). The
- * widest quantity it admits, 999999999.999, is 999999999999 thousandths — well inside the
- * 9007199254740991 a JavaScript number counts exactly.
+ * Nine integer digits. The column takes a wider count without complaint, so this bound is the only
+ * width limit; 999999999.999 is 999999999999 thousandths, inside `Number.MAX_SAFE_INTEGER`.
  */
 export const MAX_QUANTITY_INTEGER_DIGITS = 9;
 
 /** Two decimal places: a 21.00 VAT rate, and a 10.50 one. */
 export const RATE_SCALE = 2;
 
-/**
- * Three integer digits: 999.99 is 99999 basis points. The column is an eight-byte integer, so this
- * bound is the only digit limit; the VAT-rate and deductible-proportion columns also carry a CHECK
- * capping the count at 10000.
- */
+/** Three integer digits: 999.99 is 99999 basis points. */
 export const MAX_RATE_INTEGER_DIGITS = 3;
 
 function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
@@ -69,8 +46,7 @@ function boundedCount(
 /**
  * The literal for a count at `scale`, always with every place: 1234 at scale 2 is "12.34".
  *
- * Package-internal — not re-exported from `index.ts`. Callers check `Number.isInteger` first, as
- * `centsToDecimal`, `thousandthsToDecimal` and `basisPointsToDecimal` do.
+ * Package-internal — not re-exported from `index.ts`. Callers check `Number.isInteger` first.
  */
 export function scaledLiteral(count: number, scale: number): Decimal {
   const negative = count < 0;
@@ -123,8 +99,7 @@ export function stringToBasisPoints(value: string): number {
 /**
  * The decimal literal for a stored count of basis points: 2100 is "21.00".
  *
- * Always two places, for the same reason `centsToDecimal` gives: one of these rates reaches a
- * fiscal record, where "21" and "21.00" are one rate and two different byte strings.
+ * Always two places: "21" and "21.00" are one rate and two different literals.
  */
 export function basisPointsToDecimal(count: number): Decimal {
   if (!Number.isInteger(count)) {
@@ -133,20 +108,13 @@ export function basisPointsToDecimal(count: number): Decimal {
   return scaledLiteral(count, RATE_SCALE);
 }
 
-// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the shape this
-// engine renders for an integer cast to text, column or aggregate alike. It also admits "-0", read
-// as zero (pinned in `scales.test.ts`). A value carrying a decimal point is refused rather than
-// converted, which is the case that would otherwise be wrong by a power of ten. Shared by every raw
-// reader, money's included; the reasoning and the measurements are on `rawCentsToDecimal` in
-// `./cents.ts`.
+// The shape this engine renders for an integer cast to text. A value with a decimal point is
+// refused rather than converted, since it would be wrong by a power of ten (`rawCentsToDecimal`).
 export const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
- * `malformed` is the caller's own scale code, as `rawCentsToDecimal` refuses in money's own words:
- * a caller reading a quantity and a rate in one row can then tell which of the two was malformed.
- * The OVERFLOW refusal below is deliberately not per-scale — `shared.decimal_overflow` names the
- * concept for every scale, and is what the typed `decimalToThousandths` throws for the same
- * condition.
+ * `malformed` is the caller's own scale code, so a row holding a quantity and a rate says which was
+ * malformed. Overflow is `shared.decimal_overflow` for every scale, as the typed converters throw.
  */
 function rawCount(
   value: string,
