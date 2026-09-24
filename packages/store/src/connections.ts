@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 /**
  * An `async` body returns at its FIRST `await`, with its remaining work and its throw still ahead
@@ -28,6 +28,23 @@ export const settle = <T>(result: T, onOk: () => void, onFail: () => void): T =>
       throw error;
     },
   ) as T;
+};
+
+/** Told the time of each commit on a file's write connection that changed at least one row. */
+export type CommitListener = (committedAt: Date) => void;
+
+/**
+ * How many rows `connection` has inserted, updated or deleted since it opened. Prepared once per
+ * connection, because it runs beside every statement issued outside a transaction.
+ */
+const changeCounters = new WeakMap<DatabaseSync, StatementSync>();
+export const totalChanges = (connection: DatabaseSync): number => {
+  let counter = changeCounters.get(connection);
+  if (counter === undefined) {
+    counter = connection.prepare("select total_changes() as n");
+    changeCounters.set(connection, counter);
+  }
+  return (counter.get() as { n: number }).n;
 };
 
 /**
@@ -61,6 +78,14 @@ export interface Connections {
   asTransactionBody: <T>(body: () => T) => T;
   /** Which connection a statement issued at this moment belongs on. */
   forStatement: () => DatabaseSync;
+  /** Registers `listener` for every commit on the write connection; returns the unsubscribe. */
+  onCommit: (listener: CommitListener) => () => void;
+  /**
+   * Tells every listener a commit has just happened. The commit is already durable, so a listener
+   * that throws is skipped rather than allowed to reach the caller, who would otherwise be told a
+   * committed write failed.
+   */
+  committed: () => void;
 }
 
 /**
@@ -96,6 +121,7 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
    * "is one running" alone but "is THIS one still running".
    */
   const running = new Set<symbol>();
+  const listeners = new Set<CommitListener>();
   return {
     write,
     read,
@@ -118,6 +144,23 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
       if (running.size === 0) return write;
       const token = context.getStore();
       return token !== undefined && running.has(token) ? write : read;
+    },
+    onCommit: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    committed: () => {
+      if (listeners.size === 0) return;
+      const at = new Date();
+      for (const listener of listeners) {
+        try {
+          listener(at);
+        } catch {
+          // See `committed` on the interface.
+        }
+      }
     },
   };
 }

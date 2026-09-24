@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { archiveTo } from "./archive.js";
-import { type Connections, connectionPair } from "./connections.js";
+import { type CommitListener, type Connections, connectionPair } from "./connections.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
 import { watchdogStopped } from "./venue-liveness.js";
@@ -10,6 +10,7 @@ import { watchdogStopped } from "./venue-liveness.js";
 export { installAppendOnlyTriggers } from "./append-only.js";
 export type { StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
+export type { CommitListener } from "./connections.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 export { isLocked, lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
@@ -69,6 +70,12 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    * `database table is locked` while one of those is open.
    */
   checkpointTruncate: () => Promise<{ reclaimed: boolean }>;
+  /**
+   * Registers `listener` for every commit on this file that changed at least one row; returns the
+   * unsubscribe. Commits made by issuing `begin` and `commit` as statements, as Drizzle's migrator
+   * does, are not reported.
+   */
+  onCommit: (listener: CommitListener) => () => void;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */
   close: () => Promise<void>;
 };
@@ -222,6 +229,7 @@ export async function openVenueStore<
     return Object.assign(db, {
       withWriteLock: <T>(body: () => Promise<T>) => writes.run(body),
       archiveTo: (path: string) => archiveTo(db, path),
+      onCommit: (listener: CommitListener) => connections.onCommit(listener),
       // With the store's busy wait the checkpoint blocks on the busy handler, and on this
       // synchronous engine the whole process blocks with it.
       checkpointTruncate: () =>

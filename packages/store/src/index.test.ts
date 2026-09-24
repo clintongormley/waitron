@@ -790,3 +790,94 @@ describe("close", () => {
     expect(ended).toBe(true);
   });
 });
+
+describe("onCommit", () => {
+  const setUp = async () => {
+    const { store } = await open();
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    const heard: Date[] = [];
+    const stop = store.venue.onCommit((at) => heard.push(at));
+    return { store, heard, stop };
+  };
+
+  it("tells listeners once a write transaction has committed, and not when it rolled back", async () => {
+    const { store, heard } = await setUp();
+    const before = Date.now();
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`insert into sales (total) values (1)`);
+    });
+    expect(heard).toHaveLength(1);
+    expect(heard[0]!.getTime()).toBeGreaterThanOrEqual(before);
+    await expect(
+      store.venue.withWriteLock(async () => {
+        store.venue.run(sql`insert into sales (total) values (2)`);
+        throw new Error("deliberate");
+      }),
+    ).rejects.toThrow("deliberate");
+    expect(heard).toHaveLength(1);
+  });
+
+  // A commit that changed no row writes nothing to the side file, so there is nothing for a copy
+  // of the file to catch up with.
+  it("does not tell listeners about a write transaction that changed no row", async () => {
+    const { store, heard } = await setUp();
+    await store.venue.withWriteLock(async () => {
+      store.venue.all(sql`select * from sales`);
+      store.venue.run(sql`delete from sales`);
+    });
+    expect(heard).toHaveLength(0);
+  });
+
+  it("tells listeners about a direct transaction's commit once, and not about its savepoints", async () => {
+    const { store, heard } = await setUp();
+    store.venue.transaction((tx) => {
+      tx.run(sql`insert into sales (total) values (1)`);
+      tx.transaction((inner) => {
+        inner.run(sql`insert into sales (total) values (2)`);
+      });
+    });
+    expect(heard).toHaveLength(1);
+  });
+
+  it("does not tell listeners about a direct transaction that changed no row", async () => {
+    const { store, heard } = await setUp();
+    store.venue.transaction((tx) => {
+      tx.all(sql`select * from sales`);
+    });
+    expect(heard).toHaveLength(0);
+  });
+
+  it("tells listeners about a write made outside any transaction, and not about a read", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (total) values (1)`);
+    store.venue.all(sql`select * from sales`);
+    expect(heard).toHaveLength(1);
+  });
+
+  // The commit has already happened when listeners hear of it; a listener that throws must not
+  // turn a sale that committed into one the caller is told failed.
+  it("keeps a committed write reported as committed when a listener throws, and still tells the others", async () => {
+    const { store, heard } = await setUp();
+    store.venue.onCommit(() => {
+      throw new Error("listener broke");
+    });
+    const later: Date[] = [];
+    store.venue.onCommit((at) => later.push(at));
+    await expect(
+      store.venue.withWriteLock(async () => {
+        store.venue.run(sql`insert into sales (total) values (1)`);
+        return "sold";
+      }),
+    ).resolves.toBe("sold");
+    expect(heard).toHaveLength(1);
+    expect(later).toHaveLength(1);
+    expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 1 });
+  });
+
+  it("stops telling a listener that unsubscribed", async () => {
+    const { store, heard, stop } = await setUp();
+    stop();
+    store.venue.run(sql`insert into sales (total) values (1)`);
+    expect(heard).toHaveLength(0);
+  });
+});
