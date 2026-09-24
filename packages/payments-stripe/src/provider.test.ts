@@ -15,16 +15,8 @@ import { reverseViaStripe } from "./reverse.js";
 import type { StripeClient } from "./client.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 
-// This suite seeds a FRESH working order per test (via `freshNif`), like `payments`'s own wiring test — so
-// nothing is truncated between tests and the raw `payments` rows never collide. Rows are read back
-// through the neutral store's `getPaymentByRef` (which returns `state`/`externalRef`/`settledAt`),
-// keeping this adapter package free of a direct `drizzle-orm` dependency.
-
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-// The provider's sync-origin node id. Value is irrelevant to these assertions (this suite migrates
-// core+payments only, no sync capture triggers), but the option is required — it is threaded into the
-// adapter's withTransaction so enrolled `payments` writes capture a real origin (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 const noSleep = (): Promise<void> => Promise.resolve();
@@ -42,7 +34,6 @@ async function collectParams(nif = freshNif()) {
     tillId: brandTillId(s.tillId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal("12.10"),
-    // The chosen reader's vendor ref is a per-collect input now, not baked into the provider.
     readerRef: "reader_1",
     _seeded: s,
   };
@@ -50,10 +41,8 @@ async function collectParams(nif = freshNif()) {
 function rowFor(paymentRef: string): Promise<PaymentRow | undefined> {
   return pg.db.transaction((tx) => getPaymentByRef(tx, { provider: "stripe", paymentRef }));
 }
-/** A `captured` stripe payment on a fresh tenant whose `external_ref` is EXACTLY the supplied
- * string. Written directly rather than through `collect`, which mints its own `pi_` id: the
- * resolver tests are about which reference the reversal path hands the processor, so the stored one
- * has to be chosen by the test. Returns the payment ref to reverse. */
+/** Written directly rather than through `collect`, which mints its own `pi_` id: the resolver tests
+ * need to choose the stored `external_ref`. */
 async function capturedPayment(externalRef: string): Promise<{ paymentRef: string }> {
   const seeded = await seedWorkingOrder(pg.db, freshNif());
   const paymentRef = `ref-${externalRef}`;
@@ -95,8 +84,6 @@ describe("StripeTerminalProvider.collect", () => {
   });
 
   it("throws when no readerRef is supplied — a Terminal collect cannot proceed without a reader", async () => {
-    // The reader is a per-collect input now; a collect with none is a host wiring error, not a
-    // decline. Thrown before the network — no `attempting` row, no charge.
     const p = await collectParams();
     const { readerRef, ...noReader } = p;
     void readerRef;
@@ -114,9 +101,6 @@ describe("StripeTerminalProvider.collect", () => {
   });
 
   it("network error before completion: attempting -> failed (the drive catch)", async () => {
-    // A client whose network call rejects before the reader ever runs. The committed `attempting`
-    // row must still resolve to `failed` (T2), and `collect` must return a `PaymentResult`, never
-    // throw — the caller always gets a terminal outcome.
     const failing: StripeClient = {
       createPaymentIntent: () => Promise.reject(new Error("network down")),
       processPaymentIntent: () => Promise.resolve(),
@@ -134,9 +118,8 @@ describe("StripeTerminalProvider.collect", () => {
   });
 
   it("network error mid-poll: attempting -> failed (the drive catch covers the poll loop too)", async () => {
-    // readerOutcome rejects on its next call (simulating a network blip while polling) — the poll
-    // loop itself must be inside `drive`'s try, so this resolves the row to `failed` rather than
-    // throwing out of `collect`.
+    // The poll loop itself must be inside `drive`'s try, so this resolves the row to `failed`
+    // rather than throwing out of `collect`.
     const fake = new FakeStripe();
     fake.throwOnPollNext();
     const p = await collectParams();
@@ -189,8 +172,7 @@ describe("StripeTerminalProvider.collect", () => {
 
   it("polls the reader with the default real-timer sleep between attempts", async () => {
     // No `sleep` override, so the production default (`setTimeout`) runs; `intervalMs: 0` keeps it
-    // instant. The reader is in_progress once, then succeeds, so the loop sleeps exactly once on the
-    // real timer before capturing — exercising the shipped default poll delay.
+    // instant.
     let polls = 0;
     const client: StripeClient = {
       createPaymentIntent: () => Promise.resolve({ id: "pi_default_sleep" }),
@@ -204,7 +186,7 @@ describe("StripeTerminalProvider.collect", () => {
       client,
       db: pg.db,
       nodeId: TEST_NODE_ID,
-      poll: { maxAttempts: 3, intervalMs: 0 }, // no sleep override -> default setTimeout(0)
+      poll: { maxAttempts: 3, intervalMs: 0 },
     });
     const result = await provider.collect(p);
     expect(result.state).toBe("captured");
@@ -275,7 +257,6 @@ describe("StripeTerminalProvider reversals", () => {
     const error = await provider.void(paid.paymentRef).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.not_voidable");
-    // The pre-check fired before the network call — the second void never reached Stripe.
     expect(refundSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -298,8 +279,7 @@ describe("StripeTerminalProvider reversals", () => {
 
 describe("reverseViaStripe's processor-ref resolution", () => {
   it("passes the stored external ref to the processor unchanged by default", async () => {
-    // The identity default is what keeps the terminal and on-device callers byte-identical: neither
-    // supplies a resolver, so the stored `external_ref` must reach `stripe.refunds` untouched.
+    // The terminal and on-device providers supply no resolver.
     const client = new FakeStripe();
     const { paymentRef } = await capturedPayment("pi_plain");
     await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
@@ -315,15 +295,13 @@ describe("reverseViaStripe's processor-ref resolution", () => {
       nodeId: TEST_NODE_ID,
       resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
     });
-    // A hosted payment stores the SESSION id; the refund API needs the PaymentIntent, and before
-    // this hook every hosted orphan reversal failed permanently.
+    // A hosted payment stores the SESSION id; the refund API needs the PaymentIntent.
     expect(client.lastRefund?.paymentIntentId).toBe("pi_resolved");
   });
 
   it("resolves only AFTER the local reversibility pre-check has passed", async () => {
-    // The resolution is a network call, so it obeys the same T1/T2 rule as the refund itself: an
-    // invalid local state must fail fast without touching the processor at all — not even to look
-    // an identifier up.
+    // The resolution is a network call: an invalid local state must fail without touching the
+    // processor at all.
     const client = new FakeStripe();
     const { paymentRef } = await capturedPayment("cs_precheck");
     let resolved = 0;
@@ -349,7 +327,6 @@ describe("reverseViaStripe's processor-ref resolution", () => {
 
 describe("StripeTerminalProvider.forward", () => {
   it("forward is a no-op for the server-driven provider (no device-local offline queue)", async () => {
-    // Any tenant: this forward returns a hardcoded all-zeros result without touching the database.
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: pg.db,

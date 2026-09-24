@@ -1,9 +1,7 @@
 import { defineConfig } from "vitest/config";
 
-// A SEPARATE config from vitest.config.ts, scoped to only the nightly Stripe test-mode sandbox
-// suite (`src/**/*.sandbox.test.ts`) — the file the normal config's `exclude` keeps out of every
-// PR run. Long timeouts: this suite waits on a real Stripe Terminal simulated-reader round trip,
-// not an in-process fake.
+// The nightly Stripe test-mode suite, which the normal config excludes. Long timeouts: it waits on
+// a real Stripe round trip.
 export default defineConfig({
   test: {
     globals: true,

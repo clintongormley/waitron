@@ -16,9 +16,6 @@ import type {
 import type { StripeClient } from "./client.js";
 import { stripeClient } from "./stripe-client.js";
 import { StripeTerminalProvider } from "./provider.js";
-// Registers `payment.credential_environment_mismatch` on the shared `ErrorParams` registry — the
-// Stripe-key-environment code this seat throws. `payment.provider_credential_rejected` is declared
-// in `@waitron/payments` (both provider seats throw it) and reachable through that package's barrel.
 import "./errors.js";
 
 const PROVIDER_ID = "stripe";
@@ -26,8 +23,6 @@ const CREDENTIAL_PURPOSE = "payments.stripe";
 
 type DeploymentEnvironment = "preproduction" | "production";
 
-/** The five `StripeClient` methods, listed once so `deferredStripeClient` can build a lazy wrapper
- * without repeating a per-method arrow (which would each read as a separate uncovered function). */
 const CLIENT_METHODS = [
   "createPaymentIntent",
   "processPaymentIntent",
@@ -36,28 +31,22 @@ const CLIENT_METHODS = [
   "refund",
 ] as const;
 
-/** The seam every path here builds its SDK client through: injected in tests so nothing reaches the
- * network, `defaultMakeStripe` in production. Mirrors `apps/server`'s `StripeAccountDeps.makeStripe`,
- * replicated here rather than imported so the seat imports no `apps/*` code. */
 export type MakeStripe = (secretKey: string) => Stripe;
 
 export function defaultMakeStripe(secretKey: string): Stripe {
   return new Stripe(secretKey);
 }
 
-/** Which environment a Stripe secret key belongs to, or `null` when we cannot tell. `null` is not a
- * failure: Stripe issues restricted keys (`rk_…`) and may add prefixes we do not know, and refusing
- * an unrecognised key would break a working deployment to enforce a check we cannot perform. The
- * pure replica of `apps/server`'s `keyEnvironmentOf` (kept out of this package to keep it pure). */
+/** `null` is not a failure: Stripe issues restricted keys (`rk_…`) and may add prefixes we do not
+ * know, and refusing one would break a working deployment. A replica of `apps/server`'s
+ * `keyEnvironmentOf`. */
 function keyEnvironmentOf(secretKey: string): DeploymentEnvironment | null {
   if (secretKey.startsWith("sk_live_")) return "production";
   if (secretKey.startsWith("sk_test_")) return "preproduction";
   return null;
 }
 
-/** Refuse a key whose environment prefix contradicts this host's, before it is sealed or used — a
- * test key on a production host takes payments that never settle. Skipped when `environment` is
- * unknown (a caller that cannot supply it) or the key's environment is unclassifiable. */
+/** A test key on a production host takes payments that never settle. */
 function assertKeyEnvironment(
   secretKey: string,
   environment: DeploymentEnvironment | undefined,
@@ -72,10 +61,6 @@ function assertKeyEnvironment(
   }
 }
 
-/** Read-site validation of a decrypted `payments.stripe` payload — the pure counterpart of
- * `apps/server`'s `stripeSecretKeyFrom`. A payload missing `secretKey` cannot build a client, so it
- * is rejected here rather than reaching the SDK with an undefined key; the environment-prefix guard
- * runs when `environment` is supplied. */
 export function secretKeyFromSealed(
   payload: Record<string, string>,
   environment?: DeploymentEnvironment,
@@ -87,8 +72,7 @@ export function secretKeyFromSealed(
   return secretKey;
 }
 
-/** Read the sealed `payments.stripe` credential and validate/decrypt it into a secret key. The read
- * happens on each call so provisioning and rotation take effect without a restart. */
+/** Read on each call, so provisioning and rotation take effect without a restart. */
 async function sealedSecretKey(deps: {
   db: Database;
   ring: KeyRing;
@@ -100,12 +84,9 @@ async function sealedSecretKey(deps: {
   return secretKeyFromSealed(payload, deps.environment);
 }
 
-/** A `StripeClient` that resolves the real client (from the sealed credential) on first use. `build`
- * must return synchronously, but reading the credential is asynchronous; every `StripeClient` method
- * is async, so deferring the read to the first call is transparent to `StripeTerminalProvider`. The
- * resolved client is cached for the provider's lifetime, and a failed read is not cached, so a
- * transient database error is retried on the next sale rather than bricking the provider. Mirrors
- * payments-sumup's `deferredClient`. */
+/** Resolves the real client on first use, because `build` must return synchronously and reading the
+ * credential is not. A failed read is not cached, so a transient error is retried on the next call
+ * rather than bricking the provider. */
 export function deferredStripeClient(deps: {
   db: Database;
   ring: KeyRing;
@@ -130,16 +111,7 @@ export function deferredStripeClient(deps: {
   return wrapped as unknown as StripeClient;
 }
 
-/**
- * The Stripe fill of the generic `CardProviderContribution` seat, built over an injectable
- * `makeStripe` so tests never construct a real SDK client. It keeps the Stripe name inside this
- * package: the generic connect route, provider registry and pool reach Stripe only through this
- * value. `connect` verifies the secret key with one account read and assembles the four-field
- * `payments.stripe` payload; `build` turns the sealed credential into a live server-driven
- * `StripeTerminalProvider`; `readers.*` verify and report the merchant's Terminal readers by id.
- *
- * The `stripe_on_device` (Tap-to-Pay) phone path is NOT a reader and is out of this seat.
- */
+/** The `stripe_on_device` (Tap-to-Pay) phone path is NOT a reader and is outside this seat. */
 export function createStripeCardProvider(
   makeStripe: MakeStripe = defaultMakeStripe,
 ): CardProviderContribution {
@@ -159,15 +131,13 @@ export function createStripeCardProvider(
       if (secretKey === undefined || secretKey === "")
         throw new AppError("payment.provider_credential_rejected", { providerId: PROVIDER_ID });
 
-      // The prefix/environment guard runs BEFORE the network call: a mis-copied live/test key is a
-      // provisioning mistake, and Stripe would accept the (valid, wrong-environment) key otherwise.
+      // Before the network call: Stripe would accept a valid key from the wrong environment.
       assertKeyEnvironment(secretKey, deps.environment);
 
       const stripe = makeStripe(secretKey);
       let account: Stripe.Account;
       try {
-        // `retrieve(null)` returns the account the key belongs to; a bad key answers with an error,
-        // which is exactly the rejected-credential signal.
+        // `retrieve(null)` returns the account the key belongs to.
         account = await stripe.accounts.retrieve(null);
       } catch {
         throw new AppError("payment.provider_credential_rejected", { providerId: PROVIDER_ID });
@@ -211,12 +181,9 @@ export function createStripeCardProvider(
         }));
       },
       async add(deps: CardProviderRuntimeDeps, input): Promise<AddReaderResult> {
-        // Stripe's reader-add mode is `reference`, so the route always supplies a reader id; its
-        // absence is a caller-contract violation, not a runtime condition an operator can act on.
         if (input.reference === undefined)
           throw new Error("stripe readers.add requires a reader reference");
         const secretKey = await sealedSecretKey(deps);
-        // One retrieve verifies the id exists (and that this account owns it); a bad id throws.
         await makeStripe(secretKey).terminal.readers.retrieve(input.reference);
         return { providerRef: input.reference, status: "paired" };
       },
@@ -246,13 +213,10 @@ export function createStripeCardProvider(
       },
 
       async remove(): Promise<void> {
-        // No vendor call: a Stripe Terminal reader stays registered at Stripe. Disabling the local
-        // `card_readers` row is the route's job; there is nothing to unpair on the vendor side.
+        // No vendor call: a Stripe Terminal reader stays registered at Stripe.
       },
     },
   };
 }
 
-/** The Stripe seat wired with the real SDK. Tests build their own via `createStripeCardProvider`
- * with an injected `makeStripe`. */
 export const STRIPE_CARD_PROVIDER: CardProviderContribution = createStripeCardProvider();

@@ -11,13 +11,6 @@ import { StripePaymentsClient } from "./client.js";
 
 type Field = "secretKey" | "webhookSecret" | "successUrl" | "cancelUrl";
 
-/**
- * The Stripe CONNECT FORM: the secret key + webhook signing secret (both secret, password inputs, never
- * pre-filled) and the hosted-checkout return URLs. Follows the design-system Forms contract — required
- * marker on the secret key, a `wt-form-error-summary`, and `wt-form-actions` keeping the primary action
- * bottom-right. On submit it POSTs the connect route through the injected request; on success it shows
- * the returned merchant name and calls `onConnected`.
- */
 @customElement("stripe-connect-form")
 export class StripeConnectForm extends LitElement {
   static override styles = [

@@ -13,12 +13,7 @@ import { StripeHostedProvider } from "./hosted-provider.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  // One `delete from` per table in place of `truncate payment_refunds, payments cascade`: SQLite
-  // has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time. Child
-  // before parent, because `payment_refunds.payment_id` references `payments(id)` ON DELETE
-  // restrict (`packages/payments/drizzle/0000_baseline.sql`), so deleting `payments` first is
-  // refused with `FOREIGN KEY constraint failed`. Nothing else references either table, so the
-  // CASCADE this replaces reached no third table. Same repair as `packages/payments/src/store.test.ts`.
+  // Child before parent: `payment_refunds.payment_id` references `payments(id)` ON DELETE restrict.
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
 });
@@ -55,9 +50,6 @@ describe("StripeHostedProvider.initiate", () => {
   it("stamps the working order and payment ref into the session metadata", async () => {
     // These are what let a settlement with NO local row be attributed to a till and raise an
     // incident: an `initiate` that crashes after the network call leaves exactly that state.
-    // Terminal (2a) cannot reach it — it commits an `attempting` row BEFORE its network call — but
-    // on-device (2b) can, and stamps the same keys; only the audit's read side for those is still
-    // deferred (see `hosted-client.ts`'s `metadata` doc).
     const client = new FakeStripeHosted();
     const provider = new StripeHostedProvider({ client, db: pg.db });
     const seeded = await seedWorkingOrder(pg.db, freshNif());

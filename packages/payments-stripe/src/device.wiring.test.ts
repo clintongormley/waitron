@@ -59,7 +59,6 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
         lineTotal: "10.00",
       },
     ],
-    // Immediate settlement, tip on the tender (zero here): sum(amount) 10.00 = total 10.00 + tip 0.00.
     settlement: {
       kind: "immediate",
       tenders: [{ method: "card", amount: "10.00", tipAmount: "0.00", settledAt }],
@@ -75,7 +74,7 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
 
     const client = new FakeStripeDevice();
-    client.nextCollect("offline"); // policy accepts + consent + under cap → the device stores offline
+    client.nextCollect("offline");
     const provider = new StripeOnDeviceProvider({
       client,
       db: pg.db,

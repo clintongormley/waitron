@@ -2,8 +2,6 @@ import type Stripe from "stripe";
 import type { StripeClient } from "./client.js";
 import { toMinorUnits } from "./client.js";
 
-/** The real `StripeClient`, wrapping the `stripe` SDK's server-driven Terminal API. Coverage-excluded
- * (see vitest.config.ts): a thin call-mapping boundary exercised only by the nightly sandbox suite. */
 export function stripeClient(stripe: Stripe): StripeClient {
   return {
     async createPaymentIntent({ amount, currency, idempotencyKey }) {
@@ -25,10 +23,7 @@ export function stripeClient(stripe: Stripe): StripeClient {
     },
     async readerOutcome(readerId) {
       const reader = await stripe.terminal.readers.retrieve(readerId);
-      // `retrieve` types as `Reader | DeletedReader`; only `Reader` carries `.action` (a deleted
-      // reader has no in-flight action to report). Narrow with the `in` operator rather than
-      // asserting, so a genuinely-deleted reader falls through to the same "no action" branch as a
-      // reader that has never run one.
+      // A deleted reader has no `.action`, and reads like a reader with no action.
       const action = "action" in reader ? reader.action : null;
       if (!action || action.status === "in_progress") return { status: "in_progress" };
       if (action.status === "succeeded") return { status: "succeeded" };

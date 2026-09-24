@@ -15,42 +15,24 @@ const CURRENCY = "eur";
 
 export interface StripeHostedProviderOptions {
   client: StripeHostedClient;
-  /** A plain `Database` handle. `initiate` opens its own transaction and scopes it with
-   * `withTransaction(db, …)`, so nothing is required of the handle itself. The inbound
-   * webhook path settles through its own handle, not this one — see the wiring test. */
   db: Database;
 }
 
-/** The real Stripe **Checkout** `AsyncPaymentProvider` (Mode 3, hosted/out-of-band). `initiate` mints a
- * Checkout Session (network) then writes an `initiated` `payments` row with `external_ref = session.id`
- * — the id the later `checkout.session.completed` webhook carries. A crash between the network call and
- * the write leaves an orphaned session (no local row), which `reconcile` backstops (deferred). The
- * webhook itself is handled by `verifyAndParse` (signature-verified, mapped to the neutral
- * `InboundSettlement`); the settle→recordSale→associate chaining is the app-level orchestrator's job
- * (deferred), proven here by the wiring capstone. This provider exposes no reversal API of its own;
- * the one path that hands a hosted payment back is the reconcile sweep, which resolves the stored
- * session id to its PaymentIntent before refunding (see `StripeReconciler`'s `processorRef`) because
- * `stripe.refunds` cannot address a session. */
+/** The Stripe Checkout (hosted) `AsyncPaymentProvider`. It has no reversal API: the reconcile sweep
+ * is the one path that hands a hosted payment back (`StripeReconciler`'s `processorRef`). */
 export class StripeHostedProvider implements AsyncPaymentProvider {
   readonly provider = PROVIDER;
 
   constructor(private readonly opts: StripeHostedProviderOptions) {}
 
   async initiate(params: InitiateParams): Promise<InitiateResult> {
-    // Network first — the session id is only known after creation, and it IS our external_ref.
-    // idempotencyKey = the caller's payment_ref, so a retried initiate returns the same session.
+    // Network first: the session id, our `external_ref`, is only known after creation.
     const session = await this.opts.client.createCheckoutSession({
       amount: params.amount,
       currency: CURRENCY,
       idempotencyKey: params.paymentRef,
-      // snake_case: these are Stripe-side field names travelling in Stripe metadata, not our
-      // TypeScript — kept distinct from our camelCase `params.workingOrderId`/`params.paymentRef` on
-      // purpose. This is the attribution hint: the reconciliation audit reads it back off a settlement
-      // that has no local `payments` row (see hosted-client.ts's `metadata` doc) to name a till.
       metadata: { working_order_id: params.workingOrderId, payment_ref: params.paymentRef },
     });
-    // Persist the initiated row. The (provider, payment_ref) unique makes a retried initiate a
-    // no-op-or-throw, and external_ref = session.id is the key the webhook settles by.
     await withTransaction(this.opts.db, (tx) =>
       insertInitiated(tx, {
         workingOrderId: params.workingOrderId,
@@ -64,7 +46,7 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
   }
 
   verifyAndParse(payload: string, signature: string): InboundSettlement | null {
-    // Throws on a bad signature — deliberately not swallowed (the caller returns a 4xx).
+    // A bad signature throws, deliberately not swallowed.
     const event = this.opts.client.constructWebhookEvent(payload, signature);
     const outcome =
       event.type === "checkout.session.completed"
@@ -73,12 +55,8 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
           ? "expired"
           : null;
     if (outcome === null) return null;
-    // A `settled` event MUST carry the settled amount. Silently coercing a null `amount_total` to
-    // 0.00 would write a 0.00 tender for a real payment, violating `InboundSettlement.amount` ("what
-    // actually settled"); fail visibly instead so Stripe retries and the problem is seen. Unreachable
-    // for a mode:"payment" session (amount_total is always populated on completion), but the SDK type
-    // permits null, so it is guarded. The `?? 0` below is then only ever reached for `expired`, where
-    // the amount is unused (`expireInitiated` ignores it).
+    // Coercing a null `amount_total` to 0.00 would write a 0.00 tender for a real payment. The
+    // `?? 0` below is reached only for `expired`, whose amount is unused.
     if (outcome === "settled" && event.amountTotalMinor === null) {
       throw new Error("stripe: checkout.session.completed carried no amount_total");
     }

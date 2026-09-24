@@ -1,13 +1,6 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
-// The Stripe panel's OWN i18n surface: the connect-form and add-reader UI strings, English the source
-// of truth. Browser UI (out of the english-only guard's scope), so the Spanish is user-facing
-// translation, not schema vocabulary. Registered at load so importing this panel's `t` resolves them.
-//
-// NOTE: the ERROR-CODE copy (`payment.provider_credential_rejected`,
-// `payment.credential_environment_mismatch`, `reader.not_found`, …) lives centrally in
-// `apps/dashboard/src/i18n/codes.ts` — that is Task 15's job. This panel falls back to the shared
-// `codeMessage` for a rejected connect and renders its own screen strings otherwise.
+// Screen strings only; error-code copy lives in `apps/dashboard/src/i18n/codes.ts`.
 
 const en = {
   "payments.stripe.name": "Stripe",
@@ -58,10 +51,8 @@ const es: Record<keyof typeof en, string> = {
   "payments.stripe.cancel": "Cancelar",
 };
 
-/** The `{ en, es }` catalogue the panel declares (the screen merges it on mount). */
 export const STRIPE_STRINGS = { en, es };
 
 registerCatalogue(STRIPE_STRINGS);
 
-/** Translate a Stripe panel key to the active locale, typed to this panel's own key union. */
 export const t = makeT<keyof typeof en>();

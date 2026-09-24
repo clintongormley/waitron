@@ -28,75 +28,45 @@ import { reverseViaStripe } from "./reverse.js";
 import { workingOrderIdempotencyKey } from "./client.js";
 import type { StripeDeviceClient } from "./device-client.js";
 
-// Same provider id as the server-driven adapter: one Stripe account = one settlement identity for a
-// future reconcile. Only THIS provider ever writes `accepted_offline` rows, so forward's
-// `provider = 'stripe'` scoping is unambiguous; the server-driven forward is all-zeros.
+// Shared with the other Stripe adapters: one account is one settlement identity. `forward` can scope
+// by it because only this adapter writes `accepted_offline` rows.
 const PROVIDER = "stripe";
 const CURRENCY = "eur";
-/** How long `forward` asks to wait before re-checking refs the device has not yet resolved. A local
- * constant, not a knob: unlike fiscal's drain — which is paced by AEAT's own `TiempoEsperaEnvio` —
- * nothing on the Stripe side supplies a wait, and an unresolved ref clears when the device regains
- * connectivity rather than on any schedule we control. Five minutes is short enough that recovery
- * is prompt and long enough that a device offline for hours is not polled thousands of times. */
+/** Stripe supplies no retry interval: an unresolved ref clears when the device regains
+ * connectivity, on no schedule we control. */
 const FORWARD_RETRY_MS = 5 * 60 * 1000;
 
 export interface StripeOnDeviceProviderOptions {
   client: StripeDeviceClient;
-  /** A plain `Database` handle. `collect`/`forward`/`reverse` open their own transactions and scope
-   * each one with `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
-  /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path, and
-   * stamped on the incident `forward` raises for a declined payment. Known at construction (one node
-   * per till). */
+  /** Passed to `reverseViaStripe`, which does not read it. */
   nodeId: string;
 }
 
-/** The real on-device Stripe `PaymentProvider` (Tap-to-Pay / handheld). `collect` applies the neutral
- * offline gate UP FRONT (configuring the device's offline behaviour) and persists the resolved outcome
- * in ONE short transaction — no `attempting`-first, because the device owns its PaymentIntent/offline
- * queue locally (a crash on our side never loses the device's record; the residual gap is reconcile's
- * `missingLocal`), and `network_unavailable` persists nothing. `forward` drives the device-local
- * offline queue T1/T2. Reversals delegate to the shared `reverseViaStripe` (Task 4).
- *
- * `collect` STAMPS the same `working_order_id`/`payment_ref` metadata onto the device's PaymentIntent
- * that the hosted create stamps onto its Checkout Session, and for exactly the same reason: writing
- * the row AFTER the money moves means a crash in between leaves a captured charge with no local row —
- * reconcile's `missingLocal`. This mode CAN reach that state; terminal (2a) cannot, because it commits
- * an `attempting` row before its network call. An earlier version of this comment asserted the stamp
- * was Mode-3-only "because terminal and on-device both write `attempting` first" — the sentence two
- * paragraphs above already said otherwise for this class, and the gap it papered over is real.
- *
- * What remains deferred is the READ side only: PaymentIntent metadata does not propagate to the
- * charge, so the audit's main balance-transaction list would need an
- * `expand: ["data.source.payment_intent"]` level to see it, where a hosted session's metadata comes
- * free with the session list the report already fetches. Until that lands, an on-device `missingLocal`
- * is reported but UNATTRIBUTED — no till, so no incident (Slice B §7's deferred list). */
+/** The on-device (Tap-to-Pay) Stripe `PaymentProvider`. `collect` writes its row AFTER the money
+ * moves, with no `attempting` row first, so a crash in between leaves a captured charge with no local
+ * row — reconcile's `missingLocal`. That is why it stamps attribution metadata on the PaymentIntent.
+ * The settlement report does not read that metadata back yet, so such a settlement is reported but
+ * not attributed to a till. */
 export class StripeOnDeviceProvider implements PaymentProvider {
   readonly provider = PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
 
   constructor(private readonly opts: StripeOnDeviceProviderOptions) {}
 
-  /** Mint a connection token for the device to initialise its on-device SDK. */
   connectionToken(): Promise<{ secret: string }> {
     return this.opts.client.createConnectionToken();
   }
 
-  /** The adapter's ONE transaction boundary: every database phase runs through here, and the
-   * adapter opens no transaction of its own. `tenant-scoping.test.ts` is the guard — it refuses a
-   * bare `.transaction(` anywhere in this package's production sources. */
+  /** Guard: `tenant-scoping.test.ts` refuses a bare `.transaction(` in this package's sources. */
   private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
     const paymentRef = randomUUID();
-    // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the terminal
-    // provider); `paymentRef` stays the separate, per-attempt random ref that also feeds the
-    // `metadata.payment_ref` attribution hint below.
     const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
-    // Gate up front: the neutral policy decides whether offline is permitted for THIS transaction,
-    // which configures the device's offline behaviour BEFORE anything is stored.
+    // Decided before the collect, because it configures the device's offline behaviour.
     const offlineAllowed = await this.inTransaction(async (tx) => {
       const policy = await getPaymentPolicy(tx);
       return (
@@ -109,11 +79,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       currency: CURRENCY,
       idempotencyKey: stripeIdempotencyKey,
       offlineAllowed,
-      // snake_case: these are Stripe-side field names travelling in Stripe metadata, not our
-      // TypeScript — kept distinct from our camelCase `params.workingOrderId`/`paymentRef` on
-      // purpose, and identical to the keys the hosted create uses. This is the attribution hint for
-      // a settlement whose local row never got written (see the class doc): the row below is the
-      // FIRST durable trace of this payment on our side, and it is written after the money moves.
+      // The same Stripe-side keys the hosted create stamps.
       metadata: { working_order_id: params.workingOrderId, payment_ref: paymentRef },
     });
 
@@ -125,7 +91,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     };
 
     if (outcome.outcome === "network_unavailable") {
-      // No money moved and nothing durable is written (Cycle A's offline-refused semantics).
+      // No money moved, so nothing is written.
       return {
         provider: PROVIDER,
         paymentRef,
@@ -144,12 +110,8 @@ export class StripeOnDeviceProvider implements PaymentProvider {
         settledAt: null,
       };
     }
-    // A captured / stored-offline device payment MUST carry the device's PaymentIntent id: it is the
-    // `external_ref` `reverseViaStripe` later reverses against, so persisting one without it writes an
-    // irreversible money row. Unreachable today — the fake always supplies a ref and the real
-    // binding's `collectOnDevice` throws before returning (coverage-excluded) — so this contract
-    // guard is v8-ignored to keep it off the coverage gate, mirroring record-sale.ts's
-    // "insert returned no row" unreachable throw.
+    // Without the PaymentIntent id the row could never be reversed. Unreachable today: the fake
+    // always supplies one and the real binding's `collectOnDevice` throws.
     /* v8 ignore start */
     if (outcome.externalRef === undefined) {
       throw new Error(
@@ -171,7 +133,6 @@ export class StripeOnDeviceProvider implements PaymentProvider {
         offline: true,
       };
     }
-    // captured (online single-message)
     await this.inTransaction((tx) =>
       insertCapturedPayment(tx, { ...common, settledAt, externalRef: outcome.externalRef }),
     );
@@ -179,46 +140,31 @@ export class StripeOnDeviceProvider implements PaymentProvider {
   }
 
   async forward(now: Date): Promise<ForwardResult> {
-    // T1 (read, no lock): list our pending offline payments. Never hold a lock across the device sync.
+    // Never hold a lock across the device sync.
     const pending = await this.inTransaction((tx) => listAcceptedOffline(tx, PROVIDER));
     if (pending.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
 
-    // Network: ask the device-local offline queue which refs cleared vs. were refused.
     const { settled, declined } = await this.opts.client.syncOfflineQueue(
       pending.map((p) => p.paymentRef),
     );
     const settledSet = new Set(settled);
     const declinedSet = new Set(declined);
 
-    // Refs the device resolved neither way — it still holds them. Computed here, off the sets,
-    // rather than counted in the write loop below: it is a property of what the device just said,
-    // not of anything being written, and `nextDueAt` is the only thing that reads it.
-    //
-    // `ForwardResult.nextDueAt` means "when to run again; null = nothing pending". This method
-    // returned null unconditionally, including for refs its own comment describes as "left for a
-    // later pass" — so a host sleeping until the earliest nextDueAt was told there was nothing to
-    // come back for, and those rows would stay `accepted_offline` for ever: card revenue accepted
-    // while the network was down and never cleared. Nothing calls `forward` yet, which is the only
-    // reason it never bit.
+    // Refs the device resolved neither way. A null `nextDueAt` would tell the host there is nothing
+    // to come back for, stranding those rows in `accepted_offline`.
     const unresolved = pending.some(
       (p) => !settledSet.has(p.paymentRef) && !declinedSet.has(p.paymentRef),
     );
     const nextDueAt = unresolved ? new Date(now.getTime() + FORWARD_RETRY_MS) : null;
 
-    // Nothing to write: the device resolved none of them. Skipping T2 avoids a BEGIN/COMMIT (and
-    // its `set_config`) per pass for exactly the case that now RECURS every FORWARD_RETRY_MS — a
-    // device offline through a service would otherwise pay for an empty transaction each time.
     if (settled.length === 0 && declined.length === 0) {
       return { nextDueAt, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
 
-    // T2 (write): advance each resolved row (idempotent — matches only rows still accepted_offline)
-    // and raise one race-safe incident per decline. Under two concurrent forwards the counts may
-    // double (both advance the same row, the second a no-op) — a benign log-line inaccuracy the
-    // design accepts; the incident count stays exact because recordIncidentOnce reports real
-    // inserts.
+    // Under two concurrent forwards `forwarded` and `declined` may double-count; `incidentsRaised`
+    // stays exact because `recordIncidentOnce` reports real inserts.
     return this.inTransaction(async (tx) => {
       let forwarded = 0;
       let declinedCount = 0;
@@ -252,16 +198,12 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     });
   }
 
-  /** The device SDK returns a terminal outcome before `collect` writes its row, so this adapter
-   * never leaves a row `attempting`; a pending-outcome sweep has nothing to resolve. */
+  /** This adapter never writes an `attempting` row. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface
   resolvePending(_now: Date): Promise<ForwardResult> {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  /** The one reversal path. Delegates to the shared `reverseViaStripe` (the design's "shared with
-   * StripeTerminalProvider, not re-implemented"); the on-device client's `refund` satisfies
-   * `StripeRefunder` structurally. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       nodeId: this.opts.nodeId,

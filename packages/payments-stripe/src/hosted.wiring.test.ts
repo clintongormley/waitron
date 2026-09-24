@@ -69,7 +69,6 @@ function buildInput(
         lineTotal: "10.00",
       },
     ],
-    // Immediate settlement, tip on the tender (zero here): sum(amount) = total 12.10 + tip 0.00.
     settlement: {
       kind: "immediate",
       tenders: [
@@ -87,14 +86,12 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
     const paymentRef = randomUUID();
 
-    // 1. initiate — mints the session, writes the initiated row (working order stays open).
     const init = await provider.initiate({
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,
     });
 
-    // 2. The inbound webhook arrives (verified + parsed to the neutral event).
     const payload = FakeStripeHosted.event({
       sessionId: init.externalRef,
       type: "checkout.session.completed",
@@ -104,8 +101,8 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const event = provider.verifyAndParse(payload, "good");
     expect(event?.outcome).toBe("settled");
 
-    // 3. The app-level orchestrator: confirm a local payment carries the session, then settle +
-    //    chain + associate in one transaction.
+    // The app-level orchestrator's part: confirm a local payment carries the session, then settle +
+    // chain + associate in one transaction.
     expect(await hasPaymentWithExternalRef(pg.db, event!.provider, event!.externalRef)).toBe(true);
 
     const saleId = await withTransaction(pg.db, async (tx) => {
@@ -128,7 +125,6 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
       return recorded.saleId;
     });
 
-    // 4. After commit: the payment is captured, associated, and still carries the session external_ref.
     const finalRow = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );

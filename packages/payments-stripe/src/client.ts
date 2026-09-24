@@ -1,10 +1,6 @@
 import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
-/** The narrow Stripe surface `StripeTerminalProvider` depends on — the calls it makes, not the SDK.
- * The real impl (`./stripe-client.ts`) wraps the `stripe` SDK; `FakeStripe` (`./testing/`) models it
- * deterministically. Amounts cross this seam as exact `Decimal`; the real impl converts to Stripe's
- * integer minor units via `toMinorUnits`. Mirrors `VerifactuClient`. */
 export interface StripeClient {
   createPaymentIntent(params: {
     amount: Decimal;
@@ -23,20 +19,14 @@ export interface StripeClient {
   }): Promise<{ id: string; status: "succeeded" | "pending" | "failed" }>;
 }
 
-/** Exact major→minor conversion for Stripe amounts. Money is scale-2, so `toScale(2)` normalises to
- * `"NN.MM"`, and removing the point yields the integer cents string — parsed with `Number` on a PURE
- * INTEGER string (never a float): safe up to `MAX_MONEY_INTEGER_DIGITS + 2 = 14` digits, well under
- * `Number.MAX_SAFE_INTEGER`. There is deliberately no `Decimal.toNumber`, and this is the only place
- * a monetary value becomes a JS number — at the SDK boundary that requires an integer. */
+/** `Number` parses a pure integer string, never a float, so the conversion is exact for any amount
+ * within `MAX_MONEY_INTEGER_DIGITS`. */
 export function toMinorUnits(amount: Decimal): number {
   const scaled = toScale(amount, 2);
   return Number(scaled.replace(".", ""));
 }
 
-/** Exact minor→major conversion — the inverse of `toMinorUnits`. Stripe reports settled amounts as
- * integer minor units (`amount_total`, cents); this rebuilds the exact scale-2 `Decimal` for the
- * neutral `InboundSettlement`. Integer arithmetic only (never a float): the string is built from the
- * absolute integer, split at the last two digits. */
+/** The inverse of `toMinorUnits`, built as a string so no float is involved. */
 export function fromMinorUnits(minor: number): Decimal {
   const cents = Math.trunc(Math.abs(minor));
   const s = String(cents).padStart(3, "0");
@@ -45,15 +35,9 @@ export function fromMinorUnits(minor: number): Decimal {
   return decimal(`${minor < 0 ? "-" : ""}${whole}.${frac}`);
 }
 
-/**
- * The Stripe idempotency key for an integrated card collect — derived from the STABLE working-order
- * id, NOT any per-call random ref (§4): a retry after a lost response re-drives the SAME Stripe
- * operation (PaymentIntent creation) to completion, so the card is charged once. Shared by
- * `StripeTerminalProvider.collect` and `StripeOnDeviceProvider.collect`, which both key their
- * PaymentIntent creation off this value; each keeps its own separate, per-attempt random
- * `paymentRef` (the `payments` row's own idempotency anchor), so the two are deliberately decoupled
- * — one PaymentIntent per working order, many `payments` rows across retries.
- */
+/** Derived from the working order, never from the per-attempt `paymentRef`, so a retried collect
+ * re-drives the SAME PaymentIntent and the card is charged once: one PaymentIntent per working
+ * order, possibly many `payments` rows. */
 export function workingOrderIdempotencyKey(workingOrderId: string): string {
   return `wo_${workingOrderId}`;
 }
