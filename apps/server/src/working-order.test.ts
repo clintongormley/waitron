@@ -6993,6 +6993,10 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     cafeOfferId: string,
     wine: { parentId: string; wine125: string },
   ) {
+    // The catalogue refuses a list offering a product with Active variants
+    // (`extras.product_has_variants`), so the wine's variants are Inactive while the list is saved
+    // and made Active again by writing their rows.
+    await tx.update(products).set({ active: false }).where(eq(products.parentId, wine.parentId));
     const list = await catalogue.createExtraList(
       tx,
       {
@@ -7022,6 +7026,7 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         })),
       },
     ]);
+    await tx.update(products).set({ active: true }).where(eq(products.parentId, wine.parentId));
     return list.id;
   }
 
@@ -7182,8 +7187,10 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         .orderBy(workingOrderLines.lineNo);
     const parked = await stored();
     expect(parked.map((row) => row.productId)).toEqual([cafeId, bacon.productId]);
-    await withTransaction(db, (tx) =>
-      setProductVariants(
+    // The catalogue refuses an Active variant on a product an extras list offers
+    // (`product.offered_as_extra`), so the variant is saved Inactive and its row made Active directly.
+    await withTransaction(db, async (tx) => {
+      await setProductVariants(
         tx,
         bacon.productId,
         [
@@ -7194,11 +7201,13 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
             image: null,
             unitPrice: "1.20",
             available: true,
+            active: false,
           },
         ],
         LOCALE,
-      ),
-    );
+      );
+      await tx.update(products).set({ active: true }).where(eq(products.parentId, bacon.productId));
+    });
     const edit = (quantity: string) =>
       updateProducts(cfg, id, {
         lines: [{ workingOrderLineId: parked[0]!.id, productId: cafeId, quantity, extras }],

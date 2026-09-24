@@ -8,6 +8,7 @@ import {
   sales,
   withTransaction,
   workingOrderLines,
+  type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1578,6 +1579,28 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines[2]!.parentLineNo).toBe(filedParent!.lineNo);
   });
 
+  // The catalogue refuses an Active variant on a product an extras list offers
+  // (`product.offered_as_extra`), so the variant is saved Inactive and its row made Active directly.
+  const gainActiveVariant = async (tx: Transaction, productId: string) => {
+    await setProductVariants(
+      tx,
+      productId,
+      [
+        {
+          name: "Bacon ahumado",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "0.90",
+          available: true,
+          active: false,
+        },
+      ],
+      LOCALE,
+    );
+    await tx.update(products).set({ active: true }).where(eq(products.parentId, productId));
+  };
+
   // What the server BILLS for a pick the till can no longer re-send; the till's showing and dropping
   // of it are pinned in apps/till/src/till-app.test.ts.
   it("bills a parked extra that gained an Active variant until an edit omits it, which re-prices without it", async () => {
@@ -1603,23 +1626,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const edited = randomUUID();
     await park(unedited, "2", 2);
     await park(edited, "1", 1);
-    await withTransaction(suite.db, (tx) =>
-      setProductVariants(
-        tx,
-        v.baconId,
-        [
-          {
-            name: "Bacon ahumado",
-            customerName: null,
-            kitchenName: null,
-            image: null,
-            unitPrice: "0.90",
-            available: true,
-          },
-        ],
-        LOCALE,
-      ),
-    );
+    await withTransaction(suite.db, (tx) => gainActiveVariant(tx, v.baconId));
     const pay = (id: string) =>
       payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
         id,
@@ -1667,23 +1674,7 @@ describe("ordering extras and options — parent + child lines", () => {
         { zoneId: v.zoneId },
       ),
     );
-    await withTransaction(suite.db, (tx) =>
-      setProductVariants(
-        tx,
-        v.baconId,
-        [
-          {
-            name: "Bacon ahumado",
-            customerName: null,
-            kitchenName: null,
-            image: null,
-            unitPrice: "0.90",
-            available: true,
-          },
-        ],
-        LOCALE,
-      ),
-    );
+    await withTransaction(suite.db, (tx) => gainActiveVariant(tx, v.baconId));
 
     const parked = await suite.db
       .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
