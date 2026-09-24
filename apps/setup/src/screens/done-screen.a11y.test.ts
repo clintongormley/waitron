@@ -36,8 +36,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  // The mirror path renders its own copy (no links, no nudge, no reload) plus the break-glass panel,
-  // so its contrast and heading order are a separate surface from the trading one.
   it("has no violations on the mirror path", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
-// Side-effect imports register the screen custom elements this shell only names as tags below.
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
@@ -28,19 +27,7 @@ import type {
 import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
 import { SERVER_FIELDS } from "./server-fields.js";
 
-/**
- * The wizard's screens, shown one at a time (in-memory state, never a URL route — the same
- * `@state`-driven machine `apps/dashboard/src/dashboard-app.ts` runs). The first screen checks the
- * connection and offers certificate help.
- * The following `mode` screen offers the four product journeys:
- *
- * - Demo or Prepare → `admin` (your account) → `venue` (tenant + location + series) → `review`
- *   (confirm + POST) → `provisioning` (in flight) → `done` (restarting).
- * - Go live → `live-source`; importing a prepared configuration adds `configuration-preview`, then
- *   both sources follow `admin` → `venue` → `cert` (AEAT, live ES-common only) → `fiscal-test` →
- *   `review` → `provisioning` → `done`. Development onboarding skips the real external-service steps.
- * - Join or recover → `role`, whose mirror branch opens `connect` and backup branch opens `restore`.
- */
+/** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
   | "connection"
   | "role"
@@ -61,7 +48,7 @@ export type Screen =
  * A recursively-optional view of `T`: every field, at every depth, may be absent — an array is left
  * whole (its element type is not turned partial, so `invoiceLocales` stays `string[]`). The wizard's
  * request-draft accumulates a screen at a time, so at any moment only the fields collected so far are
- * present; the `review` step asserts completeness before {@link SetupApi.provision}.
+ * present.
  */
 export type DeepPartial<T> = T extends readonly (infer U)[]
   ? U[]
@@ -69,8 +56,6 @@ export type DeepPartial<T> = T extends readonly (infer U)[]
     ? { [K in keyof T]?: DeepPartial<T[K]> }
     : T;
 
-/** A plain (non-array) object — the only thing {@link deepMerge} recurses INTO; everything else the
- * patch replaces wholesale (so an array like `invoiceLocales` is swapped, never element-merged). */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -92,20 +77,10 @@ function deepMerge(base: unknown, patch: unknown): unknown {
 }
 
 /**
- * Turn the accumulated {@link SetupApp.draft} into the full `POST /setup-api/provision` body. Every
- * collecting screen has already client-validated its own fields before contributing them, so by the
- * `review` step the draft is complete and this only NARROWS the `DeepPartial` to a `ProvisionBody`.
- *
- * The one thing it does actively is the `aeatCert` gate, which is a FISCAL guard, not a tidiness one.
- * The cert is included ONLY for a LIVE provision that actually carries a PFX; otherwise the key is
- * DROPPED entirely (never sent as `null` or empty). The mode gate matters because an operator can go
- * live → cert (fill the PFX) → Back → mode → switch to Demo → Provision. Without it, `assembleBody`
- * would POST that stale certificate onto a DEMO/preproduction tenant and the server would seal a real
- * AEAT signing certificate into it — unrepairable (CLAUDE.md §5). The server
- * distinguishes "no certificate" from "malformed" by the key's ABSENCE (the symmetric presence gate in
- * `apps/server/src/setup-api.ts`, which reaches the regime's secret validator through the fiscal
- * contribution's `provisioningSecret` seat) and answers a live production venue with no cert
- * `setup.provisioning_secret_required` (which the shell routes back to `cert`).
+ * Narrows the draft to the request body without checking it is complete. The certificate travels
+ * only on a live provision that carries a PFX, and is otherwise left out rather than sent as `null`:
+ * an operator can fill it in, go Back and switch to Demo, and the server refuses a certificate on a
+ * provision that does not expect one (`setup.request_invalid`, field `aeatCert`).
  */
 export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   const body = { ...draft } as ProvisionBody & { aeatCert?: ProvisionBody["aeatCert"] };
@@ -121,13 +96,6 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   return body as ProvisionBody;
 }
 
-/**
- * Plain-English messages for the venue-data refusals `planVenue` (and the fiscal modules) throw
- * (`packages/provisioning/src/venue-plan.ts`). The server's error boundary PROPAGATES these codes at
- * HTTP 400 unchanged (`apps/server/src/error-boundary.ts`), so they reach the wizard verbatim and the
- * shell routes them BACK to the `venue` form to be corrected. Any other `provisioning.*`/`fiscal.*`
- * code falls back to a generic message that names the code (see {@link SetupApp.#mapProvisionError}).
- */
 const VENUE_ERROR_MESSAGES: Record<string, string> = {
   "provisioning.territory_country_mismatch": "The country must match the fiscal territory.",
   "provisioning.invalid_locales": "Choose 1 or 2 invoice locales.",
@@ -136,15 +104,6 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
   "fiscal.regime_not_implemented": "That fiscal territory isn't supported yet.",
 };
 
-/**
- * Plain-English messages for the adopt failures the shell routes BACK to the `connect` screen (C2b).
- * `mirror.bundle_fetch_failed` is the mirror's own 502 when it can't reach or authenticate to the
- * primary; `setup.request_invalid` is the shared per-field guard; `setup.not_ready` is the deps gate.
- * Every other code — `server.internal`, an unrecognised code, or a code-LESS rejection (a network
- * drop mid-adopt) — falls back to the generic message (see {@link SetupApp.#mapAdoptError}). The two
- * fiscal double-setup 409s are NOT here: they are TERMINAL and route to the `provisioning` screen's
- * reload action instead, never back to the retryable form.
- */
 const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "mirror.bundle_fetch_failed":
     "Couldn't reach the primary server or the login was refused. Check the address and login, then try again.",
@@ -153,13 +112,10 @@ const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
 };
 
-/** The generic connect-form banner for a code the map above doesn't name (or a code-less rejection). */
 const ADOPT_GENERIC_ERROR =
   "Couldn't connect to the primary. Check the address and login, then try again.";
 
-/** The outcome of a failed connection check: what to tell the operator, and whether a fresh check
- * could ever come out differently. Held as ONE value ({@link SetupApp.connectionFailure}) because
- * the two are halves of a single answer — a screen showing one without the other is incoherent. */
+/** Held as one value because the message and whether to offer a retry answer the same check. */
 interface ConnectionFailure {
   message: string;
   /** False when retrying is pointless, so the screen drops its Continue action entirely. */
@@ -167,18 +123,9 @@ interface ConnectionFailure {
 }
 
 /**
- * What a failed setup read means, in words the operator can act on.
- *
- * The distinction is free and we used to throw it away: `fetch` REJECTS when nothing answers, and
- * resolves when the server answered — in which case `SetupApi` throws an {@link ApiError} carrying
- * its HTTP `status`. So a status means the box is ALIVE, and telling that operator to go and check
- * its power points them at a machine that is working perfectly.
- *
- * A 404 means alive but no longer mounting the setup routes. On a real box that has one cause: it
- * is already set up, and `/` now serves the till. Stated rather than guarded, because nothing here
- * can tell them apart: a wrong base URL or a proxy could also answer 404, and this would then name
- * the wrong reason. The wizard is served same-origin by the box itself, so neither arises on a box
- * an operator actually has in front of them.
+ * `fetch` rejects when nothing answers, and `SetupApi` rejects with a `status` when the server did,
+ * so a status means the box is alive. A 404 is read as "already set up", though a wrong base URL or
+ * a proxy answering 404 would read the same.
  */
 function describeConnectionFailure(error: unknown): ConnectionFailure {
   const status = (error as { status?: number } | null)?.status;
@@ -193,20 +140,8 @@ function describeConnectionFailure(error: unknown): ConnectionFailure {
 }
 
 /**
- * The setup wizard's ROOT element — the shell that turns the screens into a working app, mirroring
- * `apps/dashboard/src/dashboard-app.ts`.
- *
- * It owns the two things the whole flow shares: the injected {@link SetupApi}, and the accumulated
- * request {@link SetupApp.draft} that each screen contributes a slice of (via a bubbling `setup-patch`
- * event the shell deep-merges) and the `review` step finally POSTs. Most nav is a plain `setup-goto`
- * event that flips {@link SetupApp.screen} — no server call, no history entry. The one CONDITIONAL
- * transition, venue→`cert`/`review`, is a screen-agnostic `setup-advance` the shell resolves against
- * the merged draft ({@link SetupApp.#onAdvance}), so the venue screen need not read `mode` to route.
- *
- * On boot it reads `GET /setup-api/status` ({@link SetupApp.#boot}) to learn the box's `environment`,
- * so the wizard can warn before provisioning a real `production` venue. A failed read keeps the
- * connection screen visible with help, and a retry when retrying could help, without collecting
- * credentials.
+ * The wizard's root. It owns the injected {@link SetupApi} and the request {@link SetupApp.draft}
+ * each screen contributes a slice of through `setup-patch`.
  */
 @customElement("setup-app")
 export class SetupApp extends LitElement {
@@ -219,39 +154,20 @@ export class SetupApp extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the setup box. `main.ts` injects a real same-origin client; a test injects a
-   * stub. Assigned as a property (`attribute: false`) — a `SetupApi` cannot travel through an
-   * attribute string. */
   @property({ attribute: false }) api!: SetupApi;
 
   /** Certificate setup precedes collecting credentials and business details. */
   @state() private screen: Screen = "connection";
-  /**
-   * The LAST failed connection check, or `undefined` when none applies — including while a fresh
-   * check is in flight, so an answer never outlives the question it answered. The connection
-   * screen's message and whether it offers its Continue action are both DERIVED from this in
-   * `render`, so the two can never describe different checks.
-   */
+  /** Cleared while a fresh check is in flight, so an answer never outlives the check it answered. */
   @state() private connectionFailure?: ConnectionFailure;
   @state() private connectionChecking = false;
   #connectionGeneration = 0;
   @state() private venueDefaults: VenueDefaults = {};
 
-  /**
-   * The box's stamped deployment environment, read from `GET /setup-api/status` on boot. `undefined`
-   * until the read resolves (and if it fails) — the `mode`/`review` screens read it to warn loudly
-   * before provisioning a real `production` venue.
-   */
   @state() private environment?: "production" | "preproduction";
   @state() private developmentMode = false;
 
-  /**
-   * The accumulated provision request, built up a screen at a time. Seeded with the defaults every
-   * ES deli shares — country `ES`, the ES-common fiscal territory, the Madrid time zone, and an es-ES
-   * invoice locale — so a screen only has to collect what differs. A `DeepPartial` because most
-   * fields are still absent until their screen is filled in; the `review` step validates completeness
-   * before narrowing it to a full {@link ProvisionBody}.
-   */
+  /** Seeded with the defaults every ES deli shares, so a screen only has to collect what differs. */
   @state() private draft: DeepPartial<ProvisionBody> = {
     venue: {
       country: "ES",
@@ -263,34 +179,16 @@ export class SetupApp extends LitElement {
     },
   };
 
-  /**
-   * A `setup.request_invalid` the server threw at provision time, routed back to the `review` screen
-   * as a banner naming the offending field — except the four venue fields the fiscal regime refuses,
-   * which go back to the venue form with the field marked (`server-fields.ts`, and
-   * {@link SetupApp.venueInvalidField} below). `undefined` normally; cleared before every new POST.
-   */
   @state() private reviewError?: string;
 
-  /**
-   * A venue-data validation code the server threw at provision time (a `planVenue` / fiscal-module
-   * refusal, `provisioning.*` / `fiscal.*`), routed back to the `venue` screen as a banner so the
-   * operator can correct the offending detail. `undefined` normally; cleared before every new POST.
-   */
   @state() private venueError?: string;
 
   /**
-   * The single venue field a `setup.request_invalid` named, when that field is one the venue form
-   * owns. Handed to the venue screen so it can mark the field and explain it; `undefined` normally,
-   * and cleared everywhere {@link SetupApp.venueError} is — a mark surviving into the next attempt
-   * would leave a field red on a value the operator has already corrected.
+   * Cleared everywhere {@link SetupApp.venueError} is: a mark surviving into the next attempt would
+   * leave a field red on a value the operator has already corrected.
    */
   @state() private venueInvalidField?: string;
 
-  /**
-   * An adopt failure the server threw at connect time (C2b), routed back to the `connect` screen as a
-   * banner so the operator can correct the primary address / admin login and re-submit. `undefined`
-   * normally; cleared before every new adopt POST. The mirror path's analogue of `venueError`.
-   */
   @state() private connectError?: string;
   @state() private restoreError?: string;
   @state() private configurationError?: string;
@@ -300,40 +198,23 @@ export class SetupApp extends LitElement {
   @state() private fiscalTestError?: string;
 
   /**
-   * The break-glass secret the adopt path minted, captured from the 200 to hand to the `done` screen.
-   * Present ONLY on the mirror path after a successful adopt (the primary provision path mints none);
-   * `undefined` otherwise. The adopt response carries it once (spec §4.2), so this is the operator's
-   * only chance to see and record it before the box restarts.
+   * The adopt response carries this once, so the done screen is the operator's only chance to see and
+   * record it before the box restarts.
    */
   @state() private breakGlassSecret?: string;
 
   /**
-   * True once a `POST /setup-api/adopt` has SUCCEEDED — the `done` screen's signal that it is on the
-   * mirror path, where none of the trading copy applies (`done-screen.ts`'s `mirrorJoin`). Kept apart
-   * from {@link SetupApp.breakGlassSecret}, which is mirror-only today too but is a value to display
-   * rather than a statement about which path ran.
+   * Kept apart from {@link SetupApp.breakGlassSecret}, which is also set only by an adopt, because
+   * that is a value to display and this is a statement about which path ran.
    */
   @state() private mirrorJoin = false;
 
-  /**
-   * The mapped failure message shown ON the `provisioning` screen for the codes that stay there (the
-   * two fiscal 409s, `already_provisioning`, `not_ready`, `provision_failed`). `undefined` while a
-   * POST is in flight (the screen then shows the in-flight state) or before one is attempted.
-   */
+  /** `undefined` while a request is in flight, which the provisioning screen shows as such. */
   @state() private provisionMessage?: string;
 
-  /** Whether {@link SetupApp.provisionMessage} may be retried — never for the fiscal double-provision
-   * refusals (re-POSTing an already-set-up box is meaningless and unrecoverable, CLAUDE.md §5). */
   @state() private provisionCanRetry = false;
 
-  /**
-   * The label for a reload action offered ON a TERMINAL provisioning failure — the box is already set
-   * up (`already_provisioned` / `deployment.already_stamped` → "Reload to open the till", since the
-   * provisioned box serves the till) or a provision is already running elsewhere (`already_provisioning`
-   * → "Reload"). `undefined` for the in-flight and retryable states, which carry no reload (a retryable
-   * failure keeps its `Try again`, never a reload). Mutually exclusive with {@link
-   * SetupApp.provisionCanRetry}: a terminal 409 sets this and clears retry.
-   */
+  /** Set only on a terminal failure, which also clears {@link SetupApp.provisionCanRetry}. */
   @state() private provisionReloadLabel?: string;
 
   override firstUpdated(): void {
@@ -368,9 +249,6 @@ export class SetupApp extends LitElement {
     }
   }
 
-  /** The single place a failed connection check is recorded, so both halves of the answer always
-   * come from the same check. Ignores an outcome a newer check has already superseded, and a
-   * teardown mid-request, on the same discipline as {@link SetupApp.#boot}. */
   #recordConnectionFailure(error: unknown, generation: number): void {
     if (!this.isConnected || generation !== this.#connectionGeneration) return;
     this.connectionFailure = describeConnectionFailure(error);
@@ -394,11 +272,6 @@ export class SetupApp extends LitElement {
     }
   }
 
-  /**
-   * Merge a screen's emitted slice of the request into {@link SetupApp.draft}. `stopPropagation` keeps
-   * the composed, bubbling `setup-patch` inside the shell (the house pattern — the shell is its final
-   * consumer, so it must not leak past the shadow boundary).
-   */
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
     const mode = event.detail.patch.mode;
@@ -425,14 +298,9 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Advance (or step back) to another screen — a plain local state change, no server call. Same
-   * boundary `stopPropagation` as {@link SetupApp.#onPatch}.
-   *
-   * A user-initiated navigation clears any routed-back server banner (`venueError` / `reviewError`), so
-   * a stale rejection message does not reappear when the operator later steps back onto that screen
-   * after already correcting and advancing past it. This is safe because {@link
-   * SetupApp.#mapProvisionError} routes by assigning `this.screen` DIRECTLY (never via a `setup-goto`
-   * event), so its own error-showing routing does not pass through here and is not cleared.
+   * Clears the routed-back banners assigned below (not `fiscalTestError`), so a stale refusal does
+   * not reappear when the operator later steps back onto its screen. The refusal routing assigns
+   * `this.screen` directly, not through `setup-goto`, so a banner is not cleared on its way in.
    */
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
@@ -445,17 +313,7 @@ export class SetupApp extends LitElement {
     this.screen = event.detail.screen;
   }
 
-  /**
-   * Resolve a screen-agnostic `setup-advance` (only the venue screen emits it today) against the merged
-   * {@link SetupApp.draft}. The venue→`cert`/`review` decision lives HERE, not in the venue screen: the
-   * shell owns the draft, so it — mirroring `apps/dashboard/src/dashboard-app.ts`'s conditional routing
-   * — is where the conditional belongs. A live ES-common venue still needs the AEAT certificate
-   * (`cert`) unless this is the managed development walkthrough; every other case goes to `review`.
-   *
-   * Same boundary `stopPropagation` and stale-banner clear as {@link SetupApp.#onGoto}: advancing off
-   * the venue form is a user-initiated navigation, so a routed-back `venueError` must not linger.
-   * Guarded on `screen === "venue"` so a stray advance from anywhere else is inert.
-   */
+  /** The venue→`cert`/`review` decision lives in the shell because the shell owns the merged draft. */
   #onAdvance(event: CustomEvent): void {
     event.stopPropagation();
     if (this.screen !== "venue") return;
@@ -470,16 +328,6 @@ export class SetupApp extends LitElement {
         : "review";
   }
 
-  /**
-   * Fire the provision — the review screen's `Provision`, and the provisioning screen's `Try again`,
-   * both reach here through the shared composed `provision-requested`. Client validation already ran
-   * on every collecting screen, so this assembles the body and POSTs it. Success takes the box down
-   * for its restart, so `done` (not this screen) is where reconnection happens; a failure is mapped by
-   * {@link SetupApp.#mapProvisionError} onto a message here or a route back to the owning step.
-   *
-   * The `isConnected` guards stop a teardown mid-request writing state onto a detached element, the
-   * same discipline as {@link SetupApp.#boot}.
-   */
   async #onProvisionRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
     this.reviewError = undefined;
@@ -500,40 +348,11 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Map a rejected provision to the wizard's next state. Every code the provision route can surface
-   * (map §4b, verified against `apps/server/src/setup-api.ts` + `error-boundary.ts` +
-   * `packages/provisioning/src/venue-plan.ts`) is handled; a rejection carrying NO string `code` (a
-   * bare `TypeError`/`SyntaxError` out of `#request` — see the coercion below) is treated as the
-   * generic crash and routes to the retryable default too.
-   *
-   * - Any `provisioning.*` / `fiscal.*` code → a `planVenue` / fiscal-module refusal about the venue
-   *   DATA, propagated at 400 by the error boundary (it does NOT rewrite the code —
-   *   `setup.provision_failed` is only that boundary's log tag, never a wire code). Re-POSTing the same
-   *   data would just fail again, so route BACK to the `venue` form with a banner; the fix is editing,
-   *   not retrying in place.
-   * - `setup.request_invalid` naming one of the four fields the fiscal regime refuses
-   *   (`./server-fields.ts`) → back to `venue` with that field marked, explained and focused. Those
-   *   are rules the wizard cannot evaluate itself, so the operator is returned to the field rather
-   *   than shown a raw field path.
-   * - `setup.request_invalid` naming any other field → back to `review` with a banner naming
-   *   `params.field`. Those fields their own screen does validate, so this stays a fallback.
-   * - `setup.provisioning_secret_required` → back to `cert` to add the certificate.
-   * - `setup.already_provisioning` → an in-progress notice, no retry (a concurrent provision is
-   *   running); offers a plain "Reload" so the operator isn't stranded on a dead-end alert.
-   * - `setup.already_provisioned` / `deployment.already_stamped` → "already set up", NO retry: these
-   *   are the fiscal double-provision refusals and re-POSTing is unrecoverable (CLAUDE.md §5). Offers a
-   *   "Reload to open the till" action instead, since the provisioned box serves the till.
-   * - `setup.not_ready` → not-ready notice, retryable.
-   * - `server.internal` (the real generic-crash code) and any unrecognised code → a generic failure,
-   *   retryable in place.
+   * A venue-data refusal (`provisioning.*`, `fiscal.*`) would fail again on a re-POST of the same
+   * data, so it routes back to the venue form rather than offering a retry.
    */
   #mapProvisionError(error: ApiError): void {
-    // A rejection without a string `code` is real and reachable: `#request` has no try/catch, so a
-    // network drop mid-provision rejects with a bare `TypeError` and a non-JSON error body (e.g. the
-    // dev proxy's 502 HTML) rejects with a `SyntaxError` from `res.json()` — neither carries a `.code`.
-    // Coerce those to the generic bucket so they route to the retryable default rather than throwing on
-    // `undefined.startsWith` and escaping as an unhandled rejection that strands the operator on
-    // "Provisioning…". A re-POST is safe: it either succeeds or returns the 409 already_provisioned.
+    // A network drop rejects with a bare `TypeError`, which carries no `code`.
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
@@ -575,8 +394,6 @@ export class SetupApp extends LitElement {
       case "setup.already_provisioning":
         this.provisionMessage = "Setup is already in progress on this server.";
         this.provisionCanRetry = false;
-        // A provision is running elsewhere — no re-POST, but a reload re-reads status so the operator
-        // isn't stranded on a dead-end alert.
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.operation_conflict":
@@ -589,7 +406,6 @@ export class SetupApp extends LitElement {
       case "deployment.already_stamped":
         this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
-        // The box is provisioned and serves the till at the origin root — reloading opens it.
         this.provisionReloadLabel = "Reload to open the till";
         return;
       case "setup.not_ready":
@@ -605,19 +421,9 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Fire the mirror-path adopt (C2b Task 13) — the connect screen's `Connect` reaches here through the
-   * composed `adopt-requested`, which CARRIES the assembled {@link AdoptBody} in its detail (unlike
-   * `provision-requested`, which the shell assembles from its draft). The credential is forwarded
-   * VERBATIM to `SetupApi.adopt` — the structured `{ personId, password, totp? }` object, never
-   * re-shaped and never persisted to the shell's draft (a mirror files nothing; the password is not
-   * kept). Success takes the box down for a restart it does not come back from as a working mirror:
-   * `adoptFromPrimary` only records a latch for a later boot to finish (`apps/server/src/adopt.ts`),
-   * and no boot can — `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place
-   * that says why. So `done` is where the operator is TOLD that, rather than where a reload is
-   * offered; a failure is mapped by {@link SetupApp.#mapAdoptError}.
-   *
-   * The `isConnected` guards mirror {@link SetupApp.#onProvisionRequested}: a teardown mid-request must
-   * not write state onto a detached element.
+   * The adopt body goes straight to `SetupApi.adopt` and never into the draft, so the password is not
+   * kept. A successful adopt leaves the box adoption-pending, not a working mirror: the
+   * `PendingAdoption` header in `apps/server/src/finish-adoption.ts` says why.
    */
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
@@ -629,8 +435,6 @@ export class SetupApp extends LitElement {
     try {
       const outcome = await this.api.adopt(event.detail.body);
       if (!this.isConnected) return;
-      // Capture the break-glass secret before advancing: the adopt response carries it ONCE (spec
-      // §4.2), so the `done` screen must show it to the operator to record before the box restarts.
       this.breakGlassSecret = outcome.breakGlassSecret;
       this.mirrorJoin = true;
       this.screen = "done";
@@ -708,32 +512,10 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Map a rejected adopt to the wizard's next state (C2b). Two shapes:
-   *
-   * - The double-setup 409s (`setup.already_provisioned` / `deployment.already_stamped`) and the
-   *   concurrent-setup 409 (`setup.already_provisioning`) are TERMINAL — re-submitting is meaningless
-   *   or unrecoverable (CLAUDE.md §5), so they land on the `provisioning` screen with a reload action
-   *   and NO retry, exactly as {@link SetupApp.#mapProvisionError} does. The reload label here says
-   *   only "Reload", because nothing on this arm is a box that has adopted: a box that HAS adopted
-   *   serves no `/setup-api/*` at all (`apps/server/src/boot.ts` returns from its adoption-pending
-   *   branch above the mounts), so its adopt would 404 into the generic branch below. What this arm
-   *   IS is a box still in setup mode whose database was already stamped for a DIFFERENT environment
-   *   (`stampDeployment`, `packages/db/src/deployment.ts`), and a reload of a setup-mode box reopens
-   *   this wizard — which is all the label now promises. Of the three,
-   *   only two are reachable from an adopt today: `deployment.already_stamped` (the adopt path stamps
-   *   the environment — `adoptFromPrimary` → `stampDeployment`, `apps/server/src/adopt.ts`) and
-   *   `setup.already_provisioning` (the shared concurrent-setup guard). `setup.already_provisioned` is
-   *   thrown ONLY by `provisionVenue` (`apps/server/src/provision.ts:90`), which the adopt path never
-   *   calls (`adoptFromPrimary` → `adoptVenue`, which never throws it — grepped 2026-08-29); its case
-   *   below is DEFENSIVE parity with `#mapProvisionError`, not a live adopt outcome, and is kept so a
-   *   future adopt throw of it maps sensibly rather than falling through to the generic banner.
-   * - Everything else — `mirror.bundle_fetch_failed`, `setup.request_invalid`, `setup.not_ready`,
-   *   `server.internal`, an unrecognised code, and a code-LESS rejection (a bare `TypeError`/
-   *   `SyntaxError` out of `#request` on a network drop or non-JSON body) — routes BACK to the
-   *   `connect` form with a banner. The connect form (not the `provisioning` screen, whose retry fires
-   *   `provision-requested`) is the mirror path's retry surface, so a corrected re-submit re-fires
-   *   `adopt-requested`. The code-less coercion mirrors `#mapProvisionError`: without it `code.startsWith`
-   *   would throw on `undefined` and strand the operator (proven by deletion in the shell test).
+   * The terminal refusals offer a bare "Reload": only a box still in setup mode answers an adopt, and
+   * reloading one reopens this wizard. `setup.already_provisioned` is thrown only by the provision
+   * path today and is mapped here for parity. Everything else routes back to the connect form, the
+   * mirror path's retry surface.
    */
   #mapAdoptError(error: ApiError): void {
     const code =
@@ -758,11 +540,7 @@ export class SetupApp extends LitElement {
   }
 
   override render(): TemplateResult {
-    // The screens emit these composed events UP to the shell: `setup-patch` (merge a slice into the draft), `setup-goto`
-    // (flip the visible screen), `setup-advance` (the venue screen's conditional next-step, resolved
-    // here against the draft), and `provision-requested` (review's Provision and the provisioning
-    // screen's retry both fire it). Wiring them on the container means each screen talks back without
-    // the shell knowing which one is mounted.
+    // Listening on the container lets each screen talk back without the shell knowing which is mounted.
     return html`<wt-modal
       open
       .dismissible=${false}
@@ -786,21 +564,6 @@ export class SetupApp extends LitElement {
     </wt-modal>`;
   }
 
-  /**
-   * The mounted screen for the current {@link SetupApp.screen} — each real screen carries the
-   * `data-test="screen-*"` hook on its own host so the shell's screen-switching tests stay uniform.
-   * The four-choice `mode` screen is the default.
-   *
-   * `mode` reads `environment` (to warn
-   * on a production box); `admin`, `venue`, `cert` and `review` read the accumulated `draft` (to seed
-   * their fields / summarise it, so stepping Back is non-destructive); `venue` and `review` also take a
-   * routed-back server error (`venueError` / `reviewError`); `provisioning` takes the mapped message +
-   * retry flag + terminal reload label; `done` takes the `api` to poll during the restart, the
-   * `draft.mode` (see the `case "done"` comment below) to label the result and gate its first-run backup
-   * nudge, and — on the mirror path — the once-only `breakGlassSecret` to surface for the operator to
-   * record plus the `mirrorJoin` flag that selects its copy. All are passed as properties, since
-   * neither an api nor a draft object can travel as an attribute.
-   */
   #renderScreen(): TemplateResult {
     switch (this.screen) {
       case "connection":
@@ -841,8 +604,6 @@ export class SetupApp extends LitElement {
           .environment=${this.environment}
         ></setup-mode-screen>`;
       case "connect":
-        // The mirror path's connect-to-primary form (C2b Task 13). It carries the assembled adopt body
-        // up in `adopt-requested`; the shell routes a failed adopt back here via `connectError`.
         return html`<setup-connect-screen
           data-test="screen-connect"
           .errorMessage=${this.connectError}
@@ -879,16 +640,6 @@ export class SetupApp extends LitElement {
           .reloadLabel=${this.provisionReloadLabel}
         ></setup-provisioning-screen>`;
       case "done":
-        // `draft.mode` is the done screen's visible result and first-run backup-nudge gate. It is not
-        // `config.devMode`
-        // (`WAITRON_ENV=dev`, `apps/server/src/config.ts`'s `isDevMode`) — that flag governs the dev
-        // per-tab device switcher and is never set on a box an operator runs this wizard against.
-        // The wizard's own DEMO/LIVE choice (`draft.mode`, mode-screen.ts) is what "demo mode" means
-        // here: a demo box is reversible in practice and is the one the nudge is meant to skip. An
-        // adopting box collects no `mode` at all (the connect flow skips `mode`/`admin`/`venue`/
-        // `cert`/`review` entirely), so `undefined` reads as not-demo — which is why the nudge is
-        // gated on `mirrorJoin` in the screen itself and not on this value: a box that cannot finish
-        // joining serves no dashboard to set backups up in.
         return html`<setup-done-screen
           data-test="screen-done"
           .api=${this.api}

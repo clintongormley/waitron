@@ -5,15 +5,10 @@ import "@waitron/ui/src/components/wt-button.js";
 import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
 
 /**
- * The wizard's first step: it asks the operator to read their own address bar.
- *
- * A page cannot tell whether the browser reached it over a trusted certificate or over an
- * interstitial the operator clicked through — after a bypass the page still reads
- * `isSecureContext: true` and its fetches return 200 (Chrome 153 probe, recorded in
- * `docs/superpowers/specs/2026-09-12-box-trust-onboarding-design.md`). So this screen carries no
- * detection code, and Continue is only a communication check: it re-reads status and never proves
- * that the certificate is installed. Nothing here reports a verdict on the connection, which is why
- * the screen needs no disclaimer saying it cannot.
+ * A page cannot tell whether it was reached over a trusted certificate or through a warning the
+ * operator clicked past (`docs/superpowers/specs/2026-09-12-box-trust-onboarding-design.md`), so this
+ * screen asks the operator to read the address bar and never reports a verdict. Continue only checks
+ * that the server answers.
  */
 @customElement("setup-connection-screen")
 export class SetupConnectionScreen extends LitElement {
@@ -45,11 +40,8 @@ export class SetupConnectionScreen extends LitElement {
   ];
   @property() errorMessage?: string;
   @property({ type: Boolean }) checking = false;
-  /**
-   * Set when this server cannot be set up from here at all — today, when it is already set up.
-   * Continue would lead straight back to the same failure, so the whole row goes. The question and
-   * the install link stay: the operator still needs this server's certificate trusted to use it.
-   */
+  /** Set when retrying cannot help, so Continue is withheld. The install link stays: the certificate
+   * still needs trusting to use this server. */
   @property({ type: Boolean }) setupUnavailable = false;
 
   override render(): TemplateResult {

@@ -5,23 +5,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
 import { dispatchProvisionRequested } from "../events.js";
 
-/**
- * The in-flight / failed provision surface. The shell drives it: on the review screen's
- * `provision-requested` it switches here and POSTs, mapping the outcome onto this screen's two props
- * (`apps/setup/src/setup-app.ts`). This screen renders state, it does not POST — a success takes the
- * shell to `done`, so the only thing shown here is progress or a mapped failure.
- *
- * - While the POST is IN FLIGHT (`message` is `undefined`): a plain, non-spinner "Provisioning…"
- *   status and a DISABLED provision control, so a second submit is impossible while one is running.
- * - On a RETRYABLE failure (`message` set, `canRetry`): a `role="alert"` banner with the mapped
- *   message, plus a "Try again" control that re-emits `provision-requested` for the shell to retry.
- * - On a TERMINAL failure (`message` set, `canRetry=false`, `reloadLabel` set): the same banner, but
- *   its action is a RELOAD ({@link SetupProvisioningScreen.reload}, the real `location.reload`), not a
- *   retry — re-POSTing a box that is already set up is meaningless AND unrecoverable (CLAUDE.md §5), so
- *   the operator is pointed onward (into the till, or to re-read status) rather than left on a dead-end
- *   alert. The shell picks the label per code (`apps/setup/src/setup-app.ts`): "Reload to open the
- *   till" for the already-provisioned box, "Reload" for a provision already in progress.
- */
+/** Renders the provision state the shell maps onto its props; the shell does the POST
+ * (`apps/setup/src/setup-app.ts`). */
 @customElement("setup-provisioning-screen")
 export class SetupProvisioningScreen extends LitElement {
   static override styles = [
@@ -37,21 +22,13 @@ export class SetupProvisioningScreen extends LitElement {
     `,
   ];
 
-  /** The mapped failure message. `undefined` means the POST is in flight (no failure yet). */
+  /** `undefined` while the POST is in flight. */
   @property() message?: string;
 
-  /** Whether a failed provision may be retried. Never true for the terminal 409 refusals. */
   @property({ type: Boolean }) canRetry = false;
 
-  /**
-   * The label for a TERMINAL failure's reload action ("Reload to open the till" / "Reload"), set by the
-   * shell for the double-provision 409s. `undefined` for the in-flight and retryable states — its
-   * presence is what renders the reload control, and it never coexists with `canRetry`.
-   */
   @property() reloadLabel?: string;
 
-  /** How to reload the page — the real `location.reload` by default, injectable so a test can spy it
-   * without navigating the runner (mirrors `done-screen.ts`). A bound native, not authored code. */
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
   #retry(): void {

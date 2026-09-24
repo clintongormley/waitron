@@ -13,37 +13,14 @@ import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
 
-/**
- * The AEAT-certificate step, reached ONLY for a live ES-common venue (the venue screen routes here
- * only then, `apps/setup/src/screens/venue-screen.ts`). It collects the three things a `parseCert`
- * boundary needs (`apps/server/src/setup-api.ts`): the PFX bundle (as canonical base64), its
- * passphrase, and the certificate kind (`sello` / `representante`).
- *
- * The PFX is read from a chosen file to base64 IN THE BROWSER via `FileReader.readAsDataURL`, whose
- * result is a `data:<mediatype>;base64,<data>` URL; the `data:…;base64,` prefix is stripped so only
- * the canonical base64 the server validates reaches `pfxBase64`. The bytes are never rendered or
- * logged — only whether a file has been loaded (fiscal §5 / brief: never surface a secret).
- *
- * On `Next` it client-validates (a file loaded + a non-empty passphrase) — a failure shows a
- * `role="alert"` banner and marks the offending fields, and nothing is emitted — then emits the
- * `aeatCert` slice as a `setup-patch` and advances to `fiscal-test`. `Back` returns to `venue`. Both nav
- * events are the composed/bubbling pair the shell listens for. Following
- * `apps/setup/src/screens/venue-screen.ts` for the field/`wt-change`/banner + seed-once idiom.
- */
-
-/** The certificate kinds the server accepts (`isCertKind`, `packages/fiscal-verifactu/src/aeat-transport.ts`);
- * the Spanish terms are the API contract values, shown with an English gloss. */
+/** The Spanish values are the server's contract (`isCertKind`); the labels gloss them in English. */
 const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: string }> = [
   { value: "sello", label: "Company seal (sello)" },
   { value: "representante", label: "Representative (representante)" },
 ];
 
-/**
- * Read a chosen file to canonical base64 in the browser. `FileReader.readAsDataURL` yields a
- * `data:<mediatype>;base64,<data>` URL; the base64 payload is everything after the FIRST comma (the
- * base64 alphabet never contains a comma, so this split is exact), stripping the `data:…;base64,`
- * prefix the server would reject.
- */
+/** Everything after the first comma of the data URL is the base64 payload: the base64 alphabet has
+ * no comma. */
 function readFileAsBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -105,29 +82,23 @@ export class SetupCertScreen extends LitElement {
     `,
   ];
 
-  /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
-  /** The PFX bundle as canonical base64. NEVER rendered — only its presence drives the loaded status. */
+  /** Never rendered: only its presence is shown. */
   @state() private pfxBase64 = "";
 
-  /** The chosen file's name, shown as confirmation. Not a secret (the bytes are `pfxBase64`). */
   @state() private fileName = "";
 
   @state() private passphrase = "";
   @state() private certKind: AeatCertDraft["certKind"] = "sello";
   @state() private passphraseVisible = false;
 
-  /** The fields a `Next` rejected — `pfx` (no file loaded) and/or `passphrase` (blank). */
   @state() private invalid = new Set<"pfx" | "passphrase">();
 
-  /** True once a `Next` was rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
-  /** True when the last file read failed (`reader.onerror`) — drives a distinct read-error banner. */
   @state() private fileReadFailed = false;
 
-  /** Guards {@link SetupCertScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
 
   override willUpdate(): void {
@@ -136,12 +107,8 @@ export class SetupCertScreen extends LitElement {
     this.#seedFromDraft();
   }
 
-  /**
-   * Overlay whatever certificate the shell's draft already holds, so Back-then-forward is
-   * non-destructive on the passphrase and kind. The file input itself cannot be re-populated
-   * programmatically (a browser security rule), but the base64 already read survives, so the loaded
-   * status and the emitted patch both stay correct without re-choosing the file.
-   */
+  /** A file input cannot be re-populated programmatically, so a returning operator's file comes back
+   * as the base64 an earlier Next saved in the draft. */
   #seedFromDraft(): void {
     const cert = this.draft.aeatCert;
     if (cert === undefined) return;
@@ -165,10 +132,8 @@ export class SetupCertScreen extends LitElement {
     try {
       this.pfxBase64 = await readFileAsBase64(file);
     } catch {
-      // The @change binding void-discards this handler's promise, so a `readFileAsBase64` rejection
-      // (`reader.onerror`) would otherwise escape as an unhandled rejection. Surface a clean banner,
-      // drop any partial state, and leave `pfxBase64` empty so Next stays blocked until a readable file
-      // is chosen. The bytes are never touched here, so nothing secret is logged or rendered.
+      // The @change binding discards this handler's promise, so a read failure caught nowhere else
+      // would escape as an unhandled rejection.
       this.pfxBase64 = "";
       this.fileName = "";
       this.fileReadFailed = true;
@@ -186,11 +151,6 @@ export class SetupCertScreen extends LitElement {
     this.certKind = (event.target as HTMLSelectElement).value as AeatCertDraft["certKind"];
   }
 
-  /**
-   * Validate, then emit. A missing file or a blank passphrase blocks the emit, shows the banner, and
-   * marks the offending field(s). The guard is proven by deletion: drop the `invalid.size` check and a
-   * "no file does not advance" test flips red.
-   */
   #next(): void {
     const invalid = new Set<"pfx" | "passphrase">();
     if (this.pfxBase64 === "") invalid.add("pfx");

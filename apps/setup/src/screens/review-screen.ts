@@ -7,16 +7,8 @@ import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
-/**
- * The wizard's confirm step: a read-only summary of everything collected, and a `Provision` button
- * that fires the whole thing off.
- *
- * It renders ONLY non-secret values. The PIN, password, certificate passphrase and PFX bytes are
- * never shown — for the operator and the certificate it shows whether each is present, not its value
- * (fiscal §5 / brief: never render the secrets). The provision itself is the shell's job: this screen
- * emits a composed/bubbling `provision-requested` and the shell (a later task) drives the POST. `Back`
- * returns to the collecting step via the shared `setup-goto`.
- */
+/** Never renders a secret: no PIN, password, certificate passphrase or PFX bytes — the certificate
+ * appears only as attached or not. */
 @customElement("setup-review-screen")
 export class SetupReviewScreen extends LitElement {
   static override styles = [
@@ -46,13 +38,8 @@ export class SetupReviewScreen extends LitElement {
     `,
   ];
 
-  /** The accumulated draft, passed down from the shell. Rendered read-only; secrets are never shown. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
-  /** A mapped server error routed back here — set by the shell when the POST was rejected with
-   * `setup.request_invalid`, so the operator sees why before re-provisioning. `undefined` normally.
-   * Not every such refusal lands here: the four venue fields the fiscal regime refuses go back to
-   * the venue form with the field itself marked (`apps/setup/src/server-fields.ts`). */
   @property() errorMessage?: string;
 
   #provision(): void {
@@ -66,7 +53,6 @@ export class SetupReviewScreen extends LitElement {
   override render(): TemplateResult {
     const venue = this.draft.venue;
     const location = venue?.location;
-    // Present iff a PFX has actually been read in — never the value, only whether it is attached.
     const certAttached = Boolean(this.draft.aeatCert?.pfxBase64);
     return html`
       <h1>Review and provision</h1>

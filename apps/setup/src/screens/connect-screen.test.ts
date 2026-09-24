@@ -6,7 +6,6 @@ import type { SetupConnectScreen } from "./connect-screen.js";
 
 type Emitted = { kind: "adopt"; detail: unknown };
 
-/** Collects the composed `adopt-requested` the screen emits UP; it bubbles+composes, so the host hears it. */
 function collect(host: HTMLElement): Emitted[] {
   const events: Emitted[] = [];
   host.addEventListener("adopt-requested", (e) =>
@@ -17,7 +16,6 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupConnectScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** Types `value` into the wt-input at `[data-test=field]` by firing its composed `wt-change`. */
 async function type(el: SetupConnectScreen, field: string, value: string): Promise<void> {
   q(el, `[data-test=${field}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -25,14 +23,12 @@ async function type(el: SetupConnectScreen, field: string, value: string): Promi
   await el.updateComplete;
 }
 
-/** The valid values a complete connect form carries; `totp` is deliberately left blank (optional). */
 const VALID: Record<string, string> = {
   primaryUrl: "https://waitron.local",
   personId: "op-1",
   password: "correct horse",
 };
 
-/** Fills every required field with a valid value (leaving `totp` blank), then any overrides. */
 async function fillValid(
   el: SetupConnectScreen,
   overrides: Record<string, string> = {},
@@ -50,8 +46,6 @@ describe("setup-connect-screen", () => {
     const events = collect(host);
     await fillValid(el);
     q(el, "[data-test=connect]")!.click();
-    // The credential is the OBJECT { personId, password }, not a JSON string in a field — Task 9
-    // deliberately widened it. `totp` is OMITTED (not sent as "" or null) when blank.
     expect(events).toEqual([
       {
         kind: "adopt",
@@ -88,9 +82,6 @@ describe("setup-connect-screen", () => {
       totp: "  123456  ",
     });
     q(el, "[data-test=connect]")!.click();
-    // A value that passed the trimmed non-empty check must not be sent verbatim: an untrimmed URL
-    // fails the primary's `new URL()`, an untrimmed personId misses the auth lookup (Copilot #162).
-    // The password keeps its surrounding whitespace — it can be an intentional part of a secret.
     expect((events[0].detail as { body: unknown }).body).toEqual({
       primaryUrl: "https://waitron.local",
       credential: { personId: "op-1", password: "  correct horse  ", totp: "123456" },
@@ -121,8 +112,6 @@ describe("setup-connect-screen", () => {
     expect(q(el, "[data-test=password]")!.getAttribute("type")).toBe("password");
   });
 
-  // The required-field guard. Prove-by-deletion: drop the `invalid.size` check and a blank-field
-  // Connect would then emit.
   it.each(["primaryUrl", "personId", "password"])(
     "blocks Connect and marks %s invalid when it is blank, emitting nothing",
     async (field) => {
@@ -145,7 +134,7 @@ describe("setup-connect-screen", () => {
   it("allows a blank TOTP — it is optional and does not block Connect", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
     const events = collect(host);
-    await fillValid(el); // totp left blank
+    await fillValid(el);
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(events).toHaveLength(1);
@@ -162,14 +151,11 @@ describe("setup-connect-screen", () => {
     expect(q(el, "[data-test=error]")).toBeNull();
   });
 
-  // Fix (j): two simultaneous role="alert" regions double-announce to a screen reader. When BOTH a
-  // routed server error AND a client-validation failure are present, exactly ONE alert renders, and the
-  // CLIENT message wins. Prove-by-deletion: split the render into two banners and the count becomes 2.
   it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       errorMessage: "Couldn't reach the primary server.",
     });
-    q(el, "[data-test=connect]")!.click(); // empty form → client validation fails
+    q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
       updateComplete: Promise<unknown>;
@@ -187,7 +173,7 @@ describe("setup-connect-screen", () => {
   it("clears the client banner once the form is valid and Connect succeeds", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
     const events = collect(host);
-    q(el, "[data-test=connect]")!.click(); // empty form → banner
+    q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(q(el, "[data-test=error]")).not.toBeNull();
     await fillValid(el);

@@ -27,8 +27,6 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  // Fix (j): a routed server error AND a client-validation failure coincide — only the single client
-  // alert renders, and it must stay a11y-clean.
   it("has no violations when a server error and a client error coincide (one alert)", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>(
       "setup-connect-screen",

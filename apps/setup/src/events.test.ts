@@ -8,11 +8,6 @@ import {
   dispatchSetupPatch,
 } from "./events.js";
 
-/**
- * Dispatch `type` on a throwaway element via `fire`, and return the single CustomEvent a listener
- * heard. The shell's real listeners rely on the events being composed + bubbling, so every helper is
- * asserted for both flags plus its detail shape here.
- */
 function capture(type: string, fire: (el: EventTarget) => void): CustomEvent {
   const el = document.createElement("div");
   let heard: CustomEvent | undefined;

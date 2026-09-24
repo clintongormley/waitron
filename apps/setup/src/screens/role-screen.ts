@@ -6,13 +6,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto } from "../events.js";
 
-/**
- * The Join or recover subchooser. Both cards state what the operator will actually get: an adopted
- * mirror cannot finish joining today, so the mirror card promises nothing beyond that
- * (`apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place that says why),
- * and the Restore card's "still running" wording is explained in `restore-screen.ts`. Each choice
- * navigates directly to its own form.
- */
+/** Why the mirror card promises so little: `PendingAdoption` in `apps/server/src/finish-adoption.ts`. */
 @customElement("setup-role-screen")
 export class SetupRoleScreen extends LitElement {
   static override styles = [

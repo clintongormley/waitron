@@ -4,16 +4,12 @@ import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
 
-// A minimal real-Chromium mount. Importing ./setup-app.js above registers the `setup-app` custom
-// element via its @customElement decorator. Each test gets a fresh themed host, cleaned up afterwards.
-
 const mounted: HTMLElement[] = [];
 
 afterEach(() => {
   for (const host of mounted.splice(0)) host.remove();
 });
 
-/** Default boot reads and successful write responses; each test overrides the request it exercises. */
 function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): SetupApi {
   return {
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
@@ -38,7 +34,6 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
   } as unknown as SetupApi;
 }
 
-/** The connect screen's assembled adopt body — the shape the shell forwards straight to `api.adopt`. */
 const adoptBody = {
   primaryUrl: "https://waitron.local",
   credential: { personId: "op-1", password: "correct horse" },
@@ -63,15 +58,9 @@ async function flush(el: SetupApp): Promise<void> {
   await el.updateComplete;
 }
 
-/** The shell's event-listening container, from which composed screen events are dispatched in tests. */
 const wizard = (el: SetupApp) => el.shadowRoot!.querySelector<HTMLElement>("wt-modal")!;
 
-/**
- * The real `mode`/`admin`/`review` screens each render into their OWN shadow root, so the shell's
- * `shadowRoot.querySelector` cannot see their contents. This grabs the mounted screen host and awaits
- * its render, so a test can read into its shadow root. `updateComplete` is awaited because the shell
- * awaiting its own render does not await a freshly-mounted child's.
- */
+/** Awaits the screen's own render, which the shell awaiting its render does not. */
 async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
   const host = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
     `[data-test=screen-${screen}]`,
@@ -80,8 +69,7 @@ async function screenHost(el: SetupApp, screen: Screen): Promise<HTMLElement> {
   return host;
 }
 
-/** Reads the shell's private accumulated draft — the internal the `setup-patch` merge writes into,
- * which has no DOM surface until the later `review` screen. TS-private is erased at runtime. */
+/** TS-private is erased at runtime. */
 const readDraft = (el: SetupApp) => (el as unknown as { draft: DeepPartial<ProvisionBody> }).draft;
 
 function goto(el: SetupApp, screen: Screen): void {
@@ -96,19 +84,16 @@ function patch(el: SetupApp, p: DeepPartial<ProvisionBody>): void {
   );
 }
 
-/** Fires the composed, screen-agnostic `setup-advance` the venue screen emits on a valid Next. */
 function advance(el: SetupApp): void {
   wizard(el).dispatchEvent(new CustomEvent("setup-advance", { bubbles: true, composed: true }));
 }
 
-/** Fires the composed `provision-requested` the review + provisioning screens emit, into the shell. */
 function provisionRequest(el: SetupApp): void {
   wizard(el).dispatchEvent(
     new CustomEvent("provision-requested", { bubbles: true, composed: true }),
   );
 }
 
-/** Fires the composed `adopt-requested` the connect screen emits (with its assembled body), into the shell. */
 function adoptRequest(el: SetupApp, body: unknown = adoptBody): void {
   wizard(el).dispatchEvent(
     new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
@@ -160,7 +145,6 @@ function readState(el: SetupApp, keys: string[]): Record<string, unknown> {
   return Object.fromEntries(keys.map((key) => [key, state[key]]));
 }
 
-/** Reads a `[data-test]` element's trimmed text out of a mounted screen's own shadow root. */
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
@@ -292,12 +276,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
   });
 
-  /**
-   * A box that is already set up does not mount the setup routes, so its answer is a 404 — the box
-   * is ALIVE. Telling the operator to check its power and network sends them to look at a machine
-   * that is working perfectly. `fetch` rejects when nothing answers, so the presence of a status is
-   * what separates the two.
-   */
   it("says the server is already set up when it answers 404, not that it is unreachable", async () => {
     const el = await mountSetupApp(
       stubApi({
@@ -311,7 +289,6 @@ describe("setup-app", () => {
     expect(body).toContain("already set up");
     expect(body).not.toContain("could not reach");
     expect(body).not.toContain("power");
-    // A server that is already set up cannot be set up again — Continue would just fail the same way.
     expect(host.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
   });
 
@@ -327,16 +304,10 @@ describe("setup-app", () => {
     const body = host.shadowRoot!.textContent!;
     expect(body).toContain("could not reach");
     expect(body).not.toContain("already set up");
-    // An unreachable server may come back, so the retry stays.
     expect(host.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
   });
 
   /**
-   * The two halves of one fact — what to SAY and whether an action is worth offering — must always
-   * describe the SAME check. A fresh check clears the previous outcome's message; if the "no action
-   * here" half is left behind from the previous outcome, the operator is left looking at a screen
-   * with no message and no control at all while the check runs.
-   *
    * The connection screen hides its own Continue after the 404, so the shell is driven through the
    * `connection-continue` event it listens for rather than through a click.
    */
@@ -364,7 +335,6 @@ describe("setup-app", () => {
     expect(during.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
   });
 
-  // A 5xx is the box answering that IT is broken — neither "unreachable" nor "already set up".
   it("does not call a server error 'already set up'", async () => {
     const el = await mountSetupApp(
       stubApi({
@@ -419,7 +389,6 @@ describe("setup-app", () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountSetupApp(stubApi({ getStatus }));
     await flush(el);
-    // A failed boot still renders an actionable screen without inventing an environment.
     const connection = await screenHost(el, "connection");
     expect(connection.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
     expect(connection.shadowRoot!.querySelector("[data-test=environment]")).toBeNull();
@@ -536,12 +505,6 @@ describe("setup-app", () => {
     );
   });
 
-  // Fix (m): the venue→cert/review conditional lives in the SHELL now (it owns the merged draft), not
-  // in the venue screen. On a screen-agnostic `setup-advance` from venue, the shell routes by the
-  // draft's `mode` and fiscal territory. Both branches are asserted here.
-
-  // Prove-by-deletion of the `mode === "live"` operand: change it to a constant `true` and this test
-  // (demo → review) flips red, since a demo draft would then route to cert.
   it("routes a demo draft to review on setup-advance from venue", async () => {
     const el = await mountSetupApp();
     goto(el, "venue");
@@ -603,8 +566,6 @@ describe("setup-app", () => {
     ).not.toBeNull();
   });
 
-  // Prove-by-deletion of the `fiscalTerritory === "ES-common"` operand: drop it (leaving only
-  // `mode === "live"`) and this test flips red — a live NON-ES-common draft would then route to cert.
   it("routes a live non-ES-common draft to review on setup-advance (both operands matter)", async () => {
     const el = await mountSetupApp();
     goto(el, "venue");
@@ -618,7 +579,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
   });
 
-  // The advance is inert off the venue screen (only venue emits it today, but the guard is real).
   it("ignores setup-advance when the current screen is not venue", async () => {
     const el = await mountSetupApp();
     goto(el, "review");
@@ -630,9 +590,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).toBeNull();
   });
 
-  // A routed-back venue error must not linger once the operator corrects it and advances forward — the
-  // shell clears it on `setup-advance` just as it does on a manual `setup-goto`. Prove-by-deletion: drop
-  // the `this.venueError = undefined` line in `#onAdvance` and this flips red.
   it("clears a routed venue error when advancing forward off the venue screen", async () => {
     const provision = vi
       .fn()
@@ -640,7 +597,6 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
-    // Routed back to venue with the server banner.
     expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
       "country must match",
     );
@@ -656,7 +612,6 @@ describe("setup-app", () => {
 
   it("#onPatch deep-merges a screen's slice into the draft, preserving seeded siblings", async () => {
     const el = await mountSetupApp();
-    // Seeded defaults are present before any patch.
     expect(readDraft(el).venue?.country).toBe("ES");
     expect(readDraft(el).venue?.location?.timeZone).toBe("Europe/Madrid");
 
@@ -665,18 +620,15 @@ describe("setup-app", () => {
     const draft = readDraft(el);
     expect(draft.mode).toBe("live");
     expect(draft.venue?.taxId).toBe("B12345678");
-    // The nested patch merged into location WITHOUT dropping the seeded time zone / territory.
     expect(draft.venue?.location?.city).toBe("Madrid");
     expect(draft.venue?.location?.timeZone).toBe("Europe/Madrid");
     expect(draft.venue?.location?.fiscalTerritory).toBe("ES-common");
-    // And the seeded country survived the venue-level merge.
     expect(draft.venue?.country).toBe("ES");
   });
 
   it("#onPatch skips an explicit undefined so a partial re-emit never deletes a sibling", async () => {
     const el = await mountSetupApp();
     patch(el, { venue: { taxId: "B12345678" } });
-    // A later patch whose taxId is undefined must not wipe the value already collected.
     patch(el, { mode: "demo", venue: { taxId: undefined, legalName: "Deli SL" } });
     const draft = readDraft(el);
     expect(draft.venue?.taxId).toBe("B12345678");
@@ -702,10 +654,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
-  // The done screen's first-run backup nudge (Task 8) is gated on the wizard's own DEMO/LIVE choice —
-  // NOT `config.devMode` (`WAITRON_ENV=dev`), which this browser wizard never observes. `draft.mode`
-  // is what the shell already holds by the time provisioning succeeds, so it is threaded straight
-  // through as the done screen's `onboardingIntent` property.
   it("threads demo intent through to the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({
@@ -777,12 +725,8 @@ describe("setup-app", () => {
     expect(await screenText(el, "review", "[data-test=error]")).toContain("taxId");
   });
 
-  // Task 5: the four venue fields the fiscal regime refuses are rules the venue form cannot evaluate
-  // itself — so the refusal goes back to that form with the field marked and explained, not to a
-  // review-screen banner quoting a raw field path. Asserted end to end (shell routes → the form's
-  // own input is marked and carries a sentence), because a path the shell routes on but the form has
-  // no entry for would land the operator on a form saying nothing at all. Prove-by-deletion: drop the
-  // `SERVER_FIELDS` branch in `#mapProvisionError` and this flips red (the shell lands on review).
+  // Asserted on the form's own input, because a path the shell routes on but the form has no entry
+  // for would land the operator on a form saying nothing at all.
   it.each([
     ["legalName", "legalName"],
     ["seriesCode", "seriesCode"],
@@ -804,8 +748,6 @@ describe("setup-app", () => {
     expect((input as unknown as { error: string }).error).not.toBe("");
   });
 
-  // Every other field the request boundary can refuse keeps the old review banner: those fields ARE
-  // validated by their own collecting screen, so the banner stays a fallback rather than a route.
   it("still routes a field the fiscal seat does not refuse to the review banner", async () => {
     const provision = vi
       .fn()
@@ -817,9 +759,6 @@ describe("setup-app", () => {
     expect(await screenText(el, "review", "[data-test=error]")).toContain("mode");
   });
 
-  // A mark must not outlive the attempt that produced it: the operator navigating away and back, or
-  // firing a fresh provision, starts clean. Prove-by-deletion: drop the clear in `#onGoto` and the
-  // second mount still carries `seriesCode`.
   it("drops the server's field mark when the operator navigates away and back", async () => {
     const provision = vi
       .fn()
@@ -866,7 +805,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
   });
 
-  // Fix (k): a terminal 409 offers a RELOAD action, not a retry — the shell wires the label per code.
   it("maps setup.already_provisioning to an in-progress message with a reload (no retry)", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.already_provisioning", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
@@ -880,11 +818,6 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
   });
 
-  /**
-   * The certificate guide the failed-provision screen points at ("/setup/trust") is about trusting
-   * THIS server's certificate — remove any old Waitron certificate, get this one, install it. It has
-   * no section about a server being re-imaged, so the pointer must not promise one.
-   */
   it("points at the certificate guide without promising a re-imaging section", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "server.internal", params: {} });
     const el = await mountSetupApp(stubApi({ provision }));
@@ -955,11 +888,6 @@ describe("setup-app", () => {
     );
   });
 
-  // Fix 2: `#request` has no try/catch, so a network drop rejects `provision()` with a bare `TypeError`
-  // and a non-JSON error body (the dev proxy's 502 HTML) rejects with a `SyntaxError` — neither carries
-  // a `.code`. Without the coercion `#mapProvisionError` did `undefined.startsWith(...)`, throwing out of
-  // the catch as an unhandled rejection and stranding the operator on "Provisioning…" forever. Prove by
-  // deletion: drop the `typeof … === "string" ? … : "server.internal"` coercion and this flips red.
   it.each([
     ["a bare TypeError (network drop mid-provision)", new TypeError("network")],
     ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
@@ -984,14 +912,10 @@ describe("setup-app", () => {
       } finally {
         window.removeEventListener("unhandledrejection", onReject);
       }
-      expect(rejections).toEqual([]); // the catch handled it — nothing escaped
+      expect(rejections).toEqual([]);
     },
   );
 
-  // Fix 3: a routed-back server error must not reappear once the operator has corrected + advanced and
-  // later steps back onto that screen manually. `#onGoto` clears it; the error-routing in
-  // `#mapProvisionError` assigns `screen` directly (not via goto), so the banner still shows initially.
-  // Prove by deletion: drop the `this.venueError = undefined` line in `#onGoto` and this flips red.
   it("clears a routed venue error on a manual re-navigation so it doesn't reappear stale", async () => {
     const provision = vi
       .fn()
@@ -999,12 +923,10 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
-    // Routed back to venue with the server banner showing.
     expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
     expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
       "country must match",
     );
-    // The operator navigates away (Back to admin) and returns to venue: the stale banner is gone.
     goto(el, "admin");
     await el.updateComplete;
     goto(el, "venue");
@@ -1057,8 +979,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
-  // The CRITICAL fiscal guard, at the shell boundary that actually POSTs: a draft carrying a live
-  // certificate that was later reverted to demo must NOT ship the cert. Asserts the REAL posted body.
   it("never posts a stale AEAT cert on a demo provision reached by reverting from live", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,
@@ -1071,7 +991,7 @@ describe("setup-app", () => {
       aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
     });
     patch(el, { mode: "demo" });
-    expect(readDraft(el).aeatCert?.pfxBase64).toBe("AAAA"); // the stale cert is still in the draft
+    expect(readDraft(el).aeatCert?.pfxBase64).toBe("AAAA");
     provisionRequest(el);
     await flush(el);
     expect(provision).toHaveBeenCalledOnce();
@@ -1079,8 +999,6 @@ describe("setup-app", () => {
     expect(body.mode).toBe("demo");
     expect("aeatCert" in body).toBe(false);
   });
-
-  // ── The mirror path (C2b Task 13): role=mirror → connect → adopt → provisioning → done. ──
 
   it("mounts the real connect screen on the mirror path", async () => {
     const el = await mountSetupApp();
@@ -1097,16 +1015,12 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ adopt }));
     adoptRequest(el);
     await flush(el);
-    // The shell forwards the connect screen's assembled body straight through — credential stays the
-    // structured object, never re-shaped into a string.
     expect(adopt).toHaveBeenCalledWith(adoptBody);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
-  // The adopt 200 carries the break-glass secret ONCE (spec §4.2). The wizard must SHOW it to the
-  // operator to record before the box restarts — the server never logs or re-issues it, so a discarded
-  // secret is gone for good. Prove-by-deletion: drop the `this.breakGlassSecret = outcome.breakGlassSecret`
-  // capture (or the done-screen panel) and this flips red.
+  // Weaker than its name: it checks the secret and its warning render, not that the secret is never
+  // shown a second time.
   it("surfaces the break-glass secret ONCE on the done screen after a successful adopt", async () => {
     const secret = "bg-secret-once-9f3a";
     const adopt = vi.fn().mockResolvedValue({
@@ -1118,10 +1032,8 @@ describe("setup-app", () => {
     adoptRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-    // The value itself is rendered for the operator to copy.
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe(secret);
-    // Alongside the "record it now, it won't be shown again" instruction. Whitespace is collapsed
-    // because the rendered copy wraps across lines.
+    // Whitespace is collapsed because the rendered copy wraps across lines.
     const warning = (await screenText(el, "done", "[data-test=break-glass-warning]"))
       ?.toLowerCase()
       .replace(/\s+/g, " ");
@@ -1145,10 +1057,6 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
-  // The retryable adopt failures route BACK to the connect form with a banner — the connect form (not
-  // the provisioning screen, which fires `provision-requested`) is the mirror path's retry surface, so
-  // a re-submit re-fires `adopt-requested`. Prove-by-deletion: point the default branch at
-  // `provisioning` instead of `connect` and these flip red.
   it.each([
     ["mirror.bundle_fetch_failed", "reach the primary"],
     ["setup.request_invalid", "rejected the details"],
@@ -1167,8 +1075,6 @@ describe("setup-app", () => {
     },
   );
 
-  // A code-less rejection (network drop / non-JSON body) must not strand the operator or throw an
-  // unhandled `undefined.startsWith`. Prove-by-deletion: drop the `typeof … === "string"` coercion.
   it.each([
     ["a bare TypeError (network drop mid-adopt)", new TypeError("network")],
     ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
@@ -1207,10 +1113,6 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
   });
 
-  // The reload label must promise nothing: this arm is a setup-mode box whose database was stamped
-  // for another environment, and a reload of a setup-mode box reopens this wizard — it does not open a
-  // dashboard (a box that has adopted serves none, and never reaches this arm at all — see
-  // `#mapAdoptError`). The `not.toContain("dashboard")` is the point of the assertion, not decoration.
   it.each(["setup.already_provisioned", "deployment.already_stamped"])(
     "maps the fiscal 409 %s on adopt to 'already set up' with a bare reload and NO retry",
     async (code) => {
@@ -1227,8 +1129,6 @@ describe("setup-app", () => {
     },
   );
 
-  // The connect screen's own re-submit is the retry: a routed-back failure, corrected and re-fired,
-  // reaches `api.adopt` again and succeeds.
   it("re-adopts when the connect form re-emits adopt-requested after a routed-back failure", async () => {
     const adopt = vi
       .fn()
@@ -1238,7 +1138,7 @@ describe("setup-app", () => {
     adoptRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-    adoptRequest(el); // the operator corrects and re-submits
+    adoptRequest(el);
     await flush(el);
     expect(adopt).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
@@ -1265,8 +1165,6 @@ describe("assembleBody", () => {
     expect(body.aeatCert).toEqual(aeatCert);
   });
 
-  // Prove-by-deletion of the mode gate: drop `draft.mode === "live" &&` and this flips red — a demo
-  // provision would then carry the stale cert (the CRITICAL fiscal defect).
   it("drops a stale certificate when the mode is demo, even with a present PFX", () => {
     const body = assembleBody({
       mode: "demo",

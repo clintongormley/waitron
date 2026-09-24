@@ -21,7 +21,6 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupAdminScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** Types `value` into the wt-input at `[data-test=field]` by firing its composed `wt-change`. */
 async function type(el: SetupAdminScreen, field: string, value: string): Promise<void> {
   q(el, `[data-test=${field}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -94,7 +93,6 @@ describe("setup-admin-screen", () => {
     ]);
   });
 
-  // The email non-empty guard: it is the admin's dashboard-login credential, required like the rest.
   it("blocks Next and marks email invalid when email is left blank", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
@@ -112,8 +110,6 @@ describe("setup-admin-screen", () => {
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  // The non-empty guard. Prove-by-deletion: drop the `invalid.size > 0` return and this flips red —
-  // a blank Next would then emit and advance.
   it("blocks Next and shows a banner when a field is blank", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
@@ -128,7 +124,6 @@ describe("setup-admin-screen", () => {
     };
     await summary.updateComplete;
     expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-    // The blank fields are marked invalid; the filled one is not.
     expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=pin]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(false);
@@ -171,8 +166,6 @@ describe("setup-admin-screen", () => {
     expect(events).toEqual([{ kind: "goto", detail: { screen: "mode" } }]);
   });
 
-  // Fix 1: the shell renders `<setup-admin-screen .draft>`, so a `venue`→Back→`admin` return must
-  // restore the operator's typed credentials (password + PIN included) rather than blanking them.
   it("seeds the editable fields from a draft so Back-then-forward is non-destructive", async () => {
     const draft: DeepPartial<ProvisionBody> = {
       venue: {
@@ -206,9 +199,7 @@ describe("setup-admin-screen", () => {
     expect(val("pin")).toBe("");
   });
 
-  // The seed-once (`#seeded`) guard, mirroring venue-screen's. Prove-by-deletion: drop the
-  // `if (this.#seeded) return; this.#seeded = true;` guard in `willUpdate` and this flips red — the
-  // shell's per-merge `draft` reassignment would re-seed `password` back to "reseeded", losing the edit.
+  // The shell reassigns `draft` on every merge, which must not re-seed over a local edit.
   it("seeds from the draft only once, so a later draft reassignment keeps local edits", async () => {
     const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {
       draft: { venue: { admin: { password: "initial" } } },
@@ -315,7 +306,6 @@ it("stops following the names once the display name is edited by hand", async ()
   expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe("Clint");
 });
 
-/** The error summary's rendered bullet list — the words the operator actually reads. */
 async function summaryItems(el: SetupAdminScreen): Promise<string[]> {
   const summary = q(el, "[data-test=error]") as
     (HTMLElement & { updateComplete: Promise<unknown> }) | null;
@@ -324,10 +314,7 @@ async function summaryItems(el: SetupAdminScreen): Promise<string[]> {
   return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
 }
 
-// Both directions, because a rule proven for one name says nothing about the other: drop either
-// name from `#next`'s required-field loop and exactly one of these two cases flips red. The summary
-// assertion reads the rendered words, so a missing label — which renders as "Enter your undefined."
-// — fails here rather than reaching an operator.
+// The summary is read as rendered words, so a missing label ("Enter your undefined.") fails here.
 it.each([
   ["first", "firstNames", "lastNames", "Enter your first name."],
   ["last", "lastNames", "firstNames", "Enter your last name."],
@@ -385,9 +372,6 @@ it("restores both names when the operator steps back", async () => {
   ]);
 });
 
-// A display name that diverges from "first last" was chosen by the operator, so correcting a name
-// must not overwrite it. `deriveDisplayName` decides this per name change: "Clint" is not
-// "Clinton Gormley", so it is kept.
 it("keeps a display name that came from the draft when a name is corrected", async () => {
   const draft: DeepPartial<ProvisionBody> = {
     venue: { admin: { firstNames: "Clinton", lastNames: "Gormley", displayName: "Clint" } },
@@ -397,9 +381,6 @@ it("keeps a display name that came from the draft when a name is corrected", asy
   expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe("Clint");
 });
 
-// Regression (the old `#displayNameEdited` flag): a draft whose display name is exactly its
-// generated "first last" was NOT customised, so a name change on the way back must regenerate it.
-// The old flag marked any seeded display name as edited and froze it here.
 it("regenerates an auto-filled display name from the draft when a name changes on the way back", async () => {
   const draft: DeepPartial<ProvisionBody> = {
     venue: {
@@ -413,8 +394,6 @@ it("regenerates an auto-filled display name from the draft when a name changes o
   );
 });
 
-// Regression (the old `#displayNameEdited` flag): clearing the display name must resume generation.
-// The old flag stayed set once the operator had typed, so a cleared name never refilled.
 it("resumes generating the display name after it is cleared", async () => {
   const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
   await type(el, "firstNames", "Clinton");

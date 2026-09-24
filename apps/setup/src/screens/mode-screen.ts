@@ -8,20 +8,8 @@ import { helpLinkStyles, actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 
 /**
- * After the connection step, offer the four top-level onboarding journeys and retain a link to
- * certificate help. Demo, Prepare and Go live enter fresh
- * primary provisioning; Join or recover opens the existing-restaurant subchooser.
- *
- * The choice is irreversible one way — a live box files real invoices to AEAT and can never become a
- * demo (fiscal §5) — so LIVE does NOT provision on a single click. Clicking it reveals a loud
- * permanence warning and an "I understand" switch that gates an explicit confirm button; only that
- * confirm emits `mode:"live"`. Demo and Prepare advance immediately. Join or recover selects no
- * mode because a mirror inherits its environment and a restored backup carries its own.
- *
- * It talks to the shell through the two composed/bubbling events the whole wizard shares: a
- * `setup-patch` carrying the chosen `mode`, then a `setup-goto` to the `admin` step. `environment`
- * (read by the shell from `GET /setup-api/status`) is shown so a box stamped `production` is called
- * out before anything is filed.
+ * A provisioned live venue is never turned into a demo, so Live goes through a warning and an
+ * "I understand" confirm rather than advancing on one click.
  */
 @customElement("setup-mode-screen")
 export class SetupModeScreen extends LitElement {
@@ -89,45 +77,30 @@ export class SetupModeScreen extends LitElement {
     `,
   ];
 
-  /** The box's stamped environment, passed down from the shell. `production` is surfaced loudly. */
   @property() environment?: "production" | "preproduction";
 
-  /** True once LIVE has been chosen: the permanence warning + confirm gate replaces the two choices. */
   @state() private confirming = false;
 
-  /** The "I understand" switch — gates the LIVE confirm button (and the emit) while off. */
   @state() private understood = false;
 
-  /**
-   * Emit the chosen mode up to the shell as a `setup-patch`, then navigate to the `admin` step. Both
-   * events are composed + bubbling so they cross this screen's shadow boundary; the shell merges the
-   * patch into its draft and flips the visible screen.
-   */
   #advance(mode: "demo" | "prepare" | "live"): void {
     dispatchSetupPatch(this, { mode });
     dispatchSetupGoto(this, "admin");
   }
 
-  /** DEMO is reversible in practice, so it advances immediately with no confirmation. */
   #chooseDemo(): void {
     this.#advance("demo");
   }
 
-  /** Preparation starts empty and keeps sales simulated, so it advances without a permanence gate. */
   #choosePrepare(): void {
     this.#advance("prepare");
   }
 
-  /** Joining or recovering has its own subchooser and must not write a fresh-primary intent. */
+  /** Joining or recovering is not a fresh primary, so it writes no mode. */
   #chooseExisting(): void {
     dispatchSetupGoto(this, "role");
   }
 
-  /**
-   * LIVE does NOT advance here — it reveals the permanence warning + confirm gate. This is the guard:
-   * prove-by-deletion by wiring the LIVE button straight to `#advance("live")` instead, and the
-   * "one click on Live does not provision live" test flips red (one click would then emit `mode:live`).
-   */
   #chooseLive(): void {
     this.confirming = true;
   }
@@ -137,7 +110,6 @@ export class SetupModeScreen extends LitElement {
     this.understood = event.detail.checked;
   }
 
-  /** The explicit confirm. Emits `mode:"live"` only once the operator has switched "I understand" on. */
   #confirmLive(): void {
     if (!this.understood) return;
     dispatchSetupPatch(this, { mode: "live" });

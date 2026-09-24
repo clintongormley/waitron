@@ -10,9 +10,6 @@ import type { ProvisionBody } from "../api/client.js";
 
 type Emitted = { kind: "patch" | "goto" | "advance"; detail: unknown };
 
-/** Collects the composed events the screen emits UP; all bubble+compose, so the host hears them.
- * `setup-goto` is still used by `Back`; `setup-advance` is the screen-agnostic forward step from `Next`
- * (the shell decides where it lands). */
 function collect(host: HTMLElement): Emitted[] {
   const events: Emitted[] = [];
   host.addEventListener("setup-patch", (e) =>
@@ -29,7 +26,6 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupVenueScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** Changes either a `wt-input` or native select at `[data-test=field]`. */
 async function type(el: SetupVenueScreen, field: string, value: string): Promise<void> {
   const target = q(el, `[data-test=${field}]`)!;
   if (target instanceof HTMLSelectElement) {
@@ -43,7 +39,6 @@ async function type(el: SetupVenueScreen, field: string, value: string): Promise
   await el.updateComplete;
 }
 
-/** Toggles the invoice-locale checkbox for `locale` to `checked`, firing its `change`. */
 async function toggleLocale(el: SetupVenueScreen, locale: string, checked: boolean): Promise<void> {
   const box = q(el, `[data-test=locale-${locale}]`) as HTMLInputElement;
   box.checked = checked;
@@ -57,7 +52,6 @@ const ticked = (el: SetupVenueScreen): string[] =>
     .filter((input) => input.checked)
     .map((input) => input.value);
 
-/** The valid text-field values a complete venue carries; `addressLine2` is deliberately left blank. */
 const VALID: Record<string, string> = {
   country: "ES",
   taxId: "b 1234567 4",
@@ -74,7 +68,6 @@ const VALID: Record<string, string> = {
   rectificativeSeriesCode: "RF",
 };
 
-/** Fills every required text field with a valid value (leaving `addressLine2` blank), then any overrides. */
 async function fillValid(
   el: SetupVenueScreen,
   overrides: Record<string, string> = {},
@@ -84,7 +77,6 @@ async function fillValid(
   }
 }
 
-/** The nested location slice the valid `VALID` fixture emits — `addressLine2` blank becomes `null`. */
 const EXPECTED_LOCATION = {
   name: "Calle Mayor",
   fiscalTerritory: "ES-common",
@@ -117,8 +109,7 @@ describe("setup-venue-screen", () => {
     const events = collect(host);
     await fillValid(el);
     q(el, "[data-test=next]")!.click();
-    // The whole patch is pinned by field NAME — a mis-named field (this repo's dominant defect) fails here.
-    // The forward step is a screen-agnostic `setup-advance` (no target screen): the shell routes it.
+    // Pinned whole, so a mis-named field fails here.
     expect(events).toEqual([
       { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
       { kind: "advance", detail: null },
@@ -181,11 +172,6 @@ describe("setup-venue-screen", () => {
     expect(patch.venue?.location?.addressLine2).toBe("Piso 2");
   });
 
-  // Fix (m): the venue→cert/review decision moved to the shell, so this screen must NOT route by mode
-  // itself. With a live draft it still emits only the screen-agnostic `setup-advance` — no `setup-goto`
-  // to `cert` — proving the mode read was removed. The cert-vs-review branch is asserted in the shell
-  // (setup-app.test.ts). Prove-by-restore: put the old `mode === "live" ? "cert" ...` goto back and this
-  // flips red (a `setup-goto{cert}` would appear).
   it("emits a screen-agnostic advance even for a live draft (no in-screen cert routing)", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "live" },
@@ -262,11 +248,8 @@ describe("setup-venue-screen", () => {
     expect((q(el, "[data-test=addressLine2]") as unknown as { value: string }).value).toBe("");
   });
 
-  // The seed-once (`#seeded`) guard. A local edit must survive a later `draft` reassignment — the
-  // shell reassigns `draft` (a fresh reference) on every merge, so without the guard each such update
-  // would re-seed the fields and clobber whatever the operator typed. Prove-by-deletion: drop the
-  // `if (this.#seeded) return; this.#seeded = true;` guard in `willUpdate` and this flips red — the
-  // reassignment re-seeds `taxId` back to "B-RESEEDED", losing the "B-EDITED" edit.
+  // The shell reassigns `draft` on every merge, so re-seeding on each update would overwrite what the
+  // operator typed.
   it("seeds from the draft only once, so a later draft reassignment keeps local edits", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { venue: { taxId: "B-INITIAL" } },
@@ -277,14 +260,11 @@ describe("setup-venue-screen", () => {
     await type(el, "taxId", "B-EDITED");
     expect(val()).toBe("B-EDITED");
 
-    // A fresh draft object carrying a DIFFERENT taxId — the guard must stop willUpdate re-seeding.
     el.draft = { venue: { taxId: "B-RESEEDED" } };
     await el.updateComplete;
     expect(val()).toBe("B-EDITED");
   });
 
-  // The seriesCode-equality guard. Prove-by-deletion: drop the equality check (so it never adds to the
-  // invalid set) and this flips red — a same-series-code Next would then emit and advance.
   it("blocks Next when seriesCode equals rectificativeSeriesCode, marking both invalid", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
@@ -372,10 +352,7 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=error]")).toBeNull();
   });
 
-  // Fix (j): two simultaneous `role="alert"` regions double-announce to a screen reader. When BOTH a
-  // routed server error AND a client-validation failure are present, exactly ONE alert must render, and
-  // the CLIENT message wins (it names a problem in what the operator just typed; the server message is
-  // now stale). Prove-by-deletion: collapse the render back to two separate banners and the count is 2.
+  // The client message wins: it is about what the operator just typed, and the server's is stale.
   it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       errorMessage: "The country must match the fiscal territory.",
@@ -391,7 +368,6 @@ describe("setup-venue-screen", () => {
       ...summary.shadowRoot!.querySelectorAll("[role=alert]"),
     ];
     expect(alerts.length).toBe(1);
-    // The single region is the client banner; the stale server banner is suppressed.
     expect(q(el, "[data-test=error]")).not.toBeNull();
     expect(q(el, "[data-test=server-error]")).toBeNull();
     expect(alerts[0]!.textContent).toContain("There is a problem with this form");
@@ -444,10 +420,6 @@ describe("setup-venue-screen", () => {
     expect(events.some((e) => e.kind === "advance")).toBe(true);
   });
 
-  // The server refuses a venue whose fiscal text fields would produce a record the tax agency cannot
-  // accept, naming ONE field. This screen cannot evaluate that rule itself, so the shell hands the
-  // field down as `invalidField` and it is marked on sight with a sentence saying what is wrong.
-  // Prove-by-deletion: drop the `this.serverInvalid === key` term from `#field` and this flips red.
   it("marks the field the server refused and explains what is wrong with it", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "seriesCode",
@@ -455,19 +427,13 @@ describe("setup-venue-screen", () => {
     const input = q(el, "[data-test=seriesCode]")!;
     await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(input.hasAttribute("invalid")).toBe(true);
-    // The explanation renders BESIDE the field (inside `wt-input`, which owns the
-    // `aria-describedby` association), not as another page-level banner.
+    // Beside the field, inside `wt-input`, not as a page-level banner.
     expect(input.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
       "letters, numbers",
     );
     expect(q(el, "[data-test=legalName]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  // Nothing else tells the operator that anything happened: this screen renders no banner for a
-  // server-marked field, and both series codes sit at the bottom of roughly sixteen controls, so on a
-  // normal viewport the mark is off-screen on arrival and a screen reader announces nothing. Moving
-  // focus is what makes the return visible — and `wt-input` delegates focus, so the browser scrolls
-  // the native input into view. Prove-by-deletion: drop `updated()` and this flips red.
   it("moves focus to the refused field on arrival, so the operator sees where they landed", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "seriesCode",
@@ -477,15 +443,12 @@ describe("setup-venue-screen", () => {
     expect(el.shadowRoot!.activeElement).toBe(input);
   });
 
-  // A form with no server mark must not steal focus from wherever the operator was.
   it("moves no focus when the server refused nothing", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(el.shadowRoot!.activeElement).toBeNull();
   });
 
-  // The server names the operation description by its position in the request body; this screen calls
-  // the same field `operationDescription`. The shared map's `key` is what keeps the two in step.
   it("maps the server's nested field path onto this form's own field", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "location.operationDescription",
@@ -505,11 +468,6 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=taxId]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  // The one that matters most. `#next` rebuilds its own invalid set from scratch and returns early
-  // while that set is non-empty, so the server's mark is held SEPARATELY and cleared the moment the
-  // operator edits the field it names — otherwise the form stays permanently red on a field this
-  // screen has no rule for. Prove-by-deletion: drop the clear at the top of `#onField` and this flips
-  // red on the "not marked after editing" assertion.
   it("clears the server's mark once the operator edits that field, and Next still advances", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "seriesCode",
@@ -692,7 +650,6 @@ it("derives invoice language from the retained province after leaving Demo", asy
     },
   });
   expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(true);
-  // Spanish as well as Catalan: a shop in Catalonia issues in both.
   expect((q(el, "[data-test=locale-es-ES]") as HTMLInputElement).checked).toBe(true);
 });
 
@@ -701,9 +658,7 @@ it("shows the fiscal territory under the province, not above the address", async
   const nodes = [...el.shadowRoot!.querySelectorAll("[data-test]")].map((n) =>
     n.getAttribute("data-test"),
   );
-  // The line that answers "which fiscal territory?" must come after the control that decides it.
   expect(nodes.indexOf("fiscalTerritory")).toBeGreaterThan(nodes.indexOf("province"));
-  // And it sits with the other province-derived fact.
   expect(Math.abs(nodes.indexOf("fiscalTerritory") - nodes.indexOf("timeZone"))).toBe(1);
 });
 
@@ -717,7 +672,7 @@ it("pre-ticks Spanish alongside a regional language", async () => {
 it("puts Spanish first in the invoice languages it emits", async () => {
   // The checkbox reader above cannot see this: the boxes always render in the pack's own order, so a
   // helper that returned Catalan first would still read as ["es-ES", "ca-ES"]. The emitted patch is
-  // where the order is observable, and the order is what decides the first language on the invoice.
+  // where the order is observable.
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
   const events = collect(host);
   await fillValid(el, { postalCode: "08001", province: "08", city: "Barcelona" });

@@ -13,7 +13,6 @@ import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 
-/** The operator's name and credential fields, each a `wt-input`. All are required. */
 type AdminField = "firstNames" | "lastNames" | "displayName" | "email" | "password" | "pin";
 
 @customElement("setup-admin-screen")
@@ -30,10 +29,8 @@ export class SetupAdminScreen extends LitElement {
     `,
   ];
 
-  /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
 
-  /** The editable account fields. Seeding overlays whatever the draft already holds. */
   @state() private values: Record<AdminField, string> = {
     firstNames: "",
     lastNames: "",
@@ -45,10 +42,8 @@ export class SetupAdminScreen extends LitElement {
   @state() private visible = new Set<AdminField>();
   @state() private invalid = new Set<AdminField>();
 
-  /** True once a `Next` with a blank field has been rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
-  /** Guards {@link SetupAdminScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
 
   override willUpdate(): void {
@@ -57,11 +52,6 @@ export class SetupAdminScreen extends LitElement {
     this.#seedFromDraft();
   }
 
-  /**
-   * Overlay whatever admin details the shell's draft already holds onto the local field state, so
-   * Back-then-forward restores every value the operator entered. `??` keeps the local default ("") when
-   * a field is absent.
-   */
   #seedFromDraft(): void {
     const admin = this.draft.venue?.admin ?? {};
     this.values = {
@@ -78,8 +68,6 @@ export class SetupAdminScreen extends LitElement {
     event.stopPropagation();
     const prev = this.values;
     const values = { ...prev, [key]: event.detail.value };
-    // A first/last-name change re-derives the display name; `deriveDisplayName` keeps a customised
-    // one and regenerates an auto one, judged against the names it was last generated against.
     if (key === "firstNames" || key === "lastNames") {
       values.displayName = deriveDisplayName(
         prev.displayName,
@@ -92,11 +80,6 @@ export class SetupAdminScreen extends LitElement {
     this.values = values;
   }
 
-  /**
-   * Validate non-empty, then emit. A blank field blocks the emit, shows the banner, and marks the
-   * blank field(s) `invalid`; the guard is proven by deletion (drop the `invalid.size` check and a
-   * "blank fields do not advance" test flips red).
-   */
   #next(): void {
     const invalid = new Set<AdminField>();
     for (const key of [
@@ -134,7 +117,6 @@ export class SetupAdminScreen extends LitElement {
     dispatchSetupGoto(this, "mode");
   }
 
-  /** Renders one account field as a `wt-input`, bound to `this.values[key]` and its `invalid` state. */
   #field(label: string, key: AdminField, type = "text"): TemplateResult {
     const fieldPurpose = {
       firstNames: { name: "given-name", autocomplete: "given-name" },
