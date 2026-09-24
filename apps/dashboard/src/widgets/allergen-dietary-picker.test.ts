@@ -11,9 +11,7 @@ afterEach(cleanupWidgets);
 
 /**
  * Drives the single allergen `wt-combobox` exactly as the real primitive does: set its `.values` and
- * dispatch its `wt-change` carrying `{ values }`. This mirrors wt-combobox's own
- * `dispatchWtChange(this, sourceEvent, { values: this.values })`, so the test exercises the same seam
- * the widget sees in the app rather than a private helper.
+ * dispatch its `wt-change` carrying `{ values }`.
  */
 async function pickAllergens(el: AllergenDietaryPicker, values: string[]): Promise<void> {
   const combobox = el.shadowRoot!.querySelector<HTMLElement & { values: string[] }>(
@@ -26,7 +24,6 @@ async function pickAllergens(el: AllergenDietaryPicker, values: string[]): Promi
   await el.updateComplete;
 }
 
-/** Collects every `value` payload the widget emits over the test's lifetime. */
 function trackChanges(el: AllergenDietaryPicker): AllergenDietaryValue[] {
   const changes: AllergenDietaryValue[] = [];
   el.addEventListener("wt-change", (e) => changes.push((e as CustomEvent).detail.value));
@@ -151,10 +148,7 @@ describe("allergen-dietary-picker", () => {
     );
   });
 
-  // Token-painting check. No dashboard widget scans its stylesheet yet, so this mirrors the proven
-  // scan in packages/ui/src/no-hardcoded-chrome.test.ts: no hex, no functional/keyword colours, and
-  // no px above the 1px hairline exception, no rem/em at all. baseStyles is already held to this same
-  // guard inside packages/ui, so scanning the whole (baseStyles + local) sheet stays clean.
+  // Mirrors the scan in packages/ui/src/no-hardcoded-chrome.test.ts: up to 1px is allowed as a hairline.
   it("renders every colour, spacing and font from a --wt-* token", () => {
     const list = AllergenDietaryPicker.styles as CSSResult[];
     const css = list.map((s) => s.cssText).join("\n");

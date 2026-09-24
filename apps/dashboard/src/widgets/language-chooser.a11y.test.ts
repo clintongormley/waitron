@@ -3,19 +3,12 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import "./language-chooser.js";
 import type { LanguageChooser } from "./language-chooser.js";
 
-/**
- * The chooser fetches its option list on first open through the injected `loadLocales`; a fixture
- * stub stands in for `DashboardApi.getLocales`. axe is run against the themed host in BOTH themes so
- * the color-contrast check means what it means in the app. Two surfaces are covered: COLLAPSED (only
- * the `aria-haspopup`/`aria-expanded` trigger) and OPEN (the `role="menu"` of native
- * `role="menuitemradio"` options), the two states a screen-reader user meets.
- */
 const loadLocales = async () => [
   { code: "es-ES", label: "Español" },
   { code: "en-GB", label: "English" },
 ];
 
-/** Let the async fetch-on-open toggle settle (macrotask), then its repaint — mirrors the spec test. */
+/** Let the async fetch-on-open toggle settle (macrotask), then its repaint. */
 async function settle(el: LanguageChooser): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;

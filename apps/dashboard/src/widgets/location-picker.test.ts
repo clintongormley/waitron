@@ -10,7 +10,6 @@ const two: LocationSummary[] = [
   { id: "loc-2", name: "Annex" },
 ];
 
-/** The select inside the widget's shadow root, or null when the widget renders nothing (<=1 location). */
 function select(el: LocationPicker): HTMLSelectElement | null {
   return el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]");
 }

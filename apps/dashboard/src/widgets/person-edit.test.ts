@@ -32,8 +32,8 @@ describe("person-edit", () => {
     const modal = el.shadowRoot!.querySelector("wt-modal");
     expect(modal).not.toBeNull();
     await modal!.updateComplete;
-    // One shared grid gap (see profile-screen.ts's own ".fields"), not a per-field margin — so
-    // every row (wt-input as well as the role/status <label>s) stacks without overlapping.
+    // One shared grid gap, not a per-field margin — so every row (wt-input as well as the
+    // role/status <label>s) stacks without overlapping.
     const rows = [...el.shadowRoot!.querySelector(".fields")!.children] as HTMLElement[];
     expect(rows.length).toBeGreaterThan(0);
     for (let i = 1; i < rows.length; i++) {
@@ -46,8 +46,7 @@ describe("person-edit", () => {
       expect(select.required).toBe(true);
       expect(select.parentElement!.textContent).toContain("*");
     }
-    // No <hr> divider ahead of role/status — the profile screen's edit form doesn't have one
-    // either, one continuous field list instead.
+    // No <hr> divider ahead of role/status — one continuous field list instead.
     expect(el.shadowRoot!.querySelector("hr")).toBeNull();
   });
 
@@ -115,7 +114,7 @@ describe("person-edit", () => {
     change(el, "edit-first-names", "Augusta");
     await el.updateComplete;
     expect(displayValue()).toBe("Chef Ada");
-    // Clear it: generation resumes (the old edited-flag approach could not do this).
+    // Clear it: generation resumes.
     change(el, "edit-display-name", "");
     change(el, "edit-last-names", "Lovelace");
     await el.updateComplete;

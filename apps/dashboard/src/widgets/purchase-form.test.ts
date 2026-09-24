@@ -7,26 +7,22 @@ import type { PurchaseInvoice } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
-/** The base props: an open dialog. */
 function baseProps(overrides: Partial<PurchaseForm> = {}): Partial<PurchaseForm> {
   return { open: true, ...overrides };
 }
 
-/** The wt-dialog inside the form, once its own first render (which calls showModal) has settled. */
 async function openedDialog(el: PurchaseForm): Promise<HTMLDialogElement> {
   const wtDialog = el.shadowRoot!.querySelector("wt-dialog")!;
   await (wtDialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
   return wtDialog.shadowRoot!.querySelector("dialog")!;
 }
 
-/** Type into a wt-input by its data-test, via the composed `wt-change` it dispatches. */
 async function setInput(el: PurchaseForm, testId: string, value: string): Promise<void> {
   const input = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!;
   input.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await el.updateComplete;
 }
 
-/** Pick a native <select>'s option by its data-test. */
 async function setSelect(el: PurchaseForm, testId: string, value: string): Promise<void> {
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
   select.value = value;
@@ -34,20 +30,17 @@ async function setSelect(el: PurchaseForm, testId: string, value: string): Promi
   await el.updateComplete;
 }
 
-/** Click a control by its data-test. */
 async function click(el: PurchaseForm, testId: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.click();
   await el.updateComplete;
 }
 
-/** Resolve with the next event of `type` dispatched from the form host. */
 function nextEvent<T>(el: PurchaseForm, type: string): Promise<CustomEvent<T>> {
   return new Promise((resolve) =>
     el.addEventListener(type, (e) => resolve(e as CustomEvent<T>), { once: true }),
   );
 }
 
-/** Fill ONLY the header (a valid total), leaving the auto-present first VAT line blank. */
 async function fillHeaderOnly(el: PurchaseForm): Promise<void> {
   await setInput(el, "supplier-tax-id", "B12345678");
   await setInput(el, "supplier-name", "Distribuciones García SL");
@@ -57,7 +50,6 @@ async function fillHeaderOnly(el: PurchaseForm): Promise<void> {
   await setInput(el, "total", "121.00");
 }
 
-/** Fill the header + the first (auto-present) line with a valid single-rate invoice. */
 async function fillValid(el: PurchaseForm): Promise<void> {
   await fillHeaderOnly(el);
   await setInput(el, "line-rate-0", "21.00");
@@ -165,12 +157,10 @@ describe("purchase-form", () => {
   it("adds and removes VAT lines and sends them all", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
-    // Add a second line.
     await click(el, "add-line");
     await setInput(el, "line-rate-1", "10.00");
     await setInput(el, "line-base-1", "50.00");
     await setInput(el, "line-tax-1", "5.00");
-    // Add a third, then remove it.
     await click(el, "add-line");
     expect(el.shadowRoot!.querySelectorAll("[data-test^=line-rate-]").length).toBe(3);
     await click(el, "remove-line-2");
@@ -245,9 +235,6 @@ describe("purchase-form", () => {
   });
 
   // ── Empty / non-decimal amounts, caught client-side so the operator is told which one is wrong ──
-  // `purchasing-api.ts` refuses every one of these too, through `decimal()`, as
-  // `shared.invalid_decimal` -> 400. The form mirrors that screen so the message names the bad
-  // amount, in the operator's own words, without a round trip.
 
   it("blocks confirm on the default single BLANK VAT line (amounts_invalid, before any round trip)", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
@@ -284,8 +271,7 @@ describe("purchase-form", () => {
   );
 
   // A leading dot (`.5`) and a leading zero (`01.00`) are well-formed to a human and refused by the
-  // server: `decimal()` accepts neither, so both come back 400 `shared.invalid_decimal`. Both shapes
-  // are tried on a HEADER amount and on a LINE amount, which are separate code paths in the form.
+  // server: `decimal()` accepts neither.
   it.each([
     ["leading-dot total", { field: "total", value: ".5" }],
     ["leading-zero total", { field: "total", value: "01.00" }],
@@ -308,7 +294,7 @@ describe("purchase-form", () => {
   );
 
   // A blank/whitespace TOTAL is a missing REQUIRED field, so the required-field check (which runs
-  // first) wins — the operator is told to fill it in rather than to fix an amount. Either way, no 500.
+  // first) wins.
   it("blocks a whitespace total as fields_required, never reaching the server", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
@@ -337,14 +323,14 @@ describe("purchase-form", () => {
 
   it("clears the validation error once a header or line field is edited after a failed confirm", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
-    await click(el, "confirm"); // fails: fields empty
+    await click(el, "confirm");
     expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-    await setInput(el, "supplier-name", "Proveedor"); // editing a header field clears the banner
+    await setInput(el, "supplier-name", "Proveedor");
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
-    await click(el, "confirm"); // fails again (still incomplete)
+    await click(el, "confirm");
     expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-    await setInput(el, "line-rate-0", "21.00"); // editing a line field clears it too
+    await setInput(el, "line-rate-0", "21.00");
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
@@ -355,7 +341,6 @@ describe("purchase-form", () => {
     await setInput(el, "line-rate-1", "10.00");
     await setInput(el, "line-base-1", "50.00");
     await setInput(el, "line-tax-1", "5.00");
-    // Flip only the SECOND line's kind — the first must stay `ordinary`.
     await setSelect(el, "line-kind-1", "capital");
     const created = nextEvent<{ lines: { kind: string }[] }>(el, "create-purchase");
     await click(el, "confirm");

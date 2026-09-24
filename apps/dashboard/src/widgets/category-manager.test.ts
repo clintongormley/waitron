@@ -34,8 +34,6 @@ describe("category-manager", () => {
     expect(rows[1]!.textContent).toContain("Postres");
   });
 
-  // The create field's label and the create button render through the i18n layer (localised UI
-  // chrome). Category NAMES stay raw operator DATA (covered by the row tests above), not translated.
   it("renders the create field label and button from the i18n layer", async () => {
     const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", { categories });
     expect(el.shadowRoot!.querySelector("[data-test=category-name]")!.getAttribute("label")).toBe(
@@ -91,8 +89,6 @@ describe("category-manager", () => {
     expect(fired).toBe(false);
   });
 
-  // create-category must escape the widget's shadow boundary to reach the catalogue screen, so it is
-  // dispatched bubbles+composed — pinned so a future edit does not quietly drop either flag.
   it("emits create-category as a bubbling, composed event", async () => {
     const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", { categories });
     const seen = new Promise<Event>((resolve) => el.addEventListener("create-category", resolve));

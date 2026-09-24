@@ -9,9 +9,7 @@ import type {
   ProductVariantInput,
 } from "@waitron/catalogue/src/product-types.js";
 
-/** One variant as the product editor's draft holds it — catalogue's own `ProductVariantInput` (a new
- * variant omits `id`, an edited one carries it). The three names fall back INDEPENDENTLY and the
- * fallback belongs to `packages/catalogue/src/product-presentation.ts`, never to a screen. */
+/** A new variant omits `id`; an edited one carries it. */
 export type EditorVariant = ProductVariantInput;
 
 /** The product editor's DRAFT: the wire body the editor sends (`ProductEditorBody`), plus an optional
@@ -26,10 +24,8 @@ export type ProductEditorDraft = ProductEditorBody & {
   courseId: string | null;
   inherited?: InheritedValues | null;
 };
-/** A modifier list as the product editor's Modifiers section reads one: its id and its plain STAFF
- * name. `ExtraList` and `OptionList` (packages/catalogue/src/modifier-list-types.ts) both satisfy
- * this; their customer-facing and kitchen names are left out because this surface shows the staff
- * name and nothing else (docs/developers/products.md). */
+/** A modifier list's id and plain STAFF name: the product editor and the products list show that
+ * name and no other (docs/developers/products.md). */
 export interface ModifierListChoice {
   id: string;
   name: string;
@@ -45,8 +41,8 @@ export function modifierKey(ref: ProductModifierRef): string {
 /**
  * Every loaded list's plain STAFF name, by {@link modifierKey}. Built once when the loaded sets
  * change rather than searched per attachment, because both surfaces resolve a name per attachment
- * per row and do it again on every keystroke near them: the editor's form re-renders on each one
- * (`wt-input` reports on `input`), and the products table re-reads every row's search text.
+ * per row and do it again on every keystroke near them: the editor's form re-renders on each one,
+ * and the products table re-reads every row's search text.
  */
 export function modifierListNames(
   extraLists: readonly ModifierListChoice[],
@@ -60,11 +56,8 @@ export function modifierListNames(
 }
 
 /**
- * The plain STAFF name of the list an attachment points at, read from {@link modifierListNames}.
- * The ref's `kind` is part of the key — an `extras` ref never resolves to an options list — so that
- * mapping lives here once, shared by the product editor's Modifiers section and the products list's
- * Modifiers column. A list neither loaded set holds reads as the missing-choice placeholder, in the
- * one wording both surfaces use: a blank cell there says the product carries nothing.
+ * A list neither loaded set holds reads as the missing-choice placeholder: a blank cell in the
+ * products list's Modifiers column would say the product carries nothing.
  */
 export function modifierListName(
   ref: ProductModifierRef,

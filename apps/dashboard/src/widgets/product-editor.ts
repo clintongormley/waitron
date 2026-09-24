@@ -58,7 +58,6 @@ import { allergenName, vatClassName } from "../i18n/domain.js";
 
 const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
 
-/** Separates the parts of a collapsed section's summary. */
 const SUMMARY_SEPARATOR = " · ";
 
 /** The two combobox rows that open a nested form instead of attaching a list that exists. Neither
@@ -70,7 +69,6 @@ const CREATE_OPTION_LIST = "create-options";
  * same thing wherever it is named. */
 const KIND_TITLE = { extras: "extras.title", options: "options.title" } as const;
 
-/** A list named for a control with room for one string: its name, then which kind it is. */
 function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
   return `${name}${SUMMARY_SEPARATOR}${t(KIND_TITLE[kind])}`;
 }
@@ -108,8 +106,6 @@ const SERVER_FIELDS: Record<string, string> = {
 /**
  * The editor field a rejected product write's `field` belongs to, or null when this editor cannot
  * show it. A key with no input of its own (`active`) is shown in the editor's error summary alone.
- * The composing screen uses it to put the server's refusal beside the field it names, which is also
- * what opens the section that field is folded into.
  */
 export function productEditorField(field: string, defaultLanguage: string): string | null {
   const variant = /^variants\.(\d+)\.(name|unitPrice|active)$/.exec(field);
@@ -126,15 +122,13 @@ export function productEditorField(field: string, defaultLanguage: string): stri
 /**
  * The editor field a refused TRANSLATION belongs to. `content.translation_required` names the
  * language whose text is missing and never the value that lacks it
- * (`packages/catalogue/src/content-languages.ts`; the shape is pinned by
- * `packages/catalogue/src/product-editor.test.ts`), and one save carries several translated values:
- * the product's customer name and one per variant. Each of them missing that language is a fault the
- * save has to clear, so this points at the first and the next save reports whatever is still missing.
+ * (`packages/catalogue/src/content-languages.ts`), and one save carries several translated values:
+ * the product's customer name and one per variant. This points at the first, and the next save
+ * reports whatever is still missing.
  *
- * Focus goes to the input for the language the SERVER named, not the first one on screen: that is
- * the only input whose emptiness refused the save. A variant's names are edited in its own window,
- * so a variant's problem belongs to its ROW. The server checks only the variants saved Active
- * (`setProductVariants`, packages/catalogue/src/variants.ts), so an Inactive one is never blamed.
+ * A variant's names are edited in its own window, so a variant's problem belongs to its ROW. The
+ * server checks only the variants saved Active (`setProductVariants`,
+ * packages/catalogue/src/variants.ts), so an Inactive one is never blamed.
  */
 export function productEditorTranslationField(
   value: {
@@ -176,9 +170,6 @@ function emptyDraft(): ProductEditorDraft {
 }
 
 /**
- * The product editor: one short form whose optional detail folds away behind `wt-disclosure`
- * sections, over a draft nothing writes to the server until Save.
- *
  * The product's own name is the plain STAFF name. The translated customer-facing name and the
  * kitchen name are separate optional fields that fall back to it, and the fallback belongs to
  * `packages/catalogue/src/product-presentation.ts`, never to a screen. The kitchen routing (station
@@ -186,10 +177,8 @@ function emptyDraft(): ProductEditorDraft {
  * rolls the product back instead of leaving it half saved.
  *
  * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
- * field the variant may leave blank shows blank, with the parent's value as its hint (spec §4.4,
- * §9.1), and there is no Modifiers or Variants section. The names are never hinted (§15.2). The
- * description is hinted only while EVERY language of it is blank, because a variant takes the
- * parent's description as one value across all languages, never language by language.
+ * field the variant may leave blank shows blank, with the parent's value as its hint, and there is
+ * no Modifiers or Variants section. The names are never hinted.
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
@@ -349,8 +338,6 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  /** Every extras list and every options list the composing screen has loaded — what the Modifiers
-   * section can attach, and where an attached row reads its name from. */
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
@@ -376,8 +363,6 @@ export class ProductEditor extends LitElement {
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
   #focusField: string | null = null;
-  /** The loaded lists' names, ready to look up: the Modifiers section reads one per attached row
-   * and the combobox offers every unattached list, on each of this form's renders. */
   #listNames: ReadonlyMap<string, string> = new Map();
 
   readonly #reorder = new ReorderController(this, {
@@ -469,8 +454,6 @@ export class ProductEditor extends LitElement {
   private error(name: string) {
     return this.fieldErrors[name] ?? this.errors[name] ?? "";
   }
-  /** The reported problems in the order the fields appear, which is the order the summary lists
-   * them and the order the first-error focus follows. */
   private get allErrors(): Record<string, string> {
     return { ...this.errors, ...this.fieldErrors };
   }
@@ -484,14 +467,11 @@ export class ProductEditor extends LitElement {
   }
   /**
    * The reported problems that belong to a variant ROW, against the variant OBJECT rather than its
-   * position. A variant is edited in its own window, so the table is the only place in the editor
-   * its problem can be shown — and a reorder rewrites the array without revalidating, so a problem
-   * held against an index would move onto whichever variant landed there and leave the offending
-   * one unmarked. `dashboard-variant-table` keys its rows by the same identity, so the two agree.
+   * position: a reorder rewrites the array without revalidating, so a problem held against an index
+   * would move onto whichever variant landed there and leave the offending one unmarked.
    *
    * Editing or toggling a variant replaces its object and so drops its mark, which is right: that
-   * verdict was about the value the row no longer holds. The next Save re-reports whatever is still
-   * wrong.
+   * verdict was about the value the row no longer holds.
    */
   #variantProblems = new Map<EditorVariant, string>();
   private recordVariantProblems(): void {
@@ -549,9 +529,7 @@ export class ProductEditor extends LitElement {
     const abbr = this.text(unit.abbreviation);
     return abbr ? `${name} (${abbr})` : name;
   }
-  /** The pricing unit's short form — what the price field's button and the variants table's price
-   * column header both show. Never empty: a product with no stored unit is sold by the each, and
-   * that is what it reads as. */
+  /** Never empty: a product with no stored unit is sold by the each, and that is what it reads as. */
   private get unitShortLabel(): string {
     const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
     const unit = this.units.find((unit) => unit.id === unitId);
@@ -571,7 +549,6 @@ export class ProductEditor extends LitElement {
   private change<K extends keyof ProductEditorDraft>(key: K, value: ProductEditorDraft[K]) {
     this.draft = { ...this.draft, [key]: value };
   }
-  /** Replaces one variant in the draft by its index in the whole list. */
   private changeVariant(index: number, next: (variant: EditorVariant) => EditorVariant): void {
     this.change(
       "variants",
@@ -585,12 +562,7 @@ export class ProductEditor extends LitElement {
       new CustomEvent("wt-create-related", { detail: { kind }, bubbles: true, composed: true }),
     );
   }
-  /**
-   * A nested create returns through the composing screen, without reseeding the product.
-   *
-   * The kinds are `ProductChildKind`'s (`apps/dashboard/src/state/product-child-create.ts`), which
-   * is what the composing screen's controller calls this with.
-   */
+  /** A nested create returns through the composing screen, without reseeding the product. */
   selectRelated(kind: ProductChildKind, id: string): void {
     if (kind === "unit") this.change("unitId", id);
     if (kind === "category" && !this.draft.categoryIds.includes(id)) {
@@ -605,18 +577,13 @@ export class ProductEditor extends LitElement {
       this.change("modifiers", [...this.draft.modifiers, { kind, id }]);
     }
   }
-  /**
-   * Put focus back on the control that opened a child form, once that form closes.
-   *
-   * Both kinds of modifier list are added from the ONE combobox the Modifiers section renders, so
-   * both return focus there.
-   */
+  /** Both kinds of modifier list are added from the ONE combobox, so both return focus there. */
   returnRelatedFocus(kind: ProductChildKind): void {
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
   }
-  /** Save the draft; `restore` also makes an Inactive product Active again (spec §15.6). Nothing
-   * else on the form changes `active`, so a plain Save of an Inactive product keeps it Inactive. */
+  /** `restore` also makes an Inactive product Active again. Nothing else on the form changes
+   * `active`, so a plain Save of an Inactive product keeps it Inactive. */
   private save(event: Event, restore = false) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
@@ -754,8 +721,8 @@ export class ProductEditor extends LitElement {
     </div>`;
   }
 
-  /** A variant with no categories of its own is in its parent's, reporting category included (V12),
-   * so the two are named together. */
+  /** A variant with no categories of its own is in its parent's, reporting category included, so
+   * the two are named together. */
   private categoriesHint() {
     const parent = this.inherited;
     if (!parent || this.draft.categoryIds.length) return nothing;
@@ -1086,8 +1053,6 @@ export class ProductEditor extends LitElement {
     </fieldset>`;
   }
 
-  /** The parent's quick variants section: the common fields inline, each variant's full set of
-   * overrides on its own page (spec §4.4). */
   private renderVariants() {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
     const unsaved = this.value !== null && !sameValue(this.draft, this.value);
@@ -1151,8 +1116,8 @@ export class ProductEditor extends LitElement {
               @wt-remove=${(event: CustomEvent<{ index: number }>) => {
                 event.stopPropagation();
                 const { index } = event.detail;
-                // Removing makes a saved variant Inactive (spec §15.6); one never saved has no row
-                // to make Inactive, so it simply leaves the draft.
+                // Removing makes a saved variant Inactive; one never saved has no row to make
+                // Inactive, so it simply leaves the draft.
                 if (this.draft.variants[index]?.id === undefined)
                   this.change(
                     "variants",
@@ -1239,10 +1204,8 @@ export class ProductEditor extends LitElement {
   }
 
   /**
-   * One ordered list mixing both kinds (spec
-   * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §5), added to from a SINGLE
-   * combobox rather than one per kind: every option's label and every attached row's Type cell name
-   * the kind already, so a second control would add chrome without adding anything to read.
+   * One ordered list mixing both kinds, added to from a SINGLE combobox rather than one per kind:
+   * every option's label and every attached row's Type cell name the kind already.
    */
   private renderModifiers() {
     const attached = this.draft.modifiers;

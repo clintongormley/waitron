@@ -39,7 +39,6 @@ it("emits the chosen category ids and reporting id from the comboboxes", async (
     languages: { defaultLanguage: "en", languages: ["en"] },
     value: { categoryIds: ["food"], primaryCategoryId: "food" },
   });
-  // multi-select the drink category
   const multi = el.el.shadowRoot!.querySelector<HTMLElement & { values: string[] }>(
     'wt-combobox[data-test="member-categories"]',
   )!;

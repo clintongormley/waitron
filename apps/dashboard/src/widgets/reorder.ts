@@ -1,5 +1,4 @@
-/** Move the item at `from` to index `to`, returning a new array. An out-of-range `from` or `to` is
- * a no-op: without that, either one silently reorders the wrong item or inserts an undefined. */
+/** An out-of-range `from` or `to` is a no-op. */
 export function reorder<T>(list: readonly T[], from: number, to: number): T[] {
   if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to)
     return [...list];

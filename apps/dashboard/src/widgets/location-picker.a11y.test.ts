@@ -5,11 +5,8 @@ import type { LocationPicker } from "./location-picker.js";
 import type { LocationSummary } from "../api/client.js";
 
 /**
- * The location picker scanned by axe in BOTH themes so the color-contrast check on the native
- * `<select>` (surface/text tokens, via `selectStyles`) means what it means in the app. Only the SHOWN
- * surface (more than one location) has anything to scan — the widget renders NOTHING for a single
- * location — so that is the one state covered. The select carries an accessible name from its wrapping
- * `<label>`.
+ * Only the SHOWN surface (more than one location) has anything to scan — the widget renders NOTHING
+ * for a single location.
  */
 const locations: LocationSummary[] = [
   { id: "loc-1", name: "Main" },

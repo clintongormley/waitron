@@ -9,8 +9,6 @@ import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
-/** The shape `crypto.randomUUID()` produces, which is what `parseExtraListInput`'s `id()` accepts
- * (`isUuid` in packages/shared/src/ids.ts). */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const BACON = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
@@ -19,10 +17,8 @@ const BACON_ITEM = "11111111-1111-4111-8111-111111111111";
 const EGG_ITEM = "22222222-2222-4222-8222-222222222222";
 
 /**
- * A product carrying every field the wire type declares; each fixture overrides the few this form
- * reads — `id`, `name` and `unitPrice`. The two products below are priced DIFFERENTLY on purpose:
- * the inheritance hint (spec 2026-09-18-one-product-model-design.md §9.1) is only checkable when a
- * placeholder taken from the wrong product would read differently from the right one.
+ * The two products below are priced DIFFERENTLY on purpose: the inheritance hint is only checkable
+ * when a placeholder taken from the wrong product would read differently from the right one.
  *
  * All THREE of a product's names read differently too (CLAUDE.md §3). A blank `kitchenName` would
  * fall back to the staff name, so a cell reading the kitchen name where the staff name belongs would
@@ -129,8 +125,6 @@ function picker(el: ExtraListForm): HTMLElementTagNameMap["wt-combobox"] {
   )!;
 }
 
-/** Choose a product in the picker and add it as a row, the way the operator does: open the
- * combobox, click the product's own row, then Add. */
 async function addItem(el: ExtraListForm, name: string): Promise<void> {
   const combobox = picker(el);
   await combobox.updateComplete;
@@ -149,7 +143,6 @@ function text(el: ExtraListForm, testId: string): string {
   return el.shadowRoot!.querySelector(`[data-test="${testId}"]`)!.textContent!.trim();
 }
 
-/** Every message the summary is showing, in order. */
 function summary(el: ExtraListForm): string[] {
   const box = el.shadowRoot!.querySelector("wt-form-error-summary")!;
   return [...box.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
@@ -187,9 +180,6 @@ it("submits a new list once, minting an id for every item it was given", async (
     expect.stringMatching(UUID),
     expect.stringMatching(UUID),
   ]);
-  // The point of minting: `writeItems` deletes every item of the list and re-inserts the body's
-  // under `item.id ?? randomUUID()` (packages/catalogue/src/extras.ts), so a row keeps its identity
-  // across a save only because the body carried an id for it.
   expect(value).toEqual({
     name: "Add-ons",
     customerName: { en: "Make it yours", es: "Añádele algo" },
@@ -250,16 +240,11 @@ it("hints an inherited price with the product's own and submits it as null", asy
   await addItem(el, "Fried egg");
   await addItem(el, "Bacon");
 
-  // The inheritance hint (spec §9.1): the field is EMPTY while the item inherits, and the price it
-  // would fall back to is the placeholder. The two products are priced differently, so a hint read
-  // off the wrong row reads differently too.
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").value).toBe("");
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").placeholder).toBe("0.80");
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").placeholder).toBe("1.50");
 
   await click(el, "save");
-  // A blank stays null rather than the product's price copied in, which is what keeps "inherits"
-  // and "set to the same number" distinct in the stored row.
   expect(submitted[0]!.items.map((item) => item.price)).toEqual([null, null]);
 });
 
@@ -297,8 +282,6 @@ it("refuses a maximum below the minimum on the MAXIMUM field, as the contract na
   await click(el, "save");
 
   expect(submitted).toEqual([]);
-  // `parseExtraListInput` reports this as `maxPicks`, and says why: the cap is the field the
-  // manager just contradicted (packages/catalogue/src/extra-contract.ts).
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "max-picks").error).toBe(
     t("extras.max_picks_too_low"),
   );
@@ -310,8 +293,7 @@ it("refuses a pick bound that is not a whole number within the allowed limit", a
   const { el, host } = await mount({ value: addons });
   const submitted = record(host);
 
-  // Above `MAX_MODIFIER_INTEGER` (packages/catalogue/src/modifier-limits.ts): without the ceiling
-  // the value reaches PostgreSQL as `22003`, carrying no field to put a message beside.
+  // Above `MAX_MODIFIER_INTEGER` (packages/catalogue/src/modifier-limits.ts).
   await type(el, "min-picks", "2147483648");
   await click(el, "save");
 
@@ -341,8 +323,6 @@ it("refuses an in-use list with no products, and saves the same list once it is 
   expect(text(el, "items-error")).toContain(t("extras.items_required"));
   expect(summary(el)).toContain(t("extras.items_required"));
 
-  // The server makes the same split: an inactive list is never asked, so it may be empty
-  // (`if (list.active && items.length === 0)` in extra-contract.ts).
   await toggle(el, "active", false);
   await click(el, "save");
   expect(submitted).toHaveLength(1);
@@ -409,8 +389,6 @@ it("refuses a price the product-price rule does not accept", async () => {
 it("puts a rejected field's message beside the input the server named and in the summary", async () => {
   const { el } = await mount({
     value: addons,
-    // The paths `parseExtraListInput` reports (extra-contract.ts), as the screen receives them in
-    // `AppError.params.field`.
     fieldErrors: {
       kitchenName: "Too long for the kitchen.",
       "items.1.maxQuantity": "Too many of those.",
@@ -468,15 +446,12 @@ it("names a product it was given no row for rather than rendering an empty cell"
 
   expect(text(el, "item-0-product")).toBe("Bacon");
   expect(text(el, "item-1-product")).toBe(t("extras.unknown_product"));
-  // With no product to read a price from there is no hint to show, and the field stays empty.
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").placeholder).toBe("");
 });
 
 it("offers every product it was given, and adds nothing until one is chosen", async () => {
   const { el } = await mount();
 
-  // The picker is the house combobox, so the operator searches a list that is every product of
-  // every catalogue rather than scrolling a native dropdown.
   expect(picker(el).options).toEqual([
     { value: BACON, label: "Bacon" },
     { value: EGG, label: "Fried egg" },
@@ -487,8 +462,6 @@ it("offers every product it was given, and adds nothing until one is chosen", as
 
   await addItem(el, "Bacon");
   expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
-  // The picker returns to nothing chosen, so clicking Add again cannot repeat the last product by
-  // accident.
   expect(picker(el).value).toBe("");
 });
 
@@ -538,11 +511,8 @@ it("paints its own error text with the danger token and keeps the row controls t
 });
 
 // A lone `wt-input` in a `<td>` has no width of its own, so an automatic table layout gives the
-// column whatever its HEADER needs and nothing more. The price header is the shortest word in the
-// table, which squeezed the field below its own value: at phone width "12.50" rendered as "12.5"
-// with the rest scrolled out of a box the operator cannot widen. Measured, not asserted on text —
-// `.value` reads "12.50" either way, which is why the whole suite passed while the number on screen
-// was wrong. The sibling options form fixes the same mechanism with the same token.
+// column whatever its HEADER needs and nothing more. Measured, not asserted on text — `.value` reads
+// "12.50" either way.
 it("shows a whole price, not a truncated one, at phone width", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -577,7 +547,6 @@ it("puts each list-level refusal beside the input it names, and a switch's in th
     },
   });
 
-  // A refusal naming the whole translated map is shown against the first language on screen.
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "customer-name-en").error).toBe(
     "Needs a customer-facing name.",
   );

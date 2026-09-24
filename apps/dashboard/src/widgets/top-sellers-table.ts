@@ -2,33 +2,24 @@ import { type TemplateResult, css, html } from "lit";
 import type { TopSellerRow } from "../api/client.js";
 
 /**
- * The localised STRINGS a screen supplies to {@link renderTopSellers}. Each screen passes its OWN
- * resolved i18n values — the overview through its `overview.*` keys, the sales screen through its
- * `sales.*` keys — so the two namespaces stay deliberately UN-unified (a wording change to one screen
- * never silently moves the other). `empty` is the no-rows message; `emptyTest` is the data-test hook
- * for that empty state (both screens use `"empty"` today).
+ * Each screen passes its OWN resolved i18n values — the overview through its `overview.*` keys, the
+ * sales screen through its `sales.*` keys — so the two namespaces stay deliberately UN-unified (a
+ * wording change to one screen never silently moves the other).
  */
 export interface TopSellersLabels {
   /** The product-name column header. */
   title: string;
-  /** The quantity column header. */
   quantity: string;
-  /** The total column header. */
   total: string;
-  /** The message shown when there are no top sellers. */
   empty: string;
-  /** The data-test attribute for the empty-state `<p>`. */
   emptyTest: string;
 }
 
 /**
- * A shared TOP-SELLERS TABLE used by both reporting screens: one row per product (staff name,
- * quantity, total), each followed by one indented row per variant sold under it, or a muted
- * empty-state line when there are none. A pure render FUNCTION (see {@link renderMetric}), so the
- * calling screen's own `table`/`th`/`td`/`.num`/`.muted` styles apply; a screen adds
- * {@link topSellersStyles} for the variant rows. A variant row's header repeats its product's name
- * in visually hidden text — "Wine by the glass, Wine 175" — so the nesting is not carried by the
- * indent alone. Names are the plain staff names a sales report shows — no locale lookup.
+ * A pure render FUNCTION, so the calling screen's own `table`/`th`/`td`/`.num`/`.muted` styles apply;
+ * a screen adds {@link topSellersStyles} for the variant rows. A variant row's header repeats its
+ * product's name in visually hidden text so the nesting is not carried by the indent alone. Names are
+ * the plain staff names a sales report shows — no locale lookup.
  */
 export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels): TemplateResult {
   if (rows.length === 0) {
@@ -66,8 +57,6 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
   </table>`;
 }
 
-/** The variant rows' chrome for {@link renderTopSellers}: add it to a screen's `static styles`
- * beside the screen's own table rules. Tokens only, so it follows the venue's theme. */
 export const topSellersStyles = css`
   th.seller-variant {
     padding-inline-start: calc(var(--wt-space-2) + var(--wt-space-4));

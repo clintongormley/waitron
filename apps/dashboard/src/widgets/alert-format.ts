@@ -21,10 +21,9 @@ export function screenTargetOf(
     : null;
 }
 
-/** Marks an incident handled, then refreshes every query reading incidents unless the caller has
- * moved on. Invalidates rather than re-watching: while another observer (the bell or the Alerts
- * screen) holds the same query, its shared entry survives a release un-dirtied, so a re-watch is
- * handed the cached value. */
+/** Invalidates rather than re-watching: while another observer (the bell or the Alerts screen) holds
+ * the same query, its shared entry survives a release un-dirtied, so a re-watch is handed the cached
+ * value. */
 export async function markAlertHandled(
   api: Pick<DashboardApi, "markIncidentHandled" | "liveData">,
   incidentId: string,

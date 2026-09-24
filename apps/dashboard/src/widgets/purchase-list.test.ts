@@ -7,7 +7,6 @@ import { PurchaseList } from "./purchase-list.js";
 
 afterEach(cleanupWidgets);
 
-/** A representative received invoice; tests override the field they exercise via a spread. */
 function invoice(overrides: Partial<PurchaseInvoice> = {}): PurchaseInvoice {
   return {
     id: "pi-1",
@@ -63,10 +62,6 @@ describe("purchase-list", () => {
     expect((await detail).id).toBe("pi-42");
   });
 
-  // ── Delete needs a confirming second click (a factura recibida is re-keyable, but an accidental
-  //    single-click delete costs a full re-entry). The first click ARMS the row; the second emits. ──
-
-  /** The Delete control of `id`, re-queried each time (its label/aria flips on arm). */
   function del(el: PurchaseList, id: string): HTMLElement {
     return el.shadowRoot!.querySelector<HTMLElement>(`[data-test=delete-${id}]`)!;
   }
@@ -80,7 +75,6 @@ describe("purchase-list", () => {
     del(el, "pi-7").click();
     await el.updateComplete;
     expect(fired).toBe(false);
-    // The armed control's label and aria-label change to the confirm prompt.
     const control = del(el, "pi-7");
     expect(control.textContent!.trim()).toBe(t("purchase.delete_confirm", "es-ES"));
     expect(control.getAttribute("aria-label")).toContain(t("purchase.delete_confirm", "es-ES"));
@@ -98,7 +92,6 @@ describe("purchase-list", () => {
     await el.updateComplete;
     del(el, "pi-7").click(); // confirm
     expect((await detail).id).toBe("pi-7");
-    // After confirming, the control disarms back to the plain Delete label.
     await el.updateComplete;
     const control = del(el, "pi-7");
     expect(control.textContent!.trim()).toBe(t("purchase.delete", "es-ES"));
@@ -148,7 +141,6 @@ describe("purchase-list", () => {
     });
     del(el, "pi-7").click(); // arm
     await el.updateComplete;
-    // A pointerdown whose composed path includes the armed control must NOT disarm it.
     del(el, "pi-7").dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(del(el, "pi-7").getAttribute("data-armed")).toBe("true");
@@ -165,7 +157,6 @@ describe("purchase-list", () => {
     expect(del(el, "pi-7").getAttribute("data-armed")).toBeNull();
   });
 
-  // Both events must escape this widget's shadow boundary to reach the screen — bubbles+composed.
   it("emits edit-purchase and delete-purchase as bubbling, composed events", async () => {
     const { el } = await mountWidget<PurchaseList>("dashboard-purchase-list", {
       invoices: [invoice({ id: "pi-9" })],

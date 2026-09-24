@@ -9,8 +9,6 @@ import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
-/** The shape `crypto.randomUUID()` produces, which is what `parseOptionListInput`'s `id()` accepts
- * (`isUuid` in packages/shared/src/ids.ts). */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const RARE = "11111111-1111-4111-8111-111111111111";
@@ -80,7 +78,6 @@ async function click(el: OptionListForm, testId: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** Every message the summary is showing, in order. */
 function summary(el: OptionListForm): string[] {
   const box = el.shadowRoot!.querySelector("wt-form-error-summary")!;
   return [...box.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
@@ -121,9 +118,6 @@ it("submits a new list once, minting an id for every label so a brand-new one ca
     expect.stringMatching(UUID),
     expect.stringMatching(UUID),
   ]);
-  // The point of minting: `parseOptionListInput` refuses a `defaultLabelId` that names no label in
-  // the submitted array (option-contract.ts), so a never-saved label can only be preselected if the
-  // form sends it with an id of its own.
   expect(value.defaultLabelId).toBe(value.labels[1]!.id);
   expect(value).toEqual({
     name: "Cooked",
@@ -185,8 +179,6 @@ it("refuses an active list with no available label itself, beside the labels and
   );
   expect(summary(el)).toContain(message);
 
-  // The same list is savable the moment it is not being offered — which is what the server does
-  // too (`if (list.active && !labels.some(...))` in option-contract.ts).
   await toggle(el, "active", false);
   await click(el, "save");
   expect(submitted).toHaveLength(1);
@@ -226,8 +218,6 @@ it("refuses a label with no name of its own, beside that label's name field", as
 it("puts a rejected field's message beside the input the server named and in the summary", async () => {
   const { el } = await mount({
     value: cooked,
-    // The paths `parseOptionListInput` reports (option-contract.ts), as the screen receives them in
-    // `AppError.params.field`.
     fieldErrors: { kitchenName: "Too long for the kitchen.", "labels.1.name": "Already used." },
   });
 
@@ -280,8 +270,6 @@ it("shows a default whose label is unavailable as no preselection rather than as
   expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
 
   await click(el, "save");
-  // `parseOptionListInput` would drop this to null anyway; sending null means the screen and the
-  // stored row already agree, with nothing refused on the way.
   expect(submitted[0]!.defaultLabelId).toBeNull();
 });
 
@@ -360,10 +348,8 @@ it("paints its own error text with the danger token and keeps the row controls t
 
 /**
  * The preselect control is a native radio, so the user agent draws its CHECKED dot and only
- * `accent-color` hands that drawing the brand colour — the same declaration
- * packages/ui/src/components/wt-data-table.ts and apps/dashboard/src/screens/printers-screen.ts give
- * their own native controls. The UNCHECKED fill is a separate matter settled by `color-scheme`
- * (packages/ui-core/src/tokens/colors.test.ts), which this says nothing about.
+ * `accent-color` hands that drawing the brand colour. The UNCHECKED fill is a separate matter settled
+ * by `color-scheme`, which this says nothing about.
  */
 it("hands the preselect radio the brand colour to draw its checked dot with", async () => {
   const { el, host } = await mount({ value: cooked });
@@ -373,15 +359,6 @@ it("hands the preselect radio the brand colour to draw its checked dot with", as
   expect(getComputedStyle(radio).accentColor).toBe("rgb(1, 2, 3)");
 });
 
-/**
- * Found by opening the form and reading it: the two single-input cells carried no minimum width, so
- * the table's automatic layout collapsed each to `wt-input`'s own `--wt-tap-min` floor and a real
- * label's name was cut off mid-word — at 1280px, with unused space to the right of the table.
- * Measured before the fix: a 68px box around a 105px value ("Poco hecho" rendered as "Poco h"). The
- * customer-name cell beside it was never affected, because `.cell-stack` already carries the shared
- * sizing token. The kitchen-name field takes the same room: its placeholder is the STAFF name, so a
- * blank one shows the same string this test measures.
- */
 it("leaves the staff-name field wide enough for a real label name", async () => {
   const { el } = await mount({
     value: { ...cooked, labels: [{ ...cooked.labels[0]!, name: "Poco hecho" }] },

@@ -15,10 +15,6 @@ import { t } from "../i18n/t.js";
 const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
 
-/** Edits account details, role and status. Credential resets and deactivate/reactivate live on the
- * row's own kebab menu (dashboard-staff-list.ts) — not duplicated here — since the confirmation
- * flow for those is already there. Resending a pending invitation stays as its own form action:
- * it isn't destructive enough to need a confirmation step either way. */
 @customElement("dashboard-person-edit")
 export class PersonEdit extends LitElement {
   static override styles = [
@@ -107,7 +103,7 @@ export class PersonEdit extends LitElement {
     if (field === "firstNames" || field === "lastNames") {
       const next = { ...this.details, [field]: value };
       // Auto-fill the display name only while it still matches the generated form, so it resumes
-      // generating after the field is cleared — the same shared rule the other three forms use.
+      // generating after the field is cleared.
       next.displayName = deriveDisplayName(
         this.details.displayName,
         this.details.firstNames,

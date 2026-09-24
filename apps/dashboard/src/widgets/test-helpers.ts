@@ -12,20 +12,17 @@ declare module "vitest/browser" {
 }
 
 /**
- * Test support for the dashboard's Lit widgets. It mirrors `packages/ui/src/test-helpers.ts` and
- * `a11y-helpers.ts`, but mounts by ASSIGNING PROPERTIES rather than parsing an HTML string: every
- * dashboard widget takes its data as `@property({ attribute: false })` objects, which cannot travel
- * through markup. So it creates the element, assigns the props, then connects it.
+ * Mounts by ASSIGNING PROPERTIES rather than parsing an HTML string: dashboard widgets take their data
+ * as `@property({ attribute: false })` objects, which cannot travel through markup.
  */
 
 // Standalone widget fixtures use a Spanish venue; app roots replace this with their API configuration.
 beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
 
 /**
- * Starts every test with the mouse cursor off the page, so nothing inherits a `:hover` that an
- * earlier test's click or hover left behind — the cursor belongs to the shared page, not to the test
- * that moved it, and it outlives the file that moved it. Without this an a11y scan can catch a button
- * dimmed by `wt-button`'s hover rule and report a colour-contrast violation nobody can see in the app.
+ * The cursor belongs to the shared page, not to the test that moved it, and it outlives the file that
+ * moved it. Without this an a11y scan can catch a button dimmed by `wt-button`'s hover rule and report
+ * a colour-contrast violation nobody can see in the app.
  */
 beforeEach(() => commands.parkPointer());
 
@@ -35,18 +32,11 @@ const mounted: HTMLElement[] = [];
 const originalUrl = location.href;
 const originalHistoryState: unknown = history.state;
 
-/** The element under test plus the themed host it was mounted into (pass the host to axe). */
 export interface Mounted<T extends HTMLElement> {
   el: T;
   host: HTMLElement;
 }
 
-/**
- * Mounts a custom element `tag` with `props` assigned before connection, inside a fresh themed
- * host, and waits for its first render. Pass `theme` to pin `data-theme` (and paint the host's
- * `--wt-color-bg`, as a real deployment does) so a color-contrast a11y check means what it means in
- * the app; omit it to render in whatever theme the environment resolves to.
- */
 export async function mountWidget<T extends HTMLElement>(
   tag: string,
   props: Partial<T>,
@@ -68,16 +58,12 @@ export async function mountWidget<T extends HTMLElement>(
 }
 
 /**
- * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background, mirroring
- * what a real deployment does: `index.html` sets `body { background: var(--wt-color-bg) }` under
- * `applyTokens(document.documentElement)`, so in the app every element ultimately sits on the theme's
- * background. The harness themes only the nested `host` `<div>`, which leaves the page's default WHITE
- * canvas behind it — and axe-core composites the background of any element it cannot trace back to
- * `host` (e.g. one pushed off-viewport by a wide header, where `elementsFromPoint` returns nothing)
- * against that canvas. On white that reads as a false color-contrast failure for the dark theme's
- * light text (`#eceef2` on `#ffffff` → 1.16:1) even though the element renders correctly on the dark
- * canvas in the app. `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off
- * `host` rather than passing the `var()`. Reset in {@link cleanupWidgets}.
+ * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background, as
+ * `index.html` does in the app. axe-core composites the background of any element it cannot trace
+ * back to `host` (e.g. one pushed off-viewport by a wide header) against that canvas, and the default
+ * WHITE canvas reads as a false color-contrast failure for the dark theme's light text.
+ * `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off `host` rather than
+ * passing the `var()`.
  */
 function paintCanvas(host: HTMLElement): void {
   const bg = getComputedStyle(host).backgroundColor;
@@ -85,7 +71,6 @@ function paintCanvas(host: HTMLElement): void {
   document.documentElement.style.background = bg;
 }
 
-/** Removes every host mounted since the last cleanup. Use as `afterEach(cleanupWidgets)`. */
 export function cleanupWidgets(): void {
   for (const host of mounted.splice(0)) host.remove();
   history.replaceState(originalHistoryState, "", originalUrl);
@@ -110,7 +95,6 @@ export async function closeReportsDelivered(): Promise<void> {
   probe.remove();
 }
 
-/** Formats axe violations into a readable message: rule id, impact, help text, and node targets. */
 export function formatViolations(violations: axe.Result[]): string {
   return violations
     .map((violation) => {
@@ -120,7 +104,6 @@ export function formatViolations(violations: axe.Result[]): string {
     .join("\n\n");
 }
 
-/** Runs the full default axe ruleset against `context` and fails the test on any violation. */
 export async function expectNoA11yViolations(context: Element): Promise<void> {
   const results = await axe.run(context);
   expect(results.violations, formatViolations(results.violations)).toEqual([]);

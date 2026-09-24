@@ -16,18 +16,14 @@ import type {
   PurchaseVatKind,
 } from "../api/client.js";
 
-/** The two regimes the form offers, in the `purchase_regime` enum order. */
 const REGIMES: readonly PurchaseRegime[] = ["general", "equivalence_surcharge"];
-/** The two VAT kinds the form offers, in the `purchase_vat_kind` enum order. */
 const VAT_KINDS: readonly PurchaseVatKind[] = ["ordinary", "capital"];
 
-/** The `update-purchase` event detail: the invoice id + a full header/lines patch. */
 export interface UpdatePurchaseDetail {
   id: string;
   patch: PurchaseInvoicePatch;
 }
 
-/** One editable desglose row — a VAT line as the operator types it (all strings + a kind). */
 interface LineDraft {
   rate: string;
   base: string;
@@ -35,29 +31,20 @@ interface LineDraft {
   kind: PurchaseVatKind;
 }
 
-/** A blank line row — a fresh `ordinary` line with empty amounts. */
 function blankLine(): LineDraft {
   return { rate: "", base: "", tax: "", kind: "ordinary" };
 }
 
 /**
- * A well-formed NON-NEGATIVE decimal literal: `0`, or a digit string with no leading zero, each with
- * an optional fractional part. Browser-local by design — the dashboard never imports
- * `@waitron/shared` at runtime — but written to accept exactly the literals that package's
- * `decimal()` accepts (`packages/shared/src/money.ts:14`), which `purchasing-api.ts` screens every
- * amount through, apart from the SIGN: `decimal()` also accepts a leading minus, and this pattern
- * does not. Two consequences, both worth knowing before anyone relaxes it. A malformed shape — a
- * blank, a comma-decimal, `.5`, `01.00` — is refused on both sides, so here it only saves the round
- * trip: the server answers `shared.invalid_decimal` -> 400. A NEGATIVE is refused only here:
- * measured 2026-09-21 through the real route, a POST carrying `total: "-121.00"` answered 201 and
- * the row read back `-121.00`. The op checks the proportion and each line's base, tax and rate, so
- * the header's gross total is the one amount nothing on the server screens for sign.
+ * Accepts the literals `@waitron/shared`'s `decimal()` accepts, apart from the SIGN: `decimal()` also
+ * accepts a leading minus, and this pattern does not. The op checks the proportion and each line's
+ * base, tax and rate, so the header's gross total is the one amount nothing on the server screens
+ * for sign.
  */
 const DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
 /**
- * True when `value` is a well-formed non-negative decimal literal within [min, max] — the form's amount
- * check. The `DECIMAL` test runs BEFORE the range test so an empty, whitespace or comma-decimal amount is
+ * The `DECIMAL` test runs BEFORE the range test so an empty, whitespace or comma-decimal amount is
  * rejected here (`Number("")` and `Number("  ")` are both `0`, which would otherwise pass the range).
  */
 function inRange(value: string, min: number, max: number): boolean {
@@ -67,34 +54,8 @@ function inRange(value: string, min: number, max: number): boolean {
 }
 
 /**
- * The management dashboard's PURCHASE FORM: a `wt-dialog` (create + edit) that captures a received
- * supplier invoice (factura recibida) — the scalar header (supplier identity, the two civil dates, the
- * gross total, the VAT regime, the deductible proportion, an optional note) plus an embedded DESGLOSE
- * SUB-EDITOR that manages a variable number of per-rate VAT lines (rate/base/tax + kind), each with an
- * add/remove control (the add/remove-rows mechanic over a `@state() lines`).
- *
- * The purchases screen drives it by setting `.open` and (for an edit) `.invoice`, and hears one of two
- * events: `create-purchase` (a `PurchaseInvoiceInput`) or `update-purchase { id, patch }` (a full
- * header + full desglose replacement — the op's "lines present ⇒ full replace" contract). The form does
- * NOT call the API and does NOT close itself on confirm — the screen closes it on a successful write,
- * so a rejected write leaves the entered values in place.
- *
- * SEEDING: `willUpdate` reseeds every field from `invoice` whenever it changes
- * or the dialog opens — a create (`invoice` null) starts blank with one empty line, an edit fills every
- * field and one row per stored VAT line.
- *
- * CLIENT VALIDATION mirrors the op's checks for UX (the server stays authoritative): the required
- * header fields must be non-empty (`purchase.fields_required`), at least one VAT line must remain
- * (`purchase.lines_required`), and every amount — each line's base/tax, its rate, the gross total and
- * the deductible proportion — must be a well-formed non-negative decimal (base/tax ≥ 0, rate 0–100,
- * proportion 0–100), rejecting a blank, whitespace or comma-decimal value (`purchase.amounts_invalid`).
- * `purchasing-api.ts` screens every amount through `decimal()` and answers `shared.invalid_decimal`
- * -> 400, so on a malformed SHAPE this check buys latency and wording rather than correctness. On
- * the SIGN it is the only check there is: `decimal()` accepts a leading minus and no server-side
- * screen or column constraint refuses a negative gross total, so `inRange(this.total, 0, Infinity)`
- * below is what refuses one (see `DECIMAL` above for the measurement). A failing check blocks
- * confirm and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
- * round-trips) makes confirm a no-op — the create/update are not server-idempotent.
+ * The form does NOT call the API and does NOT close itself on confirm — the screen closes it on a
+ * successful write, so a rejected write leaves the entered values in place.
  */
 @customElement("dashboard-purchase-form")
 export class PurchaseForm extends LitElement {
@@ -134,13 +95,10 @@ export class PurchaseForm extends LitElement {
     `,
   ];
 
-  /** Whether the dialog is showing. The screen sets this to open the form; it clears on close. */
   @property({ type: Boolean, reflect: true }) open = false;
 
-  /** The invoice being edited, or null for a create. Setting it pre-fills every field on the next open. */
   @property({ attribute: false }) invoice: PurchaseInvoice | null = null;
 
-  /** Single-flight gate: the screen sets it true while a create/update is in flight; confirm is a no-op. */
   @property({ type: Boolean }) busy = false;
 
   @state() private supplierTaxId = "";
@@ -155,11 +113,6 @@ export class PurchaseForm extends LitElement {
   @state() private lines: LineDraft[] = [blankLine()];
   @state() private validationError: string | null = null;
 
-  /**
-   * Reseed every field from `invoice` on an open or an invoice change. A create (`invoice` null) resets
-   * to blanks + defaults with a single empty line; an edit fills from the loaded invoice, one row per
-   * stored VAT line (cloned so edits never mutate the passed object).
-   */
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("invoice") && !(changed.has("open") && this.open)) return;
     const inv = this.invoice;
@@ -195,8 +148,6 @@ export class PurchaseForm extends LitElement {
     if (this.validationError) this.validationError = null;
   }
 
-  // Native `change` is `composed: false`; `stopPropagation` is defensive consistency with the composed
-  // handlers (the person-form pattern).
   #onRegimeChange(event: Event): void {
     event.stopPropagation();
     this.regime = (event.target as HTMLSelectElement).value as PurchaseRegime;
@@ -228,7 +179,6 @@ export class PurchaseForm extends LitElement {
     this.lines = this.lines.filter((_, i) => i !== index);
   }
 
-  /** Validate the entered values against the op's checks; returns a code to show, or null when valid. */
   #validate(): string | null {
     const required = [
       this.supplierTaxId,
@@ -250,15 +200,9 @@ export class PurchaseForm extends LitElement {
     return null;
   }
 
-  /**
-   * Assemble and emit the create/update event. `stopPropagation` keeps the confirm button's own
-   * composed `click` inside this shadow boundary. Blocks (no event) on a `busy` gate and on a failed
-   * validation (a `role="alert"` is shown instead). For an edit, emits `update-purchase { id, patch }`
-   * carrying the full header + full desglose (a full replace); for a create, emits `create-purchase`.
-   */
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return; // single-flight: a second confirm while one is in flight is ignored
+    if (this.busy) return;
     const error = this.#validate();
     if (error !== null) {
       this.validationError = error;
@@ -303,8 +247,8 @@ export class PurchaseForm extends LitElement {
     );
   }
 
-  /** The dialog closed. Drop `open`, and deliberately do NOT `stopPropagation` — the composed
-   * `wt-close` must bubble on to the screen (the owner of the open state). */
+  /** Deliberately does not `stopPropagation`: the composed `wt-close` must bubble on to the screen
+   * (the owner of the open state). */
   #onClose(): void {
     this.open = false;
   }

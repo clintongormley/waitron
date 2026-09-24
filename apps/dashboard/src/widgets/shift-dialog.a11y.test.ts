@@ -5,11 +5,8 @@ import type { ShiftDialog } from "./shift-dialog.js";
 import type { Shift } from "../api/client.js";
 
 /**
- * The shift dialog only exposes anything to the accessibility tree once it is OPEN — a closed
- * <dialog> renders nothing to test — so it is mounted with `open = true` and its wt-dialog's first
- * render (which calls showModal) is settled before axe runs, in both themes and in both shapes: an
- * ADD (shift null, blank fields, no Remove button) and an EDIT (shift set, pre-filled + a Remove
- * button). axe is run against the themed host so a color-contrast check means what it means in the app.
+ * A closed <dialog> renders nothing to test, so it is mounted with `open = true` and its wt-dialog's
+ * first render (which calls showModal) is settled before axe runs.
  */
 afterEach(cleanupWidgets);
 

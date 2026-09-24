@@ -4,12 +4,7 @@ import "./purchase-list.js";
 import type { PurchaseList } from "./purchase-list.js";
 import type { PurchaseInvoice } from "../api/client.js";
 
-/**
- * The purchase list is a PURE DISPLAY widget — no `api`, so no in-flight fetch to settle. It is mounted
- * with `invoices` assigned as a property, in both themes, and axe is run against the themed host so a
- * color-contrast check means what it means in the app. The fixture carries BOTH regimes so axe sees
- * both badge renders and both rows' Edit/Delete controls.
- */
+/** The fixture carries BOTH regimes so axe sees both badge renders. */
 const invoices: PurchaseInvoice[] = [
   {
     id: "pi-1",

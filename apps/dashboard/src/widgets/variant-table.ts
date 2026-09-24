@@ -10,28 +10,21 @@ import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-/** One row: the variant and the key that follows it while the table is on screen. */
 interface VariantRow {
   key: string;
   variant: ProductEditorVariant;
 }
 
-/** Which variants the status filter shows (spec §15.6: a removed variant is Inactive, not gone). */
 type StatusFilter = "active" | "inactive" | "all";
 
 /**
- * The product editor's list of variants — a plain `<table>` this widget owns, deliberately NOT
- * `wt-data-table`: the rows are a draft being edited in place, not an administrative collection to
- * sort and search.
+ * A plain `<table>`, deliberately NOT `wt-data-table`: the rows are a draft being edited in place,
+ * not an administrative collection to sort and search.
  *
  * The host owns the variants. Every row action leaves as an event carrying the row's INDEX, which
- * is the same index in the array the host handed over — rows the status filter hides included. A
- * reorder is the one action the table also shows immediately: the row follows the key or the
- * finger, and `wt-reorder` tells the host to make the same move in its draft. A host that ignores
- * that event therefore drifts out of step with what is on screen.
+ * is the same index in the array the host handed over — rows the status filter hides included.
  *
- * The name shown is the STAFF name. The customer-facing name belongs to a receipt or a menu, and
- * the fallback between them belongs to `packages/catalogue/src/product-presentation.ts`.
+ * The name shown is the STAFF name. The customer-facing name belongs to a receipt or a menu.
  */
 @customElement("dashboard-variant-table")
 export class VariantTable extends LitElement {
@@ -206,10 +199,9 @@ export class VariantTable extends LitElement {
     },
   } satisfies ReorderModel);
 
-  /** Puts focus on a row's actions trigger — the way into the window where that variant's own
-   * fields are edited, and the only control on the row that is not itself an edit. The Edit button
-   * behind it cannot take focus while the menu is closed. A row just drawn has a trigger only once
-   * its menu has rendered, so this waits for that. */
+  /** Puts focus on a row's actions trigger: the Edit button behind it cannot take focus while the
+   * menu is closed. A row just drawn has a trigger only once its menu has rendered, so this waits
+   * for that. */
   async focusRow(index: number): Promise<void> {
     const menu = this.shadowRoot?.querySelector<LitElement>(`[data-test="actions-${index}"]`);
     await menu?.updateComplete;
@@ -271,7 +263,6 @@ export class VariantTable extends LitElement {
     return added;
   }
 
-  /** The staff name, or a generic one so a nameless draft row still has something to be called. */
   #label(variant: ProductEditorVariant | undefined): string {
     return variant?.name.trim() || t("editor.variant");
   }

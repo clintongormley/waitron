@@ -13,7 +13,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import { t, currentLocale } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
 
-/** Lists reusable product categories and emits a request to create one. */
 @customElement("dashboard-category-manager")
 export class CategoryManager extends LitElement {
   static override styles = [

@@ -33,10 +33,8 @@ const ongoing: AlertView = {
   area: "backup",
   screen: "backup",
 };
-// A real ongoing check produced by a server source (feat/dashboard-alerts-ongoing): worded from its
-// params and naming the screen that fixes it. The stub `ongoing` above is a bare placeholder; this
-// is the first end-to-end proof that a real code's wording resolves and its "Go to" targets its own
-// screen.
+// A real ongoing check produced by a server source: worded from its params and naming the screen
+// that fixes it. The stub `ongoing` above is a bare placeholder.
 const jobsWaiting: AlertView = {
   key: "printer.jobs_waiting:barra",
   kind: "ongoing",

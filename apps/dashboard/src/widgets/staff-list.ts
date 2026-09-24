@@ -8,7 +8,6 @@ import { t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
 
-/** Presents the staff roster and emits the selected person id; the screen owns data and actions. */
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];

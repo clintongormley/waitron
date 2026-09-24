@@ -139,7 +139,7 @@ describe("person-form", () => {
     change(el, "last-names", "Soler");
     await el.updateComplete;
     expect(displayName(el)).toBe("Lex");
-    // Clearing the field puts it back under the names' control — the old edited-flag could not.
+    // Clearing the field puts it back under the names' control.
     change(el, "display-name", "");
     change(el, "first-names", "Alexandra");
     await el.updateComplete;

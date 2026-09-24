@@ -71,8 +71,7 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
         },
         theme,
       );
-      // "none" saves with a category chosen and no reporting category — no longer an error state,
-      // but still worth checking it renders (and submits) accessibly.
+      // "none" saves with a category chosen and no reporting category.
       if (state === "none") {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
         await el.updateComplete;

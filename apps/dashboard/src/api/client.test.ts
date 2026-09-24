@@ -6,13 +6,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-/**
- * An empty 204 — `text()` → "" — the shape the void-returning management routes answer with
- * (`logout`, `savePerson`, `resetPin`; `c.body(null, 204)` in
- * `apps/server/src/management-api.ts`). Exercises `#request`'s empty-body branch, which resolves
- * `undefined` instead of `JSON.parse`-ing nothing. `#request` keys off the empty body (`res.ok` +
- * `text() === ""`), not the exact status, so 204 stands in for the real routes.
- */
+/** The request helper resolves an empty body to `undefined`, whatever the success status. */
 function emptyResponse(): Response {
   return { ok: true, status: 204, json: async () => undefined, text: async () => "" } as Response;
 }
@@ -55,8 +49,6 @@ describe("DashboardApi", () => {
   });
 
   it("rejects a failed configuration export with the envelope's code and the HTTP status", async () => {
-    // The export has its own fetch path (binary success), so its error handling must match the shared
-    // request helper: the domain code from `{ error: { code } }`, and the answered HTTP status alongside.
     const response = new Response(
       JSON.stringify({ error: { code: "backup.managed_by_environment" } }),
       { status: 409, headers: { "content-type": "application/json" } },
@@ -69,8 +61,6 @@ describe("DashboardApi", () => {
   });
 
   it("falls back to server.internal (with the status) when the export error body is not JSON", async () => {
-    // A vanished route answers text/plain, on which `response.json()` throws; the guarded parse turns
-    // that into the same `{ code, status }` shape rather than a fake network failure.
     const response = new Response("Bad Gateway", {
       status: 502,
       headers: { "content-type": "text/plain" },
@@ -654,13 +644,12 @@ describe("DashboardApi", () => {
     expect(url).toBe("/management-api/images");
     expect(init.method).toBe("POST");
     expect(init.credentials).toBe("include");
-    // The body is the multipart FormData carrying the file part…
     expect(init.body).toBeInstanceOf(FormData);
     const part = (init.body as FormData).get("file");
     expect(part).toBeInstanceOf(File);
     expect((part as File).name).toBe("photo.png");
-    // …and NO JSON content-type is set: the browser derives `multipart/form-data` and appends the
-    // boundary itself; a manual content-type would drop the boundary and corrupt the upload.
+    // No content-type is set: the browser derives `multipart/form-data` and appends the boundary
+    // itself; a manual content-type would drop the boundary and corrupt the upload.
     const headers = (init.headers ?? {}) as Record<string, string>;
     expect(headers["content-type"]).toBeUndefined();
   });
@@ -1021,8 +1010,6 @@ describe("DashboardApi — planned vs actual", () => {
 
 describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
   it("getMe GETs the whoami route and returns the session and venue identity", async () => {
-    // Per-user-language-preference (Task 5): the whoami now also carries the signed-in person's stored
-    // UI `locale` (null when unset) and the geography-derived `venueLocale` fallback.
     const body = {
       personId: "p1",
       role: "staff",
@@ -1369,11 +1356,6 @@ describe("DashboardApi — ingredients + product recipe", () => {
 });
 
 describe("DashboardApi — floor plan (zones + tables)", () => {
-  // The eight per-item verbs the floor-plan config screen drives (FP-1's /management-api/zones +
-  // /management-api/tables routes, till.configure-gated). Mirrors the service-status method tests:
-  // GET decodes a list, POST returns the minted id (201), PATCH/DELETE resolve undefined on an
-  // empty 204. Paths/bodies asserted against apps/server/src/management-api.ts.
-
   it("listZones GETs /management-api/zones with credentials", async () => {
     const rows = [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
@@ -1529,10 +1511,6 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     });
   });
 
-  // FP-2 spatial placement: the management placement routes (Task 3, authorizeManager-gated) the Plano
-  // editor drives. PUT sends the four placement columns + the target zone; DELETE un-places. Both answer
-  // an empty 204 → void. Paths/bodies asserted against apps/server/src/management-api.ts.
-
   it("setTablePlacement PUTs the placement body to the table's placement route (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -1599,12 +1577,6 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
 });
 
 describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
-  // The eight verbs the Cocina config screen + catalogue routing selects drive (KDS-1's
-  // /management-api/stations, /management-api/categories/:id/station, /management-api/products/:id/station
-  // and /management-api/bump-mode routes, till.configure-gated). GET decodes the station list, POST
-  // returns the minted id (201), PATCH/DELETE/PUT resolve undefined on an empty 204. Paths/bodies
-  // asserted against apps/server/src/management-api.ts.
-
   it("listStations GETs /management-api/stations with credentials", async () => {
     const rows = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
@@ -1732,7 +1704,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  // ── Kitchen courses + fire control (KDS-2) — the sibling of the station verbs above ────────────────
+  // ── Kitchen courses + fire control ─────────────────────────────────────────────────────────────
 
   it("listCourses GETs /management-api/courses with credentials", async () => {
     const rows = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
@@ -1827,12 +1799,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
 });
 
 describe("DashboardApi — devices, pairing mode and join requests", () => {
-  // The verbs the Devices screen drives: the enrolled-device list and revoke (device-identity-1's
-  // /management-api/devices routes, device.manage-gated), and the join half — the pairing window plus
-  // the pending queue, its challenge, deny and the device accept (device-join-and-accept). Paths and
-  // bodies asserted against apps/server/src/device-api.ts and apps/server/src/join-api.ts. A device is
-  // created by ACCEPTING a request now: there is no code to mint, and no /management-api/device-codes.
-
   const rows = [
     {
       id: "d1",
@@ -1876,7 +1842,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
-  // ── Pairing mode + join requests (device-join-and-accept) ──────────────────────────────────────
+  // ── Pairing mode + join requests ───────────────────────────────────────────────────────────────
 
   it("pairingMode GETs the window's state", async () => {
     const state = { open: true, openUntil: "2026-09-08T10:15:00.000Z", refusedRecently: 2 };
@@ -2114,7 +2080,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
-  // ── Per-user language preference (Task 4's PUBLIC pre-login read) ──
+  // ── Per-user language preference ───────────────────────────────────────────────────────────────
 
   it("getLocales GETs the public locale catalogue and venue identity", async () => {
     const body = {
@@ -2136,8 +2102,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
   });
 
   it("putLocale PUTs the session locale route with a { locale } body and returns nothing", async () => {
-    // The logged-in persist path (Task 10): the signed-in person's identity comes from the session
-    // server-side, so the body carries only the chosen code. An empty 204 resolves to undefined.
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     expect(await api.putLocale("en-GB")).toBeUndefined();
@@ -2159,9 +2123,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
 });
 
 describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
-  // Uses the file's `jsonResponse`/`emptyResponse` stubs rather than `new Response(...)`: a real
-  // `new Response("", { status: 204 })` throws "Response with null body status cannot have body" in
-  // this browser-mode (chromium) suite, and the brief's Step 1 directs us to the existing harness.
   it("getCanvas GETs the canvas by id", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -2225,11 +2186,6 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
 });
 
 describe("DashboardApi — printing (agents + printers + jobs)", () => {
-  // The nine verbs the Impresoras screen drives (the print-api.ts management routes, printer.manage-
-  // gated). Agents: list, mint a one-time code (201), revoke (204). Printers: list, create (201),
-  // patch (204), deactivate (204). Recent jobs: list. Test-print: enqueue a known payload (202).
-  // Paths/bodies asserted against apps/server/src/print-api.ts.
-
   const agents = [
     {
       id: "a1",
@@ -2542,12 +2498,9 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     await expect(api.testPrint("nope")).rejects.toMatchObject({ code: "printer.not_found" });
   });
 
-  // ── Station↔printer mapping (KDS-4) ────────────────────────────────────────────────────────────
-  // The three verbs the printer editor's station-mapping section drives (the print-api.ts routes at
-  // /management-api/printers/:pid/stations + /management-api/stations/:sid/printers/:pid). The GET
-  // decodes the { stationId, printerId } pairs; attach/detach resolve undefined on an empty 204. The
-  // path ORDER is load-bearing — the mutation route is /stations/:sid/printers/:pid, so the method's
-  // (stationId, printerId) arguments must land in that order.
+  // ── Station↔printer mapping ────────────────────────────────────────────────────────────────────
+  // The mutation route is `/stations/:sid/printers/:pid`, so the method's (stationId, printerId)
+  // arguments must land in that order.
 
   it("listPrinterStations GETs the printer's stations route and decodes the pairs", async () => {
     const rows = [{ stationId: "s1", printerId: "p1" }];
@@ -2590,7 +2543,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
-  // ── Receipt printer + print mode (counter receipt/drawer §5) ────────────────────────────────────
+  // ── Receipt printer + print mode ───────────────────────────────────────────────────────────────
   it("listTills GETs /management-api/tills and decodes the rows", async () => {
     const tills = [
       { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
@@ -2608,7 +2561,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   it("setTillReceiptPrinter PATCHes the till's receipt-printer route with { printerId } (set + clear)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    // Set a printer.
     await expect(api.setTillReceiptPrinter("t1", "p1")).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
       method: "PATCH",
@@ -2616,7 +2568,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ printerId: "p1" }),
     });
-    // Clear it — an explicit null in the body (a till with no printer just doesn't print).
     await expect(api.setTillReceiptPrinter("t1", null)).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
       method: "PATCH",
@@ -2663,8 +2614,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
 
 describe("DashboardApi — reporting (sales & takings)", () => {
   it("getSalesOverview GETs the overview route and returns the parsed shape", async () => {
-    // Canned JSON mirroring `apps/server/src/report-api.ts`'s overview handler: money as decimal
-    // strings, counts, the open-tables tile and top sellers (the frozen STAFF name, not a locale map).
     const overview = {
       businessDay: "2026-08-29",
       takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
@@ -2682,8 +2631,6 @@ describe("DashboardApi — reporting (sales & takings)", () => {
   });
 
   it("getDailyClose GETs the daily-close route with the businessDay query and returns the parsed shape", async () => {
-    // Canned JSON mirroring the daily-close handler: `{ businessDay, vat, cash, counts, topSellers }`,
-    // with per-till cash-up (`byMethod: {method, amount, tip}`, `cashTakings`) and VAT `{rate,base,tax}`.
     const close = {
       businessDay: "2026-08-28",
       vat: {
@@ -2726,7 +2673,6 @@ describe("DashboardApi — reporting (sales & takings)", () => {
   });
 
   it("getSalesPeriod GETs the period route with from/to and returns the parsed shape", async () => {
-    // Canned JSON mirroring the period handler: `{ from, to, vat, topSellers }`.
     const period = {
       from: "2026-08-01",
       to: "2026-08-28",
@@ -2748,8 +2694,6 @@ describe("DashboardApi — reporting (sales & takings)", () => {
   });
 
   it("getOverdueOrders GETs the overdue-orders route and returns the parsed shape", async () => {
-    // Canned JSON mirroring `apps/server/src/report-api.ts`'s overdue-orders handler (Task 6):
-    // `{ orders: OverdueOrder[] }`, worst-first — a bare walk-up's `tableLabel` is null.
     const body = {
       orders: [
         {

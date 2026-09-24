@@ -8,19 +8,8 @@ import { allergenState, allergenStateName } from "../i18n/domain.js";
 import type { Ingredient } from "../api/client.js";
 
 /**
- * The recipe-authoring dashboard's INGREDIENT LIST: one `wt-card` row per ingredient showing its
- * `name` and an allergen-state pill (the three states PENDING/none/declared). An Edit control per row
- * emits `edit-ingredient { id }`.
- *
- * It is a PURE DISPLAY widget — it holds no state and never talks to the API (like `product-list` and
- * `staff-list`). The recipe screen owns the list (`DashboardApi.listIngredients`) and hands it down as
- * `ingredients`; the Edit control emits a composed, bubbling `edit-ingredient` carrying only the `id`,
- * which the screen turns into an edit flow.
- *
  * Everything that carries meaning does so in TEXT, not colour alone (a11y): the allergen pill's three
- * states read as three different words. The allergen state renders through the i18n layer as a
- * localised display name (`allergenStateName`) at the render edge, exactly as `product-list` does;
- * `data-state` stays the raw token.
+ * states read as three different words.
  */
 @customElement("dashboard-ingredient-list")
 export class IngredientList extends LitElement {
@@ -78,16 +67,8 @@ export class IngredientList extends LitElement {
     `,
   ];
 
-  /** The ingredients to list, straight from `DashboardApi.listIngredients`. The screen owns and
-   * refreshes it; defaults to empty so the widget renders safely before the screen assigns the list. */
   @property({ attribute: false }) ingredients: Ingredient[] = [];
 
-  /**
-   * Ask the recipe screen to edit `id`. `stopPropagation` keeps the button's own composed `click`
-   * inside this widget's shadow boundary, so the consumer hears the semantic `edit-ingredient` and not
-   * a raw click as well (the house pattern — `product-list` stops its composed events the same way).
-   * Dispatched `bubbles`+`composed` so it crosses the boundary to the screen.
-   */
   #edit(event: Event, id: string): void {
     event.stopPropagation();
     this.dispatchEvent(
@@ -100,7 +81,7 @@ export class IngredientList extends LitElement {
   }
 
   override render() {
-    const editLabel = t("action.edit"); // locale-invariant across rows — resolve once per render
+    const editLabel = t("action.edit");
     return html`
       <div class="list">
         ${this.ingredients.map((ingredient) => {

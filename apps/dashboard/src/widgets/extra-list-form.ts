@@ -17,10 +17,6 @@ import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-/** One offered product while it is being edited. Every number is held as TEXT, so a blank
- * `maxPicks` stays "uncapped" and a blank `price` stays "inherit the product's own" rather than
- * becoming a zero on the way in. Every item has an `id` from the moment it is added — see
- * {@link ExtraListForm}. */
 interface DraftItem {
   id: string;
   productId: string;
@@ -30,19 +26,11 @@ interface DraftItem {
 }
 
 /**
- * Creates and edits ONE extras list: its three names, how many picks it asks for, whether it is
- * offered, and the ordered products it offers — each with a per-dish quantity cap, a preselect
- * switch and a price that overrides the product's own.
+ * Every refusal answered here is one `parseExtraListInput` also refuses
+ * (packages/catalogue/src/extra-contract.ts).
  *
- * Writes belong to the host, which passes the server's per-field refusals back through
- * `fieldErrors`; this form owns the draft and its own refusals. Every refusal answered here is one
- * `parseExtraListInput` also refuses (packages/catalogue/src/extra-contract.ts), so the two cannot
- * drift into disagreeing about what is savable.
- *
- * A price left blank means "charge the product's own `unitPrice`", and the field shows that price
- * as its hint rather than storing it — the inheritance-hint pattern
- * (docs/superpowers/specs/2026-09-18-one-product-model-design.md §9.1). A blank is emitted as
- * `null`, which is what keeps "inherits" and "set to the same number" different rows.
+ * A blank price is emitted as `null`, which is what keeps "inherits" and "set to the same number"
+ * different rows.
  */
 @customElement("dashboard-extra-list-form")
 export class ExtraListForm extends LitElement {
@@ -96,10 +84,9 @@ export class ExtraListForm extends LitElement {
     languages: ["en"],
   };
   @property({ attribute: false }) value: ExtraList | null = null;
-  /** The products a row can be about. The screen supplies them; this form neither loads nor filters
-   * them — a product already on the list stays in the picker, because hiding it would make a
-   * manager's search for it come back empty with no reason given, where offering it again produces
-   * the duplicate refusal below, which says what is wrong. */
+  /** A product already on the list stays in the picker, because hiding it would make a manager's
+   * search for it come back empty with no reason given, where offering it again produces the
+   * duplicate refusal below, which says what is wrong. */
   @property({ attribute: false }) products: Product[] = [];
   /** The server's refusal, keyed by the field path `parseExtraListInput` reports. */
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
@@ -164,19 +151,12 @@ export class ExtraListForm extends LitElement {
     this.validation = {};
   }
 
-  /** Every offered product by id. A Lit form re-renders on every keystroke and three separate
-   * readers below want a product per ROW, so the index is rebuilt only when `products` changes. */
   #productById = new Map<string, Product>();
 
-  /** The product's STAFF name — the dashboard surface's name of the three (products.md). A list
-   * can outlive the products the screen handed over, so a row with no product to read names what
-   * is missing rather than rendering an empty cell. */
   #productName(productId: string): string {
     return this.#productById.get(productId)?.name ?? t("extras.unknown_product");
   }
 
-  /** The price the item falls back to, shown as the price field's hint. Blank when there is no
-   * product row to read one from. */
   #inheritedPrice(productId: string): string {
     return this.#productById.get(productId)?.unitPrice ?? "";
   }
@@ -194,10 +174,8 @@ export class ExtraListForm extends LitElement {
     return mapped;
   }
 
-  /** One of `parseExtraListInput`'s field paths as this form's own key. A path naming the list as
-   * a whole or an item's id has no input of its own, so it is shown under the items table with the
-   * rest of the list-level refusals. An unrecognised path is kept as it came, so it still reaches
-   * the summary rather than disappearing. */
+  /** A path naming the list as a whole or an item's id has no input of its own, so it is shown under
+   * the items table with the rest of the list-level refusals. */
   #formKey(field: string): string {
     const item = /^items\.(\d+)(?:\.(.+))?$/.exec(field);
     if (item) {
@@ -208,7 +186,6 @@ export class ExtraListForm extends LitElement {
     return this.#listKey(field) ?? "items";
   }
 
-  /** The cell key for one of an item's fields, or null when the path names no cell. */
   #itemKey(field: string): string | null {
     if (field === "productId") return "product";
     if (field === "maxQuantity") return "max-quantity";
@@ -217,7 +194,6 @@ export class ExtraListForm extends LitElement {
     return null;
   }
 
-  /** The input key for one of the list's own fields, or null when the path names no input. */
   #listKey(field: string): string | null {
     if (field === "name") return "name";
     if (field === "customerName") return `customer-name-${this.#primaryLanguage()}`;
@@ -228,8 +204,6 @@ export class ExtraListForm extends LitElement {
     return null;
   }
 
-  /** Every message on screen, keyed by input name: the server's, then this form's own on top. An
-   * item's message is placed by the item's CURRENT position, so it stays on its own row. */
   #errors(): Record<string, string> {
     const errors: Record<string, string> = {};
     for (const [key, message] of Object.entries(this.serverErrors)) {
@@ -244,8 +218,6 @@ export class ExtraListForm extends LitElement {
     return { ...errors, ...this.validation };
   }
 
-  /** Every draft edit goes through here: a change invalidates what the last Save complained about,
-   * and the messages are recomputed by the next Save. */
   #edit(change: () => void): void {
     change();
     this.validation = {};
@@ -264,8 +236,7 @@ export class ExtraListForm extends LitElement {
       // An item is given its id HERE, not by the server. `writeItems` deletes every item of the
       // list and re-inserts the body's under `item.id ?? randomUUID()`
       // (packages/catalogue/src/extras.ts), so a row keeps its identity across a save only because
-      // the body carried an id for it — and before the first save the id is already what keys the
-      // row's reorder handle and the server message held against it.
+      // the body carried an id for it.
       const item: DraftItem = {
         id: crypto.randomUUID(),
         productId,
@@ -370,8 +341,6 @@ export class ExtraListForm extends LitElement {
     this.#emit(event, "wt-cancel", {});
   }
 
-  /** What the shared field builders read from this form: its busy flag, its content languages and
-   * the messages currently on screen. */
   #fields(errors: Record<string, string>): FieldContext {
     return {
       busy: this.busy,

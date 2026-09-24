@@ -10,10 +10,8 @@ const twoLocales = async () => [
 ];
 
 /**
- * Let a trigger activation settle. Opening the first time runs the ASYNC `#toggle` (it awaits
- * `loadLocales()` before flipping `open`), so a single `updateComplete` races the awaited fetch; a
- * macrotask drains that microtask chain, then `updateComplete` awaits the repaint. A close / cached
- * re-open flips state synchronously, for which this is simply a harmless extra wait.
+ * Opening the first time runs the ASYNC `#toggle` (it awaits `loadLocales()` before flipping `open`),
+ * so a single `updateComplete` races the awaited fetch.
  */
 async function settle(el: LanguageChooser): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve));
@@ -38,13 +36,11 @@ describe("dashboard-language-chooser", () => {
       loadLocales,
     });
 
-    // The initial label is readable before the options have loaded.
     expect(loadLocales).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector('[role="menu"]')).toBeNull();
     const trigger = el.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
     expect(trigger.textContent).toContain("Español");
 
-    // Activating the trigger fetches the list once and renders both options as a menu.
     trigger.click();
     await settle(el);
     expect(loadLocales).toHaveBeenCalledTimes(1);
@@ -117,7 +113,6 @@ describe("dashboard-language-chooser", () => {
     expect(captured!.detail).toEqual({ code: "en-GB" });
     // The widget is presentational: it neither switches the locale nor writes the preference.
     expect(currentLocale()).toBe(before);
-    // Picking an option closes the menu.
     expect(el.shadowRoot!.querySelector('[role="menu"]')).toBeNull();
   });
 
@@ -134,7 +129,6 @@ describe("dashboard-language-chooser", () => {
     expect(es.getAttribute("aria-checked")).toBe("true");
     expect(en.getAttribute("aria-checked")).toBe("false");
 
-    // A live switch (setLocale from elsewhere) repaints via the LocaleChangeController.
     setLocale("en-GB");
     await el.updateComplete;
     expect(trigger.textContent).toContain("English");
@@ -147,10 +141,8 @@ describe("dashboard-language-chooser", () => {
   });
 
   it("a rejected loadLocales does NOT escape as an unhandled rejection and leaves the menu closed", async () => {
-    // Opening fetches the list; if that fetch rejects (the server is unreachable when the operator taps
-    // the chooser) the widget must degrade gracefully. The click handler fires `void #toggle()`, so an
-    // un-caught rejection would escape as an UNHANDLED promise rejection (this repo requires pristine
-    // test output). Proven by deletion: strip `#toggle`'s try/catch and `rejections` is non-empty here.
+    // The click handler fires `void #toggle()`, so an un-caught rejection would escape as an UNHANDLED
+    // promise rejection.
     const rejections: unknown[] = [];
     const onRejection = (event: PromiseRejectionEvent): void => {
       rejections.push(event.reason);
@@ -169,14 +161,12 @@ describe("dashboard-language-chooser", () => {
       // Give any pending unhandled-rejection notification a couple of macrotasks to surface.
       await settle(el);
 
-      // Sane state: the fetch was attempted, the menu did NOT open, and the trigger stays usable.
       expect(loadLocales).toHaveBeenCalledTimes(1);
       expect(el.shadowRoot!.querySelector('[role="menu"]')).toBeNull();
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
-      // The rejection was handled inside #toggle, not left unhandled.
       expect(rejections).toEqual([]);
 
-      // The list is left unset, so a LATER open retries — the mock now resolves and the menu populates.
+      // The list is left unset, so a LATER open retries.
       loadLocales.mockResolvedValue([{ code: "en-GB", label: "English" }]);
       trigger.click();
       await settle(el);

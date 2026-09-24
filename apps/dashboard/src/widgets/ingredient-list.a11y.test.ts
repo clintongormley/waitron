@@ -5,12 +5,8 @@ import type { IngredientList } from "./ingredient-list.js";
 import type { Ingredient } from "../api/client.js";
 
 /**
- * The ingredient list is a PURE DISPLAY widget — no `api`, so no in-flight fetch to settle. It is
- * mounted with `ingredients` assigned as a property, in both themes, and axe is run against the themed
- * host so a color-contrast check means what it means in the app.
- *
- * The fixture covers all THREE allergen states (null=PENDING, {}=none, {…}=declared) so axe sees the
- * whole rendered surface — every branch of the allergen pill plus the per-row Edit control.
+ * The fixture covers all THREE allergen states (null=PENDING, {}=none, {…}=declared) so axe sees
+ * every branch of the allergen pill.
  */
 const ingredients: Ingredient[] = [
   { id: "i1", name: "Harina de trigo", allergens: null, dietaryOrigin: null, active: true },

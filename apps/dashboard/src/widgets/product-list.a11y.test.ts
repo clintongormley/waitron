@@ -5,17 +5,9 @@ import type { ProductList } from "./product-list.js";
 import type { Product } from "../api/client.js";
 
 /**
- * The product list is a PURE DISPLAY widget — no `api`, so no in-flight fetch to settle. It is mounted
- * with `products` assigned as a property, in both themes, and axe is run against the themed host so a
- * color-contrast check means what it means in the app.
- *
- * The fixture covers all THREE allergen states (null=PENDING, {}=none, {…}=declared), both
- * active/inactive badges, the Unavailable badge, and both a product WITH a decorative image and one
- * WITHOUT (the placeholder) — so axe sees the whole rendered surface, every branch of the row
- * template. The Inactive product sits behind the status filter, so one case shows every status. A
- * product with an Active variant (its own VAT, noted under its price) and a removed one covers the
- * variant rows, and under the Inactive filter the muted row its product is drawn as while it is
- * there only as the removed variant's context.
+ * The fixture covers all THREE allergen states, both active/inactive badges, the Unavailable badge,
+ * a product with and without an image, and variant rows. The Inactive product sits behind the status
+ * filter, so one case shows every status.
  */
 const products: Product[] = [
   {

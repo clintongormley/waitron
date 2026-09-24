@@ -6,12 +6,7 @@ import { IngredientList } from "./ingredient-list.js";
 
 afterEach(cleanupWidgets);
 
-/**
- * A representative ingredient carrying every field the list reads; individual tests override the one
- * field they exercise (allergens, name) via a spread so the fixture stays the single source for the
- * rest. Unlike a product, an ingredient has no customer-facing or kitchen name beside its `name`,
- * and a single `allergens` declaration (no manual/published split).
- */
+/** Unlike a product, an ingredient has no customer-facing or kitchen name beside its `name`. */
 function ingredient(overrides: Partial<Ingredient> = {}): Ingredient {
   return {
     id: "ing-1",
@@ -43,8 +38,8 @@ describe("ingredient-list", () => {
     );
   });
 
-  // The three-state allergen invariant (design §7): null=PENDING, {}=none, {…}=declared. PENDING and
-  // none MUST be distinguishable — a blank declaration must never silently claim "allergen-free".
+  // null=PENDING, {}=none, {…}=declared. PENDING and none MUST be distinguishable — a blank
+  // declaration must never silently claim "allergen-free".
   it("renders a PENDING allergen pill when allergens is null", async () => {
     const { el } = await mountWidget<IngredientList>("dashboard-ingredient-list", {
       ingredients: [ingredient({ allergens: null })],
@@ -70,9 +65,6 @@ describe("ingredient-list", () => {
     expect(pill.getAttribute("data-state")).toBe("declared");
   });
 
-  // The three states render through the i18n layer as three DISTINCT localised names (Pendiente /
-  // Ninguno / Declarado), preserving the a11y "three different words, not colour alone" requirement.
-  // `data-state` stays the raw token; only the pill's visible text is localised.
   it("renders each allergen-state pill with its localised name", async () => {
     const { el } = await mountWidget<IngredientList>("dashboard-ingredient-list", {
       ingredients: [
@@ -85,7 +77,6 @@ describe("ingredient-list", () => {
     expect(pills[0]!.textContent!.trim()).toBe(allergenStateName("pending", "es-ES"));
     expect(pills[1]!.textContent!.trim()).toBe(allergenStateName("none", "es-ES"));
     expect(pills[2]!.textContent!.trim()).toBe(allergenStateName("declared", "es-ES"));
-    // PENDING and none are not the same rendered text (the whole point of the invariant).
     expect(pills[0]!.textContent).not.toBe(pills[1]!.textContent);
   });
 
@@ -100,8 +91,6 @@ describe("ingredient-list", () => {
     expect((await detail).id).toBe("ing-42");
   });
 
-  // edit-ingredient must escape this widget's shadow boundary to reach the recipe screen, so it is
-  // dispatched bubbles+composed — pinned so a future edit does not quietly drop either flag.
   it("emits edit-ingredient as a bubbling, composed event", async () => {
     const { el } = await mountWidget<IngredientList>("dashboard-ingredient-list", {
       ingredients: [ingredient({ id: "ing-9" })],

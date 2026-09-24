@@ -10,9 +10,8 @@ import { t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 
 /**
- * A saved variant. Every one of its three names is a DIFFERENT string on purpose: this branch has
- * twice shipped a fixture whose staff name and customer name were the same text, which left no
- * assertion able to tell the two apart — and one of those times hid a real customer-facing defect.
+ * A saved variant. Every one of its three names is a DIFFERENT string on purpose: a fixture whose
+ * staff name and customer name are the same text leaves no assertion able to tell the two apart.
  */
 const halfPortion: ProductEditorVariant = {
   id: "8f1f2f3f-4f5f-4f6f-8f7f-9f8f7f6f5f4f",
@@ -89,7 +88,7 @@ it("opens with every field of the variant it was given", async () => {
 it("marks the name as required and leaves the price and the optional names unmarked", async () => {
   const el = await mountForm();
   expect(field(el, "name").required).toBe(true);
-  // A blank price is the variant following its product's (spec §15.3).
+  // A blank price is the variant following its product's.
   expect(field(el, "unitPrice").required).toBe(false);
   expect(field(el, "kitchenName").required).toBe(false);
   expect(field(el, "customerName-es").required).toBe(false);

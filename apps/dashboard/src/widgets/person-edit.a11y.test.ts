@@ -5,7 +5,6 @@ import type { PersonEdit } from "./person-edit.js";
 import type { PersonSummary } from "../api/client.js";
 
 // Open the modal before running axe so its controls enter the accessibility tree.
-// The themed host gives the contrast checks the same background as the dashboard.
 const person: PersonSummary = {
   personId: "p1",
   displayName: "Ada",
