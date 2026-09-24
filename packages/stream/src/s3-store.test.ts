@@ -391,7 +391,7 @@ describe("the configured prefix", () => {
     expect(normalisePrefix(prefix)).toBe(expected);
   });
 
-  it("joins the prefix and a key the same way for this package and for Litestream's replica path", () => {
+  it("joins the normalised prefix and a key into the key the bucket holds", () => {
     expect(bucketKey({ prefix: "/waitron" }, "venues/v1/gen-1")).toBe("waitron/venues/v1/gen-1");
     expect(bucketKey({ prefix: "" }, "venues/v1/gen-1")).toBe("venues/v1/gen-1");
   });

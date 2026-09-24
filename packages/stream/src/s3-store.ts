@@ -42,7 +42,10 @@ export function normalisePrefix(prefix: string): string {
   return trimmed === "" ? "" : `${trimmed}/`;
 }
 
-/** The key as the bucket holds it. Litestream's replica path is built with this too, so the two agree. */
+/**
+ * The key as the bucket holds it. Litestream's replica path must be built with this function, or
+ * Litestream and this package will look for a generation in different places.
+ */
 export function bucketKey(config: Pick<BucketConfig, "prefix">, key: string): string {
   return `${normalisePrefix(config.prefix)}${key}`;
 }
