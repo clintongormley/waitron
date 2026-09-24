@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
+import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
 import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -56,6 +57,12 @@ export interface ServerConfig {
   /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
   settlementLagMs: number | undefined;
   migrationsRoot: string;
+  /**
+   * The Litestream binary the stream supervisor runs (`WAITRON_LITESTREAM_BIN`), resolved by
+   * `@waitron/stream`'s `resolveLitestreamBin`. Unset or empty means `litestream`, found on PATH, where the box image puts the pinned one. A developer
+   * points it at `pnpm setup:litestream`'s download.
+   */
+  litestreamBin: string;
   /**
    * The persisted directory the box owns its self-signed cert PEMs and generated secrets under —
    * resolved to an ABSOLUTE path at load (`resolve`) so callers
@@ -738,6 +745,7 @@ export function loadConfig(
     skipRetryMs,
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
+    litestreamBin: resolveLitestreamBin(env),
     // Unset or empty values use the default, never the current working directory.
     stateDir: resolvedStateDir,
     // Where `openVenueStore` creates `venue.db` and `node.db`. Defaults under whichever state root

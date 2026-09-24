@@ -187,6 +187,7 @@ import { readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
+import { StreamHost } from "./stream-host.js";
 import { Server as HttpsServer } from "node:https";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
@@ -228,11 +229,10 @@ export interface StartedServer {
  * signal-initiated shutdown then logs `server.shutdown_failed`, unless the shutdown deadline has
  * already exited the process. Setup's `stopWork` is a no-op;
  * adoption-pending's AWAITS the adoption worker — `runFinishAdoption` takes no abort signal, so there
- * is nothing to cancel; trading's stops the main loop, the outbound tunnel and the backup sweep, and
- * closes the live event bus after dropping its change-feed subscription. That unsubscribe is itself
- * synchronous — it returns nothing to await, the feed being in-process and holding no connection.
- * The awaits later in trading's `stopWork` belong to the main loop, the tunnel worker and
- * `backupSupervisor.stop()`, not to it.
+ * is nothing to cancel; trading's stops its background workers, and closes the live event bus after
+ * dropping its change-feed subscription. That unsubscribe is itself synchronous — it returns nothing
+ * to await, the feed being in-process and holding no connection. The awaits in trading's
+ * `stopWork` belong to the workers it stops, not to it.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;
@@ -2089,6 +2089,20 @@ export async function startServer(
     log,
   });
   await sealedState.refresh();
+  // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
+  // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
+  const streamHost = new StreamHost({
+    db,
+    ring,
+    nodeId: till.nodeId,
+    venueDir: config.venueDir,
+    stateDir: config.stateDir,
+    litestreamBin: config.litestreamBin,
+    log,
+    now,
+    isPrimary: () => holders.singletonRole.current === "primary",
+  });
+  await streamHost.start();
 
   // Dashboard alerts. Mounted HERE, after the backup supervisor exists, because the backups source
   // reads the supervisor's live status; the claims list comes from every module, but the ongoing
@@ -2564,6 +2578,8 @@ export async function startServer(
         // separate `backupDb` for `closePools` to reach. Done here, before `closePools`, for the same
         // ordering guarantee the tunnel above keeps.
         await backupSupervisor.stop();
+        // Litestream writes venue.db, so it stops before the store closes beneath it.
+        await streamHost.stop();
       },
       // The venue directory's two files, closed together.
       closePools: () => store.close(),

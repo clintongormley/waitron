@@ -6,6 +6,7 @@ import { capturedSync as captured } from "./testing/captured.js";
 describe("PURPOSES", () => {
   it("declares the host credential purposes", () => {
     expect(Object.keys(PURPOSES).sort()).toEqual([
+      "backup.stream",
       "email.smtp",
       "fiscal.aeat",
       "membership.node_key",
@@ -39,6 +40,20 @@ describe("PURPOSES", () => {
     expect(() =>
       validatePayload("fiscal.aeat", { pfxBase64: "AAA=", passphrase: "s3cret" }),
     ).toThrow(/credentials.invalid_payload/);
+  });
+});
+
+describe("backup.stream purpose", () => {
+  it("names the venue, the bucket and its key", () => {
+    expect([...PURPOSES["backup.stream"]].sort()).toEqual([
+      "accessKeyId",
+      "bucket",
+      "endpoint",
+      "prefix",
+      "region",
+      "secretAccessKey",
+      "venueId",
+    ]);
   });
 });
 

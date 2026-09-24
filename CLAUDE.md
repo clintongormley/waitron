@@ -450,7 +450,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `lockVenueDatabase` turn into `provisioning.database_in_use`; opens inside one process share the
   hold. A tool documented to run beside the server passes `exclusive: false`; a command that changes
   the folder's files takes `lockVenueDatabase` before its first change. Never unlink `venue.lock`.
-  Guard: `packages/store/src/venue-lock.test.ts`, weaker than its name — it proves the lock, not
+  The server's own Litestream child also opens `venue.db` and takes no lock; the server stops it
+  before the store closes. Guard: `packages/store/src/venue-lock.test.ts`, weaker than its name — it proves the lock, not
   that each caller takes it, so a caller passing `exclusive: false` wrongly is seen by nothing.
   Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a

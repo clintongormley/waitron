@@ -82,6 +82,31 @@ WORKDIR /app
 CMD ["node", "/app/print-agent.js"]
 
 # ---------------------------------------------------------------------------
+# Litestream stage — the pinned binary the server runs as a child process to
+# stream venue.db to the owner's bucket (packages/stream). A stage of its own so
+# its layer depends on nothing but this RUN and survives every source change
+# the build stage's `COPY . .` sees. The sums are the release's own
+# checksums.txt for the tag; scripts/litestream-pin.test.ts holds them and the
+# version equal to scripts/setup-litestream.mjs and packages/stream. BuildKit
+# sets TARGETARCH; the classic builder leaves it empty, which `*)` refuses.
+# ---------------------------------------------------------------------------
+FROM node:26 AS litestream
+ARG TARGETARCH
+RUN set -eux; \
+  version=0.5.17; \
+  case "${TARGETARCH}" in \
+    amd64) asset="litestream-${version}-linux-x86_64.tar.gz"; sum="cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d" ;; \
+    arm64) asset="litestream-${version}-linux-arm64.tar.gz"; sum="f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5" ;; \
+    *) echo "no pinned litestream ${version} for '${TARGETARCH}'" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL -o /tmp/litestream.tar.gz \
+    "https://github.com/benbjohnson/litestream/releases/download/v${version}/${asset}"; \
+  echo "${sum}  /tmp/litestream.tar.gz" | sha256sum -c -; \
+  tar --no-same-owner -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream; \
+  rm /tmp/litestream.tar.gz; \
+  test "$(/usr/local/bin/litestream version)" = "${version}"
+
+# ---------------------------------------------------------------------------
 # Runtime stage — the build outputs and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
@@ -99,6 +124,10 @@ RUN set -eux; \
 # bridge namespace sets 0 and needs nothing. The capability makes both profiles work, and Docker's
 # default capability set retains CAP_NET_BIND_SERVICE, so nothing is added at run time.
 RUN setcap cap_net_bind_service=+ep /usr/local/bin/node
+
+# The pinned Litestream (the `litestream` stage), on PATH, where the server's default
+# WAITRON_LITESTREAM_BIN (`litestream`) finds it.
+COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 
 RUN groupadd --system --gid 10001 waitron \
   && useradd --system --uid 10001 --gid 10001 --home-dir /var/lib/waitron \

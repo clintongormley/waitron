@@ -26,14 +26,20 @@ export function createWriteQueue(connections: Connections) {
    * free.
    */
   const inBody = new AsyncLocalStorage<true>();
+  async function enqueue<T>(work: () => T | PromiseLike<T>): Promise<T> {
+    // Re-entering from inside a running body waits on a tail that cannot settle until that body
+    // returns, while the body waits on this call — so it hangs with no error, no stack and no
+    // timeout. Refusing makes the failure say so.
+    if (inBody.getStore() === true) {
+      throw new Error("write lock: a body asked for the lock it is already holding");
+    }
+    const mine = tail.then(() => inBody.run(true, work));
+    // The tail must not carry a rejection, or every later caller inherits it.
+    tail = mine.catch(() => undefined);
+    return mine;
+  }
   return {
     async run<T>(body: () => Promise<T>): Promise<T> {
-      // Re-entering from inside a running body waits on a tail that cannot settle until that body
-      // returns, while the body waits on this call — so it hangs with no error, no stack and no
-      // timeout. Refusing makes the failure say so.
-      if (inBody.getStore() === true) {
-        throw new Error("write lock: a body asked for the lock it is already holding");
-      }
       // The store's marking wraps the WHOLE transaction, `commit` and `rollback` included, not
       // just the body: a handler registered on the body's own promise can run after the body
       // settles and before the transaction finishes, and must not read the writer's uncommitted
@@ -42,11 +48,11 @@ export function createWriteQueue(connections: Connections) {
       // Two markings, and they answer different questions: `inBody` refuses a body that asks for
       // the lock it holds; `asTransactionBody` routes a read from here to the write connection
       // (`./connections.ts`).
-      const mine = tail.then(() =>
+      return enqueue(() =>
         connections.asTransactionBody(async () => {
           connections.write.exec("begin immediate");
           try {
-            const result = await inBody.run(true, body);
+            const result = await body();
             connections.write.exec("commit");
             return result;
           } catch (error) {
@@ -55,9 +61,14 @@ export function createWriteQueue(connections: Connections) {
           }
         }),
       );
-      // The tail must not carry a rejection, or every later caller inherits it.
-      tail = mine.catch(() => undefined);
-      return mine;
+    },
+    /**
+     * Runs `body` in the queue's order with no transaction the QUEUE opened still open, and opens
+     * none itself: for work such as a checkpoint (`./index.ts`, `checkpointTruncate`). A transaction
+     * opened on the writer some other way is not waited for.
+     */
+    async exclusive<T>(body: () => T): Promise<T> {
+      return enqueue(body);
     },
   };
 }

@@ -15,6 +15,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import type { BucketOperation } from "./errors.js";
+import { normalisePrefix } from "./names.js";
 import type { ListedObject, ObjectStore, PutCondition } from "./object-store.js";
 
 export interface BucketConfig {
@@ -38,19 +39,6 @@ export interface S3ObjectStoreOptions {
 /** How many times a write answered "conflict" is sent in all before it is reported as failed. */
 export const CONFLICT_ATTEMPTS = 5;
 const CONFLICT_BACKOFF_MS = 200;
-
-export function normalisePrefix(prefix: string): string {
-  const trimmed = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
-  return trimmed === "" ? "" : `${trimmed}/`;
-}
-
-/**
- * The key as the bucket holds it. Litestream's replica path must start with the same normalised
- * prefix, or Litestream and this package will look for a generation in different places.
- */
-export function bucketKey(config: Pick<BucketConfig, "prefix">, key: string): string {
-  return `${normalisePrefix(config.prefix)}${key}`;
-}
 
 function statusOf(error: unknown): number | null {
   const status = (error as { $metadata?: { httpStatusCode?: unknown } } | null)?.$metadata

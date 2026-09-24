@@ -563,7 +563,7 @@ ran one at a time.
 
 | value | recorded | read by |
 | --- | --- | --- |
-| `RESTART_RESYNCS` | `RESTART_RESYNCS = true` (measurement 1): the restore after the restart held every sale and the daemon stayed up. The restarted daemon did NOT upload a new level-9 full copy, so spec §4.5's condition as worded ("If Litestream uploads a fresh full copy on restart, the same generation continues") does not describe what happened; the recorded verdict rests on the restore being complete | Task 6: same generation after a pause, or a new one |
+| `RESTART_RESYNCS` | `RESTART_RESYNCS = true` (measurement 1): the restore after the restart held every sale and the daemon stayed up. The restarted daemon did NOT upload a new level-9 full copy, so spec §4.5's condition as worded ("If Litestream uploads a fresh full copy on restart, the same generation continues") does not describe what happened; the recorded verdict rests on the restore being complete. **2026-09-24 (measurement 1b):** repeated at the 256 MiB limit (6,487 sales while offline), the restarted daemon uploaded a full copy at LEVEL 0 — a file holding all 820 of the database's pages — into the same generation, and the restore held every sale; the owner has since decided the same generation continues after a pause | Task 6: same generation after a pause, or a new one |
 | `AUTOCHECKPOINT_OFF_NEEDED` | `AUTOCHECKPOINT_OFF_NEEDED = false` (measurement 2; the peak comparison behind it is close, see below) | Task 6: whether the venue connection sets `wal_autocheckpoint = 0` while streaming |
 | `TRUNCATE_THRESHOLD_OFFLINE` | `D-crossed-threshold=true D-shrank-after-threshold=false D-max-commit-ms=6.861` (arm 2b; peak side file 621,090,032 bytes; past the threshold for the last three of fifteen rounds only); what Litestream's emergency checkpoint does past the threshold is not established — the side file was past it for a few seconds only, and the absence of log lines says nothing (see 2b) | Task 6: the side-file limit |
 | `LINUX_BINARIES_RUN` | `LINUX_BINARIES_RUN = true`; `litestream-0.5.17-linux-x86_64.tar.gz` sha256:cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d, `litestream-0.5.17-linux-arm64.tar.gz` sha256:f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5 (measurement 5; amd64 under emulation) | Task 6: the image's download-and-check step |
@@ -621,7 +621,7 @@ generation prefix. `objects-after` counts files per level: level 0 went from 2 f
 to 3 (48,455 bytes), so it gained one file and 38,206 bytes, and a level-2 file appeared, while level 9
 stayed at one file of 2,203 bytes — **no fresh full copy was uploaded at level 9**. The probe never
 read the new level-0 file, so whether it held the whole database or only the changed pages was not
-established. For scale, a re-run during review opened a database through the rig's `openNode`, made
+established. (2026-09-24: §1b below read it.) For scale, a re-run during review opened a database through the rig's `openNode`, made
 80 `sell()` calls, ran `checkpoint()` and read the file with `statSync`: the checkpoint printed
 `{"busy":0,"log":-1,"checkpointed":-1}` and the file was 81,920 bytes. `log: -1` means that database
 was not in write-ahead-log mode, so it is not exactly the probe's state. The spec's §8.1
@@ -631,6 +631,85 @@ survived, and no WARN or ERROR line was logged. `daemon-exit=0` is the exit code
 stop at the end (read from the probe: the field is filled after its `kill()`), not a death.
 Not established: a pause longer than seconds, batches larger than 20 sales, and what Litestream's own
 directory beside the database (`.venue.db-litestream/`) held or grew to — it was not read.
+
+### 1b — restart after a fold-back at the 256 MiB limit (2026-09-24)
+
+Measurement 1 repeated at the side-file limit spec §4.5 sets, at the owner's request, before the
+supervisor is built. Reproducer: `probe:restart-at-limit` (`src/probes/restart-at-limit.ts`).
+
+**Failing would print:** `RESTART_AT_LIMIT_COMPLETE=false … missing=21-<total>` (sales made after the
+first batch absent from the restore) or `daemon-alive=false`; and, as a finding printed beside the
+verdict rather than part of it, `full-copy=false` — no level-0 file written after the restart holds
+every page of the database.
+**Controls:** the store read before the restart must hold only the first 20 sales
+(`control-before-restart-rows=20`, or the line reads `VOID`). The probe's own LTX decoder is run over
+the first batch's level-9 file, which starts at transaction 1 — a file the LTX format requires to hold
+every page — and must count all of them (`l9-control-pages` equal to `l9-control-expected`).
+**Failing case, printed on purpose** (`--no-restart`: nothing is started after the fold-back, so
+nothing can upload; an earlier failing-case run without the paced selling described below printed the
+same verdict with `missing=21-6575`):
+
+```
+| m1b-restart-at-limit | RESTART_AT_LIMIT_COMPLETE=false | version=0.5.17 mode=no-restart offline=ECONNREFUSED sales-streamed=20 sales-offline=6450 sales-paused=20 sales-after-restart=20 sales-after-copy=20 offline-sell-ms=25348 offline-pauses=16 max-commit-ms=9.873 wal-limit=268435456 wal-at-stop=268471592 offline-alive-at-limit=true offline-stop-ms=5 offline-exit=0 fold-back-busy=0 fold-back-log=0 fold-back-checkpointed=0 fold-back-ms=13 wal-after-fold=0 db-bytes=3334144 page-size=4096 db-pages=814 sidecar-bytes-at-stop=10254 control-before-restart-rows=20 control-expected=20 l9-control-pages=16 l9-control-expected=16 restored-rows=20 expected=6530 missing=21-6530 integrity=ok final-restore-ms=88 daemon-alive=false objects-before={"0000":{"count":2,"bytes":10254},"0001":{"count":1,"bytes":2203},"0009":{"count":1,"bytes":2203}} objects-after={"0000":{"count":2,"bytes":10254},"0001":{"count":1,"bytes":2203},"0009":{"count":1,"bytes":2203}} post-restart-l0-files=0 post-restart-l0-bytes=0 post-restart-l0-largest-bytes=none post-restart-l0-largest-pages=none post-restart-l0-largest-commit=none post-restart-l0-largest-txids=none post-restart-l0=[] full-copy=false first-new-l0-ms=none upload-ms=never upload-restore-attempts=687 upload-last-restore-ms=75 tail-ms=never log-problems=0 first-problem=none offline-log-problems=0 |
+```
+
+**Printed** (`pnpm --filter @waitron/bench-sqlite-failover probe:restart-at-limit`):
+
+```
+| m1b-restart-at-limit | RESTART_AT_LIMIT_COMPLETE=true | version=0.5.17 mode=restart offline=ECONNREFUSED sales-streamed=20 sales-offline=6487 sales-paused=20 sales-after-restart=20 sales-after-copy=20 offline-sell-ms=25468 offline-pauses=16 max-commit-ms=18.099 wal-limit=268435456 wal-at-stop=268442752 offline-alive-at-limit=true offline-stop-ms=4 offline-exit=0 fold-back-busy=0 fold-back-log=0 fold-back-checkpointed=0 fold-back-ms=16 wal-after-fold=0 db-bytes=3342336 page-size=4096 db-pages=816 sidecar-bytes-at-stop=10248 control-before-restart-rows=20 control-expected=20 l9-control-pages=16 l9-control-expected=16 restored-rows=6567 expected=6567 missing=none integrity=ok final-restore-ms=74 daemon-alive=true objects-before={"0000":{"count":2,"bytes":10248},"0001":{"count":1,"bytes":2203},"0009":{"count":1,"bytes":2203}} objects-after={"0000":{"count":4,"bytes":2755863},"0001":{"count":2,"bytes":10248},"0002":{"count":1,"bytes":2203},"0009":{"count":1,"bytes":2203}} post-restart-l0-files=2 post-restart-l0-bytes=2745615 post-restart-l0-largest-bytes=2529921 post-restart-l0-largest-pages=820 post-restart-l0-largest-commit=820 post-restart-l0-largest-txids=3-3 post-restart-l0=["3-3:2529921b:820/820p","4-4:215694b:63/825p"] full-copy=true first-new-l0-ms=2148 upload-ms=2274 upload-restore-attempts=1 upload-last-restore-ms=125 tail-ms=889 log-problems=0 first-problem=none offline-log-problems=0 |
+```
+
+The run: 20 sales streamed to MinIO. Litestream was restarted against a closed port, and the probe sold
+in rounds of 400 with a 1.5-second pause between rounds (S4's and measurement 2's cadence) until
+`venue.db-wal` reached 268,435,456 bytes: 6,487 sales in 25.5 seconds, ending at 268,442,752 bytes.
+The longest single sale's commit in that phase was 18.099 ms. Litestream was stopped — it exited 0, 4 ms
+after the probe's SIGTERM — and `PRAGMA wal_checkpoint(TRUNCATE)` on the writer answered busy 0 in
+16 ms and left the side file at 0 bytes. The database file was then 3,342,336 bytes (816 pages of
+4,096). SQLite's other two answers to that call were 0 and 0; the probe does not interpret them. Then
+20 sales with nothing attached, and a restore read at that point held only the first 20. Litestream was
+restarted with the same config file, so the same replica path and generation, and 20 sales were made
+at once.
+
+The bucket then gained a level-0 file with transaction id 3 (ids 1 and 2 were the first batch's), of
+2,529,921 bytes, holding 820 distinct pages against a header `commit` — the database's size in pages
+after that transaction — of 820. **That is every page of the database, uploaded at level 0**; no new
+level-9 file appeared (level 9 stayed one file of 2,203 bytes). The only other new level-0 file,
+transaction 4, held 63 of 825 pages. The first new level-0 key showed in the listing (polled
+every 100 ms) 2,148 ms after the restarted daemon was spawned; a restore started right after held every
+sale made up to then and finished at 2,274 ms, of which the restore itself took 125 ms. After the last
+20 sales, a restore holding them finished 889 ms later. The final restore, taken after Litestream was
+stopped, held all 6,567 sales in order with `integrity=ok`; the restarted daemon was alive until the
+probe stopped it and logged no WARN or ERROR line. A second run printed the same shape:
+`restored-rows=6560 missing=none integrity=ok full-copy=true`, a level-0 file of 2,527,222 bytes
+holding 819 of 819 pages, `upload-ms=2251`, `max-commit-ms=8.645`.
+
+What the offline daemon did not do: its directory beside the database (`.venue.db-litestream/`) held
+10,248 bytes when it was stopped, exactly the level-0 bytes the first batch had uploaded, so it had not
+grown. It did still stop the side file resetting. A throwaway script outside the rig (not committed),
+selling in the same rounds on a fresh database, saw the side file stay between 4,144,752 and 4,169,472
+bytes over 3,200 sales with no daemon, and reach 131,547,512 bytes with a daemon pointed at a closed
+port. That daemon logged nothing between its start-up lines (`initialized db`, `replicating to` and
+the monitors starting) and its shutdown, and it created no directory beside the database.
+
+Not established:
+
+- **The size of a full copy on a real venue.** Here the copy followed the database (2.5 MB from a
+  3.3 MB file), not the side file (256 MiB): at 4,120 bytes a frame (a page and its 24-byte header),
+  the side file held about 65,000 frames, written over a database of 816 pages (arithmetic). A venue's database holds its product images (measurement 4 sized 5,000 at
+  171 KiB), so if every restart after a fold-back uploads the whole database, as both runs here did,
+  that upload is far larger. Its time over a real link was not measured: this store was a local MinIO,
+  and the 2.3-second figure includes one restore.
+- **A daemon that was already streaming when the bucket went away**, which is the likelier
+  production shape. Only a daemon STARTED against an unreachable store was run, and it wrote no local
+  files; a daemon that had been running may hold local files the restart then uploads as well.
+- **A long outage.** The offline window was about 28 seconds; S4 saw its first sync error only after
+  116 seconds, so `offline-log-problems=0` says nothing.
+- **Anything about page contents.** `full-copy=true` rests on the probe's decoder, which counts
+  distinct page numbers in the file's page frames without decompressing them, using the layout of
+  superfly/ltx v0.5.2 (the version string in the pinned binary), and refuses a walk that does not end
+  where the file's page index begins. Its control counted 16 of 16 on the level-9 file. Pages were not
+  decompressed or compared with the database; the restore's completeness is the evidence the data
+  arrived.
 
 ### 2 — automatic fold-back with the bucket reachable, and 2b — offline past `truncate-page-n`
 

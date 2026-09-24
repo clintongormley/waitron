@@ -65,6 +65,7 @@ describe("loadConfig", () => {
       skipRetryMs: DEFAULTS.skipRetryMs,
       settlementLagMs: undefined,
       migrationsRoot: ROOT,
+      litestreamBin: "litestream",
       // Unset state storage uses the boot-provided default, not cwd.
       stateDir: STATE_ROOT,
       // No WAITRON_VENUE_DIR set, so the venue's databases default to `join(stateDir, "venue")` —
@@ -102,6 +103,14 @@ describe("loadConfig", () => {
         staleAfterMs: 3_600_000,
       },
     });
+  });
+
+  it("takes the Litestream binary from WAITRON_LITESTREAM_BIN, and an empty value as unset", () => {
+    const cfg = (env: Record<string, string>) => loadConfig(env, ROOT, STATE_ROOT);
+    expect(cfg({ ...MIN_ENV, WAITRON_LITESTREAM_BIN: "/opt/litestream" }).litestreamBin).toBe(
+      "/opt/litestream",
+    );
+    expect(cfg({ ...MIN_ENV, WAITRON_LITESTREAM_BIN: "" }).litestreamBin).toBe("litestream");
   });
 
   it("landingPort defaults to 80 and 0 disables it", () => {

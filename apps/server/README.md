@@ -59,7 +59,9 @@ directory**, and that directory is the whole database: `openVenueStore`
 (`packages/store/src/index.ts`) creates `venue.db` and `node.db` inside it, each with write-ahead
 journalling, foreign keys on and a busy timeout. The operating-system permissions on that directory
 are the whole of the access control; there is nothing to `GRANT`, and nothing that could be granted
-too widely.
+too widely. While a primary streams to a bucket, the server's own Litestream child
+also opens `venue.db`, and takes no lock ([conventions-data.md](../../docs/developers/conventions-data.md), "Litestream is a second
+process on `venue.db`").
 
 **Every migration set is applied to `venue.db`, and `node.db` is created and left empty**
 (`packages/migrations/src/apply.ts`, and `useVenueDb`'s own note in

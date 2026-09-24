@@ -1,7 +1,14 @@
 export type { ListedObject, ObjectStore, PutCondition, StoredObject } from "./object-store.js";
-export { CONFLICT_ATTEMPTS, bucketKey, createS3ObjectStore, normalisePrefix } from "./s3-store.js";
+export { CONFLICT_ATTEMPTS, createS3ObjectStore } from "./s3-store.js";
 export type { BucketConfig, S3ObjectStoreOptions } from "./s3-store.js";
-export { GENERATION_NAME, generationName, parseGenerationName, venuePrefix } from "./names.js";
+export {
+  GENERATION_NAME,
+  bucketKey,
+  generationName,
+  normalisePrefix,
+  parseGenerationName,
+  venuePrefix,
+} from "./names.js";
 export {
   pointerKey,
   pointerMessage,
@@ -11,15 +18,18 @@ export {
   writePointer,
 } from "./pointer.js";
 export type { SignedPointer, StreamPointer } from "./pointer.js";
-export {
-  PRUNE_CONCURRENCY,
-  claimGeneration,
-  generationPrefix,
-  markerKey,
-  pruneGenerations,
-} from "./generations.js";
+export { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 export { PROBE_PREFIX, probeBucket } from "./probe.js";
 export type { ProbeFailure, ProbeResult } from "./probe.js";
+export {
+  ENV_ACCESS_KEY_ID,
+  ENV_SECRET_ACCESS_KEY,
+  LITESTREAM_VERSION,
+  resolveLitestreamBin,
+} from "./litestream.js";
+export type { ChildHandle, SpawnFn } from "./litestream-process.js";
+export { DEFAULT_WAL_LIMIT_BYTES, StreamSupervisor } from "./supervisor.js";
+export type { StreamLog, StreamState, StreamStatus, SupervisorDeps } from "./supervisor.js";
 
 // Side-effect only: keeps errors.ts's registry augmentation reachable from this barrel
 // (guarded tree-wide by scripts/errors-reachable.test.ts).

@@ -307,6 +307,16 @@ was stopping Litestream.
   condition as worded above does not describe what happened: the recorded `RESTART_RESYNCS = true`
   rests on the restore being complete. Which branch the supervisor takes is for Task 6 and the owner
   to confirm against this result (results note, Slice 2 measurements §1).
+  **2026-09-24, measured:** repeated at the limit itself (results note, Slice 2 measurements §1b):
+  6,487 sales took the side file past 256 MiB with Litestream attached to an unreachable store, then
+  Litestream was stopped, the side file folded back, and Litestream restarted against the same
+  replica path. The restarted daemon uploaded a full copy of the database at LEVEL 0, not level 9 — a
+  level-0 file holding all 820 of the database's pages, 2,529,921 bytes against a 3,342,336-byte
+  database file — and no new level-9 file; the restore afterwards held every sale with
+  `integrity=ok`. A second run showed the same. Measurement 1 had not opened its new level-0 file, so
+  it could not see this. The copy's size followed the database, not the side file; what it costs on a
+  venue's real database, product images included, was not measured. **Owner decision 2026-09-24:**
+  the same generation continues after a pause; there is no new-generation rule.
 - **Whether SQLite's automatic folding should be switched off at all** is measured too (§8.1, item 2).
   The topology design says to (§8.3); the prototype found the setting makes no difference while the
   store is unreachable. Until the measurement says otherwise, `packages/store` keeps SQLite's default,

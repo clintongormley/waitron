@@ -1183,6 +1183,14 @@ the server opens with `exclusive: false` and takes no lock. A command that chang
 reset of in-flight AEAT submissions (`apps/server/src/restart-reset.ts`) relies on one server
 process per folder.
 
+**Litestream is a second process on `venue.db`, and it takes no lock.** While a primary streams its
+copy to the owner's bucket, the server runs Litestream as its own child process
+(`packages/stream/src/supervisor.ts`), and Litestream reads and writes `venue.db` without
+`venue.lock`; the slice-2 plan (Reconciliation L1) records that it adds `_litestream_seq` and
+`_litestream_lock` tables inside the file and a `.venue.db-litestream/` folder beside it. It is only
+ever started by the server that holds the lock, and `stopWork` stops it before the store closes
+(`apps/server/src/boot.ts`).
+
 **The mechanism: a SQLite transaction on an empty file, not a lock file.** `venue.lock` is opened
 with `node:sqlite`, `pragma busy_timeout = 0`, and `begin immediate` is left open. It is the same
 mechanism the migrator uses for `migrations.lock` (`packages/migrations/src/apply.ts`), whose

@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,8 +79,8 @@ describe("openVenueStore", () => {
       // Weaker than it looks: `node:sqlite` enables foreign keys by default, so this reads 1 even
       // with the store's `pragma foreign_keys` deleted.
       expect(pragma(db, "foreign_keys")).toBe(1);
-      // SQLite's own default, deliberately not zero: nothing else checkpoints until Litestream
-      // arrives, so a zero here would let the write-ahead file grow without limit.
+      // SQLite's own default, deliberately not zero: with streaming off nothing else checkpoints,
+      // so a zero here would let the write-ahead file grow without limit.
       expect(pragma(db, "wal_autocheckpoint")).toBe(1000);
       // SQLite's default is 0. The case below is what the setting buys.
       expect(pragma(db, "recursive_triggers")).toBe(1);
@@ -686,5 +686,94 @@ describe("openVenueStore under contention", () => {
       vi.useRealTimers();
       holder.close();
     }
+  });
+});
+
+describe("checkpointTruncate", () => {
+  const sideFileBytes = (directory: string) => statSync(join(directory, "venue.db-wal")).size;
+
+  // A hundred single-row commits: well under SQLite's 1000-page automatic checkpoint, so the side
+  // file still holds frames a reader can be reading.
+  const fill = (store: Awaited<ReturnType<typeof open>>["store"]) => {
+    store.venue.run(sql`create table if not exists sales (id integer primary key, total integer)`);
+    for (let i = 0; i < 100; i += 1) store.venue.run(sql`insert into sales (total) values (${i})`);
+  };
+
+  it("folds the side file back into the database and truncates it", async () => {
+    const { directory, store } = await open();
+    fill(store);
+    expect(sideFileBytes(directory)).toBeGreaterThan(0);
+
+    await expect(store.venue.checkpointTruncate()).resolves.toEqual({ reclaimed: true });
+
+    expect(sideFileBytes(directory)).toBe(0);
+    expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 100 });
+  });
+
+  // The failing case is a fold-back that WAITS on the busy handler, and on this synchronous engine
+  // the whole process waits with it.
+  it("answers at once, unreclaimed, while another connection is still reading the side file", async () => {
+    const { directory, store } = await open();
+    fill(store);
+    const reader = new DatabaseSync(join(directory, "venue.db"), { readOnly: true });
+    try {
+      const rows = reader.prepare("select id from sales").iterate();
+      rows.next();
+      const started = performance.now();
+      await expect(store.venue.checkpointTruncate()).resolves.toEqual({ reclaimed: false });
+      expect(performance.now() - started).toBeLessThan(1_000);
+      rows.return?.();
+    } finally {
+      reader.close();
+    }
+    // The zero wait was for that one statement only.
+    expect(pragma(store.venue, "busy_timeout")).toBe(5000);
+    await expect(store.venue.checkpointTruncate()).resolves.toEqual({ reclaimed: true });
+  }, 30_000);
+
+  it("waits for a running write transaction instead of failing inside it", async () => {
+    const { store } = await open();
+    fill(store);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const sale = store.venue.withWriteLock(async () => {
+      store.venue.run(sql`insert into sales (total) values (1)`);
+      await gate;
+    });
+    let folded = false;
+    const fold = store.venue.checkpointTruncate().then((result) => {
+      folded = true;
+      return result;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(folded).toBe(false);
+    release();
+    await sale;
+    await expect(fold).resolves.toEqual({ reclaimed: true });
+    expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 101 });
+  });
+
+  // A transaction opened outside the queue, on the writer, makes the checkpoint statement throw.
+  it("puts the busy timeout back when the checkpoint statement throws", async () => {
+    const { store } = await open();
+    fill(store);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const held = store.venue.transaction(async (tx) => {
+      tx.run(sql`insert into sales (total) values (1)`);
+      await gate;
+    });
+    await expect(store.venue.checkpointTruncate()).rejects.toThrow("database table is locked");
+    release();
+    await held;
+    expect(pragma(store.venue, "busy_timeout")).toBe(5000);
+  });
+
+  it("refuses a fold-back asked for from inside a write transaction's body", async () => {
+    const { store } = await open();
+    fill(store);
+    await expect(store.venue.withWriteLock(() => store.venue.checkpointTruncate())).rejects.toThrow(
+      "write lock: a body asked for the lock it is already holding",
+    );
   });
 });

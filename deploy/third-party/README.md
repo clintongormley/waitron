@@ -38,3 +38,14 @@ info@waitron.io, naming the image's tag.
 
 These are the terms of sections 6(b) and 6(d) of the GNU General Public License version 3, which
 the LGPL version 3 incorporates.
+
+## Litestream
+
+The server streams the venue's database to the owner's storage bucket with Litestream 0.5.17,
+which it runs as a separate program, `/usr/local/bin/litestream` in the image. It is the
+unmodified release binary the Litestream project publishes for its tag `v0.5.17`
+(<https://github.com/benbjohnson/litestream>), and the image build checks it against that
+release's published SHA-256 before installing it. Litestream is licensed under the Apache License,
+Version 2.0.
+
+- `licenses/Apache-2.0.txt` is that licence, copied from the `LICENSE` file at the tag.

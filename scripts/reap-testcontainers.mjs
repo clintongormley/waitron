@@ -132,7 +132,8 @@ export function reap({ exec, now = () => Date.now() }) {
 /**
  * Kill orphaned vitest worker processes — the CPU-side counterpart to `reap()`'s container cleanup. A
  * pure data-in/data-out function over an injected `psExec` and `kill`, testable without touching a real
- * process; the CLI block below wires in the real `ps` and `process.kill`.
+ * process; the CLI block below wires in the real `ps` and `process.kill`. It also kills parentless
+ * test binaries `isTestBinaryProcess` matches.
  *
  * @param {{ psExec: (args: string[]) => string, kill: (pid: number, signal: string) => void }} deps
  *   `psExec(args)` runs `ps <args>` and returns stdout (throwing when `ps` is absent). `kill(pid, sig)`
@@ -156,6 +157,24 @@ function isVitestProcess(command) {
   );
 }
 
+/**
+ * Is this `ps` command column one of the test binaries a checkout keeps in a `.bin` (Litestream,
+ * which `scripts/setup-litestream.mjs` installs at the root and the bench rig under
+ * `bench/sqlite-failover/`, and `versitygw`, which nothing in the tree installs today)? The row's
+ * FIRST token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
+ * `<dir>/bench/sqlite-failover/`, where `<dir>` is a directory whose name starts `waitron` — the main
+ * checkout and every `waitron-<branch>` worktree. Any other `.bin` (a developer's own `~/.bin`, a
+ * `node_modules/.bin`), a Litestream on PATH, and a tool that merely names the file are not matched.
+ *
+ * @param {string} command the command column of one `ps` row
+ * @returns {boolean}
+ */
+function isTestBinaryProcess(command) {
+  return /^(?:\S*\/)?waitron[^/\s]*\/(?:bench\/sqlite-failover\/)?\.bin\/(?:litestream|versitygw)(?:\s|$)/.test(
+    command,
+  );
+}
+
 export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   let table;
   try {
@@ -172,7 +191,9 @@ export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   const orphans = table
     .split("\n")
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
-    .filter((m) => m !== null && m[2] === "1" && isVitestProcess(m[3]))
+    .filter(
+      (m) => m !== null && m[2] === "1" && (isVitestProcess(m[3]) || isTestBinaryProcess(m[3])),
+    )
     .map((m) => Number(m[1]));
 
   let killed = 0;
@@ -206,7 +227,7 @@ if (process.argv[1] && process.argv[1].endsWith("reap-testcontainers.mjs")) {
   });
   const result = reap({ exec: dockerExec });
   const workerPart = workers.psAvailable
-    ? `killed ${workers.workersKilled} orphaned vitest worker(s)`
+    ? `killed ${workers.workersKilled} orphaned vitest worker(s) or test binaries`
     : "ps unavailable — no worker sweep";
   const containerPart = result.dockerAvailable
     ? `reaped ${result.containersRemoved} stale waitron testcontainers container(s)`

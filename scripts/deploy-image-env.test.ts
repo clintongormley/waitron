@@ -407,6 +407,19 @@ function libvipsRelease(): { packageVersion: string; libvips: string } {
   return { packageVersion, libvips: [...libvips][0]! };
 }
 
+const NOTICES = read("deploy/third-party/README.md");
+
+/** The `## <heading>…` section of the third-party notice, up to the next `## ` heading. */
+function noticeSection(heading: string): string {
+  const sections = NOTICES.split(/^(?=## )/m).filter((section) =>
+    section.startsWith(`## ${heading}`),
+  );
+  if (sections.length !== 1) {
+    throw new Error(`expected one "## ${heading}" section, found ${sections.length}`);
+  }
+  return sections[0]!;
+}
+
 /**
  * libvips ships in the image as its own shared library, under LGPL-3.0-or-later. Reads TEXT: it
  * proves the files exist and the Dockerfile names them, not that the built image holds them — the
@@ -425,17 +438,65 @@ describe("the box image carries libvips's licence, its notices and a written sou
     expect(lgpl).toContain("GNU LESSER GENERAL PUBLIC LICENSE");
     expect(lgpl).toContain("Version 3, 29 June 2007");
     expect(read("deploy/third-party/licenses/GPL-3.0.txt")).toContain("GNU GENERAL PUBLIC LICENSE");
-    const offer = read("deploy/third-party/README.md");
+    const offer = noticeSection("libvips");
     const { packageVersion, libvips } = libvipsRelease();
     expect(offer).toContain(`libvips ${libvips}`);
     expect(offer).toContain(`libvips-cpp.so.${libvips}`);
     expect(offer).toContain(packageVersion);
-    // Every version the offer names is one of those two, so a stale one anywhere in it fails.
+    // Every version the section names is one of those two, so a stale one anywhere in it fails.
     expect(new Set(offer.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(new Set([libvips, packageVersion]));
     expect(offer).toContain("info@waitron.io");
     // GPL-3.0 §6(b)'s term for a physical product, and §6(d)'s directions for a download.
     expect(offer).toMatch(/at least three years/);
     expect(offer).toMatch(/spare parts or customer support/);
     expect(offer).toMatch(/container registry/);
+  });
+});
+
+/**
+ * Litestream ships in the image as its own program, under Apache-2.0. Reads TEXT, like the libvips
+ * block: it ties the notice's version to the pin `packages/stream` exports and proves the files and
+ * the image-smoke step exist, not that the licence text is the one at the tag or that the built
+ * image holds it — the image-smoke step is what looks inside the image.
+ */
+describe("the box image carries Litestream's licence and a notice naming the pinned version", () => {
+  const PIN_LINE = /^export const LITESTREAM_VERSION = "([0-9.]+)";$/m;
+  const pinned = read("packages/stream/src/litestream.ts").match(PIN_LINE)?.[1];
+
+  it("names the pinned version, and only that one, in its section of the notice", () => {
+    expect(pinned).toMatch(/^\d+\.\d+\.\d+$/);
+    const section = noticeSection("Litestream");
+    expect(section).toContain(`Litestream ${pinned}`);
+    expect(section).toContain(`\`v${pinned}\``);
+    expect(new Set(section.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(new Set([pinned]));
+    expect(section).toMatch(/Apache License,\s+Version 2\.0/);
+    expect(section).toContain("`licenses/Apache-2.0.txt`");
+  });
+
+  it("names no version in the notice but libvips's and Litestream's", () => {
+    const { packageVersion, libvips } = libvipsRelease();
+    expect(new Set(NOTICES.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(
+      new Set([libvips, packageVersion, pinned]),
+    );
+  });
+
+  it("holds the Apache License 2.0 text", () => {
+    const apache = read("deploy/third-party/licenses/Apache-2.0.txt");
+    expect(apache).toContain("Apache License");
+    expect(apache).toContain("Version 2.0, January 2004");
+    expect(apache).toContain("END OF TERMS AND CONDITIONS");
+  });
+
+  it("copies the binary into the runtime image, and image-smoke runs it against the pin", () => {
+    expect(DOCKERFILE).toContain(
+      "COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream",
+    );
+    // The step reads the pin with this sed expression, so it must be the one that matches above.
+    expect(IMAGE_SMOKE).toContain(
+      `sed -nE 's/${PIN_LINE.source}/\\1/p' packages/stream/src/litestream.ts`,
+    );
+    expect(IMAGE_SMOKE).toContain('reported=$(docker exec "$app" litestream version)');
+    expect(IMAGE_SMOKE).toContain('[ "$reported" = "$pinned" ]');
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/licenses/Apache-2.0.txt");
   });
 });
