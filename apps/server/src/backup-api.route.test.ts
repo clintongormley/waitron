@@ -829,11 +829,10 @@ describe("backup admin routes", () => {
     await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
   });
 
-  it("a concurrent apply while a reload is in flight → 409 backup.reload_in_progress", async () => {
-    // Hono serves requests concurrently, so two apply/rotate calls can race the supervisor's single
-    // reload latch. The loser must map to 409 (a conflict to retry), NOT the boundary's default 400.
-    // A gated `buildConfig` parks the FIRST reload inside its critical section (latch held), so the
-    // second apply hits the latch deterministically — no timing guess.
+  it("an apply while another reload is in flight → 409 backup.reload_in_progress", async () => {
+    // The routes wait for each other, so the reload holding the latch is one started on the
+    // supervisor directly. A gated `buildConfig` parks it inside its critical section, so the apply
+    // hits the latch deterministically. It must map to 409, NOT the boundary's default 400.
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     let release!: () => void;
@@ -874,19 +873,169 @@ describe("backup admin routes", () => {
       schedule: DAILY_AT_0330,
       retention: RETENTION,
     });
-    const post = () =>
-      app.request("/api/backup/apply", {
-        method: "POST",
-        headers: { cookie, "content-type": "application/json" },
-        body,
-      });
-
-    const first = post(); // parks inside reload() → holds the latch
-    await enteredOnce; // deterministic: the latch is held before the second call fires
-    const second = await post(); // hits the latch
+    const first = sup.reload(); // parks inside reload() → holds the latch
+    await enteredOnce;
+    const second = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body,
+    });
     expect(second.status).toBe(409);
     expect(await second.json()).toMatchObject({ error: { code: "backup.reload_in_progress" } });
     release();
-    expect((await first).status).toBe(200); // the winner completes normally once released
+    await first; // the parked reload completes normally once released
+  }, 60_000);
+
+  // One route is parked right after its first read of the held key; the other is sent while it waits.
+  // Unserialised, the second runs to completion inside that window and the first then writes (or
+  // leaves loaded) the key it read beforehand.
+  async function raceKeyWrites(parked: "apply" | "rotate") {
+    const stateDir = await makeStateDir();
+    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let entered!: () => void;
+    const paused = new Promise<void>((r) => {
+      entered = r;
+    });
+    let first = true;
+    const app = buildApp(sup, stateDir, {}, async () => {
+      const key = loadRecoveryKey(await loadBoxEnv({}, stateDir));
+      if (first) {
+        first = false;
+        entered();
+        await gate;
+      }
+      return key;
+    });
+    const cookie = await login(app);
+    const headers = { cookie, "content-type": "application/json" };
+    const apply = () =>
+      app.request("/api/backup/apply", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          destinationDir: makeDestDir(),
+          schedule: DAILY_AT_0330,
+          retention: RETENTION,
+        }),
+      });
+    const rotate = () =>
+      app.request("/api/backup/rotate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ recoveryKey: KEY_2 }),
+      });
+
+    const firstReq = parked === "apply" ? apply() : rotate();
+    await paused;
+    const secondReq = parked === "apply" ? rotate() : apply();
+    // Queued, the second request cannot settle, so the timer releases the parked one; unqueued, the
+    // test relies on the second request finishing within that second.
+    await Promise.race([secondReq, new Promise((r) => setTimeout(r, 1_000))]);
+    release();
+    const [firstRes, secondRes] = await Promise.all([firstReq, secondReq]);
+    const [applied, rotated] = parked === "apply" ? [firstRes, secondRes] : [secondRes, firstRes];
+    return { applied, rotated, sup, stateDir, app, cookie };
+  }
+
+  for (const parked of ["apply", "rotate"] as const) {
+    it(`a rotate that succeeds leaves its key in effect when ${parked} is parked mid-request`, async () => {
+      const { applied, rotated, sup, stateDir, app, cookie } = await raceKeyWrites(parked);
+      expect(rotated.status).toBe(200);
+      expect(applied.status).toBe(200);
+      expect(loadRecoveryKey(await loadBoxEnv({}, stateDir))).toBe(KEY_2);
+      expect(sup.current().recoveryKey).toBe(KEY_2);
+      const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
+      expect((await rk.json()).key).toBe(KEY_2);
+    }, 60_000);
+  }
+
+  it("a write queued behind another is refused if the node stopped being primary while it waited", async () => {
+    const stateDir = await makeStateDir();
+    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let entered!: () => void;
+    const paused = new Promise<void>((r) => {
+      entered = r;
+    });
+    let first = true;
+    const app = buildApp(sup, stateDir, {}, async () => {
+      const key = loadRecoveryKey(await loadBoxEnv({}, stateDir));
+      if (first) {
+        first = false;
+        entered();
+        await gate;
+      }
+      return key;
+    });
+    const cookie = await login(app);
+    const headers = { cookie, "content-type": "application/json" };
+
+    const rotateReq = app.request("/api/backup/rotate", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ recoveryKey: KEY_2 }),
+    });
+    await paused;
+    const applyReq = app.request("/api/backup/apply", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        destinationDir: makeDestDir(),
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    // Let the apply pass its arrival check and join the queue while the node is still primary.
+    await Promise.race([applyReq, new Promise((r) => setTimeout(r, 1_000))]);
+    sc.role = "secondary";
+    release();
+    const [rotated, applied] = await Promise.all([rotateReq, applyReq]);
+
+    expect(rotated.status).toBe(200);
+    expect(applied.status).toBe(409);
+    expect(await applied.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+    const env = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    expect(env.WAITRON_BACKUP_DIR).toBeUndefined();
+    expect(env.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
+    expect(sup.current().destinations).toEqual([]);
+  }, 60_000);
+
+  it("a refused write does not hold up the next one", async () => {
+    const stateDir = await makeStateDir();
+    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const app = buildApp(makeSupervisor({ stateDir, base: {}, role: "primary" }), stateDir);
+    const cookie = await login(app);
+    const headers = { cookie, "content-type": "application/json" };
+    const refused = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        destinationDir: makeDestDir(),
+        recoveryKey: KEY_2,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "backup.recovery_key_exists" },
+    });
+    const rotated = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ recoveryKey: KEY_2 }),
+    });
+    expect(rotated.status).toBe(200);
+    expect(loadRecoveryKey(await loadBoxEnv({}, stateDir))).toBe(KEY_2);
   }, 60_000);
 });
