@@ -8,13 +8,12 @@ const LOCAL =
   "one node's own row, keyed by its node id; in venue.db like every table, read and written only by that node";
 
 /**
- * Core's tables, classified for native replication (swap spec §2.1). `canvases` is `state` (it
- * succeeded the dropped `layout_profiles`); `bookings` left for `@waitron/bookings` (#270). The
- * completeness of this list against core's migrations is guarded by `classification.test.ts`, which
- * scans `drizzle/*.sql` for `CREATE TABLE`.
+ * Core's tables, classified for native replication. The completeness of this list against core's
+ * migrations is guarded by `classification.test.ts`, which scans `drizzle/*.sql` for
+ * `CREATE TABLE`.
  */
 export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
-  // ledger — append-only history copied to a standby AND drained back from a returned box.
+  // ledger — copied to a standby AND drained back from a returned box.
   appendOnly("sales", "ledger", LEDGER),
   appendOnly("sale_lines", "ledger", LEDGER),
   appendOnly("tenders", "ledger", LEDGER),

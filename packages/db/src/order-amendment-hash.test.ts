@@ -37,9 +37,8 @@ describe("computeAmendmentHash", () => {
   });
 
   it("commits the sequence, kind, order, offset and predecessor — each changes the hash", () => {
-    // The remaining canonical fields, so no field is silently outside the digest (the vocabulary the
-    // #52 lesson was about is only part of the content; a chain field left unhashed would be just as
-    // rewritable). One assertion per field, none of them the ones above.
+    // The remaining canonical fields, so no field is silently outside the digest. One assertion per
+    // field, none of them the ones above.
     const h = computeAmendmentHash(base);
     expect(computeAmendmentHash({ ...base, sequenceNo: 2 })).not.toBe(h);
     expect(
@@ -51,7 +50,7 @@ describe("computeAmendmentHash", () => {
   });
 
   it("hashes event_at as the instant, so an offset-only representation change is inert", () => {
-    // Same instant, different string form: the hash must not move (the EventAtMs precedent). A null
+    // Same instant, different string form: the hash must not move. A null
     // reason is hashed as the empty string, so a null-vs-null pair is genuinely the same content.
     const a = computeAmendmentHash(base);
     const b = computeAmendmentHash({ ...base, eventAt: "2026-08-06T11:00:00.000+01:00" });
@@ -60,16 +59,10 @@ describe("computeAmendmentHash", () => {
 });
 
 describe("the canonical string the amendment hash digests", () => {
-  // The two digests below are RECORDED from this implementation on 2026-09-20, not published by
-  // anyone. They cannot tell you the format is right; they can only tell you it has changed — which
-  // is the property that matters here, because a stored chain is verified by recomputing these
-  // digests and an amendment chain that no longer recomputes cannot be repaired.
-  //
-  // Everything the canonical string is made of is inside them: each field's NAME, the order the
-  // fields are written in, the `=` between a name and its value, the `&` between pairs, the empty
-  // string a null reason or a genesis predecessor contributes, and the uppercase hex. Before these
-  // two assertions existed, every one of those could be changed and the whole suite stayed green —
-  // the other tests here compare one hash with another, so they agree with each other whatever the
+  // The two digests below are RECORDED from this implementation, not published by anyone. They
+  // cannot tell you the format is right; they can only tell you it has changed — and an amendment
+  // chain that no longer recomputes cannot be repaired. Everything the canonical string is made of
+  // is inside them, where the other tests here compare one hash with another and agree whatever the
   // format is.
   //
   // If one of them fails, the format moved. Restoring it is the fix; editing the expected digest is
@@ -121,9 +114,7 @@ describe("verifyAmendmentChain", () => {
       sequenceNo: 1,
     });
     // Read-back row order is irrelevant: verify sorts by sequenceNo first, so [e2, e1] still verifies.
-    // This is the tie-break-on-HASHED-sequence lesson (#52): the walk is defined by the hashed
-    // sequence_no, never by ingest order — proven by deletion below (deleting the .sort makes THIS
-    // case fail).
+    // The walk is defined by the hashed sequence_no, never by ingest order.
     expect(verifyAmendmentChain([e2, e1]).ok).toBe(true);
     // A predecessor pointer aimed at the wrong hash — a splice or a reorder attempt — is a broken link.
     expect(verifyAmendmentChain([e1, { ...e2, prevEntryHash: "DEADBEEF" }])).toEqual({

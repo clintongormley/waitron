@@ -19,13 +19,9 @@ export interface ReservedNodeInput {
 }
 
 /**
- * Insert the standby's OWN dormant node row (design §6 R2): its distinct nodeId, its public key, and
- * the primary's endorsement of that key, all in one INSERT so public_key and endorsement land together.
- * Nothing in the database refuses another writer this table: an ordinary insert into `nodes`, and
- * an update of `public_key` or `endorsement`, both succeed (measured 2026-09-23 on Node v26.7.0
- * against the core migration set). Adopt is the only writer by convention now. Caller supplies a
- * `withTransaction` tx so this commits with the reserved SIF + sealed key in one transaction
- * (CLAUDE.md §3 — a write-path helper takes a `tx`).
+ * Insert the standby's OWN dormant node row: its distinct nodeId, its public key, and the primary's
+ * endorsement of that key, all in one INSERT so public_key and endorsement land together. Nothing
+ * in the database refuses another writer this table; adopt is the only writer by convention.
  */
 export async function insertReservedNodeTx(
   tx: Transaction,
@@ -70,7 +66,7 @@ export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endor
 }
 
 /**
- * The id of a node's LIVE standard-purpose invoice series, inside the caller's tenant transaction.
+ * The id of a node's LIVE standard-purpose invoice series, inside the caller's transaction.
  * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
  * Caps the read at TWO rows and fails LOUD on a second live standard series rather than picking one
  * silently: nothing enforces one standard series per node (the natural key is `(node_id,
@@ -106,17 +102,12 @@ export function readStandardSeriesId(db: Database, nodeId: string): Promise<stri
 
 /**
  * Retire every LIVE series of a node, stamping `retired_at`, and return how many were retired.
- * **Nothing in the database refuses this update.** Stamping `retired_at` succeeds on an ordinary
- * handle, measured 2026-09-23 on Node v26.7.0 against the core migration set. What is still true is
- * the code half: no runtime path retires a series — a restore does, before opening the node's
+ * **Nothing in the database refuses this update.** A restore calls it, before opening the node's
  * replacement series.
  */
 export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
   const rows = await tx
     .update(invoiceSeries)
-    // A JavaScript `Date`, the way every other converted writer in this package stamps a `ts`
-    // column: `sql`now()`` is a PostgreSQL function this engine does not have, and the statement
-    // failed outright with `no such function: now` (errcode ERR_SQLITE_ERROR).
     .set({ retiredAt: now() })
     .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });

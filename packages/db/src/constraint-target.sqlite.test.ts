@@ -89,8 +89,8 @@ describe("reading a SQLite refusal", () => {
   it("reads a primary-key collision as a unique violation", async () => {
     const db = await open();
     const error = await refusal(db, sql`insert into child (id, parent_id) values ('c1', 1)`);
-    // SQLite reports a primary key under its own result code, where PostgreSQL folded it into
-    // 23505. A caller asking "was this key already taken?" must get the same answer either way.
+    // SQLite reports a primary key under its own result code. A caller asking "was this key already
+    // taken?" must get the same answer either way.
     expect(isUniqueViolation(error)).toBe(true);
     expect(refusalOn(error, UNIQUE_VIOLATION, { table: "child", columns: ["id"] })).toBe(true);
   });
@@ -124,8 +124,6 @@ describe("reading a SQLite refusal", () => {
     const db = await open();
     const error = await refusal(db, sql`delete from parent where id = 1`);
     expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
-    // The two directions carried different SQLSTATEs on PostgreSQL and carry different result
-    // codes here, so the distinction survives the engine change.
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(false);
   });
 
@@ -160,10 +158,6 @@ describe("reading a SQLite refusal", () => {
 /**
  * A trigger's own `RAISE(ABORT, …)` — how this schema's hand-written guards refuse a write, and the
  * one refusal whose wording the migration, not the engine, chooses.
- *
- * The hand-built cases live here rather than in `constraint-target.test.ts` because that file
- * crafts PostgreSQL shapes (`code`, `table`, `detail`) that this engine never produces; the fields
- * these read are the ones `open()` above drives for real.
  */
 // Deliberately NOT one of the product's own trigger messages
 // (`packages/db/src/trigger-refusals.ts`): what is under test here is the PREDICATE, against a
@@ -277,8 +271,8 @@ describe("reading which CHECK refused a write", () => {
   });
 
   it("cannot name an ANONYMOUS check, which reports its expression instead", async () => {
-    // The hedge stated on the predicate, measured rather than assumed: a CHECK declared with no
-    // name reports the EXPRESSION, so there is no name to ask for and this can only ever be false.
+    // The hedge stated on the predicate: a CHECK declared with no name reports the EXPRESSION, so
+    // there is no name to ask for and this can only ever be false.
     const db = await open();
     db.run(sql`create table anon (a integer, check (a > 0))`);
     const error = await refusal(db, sql`insert into anon (a) values (0)`);
@@ -314,10 +308,9 @@ describe("reading which CHECK refused a write", () => {
  * every `sameTarget` comparison against such an index is false. The name is the identity, the same
  * way a CHECK's is.
  *
- * The hedge, and it is the thing a reader must not have to discover: this is NOT how a plain-column
- * index is reported. That one names its TABLE and COLUMNS and no index name at all, so asking
- * `indexViolated` for it can only ever be false — `refusalOn` is its question. Both shapes are
- * driven below, each against the other as its control.
+ * The hedge: this is NOT how a plain-column index is reported. That one names its TABLE and COLUMNS
+ * and no index name at all, so asking `indexViolated` for it can only ever be false — `refusalOn`
+ * is its question. Both shapes are driven below, each against the other as its control.
  */
 describe("reading which INDEX refused a write", () => {
   it("names the index an expression-index collision refused, and declines another name", async () => {
@@ -338,7 +331,7 @@ describe("reading which INDEX refused a write", () => {
     db.run(sql`create unique index named_uq_a_uq on named_uq (a)`);
     db.run(sql`insert into named_uq (a) values ('K')`);
     const error = await refusal(db, sql`insert into named_uq (a) values ('K')`);
-    // The index has a name and the refusal does not carry it — measured, not assumed.
+    // The index has a name and the refusal does not carry it.
     expect(indexViolated(error, "named_uq_a_uq")).toBe(false);
     // The control in the other direction: this shape IS identifiable, by its key.
     expect(refusalOn(error, UNIQUE_VIOLATION, { table: "named_uq", columns: ["a"] })).toBe(true);

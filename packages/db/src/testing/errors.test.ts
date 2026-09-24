@@ -2,14 +2,8 @@ import { expect, it } from "vitest";
 import { captureError, driverErrorCode, engineErrorMessage } from "./errors.js";
 
 /*
- * immutability.test.ts exercises these against real driver errors, but only
- * ever the shape both drivers actually produce (a DrizzleQueryError whose
- * `.cause` carries the SQLSTATE and message). That leaves the top-level and
- * neither-present branches unreached — the latter is a throw, not a return,
- * since neither real driver has ever been observed to omit both — and
- * captureError's "fn did not reject" branch unreached entirely. This file
- * exists to cover the branches an integration test cannot reach without a
- * driver that behaves differently from either target.
+ * Hand-built error shapes, for the branches an integration test does not reach: the neither-present
+ * throw, and captureError's "fn did not reject" branch.
  */
 
 it("driverErrorCode reads a top-level .code", () => {
@@ -41,11 +35,9 @@ it("engineErrorMessage falls back to the top-level .message when .cause has none
 });
 
 it("engineErrorMessage throws when neither .cause.message nor .message is a string", () => {
-  // No String(error) fallback: that would reproduce a DrizzleQueryError's
-  // generic "Failed query: <sql>" text and let a pattern that happens to
-  // match the SQL pass an assertion for the wrong reason (the exact trap
-  // tenancy.test.ts's rejectsWithCauseMatching, Task 4, was written to
-  // close).
+  // No String(error) fallback: on drizzle's wrapper that would reproduce the
+  // failed SQL and let a pattern that happens to match the SQL pass an
+  // assertion for the wrong reason.
   expect(() => engineErrorMessage(null)).toThrow(/neither \.cause\.message nor \.message/);
   expect(() => engineErrorMessage(undefined)).toThrow(/neither \.cause\.message nor \.message/);
   expect(() => engineErrorMessage("plain string rejection")).toThrow(

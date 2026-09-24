@@ -1,17 +1,9 @@
-// A real venue file, not `:memory:` and not a container: the triggers under test are ordinary
-// SQLite triggers, so what they write is visible to the one handle the store gives a file
-// (CLAUDE.md §4). The suite this replaces ran on a container because it watched the change rows
-// from a SECOND connection while the writing transaction was open, and because one case set
-// `session_replication_role = replica`. Neither survives the storage switch: there is one writer
-// per file here, and this engine has no apply worker and no `ENABLE ALWAYS`.
+// A real venue file, not `:memory:`: the triggers under test are ordinary SQLite triggers, so what
+// they write is visible to the one handle the store gives a file.
 //
-// EVERY expectation below is what PostgreSQL's `waitron_record_change()` wrote, measured rather
-// than remembered — `origin/main`'s function body run on PGlite over three probe tables, one per
-// shape (2026-09-22). The keyless and null-identity cases are that measurement's answer: the
-// PL/pgSQL read `changed_row ->> 'id'` out of a row rendered as JSON, so a missing column and a
-// null column both gave null, and `jsonb_strip_nulls` then dropped the key. `new."id"` is a
-// PREPARE error on a table with no such column, so the same answer has to be reached a different
-// way, and sixteen of the eighty-nine declared sources are keyless.
+// A table with no `id` column and a row whose `id` is null both produce an identity with no `id`
+// key. `new."id"` is a PREPARE error on a table with no such column, so the keyless case is one of
+// its own.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
@@ -51,12 +43,9 @@ describe("database change feed", () => {
   });
 
   /**
-   * What the change log holds, sorted by its rendered JSON rather than read in write order.
-   *
-   * Nothing downstream reads the order two changes arrive in: the dashboard's live API gathers a
-   * batch's identities into a `Map` and flushes the values (`apps/server/src/live-api.ts`, `const
-   * pending = new Map<…>`). What the assertions rest on is the event COUNT and each event's
-   * contents, and the sort leaves both alone.
+   * What the change log holds, sorted by its rendered JSON rather than read in write order. What
+   * the assertions rest on is the event COUNT and each event's contents, and the sort leaves both
+   * alone.
    */
   function changes(): ResourceChange[] {
     return suite.db
@@ -114,10 +103,9 @@ describe("database change feed", () => {
     ]);
   });
 
-  // The PL/pgSQL opened with `if TG_OP = 'UPDATE' and NEW is not distinct from OLD then return
-  // null`. SQLite fires a row trigger for an UPDATE that changes nothing, so the same silence has
-  // to be bought with a `when` clause — and the case above is this one's control, because a `when`
-  // clause that refused everything would pass here and fail there.
+  // SQLite fires a row trigger for an UPDATE that changes nothing, so the silence is bought with a
+  // `when` clause — and the case above is this one's control, because a `when` clause that refused
+  // everything would pass here and fail there.
   it("writes nothing for an update that leaves every column as it was", () => {
     suite.db.run(sql.raw(`insert into live_probe values ('still', 'p', null)`));
     suite.db.run(sql.raw(`delete from change_log`));

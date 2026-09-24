@@ -11,16 +11,10 @@ import * as schema from "./schema/index.js";
 import { withTransaction } from "./tenancy.js";
 
 /**
- * `withTransaction` against a real SQLite store, built here rather than through `useVenueDb`.
- *
- * That is a deliberate shape, not a leftover: `useVenueDb`'s job is to APPLY MIGRATION SETS — the
- * option is required — and publish one database for the whole file, and this suite wants neither. It
- * wants a bare store with two hand-written tables, because what is under test is the helper and not
- * the schema, and a fresh store per case so the queue it exercises starts with nothing in flight.
- * `change_log` here happens to have the same two columns the core set declares
- * (`packages/db/drizzle/0000_baseline.sql:686-689`); `probe` is this suite's own. `tenancy.test.ts`
- * beside this file went the other way — its cases are about the real schema's constraints, so it is
- * on `useVenueDb`.
+ * `withTransaction` against a real SQLite store, built here rather than through `useVenueDb`: this
+ * suite wants a bare store with two hand-written tables, because what is under test is the helper
+ * and not the schema, and a fresh store per case so the queue it exercises starts with nothing in
+ * flight.
  *
  * Its teardown closes every store it opened and guards the pop, which is what CLAUDE.md §4 and
  * `scripts/guarded-teardowns.test.ts` ask of a suite that builds its own resource.
@@ -94,9 +88,7 @@ describe("withTransaction on the write queue", () => {
     await Promise.allSettled([write("A", true), write("B", false)]);
 
     // Without the queue the two share the one write connection: B's `begin` is refused inside A's
-    // open transaction, and A's rollback then takes its own row, leaving the table empty. RE-RUN
-    // 2026-09-23 against the read-connection routing, by replacing the queue's `tail` with an
-    // already-resolved promise: `expected [] to deeply equal [ 'B' ]`, unchanged.
+    // open transaction, and A's rollback then takes its own row, leaving the table empty.
     expect(labels(db)).toEqual(["B"]);
   });
 

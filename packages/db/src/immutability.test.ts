@@ -8,33 +8,23 @@ import { useVenueDb } from "./testing/venue-db.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 
 /*
- * LOSS, from the storage swap, and it is a DDL loss rather than a DML one.
- *
- * PostgreSQL protected an append-only table twice over, and only the trigger has an equivalent
- * here: one process opens one file, so the DDL that removes the trigger is open to every caller.
- * Measured through `useVenueDb` on a table this file's own helper had just protected, one
- * statement per line:
+ * What no case below covers: the DDL that removes the trigger is open to every caller. Measured
+ * through `useVenueDb` on a table this file's own helper had just protected, one statement per
+ * line:
  *
  *   drop trigger probe_guarded_append_only_update => SUCCEEDED
  *   the next UPDATE                               => SUCCEEDED, row read back 'tampered'
  *   drop table sales                              => SUCCEEDED, table and triggers both gone
  *
- * None of the cases below ever covered that path, so nothing here got weaker. Replacing it is not
- * a test's job: it needs a control outside the engine, since the engine no longer has one.
+ * Closing it needs a control outside the engine.
  */
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /*
- * The pattern is proved against tables this file owns outright, created and protected here.
- *
- * Deliberately NOT `sales`, though `sales` now carries the same triggers: a dedicated probe keeps
- * this file honest, because it fails when the PATTERN is wrong rather than when a sale column
- * changes. A SECOND probe exists so that "the rejection names the offending table" is checkable —
- * with one table every wrong answer and the right answer read alike.
- *
- * Created per test rather than by a migration, because it is scaffolding for the proof rather than
- * part of the product schema.
+ * The pattern is proved against tables this file owns outright, created and protected here, so it
+ * fails when the PATTERN is wrong rather than when a sale column changes. A SECOND probe exists so
+ * that "the rejection names the offending table" is checkable.
  */
 const PROBE = "immutability_probe";
 const OTHER_PROBE = "immutability_other_probe";
@@ -44,13 +34,8 @@ const OTHER_PROBE = "immutability_other_probe";
 const refusalFor = (table: string): string => `${table} is append-only`;
 
 /**
- * The product's own installer, not hand-written trigger SQL.
- *
- * The version of this file that stood here wrote its `create trigger` statements out, which was
- * right when each migration carried them; the pattern's one home is now
- * `installAppendOnlyTriggers` (`packages/store/src/append-only.ts`), driven per migration set by
- * `applyMigrations` and by this suite's own helper. Writing the triggers again here would prove a
- * shape nothing in the product runs.
+ * The product's own installer, not hand-written trigger SQL: writing the triggers again here would
+ * prove a shape nothing in the product runs.
  */
 async function createProtectedProbe(db: Database, table: string): Promise<void> {
   await db.execute(sql.raw(`create table ${table} (id text primary key, note text not null)`));
@@ -109,21 +94,9 @@ describe("immutability", () => {
 
   it("rejects the statement that empties the table in one go", async () => {
     /*
-     * The successor to this file's TRUNCATE case, and the mechanism is not the same one.
-     *
-     * On PostgreSQL a FOR EACH ROW trigger does not fire on TRUNCATE, so a second, STATEMENT-level
-     * trigger existed purely to stop the owner emptying the table with no error at all. SQLite has
-     * no TRUNCATE statement, and asserting that it refuses one would measure nothing: `truncate
-     * table <t>` is `errcode 1, near "truncate": syntax error` on a protected table and on an
-     * unprotected one alike — the same two answers, which is CLAUDE.md §1's "a measurement taken
-     * where both answers look alike".
-     *
-     * What DOES empty a table here is a `DELETE` with no `WHERE`, and the row trigger — the only
-     * kind SQLite has — fires once per row, so the hole the statement trigger existed for does not
-     * open. Measured, with an identical table carrying no triggers as the control: refused 1811 on
-     * the protected table, `changes: 1` and the rows gone on the control.
-     *
-     * The residual hole is `DROP TABLE`, which succeeds; see this file's header.
+     * SQLite has no TRUNCATE statement. What empties a table here is a `DELETE` with no `WHERE`,
+     * and the row trigger — the only kind SQLite has — fires once per row. The residual hole is
+     * `DROP TABLE`, which succeeds; see this file's header.
      */
     await db.execute(sql.raw(`insert into ${PROBE} (id, note) values ('second-row', 'original')`));
 
@@ -148,21 +121,12 @@ describe("immutability", () => {
 
   it("is not confusable with the engine's own refusal under the same result code", async () => {
     /*
-     * LOSS, and the replacement for this file's TG_OP case.
+     * Not covered: `installAppendOnlyTriggers` raises the same words for an update and a delete
+     * alike, so the operation survives only in the trigger's NAME, which nothing reports.
      *
-     * PostgreSQL's message named the operation — `… is append-only: UPDATE is not permitted` — so
-     * an incident report could not send a reader after the wrong actor.
-     * `installAppendOnlyTriggers` raises the same words for an update and a delete alike; the
-     * operation now survives only in the trigger's NAME, and nothing reports that to a caller. The
-     * wording is owned by `packages/store/src/append-only.ts` and pinned by suites across the tree,
-     * so it is recorded here rather than changed here.
-     *
-     * The discriminating property that DID survive is the one worth a case, because it is the same
-     * risk one layer down: result code 1811 is `SQLITE_CONSTRAINT_TRIGGER`, and SQLite implements
-     * `ON DELETE RESTRICT` with an internal trigger, so a restricted delete arrives under the
-     * append-only refusal's exact code (`./sql-state.ts`). A reader who matched on the code alone
-     * would read one as the other. The RESTRICT refusal below is the control: same class, and
-     * `triggerRaised` must still say no.
+     * A restricted delete arrives under the append-only refusal's exact result code
+     * (`./sql-state.ts`), so a reader who matched on the code alone would read one as the other.
+     * The RESTRICT refusal below is the control: same class, and `triggerRaised` must still say no.
      */
     await db.execute(sql.raw(`create table immutability_restrict_parent (id text primary key)`));
     await db.execute(
@@ -196,11 +160,10 @@ describe("immutability", () => {
      *
      * `INSERT OR REPLACE` performs an internal delete, and a `BEFORE DELETE` trigger fires on it
      * only when `pragma recursive_triggers` is on. Without the pragma the row is rewritten with no
-     * error at all — the exact shape of the TRUNCATE hole this file used to guard. The store
-     * suite sets that pragma on the connection it builds, so it proves the triggers and cannot see
-     * the pragma missing; this suite's database comes from the product's own opener
-     * (`useVenueDb` → `openVenueDatabase` → `openVenueStore`), which is where the pragma has to be
-     * for a real box to be protected.
+     * error at all. The store suite sets that pragma on the connection it builds, so it proves the
+     * triggers and cannot see the pragma missing; this suite's database comes from the product's
+     * own opener (`useVenueDb` → `openVenueDatabase` → `openVenueStore`), which is where the pragma
+     * has to be for a real box to be protected.
      */
     const error = await captureError(async () =>
       db.execute(

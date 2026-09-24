@@ -29,8 +29,7 @@ export async function seedTenant(db: Database): Promise<void> {
     .onConflictDoNothing({ target: tenants.id });
 }
 
-/** Seeds one node at `location` and returns its id. The name is a fixed fixture value, mirroring
- * seedTenant's hardcoded legal_name: callers that care about a node's name insert it themselves. */
+/** Seeds one node at `location` and returns its id. */
 export async function seedNode(db: Database, location: LocationId): Promise<NodeId> {
   const [row] = await db
     .insert(nodes)
@@ -39,11 +38,9 @@ export async function seedNode(db: Database, location: LocationId): Promise<Node
   return brandNodeId(row!.id);
 }
 
-/** Seeds one kitchen station for `locationId` and returns its id. Run as the connection owner
- * for fixture setup, exactly like {@link seedTenant}/{@link seedNode}.
- * Defaults to the DEFAULT station named 'Cocina' — the fixture shape the till suites need so a fire's
- * default-station fallback ({@link fireLines}) resolves; callers wanting a non-default or differently
- * named station override `isDefault`/`name`. */
+/** Seeds one kitchen station for `locationId` and returns its id. Defaults to the DEFAULT station
+ * named 'Cocina' — the fixture shape the till suites need so a fire's default-station fallback
+ * ({@link fireLines}) resolves. */
 export async function seedKitchenStation(
   db: Database,
   opts: { locationId: LocationId; name?: string; isDefault?: boolean },

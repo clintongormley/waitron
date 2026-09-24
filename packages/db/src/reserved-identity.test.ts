@@ -29,15 +29,8 @@ const ENDORSEMENT: Endorsement = {
 };
 const CLOUD_NODE = ENDORSEMENT.nodeId;
 
-// There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
-// build the location the node FKs first, exactly as node-identity.test.ts does.
-// Drizzle rather than raw SQL, for two things the raw insert relied on PostgreSQL for. Run against
-// this engine the old statement is refused at prepare with `near "['es']": syntax error` (node
-// v26.7.0, `node:sqlite`) — there is no array literal and no `::text[]` cast. And `locations.id` is
-// `id("id").primaryKey().$defaultFn(newId)`, a JavaScript generator rather than a SQL DEFAULT, so a
-// raw insert that omits the column reaches nothing to fill it. Both are handled by going through
-// drizzle, which encodes `invoiceLocales` as the JSON text the column now holds and calls the
-// generator; `seedNode` in `./testing/seed.ts` is built the same way.
+// Drizzle rather than raw SQL: drizzle encodes `invoiceLocales` as the JSON text the column holds,
+// and `locations.id` is a JavaScript `$defaultFn` generator that a raw insert never reaches.
 async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocationId>> {
   const [row] = await db
     .insert(locations)
@@ -113,13 +106,6 @@ describe("reserved-identity accessors", () => {
     // A node reserved with no series must not emit an INSERT with no rows — drizzle builds invalid
     // SQL for an empty values list, so the early return is what keeps the caller's transaction
     // alive rather than a nicety.
-    //
-    // The two counts below were written `count(*)::int` for a PostgreSQL driver that returned a
-    // BigInt. Run against this engine that statement is refused at prepare with
-    // `unrecognized token: ":"` (node v26.7.0, `node:sqlite`), and the cast has nothing left to do:
-    // `select count(*) as count` on a two-row table hands back `2` with `typeof === "number"`,
-    // measured the same way. The `Number(...)` wrappers below are left in place — they are a no-op
-    // on a number and they are what the assertion already said.
     const before = await withTransaction(suite.db, (tx) =>
       tx.execute<{ count: number }>(sql`select count(*) as count from invoice_series`),
     );
@@ -133,8 +119,8 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
-    // A node with both purposes reserved (R2's real shape): the standard series is the one R3b's
-    // promote points config.till.seriesId at, never the rectificative sitting beside it.
+    // A node with both purposes reserved: the standard series is the one a promote points
+    // config.till.seriesId at, never the rectificative sitting beside it.
     const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [

@@ -24,10 +24,9 @@ import { useVenueDb } from "./venue-db.js";
 const unmigrated = useVenueDb({ migrations: [], resetPerTest: false });
 const alreadyCarryingCore = useVenueDb({
   // The same folder and journal as `CORE_MIGRATIONS`, with `appendOnlyTables` omitted rather than
-  // copied: the field is optional (`./venue-db.ts`) and a set declaring none is a real shape —
-  // `packages/catalogue/src/migrations.ts` is one, and nothing else in this package hands over that
-  // shape. The staging call below still gets the same `CORE_MIGRATIONS` object the virgin database
-  // gets, so the starting point is the only difference between the two.
+  // copied: the field is optional (`./venue-db.ts`) and a set declaring none is a real shape. The
+  // staging call below still gets the same `CORE_MIGRATIONS` object the virgin database gets, so
+  // the starting point is the only difference between the two.
   migrations: [
     {
       migrationsFolder: CORE_MIGRATIONS.migrationsFolder,

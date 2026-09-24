@@ -4,11 +4,6 @@ import type { Database, Transaction } from "./client.js";
 import { nodes } from "./schema/nodes.js";
 import { withTransaction } from "./tenancy.js";
 
-/**
- * No-op-safe on a non-matching id (0 rows updated): callers pass a just-minted id, so a 0-row update
- * would be a bug — but this accessor does not assert it, because the id is fresh by construction and a
- * guard here would only add a read the caller does not need.
- */
 export async function setNodePublicKeyTx(
   tx: Transaction,
   nodeId: string,
@@ -18,9 +13,8 @@ export async function setNodePublicKeyTx(
 }
 
 /**
- * Stamp a node's membership identity PUBLIC key, opening its own tenant transaction (design §4).
- * The standalone form, for a lone stamp (a test seeding a source node; the adopt proof); a caller
- * that must stamp atomically alongside another write uses `setNodePublicKeyTx` inside one shared
+ * Stamp a node's membership identity PUBLIC key in a transaction of its own. A caller that must
+ * stamp atomically alongside another write uses `setNodePublicKeyTx` inside one shared
  * `withTransaction` instead.
  */
 export function setNodePublicKey(db: Database, nodeId: string, publicKey: string): Promise<void> {
@@ -28,17 +22,10 @@ export function setNodePublicKey(db: Database, nodeId: string, publicKey: string
 }
 
 /**
- * The node's membership trust anchors (design §4): every `nodes` row's `{ id → public_key }`, skipping
- * the keyless ones (bare fixtures, a not-yet-stamped node). Read under `withTransaction`. Boot
- * reads this into `membershipTrustSet`: a fresh primary gets `{ self }`. A cloud mirror gets an
- * EMPTY set, because nothing creates a `nodes` row on it today: `adoptFromPrimary` inserts no venue
- * rows and the bundle carries none (`apps/server/src/adopt.ts`), the initial copy that used to
- * bring the primary's rows across was the deleted PostgreSQL replication, and the standby's OWN row
- * — the one `establishReservedStandbyIdentity` inserts through `insertReservedNodeTx`, carrying the
- * STANDBY's public key, never the primary's — cannot be inserted without the venue's `locations`
- * row it foreign-keys to (`nodes_location_id_locations_id_fk`, `drizzle/0000_db_baseline.sql`),
- * which the mirror does not have either; `apps/server/src/finish-adoption.ts` keeps its latch file
- * and retries that step on every boot.
+ * The node's membership trust anchors: every `nodes` row's `{ id → public_key }`, skipping the
+ * keyless ones. A cloud mirror gets an EMPTY set, because nothing creates a `nodes` row on it
+ * today: `adoptFromPrimary` inserts no venue rows (`apps/server/src/adopt.ts`), and the standby's
+ * OWN row cannot be inserted without the venue's `locations` row it foreign-keys to.
  */
 export function readMembershipTrustSet(db: Database): Promise<TrustSet> {
   return withTransaction(db, async (tx) => {

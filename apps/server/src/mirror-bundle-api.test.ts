@@ -53,8 +53,8 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
  * second round and `persistNodeMembershipIfNewer` never once refused a write. Control in the other
  * direction, same probe: ONE adopt produces exactly 1 read, so the counter really was watching the
  * route rather than the suite. The cause is the single write queue — `withTransaction` is
- * `db.withWriteLock` on this engine (`packages/db/src/tenancy.ts:34`), so each request's work
- * completes before the next begins and every mint is built on the winner's chart.
+ * `db.withWriteLock` on this engine (`withTransaction` in `packages/db/src/tenancy.ts`), so each
+ * request's work completes before the next begins and every mint is built on the winner's chart.
  *
  * So the case would now pass under the very upsert it was written to catch. It is deleted rather
  * than kept green and vacuous, and no replacement is invented here: proving a term guard needs two

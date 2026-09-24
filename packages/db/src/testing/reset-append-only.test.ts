@@ -10,8 +10,7 @@ import { useVenueDb } from "./venue-db.js";
  * To empty `sales` the reset has to get past the very triggers that protect it: SQLite has no
  * `ALTER TABLE … DISABLE TRIGGER`, so `useVenueDb`'s reset drops each trigger, deletes the rows and
  * recreates the trigger from the text `sqlite_master` stored for it. A reset that dropped and did
- * not put them back would leave every later test in its file free to rewrite a filed sale, which is
- * the class of damage `CLAUDE.md` §5 says cannot be repaired afterwards.
+ * not put them back would leave every later test in its file free to rewrite a filed sale.
  *
  * The cycle is exercised rather than assumed: the first test leaves a row in `sales`, so the
  * reset's `delete` really does run against the protected table; the second test reads what the
@@ -21,20 +20,16 @@ import { useVenueDb } from "./venue-db.js";
  * `scripts/append-only-triggers.test.ts`'s.
  */
 
-/** Rows in `table`. `count(*)::int` is PostgreSQL's spelling and SQLite refuses it at prepare time
- * with `unrecognized token: ":"` (measured 2026-09-22 on this suite's previous body). */
+/** Rows in `table`. */
 const count = (db: Database, table: string) =>
   db.all<{ n: number }>(sql.raw(`select cast(count(*) as int) as n from "${table}"`))[0].n;
 
 /**
  * What the ENGINE said about `statement`, or `undefined` if it was accepted.
  *
- * `error.cause`, never the message drizzle wraps it in. Printed 2026-09-22 from inside this
- * function: for the refused update the wrapper read
- * `Failed to run the query 'update sales set locale = 'es-ES''` and the cause read
- * `sales is append-only`. The wrapper quotes the failing STATEMENT, so it carries the table name
- * whatever the engine thought of it, and a match on the table name alone reads that quotation
- * rather than the refusal. The words asserted below appear only in the cause.
+ * `error.cause`, never the message drizzle wraps it in: the wrapper quotes the failing STATEMENT,
+ * so it carries the table name whatever the engine thought of it, and a match on the table name
+ * alone reads that quotation rather than the refusal.
  */
 function refusalFor(db: Database, statement: string): string | undefined {
   try {
@@ -49,11 +44,9 @@ function refusalFor(db: Database, statement: string): string | undefined {
 /**
  * One `sales` row, every NOT NULL column stated.
  *
- * Only the foreign keys are switched off — the values satisfy every CHECK the table declares, which
- * is why the insert below needs no second pragma — and they are switched straight back on, which is
- * how `openConnection` (`packages/store/src/index.ts`) leaves a handle it opened. Issued outside
- * any transaction. Every refusal asserted below is tried after this function has put foreign keys
- * back on, so no assertion here rests on what the pragma does or does not do to a trigger.
+ * Only the foreign keys are switched off — the values satisfy every CHECK the table declares — and
+ * they are switched straight back on, so no assertion here rests on what the pragma does or does
+ * not do to a trigger.
  */
 function seedSale(db: Database, id: string, invoiceNumber: number): void {
   db.run(sql.raw("pragma foreign_keys = off"));
@@ -87,9 +80,7 @@ describe("the per-test reset and an append-only table from a real migration set"
     expect(count(suite.db, "sales")).toBe(0);
 
     // FOR EACH ROW is SQLite's only trigger granularity, so a row trigger on an EMPTY table refuses
-    // nothing. Measured here 2026-09-22 with both triggers in place: run at this point, before the
-    // seed, the same update and delete below were BOTH accepted. The seed is what gives the
-    // triggers something to fire on.
+    // nothing. The seed is what gives the triggers something to fire on.
     seedSale(suite.db, "sale-after-reset", 2);
 
     expect(refusalFor(suite.db, "update sales set locale = 'es-ES'")).toBe("sales is append-only");

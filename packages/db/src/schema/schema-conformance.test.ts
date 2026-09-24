@@ -1,7 +1,7 @@
 // The CORE migration set's instance of the shared schema-conformance suite
 // (`../testing/schema-conformance.ts`), which is where the machinery and its limits are described.
 //
-// Receipts the factory's header points here for, both taken 2026-09-22 on the core set: every check
+// Receipts for the factory's comparisons, both taken 2026-09-22 on the core set: every check
 // constraint and index filter rendered from its declaration equalled the stored DDL; and comparing
 // each table's declared foreign keys, indexes and checks against the built database with no
 // allowance list found nothing unmatched on either side.

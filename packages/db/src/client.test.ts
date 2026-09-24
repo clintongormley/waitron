@@ -50,11 +50,10 @@ describe("openVenueDatabase", () => {
   });
 
   it("gives both handles the whole schema barrel, and lets the file refuse the query", async () => {
-    // `client.ts:47-53` says both handles are typed on the barrel on purpose, and that a query
-    // naming a venue table on the node handle is refused by the ENGINE rather than by the compiler.
-    // This is that sentence as an experiment: the relational map is present on both sides — so the
-    // compiler is not what stops anything — and after migrating the core set to the venue file
-    // alone, the same read succeeds on one handle and is refused on the other.
+    // `openVenueDatabase`'s comment in `client.ts` says a query naming a venue table on the node
+    // handle is refused by the ENGINE rather than by the compiler. This is that sentence as an
+    // experiment: the relational map is present on both sides, and after migrating the core set to
+    // the venue file alone, the same read succeeds on one handle and is refused on the other.
     const { store } = await open();
     expect(store.venue.query.tenants).toBeDefined();
     expect(store.node.query.tenants).toBeDefined();
@@ -81,11 +80,8 @@ describe("openVenueDatabase", () => {
   });
 
   it("persists to its directory across close and reopen", async () => {
-    // Carried over from the deleted `createPgliteDb` case of the same name: the standalone backup
-    // story is "copy one directory", so a store that lost its rows on close would not be the thing
-    // we ship. This is the only case in the tree that runs it: of the five `openVenueStore(` calls
-    // in `packages/store/src/index.test.ts`, three belong to its contention block and none writes
-    // rows, closes, and reads them back.
+    // The standalone backup story is "copy one directory", so a store that lost its rows on close
+    // would not be the thing we ship.
     const { directory, store } = await open();
     store.venue.run(sql`create table persisted (id integer primary key)`);
     store.venue.run(sql`insert into persisted (id) values (7)`);

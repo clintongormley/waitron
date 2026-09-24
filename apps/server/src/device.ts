@@ -33,9 +33,9 @@ export type { DeviceKind };
  *
  * Asked BEFORE the write rather than read off the refusal afterwards. The engine's foreign-key
  * refusal is the whole message `FOREIGN KEY constraint failed` — no table, no column, no
- * constraint name (`packages/db/src/constraint-target.ts` states this and names this module), and
- * `devices` carries a station FK, a till FK and a location FK beside the two binding ones, so a
- * refusal cannot be attributed to any of the five.
+ * constraint name (`packages/db/src/constraint-target.ts` states this), and `devices` carries a
+ * station FK, a till FK and a location FK beside the two binding ones, so a refusal cannot be
+ * attributed to any of the five.
  *
  * `devices_device_profile_fk` and `devices_receipt_printer_fk` are still in the schema and are
  * still what makes a dangling binding impossible — measured on this engine in `device-api.test.ts`,

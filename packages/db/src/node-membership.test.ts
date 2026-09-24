@@ -12,15 +12,6 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// The accessors are pure SQL logic — upsert and read of a singleton.
-//
-// LOSS, from the storage swap: the last block in this file used to run on a real PostgreSQL
-// container, because the only thing PGlite could not answer was how the REAL `pg` driver decoded
-// the `document` jsonb column, and the two drivers had diverged before (CLAUDE.md §4's `name[]`
-// OID 1003 case). There is one driver now and one storage engine, so there is no second decoding
-// to compare against; the rich-document round-trip that block carried is kept below, against the
-// one engine there is.
-
 function doc(term: number): SignedMembershipDocument {
   return {
     body: {
@@ -34,9 +25,7 @@ function doc(term: number): SignedMembershipDocument {
 }
 
 // A database with NO migration set applied, so `node_membership` does not exist — the state of a
-// node before the set that creates the table has run. Its own `useVenueDb` rather than the migrated
-// one the accessors' round-trip uses: the helper applies its sets in `beforeAll`, so one handle
-// cannot be both migrated and unmigrated.
+// node before the set that creates the table has run.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
@@ -77,9 +66,9 @@ describe("node_membership accessors", () => {
   });
 
   it("is a plain setter — it does NOT enforce monotonicity (that is acceptMembershipDocument's job)", async () => {
-    // Storage is dumb (design §3 / owner decision): the authentic-and-strictly-newer fence lives in
-    // @waitron/membership's acceptMembershipDocument, called by the Slice-3 adoption path BEFORE it
-    // persists. A lower term written directly here simply overwrites — proving the fence is not here.
+    // Storage is dumb: the authentic-and-strictly-newer fence lives in @waitron/membership's
+    // acceptMembershipDocument. A lower term written directly here simply overwrites — proving the
+    // fence is not here.
     await writeNodeMembership(pg.db, doc(5));
     await writeNodeMembership(pg.db, doc(2));
     expect((await readNodeMembership(pg.db))?.body.term).toBe(2);
@@ -93,8 +82,6 @@ describe("node_membership accessors", () => {
   });
 
   it("writeNodeMembershipTx writes inside a caller transaction", async () => {
-    // The tx-taking form (Task 4 commits a singleton-role flip and this write in ONE transaction):
-    // run it on a caller-provided tx and confirm the write persists after that transaction commits.
     const d = doc(3);
     await pg.db.transaction(async (tx) => {
       await writeNodeMembershipTx(tx, d);
@@ -104,9 +91,6 @@ describe("node_membership accessors", () => {
 });
 
 describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)", () => {
-  // A separate `useVenueDb` database (not the suite above's) so this describe's beforeEach reset is
-  // independent of the other describe's ordering — moved from apps/server/src/membership-adopt.test.ts,
-  // where it exercised the same accessor before it lived here.
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   // Order-independent (CLAUDE.md §4): clear the singleton before each case rather than relying on
@@ -122,9 +106,7 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
 
   it("is monotonic — a lower term is a no-op, a higher term overwrites", async () => {
     await persistNodeMembershipIfNewer(pg.db, doc(5));
-    // The atomic WHERE guard rejects the not-newer term: proven by deletion — removing `setWhere`
-    // from persistNodeMembershipIfNewer makes this assertion fail (the term-3 write overwrites 5
-    // instead of being rejected). Restored after confirming the failure.
+    // The atomic WHERE guard rejects the not-newer term.
     expect(await persistNodeMembershipIfNewer(pg.db, doc(3))).toBe(false);
     expect((await readNodeMembership(pg.db))?.body.term).toBe(5);
     expect(await persistNodeMembershipIfNewer(pg.db, doc(7))).toBe(true);
@@ -158,10 +140,8 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
 });
 
 // The `document` column round-trip, with a document richer than `doc(term)` builds: two nodes, two
-// standings and a populated `endorsements` list. It used to live in a real-PostgreSQL block whose
-// reason was driver divergence (see this file's header); what it still shows is that the column's
-// read mapping hands back a parsed object equal to what was written, nested arrays included, rather
-// than the text the engine stores.
+// standings and a populated `endorsements` list. The column's read mapping hands back a parsed
+// object equal to what was written, nested arrays included, rather than the text the engine stores.
 describe("node_membership document round-trip", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 

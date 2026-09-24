@@ -15,9 +15,6 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 
-// A series is keyed on its NODE since the node-id rekey (2026-08-03); seed() creates one node per
-// tenant and makeSeries points a series at it. The tills stay seeded because sales still ring on a
-// till, but invoice_series no longer carries till_id.
 let nodeA1 = "";
 
 async function seed(db: Database): Promise<void> {
@@ -58,8 +55,6 @@ async function makeSeries(
 }
 
 describe("allocateInvoiceNumber", () => {
-  // One migrated database, emptied between tests by the helper's default reset — what the per-test
-  // `target.create()` this replaces bought, without building a fresh file each time.
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let db: Database;
 
@@ -98,11 +93,8 @@ describe("allocateInvoiceNumber", () => {
   });
 
   it("returns a number as a JS number, not a string", async () => {
-    // `next_number` is integer, which node-postgres renders as a number — but
-    // a widening of the column to bigint, or a RETURNING expression that
-    // produces numeric, would render as a string instead. An unconverted "1"
-    // compares equal to 1 under == but not under toBe, and would reach the
-    // invoice number column as text.
+    // An unconverted "1" compares equal to 1 under == but not under toBe, and
+    // would reach the invoice number column as text.
     const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(typeof n).toBe("number");
@@ -113,8 +105,7 @@ describe("allocateInvoiceNumber", () => {
     // This is correct: the regulation requires strictly-increasing and
     // never-reused numbering and *permits* gaps without requiring them, so a
     // returned number satisfies it. Asserting `2` here would be asserting that
-    // the counter escaped its transaction, which is the behaviour this task
-    // deliberately does not implement.
+    // the counter escaped its transaction.
     const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     let allocated = 0;
     await expect(
@@ -137,8 +128,7 @@ describe("allocateInvoiceNumber", () => {
     // under it and no receipt bearing it exists — so handing it out again is
     // not reuse. What must never happen is two *committed* sales sharing a
     // number, and that is enforced by UNIQUE (series_id,
-    // invoice_number) on `sales`, which Task 8 creates and Task 16 exercises
-    // against the live write path.
+    // invoice_number) on `sales`.
     const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const committed: number[] = [];
     for (let i = 0; i < 6; i += 1) {
@@ -176,19 +166,11 @@ describe("allocateInvoiceNumber", () => {
   });
 
   it("hands out distinct numbers to twenty allocators started together", async () => {
-    // WHAT THIS CASE NOW SHOWS, AND WHAT IT NO LONGER DOES. On PostgreSQL it ran on the real
-    // container only, because twenty allocators on twenty backends could genuinely collide and a
-    // read-then-write allocator handed the same number out twice; on PGlite every query landed on
-    // one backend, so a pass there meant nothing and the case was skipped.
-    //
-    // SQLite admits one writer per file and has no row locks, so the collision this guarded
-    // against cannot arise: `withTransaction` runs each body inside the venue file's write queue
-    // (`packages/store/src/write-queue.ts`), which issues `begin immediate` and `commit` around it,
-    // so the next caller's transaction does not start until the previous one has committed. What
-    // twenty overlapping calls test HERE is that the queue actually serialises them — twenty
-    // distinct, contiguous numbers — and not that a lock holds under contention. The receipt for
-    // the queue itself, with a control in the other direction, is `racePair` in
-    // `packages/catalogue/test/fixtures.ts`.
+    // `withTransaction` runs each body inside the venue file's write queue
+    // (`packages/store/src/write-queue.ts`), so what twenty overlapping calls test here is that the
+    // queue serialises them — twenty distinct, contiguous numbers — and not that a lock holds under
+    // contention. The receipt for the queue itself, with a control in the other direction, is
+    // `racePair` in `packages/catalogue/test/fixtures.ts`.
     const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const results = await Promise.all(
       Array.from({ length: 20 }, () =>

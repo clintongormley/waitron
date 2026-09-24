@@ -12,12 +12,9 @@ import { useVenueDb } from "./testing/venue-db.js";
 
 // `locations` is a change source, so one fixture table serves every case here.
 // `operation_description` is Spanish test DATA, not a schema identifier — the same shape the
-// sibling join-requests and dining-table suites use.
-//
-// Two things the statement carries that the PostgreSQL one did not. The id is supplied here,
-// because `id` columns take their default from a JavaScript call now (`newId`,
-// `./schema/columns.ts`) and raw SQL never reaches it. And `invoice_locales` is one TEXT column
-// holding a JSON array, checked by `locations_invoice_locales_len`, where it used to be `text[]`.
+// sibling join-requests and dining-table suites use. The id is supplied here because `id` columns
+// take their default from a JavaScript call (`newId`, `./schema/columns.ts`) and raw SQL never
+// reaches it.
 async function insertLocation(tx: Transaction, name: string): Promise<string> {
   const id = randomUUID();
   await tx.execute(sql`
@@ -70,9 +67,7 @@ describe("the change log", () => {
     expect(seen).toEqual([]);
   });
 
-  // THIS CASE NO LONGER SEPARATES ANYTHING. It was the grant case, and what it proved was that the
-  // non-owner role held SELECT, INSERT and DELETE on `change_log`. This engine has no roles, so what
-  // remains is the first case again under another name.
+  // THIS CASE NO LONGER SEPARATES ANYTHING: it repeats the first case under another name.
   it("lets the application role write a change-fed row and drain what the trigger wrote", async () => {
     const seen = collect();
     let id = "";

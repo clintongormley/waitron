@@ -13,12 +13,8 @@ const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 
 /**
  * A migration set a suite hands over: what drizzle needs, plus what the set's own module declared
- * append-only.
- *
- * `appendOnlyTables` is optional because most migration sets declare no append-only table at all:
- * run `grep -L appendOnlyTables` over every package's own `src/migrations.ts` and the files it
- * lists are the majority. What a caller omitting it gets is a database where a ledger row can be
- * rewritten, which is why the field is stated here rather than inferred from anything.
+ * append-only. A caller omitting `appendOnlyTables` gets a database where a ledger row can be
+ * rewritten.
  */
 export type VenueMigrationSet = MigrationOptions & {
   readonly appendOnlyTables?: readonly string[];
@@ -53,18 +49,13 @@ export interface VenueDb {
  * Three lists rather than one because the ORDER between them is the whole mechanism: EVERY trigger
  * in `sqlite_master` is dropped, then every table is emptied, then each trigger is recreated from
  * the exact `CREATE TRIGGER` text SQLite stored for it. SQLite has no
- * `ALTER TABLE … DISABLE TRIGGER` to reach for instead, so drop and recreate is the only way
- * through, and losing one would let a later test mutate a ledger table (`CLAUDE.md` §5).
+ * `ALTER TABLE … DISABLE TRIGGER` to reach for instead.
  *
- * **Every trigger, not only the append-only ones — do not narrow this query.** Two different
- * triggers would break the reset and each breaks it a different way. An append-only trigger's
- * `RAISE(ABORT)` on a `BEFORE DELETE` refuses the reset's own `delete` outright (`1811`, measured
- * 2026-09-21 on Node v26.7.0). A change-feed trigger (`../change-feed.ts`) does something quieter
- * and worse: it INSERTS into `change_log` on every delete, and `deletes` runs in name order, so
- * `change_log` is emptied near the start and the later deletes fill it up again. Measured
- * 2026-09-23 on Node v26.7.0 — with the feed installed on `tills`, emptying `change_log` and then
- * deleting one `tills` row leaves `change_log` holding a row, so the next test starts on a table
- * the reset was supposed to have cleared.
+ * **Every trigger, not only the append-only ones — do not narrow this query.** An append-only
+ * trigger's `RAISE(ABORT)` on a `BEFORE DELETE` refuses the reset's own `delete` outright. A
+ * change-feed trigger (`../change-feed.ts`) INSERTS into `change_log` on every delete, and
+ * `deletes` runs in name order, so the later deletes would fill `change_log` up again after it was
+ * emptied.
  */
 interface ResetPlan {
   /** `drop trigger "<name>"`, one per trigger. */
@@ -77,17 +68,10 @@ interface ResetPlan {
 
 /**
  * Every table some migration created, in name order, the engine's own bookkeeping and the journals
- * aside.
+ * aside — the migration state has to outlive the data.
  *
  * `glob` rather than `like` for the two exclusions: GLOB treats `_` as an ordinary character where
- * LIKE treats it as a wildcard needing an `escape` clause, and a backslash written inside a
- * template literal is not the backslash that reaches SQLite. `sqlite_*` covers the engine's own
- * tables, `__drizzle_migrations*` the per-package journals — the migration state has to outlive the
- * data, and every set names its own (`packages/db/src/migrations.ts`).
- *
- * Exported because the same two exclusions are the same question asked twice: the reset below needs
- * the tables it may empty, and `./schema-conformance.ts` needs the tables a migration set built. A
- * second copy of the query is a second place for one of the exclusions to be forgotten.
+ * LIKE treats it as a wildcard needing an `escape` clause.
  */
 export function migratedTableNames(db: Database): string[] {
   return db
@@ -103,14 +87,10 @@ export function migratedTableNames(db: Database): string[] {
 }
 
 /**
- * One migration set applied, then the append-only triggers that set declared.
- *
- * The two are paired in one place so their ORDER is stated once. Installing immediately after THIS
- * set migrated, rather than once after every set, is what `packages/migrations/src/apply.ts` does
- * and for its reason: `create trigger` needs the table to exist, so a single pass at the end would
- * refuse the first set's tables if a later set threw. This pairing is what makes a suite's database
- * refuse what the box refuses — the product installs the same triggers from the same list in
- * `applyMigrations`, which a suite does not go through.
+ * One migration set applied, then the append-only triggers that set declared — immediately after
+ * THIS set migrated, as `packages/migrations/src/apply.ts` does. This pairing is what makes a
+ * suite's database refuse what the box refuses, since a suite does not go through
+ * `applyMigrations`.
  */
 export async function applyMigrationSet(db: Database, set: VenueMigrationSet): Promise<void> {
   await runMigrations(db, set);
@@ -120,13 +100,11 @@ export async function applyMigrationSet(db: Database, set: VenueMigrationSet): P
 /**
  * Reads the plan off the catalogue.
  *
- * `sqlite_sequence` is `restart identity`'s only counterpart here: it holds the AUTOINCREMENT
- * counters, exists only once some table declares one, and is emptied with the rest. It is matched
- * by the `sqlite_*` exclusion, so it is added back by name.
+ * `sqlite_sequence` holds the AUTOINCREMENT counters, exists only once some table declares one, and
+ * is emptied with the rest. It is matched by the `sqlite_*` exclusion, so it is added back by name.
  *
  * Table and trigger names are validated rather than escaped, the shape `CLAUDE.md` §3 asks for when
- * a statement cannot bind — SQLite binds no identifier, and `identifiers.ts` beside this file
- * carries the receipt. A trigger's stored text is replayed verbatim, never built.
+ * a statement cannot bind. A trigger's stored text is replayed verbatim, never built.
  */
 function buildResetPlan(db: Database): ResetPlan {
   const tables = migratedTableNames(db);
@@ -150,25 +128,17 @@ function buildResetPlan(db: Database): ResetPlan {
 }
 
 /**
- * Empties the data, in ONE transaction, on the handle's own write queue.
+ * Empties the data, in ONE transaction, on the handle's own write queue — `withWriteLock` issues
+ * `begin immediate` and `commit` around the body, so nothing here issues a `begin` of its own.
  *
- * `withWriteLock` is what opens that transaction — `packages/store/src/write-queue.ts` issues
- * `begin immediate` and `commit` around the body — so nothing here issues a `begin` of its own, and
- * the reset queues behind any write a test left in flight THROUGH THAT QUEUE. A test that wrote on
- * the handle directly, as most do, is already finished by the time `afterEach` runs.
- *
- * Two things follow from being one transaction, and neither is available outside it:
+ * Two things follow from being one transaction:
  *
  * - `pragma defer_foreign_keys = on` holds only until that transaction ends, and it is what lets
- *   the tables be emptied in NAME order. Without it, deleting a parent whose child still holds a
- *   row is refused with `FOREIGN KEY constraint failed` (errcode 787); with it, the same pair
- *   succeeds and the check runs at `commit`, by which time both sides are empty. Measured
- *   2026-09-21 on Node v26.7.0, with the pragma omitted as the control.
- * - There is no `finally` restoring the triggers, unlike the PostgreSQL reset this replaces, where
- *   each `ALTER TABLE … TRIGGER` stood alone. A failure rolls the whole reset back, and the
- *   rollback puts the dropped triggers back: measured, a `drop trigger`, a `delete` and a failing
- *   statement in one transaction, after which `sqlite_master` holds the trigger again and the next
- *   delete is refused with `1811`. A `finally` would try to CREATE a trigger that already exists.
+ *   the tables be emptied in NAME order: the foreign-key check runs at `commit`, by which time both
+ *   sides are empty.
+ * - There is no `finally` restoring the triggers. A failure rolls the whole reset back, and the
+ *   rollback puts the dropped triggers back; a `finally` would try to CREATE a trigger that already
+ *   exists.
  */
 async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
   if (plan.deletes.length === 0) return;
@@ -184,26 +154,17 @@ async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
 /**
  * One SQLite venue database for the calling suite, with the hooks that own it.
  *
- * **A real directory under `os.tmpdir()`, never `:memory:`.** What a suite gets is then the storage
- * the product gets: write-ahead mode with its `-wal` sidecar, the engine's file locking, and the
- * two files `openVenueStore` opens. An in-memory database has none of those, and a suite that
- * passed on one would say nothing about the box.
- *
- * **Opened through {@link openVenueDatabase}** rather than by calling `openVenueStore` directly, so
- * a suite's handle is the one the product's own opener hands out — the pragmas, the schema barrel
- * and the per-file write queue included. A second opener here would be a second thing to keep in
- * step with it.
+ * **A real directory under `os.tmpdir()`, never `:memory:`**, opened through
+ * {@link openVenueDatabase}, so a suite's handle is the one the product's own opener hands out: the
+ * write-ahead mode, the file locking, the pragmas and the per-file write queue included.
  *
  * **Every migration set is applied to the VENUE handle, and the node file stays empty**, as
- * `applyMigrations` does, for the reason it states (`packages/migrations/src/apply.ts`) — `local`
- * tables included, since a class names whose rows a table holds, not which file. A later slice
- * that moves tables into the node file would need this function to learn which handle to migrate
- * — and the node handle is deliberately not exposed until something needs it.
+ * `applyMigrations` does (`packages/migrations/src/apply.ts`).
  *
- * The accessor throws rather than returning `undefined` when read before `beforeAll` has run: that
- * is the whole point, since `undefined` turns a setup failure into `Cannot read properties of
- * undefined` two frames from the real error. The message names NO function — a function name in a
- * thrown message is a claim about the call site, and the next rename or replacement falsifies it
+ * The accessor throws rather than returning `undefined` when read before `beforeAll` has run, since
+ * `undefined` turns a setup failure into `Cannot read properties of undefined` two frames from the
+ * real error. The message names none of this repository's functions — a function name in a thrown
+ * message is a claim about the call site, and the next rename or replacement falsifies it
  * silently, which is the opposite of what a loud throw is for.
  */
 export function useVenueDb(options: VenueDbOptions): VenueDb {
@@ -214,16 +175,11 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
   const resetPerTest = options.resetPerTest ?? true;
 
   // The directory and the store are each assigned the instant they exist, BEFORE migrations or
-  // setup can throw. Assigning at the end of the hook instead leaves a failed suite holding two
-  // open files and a directory nothing removes — a silent leak in place of the noisy error this
-  // helper exists to produce. `runMigrations` failing is not hypothetical: it is what a bad
-  // migration in a feature branch does.
+  // setup can throw, so a failed suite's `afterAll` still closes and removes them.
   beforeAll(async () => {
     directory = await mkdtemp(join(tmpdir(), "waitron-venue-db-"));
     store = await openVenueDatabase(directory);
     db = store.venue;
-    // One set at a time, triggers and all: the order is {@link applyMigrationSet}'s, and its reason
-    // is stated there.
     for (const migrations of options.migrations) await applyMigrationSet(db, migrations);
     if (options.setup !== undefined) await options.setup(db);
     // After setup so a fake backend's tables are in the delete set; the plan records only names and

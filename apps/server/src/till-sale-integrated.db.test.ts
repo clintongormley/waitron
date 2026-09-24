@@ -793,8 +793,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     // rather than filing a second unrepairable record. The backstop keys on the refusal CLASS, not on
     // a spelling. Measured in this suite on 2026-09-22 by copying the filed row back into `sales`
     // under a new id: the refusal is `UNIQUE constraint failed: sales.working_order_id`, result code
-    // 2067 one level down the cause chain, and `isUniqueViolation` answers true — where on
-    // PostgreSQL the same refusal was SQLSTATE 23505 (`packages/db/src/sql-state.ts:26`). The index
+    // 2067 one level down the cause chain, and `isUniqueViolation` answers true
+    // (`UNIQUE_VIOLATION` in `packages/db/src/sql-state.ts`). The index
     // itself is in the SQLite baseline unchanged (`packages/db/drizzle/0000_baseline.sql:618`).
     const provider = cannedProvider(async () => {
       await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {

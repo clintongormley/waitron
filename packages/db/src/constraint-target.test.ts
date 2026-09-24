@@ -1,27 +1,17 @@
 /**
  * The cause WALK and `sameTarget` — the parts of `./constraint-target.ts` that turn on the shape of
- * an error object rather than on one engine's words.
- *
- * WHAT WAS DELETED HERE, AND WHY. This file used to be the whole of that module's coverage, and
- * most of it parsed PostgreSQL's refusal messages: a `detail` field reading
- * `Key (email)=(a@x) already exists.`, quoted identifiers, an expression index reported with
- * `::text` casts, a RESTRICT refusal naming the referencing table. None of those strings exists on
- * this engine, and `./constraint-target.sqlite.test.ts` beside this file asks every one of those
- * questions again against REAL `node:sqlite` refusals. The message-grammar half is therefore gone
- * rather than translated: a second copy driven by crafted strings would only prove the parser reads
- * itself.
+ * an error object rather than on one engine's words. `./constraint-target.sqlite.test.ts` asks the
+ * message-grammar questions against REAL `node:sqlite` refusals; a second copy driven by crafted
+ * strings would only prove the parser reads itself.
  *
  * WHAT IS LEFT IS WHAT THAT FILE CANNOT DRIVE. No engine emits a cause chain five layers deep, a
  * cause that points at itself, or a layer carrying a result code with no message — so these cases
  * are crafted, and they are the only ones that reach `causeLayers`' bound and its self-reference
- * guard, and `refusalOn`'s two `continue`s. Measured 2026-09-22 with
- * `pnpm exec vitest run --coverage src/constraint-target.sqlite.test.ts`: without this file,
- * `constraint-target.ts` reads 94.23% statements and 92.1% branches, under this package's 98/95
- * bar, with lines 30, 93 and 183 uncovered.
+ * guard, and `refusalOn`'s two `continue`s.
  *
  * THE CRAFTED SHAPES CARRY `errcode`, NOT `code`. `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code`
  * for every failure alike and the discriminating number on `errcode` (`./sql-state.ts`), so a stub
- * built the old way would be read as carrying no result code at all — and every negative assertion
+ * built on `code` would be read as carrying no result code at all — and every negative assertion
  * on it would pass for the wrong reason.
  */
 import { describe, expect, it } from "vitest";
@@ -49,12 +39,10 @@ describe("constraintTarget's cause walk", () => {
   });
 
   // No engine can produce this: the CLASS on one layer and the key on another. It is the one shape
-  // that separates refusalOn's same-layer rule from asking the two questions separately.
-  //
-  // Built differently from the PostgreSQL version, because this module reads different fields. The
+  // that separates refusalOn's same-layer rule from asking the two questions separately. The
   // outer layer carries the key under the WRONG class (a CHECK's result code with a unique index's
   // words) and the inner layer carries the RIGHT class with no key, so no single layer answers both
-  // questions — where the old split put a `code`-only layer above a `table`/`detail`-only one.
+  // questions.
   it("refusalOn does not join a code on one layer to a key on another", () => {
     const split = Object.assign(new Error("UNIQUE constraint failed: people.email"), {
       errcode: 275,
@@ -89,15 +77,14 @@ describe("constraintTarget's cause walk", () => {
     expect(constraintTarget("dup key")).toBeUndefined();
     // `refusalCode`'s own "nothing in this chain carries a result code" answer, asked through the
     // predicate that reads it. Without this line that branch is the one statement in
-    // `constraint-target.ts` neither this file nor the SQLite suite reaches (measured 2026-09-22).
+    // `constraint-target.ts` neither this file nor the SQLite suite reaches.
     expect(
       isRefusal(new Error("not a refusal", { cause: new Error("nor this") }), UNIQUE_VIOLATION),
     ).toBe(false);
   });
 
-  // Replaces the old "ignores a layer that reports a table but no detail": a layer whose `message`
-  // is not a string is the shape `refusalOn` and `constraintTarget` each guard against, and the
-  // fields it used to craft (`table`, `detail`) are PostgreSQL's and no longer read at all.
+  // A layer whose `message` is not a string is the shape `refusalOn` and `constraintTarget` each
+  // guard against.
   it("ignores a layer that carries a result code but no message", () => {
     const noMessage = { errcode: 2067, message: 42 };
     expect(constraintTarget(noMessage)).toBeUndefined();
@@ -106,16 +93,15 @@ describe("constraintTarget's cause walk", () => {
     );
   });
 
-  // Replaces the old "treats an empty key as no key at all". SQLite cannot write this either: the
-  // prefix is there and the tail is empty, so there is no `table.column` to read.
+  // The prefix is there and the tail is empty, so there is no `table.column` to read.
   it("treats an empty key as no key at all", () => {
     expect(
       constraintTarget(Object.assign(new Error("UNIQUE constraint failed: "), { errcode: 2067 })),
     ).toBeUndefined();
   });
 
-  // Replaces the old "ignores a layer whose detail names no key": a refusal class that names no key
-  // at all. A CHECK reports its constraint's NAME, which is not a `table.column` pair.
+  // A refusal class that names no key at all: a CHECK reports its constraint's NAME, which is not a
+  // `table.column` pair.
   it("ignores a layer whose message names no key", () => {
     expect(
       constraintTarget(

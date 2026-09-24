@@ -1,6 +1,5 @@
-// LOSS, from the storage swap: a case here pinned that the application may read `deployment` and
-// not write it. It is deleted rather than kept in a form that asserts nothing. CLAUDE.md §3 still
-// states the rule, and nothing in this package now holds it.
+// No case here pins that the application may read `deployment` and not write it: CLAUDE.md §3
+// states the rule, and nothing in this package holds it.
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
@@ -27,22 +26,14 @@ const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 // A database with NO migration set applied, so `deployment` does not exist — the state of a
 // first-ever boot, before the set that creates the table has run, and the state the boot-time
-// readers must answer without throwing. It needs its own handle: `useVenueDb` applies the sets it
-// is given in `beforeAll`, and every other fixture in this file hands back an already-migrated
-// database, so no suite built on one of those can observe this state.
+// readers must answer without throwing.
 describe("before any migration set has run", () => {
   const bare = useVenueDb({ migrations: [] });
 
   it("reads as unstamped when the table has not been created yet", async () => {
     expect(await readDeploymentEnvironment(bare.db)).toBeNull();
-    // Same pre-migration handle: readDeploymentMode must see the table as absent and answer
-    // "primary" (an unstamped database is a primary) rather than throw.
     expect(await readDeploymentMode(bare.db, NODE)).toBe("primary");
-    // Same pre-migration handle: readSingletonRole must see the table as absent and answer
-    // "primary" (an unstamped database is a sole primary) rather than throw.
     expect(await readSingletonRole(bare.db, NODE)).toBe("primary");
-    // readDeploymentAxes answers for both axes at once, so an unstamped database must read primary
-    // on both rather than throwing halfway.
     expect(await readDeploymentAxes(bare.db, NODE)).toEqual({
       mode: "primary",
       singletonRole: "primary",
@@ -51,9 +42,6 @@ describe("before any migration set has run", () => {
 });
 
 describe("the deployment stamp", () => {
-  // One migrated database for the whole block, emptied between tests by the helper's default
-  // reset — which is what the per-test `target.create()` this replaces bought, without a fresh
-  // file each time.
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let db: Database;
 
@@ -136,10 +124,9 @@ describe("the deployment stamp", () => {
 
   it("the mode CHECK rejects any value outside primary/mirror", async () => {
     await stampDeployment(db, "preproduction");
-    // Not `.rejects.toThrow(/node_roles_mode_ck/)`: drizzle-orm@0.45.2 wraps every failed query in
-    // a DrizzleQueryError whose own `.message` is `Failed query: <sql>` — the engine's words and
-    // its result code live on `.cause`, which `toThrow` never reads. Read the reason off the cause
-    // instead.
+    // Not `.rejects.toThrow(/node_roles_mode_ck/)`: `db.run` rejects with drizzle's `DrizzleError`,
+    // whose own `.message` is `Failed to run the query '<sql>'` — the engine's words and its result
+    // code live on `.cause`, which `toThrow` never reads.
     const error = await captureError(() =>
       Promise.resolve(
         db.run(
@@ -206,8 +193,6 @@ describe("the deployment stamp", () => {
   });
 
   it("setSingletonRoleTx flips the role inside a caller transaction", async () => {
-    // The tx-taking form (Task 4 commits this flip and a membership-document write in ONE
-    // transaction): stamp first, run it on a caller-provided tx, confirm the flip persists.
     await stampDeployment(db, "preproduction");
     await withTransaction(db, async (tx) => {
       await setSingletonRoleTx(tx, NODE, "secondary");

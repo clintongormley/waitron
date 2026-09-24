@@ -14,7 +14,7 @@ import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 // Two nodes sharing one venue database: what a rebuilt or promoted node holds once it has another
-// node's copy (slice-2 spec §2). Each must read its own row or none, never the other's.
+// node's copy. Each must read its own row or none, never the other's.
 const NODE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const NODE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 

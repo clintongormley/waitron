@@ -276,7 +276,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
 
   it("surfaces a sequence-key collision RAW, not masked as close.already_closed", async () => {
     // A daily_closes_sequence_key collision cannot happen while one write transaction runs on the
-    // venue file at a time (`withTransaction`, `packages/db/src/tenancy.ts:44`), so if one ever
+    // venue file at a time (`withTransaction`, `packages/db/src/tenancy.ts`), so if one ever
     // does it is a genuine single-writer bug for a day that is NOT closed — it must propagate, never
     // be reported as "already closed". Provoke it deterministically: close day 4, rewind the head's
     // sequence_no by hand, then close a DIFFERENT day 5. That recomputes sequence 1 and collides with

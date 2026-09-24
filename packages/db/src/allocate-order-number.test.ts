@@ -1,4 +1,3 @@
-// SQLite has no roles and no grants, so nothing here says anything about privileges.
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";
@@ -71,28 +70,16 @@ describe("allocateOrderNumber", () => {
 const WRITERS = 20;
 
 /**
- * WHAT THIS BLOCK NOW SHOWS, AND WHAT IT NO LONGER DOES.
- *
- * On PostgreSQL it opened `WRITERS` separate connections, asserted they were distinct backend
- * PROCESSES (`pg_backend_pid`), and raced them at one node's counter — a read-then-write allocator
- * handed the same number out twice there. That whole shape is gone: SQLite has one write connection per
- * file and no backend to have a pid, so `suite.pg.connect()` has no counterpart and the
- * distinct-pid guard cannot be written at all.
- *
- * What the overlapping calls below test instead is that the venue file's WRITE QUEUE serialises
- * them: `withTransaction` runs each body inside `db.withWriteLock`, and
- * `packages/store/src/write-queue.ts` issues `begin immediate` and `commit` around it, so the next
- * caller's transaction does not begin until the previous one has committed. Twenty distinct,
- * contiguous numbers is what that produces. The receipt for the queue itself, with a control in the
- * other direction, is `racePair` in `packages/catalogue/test/fixtures.ts`.
+ * What the overlapping calls below test is that the venue file's WRITE QUEUE serialises them:
+ * `withTransaction` runs each body inside `db.withWriteLock`, so the next caller's transaction does
+ * not begin until the previous one has committed. The receipt for the queue itself, with a control
+ * in the other direction, is `racePair` in `packages/catalogue/test/fixtures.ts`.
  */
 describe("allocateOrderNumber under overlapping callers", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // A FRESH location + node per case, leaving the rows independent of any other test's.
-  // `working_order_counters` reaches append-only fiscal tables by foreign key, so the PostgreSQL
-  // version could not wipe it between tests; the same shape is kept here. The taxpayer row is a
-  // singleton, so `seedTenant` only makes sure it is there.
+  // A FRESH location + node per case, leaving the rows independent of any other test's. The
+  // taxpayer row is a singleton, so `seedTenant` only makes sure it is there.
   async function freshTenantNode(db: Database): Promise<{ nodeId: string }> {
     await seedTenant(db);
     const [location] = await db

@@ -1,8 +1,6 @@
 // The break-glass verifier column on a node's `node_roles` row.
 //
-// LOSS, from the storage swap: a fourth case proved the spec §9.3 rule that the application may
-// read this column but must not write it. That case is deleted rather than kept in a form that
-// asserts nothing, and nothing in this package now states the rule.
+// No case here holds the rule that the application may read this column but must not write it.
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import {
@@ -18,8 +16,6 @@ import { useVenueDb } from "./testing/venue-db.js";
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("the deployment break-glass verifier", () => {
-  // One migrated database, emptied between tests by the helper's default reset — the per-test
-  // isolation `target.create()` used to buy with a fresh database each time.
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before anything is written", async () => {
