@@ -25,8 +25,11 @@ export interface MemoryObjectStore extends ObjectStore {
 /**
  * An in-memory bucket with S3's conditional-write rules as the client documents them: "only if
  * absent" is refused when the key exists; "only if unchanged" is refused unless the version tag
- * matches. An "only if unchanged" against a missing object is refused here as a mismatch; what a real
- * store answers in that case is not established by anything in this package.
+ * matches. An "only if unchanged" against a missing object is refused here as a mismatch; what a
+ * real store answers in that case is not established by anything in this package. Its `deleteMany`
+ * runs its own single delete per key in turn, so it records one `delete` call per key, bypasses a
+ * `delete` a test overrides by spreading the store, and stops at the first fault with the later
+ * keys still held.
  */
 export function createMemoryObjectStore(options: { now?: () => Date } = {}): MemoryObjectStore {
   const objects = new Map<string, Entry>();
@@ -39,6 +42,13 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
       (fault) => fault.operation === operation && (fault.key === undefined || fault.key === key),
     );
     return index === -1 ? undefined : faults.splice(index, 1)[0];
+  }
+
+  async function deleteOne(key: string): Promise<void> {
+    calls.push({ operation: "delete", key });
+    const fault = takeFault("delete", key);
+    if (fault) throw fault.error;
+    objects.delete(key);
   }
 
   return {
@@ -86,11 +96,9 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([key, entry]) => ({ key, lastModified: new Date(entry.lastModified) }));
     },
-    async delete(key) {
-      calls.push({ operation: "delete", key });
-      const fault = takeFault("delete", key);
-      if (fault) throw fault.error;
-      objects.delete(key);
+    delete: deleteOne,
+    async deleteMany(keys) {
+      for (const key of keys) await deleteOne(key);
     },
   };
 }

@@ -6,8 +6,6 @@ import { putOwnBytes } from "./conditional.js";
 import { parseGenerationName, venuePrefix } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 
-export const PRUNE_CONCURRENCY = 8;
-
 function parsed(field: string, generation: string): { term: number; nodeId: string } {
   const name = parseGenerationName(generation);
   if (name === null) throw new AppError("backup.stream_name_invalid", { field, value: generation });
@@ -102,35 +100,7 @@ export async function pruneGenerations(
   doomed.sort((a, b) => (a.name < b.name ? -1 : 1));
   // Markers go last, so a prune interrupted partway leaves every generation that had a marker still
   // claimed.
-  await deleteAll(
-    store,
-    doomed.flatMap((folder) => folder.files),
-  );
-  await deleteAll(
-    store,
-    doomed.filter((folder) => folder.claimed).map((folder) => folder.marker),
-  );
+  await store.deleteMany(doomed.flatMap((folder) => folder.files));
+  await store.deleteMany(doomed.filter((folder) => folder.claimed).map((folder) => folder.marker));
   return doomed.map((folder) => folder.name);
-}
-
-/** Stops starting deletes at the first failure, and answers only once those in flight have settled. */
-async function deleteAll(store: ObjectStore, keys: string[]): Promise<void> {
-  let next = 0;
-  let failed = false;
-  const worker = async () => {
-    while (!failed && next < keys.length) {
-      const key = keys[next]!;
-      next += 1;
-      try {
-        await store.delete(key);
-      } catch (error) {
-        failed = true;
-        throw error;
-      }
-    }
-  };
-  const workers = Array.from({ length: Math.min(PRUNE_CONCURRENCY, keys.length) }, worker);
-  const outcomes = await Promise.allSettled(workers);
-  const refusal = outcomes.find((outcome) => outcome.status === "rejected");
-  if (refusal !== undefined) throw refusal.reason;
 }

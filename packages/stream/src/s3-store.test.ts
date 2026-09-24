@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { CONFLICT_ATTEMPTS, createS3ObjectStore } from "./s3-store.js";
+import { CONFLICT_ATTEMPTS, DELETE_CONCURRENCY, createS3ObjectStore } from "./s3-store.js";
 import type { BucketConfig } from "./s3-store.js";
 
 type SentRequest = {
@@ -12,6 +12,7 @@ type SentRequest = {
   path: string;
   query: Record<string, string>;
   headers: Record<string, string>;
+  body?: string;
 };
 type Scripted =
   | {
@@ -68,8 +69,13 @@ function bodyStream(text: string, breaks: string | undefined): Readable {
 function network(responses: Scripted[]) {
   const sent: SentRequest[] = [];
   const handler = {
-    async handle(request: SentRequest) {
-      sent.push({ ...request, headers: { ...request.headers }, query: { ...request.query } });
+    async handle(request: SentRequest & { body?: unknown }) {
+      sent.push({
+        ...request,
+        headers: { ...request.headers },
+        query: { ...request.query },
+        body: typeof request.body === "string" ? request.body : undefined,
+      });
       const next = responses.shift();
       if (next === undefined)
         throw new Error(`no scripted response for ${request.method} ${request.path}`);
@@ -405,6 +411,199 @@ describe("delete", () => {
       status: 403,
       name: "AccessDenied",
     });
+  });
+});
+
+describe("deleteMany — S3's multi-object delete", () => {
+  const keysIn = (body: string | undefined) =>
+    [...(body ?? "").matchAll(/<Key>([^<]*)<\/Key>/g)].map((match) => match[1]);
+  const DELETED: Scripted = {
+    status: 200,
+    headers: xml,
+    body: '<?xml version="1.0" encoding="UTF-8"?><DeleteResult></DeleteResult>',
+  };
+  function perKeyErrors(errors: { key: string; code: string }[]): Scripted {
+    const inner = errors
+      .map((e) => `<Error><Key>${e.key}</Key><Code>${e.code}</Code><Message>no</Message></Error>`)
+      .join("");
+    return {
+      status: 200,
+      headers: xml,
+      body: `<?xml version="1.0" encoding="UTF-8"?><DeleteResult>${inner}</DeleteResult>`,
+    };
+  }
+  const NOT_IMPLEMENTED: Scripted = {
+    status: 501,
+    headers: xml,
+    body: errorBody(
+      "NotImplemented",
+      "A header you provided implies functionality that is not implemented",
+    ),
+  };
+
+  it("sends nothing for no keys", async () => {
+    const { store, sent } = storeOver([]);
+    await expect(store.deleteMany([])).resolves.toBeUndefined();
+    expect(sent).toEqual([]);
+  });
+
+  it("sends one quiet POST ?delete per 1000 keys, under the prefix, with the checksum AWS requires", async () => {
+    const keys = Array.from({ length: 2500 }, (_, i) => `venues/v1/g/${i}.ltx`);
+    const { store, sent } = storeOver([DELETED, DELETED, DELETED]);
+    await expect(store.deleteMany(keys)).resolves.toBeUndefined();
+    expect(sent.map((request) => request.method)).toEqual(["POST", "POST", "POST"]);
+    expect(sent.every((request) => "delete" in request.query)).toBe(true);
+    expect(sent.every((request) => request.path === "/owner-bucket/")).toBe(true);
+    expect(sent.map((request) => keysIn(request.body).length)).toEqual([1000, 1000, 500]);
+    expect(sent.flatMap((request) => keysIn(request.body))).toEqual(
+      keys.map((key) => `waitron/${key}`),
+    );
+    expect(sent.every((request) => /<Quiet>true<\/Quiet>/.test(request.body ?? ""))).toBe(true);
+    // Measured 2026-09-24: @aws-sdk/client-s3 3.1136.0 sends a CRC32 checksum, not Content-MD5.
+    for (const request of sent) {
+      expect(
+        request.headers["x-amz-checksum-crc32"] ?? request.headers["content-md5"],
+      ).toBeDefined();
+    }
+  });
+
+  it("rejects when the answer names a key it did not delete, naming that key", async () => {
+    const { store } = storeOver([
+      perKeyErrors([{ key: "waitron/venues/v1/g/b.ltx", code: "AccessDenied" }]),
+    ]);
+    expect(await rejection(store.deleteMany(["venues/v1/g/a.ltx", "venues/v1/g/b.ltx"]))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key: "venues/v1/g/b.ltx", status: 200, name: "AccessDenied" },
+    });
+  });
+
+  it.each([
+    ["a key outside the batch", "<Key>elsewhere/x</Key><Code>AccessDenied</Code>", "a"],
+    ["no key", "<Code>AccessDenied</Code>", "a"],
+    ["a key of the batch but no code", "<Key>waitron/b</Key>", "b"],
+    ["a key of the batch and an empty code", "<Key>waitron/b</Key><Code></Code>", "b"],
+  ])("reports a refusal naming %s as an incomplete answer", async (_, error, key) => {
+    const { store } = storeOver([
+      {
+        status: 200,
+        headers: xml,
+        body: `<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Error>${error}</Error></DeleteResult>`,
+      },
+    ]);
+    expect(await rejection(store.deleteMany(["a", "b"]))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key, status: 200, name: "IncompleteDeleteResult" },
+    });
+  });
+
+  it("sends no further batch once one has failed", async () => {
+    const keys = Array.from({ length: 2500 }, (_, i) => `k${i}`);
+    const { store, sent } = storeOver([
+      { status: 403, headers: xml, body: errorBody("AccessDenied", "Access Denied") },
+      DELETED,
+      DELETED,
+    ]);
+    expect(await rejection(store.deleteMany(keys))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key: "k0", status: 403, name: "AccessDenied" },
+    });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("a batch with no answer at all is reported with no status", async () => {
+    const { store } = storeOver([{ throws: "connect ECONNREFUSED" }]);
+    expect((await rejection(store.deleteMany(["a", "b"]))).params).toMatchObject({
+      operation: "delete",
+      key: "a",
+      status: null,
+    });
+  });
+
+  it("falls back to one DELETE per key when the store answers the batch 501", async () => {
+    const { store, sent } = storeOver([NOT_IMPLEMENTED, { status: 204 }, { status: 204 }]);
+    await expect(store.deleteMany(["a", "b"])).resolves.toBeUndefined();
+    expect(sent.map((request) => `${request.method} ${request.path}`)).toEqual([
+      "POST /owner-bucket/",
+      "DELETE /owner-bucket/waitron/a",
+      "DELETE /owner-bucket/waitron/b",
+    ]);
+  });
+
+  it("does not fall back on any other refusal of the batch", async () => {
+    const { store, sent } = storeOver([
+      { status: 400, headers: xml, body: errorBody("MalformedXML", "bad") },
+    ]);
+    expect(await rejection(store.deleteMany(["a"]))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key: "a", status: 400, name: "MalformedXML" },
+    });
+    expect(sent).toHaveLength(1);
+  });
+});
+
+describe("deleteMany — one DELETE per key, where the batch is not implemented", () => {
+  /** A 501 for every batch, then each single DELETE held until the test releases it. */
+  function heldNetwork(failKey?: string) {
+    let inFlight = 0;
+    let most = 0;
+    let started = 0;
+    let finished = 0;
+    const handler = {
+      async handle(request: SentRequest) {
+        if (request.method === "POST") {
+          return {
+            response: {
+              statusCode: 501,
+              headers: xml,
+              body: bodyStream(errorBody("NotImplemented", "not implemented"), undefined),
+            },
+          };
+        }
+        started += 1;
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
+        inFlight -= 1;
+        const refused = failKey !== undefined && request.path.endsWith(`/${failKey}`);
+        if (!refused) finished += 1;
+        return {
+          response: refused
+            ? {
+                statusCode: 403,
+                headers: xml,
+                body: bodyStream(errorBody("AccessDenied", "Access Denied"), undefined),
+              }
+            : { statusCode: 204, headers: {}, body: bodyStream("", undefined) },
+        };
+      },
+    };
+    const store = createS3ObjectStore(CONFIG, { requestHandler: handler });
+    return { store, stats: () => ({ most, started, finished }) };
+  }
+
+  it(`keeps at most ${DELETE_CONCURRENCY} deletes in flight`, async () => {
+    const { store, stats } = heldNetwork();
+    await store.deleteMany(Array.from({ length: 50 }, (_, i) => `k${i}`));
+    expect(stats()).toEqual({ most: DELETE_CONCURRENCY, started: 50, finished: 50 });
+  });
+
+  it("starts no further deletes once one has failed, and none after it has answered", async () => {
+    const { store, stats } = heldNetwork("k0");
+    expect(
+      (await rejection(store.deleteMany(Array.from({ length: 50 }, (_, i) => `k${i}`)))).params,
+    ).toEqual({
+      operation: "delete",
+      key: "k0",
+      status: 403,
+      name: "AccessDenied",
+    });
+    const atAnswer = stats();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(stats()).toEqual(atAnswer);
+    expect(atAnswer.started).toBeLessThanOrEqual(DELETE_CONCURRENCY);
+    // Those already sent when k0 failed were answered before the rejection.
+    expect(atAnswer.finished).toBe(atAnswer.started - 1);
   });
 });
 

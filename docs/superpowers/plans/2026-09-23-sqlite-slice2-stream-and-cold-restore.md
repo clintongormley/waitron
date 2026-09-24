@@ -7795,10 +7795,14 @@ bytes they wrote (`putOwnBytes` in `conditional.ts`), while after each of the ch
 refused writes it reads the object back and reports `create_only_ignored` or `if_match_ignored` if
 the object changed; the in-memory bucket's version tag is the MD5 of the bytes, as
 S3's is for a PUT stored unencrypted or with SSE-S3; and pruning deletes every old generation's files
-through one bounded pool of concurrent deletes, then their markers, so no marker is deleted until
+through one bounded pool of concurrent deletes, then their markers (superseded by vii), so no marker is deleted until
 every file delete has succeeded. (vi) Since 2026-09-24, the S3 store reports a listed key outside
 the requested folder as `backup.stream_name_invalid` (`field: "listedKey"`), not
-`backup.stream_request_failed`.
+`backup.stream_request_failed`. (vii) Since 2026-09-24 (`feat/stream-batch-delete`), `ObjectStore`
+has a fifth operation, `deleteMany(keys)`, and pruning deletes through it: every old generation's
+files in one call, then their markers in a second. The S3 store sends S3's multi-object delete, 1000
+keys a request, and falls back to one delete per key, at most `DELETE_CONCURRENCY` (8) at a time,
+only when the batch is answered 501. `PRUNE_CONCURRENCY` is gone.
 
 **Branch:** `feat/sqlite-slice2-stream-package` (one pull request)
 

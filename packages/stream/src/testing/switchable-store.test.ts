@@ -64,6 +64,7 @@ describe("SwitchableStore", () => {
       ["put", () => store.put("k", bytes("x"))],
       ["list", () => store.list("k")],
       ["delete", () => store.delete("k")],
+      ["delete", () => store.deleteMany(["k", "other"])],
     ] as const) {
       await expect(call()).rejects.toMatchObject({
         code: "backup.stream_request_failed",
@@ -89,6 +90,8 @@ describe("SwitchableStore", () => {
     await store.delete("a");
     expect(store.has("a")).toBe(false);
     expect(await store.get("b")).toMatchObject({ body: new Uint8Array() });
+    await store.deleteMany(["b", "c"]);
+    expect(store.has("b") || store.has("c")).toBe(false);
   });
 
   it("logs answered writes and uploads in one order, and not a refused write", async () => {

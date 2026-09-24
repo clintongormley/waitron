@@ -4748,9 +4748,14 @@ Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed poin
 `current.json` naming the live generation, generation claiming and pruning, and `probeBucket`, the
 check behind the settings screen's Test button), landed as #569. Task 6 makes the server call it at boot, through
 `StreamHost`; Tasks 8a, 9b and 10 add the other callers. Where it departs from the plan's code is recorded in a dated note in the plan's
-Task 5. Left open by #569's review, the owner's call: pruning sends one delete request per file,
-where S3's `DeleteObjects` removes up to 1000 per request — using it would change the bucket
-interface the plan fixed, and not every S3-compatible store has been checked for it. The other
+Task 5. #569's review left pruning sending one delete request per file; on the owner's call
+(2026-09-24, `feat/stream-batch-delete`) the bucket interface now has a batch delete, and the S3
+store sends S3's multi-object delete, 1000 keys a request, falling back to one request per file only
+when the store answers the batch 501. Which real providers lack the multi-object delete, and what
+each answers, is not established; a provider that refuses it with any other status fails the day's
+prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream/src/probe.ts`),
+which the supervisor runs before opening a generation and the settings screen's Test button is to
+run, deletes one object at a time, so neither can reveal such a provider. The other
 choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
 now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
 pruning's own check uses (owner, 2026-09-24; landed as #576). Its value is the key as the bucket
