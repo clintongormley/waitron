@@ -30,8 +30,9 @@ export interface BackupApiDeps {
   /** The recovery key from the box env (files merged under the process env), read afresh each call.
    * Answers with no archive destination configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
-  /** Called after every write to `backup.env`: that file is sealed into the row, and a rotation
-   * changes the key the row is locked with. */
+  /** Called once straight after every write to `backup.env`, before the reload or any check that
+   * can refuse the request: that file is sealed into the row, and a rotation changes the key the row
+   * is locked with. */
   sealedState: SealedStateRefresher;
 }
 
@@ -301,13 +302,14 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         // would (`recovery_key_too_short`/`destinations_invalid`/`schedule_invalid`) BEFORE touching disk.
         loadBackupConfig(backupEnvRecord(input));
         await writeBackupEnv(deps.stateDir, input);
+        // Before anything that can refuse: the file has changed whatever this request answers.
+        await deps.sealedState.refresh();
         await deps.supervisor.reload();
         // The effective key is what the box will actually encrypt under. If a partial env override (or
         // any merge) made it differ from the key chosen above, fail LOUD rather than orphan archives.
         if (deps.supervisor.current().recoveryKey !== input.recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});
         }
-        await deps.sealedState.refresh();
         // Return the COMPLETE status (the same shape `GET /api/backup/status` returns), so the
         // dashboard, which assigns this response straight to its status state and reads
         // `backupStatus`/`archiveUnderCurrentKey`, gets both — the sync `current()` snapshot omits them.
@@ -346,20 +348,20 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (cur.destinations.length === 0 && (await keyPresent())) {
           loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
           await writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt });
+          await deps.sealedState.refresh();
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
-          await deps.sealedState.refresh();
           return c.json(await statusBody(true));
         }
         const input: BackupEnvInput = { ...fromCurrent(cur), recoveryKey, keyRotatedAt };
         loadBackupConfig(backupEnvRecord(input));
         await writeBackupEnv(deps.stateDir, input);
+        await deps.sealedState.refresh();
         await deps.supervisor.reload();
         if (deps.supervisor.current().recoveryKey !== recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});
         }
-        await deps.sealedState.refresh();
         // Complete status, as `apply` returns and the dashboard expects (see the note there).
         return c.json(await statusBody());
       });
