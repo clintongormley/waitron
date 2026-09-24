@@ -5249,6 +5249,23 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
   `message`/`stack` from rejected Errors; `maskPath` masks UUID and all-numeric segments only — mask
   slugs and emails too; route the dashboard's boot-probe-fail, post-login and logout transitions
   through the nav trail; roll the trail and report button out to `apps/setup`.
+- **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
+  Slices 2 and 3 and replace one part of Slice 3; design them together before building:
+  - **Reports go to Waitron Cloud, which files the GitHub issue.** Slice 3's "stored token in
+    `@waitron/credentials`" is replaced: the box holds no GitHub credential. The box sends through its
+    signed-in Cloud client (`apps/server/src/cloud-client.ts`, #582); Cloud (the separate
+    `waitron-cloud` repository, being built) files the issue and groups reports with the same stack
+    into one issue with a count. Open: what a venue not connected to Cloud is offered.
+  - **The repository is public**, so the public issue carries only the stack, the Waitron version and
+    the error code. The venue's identity and anything a person typed stay private in Cloud, linked
+    from the issue.
+  - **Automatic reports as well as the manual button.** A crash that reaches the recovery page, an
+    unexpected server error, and a frozen process stopped by its watchdog (lane A's A18d writes one
+    JSON report file per event on a persistent volume, outside the venue database) each become a
+    pending report. After the box is back up, a signed-in manager is offered it on the dashboard —
+    never on the unauthenticated recovery page — with an optional description of what they were
+    doing, and a setting to send them automatically. The owner's aim: the more bugs reported, the
+    better.
 
 ### KDS operations — low priority (A9)
 
