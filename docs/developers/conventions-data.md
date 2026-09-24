@@ -10,7 +10,7 @@ SQLSTATEs below — `23505`, `42501`, `22003` and the rest — are PostgreSQL's,
 now history: the storage switch took the engine that raised them. `node:sqlite` reports a numeric
 `errcode` instead. Measured 2026-09-22 on Node v26.7.0, in one transaction: a duplicate primary key
 is 1555, a null in a `not null` column 1299, and a trigger's `RAISE(ABORT)` 1811. The tree spells it
-that way too (`packages/migrations/src/apply.ts`, `packages/provisioning/src/errors.ts`). A passage
+that way too (`packages/db/src/sql-state.ts`). A passage
 kept for a measurement taken on PostgreSQL says so in its own words; read every SQLSTATE here as a
 reading from that engine and not as something a box can still print.
 

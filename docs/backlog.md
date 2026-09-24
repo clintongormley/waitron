@@ -2777,10 +2777,24 @@ image constraints under *Detail → Box image*.
   about 945 to about 330, tests included) and `packages/scheduler` (#581, about 820 to about 350,
   tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included)
   and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included) and
-  `packages/fiscal` (#592, about 690 to about 245, tests included). A pruning pull request
+  `packages/fiscal` (#592, about 690 to about 245, tests included) and `packages/payments-sumup`
+  with `packages/migrations` (#597, about 1,090 to about 800, tests included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589 and #592 and left for the package that owns each, all still OPEN:
+  #579, #581, #585, #589, #592 and #597 and left for the package that owns each, all still OPEN:
+  - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
+    comments-only change. Pointers outside `docs/` that #597 made stale: `apps/server/README.md:82`
+    says `packages/migrations/src/apply.ts` carries the lock races, which now live only in #489;
+    `packages/db/src/immutability.sql.md:18` cites `apply.ts:105` for the trigger install, which is
+    now the `installAppendOnlyTriggers` call at line 74; and `.github/workflows/ci.yml:401` says
+    esbuild collapses "all five" migration descriptors, while
+    `grep -rhoE "export const [A-Z_]+_MIGRATIONS\b" packages --include='*.ts' | sort -u` lists 15
+    names on `ca01a7fbd`. `sumupClientForTenant` (`packages/payments-sumup/src/card-provider.ts:50`)
+    still carries "tenant" in its name, and `collect.sandbox.test.ts:32` still calls its database
+    `pg`. Three `apps/server` tests still quote PostgreSQL's 23514 as the failure a range check
+    prevents (`me-api.test.ts:850`, `schedule-api.test.ts:459` and `:463`,
+    `workforce-api.test.ts:358`). The fake SumUp client leaves its one-shot switches for a lookup or
+    a refund armed when a checkout before them is refused; no test combines the two.
   - Found by #592 (`packages/fiscal`), not fixable in a comments-only change or outside the
     package. Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts`
     are code, not comments: one points at `packages/fiscal/src/backend.ts:72` for `total: Decimal`
@@ -2811,10 +2825,9 @@ image constraints under *Detail → Box image*.
     the unmade fix; the gap is stated at `assertShiftInterval`.
   - A `nodeId` option nothing reads: `ReconcileDeps.nodeId` in `packages/payments/src/reconcile.ts`
     is declared and never read, `packages/payments-stripe/src/reconciler.ts` passes one in, and the
-    SumUp provider's options declare one it never reads. `payments-sumup/src/provider.ts:47` still
-    says it is stamped on the incident, which is false; prune it with that package (#570 made
-    `payments-stripe`'s comments say the value is passed on and not read). Dropping the option is a
-    code change.
+    SumUp provider's options declare one it never reads (`payments-sumup/src/provider.ts:47`,
+    passed in at `card-provider.ts:188`). #570 and #597 made both packages' comments say so.
+    Dropping the option is a code change.
   - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
     `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
@@ -3006,7 +3019,8 @@ image constraints under *Detail → Box image*.
     `booking_time` as `HH:MM` while the write path stores `HH:MM:SS`. #574 moved the Vitest 3
     `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
     commit message; `docs/developers/testing-guide.md` has no paragraph holding it, and
-    `payments-sumup` and `venue-service` still carry it in their configs.
+    `venue-service` still carries it in its config (#597 cut `payments-sumup`'s to a pointer at
+    CLAUDE.md §4).
   - The same false comments outside bookings, found by #574: "the lanes run in parallel" in
     `packages/fiscal-none/drizzle.config.ts`, `packages/fiscal-none/src/migrations.ts` and
     `packages/workforce-es/drizzle.config.ts`; "a mismatch surfaces as a runtime shape error a view
@@ -3055,8 +3069,9 @@ image constraints under *Detail → Box image*.
     barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
     both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
     excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
-    given in the configs of workforce, credentials, bookings, payments-sumup, workforce-es,
-    server-kit, dashboard-kit and fiscal-none (not re-measured there). `claimGap` uses an untargeted
+    given in the configs of workforce, credentials, bookings, workforce-es, server-kit,
+    dashboard-kit and fiscal-none (not re-measured there); `payments-sumup` keeps its
+    `src/dashboard/index.ts` exclude with the reason deleted by #597, also not measured. `claimGap` uses an untargeted
     `.onConflictDoNothing()` on a table with two unique constraints (the `id` primary key and
     `scheduled_runs_key`); CLAUDE.md §3 asks for a named target there, though `id` is freshly
     generated (read, not run).
@@ -3725,8 +3740,8 @@ this reason.
 **`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
 required — OPEN (found 2026-09-23, task F1's review wave).** `applyMigrations` reads it as `?? []`,
 so a caller passing a plain `MigrationOptions[]` gets a migrated database with NO append-only
-triggers, silently. It is a stated hedge rather than an accident — the type's own comment says such
-a caller "migrates and installs nothing, which is what the package's own suites do" — and there are
+triggers, silently. It is a stated hedge rather than an accident — `applyMigrations`' own comment says a caller
+that "hands over no `appendOnlyTables` gets a migrated database with no triggers on it" — and there are
 no standing violations: all ten product callers go through `migrationOptionsFor`, which always
 carries the set's tables (checked at this head). Given `CLAUDE.md` §5, the property deserves a guard
 rather than a paragraph. **Next action:** a root guard that every non-test `applyMigrations` call

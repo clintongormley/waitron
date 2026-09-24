@@ -4,6 +4,8 @@
 > It was renamed to `migrations.set_missing` when `manifest.ts`/`apply.ts` moved out of `apps/server`
 > into `@waitron/migrations` (branch `feat/provisioning-cli`). The text below is left as written;
 > `packages/migrations/src/errors.ts` carries the reasoning for the rename.
+> _(2026-09-24: it no longer does — #597 removed that reasoning as history; the rename is in the
+> history of `packages/migrations/src/errors.ts`.)_
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
