@@ -4974,16 +4974,16 @@ What the preparation tasks left, with F1's own answers where it found them:
     from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
     and a `/ 100` puts a second copy of the scale outside the files
     `packages/shared/src/conventions.test.ts` checks.
-    **Found in #531's review — OPEN, predates it:** `decimalToCents` checks the twelve-digit
-    bound BEFORE it rounds to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
-    amount with a third decimal place can round past the bound and is accepted:
+    **Found in #531's review — DONE 2026-09-24 (`fix/conversion-edges`):** `decimalToCents` now
+    checks the bound on the amount rounded to cents, so `"999999999999.995"` is refused with
+    `shared.decimal_overflow`. The receipt that found it: `decimalToCents` checked the twelve-digit
+    bound BEFORE it rounded to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
+    amount with a third decimal place could round past the bound and was accepted:
     `stringToCents("999999999999.995")` returned 100000000000000 (thirteen integer digits) where
     `"1000000000000"` is refused with `shared.decimal_overflow`, measured 2026-09-23. The quantity
     and rate converters check after rounding (`stringToThousandths("999999999.9995")` is refused).
-    Not changed in #531 or since: `decimalToCents` also serves the fiscal record builders, so the
-    fix waits for a session the owner attends. The `cents.ts` header's "widest amount this system
-    admits" and `docs/developers/conventions-data.md`'s matching sentence describe two-place input
-    only.
+    Held back from #531 because `decimalToCents` also serves the fiscal record builders; the owner
+    decided it on 2026-09-24.
   - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
     PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
     pattern instead of copies; its raw reader keeps the number type's bound rather than the money
@@ -4998,16 +4998,19 @@ What the preparation tasks left, with F1's own answers where it found them:
     from `sqlToQuery(check.value).sql` alone (read in its bundled source, not run), so the
     migration would say `?`. Only `sql.raw(String(n))` renders the number, and a constant that
     works only through `sql.raw` is a trap for the next tidy-up, so the literals stay.
-    **OPEN** (found 2026-09-23 in this branch's review, left unchanged): the quantity raw reader,
-    `rawThousandthsToDecimal`, still refuses any value past nine integer digits, although
-    `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of quantities. That is the
+    **DONE 2026-09-24 (`fix/conversion-edges`, owner decision):** `rawThousandthsToDecimal` now
+    reads a total past nine integer digits and, like `rawCentsToDecimal`, refuses only a count past
+    what a number holds exactly, with `shared.invalid_thousandths`; one quantity is still bounded at
+    nine. Found 2026-09-23 in #529's review: the quantity raw reader refused any value past nine
+    integer digits, although `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of
+    quantities. That is the
     opposite choice to money's raw reader, which deliberately admits a total wider than any one
-    amount; needs a decision.
-    **OPEN** (same review): `decimalToCents` checks the money bound BEFORE rounding to cents, so
-    `decimalToCents("999999999999.995")` returns `100000000000000`, an amount with thirteen integer
+    amount.
+    **DONE 2026-09-24 (`fix/conversion-edges`)** — the same edge as the #531 entry above, fixed
+    there. The receipt (same review): `decimalToCents` checked the money bound BEFORE rounding to
+    cents, so `decimalToCents("999999999999.995")` returned `100000000000000`, an amount with thirteen integer
     digits that `assertMoney` refuses (measured 2026-09-23 on this branch). `main` checks in the same
-    order (`toScale(assertMoney(value), MONEY_SCALE)`), so this predates the branch; fixing it
-    changes money behaviour, so it needs a decision.
+    order (`toScale(assertMoney(value), MONEY_SCALE)`), so this predated the branch.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
     **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
     contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,

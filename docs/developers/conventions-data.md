@@ -378,7 +378,8 @@ conversion it exists for and forbids the rest.
 whatever the declared type says (`packages/db/src/schema/columns.ts` states it at
 `smallCount`/`bigCount`), so nothing below the converters bounds a money value at all. The bound the
 system states is twelve integer digits — 99999999999999 cents, `MAX_MONEY_INTEGER_DIGITS`, enforced
-by `assertMoney` and by `packages/catalogue`'s price validators — and it is now the only thing
+by `decimalToCents` on the amount after rounding it to cents, and by `packages/catalogue`'s price
+validators — and it is now the only thing
 enforcing anything. That figure is well inside the 9007199254740991 a JavaScript number counts
 exactly, so nothing in range loses a cent to the number type.
 
@@ -515,7 +516,8 @@ whenever a money column is added:
   `packages/fiscal-verifactu/src/monetary-columns.test.ts` states the twelve-TOTAL-digits against
   twelve-INTEGER-digits split in its own comment but does not hold it down: it neither imports
   `assertMoney` nor reads `MAX_MONEY_INTEGER_DIGITS`, and what it would catch is those two fiscal
-  columns ceasing to be `text`. The bound itself is pinned in `packages/shared/src/money.test.ts`.
+  columns ceasing to be `text`. The bound itself is pinned in `packages/shared/src/money.test.ts`
+  (`assertMoney`) and `packages/shared/src/cents.test.ts` (`decimalToCents`, after rounding).
 
 **Every document written before 2026-09-20 that states a money column as `numeric(12, 2)`
 describes the old storage.** There are dozens, nearly all dated plans and specs recording what was
@@ -600,8 +602,11 @@ says. What is left of the widths is the digit bounds in the converters, which is
 **Each decimal column's bound moved into the converter.** `numeric(12, 3)` refused a quantity past
 nine integer digits with a `22003` and `numeric(5, 2)` refused a rate past three; an integer column
 takes both silently. `MAX_QUANTITY_INTEGER_DIGITS` and `MAX_RATE_INTEGER_DIGITS` are where those
-refusals live now. The raw readers carry the same bound, which is what `top-sellers.ts`'s old
-`sum(sl.quantity)::numeric(12, 3)::text` cast was enforcing.
+refusals live now. The raw RATE reader carries the same bound; the raw QUANTITY reader,
+`rawThousandthsToDecimal`, does not (owner decision 2026-09-24). Its caller, `top-sellers.ts`, reads
+sums, which can be wider than any one quantity, so like `rawCentsToDecimal` it refuses only a count
+past what a JavaScript number holds exactly, with `shared.invalid_thousandths`. `top-sellers.ts`'s old
+`sum(sl.quantity)::numeric(12, 3)::text` cast refused such a sum; nothing does now.
 
 **A rate's CHECK constraint does not follow the column.** Four of them compared a rate against 100.
 `ALTER COLUMN ... SET DATA TYPE` keeps a check and CASTS it, so left alone every one of them would

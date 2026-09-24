@@ -20,8 +20,8 @@ export function decimalToCents(value: Decimal): number {
 
 /**
  * The count of whole cents in a decimal string: "12.34" is 1234. Refuses a malformed
- * string with `shared.invalid_decimal`, and one whose integer part is wider than the money
- * scale admits with `shared.decimal_overflow`.
+ * string with `shared.invalid_decimal`, and one whose integer part, once rounded to cents, is
+ * wider than the money scale admits with `shared.decimal_overflow`.
  */
 export function stringToCents(value: string): number {
   return decimalToCents(decimal(value));
