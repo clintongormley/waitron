@@ -247,6 +247,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 400, which is also what the default would give: it is a CLIENT request fault, the caller having
   // sent a selection the list's own published counts refuse.
   "extras.limit_exceeded": 400,
+  // 409 like the `*.in_use` codes: the body was well formed, and what another stored row holds
+  // refused it — a product's Active variants, or an extras list offering the product.
+  "extras.product_has_variants": 409,
+  "product.offered_as_extra": 409,
   // 409 for the same reason as the three `*.in_use` codes above, and unthrown like two of them.
   // `grep -rn 'product.in_use' apps packages --include="*.ts"` on 2026-09-20 returns three lines:
   // the declaration in `packages/catalogue/src/errors.ts`, this comment quoting the command, and
