@@ -4,7 +4,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { hasCode, isAppError } from "@waitron/shared";
 import { isPreconditionFailure } from "./conditional.js";
 import "./errors.js";
-import { claimGeneration, generationPrefix, pruneGenerations } from "./generations.js";
+import { CommitLog, computeLag } from "./freshness.js";
+import { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 import {
   LITESTREAM_VERSION,
   litestreamConfig,
@@ -48,7 +49,20 @@ export interface StreamStatus {
   stateSince: string;
   /** Set while the bucket refuses this box's key or fails the safe-write check; its reason. */
   bucketProblem: { reason: string; since: string } | null;
+  /**
+   * How long the oldest commit not yet seen in the bucket has waited; 0 when nothing waits.
+   * Computed whatever the state: a supervisor that stopped by itself still counts the commits it
+   * hears, and only `stop()` ends the hearing.
+   */
+  lagMs: number;
+  /** The newest file seen in the live generation, by the bucket's clock. */
+  lastConfirmedUploadAt: string | null;
 }
+
+/** What the server's readers take: a supervisor's status, or off when there is none. */
+export type StreamView = StreamStatus | { state: "off" };
+
+type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 
 /** Everything the supervisor needs; it opens no database and reads no settings itself. */
 export interface SupervisorDeps {
@@ -78,6 +92,8 @@ export interface SupervisorDeps {
   stopWaitMs?: number;
   /** Reads a PID's command line; default {@link readCommandLine}. */
   readCommandLine?: (pid: number) => Promise<string | null>;
+  /** Subscribes to the venue database's commits; returns the unsubscribe. */
+  onCommit(listener: (committedAt: Date) => void): () => void;
 }
 
 /** How often, while streaming, the side file is measured. */
@@ -103,6 +119,12 @@ const STOP_WAIT_MS = 1_000;
 export const PRUNE_EVERY_MS = 24 * 60 * 60_000;
 /** A generation untouched for this long, and not the live one, is deleted: the week of history (spec §4.4). */
 export const PRUNE_WINDOW_MS = 168 * 60 * 60_000;
+/** Level 0's retention as the configuration sets it (`l0-retention: 5m`, `./litestream.ts`). */
+export const L0_RETENTION_MS = 5 * 60_000;
+/** How often, while streaming, the bucket's safe-write check is repeated. */
+const PROBE_EVERY_MS = 24 * 60 * 60_000;
+/** How often a bucket that failed a read, or has a problem named, is checked again. */
+const CLASSIFY_EVERY_MS = 10 * 60_000;
 /** Beside the configuration: the PID of the Litestream this supervisor started. */
 const PID_FILE = "litestream.pid";
 const CONFIG_FILE = "litestream.yml";
@@ -153,6 +175,15 @@ const replicateArgs = (configPath: string): string[] => ["replicate", "-config",
 
 const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "unknown");
 
+const newestOf = (objects: readonly ListedObject[]): Date | null =>
+  objects.reduce<Date | null>(
+    (newest, object) =>
+      newest === null || object.lastModified > newest ? object.lastModified : newest,
+    null,
+  );
+const later = (a: Date | null, b: Date | null): Date | null =>
+  a === null ? b : b === null || a > b ? a : b;
+
 /** A sleep that ends early, and quietly, when `signal` aborts. */
 export async function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
   try {
@@ -190,7 +221,7 @@ export class StreamSupervisor {
   readonly #spawn: SpawnFn;
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly #stopWaitMs: number;
-  #status: StreamStatus;
+  #status: StreamCore;
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
   #keeper: Keeper | undefined;
@@ -200,6 +231,15 @@ export class StreamSupervisor {
   #env: Readonly<Record<string, string>> = {};
   #lastPruneAt = Number.NEGATIVE_INFINITY;
   #pruning = false;
+  readonly #commits = new CommitLog();
+  /** Set by `start()`, which `stop()` requires before it does anything. */
+  #unsubscribe!: () => void;
+  /** The newest file seen in the live generation, by the bucket's clock. */
+  #newestUploadAt: Date | null = null;
+  /** The bucket's clock minus this box's. */
+  #skewMs = 0;
+  #lastProbeAt = 0;
+  #lastClassifyAt = Number.NEGATIVE_INFINITY;
 
   constructor(deps: SupervisorDeps) {
     this.#deps = deps;
@@ -217,12 +257,17 @@ export class StreamSupervisor {
   }
 
   status(): StreamStatus {
-    return { ...this.#status };
+    return {
+      ...this.#status,
+      lagMs: this.#lagWith(this.#newestUploadAt).lagMs,
+      lastConfirmedUploadAt: this.#newestUploadAt?.toISOString() ?? null,
+    };
   }
 
   /** Schedules the work and returns: nothing here waits for the bucket. */
   async start(): Promise<void> {
     if (this.#controller !== undefined) return;
+    this.#unsubscribe = this.#deps.onCommit((at) => this.#commits.record(at));
     const controller = new AbortController();
     this.#controller = controller;
     this.#run = this.#main(controller.signal).catch(async (error: unknown) => {
@@ -246,6 +291,7 @@ export class StreamSupervisor {
     const controller = this.#controller;
     if (controller === undefined) return;
     controller.abort();
+    this.#unsubscribe();
     await this.#stopChild();
     await Promise.race([this.#run, delay(this.#stopWaitMs, undefined, { ref: false })]);
     await this.#stopChild();
@@ -329,6 +375,7 @@ export class StreamSupervisor {
           continue;
         }
         this.#noteBucketProblem(null);
+        this.#lastProbeAt = this.#deps.now().getTime();
         const previous = await readPointer(this.#store, venueId);
         signal.throwIfAborted();
         if (previous !== null && previous.pointer.body.term > term) {
@@ -336,6 +383,7 @@ export class StreamSupervisor {
           return null;
         }
         const generation = generationName(term, nodeId, this.#deps.now());
+        const claimStarted = this.#deps.now();
         try {
           await claimGeneration(this.#store, venueId, generation);
         } catch (error) {
@@ -343,6 +391,10 @@ export class StreamSupervisor {
           await this.#sleep(1_000, signal);
           continue;
         }
+        const claimEnded = this.#deps.now();
+        signal.throwIfAborted();
+        this.#newestUploadAt = null;
+        await this.#measureSkew(generation, claimStarted, claimEnded);
         await this.#startChild(generation, true, signal);
         this.#set("opening", null, generation);
         const overLimit = await this.#fullCopyOrLimit(generation, signal);
@@ -413,7 +465,10 @@ export class StreamSupervisor {
         this.#deps.log("warn", "stream.list_failed", { errorCode: codeOf(error) });
       }
       signal.throwIfAborted();
-      if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) return;
+      if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) {
+        this.#newestUploadAt = later(this.#newestUploadAt, newestOf(listed));
+        return;
+      }
       await this.#unlessStopped(signal, this.#sleep(OPEN_POLL_MS, signal));
     }
   }
@@ -471,11 +526,95 @@ export class StreamSupervisor {
   }
 
   async #stream(generation: string, signal: AbortSignal): Promise<void> {
+    let reading = false;
+    // Not awaited, like the prune: a bucket that never answers must not hold the tick. One read of
+    // the bucket at a time.
+    const readBucket = () => {
+      if (reading) return;
+      reading = true;
+      void this.#refreshFreshness(generation)
+        .then(() => this.#probeDaily())
+        .finally(() => {
+          reading = false;
+        });
+    };
     for (;;) {
-      const walBytes = await this.#untilOverLimit(TICK_MS, signal, () =>
-        this.#pruneDaily(generation),
-      );
+      const walBytes = await this.#untilOverLimit(TICK_MS, signal, () => {
+        this.#pruneDaily(generation);
+        readBucket();
+      });
       await this.#pauseAndResume(generation, walBytes, signal);
+    }
+  }
+
+  /**
+   * Reads the live generation's newest file (spec §7) and forgets the commits it covers. Level 0
+   * each time; level 1 as well once a commit has waited longer than level 0 keeps a file, since it
+   * may have been compacted and tidied between two reads. A bucket that failed the read, or has a
+   * problem named, is checked for being unusable.
+   */
+  async #refreshFreshness(generation: string): Promise<void> {
+    let failed = false;
+    try {
+      const prefix = generationPrefix(this.#deps.venueId, generation);
+      let newest = later(this.#newestUploadAt, newestOf(await this.#store.list(`${prefix}0000/`)));
+      if (this.#lagWith(newest).lagMs > L0_RETENTION_MS) {
+        newest = later(newest, newestOf(await this.#store.list(`${prefix}0001/`)));
+      }
+      this.#newestUploadAt = newest;
+    } catch (error) {
+      failed = true;
+      this.#deps.log("warn", "stream.freshness_unreadable", { errorCode: codeOf(error) });
+    }
+    this.#commits.settle(this.#lagWith(this.#newestUploadAt).coveredUpTo);
+    if (failed || this.#status.bucketProblem !== null) await this.#classifyBucket(false);
+  }
+
+  #lagWith(newestUploadAt: Date | null): { lagMs: number; coveredUpTo: number | null } {
+    return computeLag({
+      pending: this.#commits.pending(),
+      newestUploadAt,
+      skewMs: this.#skewMs,
+      now: this.#deps.now(),
+    });
+  }
+
+  /**
+   * The bucket's clock minus this box's, from the marker this box has just written: its
+   * `lastModified` against the middle of the write. Kept as it was when the marker cannot be read.
+   */
+  async #measureSkew(generation: string, started: Date, ended: Date): Promise<void> {
+    const key = markerKey(this.#deps.venueId, generation);
+    try {
+      const marker = (await this.#store.list(key)).find((object) => object.key === key);
+      if (marker !== undefined) {
+        this.#skewMs = marker.lastModified.getTime() - (started.getTime() + ended.getTime()) / 2;
+      }
+    } catch (error) {
+      this.#deps.log("warn", "stream.freshness_unreadable", { errorCode: codeOf(error) });
+    }
+  }
+
+  async #probeDaily(): Promise<void> {
+    const now = this.#deps.now().getTime();
+    if (now - this.#lastProbeAt < PROBE_EVERY_MS) return;
+    this.#lastProbeAt = now;
+    await this.#classifyBucket(true);
+  }
+
+  /**
+   * A bucket that answers with a refusal is unusable (its key, or its safe write); one that gives no
+   * answer at all is unreachable, which the lag already shows.
+   */
+  async #classifyBucket(force: boolean): Promise<void> {
+    const now = this.#deps.now().getTime();
+    if (!force && now - this.#lastClassifyAt < CLASSIFY_EVERY_MS) return;
+    this.#lastClassifyAt = now;
+    try {
+      const probe = await probeBucket(this.#store);
+      this.#noteBucketProblem(probe.ok ? null : probe.reason);
+    } catch (error) {
+      this.#deps.log("warn", "stream.bucket_unreachable", { errorCode: codeOf(error) });
     }
   }
 

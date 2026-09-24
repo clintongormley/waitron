@@ -11,11 +11,13 @@ import {
   type BucketConfig,
   type ObjectStore,
   type SpawnFn,
-  type StreamStatus,
+  type StreamView,
 } from "@waitron/stream";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import "./errors.js";
+
+export type { StreamView } from "@waitron/stream";
 
 /** The vault purpose holding the owner's bucket. */
 export const STREAM_PURPOSE = "backup.stream";
@@ -138,6 +140,7 @@ export class StreamHost {
         log,
         spawn: this.#deps.spawn,
         store: this.#deps.store,
+        onCommit: (listener) => db.onCommit(listener),
       });
       this.#supervisor = supervisor;
       await supervisor.start();
@@ -183,7 +186,7 @@ export class StreamHost {
     }
   }
 
-  status(): StreamStatus | { state: "off" } {
+  status(): StreamView {
     return this.#supervisor?.status() ?? { state: "off" };
   }
 }

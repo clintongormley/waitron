@@ -1,6 +1,7 @@
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CREDENTIALS_MIGRATIONS,
@@ -421,6 +422,35 @@ describe("the live copy's wiring", () => {
         } finally {
           await rt.stop();
           await rm(venueDir, { recursive: true, force: true });
+        }
+      });
+
+      // Starting never waits for a bucket that never answers, and every commit still reaches the
+      // supervisor. The fake Litestream puts nothing on the commit path, so this does NOT show a sale
+      // keeping its normal time against the real binary. The 1,000 ms bound only catches a write
+      // that never finishes.
+      it("returns from start() at once while the bucket never answers, and hears every commit", async () => {
+        db.run(sql`create table if not exists stream_probe (n integer)`);
+        const store = new SwitchableStore(() => new Date());
+        store.hang = true;
+        const rt = runtime({ spawn: new FakeLitestream().spawn, store });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(rt.status().state).toBe("opening"), { timeout: 10_000 });
+          const durations: number[] = [];
+          for (let i = 0; i < 200; i += 1) {
+            const started = performance.now();
+            await withTransaction(db, (tx) =>
+              tx.run(sql`insert into stream_probe (n) values (${i})`),
+            );
+            durations.push(performance.now() - started);
+          }
+          expect(db.get(sql`select count(*) as n from stream_probe`)).toEqual({ n: 200 });
+          expect(Math.max(...durations)).toBeLessThan(1_000);
+          // The commits reached the supervisor: they wait, because nothing reached the bucket.
+          await vi.waitFor(() => expect((rt.status() as StreamStatus).lagMs).toBeGreaterThan(0));
+        } finally {
+          await rt.stop();
         }
       });
     });

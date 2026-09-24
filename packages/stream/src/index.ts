@@ -28,8 +28,16 @@ export {
   resolveLitestreamBin,
 } from "./litestream.js";
 export type { ChildHandle, SpawnFn } from "./litestream-process.js";
-export { DEFAULT_WAL_LIMIT_BYTES, StreamSupervisor } from "./supervisor.js";
-export type { StreamLog, StreamState, StreamStatus, SupervisorDeps } from "./supervisor.js";
+export { DEFAULT_WAL_LIMIT_BYTES, L0_RETENTION_MS, StreamSupervisor } from "./supervisor.js";
+export type {
+  StreamLog,
+  StreamState,
+  StreamStatus,
+  StreamView,
+  SupervisorDeps,
+} from "./supervisor.js";
+export { COMMIT_GRANULARITY_MS, CommitLog, computeLag } from "./freshness.js";
+export type { LagInput } from "./freshness.js";
 
 // Side-effect only: keeps errors.ts's registry augmentation reachable from this barrel
 // (guarded tree-wide by scripts/errors-reachable.test.ts).
