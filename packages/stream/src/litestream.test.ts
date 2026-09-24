@@ -156,6 +156,23 @@ describe("the Litestream configuration", () => {
     },
   );
 
+  // The bucket is the address's host, where a "/", "?" or "#" would end it and move the rest into
+  // the path, query or fragment Litestream reads.
+  it.each(["venue/copies", "venue?copies", "venue#copies", "Venue-Copies", "venue_copies", ""])(
+    "refuses a bucket name holding more than S3's bucket-name characters: %j",
+    (bucket) => {
+      expect(
+        refusalOf(() => replicaUrl({ ...BUCKET, bucket }, "v1", "gen-0-a-20260923T120000Z")),
+      ).toEqual({ code: "backup.stream_config_unsafe", params: { field: "bucket" } });
+    },
+  );
+
+  it("accepts a bucket name of lowercase letters, digits, dots and hyphens", () => {
+    expect(
+      replicaUrl({ ...BUCKET, bucket: "venue.copies-2" }, "v1", "gen-0-a-20260923T120000Z"),
+    ).toBe("s3://venue.copies-2/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2");
+  });
+
   it("finds the binary from WAITRON_LITESTREAM_BIN, and on PATH when that is unset or empty", () => {
     expect(resolveLitestreamBin({ WAITRON_LITESTREAM_BIN: "/opt/litestream" })).toBe(
       "/opt/litestream",
