@@ -250,7 +250,10 @@ listed, drawn disabled; each is labelled with its difference from the parent's p
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
 available on that menu gets no button (`product-grid.ts`). An extras list does not offer a product
 that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
-since the order path refuses one picked as an extra (below).
+since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
+putting one there: an extras list naming such a product (`extras.product_has_variants`), and an
+Active variant on a product an extras list offers (`product.offered_as_extra`, which names the
+lists; the product editor shows them beside the variant's row). A variant itself may be an extra.
 
 ### The sale line
 
