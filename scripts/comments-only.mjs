@@ -24,8 +24,9 @@ import ts from "typescript";
 const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const REGULAR_FILE = new Set(["100644", "100755"]);
 
-// All but the last two are anchored where the tool itself looks, so prose that names one of those
-// directives mid-sentence stays prose. The last two match anywhere in a comment, because some of
+// All but the last two are anchored where the tool itself looks (the `@ts-` one at the start of any
+// line of a block comment, wider than the last line TypeScript reads), so prose that names one of
+// those directives mid-sentence stays prose. The last two match anywhere in a comment, because some of
 // their tools read them there (TypeScript an `@jsx` on any line of a block comment, esbuild a
 // `@license` anywhere), so prose naming any of them is refused.
 const TOOL_COMMENT = [
