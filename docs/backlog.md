@@ -4757,14 +4757,29 @@ decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeSt
 sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
 Task 6, the Litestream supervisor (`@waitron/stream`'s `StreamSupervisor`, the server's
 `StreamHost` started at boot on the primary, the store's `checkpointTruncate`, Litestream 0.5.17
-pinned in the box image and in `pnpm setup:litestream`), is on branch
-`feat/sqlite-slice2-stream-supervisor`. The owner decided on 2026-09-24 that the same generation
+pinned in the box image and in `pnpm setup:litestream`), LANDED as #590 on 2026-09-24. The owner decided on 2026-09-24 that the same generation
 continues after a pause, after measurement 1 was repeated at the 256 MiB side-file limit (results
 note §1b: the restore after the restart held every sale, and Litestream uploaded a full copy of the
 database at level 0). Left for later tasks: `/health` must treat the supervisor's
 `supervisor_failed` stop as a problem, not as streaming switched off (Task 7); the settings route
 must reload the stream only after its save commits, and word the refusal of a bucket name holding
-capitals or `_` (Task 8a). `scripts/setup-litestream.mjs` is measured by the root project's coverage
+capitals or `_` (Task 8a). Left open by #590's review, the owner's call (the PR description has the
+detail): (1) no S3 call has a request timeout, so a pointer write that never gets an answer holds up the
+supervisor's retry until the server stops or reloads — Litestream stays stopped meanwhile, so the side
+file is not at risk; (2) `StreamHost.reload()` can leave the old supervisor's pointer write in flight,
+landing after the new supervisor read the pointer, so the box takes its own write for another box's
+and refuses itself — nothing in production calls `StreamHost.reload()` until Task 8a, which must close
+this first (one option: a pointer carrying this box's own node id and term counts as its own write);
+(3) `StreamHost` streams on any node whose role is primary, while the Cloud snapshot worker also
+requires that the node has not been cut off from acting as primary (`cloudPrimary`) — should a
+cut-off primary stream?; (4) the server's 8-second shutdown stops the stream last, after the Cloud
+snapshot loop, so on a large database Litestream may not finish its last upload (it is still told to
+stop and does not outlive the server); (5) the image ships Litestream's own Apache 2.0 licence only,
+while the binary bundles about a hundred libraries, several under MIT or BSD licences that ask for
+their notices to be shipped. Also left: `pnpm setup:litestream` skips the download when the installed
+binary already reports the pinned version, so the checksum protects fresh downloads only; and the
+bench rig keeps its own Litestream download script (its version is pinned beside the root one by
+`scripts/litestream-pin.test.ts`). `scripts/setup-litestream.mjs` is measured by the root project's coverage
 table through `scripts/setup-litestream.test.mjs`, which injects the download and the platform; the
 full box image was not built locally, only its `litestream` stage.
 
