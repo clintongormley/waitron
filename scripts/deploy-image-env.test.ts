@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
+import { esbuildArgs } from "./bundle-node.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
@@ -316,10 +317,12 @@ it("stores image-library bytes in the database without a separate image volume",
  * `node --check dist/server.js` reports `SyntaxError: Identifier 'createRequire' has already been
  * declared`. Measured 2026-09-23 on esbuild 0.28.2.
  *
- * Reads TEXT. It finds the esbuild bundles that can reach `@waitron/media` by following `dependencies`
- * through workspace package.json files, so a reach through a devDependency or a relative import
- * across packages is invisible to it. It counts flags, so it cannot tell which command a flag
- * belongs to.
+ * Every bundle is built by `scripts/bundle-node.mjs`, and the flag is checked by calling that
+ * script's own argument builder. The rest reads package.json TEXT: it sees a workspace script that
+ * calls `esbuild` itself, but not a package script that runs a file of its own which calls esbuild
+ * or its JavaScript API. It finds the bundles that can reach `@waitron/media` by following
+ * `dependencies`, so a reach through a devDependency or a relative import across packages is
+ * invisible to it.
  */
 describe("sharp stays outside every bundle and ships beside the server's", () => {
   type Manifest = {
@@ -327,46 +330,48 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
     dependencies?: Record<string, string>;
     scripts?: Record<string, string>;
   };
-  /** The workspace's esbuild bundles that can reach `@waitron/media`, listed once per file. */
-  let found: Manifest[] | undefined;
-  const bundlers = (): Manifest[] => {
-    if (found !== undefined) return found;
-    const manifests = new Map<string, Manifest>();
-    for (const { dir } of workspaceMembers()) {
-      const manifest = JSON.parse(read(`${dir}/package.json`)) as Manifest;
-      manifests.set(manifest.name, manifest);
-    }
+  let listed: Manifest[] | undefined;
+  const manifests = (): Manifest[] => {
+    listed ??= workspaceMembers().map(
+      ({ dir }) => JSON.parse(read(`${dir}/package.json`)) as Manifest,
+    );
+    // An empty listing would pass every loop over it.
+    expect(listed.length).toBeGreaterThan(0);
+    return listed;
+  };
+
+  it("runs no esbuild command outside the shared bundle script", () => {
+    const direct = manifests().flatMap(({ name, scripts }) =>
+      Object.entries(scripts ?? {})
+        .filter(([, command]) => /(?:^|[\s;&|(])esbuild(?:\s|$)/.test(command))
+        .map(([script]) => `${name} ${script}`),
+    );
+    expect(direct).toEqual([]);
+  }, 60_000);
+
+  it("builds the bundles that can reach @waitron/media with the shared script", () => {
+    const byName = new Map(manifests().map((manifest) => [manifest.name, manifest]));
     const reachesMedia = (name: string, seen = new Set<string>()): boolean => {
       if (name === "@waitron/media") return true;
       if (seen.has(name)) return false;
       seen.add(name);
-      return Object.keys(manifests.get(name)?.dependencies ?? {}).some(
-        (dependency) => manifests.has(dependency) && reachesMedia(dependency, seen),
+      return Object.keys(byName.get(name)?.dependencies ?? {}).some(
+        (dependency) => byName.has(dependency) && reachesMedia(dependency, seen),
       );
     };
-    found = [...manifests.values()].filter(
-      (manifest) =>
-        (manifest.scripts?.build ?? "").includes("esbuild ") && reachesMedia(manifest.name),
-    );
-    // An empty listing would pass every loop over it.
-    expect(found.length).toBeGreaterThan(0);
-    return found;
-  };
-
-  it("finds the bundles it is meant to check", () => {
-    expect(bundlers().map((manifest) => manifest.name)).toEqual(
-      expect.arrayContaining(["@waitron/server", "@waitron/provisioning"]),
-    );
+    const bundlers = manifests()
+      .filter(
+        (manifest) =>
+          (manifest.scripts?.build ?? "").includes("scripts/bundle-node.mjs") &&
+          reachesMedia(manifest.name),
+      )
+      .map((manifest) => manifest.name);
+    expect(bundlers).toEqual(expect.arrayContaining(["@waitron/server", "@waitron/provisioning"]));
   }, 60_000);
 
-  it("names --external:sharp on every esbuild command of each", () => {
-    for (const { name, scripts } of bundlers()) {
-      const build = scripts!.build!;
-      const commands = build.split("esbuild ").length - 1;
-      expect(commands, name).toBeGreaterThan(0);
-      expect(build.split("--external:sharp").length - 1, name).toBe(commands);
-    }
-  }, 60_000);
+  it("names --external:sharp for every bundle the shared script builds", () => {
+    expect(esbuildArgs("src/bin.ts", "dist/server.js")).toContain("--external:sharp");
+  });
 
   it("copies sharp beside the bundle in the image, and both CI jobs check it", () => {
     expect(DOCKERFILE).toContain("/sharp-runtime/node_modules/ /app/node_modules/");
