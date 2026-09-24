@@ -53,12 +53,8 @@ describe("the public surface", () => {
 });
 
 /**
- * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never runs
- * it, which is why a schema file's FK/index/check block shows as uncovered even though every other
- * test imports the table. Calling `getTableConfig` forces the callback to run, and the assertions
- * below are the meaningful check that each table's constraints exist under the names the migration
- * uses — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
- * (persons moved to @waitron/identity, which owns its own such block now.)
+ * drizzle runs each table's extraConfig callback lazily, so a plain import never reaches it;
+ * `getTableConfig` forces it, and these assertions check each constraint's name.
  */
 describe("employments constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares employments' foreign keys and check constraints", () => {
@@ -84,9 +80,7 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
         "time_entries_location_fk",
         "time_entries_captured_by_till_fk",
         "time_entries_recorded_by_person_fk",
-        // The per-node rekey: the chain-key node FK.
         "time_entries_node_fk",
-        // Slice 3: the self-referential correction target and the correction actor.
         "time_entries_corrects_entry_fk",
         "time_entries_correction_actor_fk",
       ]),
@@ -94,18 +88,13 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("time_entries_event_offset_ck");
-    // Slice 3: a row is all-base or all-correction, never half of each.
     expect(checkNames).toContain("time_entries_correction_shape_ck");
-    // Slice 4: the tamper-evidence chain shape and hash format.
     expect(checkNames).toContain("time_entries_entry_hash_ck");
     expect(checkNames).toContain("time_entries_sequence_no_ck");
     expect(checkNames).toContain("time_entries_chaining_ck");
-    // Slice 4 defence-in-depth: event_at must carry no sub-second component (whole-branch review).
     expect(checkNames).toContain("time_entries_event_at_second_ck");
-    // The per-node rekey: recorded_at carries the same whole-second defence.
     expect(checkNames).toContain("time_entries_recorded_at_second_ck");
 
-    // The non-replicating `ingest_seq` identity column is gone — its jobs moved to `recorded_at`.
     expect(config.columns.map((c) => c.name)).not.toContain("ingest_seq");
     expect(config.columns.map((c) => c.name)).toContain("node_id");
     expect(config.columns.map((c) => c.name)).toContain("recorded_at");
@@ -116,8 +105,6 @@ describe("workforce_chains constraint declarations (forces the lazy extraConfig 
   it("declares the chain head's composite key, foreign keys and pointer check", () => {
     const config = getTableConfig(api.workforceChains);
 
-    // The PK is the composite (node_id, location_id) in extraConfig — asserting it forces
-    // the lazy callback to run.
     expect(config.primaryKeys.map((pk) => pk.getName())).toContain(
       "workforce_chains_node_id_location_id_pk",
     );
@@ -162,7 +149,7 @@ describe("shifts constraint declarations (forces the lazy extraConfig callback)"
       expect.arrayContaining([
         "shifts_person_fk",
         "shifts_location_fk",
-        // The roster-version link, SET NULL on delete — a discarded version detaches its shifts.
+        // SET NULL on delete: a discarded version detaches its shifts.
         "shifts_roster_version_fk",
       ]),
     );
@@ -182,7 +169,7 @@ describe("absences constraint declarations (forces the lazy extraConfig callback
     expect(fkNames).toEqual(
       expect.arrayContaining([
         "absences_person_fk",
-        // roster slice 2: the manager who decided the absence (approve/reject).
+        // The manager who decided the absence.
         "absences_decided_by_person_fk",
       ]),
     );
@@ -231,10 +218,9 @@ describe("shift_swaps constraint declarations (forces the lazy extraConfig callb
       expect.arrayContaining([
         "shift_swaps_requested_by_person_fk",
         "shift_swaps_to_person_fk",
-        // from_shift cascades (a swap dies with its offered shift), to_shift SET NULLs.
+        // from_shift cascades, to_shift SET NULLs.
         "shift_swaps_from_shift_fk",
         "shift_swaps_to_shift_fk",
-        // roster slice 2: the manager who decided the swap (approve/reject).
         "shift_swaps_decided_by_person_fk",
       ]),
     );

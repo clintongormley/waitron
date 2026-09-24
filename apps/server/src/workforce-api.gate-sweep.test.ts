@@ -32,7 +32,7 @@ import "./errors.js";
  * the route. Receipt for the "only" —
  * `grep -rln 'decided_by_person_id\|decidedByPersonId' --include='*.test.ts' apps packages`
  * returns three files, and the other two read those columns back from the VERB
- * (`packages/workforce/src/shift-swaps.test.ts:270`, `packages/workforce/src/absences.test.ts:203`,
+ * (`packages/workforce/src/shift-swaps.test.ts:251`, `packages/workforce/src/absences.test.ts:185`,
  * each calling `decideSwap`/`setAbsenceStatus` directly). The sibling `workforce-api.test.ts`
  * decide cases assert only the 204 and that the row leaves the pending queue.
  *

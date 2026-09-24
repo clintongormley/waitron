@@ -4,8 +4,7 @@ import { validateRoster, type PlannedShift, type RosterBreach } from "./roster-v
 
 let seq = 0;
 
-/** A terse planned-shift builder. `shiftId` auto-increments; offsets default to 0 (UTC wall time) so
- * a test that does not care about local-date semantics reads as bare instants. */
+/** Offsets default to 0, so a test that does not care about local dates reads as bare instants. */
 function shift(
   personId: string,
   startsAt: string,
@@ -23,7 +22,6 @@ function shift(
   };
 }
 
-/** The breaches of one kind, so a test asserts on exactly the check it exercises. */
 function ofKind<K extends RosterBreach["kind"]>(
   breaches: RosterBreach[],
   kind: K,
@@ -42,8 +40,8 @@ describe("validateRoster — aggregate behaviour", () => {
   });
 
   it("collects breaches of several kinds from one roster", () => {
-    // A 04:00–19:00 shift (15h) trips daily-max, break, overtime and night at once; a second shift
-    // 8h later trips inter-shift rest — proving validateRoster concatenates every check's output.
+    // 04:00–19:00 trips daily-max, break, overtime and night at once; a second shift 8h later trips
+    // inter-shift rest.
     const kinds = new Set(
       validateRoster(
         [
@@ -70,7 +68,7 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T17:00:00Z", { shiftId: "a" }),
-        // 11h after a's end — under the 12h (720-min) floor.
+        // 11h after a's end.
         shift("p1", "2026-01-06T04:00:00Z", "2026-01-06T12:00:00Z", { shiftId: "b" }),
       ],
       makeRuleset({ minInterShiftRestMinutes: 720 }),
@@ -118,7 +116,6 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T17:00:00Z"),
-        // p2's shift is 1h after p1's — but they are different people, so no rest breach.
         shift("p2", "2026-01-05T18:00:00Z", "2026-01-06T02:00:00Z"),
       ],
       makeRuleset({ minInterShiftRestMinutes: 720 }),
@@ -127,10 +124,8 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
   });
 
   it("does not flag a same-day split shift under a real inter-shift floor", () => {
-    // A split shift — 12:00–16:00 then 20:00–24:00 — is ONE working day with an intra-day break, NOT
-    // two working days 4h apart. art. 34.3's minimum rest is between working DAYS, so the 16:00→20:00
-    // gap must not raise rest_too_short even under the full 12h (720-min) floor. This is the case the
-    // former consecutive-pair logic got wrong (it hid because the split-shift tests set the floor to 0).
+    // A split shift is ONE working day with an intra-day break: art. 34.3's rest is between working
+    // DAYS, so the 16:00→20:00 gap must not breach even under the full 12h floor.
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T12:00:00Z", "2026-01-05T16:00:00Z"),
@@ -142,9 +137,7 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
   });
 
   it("measures inter-workday rest from the LAST shift of one day to the FIRST of the next", () => {
-    // Day D is a split shift ending 24:00; day D+1 starts 06:00 → 6h inter-workday rest, under 12h.
-    // The breach must name the LATE shift (20:00–24:00) as the previous shift — proving the rest is
-    // measured from the DAY'S last end, and the intra-day 16:00→20:00 gap is ignored.
+    // Rest is measured from the day's LAST end, so the breach names the 20:00–24:00 shift.
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T12:00:00Z", "2026-01-05T16:00:00Z", { shiftId: "d-early" }),
@@ -210,8 +203,7 @@ describe("validateRoster — max ordinary daily minutes (art. 34.3)", () => {
   });
 
   it("groups by LOCAL date via the wall offset, not the UTC instant", () => {
-    // starts 2026-01-05T23:30Z +120 → local 2026-01-06T01:30; a second shift local 2026-01-06 sums
-    // with it. Were grouping by UTC date, the first would fall on 01-05 and neither day would breach.
+    // 23:30Z at +120 is local 01-06; grouped by UTC date, neither day would breach.
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T23:30:00Z", "2026-01-06T04:30:00Z", {
@@ -231,8 +223,7 @@ describe("validateRoster — max ordinary daily minutes (art. 34.3)", () => {
   });
 });
 
-/** 09:00–(09:00+minutes) shifts, one per given local day — a week of ordinary days for the weekly
- * checks (16h rest between days, so they never trip the inter-shift-rest guard). */
+/** One 09:00 shift per given day; the 16h gaps never trip the inter-shift-rest guard. */
 function daysOf(personId: string, dates: string[], minutes: number): PlannedShift[] {
   return dates.map((date) => {
     const startsAt = `${date}T09:00:00Z`;
@@ -245,7 +236,7 @@ describe("validateRoster — max weekly minutes (art. 34.1)", () => {
   const MON = "2026-01-05"; // a Monday (2026-01-01 is a Thursday)
 
   it("flags a Monday-anchored week whose planned minutes exceed the weekly maximum", () => {
-    // Mon–Sat, six 7h days = 2520 > 2400; each day is 420 < 540 so the daily guard stays silent.
+    // Six 7h days = 2520 > 2400, each under the 540 daily max.
     const week = [
       "2026-01-05",
       "2026-01-06",
@@ -275,7 +266,6 @@ describe("validateRoster — max weekly minutes (art. 34.1)", () => {
       daysOf("p1", weekdays, 480),
       makeRuleset({ maxWeeklyMinutes: 2400 }),
     );
-    // Bump one day by a minute → 2401.
     const over = validateRoster(
       [...daysOf("p1", weekdays.slice(1), 480), ...daysOf("p1", weekdays.slice(0, 1), 481)],
       makeRuleset({ maxWeeklyMinutes: 2400 }),
@@ -285,9 +275,7 @@ describe("validateRoster — max weekly minutes (art. 34.1)", () => {
   });
 
   it("buckets a Sunday into the PREVIOUS Monday's week, not the following one", () => {
-    // Mon–Fri = 2400 (exactly the limit). A Sunday (2026-01-11) shift of 60min must land in the SAME
-    // week-of-2026-01-05 to push it to 2460 and breach; were it bucketed into week-of-2026-01-12
-    // both weeks would sit at/under the limit and nothing would fire.
+    // Mon–Fri is exactly 2400; the Sunday hour breaches only if it lands in the SAME week.
     const weekdays = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"];
     const breaches = validateRoster(
       [...daysOf("p1", weekdays, 480), ...daysOf("p1", ["2026-01-11"], 60)],
@@ -300,12 +288,11 @@ describe("validateRoster — max weekly minutes (art. 34.1)", () => {
 });
 
 describe("validateRoster — annual overtime cap (art. 35.2)", () => {
-  // Overtime accrues per day as the minutes beyond the ordinary daily maximum (art. 35.1: overtime
-  // hours are those over the maximum ordinary working time), summed across the roster.
+  // Overtime is the minutes beyond the ordinary daily maximum (art. 35.1), summed across the roster.
   const ruleset = makeRuleset({ annualOvertimeCapHours: 2, maxOrdinaryDailyMinutes: 540 });
 
   it("flags a person whose summed daily overtime exceeds the cap", () => {
-    // Three 10h days: 60 min over the 540 max each → 180 min overtime > the 120-min (2h) cap.
+    // 60 over the 540 max on each of three days = 180 > the 120-min cap.
     const breaches = validateRoster(
       daysOf("p1", ["2026-01-05", "2026-01-06", "2026-01-07"], 600),
       ruleset,
@@ -326,8 +313,7 @@ describe("validateRoster — annual overtime cap (art. 35.2)", () => {
   });
 
   it("accrues zero overtime for days at or under the ordinary daily maximum", () => {
-    // Ten ordinary 9h days (exactly 540) accrue no overtime, so a 2h cap is not breached — proving
-    // the threshold is the ordinary daily max, not raw hours worked.
+    // Exactly 540 a day accrues nothing: the threshold is the ordinary daily max, not hours worked.
     const dates = Array.from({ length: 10 }, (_, i) => `2026-02-${String(i + 1).padStart(2, "0")}`);
     const breaches = validateRoster(daysOf("p1", dates, 540), ruleset);
     expect(ofKind(breaches, "overtime_cap_exceeded")).toHaveLength(0);
@@ -348,8 +334,8 @@ describe("validateRoster — annual overtime cap (art. 35.2)", () => {
 });
 
 describe("validateRoster — break threshold (art. 34.4)", () => {
-  // Planned shifts do not model a within-shift break, so this SURFACES the obligation (a shift over
-  // the threshold owes a ≥ minBreak break) rather than detecting a missing one — documented as such.
+  // Planned shifts do not model a within-shift break, so this surfaces the owed break rather than
+  // detecting a missing one.
   it("flags a shift longer than the break threshold, naming the owed minimum break", () => {
     const breaches = validateRoster(
       [shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T16:00:00Z", { shiftId: "x" })], // 7h = 420
@@ -382,7 +368,7 @@ describe("validateRoster — break threshold (art. 34.4)", () => {
 });
 
 describe("validateRoster — night window (art. 36)", () => {
-  // Default window 22:00–06:00 (nightWindowStart 1320, nightWindowEnd 360), which WRAPS midnight.
+  // The default window 22:00–06:00 wraps midnight.
   it("does not flag a daytime shift wholly outside the night window", () => {
     const breaches = validateRoster(
       [shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T17:00:00Z")],
@@ -425,8 +411,7 @@ describe("validateRoster — night window (art. 36)", () => {
   });
 
   it("handles a NON-wrapping night window (e.g. a ruleset defining night as 00:00–06:00)", () => {
-    // start (0) < end (360), so the window does not cross midnight. A 02:00–08:00 shift overlaps it
-    // in [02:00, 06:00) = 240 min — exercising the non-wrapping branch of the window computation.
+    // start (0) < end (360): the non-wrapping branch. 02:00–08:00 overlaps it for 240 min.
     const breaches = validateRoster(
       [shift("p1", "2026-01-05T02:00:00Z", "2026-01-05T08:00:00Z", { shiftId: "n" })],
       makeRuleset({ nightWindowStartMinute: 0, nightWindowEndMinute: 360 }),
@@ -437,8 +422,7 @@ describe("validateRoster — night window (art. 36)", () => {
   });
 
   it("resolves the night window against LOCAL wall time via the offset", () => {
-    // UTC 12:00–18:00 with a +720 (12h) offset is local 00:00–06:00 — wholly inside the night
-    // window (360 min). Against the raw UTC instant it would be midday and score zero.
+    // Local 00:00–06:00 at +720; the raw UTC instant is midday and would score zero.
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T12:00:00Z", "2026-01-05T18:00:00Z", {
@@ -455,8 +439,7 @@ describe("validateRoster — night window (art. 36)", () => {
   });
 });
 
-/** N consecutive daily 09:00-(09:00+minutes) shifts from `startDate` — gaps of 24h−minutes between
- * them (16h at the 480-min default), so a run this dense never has a qualifying weekly rest. */
+/** Consecutive daily 09:00 shifts: at the 480-min default the gaps are 16h, never a weekly rest. */
 function consecutiveDays(
   personId: string,
   startDate: string,
@@ -471,12 +454,9 @@ function consecutiveDays(
 }
 
 describe("validateRoster — weekly rest (art. 37.1)", () => {
-  // Safe reading (documented on the check): only a MIDDLE week (one with shifts on both sides) is
-  // judged, and it breaches only when NO rest gap of >= weeklyRestMinutes overlaps its 7-day span.
-  // First/last weeks are excused by the unbounded rest before/after the roster — never a false alarm.
+  // Only a MIDDLE week (shifts on both sides) is judged; the first and last are excused by the
+  // unbounded rest outside the roster.
   it("flags a middle week with no rest gap of the required length (three weeks worked every day)", () => {
-    // 21 consecutive days → weeks of 01-05, 01-12, 01-19. All gaps are 16h; the middle week (01-12)
-    // has no 36h rest and is fully surrounded, so it — and only it — breaches.
     const breaches = validateRoster(
       consecutiveDays("p1", "2026-01-05", 21),
       makeRuleset({ weeklyRestMinutes: 2160 }),
@@ -493,8 +473,7 @@ describe("validateRoster — weekly rest (art. 37.1)", () => {
   });
 
   it("does not flag when each week carries a long rest (three weeks of Mon–Fri, weekends off)", () => {
-    // The Fri→Mon gap is 64h (>= 36h) and overlaps each week, so even the middle week is satisfied —
-    // the distinguishing control against the every-day roster above.
+    // The 64h Fri→Mon gap overlaps each week: the control against the every-day roster above.
     const weekdays = (mon: string): string[] =>
       Array.from({ length: 5 }, (_, i) =>
         new Date(Date.parse(`${mon}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10),
@@ -509,9 +488,8 @@ describe("validateRoster — weekly rest (art. 37.1)", () => {
   });
 
   it("treats a rest of exactly the minimum as sufficient, one minute under as a breach", () => {
-    // A dense middle week (01-12) whose single long gap is Mon 17:00 → Wed START. Both weeks around
-    // it hold a shift so 01-12 is a judged middle week; every other gap here is <= 20h, so the Mon→Wed
-    // gap alone decides it. START 05:00 → 36h00 (sufficient); 04:59 → 35h59 (breach).
+    // Every other gap is <= 20h, so the Mon 17:00 → Wed START gap alone decides the middle week:
+    // 05:00 gives 36h00, 04:59 gives 35h59.
     const scenario = (wedStart: string): PlannedShift[] => [
       shift("p1", "2026-01-11T09:00:00Z", "2026-01-11T17:00:00Z"), // W1 anchor (excused)
       shift("p1", "2026-01-12T09:00:00Z", "2026-01-12T17:00:00Z"), // Mon

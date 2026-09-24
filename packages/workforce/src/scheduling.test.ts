@@ -17,9 +17,6 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-// publishRoster is LOGIC over mutable planning rows (flip status, stamp, attach shifts). The
-// append-only floor is `packages/migrations/src/apply-append-only.test.ts`, which proves
-// `time_entries` refuses an update and a delete after the product's own migrate.
 const backend = new WorkforceBackend();
 
 let locationId: string;
@@ -69,13 +66,12 @@ describe("publishRoster", () => {
     expect(version.rows[0]!.published_at).not.toBeNull();
     expect(version.rows[0]!.published_by_person_id).toBe(personId);
 
-    // The draft shift is attached — its roster_version_id, null while a draft, now names the version.
     expect(await attachedVersion(shiftId)).toBe(versionId);
   });
 
   it("attaches only same-location, in-period draft shifts (the predicates are not vacuous)", async () => {
-    // Period 2–8 March; three draft shifts differing in exactly one attribute each. Also the
-    // published_by-omitted path — publishedByPersonId is left off here, covering the null branch.
+    // Three null-version shifts differing in exactly one attribute each. publishedByPersonId is
+    // omitted here.
     const versionId = await insertRosterVersion(suite.db, {
       locationId,
       periodStart: "2026-03-02",
@@ -110,9 +106,7 @@ describe("publishRoster", () => {
   });
 
   it("matches a shift by its LOCAL wall date, not its UTC instant", async () => {
-    // starts_at 2026-03-01T23:30Z with a +120 wall offset is local 2026-03-02T01:30 — inside a period
-    // that begins 2026-03-02, even though the UTC date (03-01) is before it. Proves publishRoster
-    // resolves the local date via the offset, not the raw instant.
+    // 23:30Z at +120 is local 03-02, inside the period, though the UTC date is 03-01.
     const versionId = await insertRosterVersion(suite.db, {
       locationId,
       periodStart: "2026-03-02",
@@ -140,8 +134,6 @@ describe("publishRoster", () => {
   });
 
   it("throws roster.already_published when republishing a published version", async () => {
-    // The guard: publishing twice is refused. Prove by deletion — remove the status check in
-    // publishRoster and this stops throwing (the second publish silently re-stamps instead).
     const versionId = await insertRosterVersion(suite.db, { locationId });
     await run((tx) => backend.publishRoster(tx, { versionId }));
 
@@ -150,12 +142,6 @@ describe("publishRoster", () => {
   });
 
   it("supersedes the prior published version when a newer version for the same period is published", async () => {
-    // The mutable + supersede model: at most one published version per (location, EXACT period).
-    // Publishing v2 for the SAME period as an already-published v1 demotes v1 to `superseded` and
-    // leaves v2 the sole published version. Prove by deletion: remove the supersede step (the
-    // `supersedePriorPublished` call) in publishRoster and v1 is never demoted — the partial unique
-    // index roster_versions_published_period_uq then rejects v2's publish (roster.period_already_published)
-    // instead, so this test fails whichever way the supersede is broken.
     const period = { periodStart: "2026-02-02", periodEnd: "2026-02-08" };
     const v1 = await insertRosterVersion(suite.db, { locationId, ...period });
     const v2 = await insertRosterVersion(suite.db, { locationId, ...period });
@@ -173,9 +159,7 @@ describe("publishRoster", () => {
   });
 
   it("supersedes only the SAME exact period — a version for a different period stays published", async () => {
-    // The supersede is scoped to the exact (location, period_start, period_end), not to the location.
-    // Publishing v2 for period P2 must leave v1 (period P1, same location) published. Distinct periods
-    // that no other test in this shared-DB suite touches, so the two published rows never collide.
+    // Periods no other test in this shared-DB suite touches.
     const p1 = { periodStart: "2026-04-13", periodEnd: "2026-04-19" };
     const p2 = { periodStart: "2026-04-20", periodEnd: "2026-04-26" };
     const v1 = await insertRosterVersion(suite.db, { locationId, ...p1 });
@@ -190,9 +174,8 @@ describe("publishRoster", () => {
   });
 
   it("returns the guardrail breaches when a ruleset is supplied, and PUBLISHES anyway (advisory)", async () => {
-    // OWNER DECISION: guardrail breaches are advisory. A roster that breaches a limit still publishes;
-    // the breaches are surfaced in the return value, never thrown. Two shifts 8h apart breach the
-    // 12h (720-min) inter-shift rest — publishRoster must report that and flip the version regardless.
+    // Guardrail breaches are advisory (owner decision): reported, never thrown. Two shifts 8h apart
+    // breach the 12h inter-shift rest.
     const versionId = await insertRosterVersion(suite.db, {
       locationId,
       periodStart: "2026-01-05",
@@ -233,10 +216,7 @@ describe("publishRoster", () => {
   });
 
   it("detaches — never deletes — a shift when its roster version is deleted (ON DELETE set null)", async () => {
-    // Planning data is discardable: deleting a version SET NULLs the attached shifts' roster_version_id
-    // rather than blocking (restrict) or cascading the shifts away. Attach via publish, delete the
-    // version, then assert the shift row SURVIVES with roster_version_id back to null. Changing the FK
-    // to `restrict` fails the delete here; changing it to `cascade` fails the survives-assertion.
+    // Planning data is discardable: the shift survives with roster_version_id back to null.
     const versionId = await insertRosterVersion(suite.db, { locationId });
     const shiftId = await insertDraftShift(suite.db, { personId, locationId });
     await run((tx) => backend.publishRoster(tx, { versionId }));
@@ -287,8 +267,6 @@ describe("createRosterVersion", () => {
   });
 
   it("normalizes a non-Monday period to that week's Monday (no mid-week rosters)", async () => {
-    // A date picker (or a direct API caller) can hand any day of the week. The engine snaps it to the
-    // canonical Monday so the roster is a whole Mon–Sun week, never a mid-week Wed–Tue one.
     const versionId = await run(
       (tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-04" }), // a Wednesday
     );
@@ -300,9 +278,8 @@ describe("createRosterVersion", () => {
   });
 
   it("refuses a second draft for two DIFFERENT non-Monday days in the SAME week — roster.draft_exists", async () => {
-    // The duplicate-draft hole: without normalization the draft_exists guard keys on the exact
-    // period_start, so two different mid-week days would each fork a draft for one calendar week.
-    // Normalized, both map to the same Monday and the second collides.
+    // Without normalization the draft_exists guard keys on the exact period_start, so two mid-week
+    // days would each fork a draft for one calendar week.
     await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-11" })); // Wednesday
     const code = await codeOfRejection(() =>
       run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-12" })),
@@ -331,8 +308,6 @@ describe("getRoster / getRosterVersion", () => {
   });
 
   it("getRoster with a non-Monday day returns the same week's roster (normalized)", async () => {
-    // getRoster must snap to the same canonical Monday createRosterVersion does, or a non-Monday query
-    // (from a date picker) would miss the week's draft and report an empty grid.
     const versionId = await run(
       (tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-16" }), // Monday
     );
@@ -445,10 +420,7 @@ describe("addShift", () => {
   });
 
   it("rejects an UNPARSEABLE startsAt/endsAt — shift.invalid, not a driver 22007", async () => {
-    // Defense in depth: the engine verb is a public @waitron/workforce API and must honour its own
-    // contract even though the route also screens this. `Date.parse` of a non-timestamp is NaN and the
-    // `NaN >= NaN` interval guard is false, so without the explicit NaN check the bad value reaches the
-    // `timestamptz` column as a driver error instead of `shift.invalid`.
+    // `Date.parse` gives NaN and `NaN >= NaN` is false, so only an explicit NaN check refuses this.
     const versionId = await run((tx) =>
       backend.createRosterVersion(tx, { locationId, period: "2026-10-05" }),
     );
@@ -500,9 +472,7 @@ describe("updateShift / removeShift", () => {
   });
 
   it("rejects an UNPARSEABLE startsAt/endsAt patch — shift.invalid (whichever field is present)", async () => {
-    // Same engine-contract hole as addShift: a partial edit carrying an unparseable instant must be
-    // `shift.invalid`, not a driver 22007 from the `timestamptz` column. Only the patched field is
-    // NaN — the effective interval mixes it with the shift's (always-parseable) stored value.
+    // Only the patched field is NaN; the effective interval mixes it with the stored value.
     const { shiftId } = await draftShift("2026-10-12");
     expect(
       await codeOfRejection(() =>
@@ -560,7 +530,6 @@ describe("updateShift / removeShift", () => {
 
 describe("getPlannedVsActual", () => {
   const week = { start: "2026-03-02", end: "2026-03-09" }; // Mon..Sun, half-open
-  // A worked session = an `in` + `out` pair appended through the chain (fixtures.insertTimeEntry).
   async function seedSession(
     person: string,
     loc: string,
@@ -583,8 +552,7 @@ describe("getPlannedVsActual", () => {
       eventAt: outAt,
     });
   }
-  // Publish a new version at `loc` for the test's week — `publishRoster` attaches every in-period
-  // null-version draft shift AT `loc`, so the planned side (published-only) then sees them.
+  // `publishRoster` attaches every in-period null-version shift at `loc`.
   async function publishWeek(loc: string): Promise<void> {
     const versionId = await insertRosterVersion(suite.db, {
       locationId: loc,
@@ -604,7 +572,6 @@ describe("getPlannedVsActual", () => {
       endsAt: "2026-03-02T13:00:00Z",
     });
     await publishWeek(loc); // the shift is now on a published version
-    // Clocked in 15 min late, worked to 13:00 → 225 worked minutes, lateMinutes 15.
     await seedSession(p, loc, "2026-03-02T09:15:00Z", "2026-03-02T13:00:00Z");
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
@@ -641,11 +608,10 @@ describe("getPlannedVsActual", () => {
   });
 
   it("counts only the PUBLISHED version's shifts — excludes drafts and superseded versions", async () => {
-    // Owner decision (2026-08-15): "planned" = the currently-published roster, so an in-progress draft
-    // and a retired (superseded) version must NOT manufacture phantom no-shows.
+    // "Planned" is the currently-published roster (owner decision), so a draft and a superseded
+    // version must not manufacture phantom no-shows.
     const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `pub-${crypto.randomUUID()}`);
-    // Version A: a shift on 2026-03-02, published.
     await insertDraftShift(suite.db, {
       personId: p,
       locationId: loc,
@@ -653,8 +619,7 @@ describe("getPlannedVsActual", () => {
       endsAt: "2026-03-02T13:00:00Z",
     });
     await publishWeek(loc);
-    // Version B: a NEW shift on 2026-03-03, published for the SAME (location, period) → B supersedes A.
-    // publishWeek attaches only null-version in-period shifts, so B gets 03-03 (03-02 is now on A).
+    // B supersedes A; publishWeek attaches only null-version shifts, so 03-02 stays on A.
     await insertDraftShift(suite.db, {
       personId: p,
       locationId: loc,
@@ -662,8 +627,7 @@ describe("getPlannedVsActual", () => {
       endsAt: "2026-03-03T17:00:00Z",
     });
     await publishWeek(loc);
-    // A standalone DRAFT shift on 2026-03-04 (roster_version_id null) — never published (inserted AFTER
-    // the last publish, so publishRoster never attaches it).
+    // Inserted after the last publish, so it stays a draft.
     await insertDraftShift(suite.db, {
       personId: p,
       locationId: loc,
@@ -673,7 +637,6 @@ describe("getPlannedVsActual", () => {
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
     );
-    // Only 03-03 (version B, published) is planned; 03-02 (superseded A) and 03-04 (draft) are not.
     const plannedDays = rows
       .filter((r) => r.personId === p && r.plannedMinutes > 0)
       .map((r) => r.workDate);
@@ -683,12 +646,9 @@ describe("getPlannedVsActual", () => {
   it("excludes a session whose local day is OUTSIDE the window, includes one inside", async () => {
     const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `bound-${crypto.randomUUID()}`);
-    // One day BEFORE the window (2026-03-01) — must be excluded even though the widened fetch grabs it.
+    // The widened fetch grabs the days either side of the window; the filter must drop them.
     await seedSession(p, loc, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
-    // The last in-window day (2026-03-08) — included.
     await seedSession(p, loc, "2026-03-08T09:00:00Z", "2026-03-08T12:00:00Z");
-    // The first day AT/AFTER the window's exclusive end (2026-03-09) — the widened fetch grabs it, the
-    // half-open `< end` filter drops it. Exercises the upper boundary alongside the lower one.
     await seedSession(p, loc, "2026-03-09T09:00:00Z", "2026-03-09T12:00:00Z");
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, { locationId: loc, period: week }),

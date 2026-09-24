@@ -4,28 +4,20 @@ import type { AbsenceKind, AbsenceStatus } from "./schema/absences.js";
 import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 import { shiftLocalDate } from "./shift-local-date.js";
 
-/**
- * The STAFF-FACING read side of the swap/absence request path — one person's OWN schedule views, the
- * counterpart to the manager `listPending*` queues. Every read filters on the requester's `person_id`
- * in application code: "a staff member sees only
- * their own rows" is enforced by these predicates and by the route passing the SESSION's personId — never
- * by the database (plan fact 3). Reads only; no throws, so no `./errors.js` import.
- */
+// "A staff member sees only their own rows" is enforced by these `person_id` predicates and by the
+// route passing the session's person — never by the database.
 
-/** A window read of one person's shifts over a half-open local-date range `[from, to)`. */
 export interface ListShiftsForPersonInput {
   personId: string;
-  /** Inclusive lower bound, `YYYY-MM-DD`, compared against each shift's LOCAL wall date. */
+  /** `YYYY-MM-DD`, inclusive, compared against each shift's local wall date. */
   from: string;
-  /** Exclusive upper bound, `YYYY-MM-DD`. */
+  /** `YYYY-MM-DD`, exclusive. */
   to: string;
 }
 
-/** One of the requester's planned shifts. Person is implied (the requester), so it is not repeated. */
 export interface PersonShiftRow {
   id: string;
   locationId: string;
-  /** UTC ISO instant — `starts_at` is a text column, read back as the stored string. */
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -34,10 +26,8 @@ export interface PersonShiftRow {
   rosterVersionId: string | null;
 }
 
-/** Which side of a swap the requesting person is on. A swap matches at most one side per person. */
 export type SwapDirection = "offered_to_me" | "requested_by_me";
 
-/** One swap the requester is party to — one they offered, or one offered to them. */
 export interface PersonSwapRow {
   id: string;
   requestedByPersonId: string;
@@ -45,18 +35,15 @@ export interface PersonSwapRow {
   toPersonId: string;
   toShiftId: string | null;
   status: ShiftSwapStatus;
-  /** UTC ISO instant — `created_at` is a text column, read back as the stored string. */
   createdAt: string;
-  /** `requested_by_me` when the requester is the `requested_by_person`, else `offered_to_me`. */
   direction: SwapDirection;
 }
 
-/** One of the requester's absences, any status (mirrors the manager queue's `PendingAbsenceRow`). */
 export interface PersonAbsenceRow {
   id: string;
   personId: string;
   kind: AbsenceKind;
-  /** YYYY-MM-DD, inclusive — the stored text, read back unchanged. */
+  /** `YYYY-MM-DD`, inclusive. */
   startsOn: string;
   endsOn: string;
   status: AbsenceStatus;
@@ -64,13 +51,6 @@ export interface PersonAbsenceRow {
   createdAt: string;
 }
 
-/**
- * The requester's shifts whose LOCAL wall date falls in the half-open window `[from, to)`, ordered by
- * `starts_at`. The window compares `date(starts_at, starts_offset_minutes || ' minutes')`, the same
- * offset-aware local-date expression `publishRoster`/`plannedShiftsInPeriod` use (offset 0 in this
- * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. The
- * matching index is `shifts_person_starts_idx` on `(person_id, starts_at)`.
- */
 export async function listShiftsForPerson(
   tx: Transaction,
   input: ListShiftsForPersonInput,
@@ -104,14 +84,7 @@ export async function listShiftsForPerson(
   }));
 }
 
-/**
- * The swaps the requester is party to — every swap whose `requested_by_person_id` OR `to_person_id` is
- * the requester — ordered by `created_at` desc (newest first). `direction` is derived from which column
- * matched: `requested_by_me` when the requester is the requester of record, else `offered_to_me`. A swap
- * matches at most one side per person (a requester offering to themselves is nonsensical and the UI filters
- * self out of the colleague picker), so the CASE is unambiguous; were a self-swap ever created the CASE
- * would deterministically report `requested_by_me`, never crash this read.
- */
+/** A self-swap, which nothing in the database refuses, reports `requested_by_me`. */
 export async function listSwapsForPerson(
   tx: Transaction,
   input: { personId: string },
@@ -143,11 +116,6 @@ export async function listSwapsForPerson(
   }));
 }
 
-/**
- * All of the requester's absences, EVERY status (not only `requested` like the manager queue), ordered by
- * `starts_on` desc — a staff member's own leave history and pending requests. Person-scoped in application
- * code. The matching index is `absences_person_idx` on `(person_id, starts_on)`.
- */
 export async function listAbsencesForPerson(
   tx: Transaction,
   input: { personId: string },

@@ -13,7 +13,7 @@ import type { PersonRoleValue } from "../src/permissions.js";
  * Seed helpers shared by the identity LOGIC suites (authorize / login / staff), which drive
  * `loginWithPin`/`authorize`/the staff-admin API. Pure setup, never a case — nothing here asserts,
  * exactly as `@waitron/db`'s own `seedTenant` documents. Under `test/`, so out of the
- * english-only scan and the src coverage glob, mirroring `packages/workforce/test/fixtures.ts`.
+ * english-only scan and the src coverage glob.
  */
 
 /** Seed a location → till. Returns the till id a session references.

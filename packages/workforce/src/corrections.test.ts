@@ -10,11 +10,6 @@ import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
-// The request→approve flow, the supervisor gate and reprojection are all LOGIC — no concurrency
-// (CLAUDE.md §4, plan §7). The append-only floor that stops a correction being UPDATE-d covers
-// every row of `time_entries`, corrections included, and is not re-proven here. It is proven at the
-// product's own migrate path by `packages/migrations/src/apply-append-only.test.ts`, which names
-// `time_entries` and carries a control in the other direction.
 const backend = new WorkforceBackend();
 
 let locationId: string;
@@ -53,9 +48,7 @@ async function nineToFive(name: string): Promise<{ personId: string; outEntryId:
   return { personId, outEntryId: rows.rows[0]!.id };
 }
 
-/** Through the `persons` table definition, not raw SQL: `persons.id` and `persons.created_at` are
- * `$defaultFn` generators, which only the insert BUILDER runs — the same reason
- * `../test/fixtures.ts`'s `seedPerson` inserts that way. */
+/** Through the table definition for the same reason as `seedPerson`. */
 async function supervisor(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(persons)
@@ -65,16 +58,9 @@ async function supervisor(name: string): Promise<string> {
 }
 
 /**
- * Inserts an APPROVED correction row directly, bypassing `appendToChain` and `approveCorrection`.
- *
- * §4.2's cross-node precedence needs a state the backend cannot reach through its own verbs: two
- * chains each holding an approved correction of ONE target. `approveCorrection` refuses a second
- * approval per target (the DB-wide `hasApprovedCorrection` guard, until it becomes per-chain in a
- * later step), so the second chain's approval is injected here instead. The hashes are placeholders
- * (a mid-chain entry — `isFirstEntry` false with a non-null `prevEntryHash`) — the projection reads
- * `corrects_entry_id`, `correction_status`, `recorded_at`, `node_id` and `event_at`, never the hash —
- * and the row still satisfies every CHECK on the table (shape, whole-second, hash-regex, chaining,
- * chain-position).
+ * Inserts an APPROVED correction directly: two chains each holding an approved correction of ONE
+ * target is a state `approveCorrection` refuses to reach, since it allows one approval per target.
+ * The hashes are placeholders; the projection never reads them.
  */
 async function insertApprovedCorrection(row: {
   node: string;
@@ -85,11 +71,7 @@ async function insertApprovedCorrection(row: {
   recordedAt: string;
   sequenceNo: number;
 }): Promise<void> {
-  // `id` comes from the table's `$defaultFn` generator, which drizzle runs for a builder insert and
-  // never for raw SQL, and the generated DDL declares no SQL default for it — without it the
-  // statement is refused `NOT NULL constraint failed: time_entries.id`. The insert stays raw
-  // because what it is building is a row the chain append path would never write: a SECOND node's
-  // correction of one target.
+  // Raw, with `id` supplied, because this is a row the chain append path would never write.
   await suite.db.execute(sql`
     insert into time_entries (
       id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
@@ -129,7 +111,6 @@ describe("requestCorrection", () => {
         actorPersonId: actor,
       }),
     );
-    // The correction row is present, `requested`, and the ORIGINAL out is untouched.
     const rows = await suite.db.execute<{
       entry_kind: string;
       correction_status: string | null;
@@ -141,7 +122,6 @@ describe("requestCorrection", () => {
       ["out", null],
       ["correction", "requested"],
     ]);
-    // Pending: worked minutes still reflect the 17:00 out (8h), not the requested 18:00 (9h).
     expect(await workedMinutes(personId)).toBe(480);
   });
 
@@ -181,12 +161,8 @@ describe("approveCorrection", () => {
       backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup }),
     );
 
-    // Reprojected: the corrected 18:00 end makes it a 9h day.
     expect(await workedMinutes(personId)).toBe(540);
-    // History retained: the original 17:00 out row is STILL there, unmodified — nothing was updated
-    // or deleted, the correction is a separate append. `event_at` is a text column read back as the
-    // stored string, and `time_entries_event_at_second_ck` admits exactly one spelling of a whole
-    // second, so the expected value carries the zero fractional second `appendToChain` writes.
+    // The original out is still there, unmodified: the correction is a separate append.
     const original = await suite.db.execute<{ at: string }>(sql`
       select event_at as at from time_entries where id = ${outEntryId}`);
     expect(original.rows[0]!.at).toBe("2026-01-05T17:00:00.000Z");
@@ -204,7 +180,7 @@ describe("approveCorrection", () => {
         actorPersonId: personId,
       }),
     );
-    // `personId` is a plain staff member (seedPerson defaults role to staff).
+    // `personId` is a plain staff member.
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.approveCorrection(tx, {
@@ -215,7 +191,6 @@ describe("approveCorrection", () => {
       ),
     );
     expect(code).toBe("correction.not_permitted");
-    // And the projection is unchanged — a refused approval takes no effect.
     expect(await workedMinutes(personId)).toBe(480);
   });
 
@@ -246,43 +221,30 @@ describe("approveCorrection", () => {
         actorPersonId: personId,
       }),
     );
-    // First approval takes effect (the request row stays `requested` — approval is a second append,
-    // never a mutation, so the id passed the second time still names a `requested` row).
+    // Approval is a second append, so the request row stays `requested` after it.
     await run((tx) =>
       backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup }),
     );
-    // Second approval of the SAME request is refused: the target already carries an approved
-    // correction, so re-approving would append a duplicate `approved` row (the request→approve-once
-    // invariant). Restricting the lookup to `requested` would NOT catch this — the request is still
-    // `requested` — so the guard is on the target's existing approval.
+    // Refused on the target's existing approval: the request itself is still `requested`.
     const code = await codeOfRejection(() =>
       run((tx) => backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup })),
     );
     expect(code).toBe("correction.not_pending");
-    // Exactly ONE approved correction row exists — the refused approval appended nothing.
     const approved = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from time_entries
       where person_id = ${personId} and entry_kind = 'correction'
         and correction_status = 'approved'`);
     expect(approved.rows[0]!.n).toBe(1);
-    // And the projection is exactly the single approved value (9h), not doubled or re-applied.
     expect(await workedMinutes(personId)).toBe(540);
   });
 });
 
 describe("cross-node correction precedence (§4.2, reprojection)", () => {
   it("reprojects the later recorded_at approved correction when two chains correct one target", async () => {
-    // Once corrections chain per node, sync can leave ONE `out` with an approved correction in the
-    // box's chain AND in a promoted cloud's — the state the DB-wide approve guard forbids through the
-    // backend, so both are inserted directly (insertApprovedCorrection). `entriesInPeriod` fetches by
-    // person, never by chain (§4.3), so reprojection sees both and must pick the greatest
-    // (recorded_at, node_id, sequence_no). The cloud row was RECORDED LATER (10:06) though it carries
-    // the LOWER sequence_no (2 vs 5), so its 18:30 corrected time wins over the box's 18:00 — a
-    // sequence_no-max rule would instead land on 540 (18:00), so the two rules disagree here.
+    // The cloud row was recorded later but carries the lower sequence_no, so a sequence_no-only rule
+    // would give 540, not 570.
     const { personId, outEntryId } = await nineToFive("xnode-1");
-    // Two distinct chains (distinct nodes), neither the setup node whose chain already carries this
-    // person's live in/out. The base `out` chains under the setup node; a correction chains under its
-    // OWN recording node (§4.2), so all three differ.
+    // Two chains, neither the setup node's: a correction chains under its own recording node.
     const boxNode = await seedNode(suite.db, brandLocationId(locationId));
     const cloudNode = await seedNode(suite.db, brandLocationId(locationId));
     const actor = await supervisor("xnode-1-sup");
@@ -291,8 +253,7 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
       correctsEntryId: outEntryId,
       personId,
       actorId: actor,
-      // The canonical whole-second spelling `appendToChain` writes: this helper inserts RAW, so
-      // nothing truncates for it and `time_entries_event_at_second_ck` admits no other form.
+      // Inserted raw, so nothing truncates to the whole-second spelling for it.
       eventAt: "2026-01-05T18:00:00.000Z",
       recordedAt: "2026-01-05T10:05:00.000Z",
       sequenceNo: 5,
@@ -306,7 +267,6 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
       recordedAt: "2026-01-05T10:06:00.000Z",
       sequenceNo: 2,
     });
-    // 09:00 → corrected 18:30 = 9.5h.
     expect(await workedMinutes(personId)).toBe(570);
   });
 });

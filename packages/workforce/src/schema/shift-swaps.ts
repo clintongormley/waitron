@@ -4,53 +4,33 @@ import { persons } from "@waitron/identity";
 import { shifts } from "./shifts.js";
 
 /**
- * A swap request's lifecycle. A requester offers their shift (`requested`); the offered person
- * accepts it (`accepted`, `acceptSwap` in ../shift-swaps.ts); a manager `approved`/`rejected` it.
- * This slice writes `requested` (`requestSwap`) and `accepted` (`acceptSwap`) only — the manager
- * approve/reject transition is a later slice's owner-gated workflow (plan §7), not built here.
- * English tokens, same reason as the sibling enums.
+ * The requester offers (`requested`), the offered person accepts (`accepted`), then a manager
+ * decides (`approved`/`rejected`).
  */
 export const shiftSwapStatus = enumType(["requested", "accepted", "approved", "rejected"]);
 
-/** One of `requested`/`accepted`/`approved`/`rejected` — the `shift_swap_status` enum's union. */
 export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
 
 /**
- * A request to swap shifts between two people — person A (the requester) offers their `from_shift` to
- * person B (`to_person`), optionally taking B's `to_shift` in return. PLANNING data, ordinary mutable
- * rows: no append-only trigger and no chain (design 2026-07-22 §2.1 / plan §2.1), so nothing in the
- * database refuses an edit or a delete here — the grant that used to name the permitted writes went
- * with PostgreSQL.
- *
- * `from_shift_id` cascades on delete — a swap is meaningless once the offered shift is gone, so
- * discarding that shift discards the swap. `to_shift_id` is nullable (a one-sided give-away) and SET
- * NULLs on delete — the swap survives as an offer of `from_shift` alone. The permission rule
- * (`requested_by_person` must OWN `from_shift`; only `to_person` may accept) is `requestSwap` /
- * `acceptSwap`'s, not the DB's.
+ * The requester offers their `from_shift` to `to_person`, optionally taking `to_person`'s `to_shift`
+ * in return. Who may request or accept is enforced by `requestSwap`/`acceptSwap`
+ * (../shift-swaps.ts), not by the database.
  */
 export const shiftSwaps = table(
   "shift_swaps",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    /** The person offering the swap — must own `from_shift` (`requestSwap` enforces it). */
     requestedByPersonId: id("requested_by_person_id").notNull(),
-    /** The shift being offered. */
     fromShiftId: id("from_shift_id").notNull(),
-    /** The person the shift is offered to — the only one who may accept it. */
     toPersonId: id("to_person_id").notNull(),
-    /** The shift offered in return, if any; null for a one-sided give-away. */
+    /** Null for a one-sided give-away. */
     toShiftId: id("to_shift_id"),
     status: shiftSwapStatus("status").notNull().default("requested"),
-    /** The manager who decided this swap (approve/reject), recorded when the route supplies it; null
-     * while the swap is still `requested`/`accepted`. Mirrors roster_versions.published_by_person_id. */
     decidedByPersonId: id("decided_by_person_id"),
-    /** When the swap was decided; null until it is. Mirrors roster_versions.published_at. */
     decidedAt: tsString("decided_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the
-    // sibling schema files document.
     foreignKey({
       columns: [t.requestedByPersonId],
       foreignColumns: [persons.id],
@@ -61,28 +41,24 @@ export const shiftSwaps = table(
       foreignColumns: [persons.id],
       name: "shift_swaps_to_person_fk",
     }).onDelete("restrict"),
-    // cascade: the offered shift going away discards the swap (it has no meaning without it).
+    // A swap has no meaning without the shift it offers.
     foreignKey({
       columns: [t.fromShiftId],
       foreignColumns: [shifts.id],
       name: "shift_swaps_from_shift_fk",
     }).onDelete("cascade"),
-    // set null: the return shift going away leaves a one-sided offer of `from_shift`, not a deletion.
+    // Losing the return shift leaves a one-sided offer.
     foreignKey({
       columns: [t.toShiftId],
       foreignColumns: [shifts.id],
       name: "shift_swaps_to_shift_fk",
     }).onDelete("set null"),
-    // restrict, not cascade: the manager who decided a swap must not be silently deletable.
     foreignKey({
       columns: [t.decidedByPersonId],
       foreignColumns: [persons.id],
       name: "shift_swaps_decided_by_person_fk",
     }).onDelete("restrict"),
     index("shift_swaps_from_shift_idx").on(t.fromShiftId),
-    // The refusal the PostgreSQL enum TYPE performed, put back as a constraint: the SQLite column
-    // is plain text and refuses nothing on its own (see enumText in
-    // packages/db/src/schema/columns.ts).
     check("shift_swaps_status_ck", enumCheck(t.status)),
   ],
 );
