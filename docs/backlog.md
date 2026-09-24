@@ -3797,12 +3797,12 @@ path is a separate decision.
 **`sale_voids` has no index on `voided_at` — OPEN (found 2026-09-24 by #605).**
 Besides its primary key's, its only index is the unique one on `sale_id`
 (`packages/db/src/schema/sale-voids.ts`). Four reads select voids by `voided_at` range: the void
-count in `packages/reporting/src/counts.ts` and, since that branch, the reversal half of the daily
+count in `packages/reporting/src/counts.ts` and, since #605, the reversal half of the daily
 VAT summary, the period VAT summary and top sellers.
 An `EXPLAIN QUERY PLAN` of the count's shape on node v26.7.0, over empty stand-in `sales` and
 `sale_voids` tables carrying only these keys, printed `SCAN s` then a `sale_id` lookup per sale;
 with an index on `voided_at` added it printed a range search on that index. The real schema and
-real row counts were not measured. Adding the index needs a migration, which that branch was
+real row counts were not measured. Adding the index needs a migration, which #605 was
 specified without. **Next action:** add the index and re-read the plan on the real schema.
 
 **Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
