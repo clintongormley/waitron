@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { lockVenueDatabase } from "@waitron/db";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { DRAIN_DUTY, RECONCILE_DUTY, type DutyReport, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
@@ -530,3 +534,86 @@ describe("logDegradedDuties", () => {
 // property — it is enforced at `pnpm typecheck` by DUTY_BUDGET_MS's `Record<Duty, number>` typing
 // (see health.ts). A test here comparing against a hardcoded literal could only catch someone
 // editing its own literal, never the omission it would claim to catch; see the type instead.
+
+describe("/health reports who holds the venue folder", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+  async function venueDir(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "wt-health-venue-"));
+    dirs.push(dir);
+    return dir;
+  }
+  async function holderFile(dir: string, heartbeatAt: Date): Promise<void> {
+    await writeFile(
+      join(dir, "venue.holder.json"),
+      JSON.stringify({
+        kind: "server",
+        pid: 4242,
+        host: "container-id",
+        lockedAt: BOOT.toISOString(),
+        heartbeatAt: heartbeatAt.toISOString(),
+      }),
+    );
+  }
+  const body = async (app: ReturnType<typeof healthApp>) =>
+    (await (await app.request("/health")).json()) as Record<string, unknown>;
+
+  it("names the holder this process wrote when it took the folder, and never its pid or host", async () => {
+    const dir = await venueDir();
+    const lock = await lockVenueDatabase(dir);
+    try {
+      const now = new Date();
+      const { venueHolder } = await body(
+        healthApp(createHealthState(BOOT), () => now, { venueDir: dir }),
+      );
+      expect(Object.keys(venueHolder as object).sort()).toEqual([
+        "heartbeatAt",
+        "kind",
+        "lockedAt",
+        "stale",
+      ]);
+      expect(venueHolder).toMatchObject({ kind: "script", stale: false });
+    } finally {
+      lock.release();
+    }
+  });
+
+  it("reads a heartbeat 30 seconds old as stale", async () => {
+    const dir = await venueDir();
+    await holderFile(dir, new Date(AT.getTime() - 30_000));
+    expect(
+      (await body(healthApp(createHealthState(BOOT), () => AT, { venueDir: dir }))).venueHolder,
+    ).toEqual({
+      kind: "server",
+      lockedAt: BOOT.toISOString(),
+      heartbeatAt: new Date(AT.getTime() - 30_000).toISOString(),
+      stale: true,
+    });
+  });
+
+  it("reads the file on every request", async () => {
+    const dir = await venueDir();
+    const app = healthApp(createHealthState(BOOT), () => AT, { venueDir: dir });
+    expect((await body(app)).venueHolder).toBeNull();
+    await holderFile(dir, new Date(AT.getTime() - 1_000));
+    expect((await body(app)).venueHolder).toMatchObject({ stale: false });
+  });
+
+  it("does not change the status code either way", async () => {
+    const dir = await venueDir();
+    await holderFile(dir, new Date(AT.getTime() - 60_000));
+    const healthy = createHealthState(BOOT);
+    recordPass(healthy, report(true), AT);
+    expect((await healthApp(healthy, () => AT, { venueDir: dir }).request("/health")).status).toBe(
+      200,
+    );
+
+    await holderFile(dir, AT);
+    const unhealthy = createHealthState(BOOT);
+    expect(
+      (await healthApp(unhealthy, () => AT, { venueDir: dir }).request("/health")).status,
+    ).toBe(503);
+  });
+});

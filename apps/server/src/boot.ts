@@ -930,7 +930,7 @@ export async function startServer(
   // before the branch so the shared `startListening`/`makeStartedServer` helpers receive one app and
   // one health state whichever mode boots.
   const health = createHealthState(now());
-  const app = healthApp(health, now);
+  const app = healthApp(health, now, { venueDir: config.venueDir });
   // Stamp + log every request FIRST, before the mirror read-only gate and every mounted surface below,
   // so every route mounted after this line (the setup surface, the mirror gate, and all the trading/
   // dashboard APIs) gets an `x-request-id` echo and a route-pattern `http.request` log line correlated
