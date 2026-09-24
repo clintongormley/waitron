@@ -1,6 +1,7 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { beginHolding, endHolding } from "./venue-liveness.js";
 
 /**
  * The file whose lock stands for the whole venue folder. It holds no data. Never unlink it: a
@@ -11,6 +12,7 @@ export const VENUE_LOCK_FILE = "venue.lock";
 /** SQLite's `SQLITE_BUSY`, which `node:sqlite` puts on the thrown error's `errcode`. */
 const SQLITE_BUSY = 5;
 
+/** Whether the engine refused because another connection holds the lock. */
 export const isLocked = (error: unknown): boolean =>
   (error as { errcode?: number }).errcode === SQLITE_BUSY;
 
@@ -76,7 +78,14 @@ export async function lockVenueDirectory(directory: string): Promise<VenueLock> 
   // holder and both open the file.
   let holder = holders.get(key);
   if (holder === undefined) {
-    holder = { connection: takeFileLock(join(key, VENUE_LOCK_FILE), directory), shares: 0 };
+    const connection = takeFileLock(join(key, VENUE_LOCK_FILE), directory);
+    try {
+      beginHolding(key);
+    } catch (error) {
+      closeQuietly(connection);
+      throw error;
+    }
+    holder = { connection, shares: 0 };
     holders.set(key, holder);
   }
   holder.shares += 1;
@@ -89,6 +98,8 @@ export async function lockVenueDirectory(directory: string): Promise<VenueLock> 
       held.shares -= 1;
       if (held.shares === 0) {
         holders.delete(key);
+        // Before the close: once the lock is let go, the holder file may be a successor's.
+        endHolding(key);
         closeQuietly(held.connection);
       }
     },

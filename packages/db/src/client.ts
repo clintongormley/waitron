@@ -10,7 +10,15 @@ import { AppError } from "@waitron/shared";
 import * as schema from "./schema/index.js";
 import "./errors.js";
 
-export type { VenueLock } from "@waitron/store";
+export type { VenueHolder, VenueHolderKind, VenueLock } from "@waitron/store";
+export {
+  isLocked,
+  isVenueHolderFresh,
+  readVenueHolder,
+  readVenueHolderAsync,
+  setVenueHolderKind,
+  VENUE_HOLDER_KINDS,
+} from "@waitron/store";
 
 export interface OpenVenueOptions {
   /**

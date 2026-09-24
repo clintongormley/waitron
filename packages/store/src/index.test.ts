@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openVenueStore } from "./index.js";
+import { runningWatchdog } from "./venue-liveness.js";
 
 // One table per file, to show each handle reaches its own file. The split is this suite's, not the
 // product's.
@@ -775,5 +776,17 @@ describe("checkpointTruncate", () => {
     await expect(store.venue.withWriteLock(() => store.venue.checkpointTruncate())).rejects.toThrow(
       "write lock: a body asked for the lock it is already holding",
     );
+  });
+});
+
+describe("close", () => {
+  it("resolves once the watchdog thread of the last held folder has ended", async () => {
+    const { store } = await open();
+    const watchdog = runningWatchdog();
+    expect(watchdog).toBeDefined();
+    let ended = false;
+    watchdog!.once("exit", () => (ended = true));
+    await store.close();
+    expect(ended).toBe(true);
   });
 });

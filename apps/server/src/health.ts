@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { isVenueHolderFresh, readVenueHolderAsync } from "@waitron/db";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
@@ -250,13 +251,42 @@ export function healthSnapshot(
   };
 }
 
+/**
+ * The holder file beside `venue.lock`, judged by the same parser and bound a refused start uses
+ * (`node-entry.ts`), so the two agree. Its pid and host stay off this unauthenticated route. Null
+ * when there is no readable file.
+ */
+async function venueHolderHealth(
+  venueDir: string,
+  now: Date,
+): Promise<Record<string, unknown> | null> {
+  const holder = await readVenueHolderAsync(venueDir);
+  if (holder === null) return null;
+  return {
+    kind: holder.kind,
+    lockedAt: holder.lockedAt,
+    heartbeatAt: holder.heartbeatAt,
+    stale: !isVenueHolderFresh(holder, now),
+  };
+}
+
 /** The ONLY route this cycle: no metrics, no readiness/liveness split, no auth, no webhook. The
- * webhook cycle attaches to this app rather than creating a second one. */
-export function healthApp(state: HealthState, now: () => Date): Hono {
+ * webhook cycle attaches to this app rather than creating a second one. The venue holder is
+ * reported beside the duties and does not enter the status code. */
+export function healthApp(
+  state: HealthState,
+  now: () => Date,
+  options: { venueDir?: string } = {},
+): Hono {
   const app = new Hono();
-  app.get("/health", (c) => {
-    const snapshot = healthSnapshot(state, now());
-    return c.json(snapshot.body, snapshot.ok ? 200 : 503);
+  app.get("/health", async (c) => {
+    const at = now();
+    const snapshot = healthSnapshot(state, at);
+    const body =
+      options.venueDir === undefined
+        ? snapshot.body
+        : { ...snapshot.body, venueHolder: await venueHolderHealth(options.venueDir, at) };
+    return c.json(body, snapshot.ok ? 200 : 503);
   });
   return app;
 }

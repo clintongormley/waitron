@@ -5,14 +5,27 @@ import { archiveTo } from "./archive.js";
 import { type Connections, connectionPair } from "./connections.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
+import { watchdogStopped } from "./venue-liveness.js";
 
 export { installAppendOnlyTriggers } from "./append-only.js";
 export type { StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
-export { lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
+export { isLocked, lockVenueDirectory, VENUE_LOCK_FILE, VenueInUseError } from "./venue-lock.js";
 export type { VenueLock } from "./venue-lock.js";
+export {
+  isVenueHolderFresh,
+  readVenueHolder,
+  readVenueHolderAsync,
+  VENUE_HOLDER_KINDS,
+} from "./venue-holder.js";
+export type { VenueHolder, VenueHolderKind } from "./venue-holder.js";
+export {
+  setVenueCrashReportDirectory,
+  setVenueHolderKind,
+  setVenueWatchdogLogFile,
+} from "./venue-liveness.js";
 import { createWriteQueue } from "./write-queue.js";
 
 const VENUE_FILE = "venue.db";
@@ -196,6 +209,7 @@ export async function openVenueStore<
     // The refusal is what the caller needs to see, never a failure from closing up after it.
     for (const connection of standing) closeQuietly(connection);
     lock.release();
+    await watchdogStopped();
     throw error;
   }
   const handle = <TSchema extends Record<string, unknown>>(
@@ -248,6 +262,7 @@ export async function openVenueStore<
         await node.close();
       } finally {
         lock.release();
+        await watchdogStopped();
       }
     },
   };

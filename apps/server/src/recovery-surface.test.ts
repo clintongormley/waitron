@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
+import { VENUE_HOLDER_KINDS } from "@waitron/db";
 import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
@@ -80,6 +81,7 @@ describe("recoveryApp", () => {
       level: "normal",
       lastErrorCode: `<script>alert(1)</script>"'&`,
       lastFailureAt: new Date().toISOString(),
+      clears: 0,
     };
     const app = recoveryApp({
       state: xssState,
@@ -191,13 +193,18 @@ describe("the caught error's own words on the page", () => {
 });
 
 /** The page as an operator sees it, for one recorded failure code. */
-async function pageFor(lastErrorCode: string | null): Promise<string> {
+async function pageFor(
+  lastErrorCode: string | null,
+  holderKind?: RecoveryState["holderKind"],
+): Promise<string> {
   const app = recoveryApp({
     state: {
       failures: 3,
       level: "recovery",
       lastErrorCode,
       lastFailureAt: new Date().toISOString(),
+      clears: 0,
+      ...(holderKind === undefined ? {} : { holderKind }),
     },
     logDir: "/nonexistent",
     onRetry: vi.fn(),
@@ -269,6 +276,7 @@ describe("curated operator text", () => {
       "migrations.set_missing",
       "migrations.incomplete",
       "server.boot_incomplete",
+      "provisioning.database_holder_stalled",
     ];
     const fromBootByHand = ["deployment.environment_mismatch"];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
@@ -331,5 +339,62 @@ describe("curated operator text", () => {
       expect(body).toContain(GENERIC_TEXT.title);
       expect(body).not.toContain("undefined");
     }
+  });
+});
+
+describe("a start refused by a holder that stopped", () => {
+  const code = "provisioning.database_holder_stalled";
+  const names: Record<string, [string, string]> = {
+    server: ["the Waitron server", "el servidor de Waitron"],
+    restore: ["a restore from a backup", "una restauración desde una copia de seguridad"],
+    rejoin: ["a rejoin of this box to its venue", "la reincorporación de este equipo a su local"],
+    provisioning: ["the Waitron setup command", "el comando de configuración de Waitron"],
+    script: ["another Waitron program", "otro programa de Waitron"],
+  };
+
+  it("names each kind of holder, in English and in Spanish", async () => {
+    expect(Object.keys(names).sort()).toEqual([...VENUE_HOLDER_KINDS].sort());
+    for (const kind of VENUE_HOLDER_KINDS) {
+      const body = await pageFor(code, kind);
+      const [english, spanish] = names[kind]!;
+      expect(body).toContain(escapeHtml(`The box's database is held by ${english},`));
+      expect(body).toContain(escapeHtml(`está ocupada por ${spanish},`));
+      for (const [other, [otherEnglish]] of Object.entries(names)) {
+        if (other !== kind) expect(body).not.toContain(`held by ${otherEnglish},`);
+      }
+    }
+  });
+
+  it("names no particular program when no kind was recorded", async () => {
+    const body = await pageFor(code);
+    expect(body).toContain("held by another Waitron program,");
+    expect(body).toContain("ocupada por otro programa de Waitron,");
+  });
+
+  it("marks the Spanish lines as Spanish, and gives no other code a Spanish line", async () => {
+    expect((await pageFor(code, "server")).match(/<p lang="es">/g)).toHaveLength(2);
+    expect(await pageFor("migrations.set_missing")).not.toContain('lang="es"');
+  });
+
+  it("tells the operator to wait for the holder to be ended, then retry, then ask for help", async () => {
+    const body = await pageFor(code, "restore");
+    expect(body).toMatch(/wait two minutes, then press retry/i);
+    expect(body).toMatch(/ask whoever installed this box/i);
+    expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
+  });
+
+  it("puts the recorded kind in the status JSON, which is from a closed set", async () => {
+    const app = recoveryApp({
+      state: { ...state, lastErrorCode: code, holderKind: "rejoin" },
+      logDir: "/nonexistent",
+      onRetry: vi.fn(),
+    });
+    expect(await (await app.request("/recovery-api/status")).json()).toEqual({
+      failures: 3,
+      level: "recovery",
+      lastErrorCode: code,
+      lastFailureAt: state.lastFailureAt,
+      holderKind: "rejoin",
+    });
   });
 });

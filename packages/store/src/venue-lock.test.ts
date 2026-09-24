@@ -47,7 +47,7 @@ const db = new DatabaseSync(process.argv[1]);
 db.exec("pragma busy_timeout = 0");
 db.exec("begin immediate");
 process.stdout.write("held");
-setInterval(() => {}, 1000);`;
+setInterval(() => db, 1000);`;
 
 function node(script: string, directory: string): ChildProcess {
   const child = spawn(

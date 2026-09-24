@@ -4905,22 +4905,29 @@ Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`
 `provisioning.database_in_use`, while opens inside one process share it; restore and
 `waitron-rejoin` take it before changing any file; break-glass, `waitron-credentials`, two dev
 scripts and the Cloud backup fixture's capture open without it), landed as #566. The question it
-left open was decided by the owner on 2026-09-24 and done in #573: a start the lock refuses no
-longer counts toward the recovery page (`apps/server/src/node-entry.ts` puts the count back), and
+left open was decided by the owner on 2026-09-24 and done in #573: a start the lock refused stopped
+counting toward the recovery page (`apps/server/src/node-entry.ts` put the count back), and
 the container's entrypoint now refuses any argument (`server.entry_arguments_refused`) instead of
-booting a second server when `docker compose run app <command>` is given no `--entrypoint`. Left
-open by #573's review, the owner's call, each reproduced by its Codex seat with a real second
-process: (1) a venue folder held by a STUCK process now restart-loops the box and never reaches the
-recovery page, because every refused start puts the count back; (2) the recovery file is read at
-the start and written at the end with no lock of its own, so a refused start can put back a count
-the running server cleared meanwhile, or erase a real failure another start recorded — and, older
-than #573, its pre-boot write of the count plus one can push a server restarting at that moment onto
-the page; closing either needs a lock or a check-before-write on `recovery.json`; (3) only an
-unwrapped `provisioning.database_in_use` is recognised — a wrapped one, or the store's raw
-`VenueInUseError`, would still count (no path wraps them today). Also
+booting a second server when `docker compose run app <command>` is given no `--entrypoint`. #573's
+review left three findings, each reproduced by its Codex seat with a real second process. The owner
+decided the first two on 2026-09-24, and A18d (branch `feat/venue-lock-liveness`) does them:
+(1) a venue folder held by a STUCK process restart-looped the box and never reached the recovery
+page. Every holder now keeps `venue.holder.json` beside `venue.lock` with a heartbeat. A refused
+start counts, as `provisioning.database_holder_stalled`, when that heartbeat is 30 s old or more
+or the file is missing, and the recovery page names the holder's kind. A holder whose main thread has not run
+for 120 s is killed by its own watchdog thread, which first records the main thread's stack when it can read it (in a test it could not, while that thread
+was inside one long synchronous database statement) ([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
+(2) `recovery.json` had no lock of its own, so a refused start could put back a count the running
+server had cleared, or erase a failure another start recorded. Every change to it now holds
+`recovery.lock`, and a clear count in the file stops a refused start's undo taking off a failure
+another start counted after a clear. Still open from (2): the level is read before that lock, so the pre-boot count
+another start writes can still push a server restarting at that moment onto the page (older than
+#573). Still open, the owner's call: (3) only an unwrapped `provisioning.database_in_use` is
+recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path wraps
+them today). Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
-process is copied into five test files.
+process is copied into several test files.
 Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed pointer
 `current.json` naming the live generation, generation claiming and pruning, and `probeBucket`, the
 check behind the settings screen's Test button), landed as #569. Task 6 makes the server call it at boot, through
@@ -5572,6 +5579,21 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
     never on the unauthenticated recovery page — with an optional description of what they were
     doing, and a setting to send them automatically. The owner's aim: the more bugs reported, the
     better.
+  - **Where the freeze reports are (A18d, branch `feat/venue-lock-liveness`).** One JSON file per
+    process the watchdog kills, named `holder-frozen-<killedAt>-<pid>.json` (the time with `:` and `.`
+    turned into `-`), in `<logDir>/crash-reports/`. On a box that is `/var/lib/waitron/logs/crash-reports/`
+    on the persistent `logs` volume (`deploy/compose.yml`), outside the venue database, so a restore
+    does not drop it. The keys, and nothing else:
+    - `code`: always `provisioning.database_holder_frozen`;
+    - `stack`: the main thread's frames as `{ function, file, line, column }`, or `null` when they
+      could not be read within 2 s, as happened with a synchronous SQLite statement;
+    - `kind`, `pid`, `host`, which is the container id under Docker;
+    - `lockedAt`, `lastTickAt`, `killedAt`;
+    - `version`: the build's own version, which on a box is `WAITRON_BUILD_ID`.
+
+    The server, restore and rejoin write them, and the provisioning command does when
+    `WAITRON_LOG_DIR` or `WAITRON_STATE_DIR` is set. The development scripts set
+    no folder, so they write none. Nothing reads or deletes them yet.
 
 ### KDS operations — low priority (A9)
 
@@ -5593,7 +5615,7 @@ series; the dashboard wizard. The image ships with backups OFF, deliberately.
 Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
 `modules.json`; the replacement's private `cloud-recovery.json` is outside that named capture set.
 The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
-`logs/`, the per-hardware `instance.env` and `recovery.json`. Touches BR-2, BR-3 and the recovery
+`logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
 bundle. Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend` key path-traversal
 guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot success-path integration
 test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a

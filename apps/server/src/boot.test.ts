@@ -806,8 +806,10 @@ describe("startServer, against a migrated venue directory", () => {
       ).toBe(true);
 
       const response = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
-      const body = (await response.json()) as { ok: boolean };
+      const body = (await response.json()) as { ok: boolean; venueHolder: unknown };
       expect(body.ok).toBe(true);
+      // The booted server holds its own venue folder, so it reports itself, from the holder file.
+      expect(body.venueHolder).toMatchObject({ stale: false });
 
       // The deployment holds one tenant per database. The till API is mounted on the same app
       // (`mountTillApi` in `boot.ts`). `GET /api/staff` is the unauthenticated roster route — it
