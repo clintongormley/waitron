@@ -4,16 +4,6 @@ import "./kitchen-screen.js";
 import type { KitchenScreen } from "./kitchen-screen.js";
 import type { Course, DashboardApi, Station } from "../api/client.js";
 
-/**
- * The Cocina (kitchen) config screen scanned by axe in both themes, in three shapes: populated (a
- * default + a non-default station and a course list, so the default badge, the make-default button and
- * the Cursos rows render, plus the bump-mode + fire-control segmented controls), empty (just the new
- * station/course forms, both empty states and the two segmented controls), and the error state (a
- * rejected station create shows the `role="alert"` banner). Mounted by ASSIGNING the `api` stub as a
- * property; the screen loads on connect, so the stub must resolve or a stray rejection pollutes the run
- * (a rejection is a finding). Every colour is a `--wt-*` token; the native `type="number"` order inputs
- * carry HA-styled labels for axe.
- */
 const STATIONS: Station[] = [
   {
     id: "s1",

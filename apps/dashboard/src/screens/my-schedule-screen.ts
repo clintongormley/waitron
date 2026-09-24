@@ -21,46 +21,25 @@ import type {
   RosterEntry,
 } from "../api/client.js";
 
-/** The four absence kinds, in display order — the request form's Type picker. Mirrors the server's
- * `absence_kind` enum; the server re-validates. */
 const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave", "unpaid"];
 
-/** How far ahead "my upcoming shifts" looks (a fixed default window; a wider range / pagination is a
- * recorded follow-up). */
 const WINDOW_DAYS = 14;
 
-/**
- * The half-open `[from, to)` window of dates for the shifts read: `now`'s day through it plus `days`,
- * both `YYYY-MM-DD`. Computed in UTC — the dashboard's own `date-utils.ts` convention (`today()` is
- * UTC; seeding from the venue's local timezone is a deferred slice), so a shift is placed by its UTC
- * day. Exported for a direct unit test rather than exercised only through the async load.
- */
+/** A half-open `[from, to)` window, computed in UTC, so a shift is placed by its UTC day. */
 export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
   const to = new Date(now.getTime() + days * 86_400_000);
   return { from: now.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
-/**
- * The LOCAL wall date+time of an instant, recovered by shifting the UTC instant by its stored wall
- * offset and reading the UTC components — the same `(instant + offset)` recovery the server's window
- * uses. Offset 0 (this slice's shifts) leaves it equal to the UTC clock.
- */
+/** The instant shifted by its stored wall offset, read in UTC, is the local wall clock. */
 function wallClock(iso: string, offsetMinutes: number): { date: string; time: string } {
   const shifted = new Date(Date.parse(iso) + offsetMinutes * 60_000);
   return { date: shifted.toISOString().slice(0, 10), time: shifted.toISOString().slice(11, 16) };
 }
 
 /**
- * The STAFF SELF-SERVICE screen — the `staff`-role landing face of the management dashboard, the browser
- * twin of `apps/till`'s till-schedule screen. A staff member views their own upcoming shifts, accepts a
- * swap offered to them, offers one of their shifts to a colleague, and requests / reviews time off. The
- * requester is ALWAYS the session's person server-side (`apps/server/src/me-api.ts`); these forms never
- * send a personId — the client methods don't carry one.
- *
- * Loads its three lists (plus the roster, for the colleague picker and requester names) on connect and
- * after every successful action. A rejected `{ code }` surfaces as a non-fatal banner via `codeMessage`
- * (never the raw code); the operator stays on the screen and can retry. Lit + `@waitron/ui` primitives +
- * `baseStyles`, the dashboard's own design system.
+ * A staff member's own shifts, swaps and time off. The server takes the requester from the session
+ * (`apps/server/src/me-api.ts`), so these forms never send the requester's id.
  */
 @customElement("dashboard-my-schedule-screen")
 export class MyScheduleScreen extends LitElement {
@@ -143,7 +122,6 @@ export class MyScheduleScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. Set before the element connects (its lifecycle loads the schedule). */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -152,27 +130,18 @@ export class MyScheduleScreen extends LitElement {
       this.loadFailed = true;
     },
   );
-  /** The logged-in person's id (from the shell's `getMe`) — filtered out of the colleague picker (you
-   * cannot offer to yourself) and used to name a swap's OTHER party. */
   @property() myPersonId = "";
 
-  /** The three lists: `undefined` while first loading, then the (possibly empty) rows. */
   @state() private shifts?: MyShift[];
   @state() private swaps?: MySwap[];
   @state() private absences?: MyAbsence[];
-  /** The active roster, for the colleague picker and to name a swap's counterparty. */
   @state() private roster: RosterEntry[] = [];
-  /** Set when the initial load rejected — shows a load-failed status instead of a stuck spinner. */
   @state() private loadFailed = false;
-  /** The error CODE of a non-fatal banner (rendered via `codeMessage`), or undefined for none. */
   @state() private noticeCode?: string;
-  /** A request is in flight — disables the action controls (a single-flight/hygiene guard). */
   @state() private busy = false;
 
-  /** Offer-a-shift form: which of my shifts, and to which colleague. */
   @state() private coverShiftId = "";
   @state() private coverColleagueId = "";
-  /** Request-time-off form. */
   @state() private absKind: AbsenceKind = "holiday";
   @state() private absFrom = "";
   @state() private absTo = "";
@@ -183,18 +152,12 @@ export class MyScheduleScreen extends LitElement {
     void this.#load();
   }
 
-  /** The half-open `[from, to)` window for the shifts read: today through today + {@link WINDOW_DAYS}. */
   #window(): { from: string; to: string } {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
-  /**
-   * The INITIAL load: the roster (for the colleague picker + name resolution) ONCE, then all three
-   * lists — mirrors approvals-screen's `#load` (static data) vs `#loadLists` (the reloadable part)
-   * split, so an action reload never refetches the roster (a swap/absence cannot change the active
-   * roster). A rejection anywhere leaves a load-failed status rather than an unhandled promise. State
-   * written after a mid-load disconnect is harmless — Lit never paints a detached element.
-   */
+  /** The roster loads only here: an action reloads just the lists, since a swap or absence cannot
+   * change the roster. */
   async #load(): Promise<void> {
     try {
       await this.#queries.watch("getStaffRoster", [], (value) => {
@@ -211,7 +174,6 @@ export class MyScheduleScreen extends LitElement {
     }
   }
 
-  /** Reload just the three lists (not the roster). Throws to its caller's catch. */
   async #loadLists(): Promise<void> {
     const { from, to } = this.#window();
     await Promise.all([
@@ -227,9 +189,6 @@ export class MyScheduleScreen extends LitElement {
     ]);
   }
 
-  /** Run an action guarded by `busy`, surfacing a rejected `{ code }` as a non-fatal banner (never the
-   * raw code) and reloading the lists on success so they reflect the change (the roster is unchanged, so
-   * it is not refetched). */
   async #act(fn: () => Promise<void>): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -276,12 +235,10 @@ export class MyScheduleScreen extends LitElement {
     });
   }
 
-  /** A person's display name from the roster, or the raw id if not on it (a defensive fallback). */
   #personName(personId: string): string {
     return this.roster.find((r) => r.personId === personId)?.displayName ?? personId;
   }
 
-  /** A one-line label for a shift: local wall date, time range and role. */
   #shiftLabel(shift: MyShift): string {
     const start = wallClock(shift.startsAt, shift.startsOffsetMinutes);
     const end = wallClock(shift.endsAt, shift.endsOffsetMinutes);
@@ -353,8 +310,6 @@ export class MyScheduleScreen extends LitElement {
     </section>`;
   }
 
-  /** One swap row: the counterparty + which side I'm on + its status, and — for a swap offered to me
-   * that is still `requested` — an Accept. */
   #swapRow(swap: MySwap): TemplateResult {
     const other =
       swap.direction === "offered_to_me"

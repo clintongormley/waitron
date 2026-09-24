@@ -13,7 +13,6 @@ import type {
   Till,
 } from "../api/client.js";
 
-// Exercise the tables, add/edit dialogs, and numeric pairing in both themes.
 const agents: PrintAgentRow[] = [
   {
     id: "a1",
@@ -107,9 +106,7 @@ const tills: Till[] = [
   { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
 ];
 
-// Two discovered USB devices — one unregistered (its Add action render) and one
-// disabled registration (offered for adding again) — plus an office printer, so the
-// usb/bluetooth create surface is in the a11y tree. Typed loosely (the stub is cast to DashboardApi), the shape matching DiscoveredPrinter.
+// An unregistered USB device, a disabled registration offered for adding again, and an office printer.
 const discovered = [
   {
     agentId: "a1",
@@ -150,7 +147,6 @@ const discovered = [
   },
 ];
 
-// A print agent knocking to join, so the pending queue + accept dialog are in the a11y tree.
 const pending: JoinRequestRow[] = [
   { id: "j1", kind: "print_agent", label: "kitchen-pi", createdAt: "2026-09-08T10:02:00.000Z" },
 ];
@@ -398,9 +394,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
 });
 
 describe("printers-screen a11y — the numeric match", () => {
-  // A bare "47" is not a name a screen reader can act on — the number has to be announced as one.
-  // Read off the INNER <button>, which is the element that carries the name (wt-button forwards
-  // `aria-label` into its shadow root).
+  // Read off the inner <button>: wt-button forwards `aria-label` into its shadow root.
   it("names every number button, not just labels it with the digits", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(true),
@@ -419,8 +413,7 @@ describe("printers-screen a11y — the numeric match", () => {
     );
   });
 
-  // Reachable AND operable from the keyboard alone: Enter on the focused row control opens the dialog,
-  // and Enter on a focused number accepts with it. Real key events, not synthetic clicks.
+  // Real key events, not synthetic clicks.
   it("opens the dialog and accepts a number from the keyboard alone", async () => {
     const api = stubApi(true);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

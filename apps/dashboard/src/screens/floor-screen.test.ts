@@ -6,18 +6,6 @@ import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
 import { FloorScreen } from "./floor-screen.js";
 
-/**
- * The floor-plan config screen. Its `api` is a stub: `listZones`/`listTables` return known
- * lists the screen loads on connect, and the eight CRUD verbs are spies the per-item mutation paths
- * call (each followed by a reload). Assertions cover each behaviour on its own: the two panels LOAD
- * from `listZones`/`listTables`; the new-zone form calls `createZone({ name })` and reloads; an empty
- * name creates nothing; a zone-row edit calls `updateZone` with the row's CURRENT values and reloads;
- * a deactivate soft-deletes; assigning a table's zone calls `updateTable({ zoneId })`; a table-row
- * edit calls `updateTable({ label, capacity })`; and any rejected mutation/load surfaces a
- * `role="alert"` whose text is the LOCALISED copy for the code, never the raw wire code. Mirrors
- * `service-status-screen.test.ts`.
- */
-
 const originalUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
@@ -26,13 +14,11 @@ afterEach(() => {
 
 const ZONES: FloorZone[] = [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }];
 
-/** Two zones — a second so a per-row edit exercises the "leave the other rows alone" branch. */
 const TWO_ZONES: FloorZone[] = [
   ...ZONES,
   { id: "z2", name: "Terraza", displayOrder: 1, active: true },
 ];
 
-/** One table with a NULL zone + capacity (exercises the "— no zone —" / blank-capacity render). */
 const TABLES: DashboardTable[] = [
   {
     id: "t1",
@@ -44,8 +30,6 @@ const TABLES: DashboardTable[] = [
   },
 ];
 
-/** Two tables — a second (zoned + seated) so a per-row edit exercises the "leave the other row
- * alone" branch and the "zone already selected" render. */
 const TWO_TABLES: DashboardTable[] = [
   {
     id: "t1",
@@ -85,7 +69,6 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight listZones/listTables and the follow-up render. */
 async function flush(el: FloorScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -95,14 +78,12 @@ const q = (el: FloorScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEle
 const errorKey = (el: FloorScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
-/** Fire a wt-input's composed change, exactly as `wt-input` dispatches it. */
 function type(el: FloorScreen, sel: string, value: string): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
 
-/** Set a native <select>'s value and fire its `change`, exactly as the browser does on a pick. */
 function selectValue(el: FloorScreen, sel: string, value: string): void {
   const node = q(el, sel) as HTMLSelectElement;
   node.value = value;
@@ -129,7 +110,7 @@ describe("floor-screen", () => {
     q(el, "[data-add-zone]")!.click();
     await flush(el);
     expect(api.createZone).toHaveBeenCalledWith({ name: "Comedor" });
-    expect(api.listZones).toHaveBeenCalledTimes(2); // initial + reload after create
+    expect(api.listZones).toHaveBeenCalledTimes(2);
   });
 
   it("does not create an empty-name zone", async () => {
@@ -142,12 +123,10 @@ describe("floor-screen", () => {
   });
 
   it("saves an edited zone row (updateZone with the row's current name + order), then reloads", async () => {
-    // Two rows, so editing z1 also exercises the "leave the other row untouched" map branch.
     const api = stubApi({}, TWO_ZONES);
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=zone-name-z1]", "Salón");
-    // A non-numeric order coerces to 0 (the falsy `|| 0` branch); then a real number.
     type(el, "[data-test=zone-order-z1]", "x");
     type(el, "[data-test=zone-order-z1]", "2");
     q(el, "[data-test=zone-save-z1]")!.click();
@@ -178,22 +157,16 @@ describe("floor-screen", () => {
   });
 
   it("offers no blank clear option once a table has a zone (the select can never show a fake unassigned state)", async () => {
-    // t2 is already in z1. Clearing a zone is not supported server-side, so a blank/"sin zona" option
-    // that would visually clear it (while the assignment stays) must not be selectable — the select
-    // shows only real zones, with the current one selected.
     const api = stubApi({}, ZONES, TWO_TABLES);
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     const select = q(el, "[data-test=table-zone-t2]") as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
-    expect(values).not.toContain(""); // no blank-clear option for an assigned table
-    expect(select.value).toBe("z1"); // the select reflects the real, still-assigned zone
+    expect(values).not.toContain("");
+    expect(select.value).toBe("z1");
   });
 
   it("shows the blank placeholder for an unassigned table, and picking it is a true no-op", async () => {
-    // t1 has no zone: the blank "— no zone —" IS its genuine current state, so it is offered and
-    // selected. Picking it again changes nothing and never calls updateTable (the route takes no null),
-    // and the select still reflects the real unassigned state (no desync).
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
@@ -207,12 +180,10 @@ describe("floor-screen", () => {
   });
 
   it("saves an edited table row (updateTable with the row's label + capacity), then reloads", async () => {
-    // Two rows, so editing t1 also exercises the "leave the other row untouched" map branch.
     const api = stubApi({}, ZONES, TWO_TABLES);
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     type(el, "[data-test=table-label-t1]", "6");
-    // Non-numeric → 0 (the `|| 0` branch); blank → null (the "clear capacity" branch); then a number.
     type(el, "[data-test=table-capacity-t1]", "x");
     type(el, "[data-test=table-capacity-t1]", "");
     type(el, "[data-test=table-capacity-t1]", "8");
@@ -224,7 +195,6 @@ describe("floor-screen", () => {
   });
 
   it("saves a table whose capacity is left blank (updateTable with the label only)", async () => {
-    // t1's capacity is null; editing only the label sends no capacity key at all.
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
@@ -379,17 +349,7 @@ describe("floor-screen", () => {
   });
 });
 
-/**
- * The FP-2 "Plano" tab: the same `wt-floor-canvas` (from `@waitron/ui`, Task 5) in EDIT mode, per zone.
- * The dashboard is manager-only (a management session gates the whole screen), so there is NO
- * operator-role gate — the editor is always available (unlike the till, which gates on `canEdit`). A
- * placed table (posX ≠ null) draws on the canvas; an unplaced one sits in a tray and is tap-to-placed.
- * `wt-placement-change` persists via `setTablePlacement` then reloads; `wt-placement-clear` via
- * `clearPlacement`; a `placement.invalid` rejection surfaces the localised `role="alert"` banner (never
- * the raw code). The FP-1 Zonas/Mesas config panels are ADDITIVE-unchanged: they stay the default tab.
- */
 describe("floor-screen — Plano editor (FP-2)", () => {
-  /** A placed table (t1, on the canvas) + an unplaced one (t2, in the tray), both in z1. */
   const Z1_TABLES: DashboardTable[] = [
     {
       id: "t1",
@@ -417,7 +377,6 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     },
   ];
 
-  /** The shadow-DOM canvas element, once the Plano tab is open. */
   type Canvas = HTMLElement & {
     editable: boolean;
     shadowRoot: ShadowRoot;
@@ -425,7 +384,6 @@ describe("floor-screen — Plano editor (FP-2)", () => {
   };
   const canvasOf = (el: FloorScreen): Canvas => q(el, "wt-floor-canvas") as Canvas;
 
-  /** Click the Plano top-tab and settle the re-render (mirrors the brief's step-2 dispatch). */
   async function openPlano(el: FloorScreen): Promise<void> {
     q(el, '[data-tab="plano"]')!.dispatchEvent(new Event("click"));
     await el.updateComplete;
@@ -435,13 +393,13 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     const api = stubApi({}, ZONES, Z1_TABLES);
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    expect(canvasOf(el)).toBeNull(); // config is the default tab — no canvas
+    expect(canvasOf(el)).toBeNull();
     expect(q(el, "[data-test=zones-panel]")).not.toBeNull();
     await openPlano(el);
     const canvas = canvasOf(el);
     expect(canvas).not.toBeNull();
-    expect(canvas.editable).toBe(true); // always edit mode (manager-only screen, no role gate)
-    expect(q(el, "[data-test=zones-panel]")).toBeNull(); // config panels hidden while Plano is active
+    expect(canvas.editable).toBe(true);
+    expect(q(el, "[data-test=zones-panel]")).toBeNull();
   });
 
   it("draws a placed table on the canvas and lists an unplaced one in the tray", async () => {
@@ -451,9 +409,9 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await openPlano(el);
     const canvas = canvasOf(el);
     await canvas.updateComplete;
-    expect(canvas.shadowRoot.querySelector('[data-table="t1"]')).not.toBeNull(); // placed → canvas
-    expect(q(el, '[data-tray-table="t2"]')).not.toBeNull(); // unplaced → tray
-    expect(canvas.shadowRoot.querySelector('[data-table="t2"]')).toBeNull(); // and not on the canvas
+    expect(canvas.shadowRoot.querySelector('[data-table="t1"]')).not.toBeNull();
+    expect(q(el, '[data-tray-table="t2"]')).not.toBeNull();
+    expect(canvas.shadowRoot.querySelector('[data-table="t2"]')).toBeNull();
   });
 
   it("persists a placement-change via setTablePlacement, then reloads", async () => {
@@ -476,9 +434,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
       rotation: 90,
       zoneId: "z1",
     });
-    expect(api.listTables).toHaveBeenCalledTimes(2); // initial + reload after the write
-    // A placement cannot change the zone list, so the reload re-fetches only tables — zones stay at
-    // their single initial load.
+    expect(api.listTables).toHaveBeenCalledTimes(2);
     expect(api.listZones).toHaveBeenCalledOnce();
   });
 
@@ -497,14 +453,10 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     expect(api.clearPlacement).toHaveBeenCalledWith("t1");
     expect(api.listTables).toHaveBeenCalledTimes(2);
-    // Only the tables are re-fetched on a placement clear; the zone list is left untouched.
     expect(api.listZones).toHaveBeenCalledOnce();
   });
 
   it("surfaces a failed table reload after a placement write as the localised errorKey banner", async () => {
-    // The placement write lands, but the follow-up tables-only reload rejects: the failure surfaces as
-    // the localised errorKey banner (the reconcile-to-server-truth shape #load had, kept in #loadTables),
-    // never swallowed. The first listTables (initial load) resolves; the reload (second call) rejects.
     const listTables = vi
       .fn()
       .mockResolvedValueOnce(Z1_TABLES.map((t) => ({ ...t })))
@@ -527,7 +479,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
   });
 
   it("tap-to-places an unplaced tray table at a default position, then reloads", async () => {
-    // Only an unplaced table in z1, so the default slot is the centre (no placed tables to nudge past).
+    // With no placed tables the default slot is the centre.
     const only: DashboardTable[] = [Z1_TABLES[1]!];
     const api = stubApi({}, ZONES, only);
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
@@ -543,7 +495,6 @@ describe("floor-screen — Plano editor (FP-2)", () => {
       zoneId: "z1",
     });
     expect(api.listTables).toHaveBeenCalledTimes(2);
-    // Tap-to-place goes through the same placement path, so it too re-fetches only the tables.
     expect(api.listZones).toHaveBeenCalledOnce();
   });
 
@@ -610,7 +561,6 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     await openPlano(el);
-    // The first (zone z1) tab is active by default; switch to the "Sin zona" tab.
     q(el, '[data-zone="none"]')!.dispatchEvent(new Event("click"));
     await el.updateComplete;
     const canvas = canvasOf(el);
@@ -638,12 +588,10 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     await openPlano(el);
-    // Default (z1): t1 on the canvas, tB not.
     let canvas = canvasOf(el);
     await canvas.updateComplete;
     expect(canvas.shadowRoot.querySelector('[data-table="t1"]')).not.toBeNull();
     expect(canvas.shadowRoot.querySelector('[data-table="tB"]')).toBeNull();
-    // Pick the z2 tab: tB now on the canvas, t1 gone.
     q(el, '[data-zone="z2"]')!.dispatchEvent(new Event("click"));
     await el.updateComplete;
     canvas = canvasOf(el);
@@ -657,9 +605,9 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     await openPlano(el);
-    expect(canvasOf(el)).not.toBeNull(); // canvas still renders (empty)
-    expect(q(el, "[data-zone]")).toBeNull(); // no zone sub-tabs
-    expect(q(el, "[data-tray-table]")).toBeNull(); // no tray
+    expect(canvasOf(el)).not.toBeNull();
+    expect(q(el, "[data-zone]")).toBeNull();
+    expect(q(el, "[data-tray-table]")).toBeNull();
   });
 });
 

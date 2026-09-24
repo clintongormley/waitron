@@ -1,7 +1,5 @@
-// validate-canvas.ts — a LIGHT client mirror of @waitron/layouts' validateCanvas, covering the
-// author-facing rules for fast in-editor feedback. Returns null when valid, else the i18n key of the
-// FIRST broken rule. The SERVER's validateCanvas stays authoritative on every write — a client pass is
-// never a guarantee, and a server canvas.invalid still surfaces in the banner.
+// A light client mirror of @waitron/layouts' validateCanvas. Returns null when valid, else the i18n
+// key of the FIRST broken rule. The server's validateCanvas stays authoritative on every write.
 import {
   CARD_CONTRACTS,
   GRID_MAX_COLUMNS,

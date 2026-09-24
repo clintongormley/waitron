@@ -4,14 +4,6 @@ import "./service-status-screen.js";
 import type { ServiceStatusScreen } from "./service-status-screen.js";
 import type { DashboardApi, ServiceStatus } from "../api/client.js";
 
-/**
- * The service-status screen scanned by axe in both themes, in three shapes: a populated list (active +
- * inactive rows, so the deactivate button renders both enabled and disabled), an empty list (just the
- * new-status form), and the error state (a rejected create shows the `role="alert"` banner). Mounted by
- * ASSIGNING the `api` stub as a property; the screen loads on connect, so the stub must resolve or a
- * stray rejection pollutes the run (a rejection is a finding). Every colour is a `--wt-*` token; the
- * native `type="color"` swatch is the browser's own control and carries no text for axe to contrast.
- */
 const SEED: ServiceStatus[] = [
   {
     id: "s1",

@@ -40,8 +40,7 @@ async function flush(el: PlannedActualScreen): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 }
-// The location select now lives in the shared `<dashboard-location-picker>` widget's shadow root, so
-// reach through that boundary rather than the screen's own shadow root.
+// The location select is inside `<dashboard-location-picker>`'s shadow root.
 const locationSelect = (el: PlannedActualScreen) =>
   el
     .shadowRoot!.querySelector("dashboard-location-picker")!
@@ -131,8 +130,6 @@ describe("planned-actual-screen", () => {
   });
 
   it("renders the no-show / unplanned flags, and the raw id when the person is unknown", async () => {
-    // A flagged row whose personId is NOT in the staff list: covers both flag branches (no-show +
-    // unplanned) and the `#name` fallback to the raw id when a row references someone off-list.
     const api = stubApi({
       getPlannedVsActual: vi.fn().mockResolvedValue([
         {
@@ -164,10 +161,10 @@ describe("planned-actual-screen", () => {
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
     const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
-    week.value = ""; // <input type=date> cleared → `Date.parse` is NaN → the handler bails
+    week.value = "";
     week.dispatchEvent(new Event("change"));
     await flush(el);
-    expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1); // no extra load
+    expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces a rejected location change as the error banner", async () => {
@@ -211,8 +208,6 @@ describe("planned-actual-screen", () => {
   });
 
   it("falls back to server.internal when a thrown error carries no code", async () => {
-    // The `?? "server.internal"` arm: a codeless rejection (a bare Error / network fault) must still
-    // land a readable banner rather than an empty one.
     const api = stubApi({ getLocations: vi.fn().mockRejectedValue(new Error("network down")) });
     const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
       api,
@@ -222,9 +217,8 @@ describe("planned-actual-screen", () => {
   });
 
   it("preserves the selected location across a disconnect/reconnect", async () => {
-    // `#load` runs on every connect; its `some(...)` guard keeps a still-valid selection rather than
-    // snapping back to the first location. Reachable only across a reconnect (on the first connect the
-    // selection is empty), so exercise the guard's keep-branch by removing and re-appending the element.
+    // Keeping a still-valid selection is reachable only across a reconnect: on the first connect
+    // there is no selection yet.
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
         { id: "loc-1", name: "Main" },

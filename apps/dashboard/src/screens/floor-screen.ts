@@ -3,10 +3,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-// `baseStyles` also loads the `@waitron/ui` barrel, which self-registers `<wt-floor-canvas>` and
-// `<wt-table-token>` — the FP-2 shared components the Plano tab consumes by tag. `GRID_STEP` /
-// `clampPermille` size the tap-to-place default slot; the type-only imports carry the canvas's
-// copy / table / placement-event shapes.
+// The `@waitron/ui` barrel registers `<wt-floor-canvas>` and `<wt-table-token>`, used here by tag.
 import {
   submitOnEnter,
   baseStyles,
@@ -27,17 +24,13 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone, TableShape } from "../api/client.js";
 
-/** A floor zone the editor holds in local, editable state (a defensive copy of the loaded FloorZone). */
 interface EditableZone {
   id: string;
   name: string;
   displayOrder: number;
 }
 
-/** A dining table the editor holds in local, editable state. `capacity`/`zoneId` stay nullable — a
- * table may sit in no zone and carry no seat count. The FP-2 placement fields are `null` when the table
- * is UNPLACED (it sits in the Plano tab's tray until tap-to-placed); a placed table carries its canvas
- * coordinates + shape + rotation and draws on the `wt-floor-canvas`. */
+/** The placement fields are `null` while the table is unplaced, in the Plano tab's tray. */
 interface EditableTable {
   id: string;
   label: string;
@@ -50,35 +43,9 @@ interface EditableTable {
 }
 
 /**
- * The management dashboard's FLOOR-PLAN SCREEN: configures the venue's floor zones and dining
- * tables (FP-1, design §3d), mirroring `service-status-screen.ts`. On connect it
- * loads `api.listZones()` + `api.listTables()` into editable rows across two panels — Zonas and Mesas.
- * A Zona row edits its name + display order and Guardar-s it; a Mesa row edits its label + seat count
- * and Guardar-s it, and its zone <select> ASSIGNS the table to a zone the moment it changes. A
- * "new zone" / "new table" form authors a fresh one from just a name/label.
- *
- * Each mutation drives the PER-ITEM CRUD on the injected `api` and RELOADS both lists afterwards (the
- * `service-status-screen` idiom): FP-1's routes are per-item POST/PATCH/DELETE, not a single bulk PUT,
- * so create, save-row, assign-zone and deactivate each hit one endpoint then call `#load` to resync.
- * A row's save reads its CURRENT values from state at click time (like `service-status-screen`'s
- * `#saveRow`), never a stale render closure, so an edit made just before the click is the one that persists.
- *
- * The zone <select> can only ASSIGN a zone, never clear one: the table PATCH route takes a `zoneId`
- * string and has no null form (clearing is a deferred backlog follow-up). So the blank "— sin zona —"
- * placeholder is offered ONLY on a table that is genuinely unassigned — never on one that already has a
- * zone, where a selectable blank would visually clear the assignment while it persisted server-side. On
- * an unassigned table the blank is its real current state and re-picking it is a true no-op. Tables
- * deactivate via the DELETE route (there is no `active` field on the table PATCH, and `listTables`
- * returns only active rows), so a Mesa row carries a Desactivar button rather than an active toggle —
- * the same is true of Zonas.
- *
- * Gating is server-side (`till.configure`): the shell hides this nav from a `staff` session and every
- * route re-checks. ERROR HANDLING mirrors the sibling screens — every loader/mutation is fully
- * `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` (the raw `{ code }`, falling
- * back to `server.internal`) rendered in a `role="alert"` banner, never an unhandled promise rejection.
- * The raw code stays in state; `codeMessage` maps it to localised copy at the render edge, so the banner
- * shows a sentence and never the raw wire code (`zone.name_taken`, `table.label_taken`, `zone.not_found`,
- * `table.not_found`).
+ * Floor zones and dining tables: a config tab of per-row forms and a Plano tab with the floor canvas.
+ * Every mutation reloads afterwards. A row's save reads its values from state at click time, not
+ * from a render closure, so an edit made just before the click is the one that persists.
  */
 @customElement("dashboard-floor-screen")
 export class FloorScreen extends LitElement {
@@ -161,7 +128,6 @@ export class FloorScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #zonesDrafts = new DraftRows<EditableZone>();
   readonly #tablesDrafts = new DraftRows<EditableTable>();
@@ -173,19 +139,14 @@ export class FloorScreen extends LitElement {
     },
   );
 
-  // The configured zones + tables as editable rows, loaded on connect and re-synced after every mutation.
   @state() private submitting = false;
   @state() private zones: EditableZone[] = [];
   @state() private tables: EditableTable[] = [];
-  // The new-zone / new-table forms' single fields.
   @state() private newZone = "";
   @state() private newTable = "";
   @state() private errorKey: string | null = null;
-  // FP-2 editor: which top-level tab shows — the FP-1 config panels (Zonas/Mesas) or the Plano canvas.
-  // Config is the default, so the FP-1 behaviour is untouched until a manager opens Plano.
   @state() private activeTab: "config" | "plano" = "config";
-  // Within Plano, which zone sub-tab is active: a zone id, `null` for the "Sin zona" tab, or `undefined`
-  // before a pick (→ the first tab). Kept distinct from a zone id so the default tracks the tab order.
+  // `null` is the "Sin zona" tab; `undefined` means none picked yet, which resolves to the first tab.
   @state() private activeZone: string | null | undefined = undefined;
 
   readonly #url = new UrlStateController(
@@ -213,8 +174,6 @@ export class FloorScreen extends LitElement {
     void this.#load();
   }
 
-  /** Map loaded API table rows into the editor's local `EditableTable` shape. Shared by `#load` (the
-   * full reload) and `#loadTables` (the placement-only reload) so the mapping lives in one place. */
   #toEditableTables(tables: DashboardTable[]): EditableTable[] {
     return tables.map((t) => ({
       id: t.id,
@@ -228,10 +187,6 @@ export class FloorScreen extends LitElement {
     }));
   }
 
-  /** Load the configured zones + tables into editable rows. A rejection becomes the `errorKey` banner
-   * rather than an unhandled rejection. Used on connect and after every mutation that can change the
-   * ZONE list (create/save/deactivate a zone or table); the placement handlers use the narrower
-   * {@link #loadTables} instead. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -251,11 +206,7 @@ export class FloorScreen extends LitElement {
     }
   }
 
-  /** Reload ONLY the tables — the narrower resync the PLACEMENT handlers use. A placement write mutates
-   * only `dining_tables` (it merely READS `floor_zones` to validate the target zone is active), so the
-   * zone LIST is guaranteed unchanged across an edit and re-fetching it via {@link #load} would be a
-   * wasted GET per edit. Still re-fetches the TABLE rows (never a local patch) so the client picks up any
-   * server-clamped placement values. A rejection becomes the `errorKey` banner, exactly like `#load`. */
+  /** For placement writes, which cannot change the zone list. */
   async #loadTables(): Promise<void> {
     this.errorKey = null;
     try {
@@ -269,17 +220,11 @@ export class FloorScreen extends LitElement {
 
   // ── Zonas ────────────────────────────────────────────────────────────────────────────────────────
 
-  /** The new-zone field's composed `wt-change`. `stopPropagation` keeps it inside this screen (the
-   * house field-handler pattern). */
   #onNewZone(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newZone = event.detail.value;
   }
 
-  /** Create a zone from the new-zone form, then reload. A blank (whitespace-only) name is a no-op — the
-   * server requires one, and this keeps an empty form from firing a doomed request. `displayOrder` is
-   * left to the server default (a manager reorders afterwards). A rejection becomes the `errorKey`
-   * banner; never an unhandled rejection (called via `void`). */
   async #createZone(): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -297,15 +242,10 @@ export class FloorScreen extends LitElement {
     }
   }
 
-  /** Apply a partial edit to the zone `id` holds, replacing it in state with a fresh object (so a row's
-   * edits never mutate a shared reference the render still points at). */
   #editZone(id: string, patch: Partial<EditableZone>): void {
     this.zones = this.zones.map((z) => (z.id === id ? { ...z, ...patch } : z));
   }
 
-  /** Persist the CURRENT name + display order of the zone `id` holds, then reload. Reads the row from
-   * state at click time (not a captured render closure), so an edit made immediately before the click is
-   * what persists. A vanished row is a no-op. A rejection becomes the `errorKey` banner. */
   async #saveZone(id: string): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -322,8 +262,6 @@ export class FloorScreen extends LitElement {
     }
   }
 
-  /** Soft-delete (deactivate) the zone `id` holds, then reload. A rejection becomes the `errorKey`
-   * banner. */
   async #deactivateZone(id: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -336,14 +274,11 @@ export class FloorScreen extends LitElement {
 
   // ── Mesas ────────────────────────────────────────────────────────────────────────────────────────
 
-  /** The new-table field's composed `wt-change`. */
   #onNewTable(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newTable = event.detail.value;
   }
 
-  /** Create a table from the new-table form, then reload. A blank label is a no-op. Zone + capacity are
-   * assigned per-row afterwards (the new-table form authors just the label, like the new-zone form). */
   async #createTable(): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -365,9 +300,6 @@ export class FloorScreen extends LitElement {
     this.tables = this.tables.map((tbl) => (tbl.id === id ? { ...tbl, ...patch } : tbl));
   }
 
-  /** Persist the CURRENT label + capacity of the table `id` holds, then reload. A null capacity is
-   * omitted from the patch (the route leaves the column untouched), so a table left without a seat count
-   * sends only its label. The zone is NOT sent here — it is assigned live by the row's <select>. */
   async #saveTable(id: string): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -386,10 +318,6 @@ export class FloorScreen extends LitElement {
     }
   }
 
-  /** Assign the table `id` holds to the picked zone, then reload. The blank placeholder is offered only
-   * on an already-unassigned table (see `#renderTable`), where a re-pick of it (value `""`) is a TRUE
-   * no-op: nothing changes, so the select still reflects the real unassigned state (no DOM desync). A
-   * rejection becomes the `errorKey` banner. */
   #onAssignZone(id: string, event: Event): void {
     event.stopPropagation();
     const zoneId = (event.target as HTMLSelectElement).value;
@@ -407,7 +335,6 @@ export class FloorScreen extends LitElement {
     }
   }
 
-  /** Soft-delete (deactivate) the table `id` holds, then reload. */
   async #deactivateTable(id: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -501,11 +428,8 @@ export class FloorScreen extends LitElement {
               @change=${(e: Event) => this.#onAssignZone(tbl.id, e)}
             >
               ${
-                // The blank "— sin zona —" placeholder is offered ONLY for a table that is genuinely
-                // unassigned (its real current state). Once a table has a zone it is omitted, because
-                // clearing a zone is unsupported server-side (the table PATCH takes `zoneId?: string`,
-                // no null — a deferred backlog follow-up): a selectable blank on an assigned table would
-                // visually clear it while the assignment persisted, desyncing the DOM from state.
+                // Offered only while the table has no zone: the table update takes no null `zoneId`,
+                // so a blank on an assigned table would show it cleared while the server kept the zone.
                 tbl.zoneId === null
                   ? html`<option value="" selected>${t("floor.no_zone")}</option>`
                   : nothing
@@ -536,18 +460,8 @@ export class FloorScreen extends LitElement {
     </li>`;
   }
 
-  // ── Plano (FP-2 spatial floor-plan editor) ────────────────────────────────────────────────────────
-  // The same `wt-floor-canvas` (Task 5) the till uses, here ALWAYS in edit mode: the dashboard is
-  // manager-only (a management session gates the whole screen and the routes re-check), so there is no
-  // operator-role gate — unlike the till, which gates its "Editar plano" toggle on `canEdit`. Placement
-  // is persisted through the MANAGEMENT route (`setTablePlacement`/`clearPlacement`, Task 3) and each
-  // write RELOADS both lists, the same idiom the config panels use. A rejected write becomes the
-  // `errorKey` banner (a `placement.invalid` mapped to localised copy) rather than being swallowed — the
-  // dashboard SURFACES the fault, where the till reconciles silently.
+  // ── Plano ─────────────────────────────────────────────────────────────────────────────────────────
 
-  /** Persist a canvas placement edit (`wt-placement-change`) via the management route, then reload only the
-   * tables (a placement cannot change the zone list — see {@link #loadTables}). A rejection (e.g.
-   * `placement.invalid`, `zone.not_found`) becomes the `errorKey` banner. */
   async #setPlacement(detail: PlacementChange): Promise<void> {
     this.errorKey = null;
     const { tableId, posX, posY, shape, rotation, zoneId } = detail;
@@ -564,8 +478,6 @@ export class FloorScreen extends LitElement {
     void this.#setPlacement((event as CustomEvent<PlacementChange>).detail);
   }
 
-  /** Un-place a table (the canvas's `wt-placement-clear`) via the management route, then reload only the
-   * tables (a placement cannot change the zone list — see {@link #loadTables}). */
   async #clearTablePlacement(tableId: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -581,14 +493,6 @@ export class FloorScreen extends LitElement {
     void this.#clearTablePlacement((event as CustomEvent<PlacementClear>).detail.tableId);
   }
 
-  /**
-   * Tap-to-place (the owner's chosen UX — no drag-onto-canvas, same as the till's `#placeFromTray`):
-   * give an unplaced tray table a DEFAULT position through the management route, then reload so it
-   * appears on the canvas for the manager to reposition with the canvas's own drag/keyboard controls.
-   * The slot is the centre nudged right by 50‰ per already-placed table (clamped into range) so
-   * successive placements don't stack exactly; `shape` defaults to `round`, `rotation` to 0, and `zoneId`
-   * is the table's own zone. A rejected write surfaces the `errorKey` banner via {@link #setPlacement}.
-   */
   async #placeFromTray(tbl: EditableTable, placedCount: number): Promise<void> {
     const { posX, posY } = defaultTraySlot(placedCount);
     await this.#setPlacement({
@@ -601,16 +505,11 @@ export class FloorScreen extends LitElement {
     });
   }
 
-  /** Map an editable table to the shared canvas/token's {@link FloorTable} shape via the shared
-   * {@link toFloorTable}. The dashboard editor has no live occupancy read-model, so the occupancy half
-   * is the neutral "free" defaults — the token renders just the label + covers. Unplaced tables (null
-   * coords) default to 0 for the required fields the token ignores in the tray. */
+  /** The dashboard has no live occupancy, so every table is drawn as free. */
   #toFloorTable(tbl: EditableTable): FloorTable {
     return toFloorTable(tbl, { state: "free", tabTotal: null, pendingToServe: 0, status: null });
   }
 
-  /** The dashboard's Spanish copy for the shared canvas (its edit-mode inspector + token suffix words).
-   * Only the overridden keys are supplied; the canvas fills the rest from its English defaults. */
   #canvasCopy(): Partial<FloorCanvasCopy> {
     return {
       floor: t("floor.title"),
@@ -651,8 +550,6 @@ export class FloorScreen extends LitElement {
     >`;
   }
 
-  /** One unplaced table in the tray: a tappable button wrapping the shared `<wt-table-token>` (the same
-   * token the canvas draws, so the tray can never drift from it). A tap PLACES it (tap-to-place). */
   #trayItem(tbl: EditableTable, placedCount: number): TemplateResult {
     return html`<button
       class="tray-item"
@@ -726,17 +623,11 @@ export class FloorScreen extends LitElement {
     `;
   }
 
-  /** The Plano tab: per-zone sub-tabs, then the editable canvas drawing that zone's PLACED tables with
-   * its UNPLACED tables in a tray beneath (tap-to-place). */
   #renderPlano(): TemplateResult {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
-    // The sub-tabs (active zones by displayOrder + a trailing "Sin zona" tab when needed) and the active
-    // key come from the shared @waitron/ui helpers; the screen owns only the Spanish no-zone LABEL.
     const tabs = buildZoneTabs(this.zones, this.tables, t("floor.zoneless"));
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
-    // The "Sin zona" tab (activeKey === null) gathers the zoneless AND deactivated-zone tables; a real
-    // zone tab shows exactly its own tables. When there are no tabs at all (no zones, no tables) nothing
-    // is visible and the canvas draws empty.
+    // The "Sin zona" tab also gathers tables whose zone has been deactivated.
     const visible = this.tables.filter((tbl) =>
       activeKey === null ? isTableZoneless(tbl, knownZoneIds) : tbl.zoneId === activeKey,
     );

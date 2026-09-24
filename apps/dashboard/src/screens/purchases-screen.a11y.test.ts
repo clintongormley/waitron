@@ -4,13 +4,7 @@ import "./purchases-screen.js";
 import type { PurchasesScreen } from "./purchases-screen.js";
 import type { DashboardApi, PurchaseInvoice } from "../api/client.js";
 
-/**
- * The purchases screen scanned by axe in both themes, in its two shapes: with invoices loaded (the
- * Add control + the purchase list) and with NONE (the empty prompt). Mounted by ASSIGNING the `api`
- * stub as a property — the screen loads on connect, so the stub must resolve `listPurchaseInvoices`
- * or a stray rejection pollutes the run. The purchase form is left CLOSED (its default), so its dialog
- * renders nothing to the a11y tree (the form's own dialog is scanned in `purchase-form.a11y.test.ts`).
- */
+// The form stays closed here; its dialog is scanned in `purchase-form.a11y.test.ts`.
 const invoices: PurchaseInvoice[] = [
   {
     id: "pi-1",

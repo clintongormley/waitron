@@ -94,9 +94,7 @@ const printers: Printer[] = [
   },
 ];
 
-// The discovered inventory the create surface reads for usb/bluetooth: one unregistered USB device an
-// agent currently sees, and one already-registered one (hidden from the list; its seen-status shows on
-// p3's row).
+// One unregistered USB device, and one already registered, whose seen-status shows on p3's row.
 const discovered: DiscoveredPrinter[] = [
   {
     agentId: "a1",
@@ -124,7 +122,6 @@ const discovered: DiscoveredPrinter[] = [
   },
 ];
 
-// A discovered network_tcp printer a Scan turns up — offered for a one-click Add.
 const discoveredNetwork: DiscoveredPrinter[] = [
   {
     agentId: "a1",
@@ -141,8 +138,8 @@ const discoveredNetwork: DiscoveredPrinter[] = [
   },
 ];
 
-// A Scan result that IS the registered printer p1 (matched by the server on host:port): hidden from the
-// results, and reported as "seen" against p1's row in the registered list.
+// A Scan result that is the registered printer p1: hidden from the results, and reported as seen on
+// p1's row.
 const discoveredRegisteredNetwork: DiscoveredPrinter[] = [
   {
     agentId: "a1",
@@ -185,15 +182,12 @@ const tills: Till[] = [
   { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
 ];
 
-// One print agent knocking to join (the shared join-and-accept queue, kind "print_agent"). The row
-// carries NO verification number — that lives only in the challenge dialog's three buttons.
 const pending: JoinRequestRow[] = [
   { id: "j1", kind: "print_agent", label: "kitchen-pi", createdAt: "2026-09-08T10:02:00.000Z" },
 ];
 
-/** The three numbers the server offers for `j1`, shuffled, one of them real — and which one that is.
- * The dashboard is never told which, so the test knowing it is the only way to check the pending LIST
- * never carries it. */
+/** The dashboard is never told which number is real; the test knows, so it can check the pending list
+ * never shows it. */
 const CHOICES = ["12", "47", "83"];
 const REAL_NUMBER = "47";
 
@@ -297,7 +291,6 @@ async function addDiscovered(el: PrintersScreen, button: HTMLElement): Promise<v
   q(el, '[data-test="confirm-add-printer"]')!.click();
 }
 
-/** Type into a wt-input by dispatching its composed `wt-change` (the wt-input contract). */
 function typeField(el: PrintersScreen, sel: string, value: string): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -310,7 +303,6 @@ function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** Choose `value` in the native select named `name` and let the screen re-render. */
 async function chooseOption(el: PrintersScreen, name: string, value: string): Promise<void> {
   const select = q(el, `select[name="${name}"]`) as HTMLSelectElement;
   select.value = value;
@@ -463,7 +455,6 @@ describe("printers-screen", () => {
       transportName("network_tcp", "es-ES"),
     );
     expect(text(el, "[data-test=printer-transport-p2]")).toBe(transportName("cloud_poll", "es-ES"));
-    // There is no serving agent to show any more — the agent column is gone from the row.
     expect(q(el, "[data-test=printer-agent-p1]")).toBeNull();
     expect(q(el, "[data-test=printer-agent-p2]")).toBeNull();
   });
@@ -477,7 +468,6 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=job-attempts-j1]")).toContain("2");
     expect(text(el, "[data-test=job-printer-j1]")).toBe("Cocina"); // resolved from the printer list
     expect(text(el, "[data-test=job-error-j1]")).toBe("printer offline");
-    // A delivered job carries no error line.
     expect(q(el, "[data-test=job-error-j2]")).toBeNull();
   });
 
@@ -509,7 +499,7 @@ describe("printers-screen", () => {
     expect(banner).not.toContain("server.internal");
   });
 
-  // ── Agents: the shared pairing window (device-join-and-accept §1.1, reused by print agents) ───────
+  // ── Agents: the pairing window ───────────────────────────────────────────────────────────────────
 
   it("loads the pairing window and the print-agent join queue on connect", async () => {
     const api = stubApi();
@@ -517,7 +507,6 @@ describe("printers-screen", () => {
     await flush(el);
 
     expect(api.pairingMode).toHaveBeenCalledTimes(1);
-    // The queue is the print-agent surface, never the device one.
     expect(api.joinRequests).toHaveBeenCalledWith("print_agent");
   });
 
@@ -550,7 +539,7 @@ describe("printers-screen", () => {
     );
   });
 
-  // ── Agents: the print-agent join queue (design §1.2, kind "print_agent") ──────────────────────────
+  // ── Agents: the join queue ───────────────────────────────────────────────────────────────────────
 
   it("lists a waiting agent by the name it asked for, and shows the setup-page hint with this origin", async () => {
     const api = stubApi();
@@ -561,13 +550,10 @@ describe("printers-screen", () => {
 
     expect(text(el, "[data-test=join-label-j1]")).toBe("kitchen-pi");
     expect(text(el, "[data-test=join-asked-j1]")).toBe("2026-09-08 10:02");
-    // The operator hint carries the dashboard's own origin verbatim (the address to type into the agent).
     expect(text(el, "[data-test=join-origin]")).toBe(window.location.origin);
   });
 
-  // Design §1.2 rule 1: the LIST must never show the answer beside the question. Asserted against the
-  // SPECIFIC number this fake server holds, over the panel's rendered TEXT, plus the fact that nothing
-  // fetched a challenge to render the list.
+  // Design §1.2 rule 1: the list must never show the answer beside the question.
   it("never renders the request's verification number in the pending list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -610,7 +596,7 @@ describe("printers-screen", () => {
     expect(api.joinRequests).toHaveBeenCalledTimes(3);
   });
 
-  // ── Agents: the accept dialog's numeric match (no binding pickers — just the three numbers) ────────
+  // ── Agents: the accept dialog ────────────────────────────────────────────────────────────────────
 
   it("opens a row and renders the three numbers as buttons, immediately tappable", async () => {
     const api = stubApi();
@@ -626,7 +612,6 @@ describe("printers-screen", () => {
     const buttons = Array.from(el.shadowRoot!.querySelectorAll("[data-choice]"));
     expect(buttons.map((b) => b.getAttribute("data-choice"))).toEqual(CHOICES);
     expect(buttons.map((b) => b.textContent?.trim())).toEqual(CHOICES);
-    // No binding to choose first: an agent accept is only the number, so it is tappable at once.
     expect(
       (q(el, `[data-choice="${REAL_NUMBER}"]`) as import("@waitron/ui").WtButton).disabled,
     ).toBe(false);
@@ -650,9 +635,7 @@ describe("printers-screen", () => {
     expect(api.joinRequests).toHaveBeenCalledTimes(3);
   });
 
-  // Design §1.2: a wrong tap has ALREADY denied the request server-side (device.join_mismatch is the
-  // surface-neutral terminal code). The dialog closes, the row is gone, and the copy sends the operator
-  // back to the agent. Proven by deletion: drop the mismatch branch in #accept and this fails.
+  // A wrong tap has already denied the request server-side (design §1.2).
   it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {
     const api = stubApi({
       acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
@@ -679,8 +662,6 @@ describe("printers-screen", () => {
     expect(banner).not.toContain("device.join_mismatch");
   });
 
-  // The counterpart that gives the mismatch branch its meaning: a fault the operator CAN retry leaves
-  // the dialog open on the same request.
   it("keeps the dialog open on a recoverable accept fault", async () => {
     const api = stubApi({
       acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -732,7 +713,6 @@ describe("printers-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("join_request.not_found");
   });
 
-  // The generate-code panel and its verb are gone: an agent is enrolled by ACCEPTING its ask now.
   it("shows none of the retired generate-code controls", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -753,8 +733,8 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    expect(q(el, "[data-test=revoke-agent-a1]")).toBeTruthy(); // active
-    expect(q(el, "[data-test=revoke-agent-a2]")).toBeNull(); // already revoked
+    expect(q(el, "[data-test=revoke-agent-a1]")).toBeTruthy();
+    expect(q(el, "[data-test=revoke-agent-a2]")).toBeNull();
   });
 
   it("revokes an agent only on the confirming second click, then reloads", async () => {
@@ -770,7 +750,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
     expect(api.revokeAgent).toHaveBeenCalledWith("a1");
-    expect(api.listAgents).toHaveBeenCalledTimes(2); // reloaded
+    expect(api.listAgents).toHaveBeenCalledTimes(2);
   });
 
   it("shows an error and keeps the list when a revoke is rejected", async () => {
@@ -787,7 +767,7 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
   });
 
-  // ── Agents: provenance + allow-again (on-node self-enrolment) ───────────────────────────────────────
+  // ── Agents: provenance + allow-again ─────────────────────────────────────────────────────────────
 
   it("marks a self-enrolled agent (node id present) and not a manually-enrolled one", async () => {
     const api = stubApi();
@@ -808,7 +788,6 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    // The allow-again control shows only on a revoked agent (a2), not an active one (a1).
     expect(q(el, "[data-test=allow-agent-a2]")).toBeTruthy();
     expect(q(el, "[data-test=allow-agent-a1]")).toBeNull();
 
@@ -820,7 +799,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=allow-agent-a2]")!.click();
     await flush(el);
     expect(api.allowAgent).toHaveBeenCalledWith("a2");
-    expect(api.listAgents).toHaveBeenCalledTimes(2); // reloaded
+    expect(api.listAgents).toHaveBeenCalledTimes(2);
   });
 
   it("shows an error and keeps the list when a re-allow is rejected", async () => {
@@ -837,7 +816,7 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
   });
 
-  // ── Printers: discovered-device registration (central printer provisioning §10) ────────────────────────────
+  // ── Printers: discovered-device registration ───────────────────────────────────────────────────────
 
   it("Enter checks the address once while pending and allows retry after rejection", async () => {
     let reject!: (reason: unknown) => void;
@@ -1293,9 +1272,8 @@ describe("printers-screen", () => {
   });
 
   it("Scan shows a busy button and keeps re-reading the discovered list for the listen period", async () => {
-    // The agents learn the window is open on their next 2 s poll and post results on the pull after
-    // that, so a single read right after opening the window sees nothing (the owner pressed Scan
-    // several times before a result appeared, 2026-09-11). The screen must listen for a while.
+    // Agents see the open window on their next poll and post results on the one after, so a single
+    // read right after opening it sees nothing.
     vi.useFakeTimers();
     try {
       const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discoveredNetwork) });
@@ -1428,7 +1406,7 @@ describe("printers-screen", () => {
     }
   });
 
-  // ── Printers: register a discovered USB / Bluetooth device (design §10) ─────────────────────────────
+  // ── Printers: register a discovered USB / Bluetooth device ─────────────────────────────────────────
 
   it("registers a discovered USB printer using its advertised name", async () => {
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
@@ -1451,7 +1429,7 @@ describe("printers-screen", () => {
     const arg = vi.mocked(api.createPrinter).mock.calls[0]![0];
     expect(arg).not.toHaveProperty("agentId");
     expect(arg).not.toHaveProperty("host");
-    expect(api.listPrinters).toHaveBeenCalledTimes(2); // reloaded after the register
+    expect(api.listPrinters).toHaveBeenCalledTimes(2);
   });
 
   it("uses make and model when a discovered device has no name", async () => {
@@ -1538,7 +1516,6 @@ describe("printers-screen", () => {
         .replace("{agent}", "Cocina agent")
         .replace("{time}", "2023-11-14 22:13"),
     );
-    // The unregistered SN-1, by contrast, DOES offer the Register action.
     expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
     expect(q(el, "[data-test=discovered-registered-SN-1]")).toBeNull();
   });
@@ -1839,7 +1816,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=print-test-page-p1]")!.click();
     await flush(el);
     expect(api.testPrint).toHaveBeenCalledWith("p1");
-    expect(api.listRecentJobs).toHaveBeenCalledTimes(2); // reloaded so the queued job appears
+    expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
   });
 
   it("shows an error banner when a test print is rejected", async () => {
@@ -2195,9 +2172,6 @@ it("hides a scan result that is already registered and shows when it was seen ag
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
-  // The registered list carries the status from the very first load, not only after a Scan — the
-  // instant formatted to the minute (in the browser's local timezone) like every other last-seen on
-  // this screen.
   expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
     t("printers.seen_at").replace("{agent}", "Cocina agent").replace("{time}", "2023-11-14 22:13"),
   );

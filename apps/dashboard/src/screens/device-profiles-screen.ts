@@ -10,11 +10,9 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-// The capability flags are a dashboard-LOCAL mirror (the #70 bundle rule forbids a runtime
-// `@waitron/layouts` import — its barrel drags `@waitron/db` into the browser bundle). The canvas
-// editor already keeps this mirror in card-contracts.ts, so this screen reuses it rather than
-// declaring a second copy; a profile's `capabilities` (opaque `string[]` on the wire) is rendered
-// defensively against it.
+// Reuses the canvas editor's dashboard-local mirror: `@waitron/layouts`' barrel would pull
+// `@waitron/db` into the browser bundle. A profile's `capabilities` is an opaque `string[]` on the
+// wire, rendered defensively against `CAPABILITY_FLAGS`.
 import {
   CAPABILITY_FLAGS,
   FORM_FACTORS,
@@ -24,34 +22,6 @@ import {
 import { toggleMembership } from "../array-utils.js";
 import type { Canvas, DeviceProfile, DashboardApi } from "../api/client.js";
 
-/**
- * The management dashboard's DEVICE-PROFILES screen — the venue authors reusable device profiles,
- * each a named bundle of an assigned canvas (or the form-factor default) and a capability set that a
- * device inherits at enrolment. It is intentionally SIMPLER than the canvas editor: no grid/tile/
- * palette machinery, only a list and a flat editor form.
- *
- * LIST mode loads the tenant's profiles (`api.listDeviceProfiles()`) AND its canvases
- * (`api.listCanvases()`, for the canvas `<select>` and to resolve each profile's `canvasId` to a
- * NAME), and renders each profile as a card carrying its name, its referenced canvas name (or the
- * "form-factor default" fallback) and a capability summary, plus per-row Edit / Duplicate / Delete.
- * "New profile" enters the editor form on a blank draft; Duplicate is an IMMEDIATE server write of a
- * "<name> (copy)" copy from the same canvas + capabilities; Delete confirms in a dialog first.
- *
- * EDITOR mode is the flat form: a NAME text field, a canvas `<select>` (its first option is the
- * form-factor default = `canvasId` null), and a switch per capability flag. Save refuses an empty
- * name (the server accepts `""`, so it is guarded here), then `createDeviceProfile` /
- * `updateDeviceProfile` on `editingId` and returns to the reloaded list. Cancel discards.
- *
- * DEFENSIVE. `capabilities` crosses the client boundary as opaque `string[]` (the #70 bundle rule —
- * the dashboard never imports `@waitron/layouts`' `CapabilityFlag`). The switches and the summary
- * render only KNOWN flags (`CAPABILITY_FLAGS`), so an unknown value on the wire is ignored rather than
- * throwing; the server's store stays authoritative on every write.
- *
- * ERROR HANDLING mirrors the sibling screens: every loader/mutation is fully `try/catch`ed, so a
- * rejection becomes `errorKey` (its `{ code }`, falling back to `server.internal`) in a `role="alert"`
- * banner. `codeMessage` maps the empty-name pseudo-code (`device_profiles.err_no_name`) and the
- * server's `device_profile.*` / `server.*` codes through the same call, no per-key routing.
- */
 @customElement("dashboard-device-profiles-screen")
 export class DeviceProfilesScreen extends LitElement {
   static override styles = [
@@ -137,7 +107,6 @@ export class DeviceProfilesScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -147,35 +116,24 @@ export class DeviceProfilesScreen extends LitElement {
     },
   );
 
-  /** Which mode is showing. `list` is the profile gallery; `editor` is the flat editor form. */
   @state() private mode: "list" | "editor" = "list";
 
-  /** The tenant's device profiles, (re)loaded on connect and after every mutation. */
   @state() private profiles: DeviceProfile[] = [];
 
-  /** The tenant's canvases — for the editor `<select>` and to resolve a profile's `canvasId` to a name. */
   @state() private canvases: Canvas[] = [];
 
   @state() private errorKey: string | null = null;
 
-  // Editor-form draft: the fields the operator edits, and the id of the profile being edited (null for
-  // a freshly-created profile not yet saved).
   @state() private editingId: string | null = null;
   @state() private draftName = "";
   @state() private draftCanvasId: string | null = null;
   @state() private draftCapabilities: CapabilityFlag[] = [];
-  // The form factor the profile targets. A fresh draft defaults to `till` (the cash register), the
-  // first `FORM_FACTORS` entry; editing seeds it from the loaded profile.
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
-  // The auto-logout idle timeout the operator edits, in whole MINUTES (`null` = never). The wire value
-  // is SECONDS; this screen is the only place the ×60 / ÷60 conversion lives. Hidden and forced to null
-  // for a `kds` profile, which never idle-logs out.
+  // In whole MINUTES (`null` = never); the wire value is SECONDS.
   @state() private draftInactivityMinutes: number | null = null;
 
-  /** True while a `#save` write is in flight, so Save disables itself and no second write races. */
   @state() private saving = false;
 
-  // Delete dialog state: the profile armed for deletion (null = closed).
   @state() private deleteTarget: DeviceProfile | null = null;
 
   override connectedCallback(): void {
@@ -183,8 +141,6 @@ export class DeviceProfilesScreen extends LitElement {
     void this.#load();
   }
 
-  /** (Re)load the tenant's profiles AND canvases in parallel. Called on connect and after every
-   * mutation. A rejection becomes the `errorKey` banner rather than an unhandled rejection. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -201,10 +157,7 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
-  /** The shared shape of every mutation: clear the error banner, run `action`, reload the PROFILES on
-   * success, and turn a rejection into the `errorKey` banner (never an unhandled rejection). Only the
-   * profiles are reloaded — no profile write can change the tenant's canvas set, so the already-loaded
-   * `this.canvases` is left untouched (one fewer round-trip per write). */
+  /** Reloads only the PROFILES: no profile write changes the canvas set. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.errorKey = null;
     try {
@@ -215,18 +168,13 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
-  /** Resolve a profile's `canvasId` to the display name shown on its row: the form-factor default when
-   * `null`, the canvas's name when it resolves, or the "unknown canvas" fallback when the id names no
-   * canvas in the loaded set (a since-deleted reference). */
   #canvasLabel(canvasId: string | null): string {
     if (canvasId === null) return t("device_profiles.canvas_default");
     const canvas = this.canvases.find((c) => c.id === canvasId);
     return canvas ? canvas.name : t("device_profiles.canvas_unknown");
   }
 
-  /** The capability summary shown on a profile row: the KNOWN flags it carries (ordered by
-   * `CAPABILITY_FLAGS`, ignoring any unknown wire value) mapped to their localised labels and joined,
-   * or the "no capabilities" fallback when it carries none. */
+  /** Only the KNOWN flags, so an unknown wire value is ignored rather than shown. */
   #capabilitySummary(capabilities: string[]): string {
     const known = CAPABILITY_FLAGS.filter((flag) => capabilities.includes(flag));
     if (known.length === 0) return t("device_profiles.no_capabilities");
@@ -235,7 +183,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
-  /** Enter the editor form on a BLANK draft (no id → Save creates). */
   #openCreate(): void {
     this.editingId = null;
     this.draftName = "";
@@ -247,11 +194,8 @@ export class DeviceProfilesScreen extends LitElement {
     this.mode = "editor";
   }
 
-  /** Open the editor for an existing profile. FETCHES it fresh via `getDeviceProfile(id)` rather than
-   * reusing the possibly-stale list snapshot, then seeds the draft. `capabilities` is filtered to the
-   * KNOWN flags (ordered by `CAPABILITY_FLAGS`) so the switches reflect it deterministically and an
-   * unknown wire value is dropped rather than shown. A rejection sets the banner and stays in LIST
-   * mode; it never becomes an unhandled rejection (the caller `void`-invokes it). */
+  /** Fetches the profile fresh via `getDeviceProfile(id)` rather than reusing the possibly-stale list
+   * row. */
   async #openEditor(id: string): Promise<void> {
     this.errorKey = null;
     try {
@@ -276,23 +220,17 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftName = event.detail.value;
   }
 
-  /** The canvas `<select>`'s change handler: an empty value (the first "form-factor default" option)
-   * maps to `null`, any other to that canvas's id. */
   #onCanvas(event: Event): void {
     event.stopPropagation();
     const value = (event.target as HTMLSelectElement).value;
     this.draftCanvasId = value === "" ? null : value;
   }
 
-  /** The form-factor `<select>`'s change handler. The option values ARE the `FORM_FACTORS` tokens, so
-   * the value is a `FormFactor` (the server re-validates on save regardless). */
   #onFormFactor(event: Event): void {
     event.stopPropagation();
     this.draftFormFactor = (event.target as HTMLSelectElement).value as FormFactor;
   }
 
-  /** The inactivity-timeout input's change handler. The field carries WHOLE MINUTES; a blank or
-   * non-numeric value clears the timeout (`null` = never). */
   #onInactivity(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const raw = event.detail.value.trim();
@@ -300,7 +238,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftInactivityMinutes = raw === "" || Number.isNaN(minutes) ? null : minutes;
   }
 
-  /** Toggle a capability flag, rebuilt in the declared flag order (deterministic, not click order). */
+  /** Rebuilt in the declared flag order, not click order. */
   #onCapToggle(event: CustomEvent<{ checked: boolean }>, flag: CapabilityFlag): void {
     event.stopPropagation();
     this.draftCapabilities = toggleMembership(
@@ -311,7 +249,6 @@ export class DeviceProfilesScreen extends LitElement {
     ) as CapabilityFlag[];
   }
 
-  /** Discard the draft and return to the list, clearing the error banner too. */
   #cancel(): void {
     this.mode = "list";
     this.editingId = null;
@@ -323,13 +260,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.errorKey = null;
   }
 
-  /**
-   * Persist the draft: refuse an empty NAME first (the server accepts `""`, so it is guarded here),
-   * then `updateDeviceProfile` when editing an existing profile or `createDeviceProfile` for a fresh
-   * one, after which the editor returns to the (reloaded) list. A server rejection (a
-   * `device_profile.*` code) stays in the editor with the banner shown. Save disables itself while the
-   * write is in flight.
-   */
+  /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
     if (this.saving) return;
     const name = this.draftName.trim();
@@ -341,8 +272,8 @@ export class DeviceProfilesScreen extends LitElement {
     const canvasId = this.draftCanvasId;
     const capabilities = [...this.draftCapabilities];
     const formFactor = this.draftFormFactor;
-    // Minutes → seconds at the wire edge. A `kds` profile never idle-logs out, so its timeout is always
-    // null regardless of any minutes left in the draft (the input is hidden for kds).
+    // Minutes → seconds at the wire edge. A `kds` profile always sends null, whatever minutes are left
+    // in the draft: the input is hidden for kds.
     const inactivityTimeoutSeconds =
       formFactor === "kds" || this.draftInactivityMinutes == null
         ? null
@@ -382,8 +313,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Duplicate ────────────────────────────────────────────────────────────────────────────────────
 
-  /** Create a copy of `profile` under a "<name> (copy)" name, from the SAME canvas + capabilities, then
-   * reload. An IMMEDIATE server write (unlike New, which only enters the form). */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
     void this.#mutate(() =>
@@ -403,7 +332,6 @@ export class DeviceProfilesScreen extends LitElement {
     this.deleteTarget = profile;
   }
 
-  /** Delete the armed profile, then reload. A rejection (a since-deleted id) becomes the error banner. */
   #confirmDelete(): void {
     const target = this.deleteTarget;
     if (target === null) return;
@@ -496,8 +424,6 @@ export class DeviceProfilesScreen extends LitElement {
     `;
   }
 
-  /** The canvas `<select>`: a first "form-factor default" option (value `""` = `canvasId` null), then
-   * one option per canvas. `draftCanvasId` drives which is selected. */
   #renderCanvasOptions(): TemplateResult {
     return html`<option value="" ?selected=${this.draftCanvasId === null}>
         ${t("device_profiles.canvas_default")}

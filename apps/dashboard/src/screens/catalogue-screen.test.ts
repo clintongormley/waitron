@@ -194,7 +194,7 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
-  // Spec §15.6: Delete makes the product Inactive and leaves its availability as it was.
+  // Delete makes the product Inactive and leaves its availability as it was.
   it("confirms Delete and makes the product Inactive without deleting its history", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
@@ -465,8 +465,7 @@ describe("catalogue-screen", () => {
   });
 
   // One dismissal produces TWO `wt-cancel`s: the form's own, then the `<dialog>`'s native `close` a
-  // task later. Found by running — the second one arrived while the options form was open and
-  // closed it, taking the refusal it was showing with it.
+  // task later, by which time another form can be open.
   it("ignores a closed form's second cancel, which by then belongs to another form", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
@@ -932,8 +931,8 @@ describe("catalogue-screen", () => {
       expect(location.pathname).toBe("/manage/catalogue/product/v1");
     });
 
-    // Spec §15.6: removing a variant makes it Inactive, through its own page's write, and leaves
-    // its availability and every other stored value as they were.
+    // Removing a variant makes it Inactive, through its own page's write, and leaves its availability
+    // and every other stored value as they were.
     it("confirms a variant's Remove and makes the variant Inactive through its own write", async () => {
       history.replaceState(null, "", "/manage/catalogue");
       const api = variantApi();

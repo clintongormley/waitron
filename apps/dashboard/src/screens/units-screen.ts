@@ -105,11 +105,9 @@ export class UnitsScreen extends LitElement {
   @state() private busy = false;
   @state() private error: UnitError | null = null;
   @state() private fieldErrors: { name?: string; precision?: string } = {};
-  /** The unit whose deletion is blocked, driving the in-use modal; null when the modal is closed. */
   @state() private inUseUnitId: string | null = null;
   @state() private inUseProducts: ProductUsingUnit[] = [];
   @state() private inUseSearch = "";
-  /** The products ticked for a bulk unit change, and the unit to move them onto. */
   @state() private selectedProducts: string[] = [];
   @state() private reassignTarget = "";
   private focusTarget: HTMLElement | null = null;
@@ -195,9 +193,8 @@ export class UnitsScreen extends LitElement {
     }
   }
 
-  /** The row's Delete action, and the modal's own Delete, both run this: no confirmation step —
-   * a delete is attempted straight away. A refusal because products use it opens the in-use modal
-   * (or refreshes it, when the modal is the caller); any other error is an inline banner. */
+  /** No confirmation step: a delete is attempted straight away, and a refusal because products use the
+   * unit opens the in-use modal. */
   async #deleteUnit(id: string): Promise<void> {
     if (id === "" || this.busy) return;
     this.busy = true;
@@ -226,8 +223,6 @@ export class UnitsScreen extends LitElement {
     void this.#deleteUnit(unit.id);
   }
 
-  /** Clicking a unit row opens the delete screen with the products that must be moved first.
-   * Fetches the products, then reuses the state populated by a refused delete. */
   async #openUnitProducts(unit: Unit): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -264,7 +259,6 @@ export class UnitsScreen extends LitElement {
     this.selectedProducts = event.detail.selected;
   }
 
-  /** Move the ticked products onto the chosen unit; they then drop out of the refreshed list. */
   async #changeUnit(): Promise<void> {
     if (
       this.inUseUnitId === null ||
@@ -291,8 +285,6 @@ export class UnitsScreen extends LitElement {
     }
   }
 
-  /** Jump to the product's editor on the catalogue screen. The person navigates back themselves;
-   * the modal reopens fresh the next time they attempt the delete. */
   #editProduct(productId: string, event: Event): void {
     event.stopPropagation();
     this.dispatchEvent(
@@ -334,15 +326,11 @@ export class UnitsScreen extends LitElement {
     ];
   }
 
-  /** The precision written with the reader's decimal marker: precision 3 → ",000" (es) / ".000"
-   * (en); precision 0 → "0". Shown in the column cell, the filter's options, so a manager reads a
-   * unit's precision the way a price of that precision would print, not as a bare digit. */
+  /** Written with the reader's decimal marker, as a price of that precision prints, not as a bare digit. */
   #precisionLabel(precision: number): string {
     return precision === 0 ? "0" : decimalMarker(currentLocale()) + "0".repeat(precision);
   }
 
-  /** One filter option per distinct precision the units in the list actually use, ascending, each
-   * labelled with the same marker text as its cell. A precision nothing uses would match no row. */
   #precisionOptions(): { value: string; label: string }[] {
     return [...new Set(this.units.map((unit) => unit.precision))]
       .sort((a, b) => a - b)

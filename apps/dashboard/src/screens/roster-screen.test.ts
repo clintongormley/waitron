@@ -50,8 +50,7 @@ function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 const dialog = (el: RosterScreen) => el.shadowRoot!.querySelector("dashboard-shift-dialog")!;
-// The location select now lives in the shared `<dashboard-location-picker>` widget's shadow root, so
-// reach through that boundary rather than the screen's own shadow root.
+// The location select is inside `<dashboard-location-picker>`'s shadow root.
 const locationSelect = (el: RosterScreen) =>
   el
     .shadowRoot!.querySelector("dashboard-location-picker")!
@@ -88,7 +87,6 @@ describe("roster-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    // Open a cell (person p1, the week's first day) and emit add-shift from the dialog.
     (el as unknown as { openCell(personId: string, day: string, shift: null): void }).openCell(
       "p1",
       "2026-03-02",
@@ -109,7 +107,7 @@ describe("roster-screen", () => {
       "v1",
       expect.objectContaining({ personId: "p1", locationId: "loc-1" }),
     );
-    expect(api.getRoster).toHaveBeenCalledTimes(2); // reloaded after the add
+    expect(api.getRoster).toHaveBeenCalledTimes(2);
   });
 
   it("publishes and renders the returned breaches as an advisory banner (publish still succeeds)", async () => {
@@ -130,8 +128,6 @@ describe("roster-screen", () => {
   });
 
   it("clears the advisory-breach banner when the roster context changes (week/location)", async () => {
-    // Regression: `breaches` was set on publish and never cleared, so navigating to another week or
-    // location kept showing the PRIOR roster's warnings against an unrelated week.
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
         { id: "loc-1", name: "Main" },
@@ -145,19 +141,16 @@ describe("roster-screen", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
 
-    // Publish → the advisory banner shows.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
 
-    // Changing the week must drop the prior roster's warnings.
     const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
     week.value = "2026-04-08";
     week.dispatchEvent(new Event("change"));
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).toBeNull();
 
-    // Publish again, then switch location — same: the banner clears.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
@@ -169,9 +162,6 @@ describe("roster-screen", () => {
   });
 
   it("ignores a cleared week input (value '') — no crash, week unchanged, no reload", async () => {
-    // Regression: a native <input type="date"> can be CLEARED (value ""). mondayOf("") builds an
-    // Invalid Date and throws a RangeError on toISOString(), which #onSelectWeek did not guard, so the
-    // handler rejected (an unhandled rejection) and left the screen broken.
     const api = stubApi();
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
@@ -196,7 +186,6 @@ describe("roster-screen", () => {
 
     expect(rejections).toEqual([]);
     expect((el as unknown as { weekMonday: string }).weekMonday).toBe(before);
-    // The ignored change fires no reload.
     expect((api.getRoster as ReturnType<typeof vi.fn>).mock.calls.length).toBe(loadsBefore);
   });
 
@@ -237,7 +226,6 @@ describe("roster-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    // The grid renders the current week; pick the first cell in p1's row rather than a hardcoded date.
     const cell = el.shadowRoot!.querySelector<HTMLElement>("[data-test^=cell-p1-]")!;
     cell.click();
     await el.updateComplete;
@@ -245,15 +233,12 @@ describe("roster-screen", () => {
   });
 
   it("renders each editable grid cell's affordance as a real, labelled <button>", async () => {
-    // Keyboard-accessibility: the cell must expose a real button (focusable + Enter/Space activatable),
-    // not a bare clickable <td>. An empty cell's button carries an accessible name so assistive tech
-    // announces it (axe did not catch the bare-<td> version).
+    // axe did not flag a bare clickable <td>, so this checks for a real button directly.
     const api = stubApi();
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     const cell = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test^=cell-p1-]")!;
     expect(cell.tagName).toBe("BUTTON");
-    // Empty cell → an accessible name from aria-label ("Nuevo turno" in the default es locale).
     expect(cell.getAttribute("aria-label")).toBe("Nuevo turno");
   });
 
@@ -269,9 +254,6 @@ describe("roster-screen", () => {
   });
 
   it("authors a SECOND shift on a populated cell (split shift) — edits the existing one AND adds another", async () => {
-    // The slice-2 fix: a populated cell must offer BOTH an edit of its existing shift AND an add of a
-    // second one. Before the fix `openCell`'s `.find` always re-opened the FIRST shift in edit mode, so
-    // a jornada partida could not be authored.
     const snap: RosterSnapshot = {
       version: draftSnapshot().version,
       shifts: [
@@ -291,8 +273,7 @@ describe("roster-screen", () => {
     const api = stubApi({ getRoster: vi.fn().mockResolvedValue(snap) });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    // The grid defaults to the current week; the fixture shift lives in the week of Mon 2026-03-02,
-    // so navigate there (the stub returns `snap` for any week) before the March cell is rendered.
+    // The fixture shift is in the week of 2026-03-02, not the current one the grid opens on.
     const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
     week.value = "2026-03-02";
     week.dispatchEvent(new Event("change"));
@@ -303,13 +284,11 @@ describe("roster-screen", () => {
     )!;
     expect(editBtn).not.toBeNull();
     expect(addBtn).not.toBeNull();
-    // Editing opens the dialog on the existing shift.
     editBtn.click();
     await el.updateComplete;
     expect((dialog(el) as unknown as { shift: { id: string } | null }).shift).toMatchObject({
       id: "s1",
     });
-    // The add button opens the dialog for a NEW (null) shift on the same person + day.
     addBtn.click();
     await el.updateComplete;
     expect((dialog(el) as unknown as { shift: unknown }).shift).toBeNull();
@@ -399,7 +378,6 @@ describe("roster-screen", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=readonly]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=publish]")).toBeNull();
-    // A cell click on a published week does nothing (not editable).
     const cell = el.shadowRoot!.querySelector<HTMLElement>("[data-test^=cell-p1-]")!;
     cell.click();
     await el.updateComplete;

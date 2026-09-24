@@ -11,7 +11,6 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, ServiceStatus } from "../api/client.js";
 
-/** A row the editor holds in local, editable state (a defensive copy of the loaded ServiceStatus). */
 interface EditableStatus {
   id: string;
   label: string;
@@ -20,26 +19,8 @@ interface EditableStatus {
   active: boolean;
 }
 
-/**
- * The management dashboard's SERVICE-STATUS SCREEN: configures the table statuses a server can set on a
- * table (design §3a), mirroring `receipt-screen.ts`. On connect it loads
- * `api.listStatuses()` (active + inactive) into editable rows; per row a manager edits the
- * label/colour/order/active toggle and Guardar-s it, and a "new status" form authors a fresh one.
- *
- * Each mutation drives the PER-ITEM CRUD on the injected `api` and RELOADS afterwards (the
- * `category-manager` idiom): Task 8's routes are per-item POST/PATCH/DELETE, not a single bulk PUT like
- * the receipt config, so there is no "compose the whole thing and PUT it" path here — create,
- * save-row and deactivate each hit one endpoint then call `#load` to resync. A row's save reads its
- * CURRENT values from state at click time, never a stale render
- * closure, so an edit made just before the click is the one that persists.
- *
- * Gating is server-side (`till.configure`): the shell hides this nav from a `staff` session and every
- * route re-checks. ERROR HANDLING mirrors the sibling screens — `#load`/`#create`/`#saveRow`/
- * `#deactivate` are each fully `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey`
- * (the raw `{ code }`, falling back to `server.internal`) rendered in a `role="alert"` banner, never an
- * unhandled promise rejection. The raw code stays in state; `codeMessage` maps it to localised copy at
- * the render edge, so the banner shows a sentence and never the raw wire code.
- */
+/** A row's save reads its values from state at click time, not from a render closure, so an edit made
+ * just before the click is the one that persists. */
 @customElement("dashboard-service-status-screen")
 export class ServiceStatusScreen extends LitElement {
   static override styles = [
@@ -80,7 +61,6 @@ export class ServiceStatusScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the dashboard. The app shell injects a real client; a test injects a stub. */
   @property({ attribute: false }) api!: DashboardApi;
   readonly #statusesDrafts = new DraftRows<EditableStatus>();
   readonly #queries = new DashboardQueries(
@@ -91,10 +71,8 @@ export class ServiceStatusScreen extends LitElement {
     },
   );
 
-  // The configured statuses as editable rows, loaded on connect and re-synced after every mutation.
   @state() private submitting = false;
   @state() private statuses: EditableStatus[] = [];
-  // The new-status form's fields. `newColor` seeds a sensible default swatch for a never-touched form.
   @state() private newLabel = "";
   @state() private newColor = "#ef4444";
   @state() private errorKey: string | null = null;
@@ -104,8 +82,6 @@ export class ServiceStatusScreen extends LitElement {
     void this.#load();
   }
 
-  /** Load the configured statuses into editable rows. A rejection becomes the `errorKey` banner rather
-   * than an unhandled rejection. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -126,25 +102,16 @@ export class ServiceStatusScreen extends LitElement {
     }
   }
 
-  /** The new-status label field's composed `wt-change`. `stopPropagation` keeps it inside this screen
-   * (the house field-handler pattern). */
   #onNewLabel(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newLabel = event.detail.value;
   }
 
-  /** The new-status colour field's composed `wt-change`. */
   #onNewColor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.newColor = event.detail.value;
   }
 
-  /**
-   * Create a status from the new-status form, then reload. A blank (whitespace-only) label is a no-op —
-   * the server requires one, and this keeps an empty form from firing a doomed request. `displayOrder`
-   * is the current row count, so a new status lands at the end. A rejection becomes the `errorKey`
-   * banner; never an unhandled rejection (called via `void`).
-   */
   async #create(): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -166,18 +133,10 @@ export class ServiceStatusScreen extends LitElement {
     }
   }
 
-  /** Apply a partial edit to the row `id` holds, replacing it in state with a fresh object (so a row's
-   * edits never mutate a shared reference the render still points at). */
   #edit(id: string, patch: Partial<EditableStatus>): void {
     this.statuses = this.statuses.map((s) => (s.id === id ? { ...s, ...patch } : s));
   }
 
-  /**
-   * Persist the CURRENT values of the row `id` holds, then reload. Reads the row from state at click
-   * time (not a captured render closure), so an edit made immediately before the click is what
-   * persists — the reads-current-values `#saveRow` discipline. A vanished row is a no-op. A rejection becomes
-   * the `errorKey` banner; never an unhandled rejection (called via `void`).
-   */
   async #saveRow(id: string): Promise<void> {
     if (this.submitting) return;
     this.errorKey = null;
@@ -199,8 +158,6 @@ export class ServiceStatusScreen extends LitElement {
     }
   }
 
-  /** Soft-delete (deactivate) the status `id` holds, then reload. A rejection becomes the `errorKey`
-   * banner; never an unhandled rejection (called via `void`). */
   async #deactivate(id: string): Promise<void> {
     this.errorKey = null;
     try {

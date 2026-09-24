@@ -169,7 +169,6 @@ function table(el: ModifiersScreen, testId: string): Table {
   return el.shadowRoot!.querySelector(`[data-test="${testId}"]`) as unknown as Table;
 }
 
-/** Switch the page's tabs the way `wt-tabs` announces a choice. */
 async function selectTab(el: ModifiersScreen, key: string): Promise<void> {
   const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
   await tabs.updateComplete;
@@ -177,7 +176,6 @@ async function selectTab(el: ModifiersScreen, key: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** Click a control rendered inside a data table's shadow root (a cell's button). */
 async function clickInTable(el: ModifiersScreen, testId: string, control: string): Promise<void> {
   const found = table(el, testId);
   await found.updateComplete;
@@ -208,7 +206,6 @@ function confirmDelete(el: ModifiersScreen) {
   )!;
 }
 
-/** The entries of a form's shared error summary, in order. */
 async function summaryEntries(form: OptionListForm | ExtraListForm) {
   await form.updateComplete;
   const summary = form.shadowRoot!.querySelector("wt-form-error-summary");
@@ -250,7 +247,7 @@ it("switches to the Options tab and lists options lists there", async () => {
 
 // A control inside a tab panel is slotted into `wt-tabs`, so a composed `wt-change` it dispatches
 // reaches the screen's tab listener under the same event name. Only the tab strip's own choice may
-// move the tabs. Delete the `event.target !== event.currentTarget` guard and this goes red.
+// move the tabs.
 it("does not change tab when a control inside a panel announces a change", async () => {
   const el = await mount();
   await selectTab(el, "options");
@@ -266,10 +263,6 @@ it("does not change tab when a control inside a panel announces a change", async
   ).toBe("true");
 });
 
-// The chosen tab lives in the path, as it does on three of the four other tabbed screens
-// (alerts-screen.ts, printers-screen.ts, venue-operations-screen.ts; profile-screen.ts keeps its
-// tab in component state). Without it a refresh, a back press and a shared link all land on Extras
-// whatever the manager was looking at.
 it("records the chosen tab in the path and walks back to the previous one", async () => {
   const el = await mount();
   expect(location.pathname).toBe("/manage/modifiers/view/extras");
@@ -289,8 +282,6 @@ it("opens on the tab the path names", async () => {
   expect(table(el, "option-lists").rows).toEqual([optionList]);
 });
 
-// A path naming no tab this screen has falls back to Extras and REPLACES rather than pushes, so the
-// back button still leaves the screen instead of bouncing off a corrected entry.
 it("falls back to Extras for an unknown tab without adding a history entry", async () => {
   history.replaceState(null, "", "/manage/modifiers/view/bogus");
   const before = history.length;
@@ -627,7 +618,6 @@ it("opens a detail modal listing the products and menus that carry the list, wit
   ]);
   expect(usage.searchable).toBe(true);
   expect(usage.columns.find((column) => column.key === "type")?.filter).toBeTruthy();
-  // The modal's own actions: Edit hands the list to its editor, Close dismisses it.
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="detail-edit"]')!.click();
   await el.updateComplete;
   expect(modal.open).toBe(false);
@@ -729,10 +719,6 @@ it("previews the products and menus a deleted extras list would touch, and NO or
   expect(deleteProducts.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
   expect(deleteMenus.searchLabel).toBe(t("modifiers.search_menus"));
   expect(deleteMenus.noMatchesMessage).toBe(t("modifiers.menus_no_matches"));
-  // Neither kind previews an order count, and neither delete is ever blocked by one: options never
-  // touch an order, and an extras-list delete leaves an open order's child lines alone (spec
-  // 2026-09-18-one-product-model-design.md §3.5, §9.2). The sentence that used to say otherwise —
-  // `modifiers.delete_orders_block` — has no reader left and was deleted with this branch.
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
@@ -835,8 +821,6 @@ it("deletes the options list the Options tab's row named", async () => {
   expect(client.deleteExtraList).not.toHaveBeenCalled();
 });
 
-// A failed preview on one list must not poison the next dialog: reopening mints a fresh generation,
-// so the stale rejection is discarded.
 it("clears a failed delete preview when the dialog is reopened", async () => {
   const client = api({
     getExtraListDependants: vi
@@ -860,11 +844,8 @@ it("clears a failed delete preview when the dialog is reopened", async () => {
   expect(dialog.querySelector('[data-test="dependants-error"]')).toBeNull();
 });
 
-// The reopen test above lets the first fetch settle before reopening, so it never has two requests
-// in flight — it cannot catch a stale response clobbering a fresh one. These two exercise the race
-// the generation guard exists for: two fetches for the SAME list at once, the older settling LATE.
-// Remove EITHER `if (generation === this.#deleteGeneration)` check in #loadDependants and one goes
-// red (proven by deletion).
+// Two fetches for the same list in flight at once, the older settling late: the race the
+// generation guard exists for.
 it("ignores a stale preview success from an earlier open of the same list", async () => {
   let resolveFirst!: (value: ExtraListDependants) => void;
   let rejectSecond!: (error: Error) => void;

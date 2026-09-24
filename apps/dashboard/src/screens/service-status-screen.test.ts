@@ -6,17 +6,6 @@ import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, ServiceStatus } from "../api/client.js";
 import { ServiceStatusScreen } from "./service-status-screen.js";
 
-/**
- * The service-status editor screen. Its `api` is a stub: `listStatuses` returns a known list the
- * screen loads on connect, and `createStatus`/`updateStatus`/`deactivateStatus` are spies the per-item
- * CRUD paths call (each followed by a reload). Assertions cover each behaviour on its own: the list
- * LOADS from `listStatuses`; the new-status form calls `createStatus` with the composed body and
- * reloads; an empty label creates nothing; a row edit calls `updateStatus` with the row's CURRENT
- * values (read from state at save time, not a stale closure) and reloads; a deactivate soft-deletes;
- * and any rejected mutation/load surfaces a `role="alert"` whose text is the LOCALISED copy for the
- * code, never the raw wire code. Mirrors `receipt-screen.test.ts`.
- */
-
 afterEach(cleanupWidgets);
 
 const SEED: ServiceStatus[] = [
@@ -30,7 +19,6 @@ const SEED: ServiceStatus[] = [
   },
 ];
 
-/** Two rows — a second status so a per-row edit exercises the "leave the other rows alone" branch. */
 const TWO_SEED: ServiceStatus[] = [
   ...SEED,
   {
@@ -56,7 +44,6 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight listStatuses and the follow-up render. */
 async function flush(el: ServiceStatusScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -66,14 +53,12 @@ const q = (el: ServiceStatusScreen, sel: string) => el.shadowRoot!.querySelector
 const errorKey = (el: ServiceStatusScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
-/** Fire a wt-input's composed change, exactly as `wt-input` dispatches it. */
 function type(el: ServiceStatusScreen, sel: string, value: string): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
 
-/** Fire a wt-switch's composed change, exactly as `wt-switch` dispatches it. */
 function toggle(el: ServiceStatusScreen, sel: string, checked: boolean): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
@@ -102,13 +87,12 @@ describe("service-status-screen", () => {
     type(el, "[data-test=new-color]", "#f59e0b");
     q(el, "[data-test=add]")!.click();
     await flush(el);
-    // displayOrder is the current row count (1 seed row → the new one lands at index 1).
     expect(api.createStatus).toHaveBeenCalledWith({
       label: "Needs cleaning",
       color: "#f59e0b",
       displayOrder: 1,
     });
-    expect(api.listStatuses).toHaveBeenCalledTimes(2); // initial + reload after create
+    expect(api.listStatuses).toHaveBeenCalledTimes(2);
   });
 
   it("does not create an empty-label status", async () => {
@@ -135,18 +119,16 @@ describe("service-status-screen", () => {
       "s1",
       expect.objectContaining({ label: "Bill please", active: true }),
     );
-    expect(api.listStatuses).toHaveBeenCalledTimes(2); // initial + reload after save
+    expect(api.listStatuses).toHaveBeenCalledTimes(2);
   });
 
   it("saves an edited colour, order and active state on the addressed row only", async () => {
-    // Two rows, so editing s1 also exercises the "leave the other row untouched" map branch.
     const api = stubApi({}, TWO_SEED);
     const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
       api,
     });
     await flush(el);
     type(el, "[data-test=color-s1]", "#22c55e");
-    // A non-numeric order coerces to 0 (the falsy `|| 0` branch); then a real number (the truthy one).
     type(el, "[data-test=order-s1]", "x");
     type(el, "[data-test=order-s1]", "2");
     toggle(el, "[data-test=active-s1]", false);
@@ -170,7 +152,7 @@ describe("service-status-screen", () => {
     q(el, "[data-test=deactivate-s1]")!.click();
     await flush(el);
     expect(api.deactivateStatus).toHaveBeenCalledWith("s1");
-    expect(api.listStatuses).toHaveBeenCalledTimes(2); // initial + reload after deactivate
+    expect(api.listStatuses).toHaveBeenCalledTimes(2);
   });
 
   it("surfaces a rejected create as a localised role=alert (never the raw code)", async () => {

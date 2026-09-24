@@ -4,18 +4,6 @@ import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DiagnosticsLine } from "../api/client.js";
 import { DiagnosticsScreen } from "./diagnostics-screen.js";
 
-/**
- * The live diagnostics viewer. Its `api` is a stub: `getRecentLogs` returns a known ring the screen
- * tails on connect + every poll, `getVerbosity` reports the current level (+ pending revert), and
- * `setVerbosity` is a spy the raise control calls. Assertions cover each behaviour on its own: it POLLS
- * the ring on connect and renders the lines; the raise control posts `("debug", <window>)` then
- * refreshes; the pause control freezes the tail (the interval fires but skips the fetch) and resume
- * restarts it; clear empties the rendered rows locally; the interval is CLEARED on disconnect (no leak);
- * a live raise renders the revert window with its `{time}` placeholder filled (never a literal brace);
- * and a rejected poll surfaces a localised `role="alert"`, never the raw wire code. Mirrors
- * `service-status-screen.test.ts`.
- */
-
 afterEach(cleanupWidgets);
 
 const SEED: DiagnosticsLine[] = [
@@ -35,7 +23,6 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight refresh (the awaited getRecentLogs/getVerbosity) and the follow-up render. */
 async function flush(el: DiagnosticsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -140,8 +127,7 @@ describe("diagnostics-screen", () => {
       await vi.advanceTimersByTimeAsync(1500);
       expect(calls()).toBe(3);
 
-      // Disconnect clears the interval — no further polls fire (proof-by-deletion: dropping
-      // clearInterval from disconnectedCallback keeps this count rising).
+      // Disconnect clears the interval, so no further polls fire.
       host.remove();
       await vi.advanceTimersByTimeAsync(1500 * 5);
       expect(calls()).toBe(3);
@@ -170,9 +156,7 @@ describe("diagnostics-screen", () => {
       // connectedCallback fired one refresh, now awaiting the deferred first response.
       expect(calls()).toBe(1);
 
-      // Two ticks fire WHILE the first refresh is still in flight → both guarded, no new fetch
-      // (proof-by-deletion: dropping the `if (this.#inFlight) return` early-return lets these through,
-      // so the count climbs and this assertion goes red).
+      // Two ticks fire WHILE the first refresh is still in flight: both guarded, no new fetch.
       await vi.advanceTimersByTimeAsync(1500);
       await vi.advanceTimersByTimeAsync(1500);
       expect(calls()).toBe(1);

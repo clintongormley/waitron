@@ -24,9 +24,8 @@ const overview: SalesOverview = {
   ],
 };
 
-// Two currently-open orders past their station's overdue threshold, WORST-FIRST — the shape
-// `computeOverdueOrders` (Task 6) returns from `/reports/overdue-orders`. The screen must not
-// re-sort these; it renders whatever order the server sends.
+// Two currently-open orders past their station's overdue threshold, WORST-FIRST, as
+// `/reports/overdue-orders` returns them. The screen must not re-sort these.
 const overdueOrders: OverdueOrder[] = [
   {
     orderId: "o-1",
@@ -176,8 +175,7 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
     expect(rows[0]!.textContent).toContain("Grill");
     expect(rows[0]!.textContent).toContain("22");
     expect(rows[0]!.querySelector("[data-test=overdue-band]")!.textContent).toContain("Forgotten");
-    // A bare walk-up (no table) renders the em-dash placeholder the roster screen's email column
-    // already uses (staff-list.ts), not a hardcoded string.
+    // A bare walk-up (no table) renders the em-dash placeholder.
     expect(rows[1]!.textContent).toContain("—");
     expect(rows[1]!.textContent).toContain("Bar");
     expect(rows[1]!.textContent).toContain("11");
@@ -206,8 +204,7 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
 
       await vi.advanceTimersByTimeAsync(30_000);
       expect(getOverdueOrders).toHaveBeenCalledTimes(2);
-      // Pins "only the overdue list refetches on tick" (design §7.4) — the sales-overview call count
-      // must stay FLAT across ticks, not grow alongside getOverdueOrders'.
+      // Only the overdue list refetches on a tick: the sales-overview call count must stay FLAT.
       expect(api.getSalesOverview).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(30_000);
@@ -280,8 +277,8 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
       await vi.advanceTimersByTimeAsync(30_000); // first tick: fails
       expect(state().overdueErrorKey).toBe("server.internal");
       expect(root.querySelector("[data-test=overdue-error]")).not.toBeNull();
-      // Fix round 2's whole point: an OVERDUE failure never touches the overview's OWN field, and
-      // never shows the top banner (that banner is reserved for `overviewErrorKey`).
+      // An OVERDUE failure never touches the overview's OWN field, and never shows the top banner
+      // (that banner is reserved for `overviewErrorKey`).
       expect(state().overviewErrorKey).toBeNull();
       expect(root.querySelector("[data-test=error]")).toBeNull();
 
@@ -312,8 +309,8 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
 
       await vi.advanceTimersByTimeAsync(30_000); // an overdue poll tick — succeeds
       expect(state().overdueErrorKey).toBeNull(); // the tick itself succeeded
-      // The overview's error is UNCHANGED by that unrelated success — this is the exact regression
-      // fix round 2 closes: a single shared `errorKey` would have been cleared here.
+      // The overview's error is UNCHANGED by that unrelated success: a single shared `errorKey` would
+      // have been cleared here.
       expect(state().overviewErrorKey).toBe("server.internal");
       expect(root.querySelector("[data-test=error]")).not.toBeNull();
       expect(root.querySelectorAll("[data-test^=overdue-row-]")).toHaveLength(2);
@@ -329,9 +326,8 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
     const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
     await flush(el);
     const root = el.shadowRoot!;
-    // The stable sales-overview cards render normally — a less-proven new endpoint's failure must
-    // not blank them, and must not raise the TOP banner (that's reserved for the overview's own
-    // failures).
+    // The sales-overview cards render normally: the overdue failure must not blank them, and must not
+    // raise the TOP banner (that's reserved for the overview's own failures).
     expect(root.querySelector("[data-test=gross-total]")!.textContent).toContain("1279.50");
     expect(root.querySelector("[data-test=count-sales]")!.textContent).toContain("42");
     expect(root.querySelector("[data-test=top-sellers]")).not.toBeNull();

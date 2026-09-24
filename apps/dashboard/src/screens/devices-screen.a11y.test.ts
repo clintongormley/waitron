@@ -15,16 +15,9 @@ import type {
 } from "../api/client.js";
 
 /**
- * The Devices screen scanned by axe in both themes, in three states: the default list (each active row
- * carrying its hardware editor, including the Task 16 default-reader picker) with the pairing window
- * shut and a device waiting to join, the pairing window OPEN, and the accept dialog with its three
- * number buttons. Mounted by ASSIGNING the `api` STUB as a property (never bare markup), exactly as the
- * sibling screen a11y suites do: `connectedCallback` fires `void this.#load()` → the list verbs, so the
- * stub must resolve them all or a stray rejection pollutes the run (a rejection is a finding).
- *
- * The last block is not about theme: it pins that each number button carries a real accessible NAME
- * ("Number 47", never a bare "47" — design §1.2 wants the comparison to be a deliberate act), and that
- * the dialog can be both reached and operated from the keyboard alone.
+ * Scanned in three states: the default list, the pairing window OPEN, and the accept dialog. The stub
+ * must resolve every list verb or a stray rejection pollutes the run. The last block pins that each
+ * number button has a real accessible NAME and that the dialog works from the keyboard alone.
  */
 const stations: Station[] = [
   {
@@ -169,7 +162,6 @@ function stubApi(pairingOpen = false): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight load and the follow-up render. */
 async function flush(el: DevicesScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;

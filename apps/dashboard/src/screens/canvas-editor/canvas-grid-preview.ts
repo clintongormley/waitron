@@ -7,44 +7,16 @@ import { EDITOR_ROW_HEIGHT, type CardInstance, type TabDef } from "./card-contra
 import { cardPreview } from "./card-preview.js";
 
 /**
- * The shared placeholder-tile grid, drawn at the till renderer's geometry
- * (`grid-template-columns: repeat(columns, 1fr)`, each card `grid-column/row: span …` — mirrors
- * `apps/till/src/widgets/card-grid.ts:133,179`). One element, two consumers:
- *
- * - the list THUMBNAIL (`interactive=false`): a plain, inert grid marked `aria-hidden` — a preview,
- *   not a control, so nothing in it is keyboard-reachable and the screen reader skips it.
- * - the editor CANVAS (`interactive=true`): each tile is a `<button>`, so it is keyboard-reachable
- *   and click-selectable; a click emits `select-card` (bubbles, composed) carrying the card index,
- *   and the tile at `selectedIndex` gets a token-driven ring.
- *
- * Direct manipulation (interactive only) sits ON TOP of the keyboard path, never replacing it:
- * - DRAG a tile to reorder — a pointer drag past the threshold emits `move-card {from,to}`; the
- *   screen splices the card in its array (the layout is FLOW-based, so "move" is a reorder, not an
- *   x/y placement). A drop indicator marks the insertion point; a below-threshold press is still a
- *   plain click that selects.
- * - RESIZE the selected tile via a corner handle — emits `resize-card {index,colSpan,rowSpan}`; the
- *   screen writes it through its existing span clamp. rowSpan is only measurable/visible because the
- *   INTERACTIVE grid pins `grid-auto-rows` to {@link EDITOR_ROW_HEIGHT} (the inert thumbnail keeps
- *   implicit content-sized rows, so its rendering and tests are unchanged).
- *
- * The preview is a VIEW: it emits INTENTS and never mutates the tab — the screen owns all mutation
- * through its immutable draft helpers.
- *
- * Each cell draws a REPRESENTATIVE silhouette of its card type ({@link cardPreview}) — a dashboard-local
- * static shape (a mini product grid, a few basket lines, a big total, …), NOT the till's real
- * data-bound widget and NOT a `@waitron/layouts`/`apps/till` runtime import (the #70 bundle rule). The
- * silhouette is DECORATIVE: it sits in an `aria-hidden`, `pointer-events: none` wrapper so it never
- * intercepts a drag/select and the screen reader skips it, while the localised card name stays as the
- * tile's accessible caption (with a `WxH` span badge in the interactive editor). Chrome is `--wt-*`
- * tokens only.
+ * The placeholder-tile grid, drawn at the till renderer's geometry (`apps/till/src/widgets/card-grid.ts`):
+ * an inert `aria-hidden` thumbnail when `interactive` is false, the editor canvas when true. It emits
+ * intents and never mutates the tab. rowSpan is visible only because the interactive grid pins
+ * `grid-auto-rows` to {@link EDITOR_ROW_HEIGHT}; the thumbnail keeps content-sized rows.
  */
 
-/** Pointer travel (px) before a press becomes a drag rather than a click. Below this a tile press is
- * still a plain `select-card`, so the keyboard/click path is never hijacked. */
 const DRAG_THRESHOLD_PX = 5;
 
 /** `setPointerCapture` is best-effort: on a synthetic pointer (unit tests) it throws, and losing it
- * only means a real drag stops tracking once the pointer leaves the tile — never a test failure. */
+ * only means a real drag stops tracking once the pointer leaves the tile. */
 function capturePointer(el: Element, pointerId: number): void {
   try {
     el.setPointerCapture(pointerId);
@@ -62,21 +34,14 @@ function releasePointer(el: Element, pointerId: number): void {
 
 @customElement("canvas-grid-preview")
 export class CanvasGridPreview extends LitElement {
-  /** The tab to draw. `null` renders nothing (a caller between selections). */
   @property({ attribute: false }) tab: TabDef | null = null;
-  /** Editor canvas when true (buttons, selection, events); inert thumbnail when false. */
   @property({ type: Boolean }) interactive = false;
-  /** Index of the selected card, or −1 for none. Only marked when `interactive`. */
   @property({ type: Number }) selectedIndex = -1;
 
-  /** The tile being dragged (dimmed), or `null` when no drag is in progress. */
   @state() private draggingIndex: number | null = null;
-  /** The pending insertion index (in the array WITHOUT the dragged card), or `null`. */
+  /** The pending insertion index, in the array WITHOUT the dragged card. */
   @state() private dropIndex: number | null = null;
 
-  /** Live drag bookkeeping (non-reactive): the captured pointer, source index, gesture origin, and —
-   * once the threshold is crossed — the non-dragged tiles' centres cached at that moment. The
-   * threshold-crossed flag is derived (`draggingIndex !== null`), not stored. */
   #drag: {
     pointerId: number;
     index: number;
@@ -84,9 +49,6 @@ export class CanvasGridPreview extends LitElement {
     startY: number;
     tiles: { index: number; cx: number; cy: number; height: number }[] | null;
   } | null = null;
-  /** Live resize bookkeeping (non-reactive): the captured pointer, target index, gesture origin, the
-   * measured column/row geometry, the card's spans at drag-start (deltas are absolute from here) and
-   * the last-emitted spans (so a move that does not cross a cell boundary dispatches nothing). */
   #resize: {
     pointerId: number;
     index: number;
@@ -393,7 +355,6 @@ export class CanvasGridPreview extends LitElement {
     const tab = this.tab;
     if (tab === null) return nothing;
     if (tab.cards.length === 0) {
-      // `canvas_editor.empty_tab` is a plain string-literal key, present in both locales.
       return html`<div class="empty" data-test="empty-grid">${t("canvas_editor.empty_tab")}</div>`;
     }
     const mark = this.#dropMarker(tab);
@@ -408,9 +369,8 @@ export class CanvasGridPreview extends LitElement {
     </div>`;
   }
 
-  /** The tile to flag as the insertion point during a drag, and on which edge: `before` the tile at
-   * `dropIndex`, or `after` the last non-dragged tile when the drop lands at the very end. `null` when
-   * no drag is in progress. */
+  /** `before` the tile at `dropIndex`, or `after` the last non-dragged tile when the drop lands at the
+   * very end. */
   #dropMarker(tab: TabDef): { index: number; side: "before" | "after" } | null {
     const drag = this.draggingIndex;
     const drop = this.dropIndex;
@@ -431,14 +391,12 @@ export class CanvasGridPreview extends LitElement {
     index: number,
     mark: { index: number; side: "before" | "after" } | null,
   ): TemplateResult {
-    // The card-name key (`canvas_editor.card.<type>`) is present in both locales for every
-    // `CardType`; the cast is still required because the template literal widens to `string`.
+    // The cast is needed because the template literal widens to `string`.
     const name = t(`canvas_editor.card.${card.type}` as StringKey);
     const badge = `${card.colSpan}×${card.rowSpan}`;
     const style = `grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}`;
-    // The caption names the card (and, in the editor, its span) — it is the tile's accessible label.
-    // The silhouette below it is decorative (aria-hidden, pointer-events:none), so it fills the tile
-    // without ever intercepting a pointer gesture or leaking into the button's accessible name.
+    // The silhouette is decorative (aria-hidden, pointer-events:none), so it never intercepts a pointer
+    // gesture or leaks into the button's accessible name, which the caption supplies.
     const caption = html`<span class="caption"
       ><span class="name">${name}</span
       >${this.interactive ? html`<span class="badge">${badge}</span>` : nothing}</span
@@ -493,10 +451,9 @@ export class CanvasGridPreview extends LitElement {
 
   #onTilePointerDown(event: PointerEvent, index: number): void {
     if (event.button !== 0) return;
-    // Start every gesture from clean state, regardless of how the previous one ended. A missed
-    // pointerup (reachable only when setPointerCapture didn't take) would otherwise leave
-    // draggingIndex non-null, so this gesture's measure block — gated on draggingIndex === null —
-    // is skipped and #insertionIndex runs over an empty cache, wedging dropIndex at 0.
+    // Start every gesture from clean state. A missed pointerup (possible when setPointerCapture didn't
+    // take) would otherwise leave draggingIndex non-null, skip this gesture's measure block and wedge
+    // dropIndex at 0.
     this.#suppressClick = false;
     this.draggingIndex = null;
     this.dropIndex = null;
@@ -518,10 +475,8 @@ export class CanvasGridPreview extends LitElement {
       const travelled = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
       if (travelled < DRAG_THRESHOLD_PX) return;
       this.draggingIndex = drag.index;
-      // Cache tile geometry ONCE at threshold-cross: the dragged tile is only dimmed (never removed
-      // from flow) and the drop marker is an inset box-shadow, so tile layout is static for the whole
-      // gesture. Assumes the grid is not scrolled mid-drag — the same assumption the resize path makes
-      // (it measures column/row geometry once at pointerdown).
+      // Cache tile geometry ONCE: the dragged tile is only dimmed and the drop marker is an inset
+      // box-shadow, so layout is static for the gesture. Assumes the grid is not scrolled mid-drag.
       drag.tiles = this.#measureTiles(drag.index);
     }
     this.dropIndex = this.#insertionIndex(event.clientX, event.clientY, drag.tiles ?? []);
@@ -547,17 +502,14 @@ export class CanvasGridPreview extends LitElement {
     }
   }
 
-  /** A cancelled pointer stream (touch-cancel, an OS/browser gesture takeover) fires `pointercancel`
-   * instead of `pointerup`: abandon the drag with no `move-card` — a cancelled gesture is not a
-   * reorder — and no `#suppressClick`, since no synthetic click trails a cancel. */
+  /** A cancelled gesture is not a reorder: no `move-card`, and no `#suppressClick`, since no synthetic
+   * click trails a `pointercancel`. */
   #onTilePointerCancel(event: PointerEvent): void {
     const drag = this.#drag;
     if (drag === null || event.pointerId !== drag.pointerId) return;
     this.#endTileDrag(event.currentTarget as HTMLElement, event.pointerId);
   }
 
-  /** Release the captured pointer and drop all live drag state. Shared by the up and cancel paths;
-   * dispatch-free, so the caller owns any `move-card` emit. */
   #endTileDrag(tile: HTMLElement, pointerId: number): void {
     releasePointer(tile, pointerId);
     this.#drag = null;
@@ -565,9 +517,7 @@ export class CanvasGridPreview extends LitElement {
     this.dropIndex = null;
   }
 
-  /** Measure each non-dragged tile's centre and height once, in flow (DOM) order. Called at
-   * threshold-cross so the per-move insertion scan reads no layout (the dragged tile stays in flow, so
-   * DOM index still equals card index). */
+  /** The dragged tile stays in flow, so DOM index still equals card index. */
   #measureTiles(dragIndex: number): { index: number; cx: number; cy: number; height: number }[] {
     const tiles = this.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=tile-]");
     const measured: { index: number; cx: number; cy: number; height: number }[] = [];
@@ -584,9 +534,8 @@ export class CanvasGridPreview extends LitElement {
     return measured;
   }
 
-  /** The insertion index (in the array WITHOUT the dragged card) for a pointer at `clientX/clientY`:
-   * the count of non-dragged tiles whose centre precedes the pointer in flow (reading) order. A pure
-   * arithmetic scan over the geometry cached at threshold-cross — no layout reads. */
+  /** The count of non-dragged tiles whose centre precedes the pointer in flow order, over the geometry
+   * cached at threshold-cross. */
   #insertionIndex(
     clientX: number,
     clientY: number,
@@ -674,17 +623,13 @@ export class CanvasGridPreview extends LitElement {
     this.#endResize(event.currentTarget as HTMLElement, event.pointerId);
   }
 
-  /** A cancelled pointer stream fires `pointercancel` instead of `pointerup`: abandon the resize so a
-   * later stray `pointermove` on the handle cannot resume it. No dispatch — the card keeps whatever
-   * spans the last committed `resize-card` set. */
+  /** Abandon the resize so a later stray `pointermove` on the handle cannot resume it. */
   #onResizePointerCancel(event: PointerEvent): void {
     const resize = this.#resize;
     if (resize === null || event.pointerId !== resize.pointerId) return;
     this.#endResize(event.currentTarget as HTMLElement, event.pointerId);
   }
 
-  /** Release the captured pointer and drop the live resize state. Shared, dispatch-free cleanup for
-   * the up and cancel paths. */
   #endResize(handle: HTMLElement, pointerId: number): void {
     releasePointer(handle, pointerId);
     this.#resize = null;

@@ -74,8 +74,6 @@ const stations: Station[] = [
   },
 ];
 
-// Counter receipt/drawer (§5): two tills (one with a printer set, one without) + one location, for the
-// per-till receipt-printer picker + the per-location print-mode toggle.
 const tills: Till[] = [
   { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
   { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
@@ -113,14 +111,12 @@ function toggleSwitch(el: PrintingRulesScreen, sel: string, checked: boolean): v
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-/** Pick a value in a native <select> and fire its `change`. */
 function pickSelect(el: PrintingRulesScreen, sel: string, value: string): void {
   const select = q(el, sel) as HTMLSelectElement;
   select.value = value;
   select.dispatchEvent(new Event("change"));
 }
 
-/** Read the native switch state after the screen settles. */
 const switchChecked = (el: PrintingRulesScreen, sel: string): boolean =>
   q(el, sel)!.shadowRoot!.querySelector("input")!.checked;
 
@@ -143,9 +139,7 @@ describe("printing rules", () => {
     expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(false);
     expect(switchChecked(el, "[data-test=station-toggle-p2-s1]")).toBe(false);
     expect(switchChecked(el, "[data-test=station-toggle-p2-s2]")).toBe(false);
-    // The toggle labels are the station names.
     expect(q(el, "[data-test=station-toggle-p1-s1]")!.getAttribute("aria-label")).toBe("Cocina");
-    // Each printer read its own mapping on load.
     expect(api.listPrinterStations).toHaveBeenCalledWith("p1");
     expect(api.listPrinterStations).toHaveBeenCalledWith("p2");
   });
@@ -171,10 +165,8 @@ describe("printing rules", () => {
     toggleSwitch(el, "[data-test=station-toggle-p1-s2]", true);
     await flush(el);
 
-    // stationId then printerId, mirroring the server route /stations/:sid/printers/:pid.
     expect(api.attachPrinterToStation).toHaveBeenCalledWith("s2", "p1");
     expect(api.detachPrinterFromStation).not.toHaveBeenCalled();
-    // #mutate reloaded, and the refreshed mapping now shows s2 attached to p1.
     expect(api.listPrinters).toHaveBeenCalledTimes(2);
     expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(true);
   });
@@ -234,7 +226,7 @@ describe("printing rules", () => {
     expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
   });
 
-  // ── Receipt printer picker + print-mode toggle (counter receipt/drawer §5) ───────────────────────
+  // ── Receipt printer picker + print-mode toggle ─────────────────────────────────────────────────────
 
   it("renders a receipt-printer picker per till, offering the ACTIVE printers + a 'no printer' option", async () => {
     const api = stubApi();
@@ -273,7 +265,7 @@ describe("printing rules", () => {
     pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
     await flush(el);
     expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
-    expect(api.listTills).toHaveBeenCalledTimes(1); // optimistic reload after the mutation
+    expect(api.listTills).toHaveBeenCalledTimes(1);
   });
 
   it("clearing the picker ('no printer') calls setTillReceiptPrinter with null", async () => {
@@ -312,14 +304,13 @@ describe("printing rules", () => {
     await flush(el);
     (api.listTills as ReturnType<typeof vi.fn>).mockClear();
 
-    // The three-mode segmented control is present; pick "on_request".
     expect(q(el, "[data-test=print-mode-loc-1-auto]")).not.toBeNull();
     expect(q(el, "[data-test=print-mode-loc-1-never]")).not.toBeNull();
     q(el, "[data-test=print-mode-loc-1-on_request]")!.click();
     await flush(el);
 
     expect(api.setReceiptPrintMode).toHaveBeenCalledWith("loc-1", "on_request");
-    expect(api.listTills).toHaveBeenCalledTimes(1); // reload after the mutation
+    expect(api.listTills).toHaveBeenCalledTimes(1);
   });
 
   it("reflects the picked print mode in the segmented control (primary variant), surviving the reload", async () => {
@@ -334,7 +325,6 @@ describe("printing rules", () => {
 
     q(el, "[data-test=print-mode-loc-1-never]")!.click();
     await flush(el);
-    // The successful choice survives reload.
     expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("primary");
     expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("secondary");
   });
@@ -357,11 +347,9 @@ describe("printing rules", () => {
     q(el, "[data-test=print-mode-loc-1-never]")!.click();
     await flush(el);
 
-    // The write failed, so the local pick is NOT applied: the control still shows the prior mode
-    // (auto), never the "never" that failed to save.
+    // The failed pick is not applied.
     expect(q(el, "[data-test=print-mode-loc-1-auto]")!.getAttribute("variant")).toBe("primary");
     expect(q(el, "[data-test=print-mode-loc-1-never]")!.getAttribute("variant")).toBe("secondary");
-    // ...and the failure is surfaced in the localised error banner (raw code never shown).
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));
     expect(banner).not.toContain("management.request_invalid");
@@ -375,14 +363,13 @@ describe("printing rules", () => {
     await flush(el);
     (api.listTills as ReturnType<typeof vi.fn>).mockClear();
 
-    // The two-policy segmented control is present; pick "open".
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
     expect(q(el, "[data-test=drawer-policy-loc-1-open]")).not.toBeNull();
     q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
     await flush(el);
 
     expect(api.setDrawerOpenPolicy).toHaveBeenCalledWith("loc-1", "open");
-    expect(api.listTills).toHaveBeenCalledTimes(1); // reload after the mutation
+    expect(api.listTills).toHaveBeenCalledTimes(1);
   });
 
   it("reflects the picked drawer policy in the segmented control (primary variant), surviving the reload", async () => {
@@ -397,7 +384,6 @@ describe("printing rules", () => {
 
     q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
     await flush(el);
-    // The successful choice survives reload.
     expect(q(el, "[data-test=drawer-policy-loc-1-open]")!.getAttribute("variant")).toBe("primary");
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe(
       "secondary",
@@ -422,13 +408,11 @@ describe("printing rules", () => {
     q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
     await flush(el);
 
-    // The write failed, so the local pick is NOT applied: the control still shows the prior policy
-    // (gated), never the "open" that failed to save.
+    // The failed pick is not applied.
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")!.getAttribute("variant")).toBe("primary");
     expect(q(el, "[data-test=drawer-policy-loc-1-open]")!.getAttribute("variant")).toBe(
       "secondary",
     );
-    // ...and the failure is surfaced in the localised error banner (raw code never shown).
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("management.request_invalid", "es-ES"));
     expect(banner).not.toContain("management.request_invalid");

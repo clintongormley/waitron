@@ -23,8 +23,6 @@ import {
   readLoginPreference,
   prepareGoogleLoginPreference,
 } from "../login-preference.js";
-// The pre-login language chooser (per-user-language-preference). It emits a composed `locale-selected`;
-// `dashboard-app` turns a pre-login pick into a transient `setLocale` (nothing is persisted).
 import "../widgets/language-chooser.js";
 
 interface CompletedLogin {
@@ -47,15 +45,8 @@ function actionEmailFromUrl(): string {
 }
 
 /**
- * The dashboard's pre-session login screen. It asks for the account email first, then presents the
- * password step. Device prompts require an explicit passkey action; cancellation returns to password.
- *
- * It talks to the world through one injected `api` (`@property({ attribute: false })`) and one
- * event: after a successful login it dispatches `logged-in` with the authenticated person and the
- * selected preference. It bubbles across the shadow boundary so the app shell hears it. A rejected login sets
- * `errorKey` from the thrown `{ code }` (falling back to `server.internal`); the raw code is kept in
- * state, and `codeMessage` (`../i18n/codes.js`) maps it to localised copy at the render edge. The
- * shared form summary announces that sentence and never exposes the raw wire code.
+ * Asks for the email first, then the password. A device passkey prompt opens only on an explicit
+ * passkey action; cancelling it returns to the password step.
  */
 @customElement("dashboard-login-screen")
 export class LoginScreen extends LitElement {
@@ -254,21 +245,13 @@ export class LoginScreen extends LitElement {
     ];
   }
 
-  /**
-   * Capture the email field's new value. `wt-change` is dispatched `bubbles`+`composed`, so
-   * `stopPropagation` is what stops it leaking past this screen's shadow boundary to the app shell.
-   */
+  /** `wt-change` is composed, so without `stopPropagation` it would reach the app shell too. */
   #onEmailChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.email = event.detail.value;
     this.emailError = "";
   }
 
-  /**
-   * Capture the password field's new value. `wt-change` is dispatched `bubbles`+`composed`, so
-   * `stopPropagation` is what stops it leaking past this screen's shadow boundary to the app shell
-   * (Task 7) — the till's field handlers do the same.
-   */
   #onPasswordChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.password = event.detail.value;
@@ -551,19 +534,10 @@ export class LoginScreen extends LitElement {
   }
 
   /**
-   * Record that the offer was resolved, then sign in regardless: a failed piece of bookkeeping must
-   * never be why somebody cannot reach their own dashboard, and the worst case is being offered once
-   * more. One kind of failure ends somewhere else — a session-shaped code
-   * (`management_session.required`, `management_session.expired`, `person.suspended`) reaches the
-   * shell through the request primitive's `onError`, which runs BEFORE it throws
-   * (`packages/dashboard-kit/src/request.ts`), and `main.ts`'s `waitron-session-invalid` — so by the
-   * time the catch below swallows anything, the shell has already put this screen back in front of
-   * the person.
-   *
-   * `busy` holds the screen for the round trip the recording added, because the render disables both
-   * buttons on it: without it a second Skip, or Add pressed on top of a pending Skip, signs the same
-   * person in twice. It is released again before announcing, since that session-shaped rejection
-   * leaves this screen mounted and it has to stay usable.
+   * Signs in even if recording the offer fails: that bookkeeping must never keep somebody out of their
+   * dashboard. A session-shaped rejection has already reached the shell through the request
+   * primitive's `onError`, which runs before it throws (`packages/dashboard-kit/src/request.ts`).
+   * `busy` keeps a second Skip, or Add on top of a pending Skip, from signing the person in twice.
    */
   async #resolvePasskeyOffer(detail: CompletedLogin): Promise<void> {
     this.busy = true;
@@ -605,9 +579,8 @@ export class LoginScreen extends LitElement {
       await this.#resolvePasskeyOffer(this.completedLogin);
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      // Classify every WebAuthn ceremony failure here, so the already-registered message appears on
-      // this screen too and no library `.code` reaches codeOf and degrades to the generic banner.
-      // Shared with profile-screen.ts.
+      // Classified first, so no WebAuthn library `.code` reaches codeOf and degrades to the generic
+      // banner.
       const passkey = classifyPasskeyRegistrationError(error);
       if (passkey === "cancelled") return;
       if (passkey === "already_registered") {
@@ -618,8 +591,6 @@ export class LoginScreen extends LitElement {
         this.errorKey = "passkey.verification_failed";
         return;
       }
-      // passkey === null → a server { code } rejection (e.g. totp.invalid from passkeyRegisterOptions):
-      // fall through to the server-code handling below.
       this.errorKey = codeOf(error, "passkey.verification_failed");
       if (this.errorKey === "totp.invalid") {
         this.passkeyFactorRequired = true;

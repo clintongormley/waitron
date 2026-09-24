@@ -1,6 +1,4 @@
-// card-contracts.parity.test.ts — the mirror must equal the @waitron/layouts source (drift guard,
-// CLAUDE.md §2 hardcoded-cross-package-list trap). Deep-imports the PURE source modules only
-// (card-contract.js + canvas.js are DB-free, so they load in headless Chromium); NEVER the barrel.
+// Deep-imports the DB-free source modules, NEVER the barrel, so this loads in headless Chromium.
 import { describe, expect, it } from "vitest";
 import {
   CARD_CONTRACTS as SRC,

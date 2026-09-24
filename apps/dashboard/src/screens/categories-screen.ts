@@ -184,9 +184,8 @@ export class CategoriesScreen extends LitElement {
           this.products = value;
         }),
       ]);
-      // A `?category=<id>` deep link opens the editor rather than selecting the category (which
-      // used to show its products below). An unknown id is ignored. Clearing the param stops a
-      // refresh reopening the editor.
+      // A `?category=<id>` deep link opens the editor; an unknown id is ignored. Clearing the param
+      // stops a refresh reopening the editor.
       const linked = new URL(location.href).searchParams.get("category");
       const category = linked ? this.categories.find((item) => item.id === linked) : undefined;
       if (category) {
@@ -259,16 +258,10 @@ export class CategoriesScreen extends LitElement {
     this.dependantsError = false;
     this.#deleteGeneration++;
   }
-  /** Feeds the delete confirmation's preview, which is the only warning there is: the delete
-   * cascades and cannot be undone, and nothing refuses it server-side. So a failed fetch gets its
-   * own state rather than an empty stand-in — an empty preview is indistinguishable from "nothing
-   * depends on this", which would have a manager confirm the cascade blind. `dependants` stays
-   * null, which keeps Delete disabled; `dependantsError` is what tells the dialog to say why.
-   * `generation` guards a reopened dialog against a stale request: comparing `this.deleting?.id`
-   * alone cannot tell a superseded fetch from the current one when the SAME category is reopened,
-   * so an old rejection could clear a new, still-loading state, or an old resolution could enable
-   * Delete after a fresh request already failed. Every open (and close) mints a new generation;
-   * only a response that still matches it is applied. */
+  /** The preview is the delete's only warning: it cascades and nothing refuses it server-side. So a
+   * failed fetch gets its own state, never an empty stand-in that reads as "nothing depends on this".
+   * `generation` guards a reopened dialog: comparing `this.deleting?.id` alone cannot tell a
+   * superseded fetch from the current one when the SAME category is reopened. */
   async #loadDependants(id: string, generation: number): Promise<void> {
     try {
       const dependants = await this.api.getCategoryDependants(id);
@@ -391,8 +384,6 @@ export class CategoriesScreen extends LitElement {
       >${this.#text(category.name)}</wt-lozenge
     >`;
   }
-  /** The full path of a category's parent, or null when it sits at the top level. The sort value
-   * and the rendered cell want the same traversal and differ only in what they show for null. */
   #parentPath(category: CategorySummary): string | null {
     const parent = this.categories.find((item) => item.id === category.parentId);
     return parent ? categoryPath(parent, this.categories, currentLocale(), this.languages) : null;
@@ -459,18 +450,13 @@ export class CategoriesScreen extends LitElement {
       .filter((category) => referenced.has(category.id))
       .map((category) => ({ value: category.id, label: label(category) }));
   }
-  /** A product's reporting category, or undefined when it has none (which is allowed) or when the
-   * id no longer resolves. The sort value and the rendered cell share this one lookup. */
   #reportingCategory(product: Product): CategorySummary | undefined {
     return this.categories.find((item) => item.id === product.primaryCategoryId);
   }
-  /** The reporting-category cell: the product's reporting category as a lozenge, or "none". */
   #reportingCell(product: Product) {
     const category = this.#reportingCategory(product);
     return category ? this.#lozenge(category) : t("categories.none");
   }
-  /** The product's categories other than its reporting one, resolved to full summaries. Shared by
-   * the "other" column's cell and its search value, so typing any of those category names finds it. */
   #otherCategories(product: Product): CategorySummary[] {
     return product.categoryIds
       .filter((id) => id !== product.primaryCategoryId)
@@ -491,11 +477,6 @@ export class CategoriesScreen extends LitElement {
     const category = this.#reportingCategory(product);
     return category ? this.#text(category.name) : "";
   }
-  /** The shared column set behind every product table in this screen (members, add-products, and
-   * the delete preview). Name searches and sorts on the staff name; Reporting
-   * category sorts and offers a dropdown filter over the reporting categories actually in use; the
-   * Other-categories column searches on those category names so a product is found by any category
-   * it belongs to. A caller passes its own trailing column (row actions, say) or none. */
   #productColumns(trailing?: DataTableColumn<Product>): DataTableColumn<Product>[] {
     const base: DataTableColumn<Product>[] = [
       {
@@ -532,9 +513,8 @@ export class CategoriesScreen extends LitElement {
     ];
     return trailing ? [...base, trailing] : base;
   }
-  /** The products modal's member list — the shared columns plus a row-actions column. Edit reopens
-   * the full membership picker; Remove pre-fills it with this category taken out, so a cleared
-   * reporting category is a deliberate (still-confirmed) choice rather than an immediate write. */
+  /** Remove pre-fills the picker with this category taken out, so a cleared reporting category is a
+   * deliberate (still-confirmed) choice rather than an immediate write. */
   #memberColumns(): DataTableColumn<Product>[] {
     return this.#productColumns({
       key: "actions",
@@ -553,9 +533,7 @@ export class CategoriesScreen extends LitElement {
         >`,
     });
   }
-  /** The single red warning at the top of the delete confirmation: one paragraph naming every
-   * consequence of the irreversible delete, space-joined from the sentences that apply. Only called
-   * when there IS something to lose, so the "cannot be undone" opener always leads it. */
+  /** Only called when there IS something to lose. */
   #deleteWarning(dependants: CategoryDependants): string {
     const parts = [t("categories.delete_warning_intro")];
     if (dependants.products.length > 0)
@@ -580,11 +558,7 @@ export class CategoriesScreen extends LitElement {
     }
     return parts.join(" ");
   }
-  /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then a single
-   * red warning at the top naming every consequence, above the affected-products table and the
-   * child-category links (each shown only when there is something in it). With nothing depending on
-   * the category there is no warning — just the buttons. A failed fetch says so instead, because
-   * silence here would read as "nothing to lose". */
+  /** A failed fetch says so, because silence here would read as "nothing to lose". */
   #renderDependants() {
     if (this.dependantsError)
       return html`<p class="error" data-test="dependants-error" role="alert">
@@ -594,8 +568,6 @@ export class CategoriesScreen extends LitElement {
     if (!dependants) return html`<wt-spinner></wt-spinner>`;
     const sections: TemplateResult[] = [];
     if (dependants.products.length > 0) {
-      // Resolve each dependant id to its full library product so the shared product table can show
-      // it; an id that no longer resolves is skipped rather than shown blank.
       const affected = dependants.products
         .map((entry) => this.products.find((product) => product.id === entry.id))
         .filter((product): product is Product => product !== undefined);

@@ -75,7 +75,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight fetches and the follow-up render. */
 async function flush(el: RecipeScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -90,12 +89,10 @@ const editor = (el: RecipeScreen): RecipeEditor =>
 const errorKey = (el: RecipeScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
-/** Fire a child widget's composed event, exactly as the real widget dispatches it. */
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
-/** Set a native <select>'s value and fire its change event, as the browser would. */
 function selectValue(el: RecipeScreen, testId: string, value: string): void {
   const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${testId}]`)!;
   select.value = value;
@@ -170,7 +167,7 @@ describe("recipe-screen", () => {
 
     expect(api.createIngredient).toHaveBeenCalledWith({ name: "Azúcar" });
     expect(form(el).open).toBe(false);
-    expect(api.listIngredients).toHaveBeenCalledTimes(2); // once on connect + once after the create
+    expect(api.listIngredients).toHaveBeenCalledTimes(2);
   });
 
   it("opens the form pre-filled when the list asks to edit an ingredient", async () => {
@@ -237,8 +234,8 @@ describe("recipe-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("allergen.invalid_code");
-    expect(form(el).open).toBe(true); // left open for a retry
-    expect(api.listIngredients).toHaveBeenCalledTimes(1); // NOT reloaded
+    expect(form(el).open).toBe(true);
+    expect(api.listIngredients).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the form open and shows the fallback error when an update fails without a code", async () => {
@@ -348,7 +345,6 @@ describe("recipe-screen", () => {
     await flush(el);
 
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
-    // No product chosen yet, so the editor is hidden (product null → renders nothing).
     expect(editor(el).product).toBeNull();
   });
 
@@ -363,7 +359,7 @@ describe("recipe-screen", () => {
     await flush(el);
 
     expect(api.listProducts).toHaveBeenLastCalledWith("cat-b");
-    expect(editor(el).product).toBeNull(); // the previous product is deselected
+    expect(editor(el).product).toBeNull();
   });
 
   it("clears the products when the catalogue placeholder is re-selected", async () => {
@@ -376,7 +372,6 @@ describe("recipe-screen", () => {
 
     selectValue(el, "recipe-catalogue-select", "");
     await flush(el);
-    // With no catalogue chosen there is no product picker.
     expect(el.shadowRoot!.querySelector("[data-test=recipe-product-select]")).toBeNull();
   });
 
@@ -414,7 +409,6 @@ describe("recipe-screen", () => {
     await flush(el);
 
     expect(api.setProductRecipe).toHaveBeenCalledWith("p1", ["i1", "i2"]);
-    // getProductRecipe: once on choosing the product + once on the post-save reload.
     expect(api.getProductRecipe).toHaveBeenCalledTimes(2);
   });
 
@@ -466,8 +460,7 @@ describe("recipe-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("server.internal");
-    expect(editor(el).product).toEqual(products[0]); // still shown for a retry
-    // getProductRecipe: once on choosing the product; the post-save reload never runs.
+    expect(editor(el).product).toEqual(products[0]);
     expect(api.getProductRecipe).toHaveBeenCalledTimes(1);
   });
 
@@ -509,10 +502,6 @@ describe("recipe-screen", () => {
   });
 
   it("disables the editor and drops a save while the chosen product's recipe is still loading", async () => {
-    // The data-loss window: choosing a product clears `recipe` to [] and shows the editor immediately,
-    // so until getProductRecipe resolves every switch reads unchecked. A Save in that window would call
-    // setProductRecipe(productId, []) and wipe the product's existing recipe. The editor must be busy
-    // (Save disabled) and the screen must drop a save until the load settles.
     let resolveRecipe!: (r: RecipeLine[]) => void;
     const getProductRecipe = vi
       .fn()
@@ -537,8 +526,6 @@ describe("recipe-screen", () => {
   });
 
   it("ignores a slow recipe load for a product the operator already switched away from", async () => {
-    // A stale-response race: load(A) is slow, the operator picks B (load(B) resolves first), then A's
-    // load resolves LAST and must not overwrite the recipe now shown for B.
     const recipeA: RecipeLine[] = [ingredients[0]!];
     const recipeB: RecipeLine[] = [ingredients[1]!];
     const deferreds: Record<string, (r: RecipeLine[]) => void> = {};
@@ -572,8 +559,6 @@ describe("recipe-screen", () => {
   });
 
   it("suppresses the error from a superseded product's recipe load", async () => {
-    // The catch-side of the same stale-response race: a superseded load that REJECTS must not raise its
-    // error over the newer selection the operator is now looking at.
     const recipeB: RecipeLine[] = [ingredients[1]!];
     const resolvers: Record<string, (r: RecipeLine[]) => void> = {};
     const rejecters: Record<string, (e: unknown) => void> = {};
@@ -610,8 +595,6 @@ describe("recipe-screen", () => {
     expect(editor(el).recipe).toEqual(recipeB);
   });
 
-  // The recipe screen is staff-facing, so the picker labels every product with its staff name — the
-  // same text whichever content language is configured, and never a guest translation or a raw id.
   it.each(["es", "en"])(
     "labels product options with the staff name under the %s default language",
     async (defaultLanguage) => {

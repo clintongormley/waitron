@@ -4,12 +4,6 @@ import "./receipt-screen.js";
 import type { ReceiptScreen } from "./receipt-screen.js";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
 
-/**
- * The receipt screen scanned by axe in both themes, in two shapes: populated fields (both the header
- * wt-input and the footer <textarea> carry authored text), and the error state (a rejected save shows
- * the `role="alert"` banner). Mounted by ASSIGNING the `api` stub as a property; the screen loads on
- * connect, so the stub must resolve or a stray rejection pollutes the run (a rejection is a finding).
- */
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
     getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt } }),

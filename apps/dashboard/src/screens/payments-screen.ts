@@ -119,30 +119,20 @@ export class PaymentsScreen extends LitElement {
     `,
   ];
 
-  /** The provider-neutral HTTP client. */
   @property({ attribute: false }) api!: DashboardApi;
 
-  /** The raw request primitive a provider panel builds its own typed client on (connect + add-reader
-   * POST through it). Injected by the shell exactly as it injects it into module screens. */
+  /** A provider panel builds its own typed client on this. */
   @property({ attribute: false }) request!: DashboardRequest;
 
-  /** The venue's onboarding intent — governs the simulator banner/badge. Injected by the shell from
-   * `getMe`; absent renders as live (no banner). */
   @property({ attribute: false }) mode?: "demo" | "prepare" | "live";
 
-  /** The card-provider panels to host. Defaults to the registry; a test injects fakes so it need not
-   * depend on the real provider elements. */
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
 
   @state() private providers?: PaymentProviderRow[];
   @state() private readers?: ReaderRow[];
-  /** Per-reader live status, loaded lazily after the readers list; `undefined` means still loading. */
   @state() private statuses = new Map<string, ReaderStatusView | "error">();
-  /** The provider whose connect form is open, or null. */
   @state() private connectingId: string | null = null;
-  /** The provider whose add-reader dialog is open, or null. */
   @state() private addingId: string | null = null;
-  /** The provider whose Disconnect is ARMED (awaiting a confirming second tap), or null. */
   @state() private armedDisconnectId: string | null = null;
   @state() private discoveringId: string | null = null;
   @state() private available?: AvailableReader[];
@@ -164,8 +154,7 @@ export class PaymentsScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // Merge each panel's strings into the shared catalogue so its `displayNameKey` resolves even if the
-    // panel module has not registered them by side-effect yet (the contract has the screen do this).
+    // So each panel's `displayNameKey` resolves even before its module has registered its strings.
     for (const panel of this.panels) registerCatalogue(panel.strings);
     void this.#load();
   }
@@ -178,15 +167,12 @@ export class PaymentsScreen extends LitElement {
     return this.panels.find((p) => p.providerId === providerId);
   }
 
-  /** The provider's display name from its panel (`displayNameKey`), or the raw token when no panel
-   * names it (a provider with no UI panel — it still lists, just without localized chrome). */
   #providerName(providerId: string): string {
     const key = this.#panelFor(providerId)?.displayNameKey;
     return key ? tRaw(key) : providerId;
   }
 
-  /** (Re)load the providers and readers, then each active reader's live status. A rejection anywhere
-   * becomes the `errorKey` banner. Disarms the two-tap controls (an armed row may no longer exist). */
+  /** Disarms the two-tap Disconnect, since the armed row may no longer exist. */
   async #load(): Promise<void> {
     this.errorKey = null;
     this.armedDisconnectId = null;
@@ -204,8 +190,7 @@ export class PaymentsScreen extends LitElement {
     }
   }
 
-  /** Fetch each ACTIVE reader's status independently; a per-reader failure marks that row "error"
-   * (rendered "Unknown"), never the whole screen. */
+  /** One reader's failed status marks only that row, never the whole screen. */
   async #loadStatuses(readers: ReaderRow[]): Promise<void> {
     const version = ++this.#statusVersion;
     this.refreshing = true;
@@ -226,7 +211,6 @@ export class PaymentsScreen extends LitElement {
     if (version === this.#statusVersion) this.refreshing = false;
   }
 
-  /** Run a mutation, then reload; a rejection becomes the `errorKey` banner. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -246,8 +230,7 @@ export class PaymentsScreen extends LitElement {
     this.addingId = null;
   }
 
-  /** The two-tap disconnect: the first tap ARMS, a second on the armed provider confirms. Disconnect
-   * drops the sealed credential, so the confirm gate is deliberate. */
+  /** Disconnect deletes the stored credential, so it takes a second, confirming tap. */
   #onDisconnect(providerId: string): void {
     if (this.armedDisconnectId === providerId) {
       this.armedDisconnectId = null;

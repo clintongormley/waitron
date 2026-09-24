@@ -71,15 +71,13 @@ async function flush(el: MyScheduleScreen): Promise<void> {
   await el.updateComplete;
 }
 
-/** Drive a native `<select>` by data-test: set the value and fire `change`. */
 function selectValue(el: MyScheduleScreen, dataTest: string, value: string): void {
   const sel = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${dataTest}]`)!;
   sel.value = value;
   sel.dispatchEvent(new Event("change"));
 }
 
-/** Drive a `wt-input` by data-test: the screen listens for the widget's own composed `wt-change`
- * (its `<input>` lives in wt-input's shadow root, unreachable via a descendant selector). */
+/** `wt-input`'s own `<input>` is in its shadow root, so the widget's `wt-change` is fired directly. */
 function setInput(el: MyScheduleScreen, dataTest: string, value: string): void {
   el.shadowRoot!.querySelector(`[data-test=${dataTest}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -124,9 +122,7 @@ describe("my-schedule-screen", () => {
   it("shows an Accept only on a swap offered to me that is still requested", async () => {
     const { el } = await mount(stubApi());
     await flush(el);
-    // The swap offered to me has an Accept…
     expect(el.shadowRoot!.querySelector("[data-test=accept-sw-offered]")).not.toBeNull();
-    // …the one I requested does not (I cannot accept my own offer).
     expect(el.shadowRoot!.querySelector("[data-test=accept-sw-mine]")).toBeNull();
   });
 
@@ -137,7 +133,6 @@ describe("my-schedule-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=accept-sw-offered]")!.click();
     await flush(el);
     expect(api.acceptSwap).toHaveBeenCalledWith("sw-offered");
-    // The lists reload after the action (a second shifts fetch); the roster is NOT refetched.
     expect(api.listMyShifts).toHaveBeenCalledTimes(2);
     expect(api.getStaffRoster).toHaveBeenCalledTimes(1);
   });
@@ -208,7 +203,6 @@ describe("my-schedule-screen", () => {
     const api = stubApi();
     const { el } = await mount(api);
     await flush(el);
-    // Submit with nothing selected — the button is disabled and the guard drops it.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cover-submit]")!.click();
     await flush(el);
     expect(api.requestSwap).not.toHaveBeenCalled();
@@ -233,8 +227,7 @@ describe("my-schedule-screen", () => {
     await flush(el);
     const banner = el.shadowRoot!.querySelector("[data-test=notice]");
     expect(banner?.textContent ?? "").toContain("Ese cambio de turno ya no se puede aceptar");
-    expect(banner?.textContent ?? "").not.toContain("swap.not_acceptable"); // never the raw code
-    // busy was released in the finally, so a second attempt fires rather than being single-flighted away.
+    expect(banner?.textContent ?? "").not.toContain("swap.not_acceptable");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=accept-sw-offered]")!.click();
     await flush(el);
     expect(api.acceptSwap).toHaveBeenCalledTimes(2);
@@ -259,7 +252,6 @@ describe("my-schedule-screen", () => {
     const { el } = await mount(api);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
-    // The loading spinner is gone (the lists defaulted to empty on failure).
     expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull();
   });
 
@@ -279,7 +271,6 @@ describe("my-schedule-screen", () => {
     const shiftText = el.shadowRoot!.querySelector("[data-test=shift-s-noRole]")!.textContent ?? "";
     expect(shiftText).toContain("2026-05-04 09:00–17:00");
     expect(shiftText).not.toContain("·"); // no role separator when role is null
-    // An unknown counterparty renders its raw id rather than an empty string.
     expect(
       el.shadowRoot!.querySelector("[data-test=swap-sw-stranger]")!.textContent ?? "",
     ).toContain("ghost");

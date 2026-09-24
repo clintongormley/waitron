@@ -16,9 +16,6 @@ import type { PaymentsScreen } from "./payments-screen.js";
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
-// A pair of fake provider panels so the screen's tests never depend on the real SumUp/Stripe elements.
-// Each registers a display name (the screen resolves `displayNameKey` through the shared catalogue) and
-// a connect form / add-reader dialog with a single button that fires the context callback.
 registerCatalogue({
   en: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },
   es: { "test.acme.name": "Acme Pay", "test.zeta.name": "Zeta Pay" },

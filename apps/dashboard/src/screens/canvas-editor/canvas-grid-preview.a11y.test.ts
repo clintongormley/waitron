@@ -4,13 +4,7 @@ import "./canvas-grid-preview.js";
 import type { CanvasGridPreview } from "./canvas-grid-preview.js";
 import type { TabDef } from "./card-contracts.js";
 
-/**
- * The shared grid scanned by axe in both themes, in both of its consumer shapes: the interactive
- * editor CANVAS (each tile a `<button>`, one selected) and the inert list THUMBNAIL (`aria-hidden`,
- * no buttons). Both must pass color-contrast for the token-driven tile/selection chrome, and the
- * interactive buttons must carry an accessible name (the tile body). Mounted by ASSIGNING props, as
- * the sibling screen a11y suites do.
- */
+/** Scanned in both shapes: the interactive editor canvas and the inert list thumbnail. */
 const tab: TabDef = {
   key: "counter",
   title: "Counter",

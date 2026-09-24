@@ -7,17 +7,6 @@ import { t } from "../i18n/t.js";
 import type { Course, DashboardApi, FireControl, Station } from "../api/client.js";
 import { KitchenScreen } from "./kitchen-screen.js";
 
-/**
- * The Cocina (kitchen) config screen. Its `api` is a stub: `listStations` returns a known list the
- * screen loads on connect, and the CRUD + default + bump-mode verbs are spies the per-item mutation
- * paths call (each station mutation followed by a reload). Assertions cover each behaviour on its own:
- * the station panel LOADS from `listStations`; the new-station form calls `createStation({ name })`
- * and reloads; an empty name creates nothing; a station-row edit calls `updateStation` with the row's
- * CURRENT values and reloads; a deactivate soft-deletes; "make default" calls `setDefaultStation`; the
- * bump-mode toggle calls `setBumpMode`; and any rejected mutation/load surfaces a `role="alert"` whose
- * text is the LOCALISED copy for the code, never the raw wire code. Mirrors `floor-screen.test.ts`.
- */
-
 afterEach(cleanupWidgets);
 
 const STATIONS: Station[] = [
@@ -33,10 +22,8 @@ const STATIONS: Station[] = [
   },
 ];
 
-/** Two stations — a default + a non-default — so a per-row edit exercises the "leave the other row
- * alone" branch, and "make default" targets the non-default one while the default shows its badge.
- * s2's thresholds are deliberately NOT the column defaults (4/9/14 rather than 5/10/15), so a seeding
- * assertion actually proves the form reads the row's OWN values rather than a hardcoded default. */
+/** s2's thresholds differ from the defaults the screen falls back to, so seeding from them shows the
+ * form reads the row's own values. */
 const TWO_STATIONS: Station[] = [
   {
     id: "s1",
@@ -62,7 +49,6 @@ const TWO_STATIONS: Station[] = [
 
 const COURSES: Course[] = [{ id: "c1", name: "Entrantes", displayOrder: 0, active: true }];
 
-/** Two courses so a per-row edit exercises the "leave the other row alone" map branch. */
 const TWO_COURSES: Course[] = [
   { id: "c1", name: "Entrantes", displayOrder: 0, active: true },
   { id: "c2", name: "Postres", displayOrder: 1, active: true },
@@ -91,7 +77,6 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
-/** Settles the in-flight listStations and the follow-up render. */
 async function flush(el: KitchenScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -99,7 +84,6 @@ async function flush(el: KitchenScreen): Promise<void> {
 
 const q = (el: KitchenScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** Fire a wt-input's composed change, exactly as `wt-input` dispatches it. */
 function type(el: KitchenScreen, sel: string, value: string): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -131,7 +115,7 @@ describe("kitchen-screen", () => {
     q(el, "[data-add-station]")!.click();
     await flush(el);
     expect(api.createStation).toHaveBeenCalledWith({ name: "Plancha" });
-    expect(api.listStations).toHaveBeenCalledTimes(2); // initial + reload after create
+    expect(api.listStations).toHaveBeenCalledTimes(2);
   });
 
   it("does not create an empty-name station", async () => {
@@ -144,14 +128,11 @@ describe("kitchen-screen", () => {
   });
 
   it("saves an edited station row (updateStation with the row's current name + order + thresholds), then reloads", async () => {
-    // Two rows, so editing s2 also exercises the "leave the other row untouched" map branch. The
-    // threshold fields ride the SAME patch even though this test doesn't touch them — the config
-    // editor always saves the trio together (design §8), mirroring the route's all-or-nothing shape.
+    // The untouched thresholds still ride the patch: the route takes all three or none.
     const api = stubApi({}, TWO_STATIONS);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
     type(el, "[data-test=station-name-s2]", "Pase");
-    // A non-numeric order coerces to 0 (the falsy `|| 0` branch); then a real number.
     type(el, "[data-test=station-order-s2]", "x");
     type(el, "[data-test=station-order-s2]", "3");
     q(el, "[data-test=station-save-s2]")!.click();
@@ -199,8 +180,6 @@ describe("kitchen-screen", () => {
   });
 
   it("rejects a client-side invalid threshold set (out of order or non-positive) without calling the API", async () => {
-    // Mirrors the server's `warm < overdue < forgotten` CHECK (design §8) as a friendly pre-check —
-    // the route still enforces it authoritatively, this only saves a round trip on an obvious mistake.
     const api = stubApi({}, TWO_STATIONS);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
@@ -231,7 +210,7 @@ describe("kitchen-screen", () => {
     q(el, "[data-test=station-save-s2]")!.click();
     await flush(el);
     expect(api.updateStation).not.toHaveBeenCalled();
-    expect(api.listStations).toHaveBeenCalledTimes(1); // never reloaded — no mutation ever succeeded
+    expect(api.listStations).toHaveBeenCalledTimes(1);
   });
 
   it("deactivates a station row", async () => {
@@ -248,12 +227,10 @@ describe("kitchen-screen", () => {
     const api = stubApi({}, TWO_STATIONS);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
-    // The already-default station shows its badge and offers no make-default button…
     expect(q(el, "[data-test=station-default-s1]")).toBeNull();
     expect(q(el, "[data-test=station-row-s1]")!.textContent).toContain(
       t("kitchen.default_badge", "es-ES"),
     );
-    // …the non-default one offers the button.
     q(el, "[data-test=station-default-s2]")!.click();
     await flush(el);
     expect(api.setDefaultStation).toHaveBeenCalledWith("s2");
@@ -319,8 +296,6 @@ describe("kitchen-screen", () => {
     expect(q(el, "[role=alert]")).not.toBeNull();
   });
 
-  // ── KDS-2 (§5c): the Cursos panel + the fire-control toggle ────────────────────────────────────────
-
   it("loads and lists the courses on connect (beside the stations)", async () => {
     const api = stubApi({}, STATIONS, TWO_COURSES);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
@@ -345,7 +320,7 @@ describe("kitchen-screen", () => {
     q(el, "[data-add-course]")!.click();
     await flush(el);
     expect(api.createCourse).toHaveBeenCalledWith({ name: "Postres" });
-    expect(api.listCourses).toHaveBeenCalledTimes(2); // initial + reload after create
+    expect(api.listCourses).toHaveBeenCalledTimes(2);
   });
 
   it("does not create an empty-name course", async () => {
@@ -358,12 +333,11 @@ describe("kitchen-screen", () => {
   });
 
   it("saves an edited course row (updateCourse with the row's current name + order), then reloads", async () => {
-    // Two rows, so editing c2 also exercises the "leave the other row untouched" map branch.
     const api = stubApi({}, STATIONS, TWO_COURSES);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
     type(el, "[data-test=course-name-c2]", "Café");
-    type(el, "[data-test=course-order-c2]", "x"); // non-numeric coerces to 0 (the `|| 0` branch)
+    type(el, "[data-test=course-order-c2]", "x");
     type(el, "[data-test=course-order-c2]", "3");
     q(el, "[data-test=course-save-c2]")!.click();
     await flush(el);
@@ -398,7 +372,6 @@ describe("kitchen-screen", () => {
   });
 
   it("seeds the fire-control toggle from the PERSISTED setting (getFireControl) and reflects it", async () => {
-    // The persisted setting is `kitchen`, so on load the Kitchen option is primary (selected).
     const api = stubApi({}, STATIONS, COURSES, "kitchen");
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
@@ -414,7 +387,6 @@ describe("kitchen-screen", () => {
     q(el, "[data-test=fire-kitchen]")!.click();
     await flush(el);
     expect(api.setFireControl).toHaveBeenNthCalledWith(1, "kitchen");
-    // The KDS-3 third option: `expo` routes the fire to the expo/pass display.
     q(el, "[data-test=fire-expo]")!.click();
     await flush(el);
     expect(api.setFireControl).toHaveBeenNthCalledWith(2, "expo");

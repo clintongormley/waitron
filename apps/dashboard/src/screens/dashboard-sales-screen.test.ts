@@ -192,13 +192,9 @@ describe("dashboard-sales-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=period-note]")).toBeNull();
   });
 
-  // The next three tests mock rejections with `{ code: "report.forbidden" }` / `{ code: "report.range" }`.
-  // Those are NOT real server codes — the server answers `management.request_invalid` for a bad param
-  // (including `from > to`) and an authorization code (`authorization.not_permitted` and friends) for
-  // an unauthorized request (see report-api.ts's STATUS map). The mocked strings are arbitrary
-  // stand-ins for "any error code the server returns": the screen renders whatever `codeOf`/`codeMessage`
-  // give it without inspecting the code's meaning, so what these tests actually pin down is that ANY
-  // rejection reaches the `errorKey` banner and clears stale state — not which code triggers it.
+  // The next three tests mock codes the server never sends. The screen renders whatever code it gets
+  // without inspecting it, so these pin that ANY rejection reaches the `errorKey` banner and clears
+  // stale state, not which code triggers it.
 
   it("shows the error banner when the daily-close load rejects", async () => {
     const api = stubApi({ getDailyClose: vi.fn().mockRejectedValue({ code: "report.forbidden" }) });
