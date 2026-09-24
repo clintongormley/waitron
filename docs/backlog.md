@@ -2513,7 +2513,25 @@ image constraints under *Detail → Box image*.
   fold onto one line is refused. The packages follow, the fiscal ones under the
   same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
   unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
-  root `vitest.config.ts` and `eslint.config.js`.
+  root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
+  comment lines to about 750). A pruning pull request cannot carry this file (the checker refuses
+  it), so each one's line lands here as a docs-only push after the merge. Found by #555 and left
+  for the package that owns each, all still OPEN:
+  - The journal-table reason in the `drizzle.config.ts` of `credentials`, `scheduler`, `payments`
+    and `fiscal-verifactu` ("`generate` would … silently re-apply its own from zero") is wrong:
+    drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
+    the set with older timestamps would never run (measured by #555's review with the real
+    `runMigrations`; workforce's config now says so).
+  - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
+    and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
+    engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
+    Fiscal files: comment-only, under the pruning gates.
+  - `addShift` and the shift update in `packages/workforce/src/clocking.ts` store the caller's
+    spelling of `starts_at`/`ends_at`, and `shifts_interval_ck` compares that text, so two valid
+    times spelled with different offsets, or with fractional seconds on one side only, can be
+    refused as a raw CHECK error instead of `shift.invalid`, and `order by starts_at` can sort
+    them wrongly. Normalising the spelling on write, as `appendToChain` does for `event_at`, is
+    the unmade fix; the gap is stated at `assertShiftInterval`.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2569,7 +2587,8 @@ image constraints under *Detail → Box image*.
   and nothing enforces it" beside a list, was then corrected in more places, rechecked the same
   day: `applyMigrations` applied `workforce` ahead of identity and core, and `workforce-es`,
   `payments` and `fiscal-verifactu` ahead of core, all cleanly, while `media` in the same run was
-  refused. So those four `migrations.ts` now say their set migrates before or after core, with
+  refused. So those four `migrations.ts` now say their set migrates before or after core (2026-09-24:
+  workforce's no longer does; #555 pruned that sentence), with
   `payments` and `fiscal-verifactu` naming the core table their code reads; `workforce`'s
   `migrations.test.ts` names the seeds its cases need core for (without core it fails `no such
   table: tenants`, then `locations`), and `fiscal-none`'s says its case passes without core; the
