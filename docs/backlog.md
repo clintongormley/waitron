@@ -725,7 +725,7 @@ variants' prices move under their names and the price column is hidden. Shared p
 with it: `wt-price-input` gained a `placeholder`, `wt-input`'s and `wt-price-input`'s hints use the
 muted text colour, `wt-switch` gained `hide-label`, and `wt-dialog` no longer lets a late close
 report shut a dialog that has been reopened. No migration: **no venue reset needed.** Task 8
-follows the list below. What Task 7 leaves open:
+(#551) follows the list below. What Task 7 leaves open:
 - **The product list shows "—" for a variant's allergens**, because the list's data carries none for
   a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
   whether the list should read a variant's effective allergens, and add them to that read if so.
@@ -773,7 +773,7 @@ follows the list below. What Task 7 leaves open:
   screen sends it to `apps/dashboard/src/dashboard-app.ts`, so pick names that cannot reach that
   handler by mistake.
 
-**Task 8 (branch `feat/variants-top-sellers`, 2026-09-24): top sellers now roll variants up under
+**Task 8 LANDED as #551 (2026-09-24): top sellers now roll variants up under
 their parent.** The top-sellers list on the dashboard's overview and sales screens groups lines under
 the parent's name and ranks them by quantity sold — "Wine by the glass", 5 sold, 24.50 — and shows each variant sold under it on its
 own indented row beneath, under the variant's own name ("Wine 175", then "Wine 125", biggest seller
