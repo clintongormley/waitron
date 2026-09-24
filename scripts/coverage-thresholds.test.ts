@@ -82,6 +82,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/tunnel",
   "@waitron/ui",
   "@waitron/ui-core",
+  "@waitron/venue-service",
   "@waitron/workforce",
   "@waitron/workforce-es",
 ];

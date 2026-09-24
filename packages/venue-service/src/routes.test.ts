@@ -1,11 +1,20 @@
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CATALOGUE_MIGRATIONS, createCatalogue, createCategory } from "@waitron/catalogue";
+import {
+  CATALOGUE_MIGRATIONS,
+  createCatalogue,
+  createCategory,
+  createProduct,
+} from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  deviceProfiles,
+  devices,
   floorZones,
   kitchenStations,
   locations,
+  tills,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,9 +27,10 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { resolveNewOrderZone } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -43,6 +53,7 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
+  locationId: LocationId;
   managerCookie: string;
   staffCookie: string;
   zoneId: string;
@@ -125,6 +136,7 @@ async function fixture(): Promise<Fixture> {
   );
   return {
     app,
+    locationId: scopedLocationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSessionId}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSessionId}`,
     zoneId: zone!.id,
@@ -728,5 +740,234 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(404);
+  });
+
+  it("refuses an hours body that is not a list of intervals and keeps the saved hours", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+    ).json()) as { id: string };
+    const path = `/management-api/venue-service/departments/${department.id}/hours`;
+    const saved = { weekday: 2, opensAt: "12:00", closesAt: "16:00" };
+    expect((await send(fx.app, "PUT", path, fx.managerCookie, { hours: [saved] })).status).toBe(
+      204,
+    );
+    const cases: { body: unknown; field: string }[] = [
+      { body: {}, field: "hours" },
+      { body: { hours: saved }, field: "hours" },
+      { body: { hours: [saved, null] }, field: "hours.1" },
+      { body: { hours: [saved, "Monday"] }, field: "hours.1" },
+    ];
+    for (const { body, field } of cases) {
+      const rejected = await send(fx.app, "PUT", path, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(
+      (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as { hours: unknown[] }
+      ).hours,
+    ).toEqual([
+      { departmentId: department.id, weekday: 2, opensAt: "12:00:00", closesAt: "16:00:00" },
+    ]);
+  });
+
+  it("refuses an interval with an impossible weekday or clock time, naming its position", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+    ).json()) as { id: string };
+    const path = `/management-api/venue-service/departments/${department.id}/hours`;
+    const valid = { weekday: 3, opensAt: "09:00", closesAt: "14:00" };
+    expect((await send(fx.app, "PUT", path, fx.managerCookie, { hours: [valid] })).status).toBe(
+      204,
+    );
+    // Each interval has one bad field and every other field valid.
+    for (const bad of [
+      { ...valid, weekday: "3" },
+      { ...valid, weekday: 2.5 },
+      { ...valid, weekday: -1 },
+      { ...valid, weekday: 7 },
+      { ...valid, opensAt: 900 },
+      { ...valid, opensAt: ["10:00"] },
+      { ...valid, opensAt: "24:00" },
+      { ...valid, closesAt: undefined },
+      { ...valid, closesAt: ["15:00"] },
+      { ...valid, closesAt: "14:60" },
+      { ...valid, closesAt: "09:00" },
+    ]) {
+      const rejected = await send(fx.app, "PUT", path, fx.managerCookie, { hours: [valid, bad] });
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "hours.1" } },
+      });
+    }
+    expect(
+      (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as { hours: unknown[] }
+      ).hours,
+    ).toEqual([
+      { departmentId: department.id, weekday: 3, opensAt: "09:00:00", closesAt: "14:00:00" },
+    ]);
+  });
+
+  it("stores a zone menu's explicit display order and refuses one that is not a whole number from zero", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+    ).json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/zones/${fx.zoneId}`,
+          fx.managerCookie,
+          { departmentId: department.id },
+        )
+      ).status,
+    ).toBe(204);
+    const path = `/management-api/venue-service/zones/${fx.zoneId}/menus/${fx.menuId}`;
+    expect((await send(fx.app, "PUT", path, fx.managerCookie, { displayOrder: 3 })).status).toBe(
+      204,
+    );
+    for (const displayOrder of ["4", 4.5, -1]) {
+      const rejected = await send(fx.app, "PUT", path, fx.managerCookie, { displayOrder });
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "displayOrder" } },
+      });
+    }
+    expect(
+      (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as { zoneMenus: unknown[] }
+      ).zoneMenus,
+    ).toEqual([{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 3, isDefault: false }]);
+  });
+
+  it("routes a single product rather than a category, and refuses a route naming neither", async () => {
+    const fx = await fixture();
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        categoryId: fx.categoryId,
+        name: "Negroni",
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+      }),
+    );
+    const created = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/routes",
+      fx.managerCookie,
+      { productId: product.id, stationId: fx.stationId },
+    );
+    expect(created.status).toBe(201);
+    const route = (await created.json()) as { id: string };
+    const rejected = await send(
+      fx.app,
+      "POST",
+      "/management-api/venue-service/routes",
+      fx.managerCookie,
+      { categoryId: null, stationId: fx.stationId },
+    );
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "subject" } },
+    });
+    expect(
+      (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as { routes: unknown[] }
+      ).routes,
+    ).toEqual([
+      {
+        id: route.id,
+        zoneId: null,
+        categoryId: null,
+        productId: product.id,
+        stationId: fx.stationId,
+        noPreparation: false,
+      },
+    ]);
+  });
+
+  it("stores the zone a device's new orders start in", async () => {
+    const fx = await fixture();
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Deli",
+        defaultServiceMode: "prepay",
+      })
+    ).json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/zones/${fx.zoneId}`,
+          fx.managerCookie,
+          { departmentId: department.id },
+        )
+      ).status,
+    ).toBe(204);
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: fx.locationId, name: "Till 1" })
+      .returning({ id: tills.id });
+    const [profile] = await db
+      .insert(deviceProfiles)
+      .values({ name: "Counter", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    const [device] = await db
+      .insert(devices)
+      .values({
+        locationId: fx.locationId,
+        deviceProfileId: profile!.id,
+        tillId: till!.id,
+        label: "Counter till",
+        tokenHash: "scrypt$00$00",
+      })
+      .returning({ id: devices.id });
+    const scope = { locationId: fx.locationId };
+    // No zone is the venue's counter default, so without the device's own default a new order
+    // from this device has no zone to start in.
+    await expect(
+      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
+    ).rejects.toMatchObject({ code: "service_zone.default_missing" });
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/devices/${device!.id}/default-zone`,
+          fx.managerCookie,
+          { zoneId: fx.zoneId },
+        )
+      ).status,
+    ).toBe(204);
+    await expect(
+      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
+    ).resolves.toMatchObject({ zoneId: fx.zoneId, departmentId: department.id });
   });
 });

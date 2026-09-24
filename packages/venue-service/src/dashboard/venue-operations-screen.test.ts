@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
@@ -1509,4 +1510,428 @@ describe("the menu offers list's price cell", () => {
     // Charged 9.00 against 11.00; by the struck-out prices (20.00 against 10.00) it would reverse.
     expect(names).toEqual(["Spritz", "Negroni"]);
   });
+});
+
+function column(el: VenueOperationsScreen, name: string, index: number): string[] {
+  return [...table(el, name).shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+    row.querySelectorAll("td")[index]!.textContent!.trim(),
+  );
+}
+async function sortBy(el: VenueOperationsScreen, name: string, key: string) {
+  const list = table(el, name) as HTMLElement & { updateComplete: Promise<unknown> };
+  list.shadowRoot!.querySelector<HTMLButtonElement>(`[data-sort="${key}"]`)!.click();
+  await list.updateComplete;
+}
+function fieldError(el: VenueOperationsScreen, name: string) {
+  return el.shadowRoot!.querySelector(`[data-field-error="${name}"]`)?.textContent?.trim();
+}
+function modal(el: VenueOperationsScreen) {
+  return el.shadowRoot!.querySelector("wt-modal");
+}
+
+describe("the venue lists", () => {
+  // Every sort below starts from an order other than its result, so a column that stopped sorting
+  // would leave the rows where they were. The offers' products and sections sort in OPPOSITE
+  // orders, so the product column sorting by section, or the section column by product, fails.
+  // Department, zone and section ids sort against their names, so a column sorting by id fails
+  // too; menu ids happen to sort WITH their names, so the menus sort does not catch that.
+  const unsorted: VenueServiceView = {
+    ...model,
+    menus: [
+      { id: "m2", name: "Deli takeaway", active: true },
+      { id: "m1", name: "Casa Delgado", active: true },
+    ],
+    offers: [
+      {
+        ...model.offers[0]!,
+        id: "i1",
+        menuId: "m2",
+        sectionId: "sec-z",
+        sectionName: { en: "Cocktails" },
+      },
+      {
+        ...model.offers[0]!,
+        id: "i2",
+        menuId: "m2",
+        productId: "p2",
+        name: "Bravas",
+        sectionId: "sec-a",
+        sectionName: { en: "Tapas" },
+      },
+    ],
+    sections: [
+      { id: "sec-a", menuId: "m2", name: { en: "Tapas" }, displayOrder: 0, active: true },
+      { id: "sec-z", menuId: "m2", name: { en: "Cocktails" }, displayOrder: 1, active: true },
+    ],
+  };
+
+  it("sorts every name column alphabetically", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(unsorted),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    expect(column(el, "departments", 0)).toEqual(["Restaurant and bar", "Deli"]);
+    await sortBy(el, "departments", "name");
+    expect(column(el, "departments", 0)).toEqual(["Deli", "Restaurant and bar"]);
+
+    await selectTab(el, "menus");
+    expect(column(el, "menus", 0)).toEqual(["Deli takeaway", "Casa Delgado"]);
+    await sortBy(el, "menus", "name");
+    expect(column(el, "menus", 0)).toEqual(["Casa Delgado", "Deli takeaway"]);
+    expect(column(el, "menu-offers-m2", 1)).toEqual(["Negroni", "Bravas"]);
+    await sortBy(el, "menu-offers-m2", "product");
+    expect(column(el, "menu-offers-m2", 1)).toEqual(["Bravas", "Negroni"]);
+    expect(column(el, "menu-offers-m2", 0)).toEqual(["Tapas", "Cocktails"]);
+    await sortBy(el, "menu-offers-m2", "section");
+    expect(column(el, "menu-offers-m2", 0)).toEqual(["Cocktails", "Tapas"]);
+    expect(column(el, "menu-sections-m2", 0)).toEqual(["Tapas", "Cocktails"]);
+    await sortBy(el, "menu-sections-m2", "name");
+    expect(column(el, "menu-sections-m2", 0)).toEqual(["Cocktails", "Tapas"]);
+
+    await selectTab(el, "zones");
+    expect(column(el, "zones", 0)).toEqual(["Dining room", "Deli counter"]);
+    await sortBy(el, "zones", "name");
+    expect(column(el, "zones", 0)).toEqual(["Deli counter", "Dining room"]);
+  });
+
+  it("marks inactive departments and menus, and names a zone's non-default menus", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]!, { ...model.departments[1]!, active: false }],
+        menus: [model.menus[0]!, { ...model.menus[1]!, active: false }],
+        zoneMenus: [
+          ...model.zoneMenus,
+          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
+        ],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    expect(column(el, "departments", 3)).toEqual(["Active", "Inactive"]);
+    await selectTab(el, "menus");
+    expect(column(el, "menus", 1)).toEqual(["Active", "Inactive"]);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);
+  });
+
+  it("labels a zone-menu row's actions with the stored menu id, and shows a route's stored category or product id, when they are not loaded", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        zoneMenus: [
+          ...model.zoneMenus,
+          { zoneId: "z1", menuId: "m-gone", displayOrder: 1, isDefault: false },
+        ],
+        routes: [
+          { ...model.routes[0]!, id: "r1", categoryId: "c-gone" },
+          {
+            ...model.routes[0]!,
+            id: "r2",
+            categoryId: null,
+            productId: "p-gone",
+          },
+        ],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    expect(
+      [...table(el, "zone-menus").shadowRoot!.querySelectorAll("wt-row-actions")].map((menu) =>
+        menu.getAttribute("label"),
+      ),
+    ).toEqual(["Actions: Casa Delgado", "Actions: m-gone"]);
+    await selectTab(el, "routing");
+    expect(column(el, "preparation-routes", 0)).toEqual(["c-gone", "p-gone"]);
+  });
+
+  it("makes another of a zone's menus its default straight from the list", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        zoneMenus: [
+          ...model.zoneMenus,
+          { zoneId: "z1", menuId: "m2", displayOrder: 4, isDefault: false },
+        ],
+      }),
+      allowMenu: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    expect(find(el, '[data-test="default-assignment-m1"]')!.hasAttribute("disabled")).toBe(true);
+    await action(el, "default-assignment-m2");
+    expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 4, makeDefault: true });
+    expect(modal(el)).toBeNull();
+    expect(api.load).toHaveBeenCalledTimes(2);
+  });
+
+  it("adds a product to the menu the offers list is showing, from its toolbar", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "menus");
+    await action(el, "new-offer");
+    expect(modal(el)!.getAttribute("heading")).toBe("Casa Delgado: Add product to menu");
+    expect(el.shadowRoot!.querySelector('[name="offer-product-m1"]')).not.toBeNull();
+    await action(el, "cancel-editor");
+    await action(el, "products-m2");
+    await action(el, "new-offer");
+    expect(modal(el)!.getAttribute("heading")).toBe("Deli takeaway: Add product to menu");
+    expect(el.shadowRoot!.querySelector('[name="offer-product-m2"]')).not.toBeNull();
+  });
+});
+
+describe("the venue editors refuse an incomplete form", () => {
+  it("requires a menu name", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createMenu: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-menu");
+    await action(el, "save-editor");
+    expect(fieldError(el, "menu-name")).toBe("Menu name: This field is required.");
+    expect(summary(el)).toContain("Menu name: This field is required.");
+    expect(api.createMenu).not.toHaveBeenCalled();
+  });
+
+  it("requires opening and closing times, and refuses them equal", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      replaceHours: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "departments");
+    await action(el, "new-hours");
+    await action(el, "save-editor");
+    expect(fieldError(el, "hours-opens")).toBe("Opens: This field is required.");
+    expect(fieldError(el, "hours-closes")).toBe("Closes: This field is required.");
+    expect(summary(el)).toContain("Opens: This field is required.");
+    expect(summary(el)).toContain("Closes: This field is required.");
+    field(el, "hours-opens").value = "10:00";
+    field(el, "hours-closes").value = "10:00";
+    await action(el, "save-editor");
+    expect(fieldError(el, "hours-opens")).toBe("Opening and closing times must differ.");
+    expect(fieldError(el, "hours-closes")).toBe("Opening and closing times must differ.");
+    expect(summary(el)).toContain("Opening and closing times must differ.");
+    expect(summary(el)).not.toContain("This field is required.");
+    expect(api.replaceHours).not.toHaveBeenCalled();
+  });
+
+  it("requires a department for a zone when none is active", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: model.departments.map((department) => ({ ...department, active: false })),
+      }),
+      configureZone: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    await action(el, "edit-zone-z2");
+    await action(el, "save-editor");
+    expect(fieldError(el, "zone-department-z2")).toBe("Department: This field is required.");
+    expect(summary(el)).toContain("Department: This field is required.");
+    expect(api.configureZone).not.toHaveBeenCalled();
+  });
+
+  it("requires a menu for a zone that already has every active one", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        zoneMenus: [
+          ...model.zoneMenus,
+          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
+        ],
+      }),
+      allowMenu: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    await action(el, "new-assignment-z1");
+    expect(field(el, "assignment-menu").value).toBe("");
+    await action(el, "save-editor");
+    expect(fieldError(el, "assignment-menu")).toBe("Menu name: This field is required.");
+    expect(summary(el)).toContain("Menu name: This field is required.");
+    expect(api.allowMenu).not.toHaveBeenCalled();
+  });
+
+  it("refuses a display order that is not a whole number of zero or more", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      allowMenu: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    await action(el, "zone-menus-z1");
+    await action(el, "new-assignment-z1");
+    for (const order of ["-1", "1.5"]) {
+      field(el, "assignment-order").value = order;
+      await action(el, "save-editor");
+      expect(fieldError(el, "assignment-order")).toBe("Enter a whole number of zero or more.");
+      expect(summary(el)).toContain("Enter a whole number of zero or more.");
+    }
+    expect(api.allowMenu).not.toHaveBeenCalled();
+    field(el, "assignment-order").value = "0";
+    await action(el, "save-editor");
+    expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 0, makeDefault: false });
+  });
+
+  it("requires a product or category to route when the venue has neither", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({ ...model, categories: [], products: [] }),
+      createRoute: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "routing");
+    await action(el, "new-route");
+    await action(el, "save-editor");
+    expect(fieldError(el, "route-subject")).toBe("Product or category: This field is required.");
+    expect(summary(el)).toContain("Product or category: This field is required.");
+    expect(fieldError(el, "route-target")).toBeUndefined();
+    expect(api.createRoute).not.toHaveBeenCalled();
+  });
+});
+
+it("drops a section translation cleared in the editor", async () => {
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+  const api = {
+    load: vi.fn().mockResolvedValue({
+      ...model,
+      sections: [
+        {
+          id: "sec-d",
+          menuId: "m1",
+          name: { en: "Desserts", fr: "Desserts maison" },
+          displayOrder: 0,
+          active: true,
+        },
+      ],
+    }),
+    updateMenuSection: vi.fn().mockResolvedValue(undefined),
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
+  await selectTab(el, "menus");
+  await action(el, "edit-section-sec-d");
+  expect(field(el, "section-name-fr").value).toBe("Desserts maison");
+  field(el, "section-name-fr").value = "  ";
+  await action(el, "save-editor");
+  expect(api.updateMenuSection).toHaveBeenCalledWith("sec-d", { name: { en: "Desserts" } });
+});
+
+it("opens a product route that needs no preparation on that product and on no station", async () => {
+  const el = await mount({
+    load: vi.fn().mockResolvedValue({
+      ...model,
+      routes: [
+        {
+          id: "r2",
+          zoneId: null,
+          categoryId: null,
+          productId: "p1",
+          stationId: null,
+          noPreparation: true,
+        },
+      ],
+    }),
+  } as unknown as VenueServiceApi);
+  await selectTab(el, "routing");
+  await action(el, "edit-route-r2");
+  expect(field(el, "route-subject").value).toBe("product:p1");
+  expect(field(el, "route-zone").value).toBe("");
+  expect(field(el, "route-target").value).toBe("none");
+});
+
+it("shows the general save error when a write is refused without a reason", async () => {
+  const api = {
+    load: vi.fn().mockResolvedValue(model),
+    deactivateDepartment: vi.fn().mockRejectedValue(undefined),
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
+  await selectTab(el, "departments");
+  await action(el, "deactivate-department-d2");
+  await action(el, "save-editor");
+  expect(summary(el)).toContain("The change could not be saved.");
+  expect(modal(el)).not.toBeNull();
+});
+
+describe("the editor's keyboard", () => {
+  it("closes on Escape", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createMenu: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-menu");
+    input(el, "menu-name").focus();
+    await userEvent.keyboard("{Escape}");
+    // Escape closes the native dialog at once, but the modal leaves only when its close event
+    // arrives, which the HTML spec's dialog-closing steps queue as a later task.
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(api.createMenu).not.toHaveBeenCalled();
+  });
+
+  it("stays open on Escape while a save is still pending", async () => {
+    let finish!: () => void;
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      deactivateDepartment: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      ),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "departments");
+    await action(el, "deactivate-department-d2");
+    find(el, '[data-test="save-editor"]')!.click();
+    await el.updateComplete;
+    modal(el)!.shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
+    await userEvent.keyboard("{Escape}");
+    await settle(el);
+    expect(modal(el)).not.toBeNull();
+    expect(modal(el)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    finish();
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+  });
+
+  it("saves on Enter in a text field", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(model),
+      createMenu: vi.fn().mockResolvedValue({ id: "m3" }),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-menu");
+    input(el, "menu-name").focus();
+    await userEvent.keyboard("Brunch{Enter}");
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
+    expect(api.createMenu).toHaveBeenCalledWith("Brunch");
+  });
+});
+
+it("returns focus to the row that opened an editor, or to the tabs once that row is gone", async () => {
+  const liveData = new LiveData();
+  const load = vi.fn().mockResolvedValue(structuredClone(model));
+  const el = await mount({ load, liveData } as unknown as VenueServiceApi);
+  await selectTab(el, "departments");
+  await action(el, "edit-department-d1");
+  await action(el, "cancel-editor");
+  const menu = table(el, "departments").shadowRoot!.activeElement as HTMLElement;
+  expect(menu.getAttribute("label")).toBe("Actions: Restaurant and bar");
+  expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
+
+  await action(el, "edit-department-d2");
+  const updated = structuredClone(model);
+  updated.departments = [updated.departments[0]!];
+  updated.hours = [];
+  load.mockResolvedValue(updated);
+  liveData.invalidate([{ type: "departments", id: "d2" }]);
+  await vi.waitFor(() => expect(column(el, "departments", 0)).toEqual(["Restaurant and bar"]));
+  await action(el, "cancel-editor");
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("wt-tabs"));
 });
