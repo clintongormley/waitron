@@ -477,24 +477,22 @@ describe("deleteMany — S3's multi-object delete", () => {
     });
   });
 
-  it("names the refused key as the answer gave it, or the batch's first when it gave none", async () => {
-    const bare: Scripted = {
-      status: 200,
-      headers: xml,
-      body: '<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Error></Error></DeleteResult>',
-    };
+  it.each([
+    ["a key outside the batch", "<Key>elsewhere/x</Key><Code>AccessDenied</Code>", "a"],
+    ["no key", "<Code>AccessDenied</Code>", "a"],
+    ["a key of the batch but no code", "<Key>waitron/b</Key>", "b"],
+    ["a key of the batch and an empty code", "<Key>waitron/b</Key><Code></Code>", "b"],
+  ])("reports a refusal naming %s as an incomplete answer", async (_, error, key) => {
     const { store } = storeOver([
-      perKeyErrors([{ key: "elsewhere/x", code: "AccessDenied" }]),
-      bare,
+      {
+        status: 200,
+        headers: xml,
+        body: `<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Error>${error}</Error></DeleteResult>`,
+      },
     ]);
-    expect((await rejection(store.deleteMany(["a"]))).params).toMatchObject({
-      key: "elsewhere/x",
-    });
-    expect((await rejection(store.deleteMany(["a", "b"]))).params).toEqual({
-      operation: "delete",
-      key: "a",
-      status: 200,
-      name: "Unknown",
+    expect(await rejection(store.deleteMany(["a", "b"]))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key, status: 200, name: "IncompleteDeleteResult" },
     });
   });
 
@@ -535,9 +533,9 @@ describe("deleteMany — S3's multi-object delete", () => {
     const { store, sent } = storeOver([
       { status: 400, headers: xml, body: errorBody("MalformedXML", "bad") },
     ]);
-    expect((await rejection(store.deleteMany(["a"]))).params).toMatchObject({
-      status: 400,
-      name: "MalformedXML",
+    expect(await rejection(store.deleteMany(["a"]))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key: "a", status: 400, name: "MalformedXML" },
     });
     expect(sent).toHaveLength(1);
   });

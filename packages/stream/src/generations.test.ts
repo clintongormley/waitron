@@ -250,12 +250,16 @@ describe("pruneGenerations", () => {
 
   // A generation whose marker is gone could be claimed again, and would then be streamed into
   // on top of its own old files.
-  it("keeps a generation's marker when a delete before it fails", async () => {
+  it("keeps a generation's marker when a file that sorts after it fails to delete", async () => {
     const root = `venues/${VENUE}/${gen(1)}/`;
     const inner = createMemoryObjectStore({ now: () => T0 });
     for (const file of ["0000/a.ltx", "0000/b.ltx", "opened.json", "zz/after-the-marker.ltx"])
       await inner.put(`${root}${file}`, new Uint8Array([1]));
-    inner.failNext({ operation: "delete", key: `${root}0000/b.ltx`, error: new Error("refused") });
+    inner.failNext({
+      operation: "delete",
+      key: `${root}zz/after-the-marker.ltx`,
+      error: new Error("refused"),
+    });
     await expect(
       pruneGenerations(inner, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
     ).rejects.toThrow("refused");

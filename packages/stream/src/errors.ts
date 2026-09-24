@@ -7,8 +7,8 @@ export type BucketOperation = "get" | "put" | "list" | "delete";
 /**
  * This package's codes in the shared registry. They sit in the `backup.*` family with the archive's
  * codes (apps/server/src/errors.ts) because the stream is the venue's other kind of backup. No param
- * ever carries a credential: `name` is the store's error code, or the name of a listing this package
- * refused, never message text.
+ * ever carries a credential: `name` is the store's error code, or the name this package gives an
+ * answer it refused, never message text.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -17,8 +17,10 @@ declare module "@waitron/shared" {
      * box writing this venue. */
     "backup.stream_precondition_failed": { key: string };
     /** Any other failure talking to the bucket, after conflict retries are spent. `status` is the HTTP
-     * status, or null when no answer arrived at all. One file refused inside a batch delete the bucket
-     * otherwise answered carries that answer's status (200) and the file's own error code as `name`. */
+     * status, or null when no answer arrived at all. A file refused inside a batch delete the bucket
+     * otherwise answered carries that answer's status (200) and the file's own error code as `name`.
+     * `name` is "IncompleteDeleteResult" when the refusal gives no code or names no file of the batch;
+     * in the latter case `key` is the batch's first file. */
     "backup.stream_request_failed": {
       operation: BucketOperation;
       key: string;

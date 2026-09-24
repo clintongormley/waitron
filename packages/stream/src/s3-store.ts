@@ -249,14 +249,12 @@ export function createS3ObjectStore(
         // A quiet answer lists only the keys it did not delete, inside a request that succeeded.
         const refused = out.Errors?.[0];
         if (refused !== undefined) {
-          const named = refused.Key ?? at(batch[0]!);
-          const key = named.startsWith(root) ? named.slice(root.length) : named;
-          throw requestFailed(
-            "delete",
-            key,
-            out.$metadata.httpStatusCode ?? null,
-            refused.Code ?? "Unknown",
-          );
+          const status = out.$metadata.httpStatusCode ?? null;
+          const key = batch.find((candidate) => at(candidate) === refused.Key);
+          if (key === undefined || !refused.Code) {
+            throw requestFailed("delete", key ?? batch[0]!, status, "IncompleteDeleteResult");
+          }
+          throw requestFailed("delete", key, status, refused.Code);
         }
       }
     },
