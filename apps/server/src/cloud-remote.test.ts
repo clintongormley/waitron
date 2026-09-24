@@ -1,11 +1,11 @@
 import { expect, it } from "vitest";
 import { Hono } from "hono";
-import { mkdtemp, readFile, rm, stat, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile, mkdir, chmod } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { mountCloudPublic, createStaffCsr } from "./cloud-remote.js";
 import forge from "node-forge";
-it("public availability exposes no venue data and follows the live serving gate", async () => {
+it("public availability exposes no venue data and reevaluates its supplied serving check", async () => {
   const app = new Hono();
   let serving = true;
   mountCloudPublic(app, () => serving);
@@ -68,6 +68,14 @@ it("certificate installation verifies the venue key and hostname before replacin
     cert.sign(key, forge.md.sha256.create());
     const pem = forge.pki.certificateToPem(cert);
     await installStaffCertificate(root, "staff.sol.example.test", pem);
+    await chmod(join(root, "cloud-staff.key"), 0o666);
+    await expect(installStaffCertificate(root, "staff.sol.example.test", pem)).rejects.toThrow(
+      "Invalid staff key file",
+    );
+    await expect(createStaffCsr(root, "staff.sol.example.test")).rejects.toThrow(
+      "Invalid staff key file",
+    );
+    await chmod(join(root, "cloud-staff.key"), 0o600);
     await expect(installStaffCertificate(root, "staff.luna.example.test", pem)).rejects.toThrow();
     await expect(
       installStaffCertificate(root, "staff.sol.example.test", "broken"),
@@ -79,6 +87,29 @@ it("certificate installation verifies the venue key and hostname before replacin
       installStaffCertificate(root, "staff.sol.example.test", forge.pki.certificateToPem(cert)),
     ).rejects.toThrow();
     expect(await readFile(join(root, "cloud-staff.crt"), "utf8")).toBe(pem);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("the certificate CLI reports an invalid chain without a Node stack trace", async () => {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const root = await mkdtemp(join(tmpdir(), "waitron-cert-cli-"));
+  try {
+    await writeFile(join(root, "chain.pem"), "broken");
+    const result = await promisify(execFile)(process.execPath, [
+      "--import",
+      import.meta.resolve("tsx"),
+      "scripts/cloud-certificate.ts",
+      "install",
+      root,
+      "staff.example.test",
+      join(root, "chain.pem"),
+    ]).catch((error: { code: number; stderr: string }) => error);
+    expect(result).toHaveProperty("code", 1);
+    expect(result.stderr).toContain("Could not install the staff certificate");
+    expect(result.stderr).not.toContain("node:internal");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

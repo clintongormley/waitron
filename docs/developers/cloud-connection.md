@@ -122,8 +122,9 @@ HTTPS staff origin and `WAITRON_MANAGEMENT_RP_ID` to its hostname. The initial
 HTTP-to-HTTPS change needs a restart. Subsequent certificate updates are checked
 every ten seconds and applied to new TLS connections without restarting Waitron.
 An invalid replacement leaves the loaded context intact and logs
-`cloud.certificate_reload_failed`. Fix the certificate file before the valid
-certificate expires; the watcher does not obtain certificates itself.
+`cloud.certificate_reload_failed`, repeating every five minutes while it persists.
+Check that the certificate covers `WAITRON_MANAGEMENT_ORIGIN`, as well as its key
+and dates. Fix the configuration or certificate before the valid certificate expires; the watcher does not obtain certificates itself.
 
 Use the same hostname on your LAN by configuring your local DNS resolver to return
 the server's LAN address. Keep that address reserved in DHCP. Devices using a
@@ -137,3 +138,18 @@ Its cached authority lasts at most ten minutes during a Cloud management outage;
 a restart cannot extend it. Expiry closes remote connections while local HTTPS
 continues. The local peer container grants no access to the rest of your LAN and
 has no SSH support feature.
+
+### Reissue staff TLS after a restore
+
+A recovery archive deliberately excludes `cloud-staff.key` and `cloud-staff.crt`.
+If your restored configuration still points at those missing files, Waitron refuses
+to start; it does not silently serve plain HTTP. Before enabling remote access on a
+replacement, generate a new staff key/CSR and have the Cloud operator issue its chain
+for the authorized replacement. Set the TLS paths and management origin consistently
+before starting it. The certificate commands work without a running server.
+
+Cloud replacement enrollment is a separate recovery step and is not implemented by
+the certificate command. Keep the gateway route disabled until it is complete. For
+local recovery first, use Waitron's existing local-certificate setup and its matching
+local management origin, then change to the staff hostname after Cloud enrollment.
+Do not copy the old staff key or delete the Cloud connection state to bypass enrollment.

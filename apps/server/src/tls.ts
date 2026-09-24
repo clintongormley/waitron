@@ -58,7 +58,7 @@ export function watchTlsFiles(
   intervalMs = 10000,
 ): void {
   let accepted = "",
-    failed = false;
+    lastFailure: number | undefined;
   const timer = setInterval(() => {
     try {
       if (statSync(files.keyFile).size > 16384 || statSync(files.certFile).size > 16384)
@@ -78,10 +78,12 @@ export function watchTlsFiles(
       createSecureContext({ key, cert });
       server.setSecureContext({ key, cert });
       accepted = fingerprint;
-      failed = false;
+      lastFailure = undefined;
     } catch {
-      if (!failed) onError();
-      failed = true;
+      if (lastFailure === undefined || Date.now() - lastFailure >= 300000) {
+        onError();
+        lastFailure = Date.now();
+      }
     }
   }, intervalMs);
   timer.unref();

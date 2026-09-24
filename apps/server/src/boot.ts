@@ -938,6 +938,10 @@ export async function startServer(
     } else await next();
   });
 
+  // Setup and recovery must answer unavailable before their HTML catch-all can handle this path.
+  let cloudServing = () => false;
+  mountCloudPublic(app, () => cloudServing());
+
   // Help and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
   mountDiscovery(
@@ -2152,7 +2156,7 @@ export async function startServer(
     : undefined;
   const cloudPrimary = () =>
     holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
-  mountCloudPublic(app, cloudPrimary);
+  cloudServing = cloudPrimary;
   mountCloudApi(
     app,
     {

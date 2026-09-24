@@ -915,6 +915,9 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       // The setup status fact sheet (Task 2's `mountSetup`), over HTTPS — proof `config.environment`
       // threaded through the setup branch into `mountSetup`, and that the minted cert actually serves.
+      const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
+      expect(publicStatus.status).toBe(503);
+      expect(await publicStatus.json()).toEqual({ available: false });
       const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({
@@ -1401,6 +1404,9 @@ describe("startServer, against a migrated venue directory", () => {
 
       // The setup API still answers as JSON: the wizard's `mountSpa` catch-all (registered LAST) did not
       // shadow /setup-api/status.
+      const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
+      expect(publicStatus.status).toBe(503);
+      expect(await publicStatus.json()).toEqual({ available: false });
       const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toEqual({
@@ -1538,6 +1544,9 @@ describe("startServer, against a migrated venue directory", () => {
     const { via, close } = httpsVia(material.caPem);
     try {
       // (a) HTTPS serves from the OPERATOR cert — the operator-CA client completes the handshake.
+      const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
+      expect(publicStatus.status).toBe(503);
+      expect(await publicStatus.json()).toEqual({ available: false });
       const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, via);
       expect(status.status).toBe(200);
       expect(await status.json()).toMatchObject({ provisioned: false });

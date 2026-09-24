@@ -13,7 +13,15 @@ export function mountCloudPublic(app: Hono, serving: () => boolean): void {
   });
 }
 
-/** The server keeps this key outside venue.db and recovery archives. Only the CSR leaves it. */
+async function readStaffKey(stateDir: string): Promise<string> {
+  const path = join(stateDir, "cloud-staff.key");
+  const info = await lstat(path);
+  if (!info.isFile() || info.size > 8192 || (info.mode & 0o077) !== 0)
+    throw new Error("Invalid staff key file");
+  return readFile(path, "utf8");
+}
+
+/** Keep the staff key separate from venue.db and the recovery-file allowlist. Only the CSR leaves it. */
 export async function createStaffCsr(stateDir: string, hostname: string): Promise<string> {
   if (
     hostname.length > 253 ||
@@ -21,7 +29,7 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
     /^\d+(\.\d+){3}$/.test(hostname) ||
     !hostname.split(".").every((s) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))
   )
-    throw new Error("Invalid staff hostname");
+    throw new Error("Invalid staff hostname; use the exact lowercase hostname assigned by Cloud");
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   const path = join(stateDir, "cloud-staff.key");
   try {
@@ -47,10 +55,7 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
       if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
     }
   }
-  const info = await lstat(path);
-  if (!info.isFile() || info.size > 8192 || (info.mode & 0o077) !== 0)
-    throw new Error("Invalid staff key file");
-  const key = forge.pki.privateKeyFromPem(await readFile(path, "utf8"));
+  const key = forge.pki.privateKeyFromPem(await readStaffKey(stateDir));
   const request = forge.pki.createCertificationRequest();
   request.publicKey = forge.pki.setRsaPublicKey(key.n, key.e);
   request.setSubject([{ name: "commonName", value: hostname }]);
@@ -77,7 +82,7 @@ export async function installStaffCertificate(
     Date.parse(cert.validTo) <= Date.now()
   )
     throw new Error("Invalid staff certificate");
-  const key = await readFile(join(stateDir, "cloud-staff.key"));
+  const key = await readStaffKey(stateDir);
   createSecureContext({ key, cert: chain });
   const path = join(stateDir, "cloud-staff.crt"),
     temporary = path + "." + randomUUID();

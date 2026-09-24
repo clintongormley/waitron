@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildServeOptions } from "./tls.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 
 /**
- * `buildServeOptions` is the whole of this task's TLS surface: with no `tls` it hands `serve` the
+ * `buildServeOptions` builds the initial TLS context: with no `tls` it hands `serve` the
  * plain-HTTP options unchanged, and with `tls` it reads the PEM files and returns the
  * `@hono/node-server` option shape (`createServer: node:https.createServer`, `serverOptions:
  * { key, cert }`) that makes the SAME `serve` call serve HTTPS instead. The confirmed option names
@@ -166,6 +166,30 @@ it("reloads a renewed certificate for fresh TLS connections and keeps serving af
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("repeats a persistent reload failure after five minutes instead of suppressing it forever", async () => {
+  const { watchTlsFiles } = await import("./tls.js");
+  const { Server } = await import("node:https");
+  const material = mintMtlsMaterial();
+  const root = await mkdtemp(join(tmpdir(), "waitron-tls-alert-"));
+  const files = { certFile: join(root, "cert.pem"), keyFile: join(root, "key.pem") };
+  const server = new Server({ key: material.serverKeyPem, cert: material.serverCertPem });
+  let now = Date.now(),
+    errors = 0;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  try {
+    await writeFile(files.certFile, material.serverCertPem);
+    await writeFile(files.keyFile, material.serverKeyPem);
+    watchTlsFiles(server, files, "wrong.example.test", () => errors++, 5);
+    await vi.waitFor(() => expect(errors).toBe(1));
+    now += 300001;
+    await vi.waitFor(() => expect(errors).toBe(2));
+  } finally {
+    server.emit("close");
+    clock.mockRestore();
     await rm(root, { recursive: true, force: true });
   }
 });
