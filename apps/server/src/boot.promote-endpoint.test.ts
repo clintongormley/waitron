@@ -258,7 +258,7 @@ async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
   };
   await writeNodeMembership(db, held);
 
-  await writeMirrorConfig(db, {
+  await writeMirrorConfig(db, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -266,7 +266,7 @@ async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
   });
 
   await stampDeployment(db, "production");
-  await setDeploymentMode(db, "mirror");
+  await setDeploymentMode(db, standby.nodeId, "mirror");
   // Prove the reserved series exists (the value a real promote would correct trading.env to) — not
   // asserted here (the mirror case never reaches the promote), but a cheap invariant on the seed.
   await readStandardSeriesId(db, standby.nodeId);
@@ -302,8 +302,9 @@ beforeAll(async () => {
   [appVenueDir, appDb] = await migratedVenue();
   [mirrorVenueDir, mirrorDb] = await migratedVenue();
   await seedTillIdentity(appDb);
-  // Stamp production (matching WAITRON_ENV so the boot guard passes); singleton_role keeps its column
-  // default 'primary'. => (mode=primary, singleton_role=primary), the primary starting point.
+  // Stamp production (matching WAITRON_ENV so the boot guard passes). No `node_roles` row is
+  // written, so `readDeploymentAxes`'s missing-row fallback reads (mode=primary,
+  // singleton_role=primary), the primary starting point.
   await stampDeployment(appDb, "production");
 }, 180_000);
 
@@ -404,7 +405,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
 
   it("an unfenced PRIMARY serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
     // A fresh unfenced primary: singleton_role primary and a held self-doc that keeps it serving.
-    await setSingletonRole(appDb, "primary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("serving-primary"));
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
@@ -429,7 +430,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
   it("a FENCED node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
     // A returned ex-primary whose held document marks it sell-only — boot reconciles the singleton axis
     // to 'secondary' and mounts the read-only gate.
-    await setSingletonRole(appDb, "primary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("sell-only"));
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;

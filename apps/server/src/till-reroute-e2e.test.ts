@@ -291,12 +291,12 @@ beforeAll(async () => {
   await seedVenue(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
-  // `mirror_config` row a mirror boot requires. A keeps the 'primary'/'primary' column defaults; a
-  // stamp is all it needs.
+  // `mirror_config` row a mirror boot requires. A gets no `node_roles` row, so it reads
+  // 'primary'/'primary' through `readDeploymentAxes`'s missing-row fallback; a stamp is all it needs.
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");
-  await setDeploymentMode(b, "mirror");
-  await writeMirrorConfig(b, {
+  await setDeploymentMode(b, NODE_B, "mirror");
+  await writeMirrorConfig(b, NODE_B, {
     relayUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",
     boxCaPem: mintSelfSignedServerCert({
@@ -368,8 +368,8 @@ describe("till reroute — two instances, one venue", () => {
 
       // 5. Promote B at the DB level — the deployment flip a human's promote performs (Track B item 3
       // builds the endpoint).
-      await setDeploymentMode(b, "primary");
-      await setSingletonRole(b, "primary");
+      await setDeploymentMode(b, NODE_B, "primary");
+      await setSingletonRole(b, NODE_B, "primary");
 
       // The boot-captured control (node-api.ts, §3.1) — the measurement where a live read and the
       // captured one genuinely differ (CLAUDE.md §1): the STILL-RUNNING mirror keeps answering

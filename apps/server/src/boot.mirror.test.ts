@@ -69,7 +69,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // `adopting` is migrated but has NO identity seeded — it models a mirror that has just adopted,
 // which holds none of the venue's rows (adopt scaffolds none, and nothing brings them). `noConfig`
 // is mirror-stamped and NEVER given a `mirror_config` row — the fail-closed control: a box stamped
-// `deployment.mode='mirror'` with no connection config must refuse to boot (server.config_invalid),
+// `node_roles.mode='mirror'` with no connection config must refuse to boot (server.config_invalid),
 // never serve a mirror that can never reach its primary.
 const VENUES = ["mirror", "primary", "noConfig", "adopting"] as const;
 type VenueName = (typeof VENUES)[number];
@@ -204,22 +204,23 @@ beforeAll(async () => {
   await seedIdentity(db.primary);
   await seedIdentity(db.noConfig);
   // Stamp all three preproduction (matching WAITRON_ENV so the deployment guard passes), then flip
-  // the two mirror directories' mode. The primary one keeps the column default ('primary').
+  // the two mirror directories' mode. The primary one writes no `node_roles` row, so it reads as
+  // 'primary' through `readDeploymentAxes`'s missing-row fallback.
   await stampDeployment(db.mirror, "preproduction");
-  await setDeploymentMode(db.mirror, "mirror");
+  await setDeploymentMode(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
   await stampDeployment(db.primary, "preproduction");
   await stampDeployment(db.noConfig, "preproduction");
-  await setDeploymentMode(db.noConfig, "mirror");
+  await setDeploymentMode(db.noConfig, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
   // The adoption-pending directory: stamped preproduction (so `assertDeploymentMatches` passes) and mode
   // 'mirror', but deliberately NOT seeded with the till identity — the tenant row the initial copy
   // has not brought yet.
   await stampDeployment(db.adopting, "preproduction");
-  await setDeploymentMode(db.adopting, "mirror");
+  await setDeploymentMode(db.adopting, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
 
   // The `mirror` directory's DB-stored connection config (C2b), written exactly as
   // `adoptFromPrimary` would — this is what the boot's `readMirrorConfig` reads INSTEAD of the
   // retired env. The `noConfig` directory deliberately gets none (the fail-closed control).
-  await writeMirrorConfig(db.mirror, {
+  await writeMirrorConfig(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID, {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
@@ -260,7 +261,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
-describe("mirror-mode boot (deployment.mode = 'mirror')", () => {
+describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
   it("serves a dashboard read via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({
@@ -422,7 +423,7 @@ describe("mirror-mode boot (deployment.mode = 'mirror')", () => {
 
     // The mirror directory's REAL role, as `setDeploymentMode('mirror')` co-set it in beforeAll — this is a
     // genuine mirror, not a role invented for the test.
-    const role = await readSingletonRole(db.mirror);
+    const role = await readSingletonRole(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID);
     expect(role).toBe("secondary");
 
     // Drive the pass an hour ahead of wall-clock so the seeded envío is unambiguously DUE for the
@@ -469,8 +470,9 @@ describe("mirror-mode boot (deployment.mode = 'mirror')", () => {
   }, 60_000);
 
   it("primary boot of the same identity mounts the mirror-bundle endpoint + operational groups (control: the mirror's absence is real)", async () => {
-    // The other direction (CLAUDE.md §1): the SAME identity, stamped 'primary' (mode column default),
-    // mounts the primary-only surfaces the mirror suppresses. The prove-by-deletion control — flip
+    // The other direction (CLAUDE.md §1): the SAME identity with no `node_roles` row, so 'primary'
+    // through the reader's missing-row fallback, mounts the primary-only surfaces the mirror
+    // suppresses. The prove-by-deletion control — flip
     // boot.ts's `isMirror` / singleton gating and the mirror's 403/404s above become the 401s/non-404s
     // below; keep both and the two disagree, which is the whole point.
     const port = await freePort();

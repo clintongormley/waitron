@@ -1,15 +1,19 @@
 /**
- * A table's CLASS (swap spec §2.1). Every database table is exactly one of these: `ledger` — what
- * happened (sales, payments, fiscal records, closes, clock-ins), keyed by the node that wrote it.
- * `state` — what a manager configures plus live service in flight. `local` — this node's own record
- * of what it is.
+ * A table's CLASS. Every table lives in `venue.db`, the file slice 2 will stream (slice-2 spec §2).
+ * `ledger` — what happened (sales, payments, fiscal records, closes, clock-ins), keyed by the node
+ * that wrote it. `state` — what a manager configures, live service in flight, and anything else
+ * that means the same on every node. `local` — a row that belongs to one node and means nothing to
+ * another; the table's reason says what ties a row to its node: a `node_id` column every read and
+ * write names, a seal only that node's key opens, or rows the transaction that wrote them deletes.
+ * Identity's `local` tables state none of these until slice-2 Task 1b reclassifies them `state`.
  *
- * What the class decides TODAY is which DATABASE FILE a table lives in after the storage switch
- * (`local` in `node.db`, the rest in `venue.db`), which is why a foreign key must not join a `local`
- * table to a `ledger`/`state` one — guard: `scripts/two-file-foreign-keys.test.ts`, which reads
- * drizzle's GENERATED snapshots, so a key only in hand-written migration SQL is outside it. The
- * copy-and-drain directions the three names were coined for belonged to the deleted PostgreSQL
- * replication; the per-module reason strings still describe them, as does every module
+ * No foreign key joins a `local` table to a `ledger`/`state` one — guard:
+ * `scripts/two-file-foreign-keys.test.ts`, which reads drizzle's GENERATED snapshots, so a key only
+ * in hand-written migration SQL is outside it. `node.db` is created empty and reserved for a later
+ * slice (spec §2); a slice that moves `local` tables into it then has no key to cut first.
+ *
+ * The copy-and-drain directions the three names were coined for belonged to the deleted
+ * PostgreSQL replication; the per-module reason strings still describe them, as does every module
  * `classification.ts` whose file docstring names the mechanism ("classified for native
  * replication") — not all of them have a file docstring at all — and no mechanism in the tree copies
  * a table to a standby or drains one back today.
@@ -79,7 +83,7 @@ export function appendOnlyTablesIn(classifications: readonly ClassifiedTable[]):
 
 /** The physical table names in one class. No production consumer: the package barrel exports it and
  * this package's own test calls it, and nothing else in the tree does. Held because the split it
- * computes is live in the CLASS itself — the class decides which database FILE a table lives in
+ * computes is live in the CLASS itself — the class decides which tables no key may cross
  * (`scripts/two-file-foreign-keys.test.ts`). The `Publication` in the name is left over from the
  * deleted PostgreSQL replication, not a mechanism that still exists. */
 export function tablesForPublication(

@@ -1350,17 +1350,17 @@ export async function startServer(
   // writes inside a GET, and the promote POST is exempt by name. Nothing copies the venue's rows onto
   // a mirror; `mirror-bundle.ts`'s header says what the deleted replication used to supply and that no
   // replacement has landed. A primary is today's flow.
-  // Read ONCE here into a refreshable holder that the promote action
-  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its write — so a mode flip
-  // would take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
-  // flip the mode: a local-secondary promote refreshes this holder without changing its value ('primary'
-  // stays 'primary'). What FLIPS deployment.mode to 'primary' to open the read-only gate live is the
-  // mirror→primary path (spec §5b), a later slice. The store is already open, so this read is free.
+  // Read ONCE here into a refreshable holder that both promote actions refresh after their
+  // write (design §10; the refresh is in promote.ts). `promoteLocalSecondaryToPrimary` never
+  // changes the mode, so its refresh leaves this holder at 'primary'. What flips this node's
+  // `node_roles.mode` to 'primary' is `promoteMirrorToPrimary` (promote.ts, spec §5b). The store
+  // is already open, so this read is free.
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
-  // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this
-  // holder: after writing singleton_role='primary' it refreshes both holders, so the fiscal pass starts on
-  // the next tick with no restart (promotion runbook design §3b/§3c).
+  // duties; only a 'primary' drains/reconciles. Read PER PASS below, and each promote action DOES flip
+  // this holder: after writing singleton_role='primary' it refreshes both holders. After a local-secondary
+  // promote the fiscal pass starts on the next tick with no restart (promotion runbook design §3b/§3c);
+  // a mirror promote restarts the process into `mode=primary` (`promoteMirrorRun`, below).
   // Both axes from ONE read of the one row, so the initial holder pair is never torn — the same thing
   // `refreshDeploymentHolders` relies on: two separate reads could straddle a concurrent promotion and
   // yield an impossible `(mirror, primary)` pair.
@@ -1370,7 +1370,7 @@ export async function startServer(
   // DEMOTE-ONLY — it can never self-promote. Read UNVERIFIED: the row was verified when adopted
   // (its acceptance path) or self-signed at promotion, so reading our own authoritative state back
   // needs no re-verify, exactly as the deployment axes are trusted.
-  const initialAxes = await readDeploymentAxes(db);
+  const initialAxes = await readDeploymentAxes(db, config.till.nodeId);
   // Ruling C7 — returned-box membership reconciliation, the boot-time replacement for the deleted
   // gossip. Deleting the pull worker deleted membership GOSSIP, so a box that died BEFORE it was fenced
   // would boot with a stale serving-primary chart and SELL while the promoted cloud is also primary —
@@ -1388,7 +1388,7 @@ export async function startServer(
   if (initialAxes.mode !== "mirror") {
     let peer: Awaited<ReturnType<typeof readMirrorConfig>>;
     try {
-      peer = await readMirrorConfig(db);
+      peer = await readMirrorConfig(db, config.till.nodeId);
     } catch (error) {
       await store.close();
       throw error;
@@ -1433,15 +1433,16 @@ export async function startServer(
   if (fenced && axes.singletonRole === "primary") {
     // Demote the singleton axis. Idempotent: a second fenced boot already reads 'secondary' and
     // skips. mode stays 'primary' — the (primary, secondary) pair is valid
-    // (deployment_role_valid_ck); the read-only gate below, not the mode, enforces the fence. This
+    // (node_roles_role_valid_ck); the read-only gate below, not the mode, enforces the fence. This
     // stops the submitter/reconciler/config-writer via their existing isSingletonPrimary gates with
     // no worker-gating code change.
     // Close the store on ANY throw before rethrowing, matching the loadKeyRing / mirror-guard
     // close-on-throw discipline in this region: startServer never returns on the throw path, so nothing
     // else would call `store.close()`.
+    const ownNodeId = config.till.nodeId;
     try {
       await withTransaction(db, async (tx) => {
-        await setSingletonRoleTx(tx, "secondary");
+        await setSingletonRoleTx(tx, ownNodeId, "secondary");
       });
     } catch (error) {
       await store.close();
@@ -1449,9 +1450,9 @@ export async function startServer(
     }
     // Re-read rather than synthesize `{ ...axes, singletonRole: "secondary" }`: the demote wrote only
     // singleton_role, and re-reading takes BOTH axes from one read of the current row, so `mode`
-    // cannot be stale if something flipped `deployment.mode` in the window since the initial read.
+    // cannot be stale if something flipped `node_roles.mode` in the window since the initial read.
     // One extra query on the rare fenced path, bought for that freshness (Copilot #214 re-review).
-    axes = await readDeploymentAxes(db);
+    axes = await readDeploymentAxes(db, config.till.nodeId);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   // The awaiting-fiscal-certificate cell (pass.ts's `AwaitingCertStatus`), shared by reference between
@@ -1466,15 +1467,16 @@ export async function startServer(
   // gate's own per-request predicate re-reads `mode` live (so a promotion lifts it without a restart),
   // and is deliberately kept separate below.
   const fencedOrMirror = isMirror || fenced;
-  // The primary-only SINGLETON duties below (scheduled backup, outbound tunnel client, and the fiscal
-  // drain/reconcile pass) gate on THIS, not on `isMirror`: they must run on the ONE
-  // `singleton_role='primary'` node, never on every non-mirror node (promotion runbook design §2/§3c —
-  // the same axis `singletonPass` already gates the fiscal drain/reconcile pass on, #158). The bug this
-  // fixes: a SELL-ONLY LOCAL SECONDARY (`mode='primary'`, `singleton_role='secondary'`) is NOT a mirror,
-  // so the old `!isMirror` gate ran them on it too — a second node dialing the one outbound tunnel and
-  // writing scheduled backups, duplicating the primary (active-active). Because `deployment_role_valid_ck`
-  // rejects `(mirror, primary)`, `singleton_role='primary'` already implies `mode='primary'`, so this
-  // predicate alone is correct and a mirror is always 'secondary'.
+  // The primary-only SINGLETON duties below (scheduled backup, outbound tunnel client, and the
+  // fiscal drain/reconcile pass) gate on THIS, not on `isMirror`: they must run on the ONE
+  // `singleton_role='primary'` node, never on every non-mirror node (promotion runbook design
+  // §2/§3c — the same axis `singletonPass` already gates the fiscal drain/reconcile pass on, #158).
+  // The bug this fixes: a SELL-ONLY LOCAL SECONDARY (`mode='primary'`,
+  // `singleton_role='secondary'`) is NOT a mirror, so the old `!isMirror` gate ran them on it too —
+  // a second node dialing the one outbound tunnel and writing scheduled backups, duplicating the
+  // primary (active-active). Because `node_roles_role_valid_ck` rejects `(mirror, primary)`,
+  // `singleton_role='primary'` already implies `mode='primary'`, so this predicate alone is correct
+  // and a mirror is always 'secondary'.
   //
   // BOOT decision, captured once like `isMirror` — DELIBERATELY not live. An in-process promotion (#160
   // `promoteLocalSecondaryToPrimary` flips `singleton_role` live and starts the fiscal pass next tick) will
@@ -1545,7 +1547,7 @@ export async function startServer(
   let dataNodeId: string = config.till.nodeId;
   if (isMirror) {
     try {
-      const loaded = await readMirrorConfig(db);
+      const loaded = await readMirrorConfig(db, config.till.nodeId);
       if (loaded === null) {
         // The registered `server.config_invalid` shape is `{ variable, reason }` (errors.ts). The
         // "variable" is no longer an env name — the mirror's connection config lives in the DB now — so
@@ -1719,11 +1721,11 @@ export async function startServer(
     },
     log,
   );
-  // The public role probe a till polls to follow the venue's primary across a failover (till-reroute
-  // §3.1). Mounted on every trading boot, not in setup: "not accepting sales" from a mirror or a fenced
-  // node is the answer that steers a till away, so those boots must answer it too. `!fencedOrMirror` is
-  // redundant while `deployment_role_valid_ck` rejects (mirror, primary) and the fence above demotes the
-  // singleton axis; kept so the probe refuses if either stops.
+  // The public role probe a till polls to follow the venue's primary across a failover
+  // (till-reroute §3.1). Mounted on every trading boot, not in setup: "not accepting sales" from a
+  // mirror or a fenced node is the answer that steers a till away, so those boots must answer it
+  // too. `!fencedOrMirror` is redundant while `node_roles_role_valid_ck` rejects (mirror, primary)
+  // and the fence above demotes the singleton axis; kept so the probe refuses if either stops.
   mountNodeApi(
     app,
     {
@@ -2255,7 +2257,8 @@ export async function startServer(
   // cloud's OWN reserved standard series (spec §4.3) BEFORE the point-of-no-return (inert on a
   // still-read-only mirror), runs the PONR owner transaction, and restarts into `mode=primary` on a real
   // promote — an already-primary re-run is an idempotent no-op that skips the restart. Only a mirror
-  // changes its selling series + `deployment.mode` on promotion, so this path exists only in mirror mode.
+  // changes its selling series + its `node_roles.mode` on promotion, so this path exists only in
+  // mirror mode.
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
   ): Promise<MirrorPromotionResult> => {
@@ -2307,7 +2310,7 @@ export async function startServer(
 
   // Mount the operator's failover trigger on BOTH modes (spec §6), before the SPA catch-alls. The
   // read-only gate exempts this POST (above), so a mirror AND a fenced node reach the handler.
-  mountPromoteApi(app, { appDb: db, run: promoteRun }, log);
+  mountPromoteApi(app, { appDb: db, nodeId: till.nodeId, run: promoteRun }, log);
 
   // Serve the built front-ends SAME-ORIGIN (slice 1a), mounted LAST — after every API route AND the
   // optional sync block above — so the till's root catch-all cannot shadow `/api`, `/management-api`,

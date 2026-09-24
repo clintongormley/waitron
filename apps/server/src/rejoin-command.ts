@@ -16,11 +16,10 @@ type Env = NodeJS.ProcessEnv;
 /**
  * The pre-wipe membership read's handle: the VENUE file of this node's own venue directory.
  *
- * `node_membership` is declared `local`, but `applyMigrations` applies every set to the venue
- * handle and leaves the node file empty (`packages/migrations/src/apply.ts`), so the venue handle
- * is where the row is. `close` closes BOTH files — `openVenueDatabase` opens
- * `node.db` beside `venue.db`, and a handle left open would hold a directory this command is
- * about to empty.
+ * `applyMigrations` applies every set to the venue handle and leaves the node file empty
+ * (`packages/migrations/src/apply.ts`), so the venue handle is where `node_membership`'s row is.
+ * `close` closes BOTH files — `openVenueDatabase` opens `node.db` beside `venue.db`, and a handle
+ * left open would hold a directory this command is about to empty.
  */
 async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
   const store = await openVenueDatabase(directory);

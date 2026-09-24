@@ -1,13 +1,13 @@
 // Fail-closed boot guard for the mirror's UNAUTHENTICATED admin surface (sync cloud-mirror hardening).
 //
 // A mirror node fronts the whole dashboard with an ambient full-admin viewer: `ensureMirrorViewer`
-// seeds it and `mirrorSession` auto-injects its session cookie on every request (boot.ts, wired only
-// when `deployment.mode === 'mirror'`). Nothing else authenticates that surface — the ONLY thing
-// keeping it off the network is that the server binds to `config.httpHost`, whose default is the
-// loopback `127.0.0.1`. Setting `WAITRON_HTTP_HOST=0.0.0.0` (or any routable host) would expose the
-// unauthenticated admin dashboard with no auth. This guard refuses exactly that: under mirror mode,
-// a non-loopback bind throws `server.mirror_bind_exposed` BEFORE `serve(...)` binds the socket,
-// unless the operator explicitly opts in via `WAITRON_MIRROR_ALLOW_EXPOSED`.
+// seeds it and `mirrorSession` auto-injects its session cookie on every request (boot.ts, wired
+// only when this node's `node_roles.mode === 'mirror'`). Nothing else authenticates that surface —
+// the ONLY thing keeping it off the network is that the server binds to `config.httpHost`, whose
+// default is the loopback `127.0.0.1`. Setting `WAITRON_HTTP_HOST=0.0.0.0` (or any routable host)
+// would expose the unauthenticated admin dashboard with no auth. This guard refuses exactly that:
+// under mirror mode, a non-loopback bind throws `server.mirror_bind_exposed` BEFORE `serve(...)`
+// binds the socket, unless the operator explicitly opts in via `WAITRON_MIRROR_ALLOW_EXPOSED`.
 //
 // Real per-user auth + TLS is the hosting slice and is OUT OF SCOPE here; the opt-in ONLY silences
 // this stopgap guard and does NOT discharge that owed work. A primary may legitimately bind

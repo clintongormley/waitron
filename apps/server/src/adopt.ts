@@ -37,9 +37,11 @@ export interface AdoptRequest {
 }
 
 export interface AdoptDeps {
-  /** The handle that stamps `deployment`, writes `mirror_config` and mints the break-glass
-   * verifier. There is one handle and nothing in the engine refuses these writes —
-   * `scripts/write-path-tables.test.ts` is what keeps them in named files. */
+  /** The handle that stamps `deployment`, sets this node's mode to `mirror` on `node_roles` (which
+   * sets its singleton role to `secondary` in the same write), writes `mirror_config` and mints the
+   * break-glass verifier onto the same `node_roles` row. There is one handle and nothing in the
+   * engine refuses these writes — `scripts/write-path-tables.test.ts` is what keeps them in named
+   * files. */
   ownerDb: Database;
   /** Fetches the bundle from the primary, carrying the mirror's own `standby` identity so the primary
    * can reserve + endorse it (membership promotion R2). Injected so the HTTP call is stubbable and the
@@ -84,8 +86,8 @@ export interface AdoptDeps {
  *
  * The order is load-bearing: every refusal — a skewed module set, the wrong environment, a foreign
  * tenant, an operational venue already here — runs BEFORE any mutation. `stampDeployment` runs before
- * `setDeploymentMode`, because the `mode` UPDATE needs the singleton row. The environment is the
- * primary's (immutable, one database per environment, §5).
+ * `setDeploymentMode`, because a node's role may be written only to a stamped database. The
+ * environment is the primary's (immutable, one database per environment, §5).
  *
  * This function does NOT restart the box; the `/setup-api/adopt` endpoint does that after `trading.env`
  * is persisted, the same persist-then-restart transition `provision` uses.
@@ -134,8 +136,8 @@ export async function adoptFromPrimary(
   assertNoOperationalVenue(await readOperationalVenueIds(deps.ownerDb));
 
   await stampDeployment(deps.ownerDb, bundle.environment);
-  await setDeploymentMode(deps.ownerDb, "mirror");
-  await writeMirrorConfig(deps.ownerDb, {
+  await setDeploymentMode(deps.ownerDb, standby.nodeId, "mirror");
+  await writeMirrorConfig(deps.ownerDb, standby.nodeId, {
     relayUrl: bundle.relayUrl,
     boxHostname: bundle.boxHostname,
     boxCaPem: bundle.boxCaPem,
@@ -175,7 +177,7 @@ export async function adoptFromPrimary(
   // Mint the offline break-glass secret AFTER the mirror is stamped: this is the ONLY promotable
   // node, so adopt is the right enrolment point. The raw secret is returned exactly once; only its
   // scrypt verifier is persisted, and it is NEVER logged.
-  const breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb);
+  const breakGlassSecret = await mintBreakGlassSecret(deps.ownerDb, standby.nodeId);
 
   return { breakGlassSecret };
 }

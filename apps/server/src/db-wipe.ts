@@ -26,11 +26,9 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * `venue.db`, and `node.db` goes because it is the other file the venue directory is made of, not
  * because emptying it discards anything.
  *
- * What makes keeping that second removal worth its line: `node_membership` is declared `local`
- * (`packages/db/src/classification.ts`), and the class a table is declared with is intended to
- * choose the FILE it lives in. On the day that split lands, the membership record moves into
- * `node.db` and this loop is already right. Until then the claim to hold onto is the measured one
- * above, not the split.
+ * Keeping the second removal costs one line and stays right if a later slice puts tables into
+ * `node.db` (slice-2 spec §2 reserves it); until then the claim to hold onto is the measured one
+ * above.
  *
  * **What a leftover sidecar does NOT do here, stated so nobody carries `restore.ts`'s reading
  * across.** A restore REPLACES `venue.db` with another database, and there a stale `-wal` is

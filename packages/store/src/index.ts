@@ -12,7 +12,8 @@ export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 import { createWriteQueue } from "./write-queue.js";
 
-/** The two database files, named after what each holds. */
+/** The two database files. Every table is in the venue file; the node file is created empty
+ * (`packages/migrations/src/apply.ts`). */
 const VENUE_FILE = "venue.db";
 const NODE_FILE = "node.db";
 
@@ -22,9 +23,9 @@ export interface VenueStoreConfig<
 > {
   /** Where the two files live. Created if it does not exist. */
   directory: string;
-  /** Every table classified `ledger` or `state`. */
+  /** The schema Drizzle maps over the venue file. */
   venueSchema: TVenueSchema;
-  /** Every table classified `local`: this node's identity, sessions, pairing codes, keys. */
+  /** The schema Drizzle maps over the node file. */
   nodeSchema: TNodeSchema;
 }
 
@@ -34,9 +35,10 @@ export interface VenueStoreConfig<
  *
  * `withWriteLock` is per file because the thing it protects is per file — the one WRITE connection,
  * which SQLite will not let two transactions share. One queue across both files would also be correct
- * for safety and wrong for throughput: a node write (a session, a pairing code) would wait behind
- * a venue transaction it can never conflict with, and a node write nested inside a venue
- * transaction would deadlock outright.
+ * for safety and wrong for throughput: a write to one file would wait behind a transaction on the
+ * other that it can never conflict with, and a node write nested inside a venue transaction would
+ * be refused as re-entering the lock (`./write-queue.ts`). Nothing writes to the node file today —
+ * every migration set is applied to the venue file (`packages/migrations/src/apply.ts`).
  */
 export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDatabase<TSchema> & {
   /** Runs `body` as the only write transaction on this file at that moment. */
@@ -58,7 +60,7 @@ export interface VenueStore<
   node: StoreHandle<TNodeSchema>;
   /** Runs `body` as the only write transaction on the venue file at that moment. */
   withWriteLock: <T>(body: () => Promise<T>) => Promise<T>;
-  /** Copies the VENUE file to `path`; the node file carries only this box's own local rows. */
+  /** Copies the VENUE file to `path`, and not the node file. */
   archiveTo: (path: string) => Promise<void>;
   close: () => Promise<void>;
 }

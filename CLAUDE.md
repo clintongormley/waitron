@@ -387,15 +387,17 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).
-- **Four tables request code may read and never write — `tenants`, `nodes`, `deployment`,
-  `mirror_config` — and the database does not refuse the write.** The engine is a file with no roles
-  or permissions, so the guard below is the whole of the enforcement. A write of one
-  of them belongs on a path that opens the store deliberately for it, never on the handle a request
-  is served on. Guard: `scripts/write-path-tables.test.ts`, weaker than its name in three ways its
-  own header states — it reads TEXT, so a table name reached through a variable is invisible to it;
-  it judges a FILE against an allowance list rather than a call chain, so a request path that calls
-  into an allowed file writes through it unseen; and it walks `<member>/src` under `apps` and
-  `packages` alone, so a package's `test/` directory and `apps/<app>/scripts` are outside it.
+- **The tables `scripts/write-path-tables.json` lists — `tenants`, `nodes`, `deployment`,
+  `mirror_config`, `node_roles` — request code may read and never write, and the database does not
+  refuse the write.** The engine is a
+  file with no roles or permissions, so the guard below is the whole of the enforcement. A write of
+  one of them belongs on a path that opens the store deliberately for it, never on the handle a
+  request is served on. Guard: `scripts/write-path-tables.test.ts`, weaker than its name in three
+  ways its own header states — it reads TEXT, so a table name reached through a variable is
+  invisible to it; it judges a FILE against an allowance list rather than a call chain, so a request
+  path that calls into an allowed file writes through it unseen; and it walks `<member>/src` under
+  `apps` and `packages` alone, so a package's `test/` directory and `apps/<app>/scripts` are outside
+  it.
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.** Write-path
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
   `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is assignable
@@ -504,15 +506,24 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   a real database through `applyMigrations` and then tries a plain `UPDATE` and `DELETE` on every
   declared table, and leaves the other two shapes to `packages/store/src/append-only.test.ts`, where
   a conflicting key is available.
-- **The class also chooses the database FILE, so no foreign key may join a `local` table to a
-  `ledger`/`state` one, in either direction.** A `local` row that needs a venue row keeps the plain id
-  and names, at the column, what establishes the target exists — or that nothing does, and where the
-  refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it reads
-  drizzle's GENERATED snapshots, so a key added only in hand-written migration SQL is invisible to
-  it; one declared in TypeScript but not yet generated fails `scripts/migrations-match-schema.test.ts`
-  instead. Cost of the shape it replaced: six such keys
+- **A `local` row belongs to one node, so no foreign key may join a `local` table to a
+  `ledger`/`state` one, in either direction.** Every table is in `venue.db`, the file slice 2 will
+  stream (slice-2 spec §2); `node.db` is reserved and empty, and a key across the classes would stop
+  a later slice moving `local` tables into it. A `local` row that needs a venue row keeps the plain
+  id and names, at the column, what establishes the target exists — or that nothing does, and where
+  the refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it
+  reads drizzle's GENERATED snapshots, so a key added only in hand-written migration SQL is
+  invisible to it; one declared in TypeScript but not yet generated fails
+  `scripts/migrations-match-schema.test.ts` instead. Cost of the shape it replaced: six such keys
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
+- **A `local` table says what ties a row to its node** — a `node_id` column that every read and
+  write names (`node_roles`, `mirror_config`, `join_requests`), a seal only that node's key opens
+  (`tenant_credentials`), or rows the transaction that wrote them deletes (`change_log`). A node
+  holding another node's copy of `venue.db` must read its own rows or none. No guard makes a new
+  `local` table say which, and identity's `local` tables (`packages/identity/src/classification.ts`)
+  state none of these until slice-2 Task 1b reclassifies them `state`. Which node filters a
+  deletion pins: [conventions-data.md](docs/developers/conventions-data.md).
 - **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
   puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
   descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has

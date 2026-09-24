@@ -336,10 +336,9 @@ export interface WaitronModule {
   // Optional module capabilities are assembled by composition without importing domain packages here.
   /** Swap S1: every table this module's migrations create, classified `ledger`/`state`/`local`
    * (swap spec §2.1). The composition root assembles every module's classification, and the root
-   * completeness guard checks it covers each module's `CREATE TABLE`s exactly once. The class decides
-   * which DATABASE FILE a table lives in after the storage switch — `local` in `node.db`, the rest in
-   * `venue.db` — so no foreign key may join a `local` table to a `ledger`/`state` one:
-   * `scripts/two-file-foreign-keys.test.ts`. */
+   * completeness guard checks it covers each module's `CREATE TABLE`s exactly once. No foreign key
+   * may join a `local` table to a `ledger`/`state` one: `scripts/two-file-foreign-keys.test.ts`.
+   * What each class means is on `TableClass` (`@waitron/sync-enrolment`). */
   readonly classification?: readonly ClassifiedTable[];
   readonly changes?: readonly ChangeSource[];
   readonly cards?: unknown; // SP-4

@@ -8,8 +8,8 @@ import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migrat
 
 /**
  * Every table a module's migrations CREATE is classified `ledger`/`state`/`local` (swap spec §2.1)
- * exactly once — tree-wide. The class decides which DATABASE FILE a table lives in after the storage
- * switch, so a table left unclassified has no stated home and a phantom classification points at
+ * exactly once — tree-wide. The class decides which tables belong to one node and which no key may
+ * cross, so a table left unclassified has no stated rule and a phantom classification points at
  * nothing; a table classified twice (within or across modules) is ambiguous. This is the net for all
  * three (the per-package tests and `modules.test.ts`'s dedup are earlier checkpoints).
  *
@@ -148,9 +148,10 @@ describe("every table is classified exactly once", () => {
     // A known table per class, resolved with the class the tree really assigns it.
     expect(classOfTable.get("sales")).toBe("ledger");
     expect(classOfTable.get("tenants")).toBe("state");
-    expect(classOfTable.get("deployment")).toBe("local");
+    expect(classOfTable.get("mirror_config")).toBe("local");
     // Those three are created tables, not phantoms.
-    for (const t of ["sales", "tenants", "deployment"]) expect(allCreatedTables.has(t)).toBe(true);
+    for (const t of ["sales", "tenants", "mirror_config"])
+      expect(allCreatedTables.has(t)).toBe(true);
 
     expect(allCreatedTables.size).toBeGreaterThanOrEqual(77);
     expect(discovered.length).toBeGreaterThanOrEqual(8);

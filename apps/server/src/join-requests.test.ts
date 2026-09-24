@@ -8,15 +8,15 @@
  *    **Nothing now checks that the deployment role cannot UPDATE a join request.**
  *
  * 2. **FOUR cases staged an interleave on two PostgreSQL backends, and none of them can any
- *    longer.** They are the two in `createJoinRequest — per-tenant serialization…` and the two
- *    `two concurrent accepts…` cases. Each called `suite.pg.connect()` twice; there is one handle
- *    now, and `withTransaction` runs its body inside `db.withWriteLock`, which issues
- *    `begin immediate` and does not let the next caller's `begin` run until the first `commit` has
- *    returned (`packages/store/src/write-queue.ts`). The two allocation cases went further and
- *    forced the interleave deterministically — a waiter holding its transaction open until the
- *    other creator's injected `numbers()` callback fired a signal from INSIDE its own reads. That
- *    machinery is deleted rather than translated: the signal can never fire while the first
- *    transaction is open, so leaving it would be scaffolding that proves nothing.
+ *    longer.** They are the two in `createJoinRequest — serialization of number allocation and the
+ *    cap on the file` and the two `two concurrent accepts…` cases. Each called `suite.pg.connect()`
+ *    twice; there is one handle now, and `withTransaction` runs its body inside `db.withWriteLock`,
+ *    which issues `begin immediate` and does not let the next caller's `begin` run until the first
+ *    `commit` has returned (`packages/store/src/write-queue.ts`). The two allocation cases went
+ *    further and forced the interleave deterministically — a waiter holding its transaction open
+ *    until the other creator's injected `numbers()` callback fired a signal from INSIDE its own
+ *    reads. That machinery is deleted rather than translated: the signal can never fire while the
+ *    first transaction is open, so leaving it would be scaffolding that proves nothing.
  *
  *    **LOST: the proof that overlapping creators are serialised at all**, in either direction.
  *    Each of the four cases keeps its assertions unchanged and they still hold — the cap is never
@@ -27,8 +27,9 @@
  *    `cd2838e4a`, whose SUBJECT is about the dev stack but whose body names this among its four
  *    conversions; `apps/server/src/join-requests.ts:66-72` states what replaced it.
  *
- *    The KEY-SCOPE half — that the allocation guard must be database-wide rather than
- *    per-location — went with `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered
+ *    The KEY-SCOPE half is split. That numbers and the cap are counted per node is pinned by
+ *    "counts neither the cap nor the spoken-for numbers across nodes". That two locations on one
+ *    node share them went with `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered
  *    by nothing.
  *
  * ## One correction to this file's own previous header
@@ -49,6 +50,7 @@ import {
   challengeFor,
   createJoinRequest,
   denyJoinRequest,
+  joinRequestKind,
   listPendingJoinRequests,
   readAgentJoinStatus,
   readJoinStatus,
@@ -70,7 +72,9 @@ import { verifySecret } from "@waitron/identity";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import type { TillConfig } from "./till-config.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -113,6 +117,131 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
     return (e as { code?: string }).code;
   }
 }
+
+describe("pending joins belong to the node that received them", () => {
+  it("does not list or challenge another node's pending request", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const made = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+
+    const here = await withTransaction(suite.db, (tx) =>
+      listPendingJoinRequests(tx, venue.cfg, "device"),
+    );
+    const there = await withTransaction(suite.db, (tx) =>
+      listPendingJoinRequests(tx, otherNode, "device"),
+    );
+    expect(here.map((r) => r.id)).toContain(made.joinId);
+    expect(there.map((r) => r.id)).not.toContain(made.joinId);
+    expect(
+      await codeOf(() =>
+        withTransaction(suite.db, (tx) => challengeFor(tx, otherNode, made.joinId)),
+      ),
+    ).toBe("join_request.not_found");
+  });
+
+  it("tells another node's poller not_approved, and reads no kind for it", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const device = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+    const agent = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "kitchen-pi" }),
+    );
+
+    expect(await asApp((tx) => readJoinStatus(tx, venue.cfg, device.joinId, device.token))).toBe(
+      "pending",
+    );
+    expect(await asApp((tx) => readJoinStatus(tx, otherNode, device.joinId, device.token))).toBe(
+      "not_approved",
+    );
+    expect(await asApp((tx) => readAgentJoinStatus(tx, venue.cfg, agent.joinId, agent.token))).toBe(
+      "pending",
+    );
+    expect(await asApp((tx) => readAgentJoinStatus(tx, otherNode, agent.joinId, agent.token))).toBe(
+      "not_approved",
+    );
+    expect(await asApp((tx) => joinRequestKind(tx, venue.cfg, device.joinId))).toBe("device");
+    expect(await asApp((tx) => joinRequestKind(tx, otherNode, device.joinId))).toBeUndefined();
+  });
+
+  it("does not let another node accept a pending request, of either kind", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const profileId = await seedProfile("till");
+    const device = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+    const agent = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "kitchen-pi" }),
+    );
+
+    expect(
+      await codeOf(() =>
+        asApp((tx) =>
+          acceptDeviceJoinRequest(tx, otherNode, device.joinId, {
+            choice: device.verificationNumber,
+            profileId,
+          }),
+        ),
+      ),
+    ).toBe("join_request.not_found");
+    expect(
+      await codeOf(() =>
+        asApp((tx) =>
+          acceptPrintAgentJoinRequest(tx, otherNode, agent.joinId, {
+            choice: agent.verificationNumber,
+          }),
+        ),
+      ),
+    ).toBe("join_request.not_found");
+    // Both requests are still pending for the node that received them.
+    const still = await asApp((tx) => tx.select({ id: joinRequests.id }).from(joinRequests));
+    expect(still.map((r) => r.id).sort()).toEqual([device.joinId, agent.joinId].sort());
+  });
+
+  it("counts neither the cap nor the spoken-for numbers across nodes", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const always47 = () => 47;
+    await asApp(async (tx) => {
+      await createJoinRequest(tx, otherNode, { kind: "device", label: "d0", numbers: always47 });
+      for (let i = 1; i < PENDING_CAP; i++) {
+        await createJoinRequest(tx, otherNode, { kind: "device", label: `d${i}` });
+      }
+    });
+
+    // The other node is at the cap and holds 47, and neither is this node's concern.
+    const mine = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "mine", numbers: always47 }),
+    );
+    expect(mine.verificationNumber).toBe("47");
+  });
+
+  it("leaves another node's lapsed request for that node to sweep", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const theirs = await asApp((tx) =>
+      createJoinRequest(tx, otherNode, { kind: "device", label: "theirs" }),
+    );
+    // A fixture back-date, for the reason the sweep case under `createJoinRequest` states.
+    const lapsed = new Date(Date.now() - JOIN_TTL_MS - 60_000).toISOString();
+    await suite.db.execute(
+      sql`update join_requests set created_at = ${lapsed} where id = ${theirs.joinId}`,
+    );
+
+    await asApp((tx) => listPendingJoinRequests(tx, venue.cfg, "device"));
+    const rows = await asApp((tx) =>
+      tx
+        .select({ id: joinRequests.id })
+        .from(joinRequests)
+        .where(eq(joinRequests.id, theirs.joinId)),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
 
 describe("createJoinRequest", () => {
   it("mints a two-digit number, an id and a token, and leaves one pending row", async () => {
@@ -180,6 +309,7 @@ describe("createJoinRequest", () => {
     // the `::join_request_kind` cast has nothing to name), and `decoy_numbers` is a JSON array in a
     // text column, not a `text[]`.
     await suite.db.insert(joinRequests).values({
+      nodeId: venue.cfg.nodeId,
       locationId: venue.cfg.locationId,
       kind: "device",
       label: "seeded",
@@ -205,6 +335,7 @@ describe("createJoinRequest", () => {
     // and the column notes on the seed above apply unchanged.
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 98 }, (_, i) => i + 2).map((n) => ({
+        nodeId: venue.cfg.nodeId,
         locationId: venue.cfg.locationId,
         kind: "print_agent" as const,
         label: `seed ${n}`,
@@ -270,7 +401,7 @@ describe("createJoinRequest", () => {
   });
 });
 
-describe("createJoinRequest — per-tenant serialization of number allocation and the cap", () => {
+describe("createJoinRequest — serialization of number allocation and the cap on the file", () => {
   // Both creators are started together on the one handle and the write queue decides the order:
   // `withTransaction` runs its body inside `db.withWriteLock`, which issues `begin immediate` and
   // does not let the next caller's `begin` run until the first `commit` has returned
@@ -334,6 +465,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
     // Seed nine pending `device` requests directly — one shy of the cap. Reals 01..09, empty decoys.
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 9 }, (_, i) => i + 1).map((n) => ({
+        nodeId: venue.cfg.nodeId,
         locationId: venue.cfg.locationId,
         kind: "device" as const,
         label: `seed ${n}`,

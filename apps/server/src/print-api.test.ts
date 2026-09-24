@@ -91,9 +91,9 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // The FULL TillConfig the print verbs are typed on (branded ids). Only locationId is read
-    // by the join verbs and the routes; nodeId is echoed on the pull; the other fiscal ids are unused
-    // here, so a branded random uuid stands in.
+    // The FULL TillConfig the print verbs are typed on (branded ids). The join verbs read
+    // locationId and nodeId (every join-request statement filters by node), so this one cfg serves
+    // both knock and accept; the fiscal ids are unused here, so a branded random uuid stands in.
     cfg = {
       tillId: brandTillId(randomUUID()),
       nodeId: brandNodeId(randomUUID()),

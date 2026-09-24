@@ -129,12 +129,17 @@ beforeAll(async () => {
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
 });
 
-/** The FULL TillConfig for a seeded venue. Only locationId is read by the join verbs and
- * routes here; nodeId is echoed on the pull and the rest are unused, so branded random uuids stand in. */
+/** One node for the whole suite: every join-request statement filters by `cfg.nodeId`, so the knock
+ * (through `mountApp`'s cfg) and the in-process accept must name the same node — as production does,
+ * where boot.ts hands one `till` to both the print and the join mounts. */
+const venueNodeId = brandNodeId(randomUUID());
+
+/** The FULL TillConfig for a seeded venue. The join verbs read locationId and nodeId; the fiscal ids
+ * are unused, so branded random uuids stand in. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
     tillId: brandTillId(randomUUID()),
-    nodeId: brandNodeId(randomUUID()),
+    nodeId: venueNodeId,
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),
     locale: "es-ES",

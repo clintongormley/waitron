@@ -310,11 +310,14 @@ with at most three reads; `working-order.test.ts` checks the single call and
 
 **Tables the application code may read and never write**
 
-## Four tables are read-only to the application, and one guard is the whole of the enforcement
+## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
 
-`tenants`, `nodes`, `deployment` and `mirror_config`. NOTHING BUT `scripts/write-path-tables.test.ts`
-REFUSES THEM. The database used to: a request was served on a connection wearing `app_user`, which
-held `SELECT` and no write on the four, so PostgreSQL answered a write with `42501`. SQLite has no
+`tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
+2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (slice-2
+spec §2); it inherits `deployment`'s rule and is not in the frozen matrix, which the guard's
+`ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM. The
+database used to: a request was served on a connection wearing `app_user`, which held `SELECT` and
+no write on the four, so PostgreSQL answered a write with `42501`. SQLite has no
 roles and no grants — one process opens one file, and every path, request and provisioning alike,
 shares that one venue handle. So the rule survives as a convention over source text, and that guard
 is not a second opinion on an engine that would refuse the write anyway.
@@ -328,11 +331,12 @@ chain; it walks `<member>/src` under `apps` and `packages` alone; and what the g
 operation at a time it does not cover at all (`docs/backlog.md` → B9). Read those hedges in the guard
 rather than trusting this line.
 
-Real code does write all four, legitimately: the promote route reaches `deployment`, and the
-setup-mode provision and adopt routes reach `tenants`, `nodes` and `mirror_config`. Each does it by
-calling into one of the four files `scripts/write-path-tables.json` names, which is where such a
-write is allowed to live. Keeping them in a handful of named files is the whole of the property now,
-because no connection makes the distinction for us any more.
+Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
+`nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
+`mirror_config`; and the promote route reaches `node_roles`. Each does it by calling into one of the
+files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
+Keeping them in a handful of named files is the whole of the property now, because no connection
+makes the distinction for us any more.
 
 HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in
 PGlite against the core migrations inside a transaction that had run `set local role app_user`: an
@@ -849,11 +853,12 @@ manifest-JSON path that `rejoin-command`, `dev-setup` and `dev-onboard` take to
 by name rather than counting it, so adding or dropping an append-only table costs a deliberate edit.
 Run both after adding any table anywhere.
 
-## The class also chooses the database FILE, so no foreign key may join a `local` table to a `ledger`/`state` one
+## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
-The storage switch keeps every `local` table in `node.db` and the rest in `venue.db` (topology design
-§2.1), which is what lets a standby hold an exact copy of the venue without overwriting who it is. A
-key across the two files stops either being restored on its own, in either direction. Guard:
+Every table is in `venue.db`, the file slice 2 will stream (slice-2 spec §2, which replaced the
+topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
+node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
+move `local` tables into it — which a key in either direction would block. Guard:
 `scripts/two-file-foreign-keys.test.ts`.
 
 **What it reads, and the two things it therefore cannot see.** It reads drizzle's own generated head
@@ -876,6 +881,18 @@ request had already read. The sixth, `join_requests.location_id`, is the node's 
 is checked by nothing when the row is written, and its refusal moved to accept, where the accepted row
 (`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
 this guard pass — that is the one wrong answer §2.1 rules out.
+
+**What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
+which of three ties it uses: a `node_id` column every read and write names (`node_roles`,
+`mirror_config`, `join_requests`), a seal only that node's key opens (`tenant_credentials`), or rows
+the transaction that wrote them deletes (`change_log`). Identity's `local` tables
+(`packages/identity/src/classification.ts`) state none of the three; slice-2 Task 1b reclassifies
+them `state` (plan `2026-09-23-sqlite-slice2-stream-and-cold-restore.md`, Task 1b and owner decision
+O1). Pinned, each by deleting the node filter and watching a case fail: the `node_roles` and
+`mirror_config` readers (`packages/db/src/node-roles.test.ts`), and every node filter on
+`join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a
+node-filtered read of the same id (the "belong to the node" cases in
+`apps/server/src/join-requests.test.ts`).
 
 HISTORICAL, kept for the mechanism it records: while `ledger`/`state` tables were PUBLISHED for
 PostgreSQL logical replication (removed 2026-09-19), such a table also needed a PRIMARY KEY, not a

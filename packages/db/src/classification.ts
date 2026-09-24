@@ -4,7 +4,8 @@ import type { ChangeSource } from "@waitron/shared";
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
-const LOCAL = "this node's own record of what it is; not copied";
+const LOCAL =
+  "one node's own row, keyed by its node id; in venue.db like every table, read and written only by that node";
 
 /**
  * Core's tables, classified for native replication (swap spec §2.1). `canvases` is `state` (it
@@ -79,15 +80,34 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("print_jobs", "state", STATE),
 
-  // local — this node's own record of what it is; not copied, not drained.
-  classify("deployment", "local", LOCAL),
-  classify("mirror_config", "local", "this node's link to its cloud mirror; not copied"),
-  classify("node_membership", "local", "this node's membership record; not copied"),
-  classify("join_requests", "local", "this node's pending joins, device and agent; not copied"),
+  // state — one row per database, the same whichever node reads it.
+  classify(
+    "deployment",
+    "state",
+    "the environment this database was stamped for; one per database, whichever node reads it",
+  ),
+  classify(
+    "node_membership",
+    "state",
+    "the venue's signed membership document; the same on every node, so one row",
+  ),
+
+  // local — belongs to one node; each says what ties a row to its node.
+  classify("node_roles", "local", LOCAL),
+  classify(
+    "mirror_config",
+    "local",
+    "one node's link to the box it mirrors, keyed by its node id; read only by that node",
+  ),
+  classify(
+    "join_requests",
+    "local",
+    "pending joins one node received, keyed by its node id; no other node lists or accepts them",
+  ),
   classify(
     "change_log",
     "local",
-    "this node's own signal to its own dashboard, drained as it is delivered; not copied",
+    "one node's signal to its own dashboard, deleted by the transaction that wrote it; a row a write outside withTransaction left is delivered by the next transaction on whichever node holds the file",
   ),
 ];
 

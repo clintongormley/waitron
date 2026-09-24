@@ -26,7 +26,7 @@ import { startServer } from "./boot.js";
  * `singleton_role`, not on `mode` (promotion #158 follow-on). Since swap step 4 the outbox sync
  * SOURCE and retention sweep are deleted, so two singleton duties remain; this suite pins the
  * topology no other boot suite exercises WITH THE SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY LOCAL
- * SECONDARY — `deployment.mode='primary'` AND `singleton_role='secondary'` — which is NOT a mirror
+ * SECONDARY — `node_roles.mode='primary'` AND `singleton_role='secondary'` — which is NOT a mirror
  * (so `isMirror` is false and the old `!isMirror` gate ran all of them, the active-active
  * duplication this gate fixes) yet must run NEITHER, because the one singleton primary owns them.
  * TWO migrated venue directories holding the SAME identity: a `(primary, secondary)` one that runs
@@ -183,15 +183,17 @@ beforeAll(async () => {
   backupDir = await mkdtemp(join(tmpdir(), "waitron-singleton-backup-"));
 
   // The sell-only local secondary: stamp preproduction (so the deployment guard passes and
-  // `setSingletonRole` has a row to update), then set singleton_role='secondary'. The mode column keeps
-  // its default 'primary' — this is a `(primary, secondary)` node, valid under `deployment_role_valid_ck`
-  // (a mirror could not hold 'secondary' this way; only a real primary-mode box can be a local secondary).
+  // `setSingletonRole` finds a stamped database), then set singleton_role='secondary'. The mode
+  // keeps its default 'primary' — this is a `(primary, secondary)` node, valid under
+  // `node_roles_role_valid_ck` (a mirror could not hold 'secondary' this way; only a real
+  // primary-mode box can be a local secondary).
   secondaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary");
+    await setSingletonRole(db, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
   });
-  // The control keeps the column default ('primary', 'primary') — the singleton primary that owns both.
+  // The control writes no `node_roles` row, so it reads as ('primary', 'primary') through
+  // `readDeploymentAxes`'s missing-row fallback — the singleton primary that owns both.
   primaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
@@ -321,7 +323,7 @@ function backupBase() {
   };
 }
 
-describe("singleton-duty boot (deployment.singleton_role gating)", () => {
+describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
   it("a sell-only local secondary (primary, secondary) runs NEITHER singleton duty, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {

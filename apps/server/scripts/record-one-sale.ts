@@ -121,8 +121,9 @@ export type RecordOneSaleResult = Awaited<ReturnType<typeof recordSale>>;
  * backend, and close both files. Exported so a test can run the whole path — the argv shim below
  * adds nothing but the arity check, the `WAITRON_ENV` guard and stdout.
  *
- * `store.venue` is the handle, not `store.node`: `sales`, `tenders` and `registros_facturacion` are
- * all classified `ledger`, so they live in the venue file.
+ * `store.venue` is the handle, not `store.node`: every migration set is applied to the venue file
+ * (`packages/migrations/src/apply.ts`), so `sales`, `tenders` and `registros_facturacion` live
+ * there and the node file holds no tables.
  */
 export async function recordOneSale(
   args: RecordOneSaleArgs,

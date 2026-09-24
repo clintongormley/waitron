@@ -1,6 +1,6 @@
 // Side-effect only: loads this host's errors.ts augmentation for the codes THIS file throws directly —
 // `device.join_mismatch` (a wrong number, thrown AFTER the transaction commits the deny),
-// `join_request.not_found` (the tenant holds no such pending row) and `management.request_invalid`
+// `join_request.not_found` (this node holds no such pending row) and `management.request_invalid`
 // (the `kind` query and accept-body screens). The accept-time binding codes reach here through the
 // value import of `acceptDeviceJoinRequest` (`join-requests.js`, which calls `resolveDeviceBinding`),
 // and the management-session/authorization codes through `@waitron/identity`. See the note atop
@@ -88,7 +88,7 @@ const PERMISSION_FOR: Record<JoinRequestKind, Permission> = {
 };
 
 /**
- * The permission a by-id route demands when the id names NO row of this tenant. It has to be some
+ * The permission a by-id route demands when the id names NO row of this node. It has to be some
  * fixed permission — there is no kind to read — and `device.manage` is the choice; see
  * `gatedByRowKind` for why the gate runs at all on a row that is not there.
  */

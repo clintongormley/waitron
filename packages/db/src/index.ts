@@ -119,6 +119,7 @@ export {
 } from "./deployment.js";
 export type { DeploymentEnvironment, DeploymentMode, SingletonRole } from "./deployment.js";
 export * from "./schema/deployment.js";
+export * from "./schema/node-roles.js";
 export { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 export type { MirrorConnection } from "./mirror-config.js";
 export {

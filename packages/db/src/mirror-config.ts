@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Database } from "./client.js";
 import { now } from "./schema/columns.js";
 import { mirrorConfig } from "./schema/mirror-config.js";
@@ -21,41 +21,37 @@ export interface MirrorConnection {
 }
 
 /**
- * The mirror connection config, or `null` when the table/row is absent — a primary or an unstamped
- * database. `null` covers BOTH "the table does not exist yet" and "the table is empty", and callers
- * must not tell them apart: both mean nothing has adopted this database as a mirror.
+ * This node's mirror connection config, or `null` when the table is absent or this node has no row.
+ * `null` covers BOTH "the table does not exist yet" and "this node has no row", and callers must not
+ * tell them apart: both mean nothing has adopted this node as a mirror.
  *
  * The table's existence is read off `sqlite_master` rather than discovered by running the select and
- * catching the refusal, exactly as `readDeploymentMode`/`readDeploymentEnvironment` do — the reason
+ * catching the refusal, exactly as `readDeploymentAxes`/`readDeploymentEnvironment` do — the reason
  * for that shape, and for the catalogue rather than a pragma, is on `deploymentTableExists` in
  * `./deployment.js`.
  */
-export async function readMirrorConfig(db: Database): Promise<MirrorConnection | null> {
+export async function readMirrorConfig(
+  db: Database,
+  nodeId: string,
+): Promise<MirrorConnection | null> {
   const present = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name = ${"mirror_config"}`,
   );
   if (present.rows.length === 0) return null;
-
-  const rows = await db.execute<{
-    relay_url: string;
-    box_hostname: string;
-    box_ca_pem: string;
-    origin_node_id: string;
-  }>(
-    sql`select relay_url, box_hostname, box_ca_pem, origin_node_id from mirror_config where id = 1`,
-  );
-  const row = rows.rows[0];
-  if (row === undefined) return null;
-  return {
-    relayUrl: row.relay_url,
-    boxHostname: row.box_hostname,
-    boxCaPem: row.box_ca_pem,
-    originNodeId: row.origin_node_id,
-  };
+  const [row] = await db
+    .select({
+      relayUrl: mirrorConfig.relayUrl,
+      boxHostname: mirrorConfig.boxHostname,
+      boxCaPem: mirrorConfig.boxCaPem,
+      originNodeId: mirrorConfig.originNodeId,
+    })
+    .from(mirrorConfig)
+    .where(eq(mirrorConfig.nodeId, nodeId));
+  return row ?? null;
 }
 
 /**
- * UPSERT of the singleton (`id = 1`). Re-adopting a mirror overwrites the config in place — there
+ * UPSERT of this node's row. Re-adopting a mirror overwrites the config in place — there
  * is no immutability rule here (unlike `deployment.environment`), because a box can legitimately
  * move relays or rotate its CA.
  *
@@ -64,28 +60,19 @@ export async function readMirrorConfig(db: Database): Promise<MirrorConnection |
  * migration set. That the adopt path is the only writer is a convention, not something the database
  * holds.
  */
-export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Promise<void> {
-  // Uses the Drizzle table object (not raw SQL) — the same split `deployment.ts` uses, where
-  // `stampDeployment` writes via `db.insert(deployment)`. `now()` on the update refreshes
-  // `adopted_at` each re-adoption; it is the generator the column's own default already uses
-  // (`./schema/columns.js`), because the clock is the server's here and not the engine's.
+export async function writeMirrorConfig(
+  db: Database,
+  nodeId: string,
+  cfg: MirrorConnection,
+): Promise<void> {
+  // `now()` on the update refreshes `adopted_at` each re-adoption; it is the generator the column's
+  // own default already uses (`./schema/columns.js`), because the clock is the server's here and not
+  // the engine's.
   await db
     .insert(mirrorConfig)
-    .values({
-      id: 1,
-      relayUrl: cfg.relayUrl,
-      boxHostname: cfg.boxHostname,
-      boxCaPem: cfg.boxCaPem,
-      originNodeId: cfg.originNodeId,
-    })
+    .values({ nodeId, ...cfg })
     .onConflictDoUpdate({
-      target: mirrorConfig.id,
-      set: {
-        relayUrl: cfg.relayUrl,
-        boxHostname: cfg.boxHostname,
-        boxCaPem: cfg.boxCaPem,
-        originNodeId: cfg.originNodeId,
-        adoptedAt: now(),
-      },
+      target: mirrorConfig.nodeId,
+      set: { ...cfg, adoptedAt: now() },
     });
 }

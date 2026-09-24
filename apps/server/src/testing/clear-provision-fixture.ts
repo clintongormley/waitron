@@ -36,6 +36,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "units",
       "unit_seed_states",
       "tenants",
+      "node_roles",
       "deployment",
     ]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);

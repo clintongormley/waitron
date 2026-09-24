@@ -127,10 +127,10 @@ declare module "@waitron/shared" {
     /**
      * A write reached a node running as a read-only MIRROR. A mirror serves the dashboard read-only and
      * refuses every non-GET at the HTTP layer (the read-only gate, `read-only-gate.ts`), because
-     * `deployment.mode = 'mirror'`. `node.*`, not `server.*`: it is a
+     * this node's `node_roles.mode = 'mirror'`. `node.*`, not `server.*`: it is a
      * fact about the node's role in the topology, not about the process. No params — the refusal names no
      * row, so a log line leaks nothing. Cleared by promotion
-     * (`deployment.mode = 'primary'`), read live so no restart is needed.
+     * (`node_roles.mode = 'primary'`), read live so no restart is needed.
      */
     "node.read_only": Record<string, never>;
     /**
@@ -1141,7 +1141,7 @@ declare module "@waitron/shared" {
      */
     "device.pairing_closed": Record<string, never>;
     /**
-     * This database already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
+     * This node already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
      * needs room, and an uncapped pending list is a denial-of-service on the admin's attention). Per
      * KIND, so ten agents mid-install cannot lock devices out. HTTP 429.
      */
@@ -1168,9 +1168,9 @@ declare module "@waitron/shared" {
      */
     "device.join_revoked": Record<string, never>;
     /**
-     * No pending join request with that id in this tenant — never existed, already accepted or denied,
-     * or lapsed past its TTL. All fold into one code: the admin's recovery is the same in every case,
-     * and the joiner must knock again.
+     * No pending join request with that id held by this node — never existed, already accepted or
+     * denied, or lapsed past its TTL. All fold into one code: the admin's recovery is the same in
+     * every case, and the joiner must knock again.
      * `join_request.*` names the domain concept. HTTP 404.
      */
     "join_request.not_found": Record<string, never>;
@@ -1308,13 +1308,14 @@ declare module "@waitron/shared" {
      */
     "promotion.fence_not_attested": Record<string, never>;
     /**
-     * A local-secondary promote (promotion runbook design §5a) was called on a node that is a read-only
-     * MIRROR (`deployment.mode='mirror'`). A mirror holds no SIF and cannot become the submitter by a bare
-     * `singleton_role` flip — it needs the mirror→primary path (fresh-SIF mint from the pre-reserved
-     * identity, §5b), a later slice. Refused with THIS code BEFORE the write, giving a clean domain error
-     * rather than the raw `deployment_role_valid_ck` CHECK violation the `(mirror, primary)` write would
-     * otherwise raise (the CHECK is the backstop). `mode` is the node's own configured role, already in its
-     * config and not a secret — echoing it is what tells the operator which path to use, the same shape
+     * A local-secondary promote (promotion runbook design §5a) was called on a node that is a
+     * read-only MIRROR (its `node_roles.mode` is `'mirror'`). A mirror is not the submitter and
+     * cannot become it by a bare `singleton_role` flip — it needs the mirror→primary path
+     * (`promoteMirrorToPrimary`, promote.ts; §5b). Refused with THIS code
+     * BEFORE the write, giving a clean domain error rather than the raw `node_roles_role_valid_ck`
+     * CHECK violation the `(mirror, primary)` write would otherwise raise (the CHECK is the
+     * backstop). `mode` is the node's own configured role, already in its config and not a secret —
+     * echoing it is what tells the operator which path to use, the same shape
      * `deployment.environment_mismatch` follows. `promotion.*`, not `server.*`, for the reason
      * `promotion.fence_not_attested` gives. Never renamed once shipped.
      */

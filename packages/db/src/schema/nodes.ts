@@ -8,13 +8,13 @@ import { locations } from "./tenants.js";
  * is a machine, not a person). One node per venue today; active-active/failover (a `role` column,
  * a second node) are later specs.
  *
- * Which role a whole deployment plays — a `primary` that writes and originates, or a read-only
- * `mirror` of it — is a fact about the DATABASE, not about a node row, so it lives on the singleton
- * `deployment.mode` (`primary`|`mirror`; `packages/db/src/schema/deployment.ts`), which carries no
- * node scope. Do not add a `role` column here for the mirror/primary split — that concept already
- * has its flag. Deliberately regime-neutral, like `tills`: the Veri*Factu SIF identity
- * (`NúmeroInstalación`, `IdSistemaInformatico`) lives in the module-owned `registro_sif` table,
- * keyed by node (the SIF is the node — #33).
+ * Which role a node plays — a `primary` that writes and originates, or a read-only `mirror` — lives
+ * on `node_roles` (`./node-roles.ts`), keyed by node id: a `local` table, because a node holding
+ * another node's copy of the database must read its own role or none. Do not add a `role` column
+ * here for the mirror/primary split — that concept already has its table. Deliberately
+ * regime-neutral, like `tills`: the Veri*Factu SIF identity (`NúmeroInstalación`,
+ * `IdSistemaInformatico`) lives in the module-owned `registro_sif` table, keyed by node (the SIF is
+ * the node — #33).
  *
  * `filing_module`/`tax_module` are nullable and stamped at provision time from the location's
  * territory (Task D1); the authoritative per-sale value stays `sales.fiscal_backend` — these are

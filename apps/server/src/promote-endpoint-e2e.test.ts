@@ -246,7 +246,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
   };
   await writeNodeMembership(admin, held);
 
-  await writeMirrorConfig(admin, {
+  await writeMirrorConfig(admin, standby.nodeId, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -269,7 +269,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
     .onConflictDoNothing();
 
   await stampDeployment(admin, "production");
-  await setDeploymentMode(admin, "mirror");
+  await setDeploymentMode(admin, standby.nodeId, "mirror");
   const standardSeriesId = await readStandardSeriesId(admin, standby.nodeId);
   return { nodeId: standby.nodeId, standardSeriesId };
 }
@@ -444,7 +444,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
     const seed = await seedMirror(db.main);
     await seedSaleVenue(db.main, seed.nodeId);
-    await mintBreakGlassSecret(db.main); // a verifier exists (an adopted mirror always has one)
+    await mintBreakGlassSecret(db.main, seed.nodeId); // a verifier exists (an adopted mirror always has one)
 
     const mirrorPort = await freePort();
     const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
@@ -474,7 +474,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       });
       expect(wrongBg.status).toBe(401);
       expect((await wrongBg.json()).error.code).toBe("promotion.break_glass_invalid");
-      expect(await readDeploymentMode(db.main)).toBe("mirror");
+      expect(await readDeploymentMode(db.main, seed.nodeId)).toBe("mirror");
 
       // A valid admin credential but `oldNodeNeutralised:false` → 400 fence_not_attested, node unchanged.
       const unattested = await postPromote(mirrorBase, {
@@ -484,7 +484,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       });
       expect(unattested.status).toBe(400);
       expect((await unattested.json()).error.code).toBe("promotion.fence_not_attested");
-      expect(await readDeploymentMode(db.main)).toBe("mirror");
+      expect(await readDeploymentMode(db.main, seed.nodeId)).toBe("mirror");
 
       // STEP 4 (gate control, real boot): an ordinary write POST is refused by the read-only gate (403
       // node.read_only), so the promote POST reaching the handler above is the EXEMPTION's doing — not a
@@ -507,8 +507,8 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
 
       // The point-of-no-return committed: deployment flipped to (primary, primary), and the restart
       // SIGTERM was scheduled (into the spy, never fired for real).
-      expect(await readDeploymentMode(db.main)).toBe("primary");
-      expect(await readSingletonRole(db.main)).toBe("primary");
+      expect(await readDeploymentMode(db.main, seed.nodeId)).toBe("primary");
+      expect(await readSingletonRole(db.main, seed.nodeId)).toBe("primary");
       await delay(50);
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
 
@@ -633,7 +633,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
   // STEP 2 — the break-glass path: the offline fallback authorizes a promote with no login at all.
   it("break-glass secret → 200 promoted (no login)", async () => {
     const seed = await seedMirror(db.breakGlass);
-    const breakGlass = await mintBreakGlassSecret(db.breakGlass);
+    const breakGlass = await mintBreakGlassSecret(db.breakGlass, seed.nodeId);
 
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
@@ -652,8 +652,8 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       const res = await postPromote(base, { oldNodeNeutralised: true, breakGlass });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
-      expect(await readDeploymentMode(db.breakGlass)).toBe("primary");
-      expect(await readSingletonRole(db.breakGlass)).toBe("primary");
+      expect(await readDeploymentMode(db.breakGlass, seed.nodeId)).toBe("primary");
+      expect(await readSingletonRole(db.breakGlass, seed.nodeId)).toBe("primary");
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });
@@ -684,7 +684,8 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
       "*",
       readOnlyGate(() => true, exempt),
     ); // a read-only mirror (isReadOnly always true)
-    mountPromoteApi(app, { appDb: db.main, run: alwaysRun });
+    // No case here reaches the break-glass check, so the node id is a placeholder.
+    mountPromoteApi(app, { appDb: db.main, nodeId: "gate-only", run: alwaysRun });
     return app;
   }
 

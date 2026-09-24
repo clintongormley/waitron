@@ -35,9 +35,9 @@ beforeEach(async () => {
   // `delete`, not TRUNCATE: this engine has no TRUNCATE at all, and the statement did not even
   // reach execution — running this suite before the change printed `Error: near "truncate": syntax
   // error` from `packages/store/src/node-sqlite-adapter.ts:64`, which killed every case in the
-  // file in its `beforeEach`. `tenant_credentials` is classified `local` (`./classification.ts`),
-  // so it carries no append-only trigger to refuse the delete — the same reasoning as
-  // `packages/fiscal-verifactu/src/acks.test.ts:123`.
+  // file in its `beforeEach`. `tenant_credentials` is declared with `classify()`, not
+  // `appendOnly()` (`./classification.ts`), so no append-only trigger refuses the delete — the
+  // same reasoning as `packages/fiscal-verifactu/src/acks.test.ts:123`.
   await suite.db.execute(sql`delete from tenant_credentials`);
 });
 

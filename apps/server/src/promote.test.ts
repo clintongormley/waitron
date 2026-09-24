@@ -128,7 +128,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
   }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
-    await setSingletonRole(db, "secondary"); // (primary, secondary) — a local secondary
     await seedTenant(db);
     // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts` took:
     // `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL DEFAULT, so a raw
@@ -143,6 +142,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
       })
       .returning({ id: locations.id });
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await setSingletonRole(db, nodeId, "secondary"); // (primary, secondary) — a local secondary
     await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
     const holders = createDeploymentHolders("primary", "secondary");
     return {
@@ -153,16 +153,16 @@ describe("promoteLocalSecondaryToPrimary", () => {
   }
 
   it("refuses without a fence attestation and leaves state unchanged", async () => {
-    const { db, deps } = await localSecondary();
+    const { db, deps, nodeId } = await localSecondary();
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(deps(noopLog), { oldNodeNeutralised: false }),
     );
     expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
-    expect(await readSingletonRole(db)).toBe("secondary"); // no write happened
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary"); // no write happened
   });
 
   it("claims the singletons and flips the holder so the fiscal pass starts", async () => {
-    const { db, deps } = await localSecondary();
+    const { db, deps, nodeId } = await localSecondary();
     const d = deps(noopLog);
 
     // The SAME pass function, built once over the holder, must flip empty -> real on promotion (no restart).
@@ -179,18 +179,18 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
     const result = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(result).toEqual({ alreadyPrimary: false });
-    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readSingletonRole(db, nodeId)).toBe("primary");
     expect(d.holders.singletonRole.current).toBe("primary");
     expect((await pass(new Date())).duties.map((r) => r.duty)).toContain(DRAIN_DUTY); // primary: real pass runs
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
-    const { db, deps } = await localSecondary();
+    const { db, deps, nodeId } = await localSecondary();
     const d = deps(noopLog);
     await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     const second = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(second).toEqual({ alreadyPrimary: true });
-    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readSingletonRole(db, nodeId)).toBe("primary");
   });
 
   it("mints the next membership document atomically with the role flip", async () => {
@@ -211,7 +211,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     });
 
     expect(result.alreadyPrimary).toBe(false);
-    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readSingletonRole(db, nodeId)).toBe("primary");
 
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(4); // bumped from 3
@@ -288,7 +288,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     );
     expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
     expect(isAppError(error) && error.params).toEqual({ standing: "sell-only" });
-    expect(await readSingletonRole(db)).toBe("secondary"); // never promoted
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary"); // never promoted
     expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
   });
 
@@ -300,7 +300,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     );
     expect(isAppError(error) && error.code).toBe("promotion.node_fenced");
     expect(isAppError(error) && error.params).toEqual({ standing: "evicted" });
-    expect(await readSingletonRole(db)).toBe("secondary"); // never promoted
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary"); // never promoted
     expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
   });
 
@@ -309,18 +309,19 @@ describe("promoteLocalSecondaryToPrimary", () => {
     // file also carries the credentials tables, which is harmless here — the mirror guard returns
     // before any identity read.
     const db = suite.db;
+    const nodeId = "n";
     await stampDeployment(db, "preproduction");
-    await setDeploymentMode(db, "mirror"); // (mirror, secondary)
+    await setDeploymentMode(db, nodeId, "mirror"); // (mirror, secondary)
     const holders = createDeploymentHolders("mirror", "secondary");
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(
         // The mirror guard returns before any identity read, so placeholder ring/ids are harmless here.
-        { db, holders, log: noopLog, ring: RING, nodeId: "n" },
+        { db, holders, log: noopLog, ring: RING, nodeId },
         { oldNodeNeutralised: true },
       ),
     );
     expect(isAppError(error) && error.code).toBe("promotion.not_a_local_secondary");
-    expect(await readSingletonRole(db)).toBe("secondary"); // never written
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary"); // never written
   });
 });
 
@@ -372,7 +373,6 @@ describe("promoteMirrorToPrimary", () => {
   }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
-    await setDeploymentMode(db, "mirror"); // (mirror, secondary)
     await seedTenant(db);
     // Through the table definition rather than raw SQL, for the reason the local-secondary fixture
     // above states: `locations.id` defaults in the client here, not in the engine.
@@ -389,6 +389,7 @@ describe("promoteMirrorToPrimary", () => {
     const nif = t.rows[0]!.tax_id;
 
     const standby = generateStandbyIdentity();
+    await setDeploymentMode(db, standby.nodeId, "mirror"); // (mirror, secondary)
     // The primary's endorsement of the cloud's own key — stored on `nodes.endorsement`, read back by the
     // promote signer and attached to the minted document (R3b's first non-setup-signed doc).
     const endorsement: Endorsement = {
@@ -442,8 +443,8 @@ describe("promoteMirrorToPrimary", () => {
 
     expect(result.alreadyPrimary).toBe(false);
     expect(result.seriesId).toBe(standardSeriesId); // corrected to the cloud's OWN standard series
-    expect(await readDeploymentMode(db)).toBe("primary");
-    expect(await readSingletonRole(db)).toBe("primary");
+    expect(await readDeploymentMode(db, nodeId)).toBe("primary");
+    expect(await readSingletonRole(db, nodeId)).toBe("primary");
 
     const held = await readNodeMembership(db);
     expect(held?.body.term).toBe(4); // bumped from 3
@@ -475,13 +476,13 @@ describe("promoteMirrorToPrimary", () => {
     expect((err as Error).message).toBe("disk full");
     expect(persisted).toEqual([standardSeriesId]); // called with the cloud's OWN corrected series
     // The PONR never ran: still a read-only mirror, singleton unclaimed, org chart not bumped.
-    expect(await readDeploymentMode(db)).toBe("mirror");
-    expect(await readSingletonRole(db)).toBe("secondary");
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
   });
 
   it("refuses without a fence attestation, leaving the node a mirror and persisting nothing", async () => {
-    const { db, deps } = await mirror();
+    const { db, deps, nodeId } = await mirror();
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
@@ -492,7 +493,7 @@ describe("promoteMirrorToPrimary", () => {
       ),
     );
     expect(isAppError(err) && err.code).toBe("promotion.fence_not_attested");
-    expect(await readDeploymentMode(db)).toBe("mirror"); // no write
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror"); // no write
     expect(persisted).toEqual([]); // fence refusal is before any persist
   });
 
@@ -525,8 +526,8 @@ describe("promoteMirrorToPrimary", () => {
     );
     expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
     expect(isAppError(err) && err.params).toEqual({ standing: "sell-only" });
-    expect(await readDeploymentMode(db)).toBe("mirror"); // never promoted
-    expect(await readSingletonRole(db)).toBe("secondary");
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror"); // never promoted
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
     expect(persisted).toEqual([]); // the fence refusal is before persistTradingEnv
   });
@@ -542,14 +543,14 @@ describe("promoteMirrorToPrimary", () => {
     await writeNodeMembership(db, docAtTerm(5, nodeId));
 
     const err = await captureError(() =>
-      withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
+      withTransaction(db, (tx) => commitMirrorPromotionTx(tx, nodeId, docAtTerm(4, nodeId))),
     );
     expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
     // The whole PONR rolled back: the held term is untouched and the node is still a mirror — the flip
     // did NOT commit against the superseded chart.
     expect((await readNodeMembership(db))?.body.term).toBe(5);
-    expect(await readDeploymentMode(db)).toBe("mirror");
-    expect(await readSingletonRole(db)).toBe("secondary");
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect(await readSingletonRole(db, nodeId)).toBe("secondary");
   });
 
   it("mints a first chart naming only itself, with no endorsement, when the mirror holds neither", async () => {
@@ -577,13 +578,13 @@ describe("promoteMirrorToPrimary", () => {
     let err: unknown;
     try {
       err = await captureError(() =>
-        withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
+        withTransaction(db, (tx) => commitMirrorPromotionTx(tx, nodeId, docAtTerm(4, nodeId))),
       );
     } finally {
       await db.execute(sql`drop trigger promote_skip_membership`);
     }
     expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
     expect(isAppError(err) && err.params).toEqual({ heldTerm: -1, mintedTerm: 4 });
-    expect(await readDeploymentMode(db)).toBe("mirror");
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
   });
 });

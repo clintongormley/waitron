@@ -4,10 +4,10 @@
 // Both handles `openVenueDatabase` returns are typed on the whole schema barrel
 // (`packages/db/src/client.ts:44-54`), so passing the NODE handle where the venue handle belongs
 // compiles cleanly and is refused by the engine at the first query. `tenant_credentials` is
-// classified `local` (`./classification.ts`), which reads like the node file — but no migration set
-// is split across the two files today: `packages/migrations/src/apply.ts:98` applies every set to
-// `store.venue` and leaves the node file empty. The `set`/`list` round trip below is what holds the
-// entry point to the file its own migrations actually created.
+// classified `local` (`./classification.ts`), which names whose rows they are, not a file:
+// `packages/migrations/src/apply.ts:99` applies every set to `store.venue` and leaves the node file
+// empty. The `set`/`list` round trip below is what holds the entry point to the file its own
+// migrations actually created.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

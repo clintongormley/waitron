@@ -10,32 +10,34 @@ import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
 // the data after every test, which is what the third case needs: a venue whose verifier is unset.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
+const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
 beforeEach(async () => {
-  // Create the id=1 singleton row `setBreakGlassVerifierTx`'s UPDATE has to hit; the per-test reset
-  // removes it again.
+  // A role write is refused on an unstamped database (`deployment.not_stamped`); the per-test reset
+  // removes the stamp again.
   await stampDeployment(suite.db, "preproduction");
 });
 
 describe("break-glass mint + verify", () => {
   it("mints a secret, stores only a verifier, and verifies it", async () => {
-    const secret = await mintBreakGlassSecret(suite.db);
+    const secret = await mintBreakGlassSecret(suite.db, NODE);
     expect(secret).toMatch(/^[A-Za-z0-9_-]{20,}$/); // base64url, high-entropy
-    const stored = await readBreakGlassVerifier(suite.db);
+    const stored = await readBreakGlassVerifier(suite.db, NODE);
     expect(stored).not.toBeNull();
     expect(stored).not.toContain(secret); // the raw secret is NEVER stored
     expect(stored!.startsWith("scrypt$")).toBe(true);
-    expect(await verifyBreakGlass(suite.db, secret)).toBe(true);
-    expect(await verifyBreakGlass(suite.db, "wrong")).toBe(false);
+    expect(await verifyBreakGlass(suite.db, NODE, secret)).toBe(true);
+    expect(await verifyBreakGlass(suite.db, NODE, "wrong")).toBe(false);
   });
 
   it("re-minting invalidates the previous secret", async () => {
-    const first = await mintBreakGlassSecret(suite.db);
-    const second = await mintBreakGlassSecret(suite.db);
-    expect(await verifyBreakGlass(suite.db, first)).toBe(false);
-    expect(await verifyBreakGlass(suite.db, second)).toBe(true);
+    const first = await mintBreakGlassSecret(suite.db, NODE);
+    const second = await mintBreakGlassSecret(suite.db, NODE);
+    expect(await verifyBreakGlass(suite.db, NODE, first)).toBe(false);
+    expect(await verifyBreakGlass(suite.db, NODE, second)).toBe(true);
   });
 
   it("verify returns false when no verifier is set", async () => {
-    expect(await verifyBreakGlass(suite.db, "anything")).toBe(false);
+    expect(await verifyBreakGlass(suite.db, NODE, "anything")).toBe(false);
   });
 });

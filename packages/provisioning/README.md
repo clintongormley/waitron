@@ -81,8 +81,8 @@ then every composed module's provisioning seed — the fiscal module's registers
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
 
-`venue` opens **one venue directory** — the two SQLite files this node keeps everything in — and
-writes through its venue file, the one holding every `ledger` and `state` table. There is no
+`venue` opens **one venue directory** — the two SQLite files `openVenueDatabase` opens — and
+writes through its venue file, the one every migration set is applied to. There is no
 connection string, no cluster, no role and no grant: the directory IS the database. It takes the
 path from `--venue-dir`, then from `WAITRON_VENUE_DIR` (the same variable `apps/server` reads, so a
 box's own setting is what stands its venue up), then from a prompt.

@@ -40,9 +40,9 @@ function usageError(message: string): never {
  * both files. Exported so a test can run the whole thing — the argv shim below adds nothing but the
  * arity check and stdout.
  *
- * `store.venue` is the handle, not `store.node`: the tables a seed writes — `registro_sif`, the
- * chain head, the node's own row — are all classified `ledger` or `state`, so they live in the
- * venue file. The node file holds this box's local identity, which no module seed touches.
+ * `store.venue` is the handle, not `store.node`: every migration set is applied to the venue file
+ * (`packages/migrations/src/apply.ts`), so the tables a seed writes — `registro_sif`, the chain
+ * head, the node's own row — are there, and none is applied to the node file.
  */
 export async function registerTill(
   nodeArg: string,

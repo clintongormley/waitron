@@ -194,11 +194,11 @@ async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
  * and the per-file write queue included. A second opener here would be a second thing to keep in
  * step with it.
  *
- * **Every migration set is applied to the VENUE handle, and the node file stays empty.** That is
- * what is true today rather than a prediction: nothing splits a set across the two files, so every
- * table a set creates belongs on the venue side. A set that later creates `local` tables would need
- * this function to learn which handle to migrate — and the node handle is deliberately not exposed
- * until something needs it.
+ * **Every migration set is applied to the VENUE handle, and the node file stays empty**, as
+ * `applyMigrations` does, for the reason it states (`packages/migrations/src/apply.ts`) — `local`
+ * tables included, since a class names whose rows a table holds, not which file. A later slice
+ * that moves tables into the node file would need this function to learn which handle to migrate
+ * — and the node handle is deliberately not exposed until something needs it.
  *
  * The accessor throws rather than returning `undefined` when read before `beforeAll` has run: that
  * is the whole point, since `undefined` turns a setup failure into `Cannot read properties of

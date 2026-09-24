@@ -269,7 +269,7 @@ describe("returned-box membership reconciliation at boot", () => {
     // which holds the superseding chart (term 2, this box sell-only).
     await seedHeldChart(supersededDb, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(supersededDb, {
+    await writeMirrorConfig(supersededDb, TILL_ENV.WAITRON_TILL_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -304,7 +304,9 @@ describe("returned-box membership reconciliation at boot", () => {
       // singleton axis off it — the durable evidence the fence engaged, not merely a per-request gate.
       const held = await readNodeMembership(supersededDb);
       expect(held?.body.term).toBe(2);
-      expect(await readSingletonRole(supersededDb)).toBe("secondary");
+      expect(await readSingletonRole(supersededDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe(
+        "secondary",
+      );
     } finally {
       await server.close();
       await peer.stop();
@@ -317,7 +319,7 @@ describe("returned-box membership reconciliation at boot", () => {
     // the box keeps its own chart and sells — which is exactly what the reachable case above must prevent.
     await seedHeldChart(proceedsDb, 1);
     const deadPort = await freePort();
-    await writeMirrorConfig(proceedsDb, {
+    await writeMirrorConfig(proceedsDb, TILL_ENV.WAITRON_TILL_NODE_ID, {
       relayUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -345,7 +347,7 @@ describe("returned-box membership reconciliation at boot", () => {
       // — nothing was persisted, nothing demoted.
       const held = await readNodeMembership(proceedsDb);
       expect(held?.body.term).toBe(1);
-      expect(await readSingletonRole(proceedsDb)).toBe("primary");
+      expect(await readSingletonRole(proceedsDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
     } finally {
       await server.close();
     }

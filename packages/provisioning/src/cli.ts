@@ -491,10 +491,10 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
  * `finally`. The store owns both files, so closing it closes both — there is nothing else to
  * manage: no cluster handle, no connection string, no role to assume.
  *
- * `body` is handed the VENUE handle. A venue plan writes `ledger` and `state` tables — the taxpayer,
- * the location, the till, the node, its series and each module's seed — and those live in the venue
- * file; the node file holds this node's own identity, which a venue plan does not touch. Same split
- * `apps/server`'s boot names (`const db = store.venue`).
+ * `body` is handed the VENUE handle. A venue plan writes the taxpayer, the location, the till, the
+ * node, its series and each module's seed, and every migration set is applied to the venue file
+ * (`packages/migrations/src/apply.ts`), none to the node file. The same handle `apps/server`'s
+ * boot uses (`const db = store.venue`).
  *
  * The OPEN is classified: a failure carrying an error `code` — the engine's or the filesystem's —
  * becomes `provisioning.state_unreadable` naming the directory (via `asUnreadable`), while a failure
