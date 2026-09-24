@@ -22,8 +22,7 @@ export const managementSessions = table(
     endedAt: tsString("ended_at"),
   },
   (t) => [
-    // For the writes that end a person's open sessions. Kept plain (not a partial `WHERE ended_at IS
-    // NULL` index) so drizzle-kit round-trips it and db:generate stays a no-op.
+    // For the writes that end a person's open sessions.
     index("management_sessions_open_idx").on(t.personId),
     uniqueIndex("management_sessions_token_hash_uq").on(t.tokenHash),
     check("management_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),

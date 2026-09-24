@@ -1,3 +1,7 @@
+// Every check constraint in `drizzle/` is written with a `CONSTRAINT <name>` clause, so
+// `checksInDdl`'s blindness to an anonymous check reaches nothing here. The one `unique()` in this
+// package's declarations, in `webauthn.ts`, is given a name, so the unnamed-constraint refusal
+// reaches nothing either.
 // The factory's blind spot for what an index EXPRESSION says reaches this set:
 // `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq` and
 // `persons_tenant_pending_email_uq` are each over a folded-key expression, so a declaration and a

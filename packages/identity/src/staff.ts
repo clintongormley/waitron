@@ -142,7 +142,8 @@ async function revokePersonAccess(tx: Transaction, personId: string): Promise<vo
 /**
  * The last-admin refusal counts the active admins and then writes. The count still holds at the
  * write only because a caller inside `withTransaction` holds the venue's write lock; the same goes
- * for {@link deactivatePerson} and {@link resetPersonLogin}.
+ * for {@link deactivatePerson} and {@link resetPersonLogin}. The pattern is stated once, with its
+ * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  */
 export async function updatePersonDetails(
   tx: Transaction,

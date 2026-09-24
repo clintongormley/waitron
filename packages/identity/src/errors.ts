@@ -52,7 +52,7 @@ declare module "@waitron/shared" {
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
-    /** No passkey is registered for this person, or no credential matched the returned id. */
+    /** No passkey is registered for this person. */
     "passkey.not_registered": Record<string, never>;
     /** The authenticator's response failed the library's checks, or the challenge handle matched no
      * live row — never issued, or already consumed by an earlier finish. */

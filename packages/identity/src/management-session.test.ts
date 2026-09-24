@@ -103,7 +103,8 @@ describe("management session lifecycle", () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     // Reachable because the table declares no key to `persons`. Two nets produce the refusal, so
-    // breaking it takes both: the inner join alone can be widened to a left join and this still passes.
+    // breaking it takes both: measured by mutation, the inner join alone can be widened to a left
+    // join and this case still passes.
     await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));
 
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));

@@ -143,8 +143,8 @@ describe("loginManager", () => {
   });
 });
 
-// A trusted server-to-server path: it keeps the suspension and missing-factor errors that the public
-// email path folds away.
+// A trusted server-to-server path: it keeps the suspension error that the public email path folds
+// away.
 describe("loginManagerById", () => {
   it("logs in a low-level fixture by id + password without depending on email", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");

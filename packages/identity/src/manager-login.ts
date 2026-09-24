@@ -53,8 +53,8 @@ async function completeManagerLogin(
   }
   let passwordOk = false;
   if (person.passwordHash === null) {
-    // Same KDF work as a wrong password, so an account awaiting password setup cannot be told apart
-    // by latency.
+    // Same KDF work as a wrong password, so an account awaiting password setup does not stand out
+    // by its KDF time.
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
   } else {
     passwordOk = verifyPassword(input.password, person.passwordHash);
@@ -92,8 +92,8 @@ export async function loginManager(
   // address that signs in is exactly the one the index treats as taken.
   const email = normalizeEmail(input.email);
   const [person] = await selectPersonLogin(tx).where(eq(loginEmailKey(), foldForUniqueness(email)));
-  // An unknown email is indistinguishable from a wrong password, so the response never reveals
-  // which addresses have accounts.
+  // An unknown email gets the same error, after the same KDF work, as a wrong password, so the
+  // response does not say which addresses have accounts.
   if (person === undefined) {
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});

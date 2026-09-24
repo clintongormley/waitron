@@ -3,8 +3,8 @@ import { bigCount, id, label, newId, nowIso, table, tsString } from "@waitron/db
 import { persons } from "./persons.js";
 
 /**
- * Deliberately MUTABLE, not an audit trail: `counter` is bumped on every successful authentication,
- * and a stale or revoked passkey is removed outright.
+ * Deliberately MUTABLE, not an audit trail: authentication may advance `counter`, and a stale or
+ * revoked passkey is removed outright.
  */
 export const webauthnCredentials = table(
   "webauthn_credentials",
@@ -23,8 +23,6 @@ export const webauthnCredentials = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a
-    // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI process).
     // restrict, not cascade: removing a person must never silently discard a registered passkey.
     foreignKey({
       columns: [t.personId],

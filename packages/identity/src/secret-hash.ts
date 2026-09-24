@@ -9,8 +9,6 @@ const KEY_BYTES = 32;
  * an old row from a new one rather than guessing from length. */
 const ALGORITHM = "scrypt";
 
-/** The returned string is self-describing — `scrypt$<saltHex>$<derivedKeyHex>` — so `verifySecret`
- * needs no out-of-band parameters to check it. */
 export function hashSecret(secret: string): string {
   const salt = randomBytes(SALT_BYTES);
   const derived = scryptSync(secret, salt, KEY_BYTES);

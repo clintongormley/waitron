@@ -74,6 +74,11 @@ describe("webauthn_credentials constraint declarations (forces the lazy extraCon
   });
 });
 
+/**
+ * webauthn_challenges declares no constraints of its own beyond its primary key: `person_id` is
+ * nullable (a discoverable-login ceremony has no known person yet) and has no key to `persons`.
+ * Nothing refuses a row naming a missing person; only `staff.ts`'s deletes read the column.
+ */
 describe("webauthn_challenges constraint declarations", () => {
   it("declares its primary key and no foreign keys or indexes", () => {
     const config = getTableConfig(api.webauthnChallenges);
