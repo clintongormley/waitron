@@ -251,7 +251,8 @@ describe("appendToChain", () => {
   it("retries inside a savepoint, then surfaces exhaustion as attendance.append_contention", async () => {
     // Occupy position 1 directly, so every attempt collides. Weaker than its name: replacing the
     // savepoint in ./chain.ts with a plain `attemptAppend(tx, …)` leaves this case passing, and the
-    // two stub cases below fail under that change only because their stub has no other method.
+    // stubbed cases below fail under that change only because their stub has nothing but
+    // `transaction`.
     await pg.db.execute(sql`
       insert into time_entries (
         id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
@@ -296,6 +297,83 @@ describe("appendToChain", () => {
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(error).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
+  });
+
+  it("lands the entry on the retry after a refused first attempt, and the refused attempt leaves nothing behind", async () => {
+    // The first attempt's savepoint gets an entry planted at position 1 before the attempt runs, so
+    // the attempt's own insert is refused by the position's unique index. Rolling back to the
+    // savepoint removes the planted entry, and the second attempt writes at position 1.
+    // The controls that fail it are in the pull request that added it.
+    let calls = 0;
+    let firstRefusal: unknown;
+
+    const result = await pg.db.transaction((tx) => {
+      const refusedOnce = {
+        transaction: <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
+          calls += 1;
+          if (calls > 1) return tx.transaction(body);
+          return tx
+            .transaction(async (nested) => {
+              await nested.insert(timeEntries).values({
+                personId,
+                locationId,
+                nodeId,
+                entryKind: "in",
+                eventAt: "2026-01-05T08:00:00.000Z",
+                eventOffsetMinutes: 0,
+                recordedByPersonId: personId,
+                recordedAt: "2026-01-05T08:00:00.000Z",
+                entryHash: "1".repeat(64),
+                prevEntryHash: null,
+                sequenceNo: 1,
+                isFirstEntry: true,
+              });
+              return body(nested);
+            })
+            .catch((error: unknown) => {
+              firstRefusal = error;
+              throw error;
+            });
+        },
+      } as never;
+      return appendToChain(refusedOnce, key(), inputAt("2026-01-05T09:00:00Z"));
+    });
+
+    expect(calls).toBe(2);
+    expect(
+      refusalOn(firstRefusal, UNIQUE_VIOLATION, {
+        table: "time_entries",
+        columns: ["node_id", "location_id", "sequence_no"],
+      }),
+    ).toBe(true);
+    const rows = await pg.db
+      .select({
+        id: timeEntries.id,
+        sequenceNo: timeEntries.sequenceNo,
+        eventAt: timeEntries.eventAt,
+        entryHash: timeEntries.entryHash,
+      })
+      .from(timeEntries);
+    expect(rows).toEqual([
+      {
+        id: result.id,
+        sequenceNo: 1,
+        eventAt: "2026-01-05T09:00:00.000Z",
+        entryHash: result.entryHash,
+      },
+    ]);
+    expect(result.sequenceNo).toBe(1);
+    expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
+    const { rows: head } = await pg.db.execute<{
+      sequence_no: number;
+      last_entry_id: string;
+      last_entry_hash: string;
+    }>(sql`
+      select sequence_no, last_entry_id, last_entry_hash from workforce_chains
+      where node_id = ${nodeId} and location_id = ${locationId}`);
+    expect(head).toEqual([
+      { sequence_no: 1, last_entry_id: result.id, last_entry_hash: result.entryHash },
+    ]);
   });
 });
 
