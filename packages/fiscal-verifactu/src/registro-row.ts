@@ -129,9 +129,9 @@ export function toRegistroRow(
       fechaExpedicionFactura: toIsoDate(record.IDFactura.FechaExpedicionFactura),
       nombreRazonEmisor: record.NombreRazonEmisor,
       tipoFactura: record.TipoFactura,
-      // The four AEAT rectificativa fields, stored as-built so the drainer re-serialises the whole
-      // rectificativa (fromRegistroRow reads them back). None is hashed, so storing them here does
-      // not affect this record's huella.
+      // The four AEAT rectificativa and substitution fields, stored as-built so the drainer
+      // re-serialises them (fromRegistroRow reads them back). None is hashed, so storing them here
+      // does not affect this record's huella.
       tipoRectificativa: record.TipoRectificativa ?? null,
       facturasRectificadas: record.FacturasRectificadas ?? null,
       facturasSustituidas: record.FacturasSustituidas ?? null,
@@ -158,8 +158,9 @@ export function toRegistroRow(
     // convenience, so it falls back to the one emisor name every record DOES carry.
     nombreRazonEmisor: record.SistemaInformatico.NombreRazon,
     tipoFactura: null,
-    // A RegistroAnulacion carries none of the four rectificativa fields — they belong to a
-    // registro de alta whose TipoFactura is R1–R5, never to an anulación.
+    // A RegistroAnulacion carries none of the four rectificativa and substitution fields — they
+    // belong to a registro de alta (R1–R5 for the three rectificativa fields, F3 for
+    // FacturasSustituidas), never to an anulación.
     tipoRectificativa: null,
     facturasRectificadas: null,
     facturasSustituidas: null,
@@ -349,12 +350,12 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     },
     NombreRazonEmisor: row.nombre_razon_emisor,
     TipoFactura: row.tipo_factura as RegistroAlta["TipoFactura"],
-    // The four AEAT rectificativa fields, spread back on ONLY when stored non-null — matching
-    // buildAltaRecord's own conditional-spread shape (in `@waitron/verifactu`),
+    // The four AEAT rectificativa and substitution fields, spread back on ONLY when stored
+    // non-null — matching buildAltaRecord's own conditional-spread shape (in `@waitron/verifactu`),
     // so an absent field is OMITTED, never set to null: a `TipoRectificativa: null` would
     // serialise a spurious empty element. None is a huella input (`@waitron/verifactu` hashes 8
-    // named fields, none of them), so adding them here cannot change the recomputed huella verify.ts
-    // checks; they exist so the drainer files a complete rectificativa (its mandatory
+    // named fields, none of them), so adding them here cannot change the recomputed huella
+    // verify.ts checks; they exist so the drainer files a complete rectificativa (its mandatory
     // TipoRectificativa, AEAT rule 1114).
     ...(row.tipo_rectificativa !== null && {
       TipoRectificativa: row.tipo_rectificativa as "S" | "I",

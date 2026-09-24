@@ -148,8 +148,9 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * Each chunk is claimed in its own short transaction (T1) that commits before the network call,
  * so the venue file's single writer slot is not held across `client.submit`. `client.submit` runs
  * outside any transaction; the response is persisted in a second short transaction (T2), or, if
- * `client.submit` throws, the batch is backed off in one instead. Route B's `client.consultar` is
- * the exception: it runs inside T2.
+ * `client.submit` or T2 throws, the batch is backed off in one instead. Route B's
+ * `client.consultar` is the exception to the round-trip rule: it runs inside T2, so a failed
+ * consulta rolls back the whole response and backs the batch off.
  *
  * AEAT's flow control: send when `TiempoEsperaEnvio` has elapsed since the last envío OR a full
  * envío has accumulated, whichever comes first.
@@ -323,9 +324,9 @@ async function requeueClaims(
  * not begin until the selection and its `enviando` stamp have committed together, and then matches
  * none of those rows. What that prevents is a DUPLICATE SUBMISSION of the same batch to AEAT, so
  * the SELECT and the stamp must stay inside one `withTransaction`, and the SELECT must stamp
- * nothing itself: the deployment-environment cases in `drain.test.ts` go red if it does. A second
- * PROCESS on this database is outside that: its restart reset, `resetInFlightClaims`, assumes one
- * process per venue database.
+ * nothing itself: most of the deployment-environment cases in `drain.test.ts` go red if it does.
+ * A second PROCESS on this database is outside that: its restart reset, `resetInFlightClaims`,
+ * assumes one process per venue database.
  *
  * **The deployment-environment guard.** Each row's own `entorno` is checked against this host's
  * `environment` before the stamp. A row that disagrees, or carries none, is left untouched and

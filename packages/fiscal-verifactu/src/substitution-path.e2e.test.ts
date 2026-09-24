@@ -204,7 +204,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     // Ticket at 1, F3 at 2 — an alta takes the next secuencia in generation order.
     expect(row?.secuencia).toBe(2);
     expect(row?.primerRegistro).toBe(false);
-    // An F3 is NOT a rectificativa: none of the four rectificativa columns is populated.
+    // An F3 is NOT a rectificativa: none of the three rectificativa columns is populated.
     expect(row?.tipoRectificativa).toBeNull();
     expect(row?.facturasRectificadas).toBeNull();
     expect(row?.importeRectificacion).toBeNull();

@@ -5,8 +5,7 @@ import { TEST_SISTEMA } from "./testing/seed.js";
 import { validateVenueFiscalFields } from "./venue-fields.js";
 
 /**
- * The drift guard for the three `@waitron/verifactu` rules ./venue-fields.ts restates. Every case
- * below is here because removing a piece of the restatement flips it.
+ * The drift guard for the three `@waitron/verifactu` rules ./venue-fields.ts restates.
  *
  * It deliberately does NOT pin the series code's LENGTH rule, because the two disagree on purpose:
  * the boundary refuses a base over 38 characters so a cold restore's `-<installation number>`
