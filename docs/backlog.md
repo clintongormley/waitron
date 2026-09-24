@@ -2788,10 +2788,29 @@ image constraints under *Detail → Box image*.
   tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included)
   and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included) and
   `packages/fiscal` (#592, about 690 to about 245, tests included) and `packages/payments-sumup`
-  with `packages/migrations` (#597, about 1,090 to about 800, tests included). A pruning pull request
+  with `packages/migrations` (#597, about 1,090 to about 800, tests included) and `packages/core`
+  (#598, about 1,870 to about 660, tests included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592 and #597 and left for the package that owns each, all still OPEN:
+  #579, #581, #585, #589, #592, #597 and #598 and left for the package that owns each, all still OPEN:
+  - Found by #598 (`packages/core`), not fixable in a comments-only change. Test titles still
+    carry claims the comments no longer make: `incidents.test.ts:463` says orphan raises de-dup
+    "via NULLS NOT DISTINCT" (PostgreSQL wording); `record-void.test.ts:340` and
+    `record-correction.test.ts:443` say an ordering "never leaks an authz error", which #598's
+    review did not bear out (Codex ran both orders: with the lookup first, an unauthorised caller
+    tells a missing sale from an existing one by the error); and `record-sale.test.ts:854`, `:930`
+    and `:995` carry history ("legacy path unchanged", "additive, no behaviour change").
+    `record-sale.test.ts:280` ("groups two lines at the same VAT rate into one breakdown entry")
+    asserts only the record's total, which is the input passed through, so it passes with no
+    grouping; the fake backend stores the breakdown, so it could assert the merged entry. No test
+    reaches `settleSale`'s catch that turns a `sale_settlements` unique-key refusal into
+    `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
+    stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
+    `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower.
+    Outside core, the same retired claims survive: `apps/server/src/till-sale.ts` still describes
+    a chain-head lock, "trigger WT002" and a failing transaction left aborted; and
+    `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
+    record hashes" (#598 found the hash covers the totals, not the breakdown).
   - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
     comments-only change. Pointers outside `docs/` that #597 made stale: `apps/server/README.md:82`
     says `packages/migrations/src/apply.ts` carries the lock races, which now live only in #489;
@@ -2810,23 +2829,15 @@ image constraints under *Detail → Box image*.
     are code, not comments: one points at `packages/fiscal/src/backend.ts:72` for `total: Decimal`
     (it is at line 50) and names "Task 14", and one says the breakdown column is NULL only for a
     void, while the fake's corrections and substitutions leave it NULL too.
-    `fiscal.node_not_registered` is thrown only by `FakeFiscalBackend.recordSale`, yet
-    `packages/core/src/record-sale.test.ts:155` and `incidents.test.ts:151` say the fake refuses
-    "exactly like a real backend" (Veri*Factu throws `sif.not_registered`; `fiscal-none` checks
-    nothing). `FiscalBackend.pendingCount` has no caller outside the backends and their tests, yet
+    `FiscalBackend.pendingCount` has no caller outside the backends and their tests, yet
     `packages/db/src/schema/sales.ts:29` says it is how the count is read.
-    `packages/core/src/record-void.ts:23` cites a `recordVoid` doc comment in
-    `packages/fiscal/src/backend.ts` that does not exist. `packages/fiscal-verifactu/src/slot.ts:51`
+    `packages/fiscal-verifactu/src/slot.ts:51`
     says `validate` runs BEFORE `provisionVenue`, which #592 narrowed in `contribution.ts` to an
     instruction to the caller, because `apps/server/scripts/cloud-integration-fixture.ts` calls
     `provisionVenue` without it. `packages/fiscal-verifactu/src/no-regime-scope.test.ts:7` says
     `packages/fiscal`'s guard forbids ENGLISH regime terms; its list is half Spanish.
     `no-hardcoded-margin.test.ts` scans only the files directly in `packages/fiscal/src`, not
     `src/testing/`, and does not say so.
-  - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
-    and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
-    engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
-    Fiscal files: comment-only, under the pruning gates.
   - `addShift` and the shift update in `packages/workforce/src/clocking.ts` store the caller's
     spelling of `starts_at`/`ends_at`, and `shifts_interval_ck` compares that text, so two valid
     times spelled with different offsets, or with fractional seconds on one side only, can be
@@ -2914,10 +2925,9 @@ image constraints under *Detail → Box image*.
     - The frozen `write-path.e2e.test.ts` points at `test/fixtures.ts:249-256` and
       `test/write-path-fixtures.ts:37-44`, which have moved; the receipt they cite is back in
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
-  - The same false comments #562 removed from `fiscal-verifactu` survive elsewhere: a nonexistent
-    `errors.reachability.test.ts` cited in `packages/core` (`incidents.ts`, `record-sale.ts`), a
-    "chain-head lock" in `packages/core` (`record-sale.ts`, `settle-sale.ts`,
-    `record-substitution.ts`) and `apps/server/src/till-sale.ts` (the head read takes no lock), and
+  - The same false comments #562 removed from `fiscal-verifactu` survive elsewhere (#598 removed
+    `packages/core`'s): a "chain-head lock" in `apps/server/src/till-sale.ts` (the head read takes
+    no lock), and
     `boot.ts` named as the owner of the AEAT certificate resolver in `apps/server/src/boot.test.ts`
     (`packages/fiscal-verifactu/src/slot.ts` builds and closes it). Prune with those packages.
   - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
@@ -2980,8 +2990,7 @@ image constraints under *Detail → Box image*.
     CLAUDE.md §3's measured rule contradicts. `scripts/behavioural-triggers.test.ts:737` and the
     shipped migration `packages/db/drizzle/0001_behavioural_triggers.sql:348` say `requireDevice`
     touches `last_seen_at` "on every authenticated request", which the review found too wide (the
-    migration cannot be edited). `packages/core/src/incidents.test.ts:314-318` describes plan 3 and
-    Task 18 as the review found no longer true (not re-checked by the land). Stale line pointers:
+    migration cannot be edited). Stale line pointers:
     `apps/server/src/till-api.fiscal-sale-paths.test.ts:662` cites `sales.ts:247`, and the shipped
     migration's line 378 points at history deleted from `device-profiles.trigger.test.ts`.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
@@ -3013,7 +3022,7 @@ image constraints under *Detail → Box image*.
     `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
     status 0); `apps/server/src/node-identity.ts` still says "ONE
     tenant transaction" and omits `credentials.key_version_unknown` among another node's read
-    failures; pointers to a missing `errors.reachability.test.ts` in `core`,
+    failures; pointers to a missing `errors.reachability.test.ts` in `apps/server`,
     `workforce-es` and `reporting` (the guard is `scripts/errors-reachable.test.ts`); and two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
     `docs/compliance/getting-to-production.md` §4 closed that day.
@@ -3047,9 +3056,8 @@ image constraints under *Detail → Box image*.
     `packages/layouts/src/canvas-store.db.test.ts` (lines 144 and 249) still quote PostgreSQL's
     error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
     it" comment #588 removed from layouts (it was written about the deleted `tenantId` field and
-    left on the next field down) is also at `packages/core/src/incidents.ts:16`,
-    `packages/core/src/settle-sale.ts:27`, not re-checked there (#589 deleted the copy in
-    `packages/db/src/append-order-amendment.ts`, whose function reads the field three times). Comments quoting the PostgreSQL numbers for these two stores remain at
+    left on the next field down) went from `packages/db` with #589 and from `packages/core` with
+    #598, both fields being read. Comments quoting the PostgreSQL numbers for these two stores remain at
     `apps/server/src/management-api.ts:299` and `:358`,
     `apps/server/src/management-api.canvases.test.ts:277` and
     `apps/dashboard/src/i18n/codes.test.ts:92`. `packages/printing/src/errors.test.ts:5` says the
@@ -3096,9 +3104,7 @@ image constraints under *Detail → Box image*.
     bound, so a count past 99999999999999 cents that reaches it by another route is still turned
     into an amount without refusal. `docs/developers/conventions-data.md` (the "no column width left
     to measure" paragraph) has only the PostgreSQL raw-read table, not the
-    SQLite one #579's commit message now carries. `packages/core/src/errors.ts` points at
-    `errors.reachability.test.ts` files in `packages/core` and `packages/db` that no longer exist
-    (the check is `scripts/errors-reachable.test.ts`). Comments saying drizzle wraps a failed query
+    SQLite one #579's commit message now carries. Comments saying drizzle wraps a failed query
     remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps every failed" -- ':!docs'` listed
     files in `apps/server`, `packages/catalogue`, `db`, `identity`, `media`, `migrations`,
     `printing` and `store` on 2026-09-24, not each checked (see the `DrizzleQueryError` entry below).
@@ -4930,9 +4936,9 @@ it; and a correction must not decrement a count where it should drop it.
   (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against the
   path it actually takes, then rewording. The candidates are what
   `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
-  also includes test fixtures that build a wrapped error by hand; among the comments are
-  `packages/core/src/record-sale.test.ts`.
-  #579 took the sentence out of `packages/shared/src/cause-chain.ts` and `engine-failure.ts`, and
+  also includes test fixtures that build a wrapped error by hand.
+  #598 took it out of `packages/core/src/record-sale.test.ts` (a query builder there, which
+  rejects with the engine's own error); #579 took the sentence out of `packages/shared/src/cause-chain.ts` and `engine-failure.ts`, and
   #585 out of `packages/db/src/schema/series.test.ts`; #589 reworded `packages/db`'s own copies
   (`deployment.test.ts`, `unique-violation.test.ts`, `testing/errors.test.ts`, `tenancy.test.ts`)
   after running both paths: through `db.run` a refused insert rejects with a `DrizzleError` whose
