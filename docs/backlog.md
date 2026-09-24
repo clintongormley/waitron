@@ -102,8 +102,7 @@ open. Disposable backup fixtures now capture real SQLite archives and restore th
 through Waitron validation, migration and module hooks for Cloud's local two-venue
 proof. The backup fixture supplies normal on-disk identity/TLS state, proves source
 Cloud credentials and staff TLS keys are excluded, and drops old backup destination
-settings on the test replacement. It never starts the restored server. This changes
-the local restore fixture only. The signed capture client now reserves upload authority,
+settings on the test replacement. The signed capture client now reserves upload authority,
 uploads directly with scoped credentials, and publishes exact snapshot metadata through Cloud.
 It renews the current control lease, rejects unbound replies and keeps upload secrets out
 of connection state. The serving-primary test installation now schedules daily snapshots,
@@ -111,19 +110,24 @@ keeps one encrypted archive for exact retries across restart and assigns monthly
 to the first successful capture in each venue-local calendar month. The file uploader
 streams with a 14-minute/credential-expiry deadline and bounded retry backoff; shutdown
 cancellation does not record an outage. The Cloud local proof crashes after upload and
-restores the resumed archive without recapture. Production deployment and customer recovery
-UI remain open. Confirmed uploads retry publication without retransferring; an acknowledged
+restores the resumed archive without recapture. Production deployment remains open. Confirmed
+uploads retry publication without retransferring; an acknowledged
 object lost by storage waits until the 24-hour expiry before recapture. Capture requests
 waiting on the Cloud client can be cancelled. Shutdown waits for an in-progress local
 database copy or encryption step. Next: measure that shutdown latency, real venue uplink
 budgets and spool disk use, and stream
 archive assembly beyond its current in-memory 512 MiB format limit. Cloud documentation:
 `docs/authenticated-captures.md` in waitron-cloud.
-Cloud's independent Litestream storage proof does not supply the sealed state row,
-stream supervisor or cold-restore activation still owned by SQLite slice 2. Next,
-connect those landed interfaces to Cloud's scoped storage and owner recovery flow;
-keep fresh installation enrolment and fiscal activation explicit. Connected does not
-mean those services are configured. Cloud service ownership stays in the Cloud
+The setup wizard now guides a fresh replacement through Cloud owner approval of one verified
+snapshot for a test venue. The replacement keeps its request key private, downloads only the
+approved encrypted object with temporary read authority, rechecks approval, then stages it through
+the existing cold restore. Its completion report follows actual local restore. The managed path
+excludes old backup destination credentials; local-file restore remains available. The Cloud
+integration proof exercises owner approval, restart, lost replies and the real target restore.
+Continuous complete-server recovery, planned final-write handover, production recovery, Cloud
+replacement enrolment, routing and fencing remain open. The Litestream stream's sealed-state
+restore and activation still need integration with Cloud storage and owner recovery. Connected does
+not mean those services are configured. Cloud service ownership stays in the Cloud
 backlog; this repository owns its adapter, screen and node-side behavior. Public
 hosting, ingress controls and Cloud audit/retention remain deployment work.
 
@@ -1817,6 +1821,10 @@ Each was judged and deliberately left; none blocks the merge.
 
 ### A2. The setup wizard
 
+The restore choice now includes guided Cloud recovery of a verified test-venue snapshot. The
+replacement shows the pairing code and approved capture time, then requires an explicit local
+restore. Live production recovery and continuous complete-server recovery remain open.
+
 The setup wizard landed in #334 (2026-09-12); corrections from walking it on a real machine, plus a
 first-sign-in passkey offer, landed in #347 (2026-09-13). Two calls the PR left with the owner, still
 open:
@@ -2449,6 +2457,8 @@ walked was not recorded here. `deploy/README.md` keeps the advice for whoever in
 
 ### B2. Backups that leave the box
 
+- **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
+  authorize trading or stop another server.
 - **S3-compatible bucket, then Google Drive.** Only `LocalFsBackend` exists. The abort-aware
   per-destination timeout lands with the first network backend.
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
@@ -2457,8 +2467,8 @@ walked was not recorded here. `deploy/README.md` keeps the advice for whoever in
 - **The "backups off or stale" reminder** — LANDED as dashboard alerts (#371), which also flag a
   destination whose last attempt failed. Still open: when a nightly report job exists, the backup slot
   should fire after it.
-- **The cold-restore operator surface** (promote Slice 4): connection rebinding, advertised origin,
-  an authenticated entry.
+- **The remaining cold-restore operator surface** (promote Slice 4): connection rebinding, advertised
+  origin and an authenticated entry.
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
   `artifact-cipher.ts` holds the whole database copy in memory and is restorable only by Waitron
   code, where piping the engine's own copy through a standard encrypter into a tar is the obvious
@@ -4644,10 +4654,10 @@ any of this code, so you can still read how something worked under PostgreSQL.
   for a few seconds (it did not shrink; what the checkpoint does over longer was not measured) —
   [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 - **The promoted generation and store pointer remain unproven.** The prototype does not stream a
-  promoted node's generation or restore by following `current.json`. Cloud recovery orchestration
-  is tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
-  Waitron retains the engine behaviour and integration proof. Settle their contract before assigning
-  implementation work; this ownership split does not close the gap.
+  promoted node's generation or restore by following `current.json`. The guided Cloud snapshot path
+  does not close continuous recovery. Its orchestration is tracked in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md); Waitron retains
+  the engine behaviour and integration proof.
 - **250 sales a day is still an assumption** nothing in this repository measures, so the days-per-GiB
   figure rescales but does not hold.
 - **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
@@ -5272,7 +5282,8 @@ partial scope; the detail for a live thread is in its track.
 **Cross-cutting infra:** replication (native Postgres logical replication, #280 — DELETED 2026-09-19;
 no node replicates to another until slices 3–5 rebuild failover) · membership, promotion and rejoin
 (the arc was completed on PostgreSQL, #197–#272; what the deletion took out of it is under
-*Replication, membership & failover — residuals*) · backup and restore (BR-1..BR-4 plus the wizard) · SIF
+*Replication, membership & failover — residuals*) · backup and restore (BR-1..BR-4 plus the wizard
+and guided Cloud snapshot restore for test venues) · SIF
 topology (`#33`, `node_id` re-key) · the module system (#212–#262; country packs #292) · the printing
 subsystem (`@waitron/printing` plus the db-free `@waitron/print-agent`, #282–#335) · the layout
 designer and device profiles (#194–#234, #246, #269) · CI and test infra (scoped CI, pre-push hook,
@@ -5410,7 +5421,8 @@ abstraction, fan-out and AES-256-GCM artifact encryption; the single encrypted a
 series; the dashboard wizard. The image ships with backups OFF, deliberately.
 
 Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
-`modules.json`; the exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
+`modules.json`; the replacement's private `cloud-recovery.json` is outside that named capture set.
+The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
 `logs/`, the per-hardware `instance.env` and `recovery.json`. Touches BR-2, BR-3 and the recovery
 bundle. Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend` key path-traversal
 guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot success-path integration

@@ -51,6 +51,14 @@ export class SetupRestoreScreen extends LitElement {
     return html`
       <h1>Restore from backup</h1>
       <p>
+        <wt-button
+          variant="ghost"
+          data-test="cloud-restore"
+          @click=${() => dispatchSetupGoto(this, "cloud-restore")}
+          >Restore from Waitron Cloud</wt-button
+        >
+      </p>
+      <p>
         Use cold recovery only when no other server is still running with newer restaurant data.
       </p>
       <label class="field">

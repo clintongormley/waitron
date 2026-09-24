@@ -262,6 +262,59 @@ describe("SetupApi", () => {
     });
   });
 
+  it("uses the local setup API for each Cloud recovery action and sends only the selected point for restore", async () => {
+    const view = {
+      requestId: "be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+      code: "12345678",
+      openCloudUrl:
+        "https://cloud.example.test/recover#request=be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+      expiresAt: "2026-09-24T12:00:00.000Z",
+      state: "awaiting_owner",
+    };
+    const staged = { restoreStaged: true, restarting: true };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(view))
+      .mockResolvedValueOnce(jsonResponse(view))
+      .mockResolvedValueOnce(jsonResponse(view))
+      .mockResolvedValueOnce(jsonResponse(staged, true, 202));
+    const api = new SetupApi("", fetchImpl);
+    expect(await api.startCloudRecovery()).toEqual(view);
+    expect(await api.cloudRecoveryStatus()).toEqual(view);
+    expect(await api.startCloudRecoveryAgain()).toEqual(view);
+    expect(await api.restoreFromCloud("e8722eb0-3f02-4f35-920b-9b5f6bfb05e8")).toEqual(staged);
+    expect(fetchImpl.mock.calls).toEqual([
+      [
+        "/setup-api/cloud-recovery/start",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        },
+      ],
+      ["/setup-api/cloud-recovery/status", { method: "GET", credentials: "include" }],
+      [
+        "/setup-api/cloud-recovery/start-again",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        },
+      ],
+      [
+        "/setup-api/cloud-recovery/restore",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pointId: "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8" }),
+        },
+      ],
+    ]);
+  });
+
   it("rejects a refused restore with the envelope's code and the HTTP status", async () => {
     const fetchImpl = vi
       .fn()

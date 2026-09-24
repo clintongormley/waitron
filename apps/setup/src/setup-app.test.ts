@@ -3,6 +3,7 @@ import { applyTokens } from "@waitron/ui";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
+import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -28,6 +29,10 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       restarting: true,
     }),
     restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
+    startCloudRecovery: vi.fn(),
+    cloudRecoveryStatus: vi.fn(),
+    startCloudRecoveryAgain: vi.fn(),
+    restoreFromCloud: vi.fn(),
     stageConfiguration: vi.fn(),
     runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
     ...overrides,
@@ -106,6 +111,20 @@ function restoreRequest(
 ): void {
   wizard(el).dispatchEvent(
     new CustomEvent("restore-requested", { detail: { request }, bubbles: true, composed: true }),
+  );
+}
+
+function cloudRecoveryAction(
+  el: SetupApp,
+  action: "start" | "status" | "start-again" | "restore",
+  pointId?: string,
+): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("cloud-restore-action", {
+      detail: { action, pointId },
+      bubbles: true,
+      composed: true,
+    }),
   );
 }
 
@@ -503,6 +522,115 @@ describe("setup-app", () => {
     expect(await screenText(el, "restore", "[data-test=server-error]")).toContain(
       "could not be staged",
     );
+  });
+
+  it("shows Cloud approval and stages only the snapshot the operator confirmed", async () => {
+    const requestId = "b6cbaee9-ee8b-4da5-b023-900547debb94";
+    const pointId = "3a1d5560-c5bd-407a-b596-e63fbe2600d5";
+    const pending = {
+      requestId,
+      code: "12345678",
+      openCloudUrl: `https://cloud.example.test/recover#request=${requestId}`,
+      expiresAt: "2026-09-24T12:00:00.000Z",
+      state: "awaiting_owner",
+    };
+    const approved = {
+      ...pending,
+      state: "approved",
+      point: {
+        id: pointId,
+        venueId: "a7f570e8-e510-49eb-b1a7-096ff72171f5",
+        capturedAt: "2026-09-24T10:00:00.000Z",
+        modules: { core: 1 },
+      },
+    };
+    const startCloudRecovery = vi.fn().mockResolvedValue(pending);
+    const cloudRecoveryStatus = vi.fn().mockResolvedValue(approved);
+    const restoreFromCloud = vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(
+      stubApi({ startCloudRecovery, cloudRecoveryStatus, restoreFromCloud }),
+    );
+    goto(el, "cloud-restore");
+    await flush(el);
+    cloudRecoveryAction(el, "start");
+    await flush(el);
+    expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("12345678");
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("2026-09-24");
+    cloudRecoveryAction(el, "restore", pointId);
+    await flush(el);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("submits one Cloud restore when the rendered button is clicked twice before the shell redraws", async () => {
+    const pointId = "3a1d5560-c5bd-407a-b596-e63fbe2600d5";
+    const approved = {
+      requestId: "b6cbaee9-ee8b-4da5-b023-900547debb94",
+      code: "12345678",
+      openCloudUrl:
+        "https://cloud.example.test/recover#request=b6cbaee9-ee8b-4da5-b023-900547debb94",
+      expiresAt: "2026-09-24T12:00:00.000Z",
+      state: "approved",
+      point: {
+        id: pointId,
+        venueId: "a7f570e8-e510-49eb-b1a7-096ff72171f5",
+        capturedAt: "2026-09-24T10:00:00.000Z",
+        modules: { core: 1 },
+      },
+    };
+    let finishRestore!: (value: { restoreStaged: true; restarting: true }) => void;
+    const restorePending = new Promise<{ restoreStaged: true; restarting: true }>((resolve) => {
+      finishRestore = resolve;
+    });
+    const restoreFromCloud = vi.fn().mockReturnValue(restorePending);
+    const el = await mountSetupApp(
+      stubApi({ cloudRecoveryStatus: vi.fn().mockResolvedValue(approved), restoreFromCloud }),
+    );
+    goto(el, "cloud-restore");
+    await flush(el);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    const screen = (await screenHost(el, "cloud-restore")) as SetupCloudRestoreScreen;
+    const checkbox = screen.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event("change"));
+    await screen.updateComplete;
+    const restore = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!;
+    restore.click();
+    restore.click();
+    expect(restoreFromCloud).toHaveBeenCalledTimes(1);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId);
+    finishRestore({ restoreStaged: true, restarting: true });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("keeps the Cloud recovery screen available after a lost start reply", async () => {
+    const startCloudRecovery = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("lost reply"))
+      .mockResolvedValue({
+        requestId: "b6cbaee9-ee8b-4da5-b023-900547debb94",
+        code: "12345678",
+        openCloudUrl:
+          "https://cloud.example.test/recover#request=b6cbaee9-ee8b-4da5-b023-900547debb94",
+        expiresAt: "2026-09-24T12:00:00.000Z",
+        state: "awaiting_owner",
+      });
+    const el = await mountSetupApp(stubApi({ startCloudRecovery }));
+    goto(el, "cloud-restore");
+    await flush(el);
+    cloudRecoveryAction(el, "start");
+    await flush(el);
+    expect(await screenText(el, "cloud-restore", "[data-test=server-error]")).toContain(
+      "unavailable",
+    );
+    cloudRecoveryAction(el, "start");
+    await flush(el);
+    expect(startCloudRecovery).toHaveBeenCalledTimes(2);
+    expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("12345678");
   });
 
   it("routes a demo draft to review on setup-advance from venue", async () => {

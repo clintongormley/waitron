@@ -16,6 +16,7 @@ export interface RestoreRequest {
   artifact: Uint8Array;
   recoveryKey: string;
   environment: DeploymentEnvironment;
+  managedCloud?: { requestId: string; pointId: string };
 }
 
 /** Write payloads first and the marker last, so the entrypoint never observes a partial request. */
@@ -29,7 +30,11 @@ export async function stageRestoreRequest(
   await writeFileAtomic(join(stateDir, KEY), request.recoveryKey, 0o600);
   await writeFileAtomic(
     join(stateDir, MARKER),
-    JSON.stringify({ version: 1, environment: request.environment }),
+    JSON.stringify({
+      version: 1,
+      environment: request.environment,
+      ...(request.managedCloud ? { managedCloud: request.managedCloud } : {}),
+    }),
     0o600,
   );
 }
@@ -40,6 +45,7 @@ export interface StagedRestoreDeps {
   venueDir: string;
   migrationsRoot: string | null;
   log: Logger;
+  onManagedCloudRestored?: (binding: { requestId: string; pointId: string }) => Promise<void>;
 }
 
 type Restore = (deps: RestoreDeps) => Promise<void>;
@@ -65,10 +71,24 @@ export async function runStagedRestore(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
-  const marker = JSON.parse(raw) as { version?: unknown; environment?: unknown };
+  const marker = JSON.parse(raw) as {
+    version?: unknown;
+    environment?: unknown;
+    managedCloud?: unknown;
+  };
   if (
     marker.version !== 1 ||
-    (marker.environment !== "production" && marker.environment !== "preproduction")
+    (marker.environment !== "production" && marker.environment !== "preproduction") ||
+    (marker.managedCloud !== undefined &&
+      (marker.environment !== "preproduction" ||
+        typeof marker.managedCloud !== "object" ||
+        marker.managedCloud === null ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          String((marker.managedCloud as { requestId?: unknown }).requestId),
+        ) ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          String((marker.managedCloud as { pointId?: unknown }).pointId),
+        )))
   ) {
     throw new Error("invalid staged restore request");
   }
@@ -86,6 +106,9 @@ export async function runStagedRestore(
       migrationsRoot: deps.migrationsRoot,
       modules: ALL_MODULES,
       environment: marker.environment,
+      ...(marker.managedCloud
+        ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
+        : {}),
       log: deps.log,
     });
   } catch (error) {
@@ -97,5 +120,9 @@ export async function runStagedRestore(
     throw error;
   }
   await clearStagedRestore(deps.stateDir);
+  if (marker.managedCloud)
+    await deps
+      .onManagedCloudRestored?.(marker.managedCloud as { requestId: string; pointId: string })
+      .catch(() => {});
   return true;
 }

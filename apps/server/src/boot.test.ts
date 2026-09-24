@@ -1520,6 +1520,54 @@ describe("startServer, against a migrated venue directory", () => {
     }
   });
 
+  it.each([
+    ["preproduction", 500],
+    ["production", 503],
+  ] as const)(
+    "%s setup boot gates the Cloud recovery seat",
+    async (environment, expectedStatus) => {
+      const port = await freePort();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-state-"));
+      const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-venue-"));
+      let server: StartedServer | undefined;
+      try {
+        server = await startServer({
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: environment,
+          WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+          WAITRON_HTTP_LANDING_PORT: "0",
+          ...(environment === "production"
+            ? {
+                WAITRON_MANAGEMENT_RP_ID: "localhost",
+                WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
+              }
+            : {}),
+        });
+        const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+        try {
+          const response = await fetch(
+            `https://127.0.0.1:${port}/setup-api/cloud-recovery/status`,
+            via,
+          );
+          expect(response.status).toBe(expectedStatus);
+          const body = await response.json();
+          expect(body.error.code).toBe(
+            environment === "production" ? "setup.not_ready" : "server.internal",
+          );
+        } finally {
+          await close();
+        }
+      } finally {
+        await server?.close();
+        await rm(stateDir, { recursive: true, force: true });
+        await rm(venueDir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("setup mode serves the discovery JSON, the CA download, and the trust page over HTTPS (slice 3)", async () => {
     // Requests trust the persisted box CA, exercising the real listener and boot route mounting.
     const port = await freePort();

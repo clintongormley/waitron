@@ -6,6 +6,7 @@ import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
+import "./screens/cloud-restore-screen.js";
 import "./screens/live-source-screen.js";
 import "./screens/configuration-preview-screen.js";
 import "./screens/fiscal-test-screen.js";
@@ -22,6 +23,7 @@ import type {
   ConfigurationPreview,
   ProvisionBody,
   SetupApi,
+  CloudRecoveryView,
   VenueDefaults,
 } from "./api/client.js";
 import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
@@ -33,6 +35,7 @@ export type Screen =
   | "role"
   | "connect"
   | "restore"
+  | "cloud-restore"
   | "live-source"
   | "configuration-preview"
   | "fiscal-test"
@@ -191,6 +194,9 @@ export class SetupApp extends LitElement {
 
   @state() private connectError?: string;
   @state() private restoreError?: string;
+  @state() private cloudRecoveryView?: CloudRecoveryView;
+  @state() private cloudRecoveryError?: string;
+  @state() private cloudRecoveryBusy = false;
   @state() private configurationError?: string;
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
@@ -467,6 +473,42 @@ export class SetupApp extends LitElement {
     }
   }
 
+  async #onCloudRestoreAction(
+    event: CustomEvent<{
+      action: "start" | "status" | "start-again" | "restore";
+      pointId?: string;
+    }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    if (this.cloudRecoveryBusy) return;
+    this.cloudRecoveryBusy = true;
+    this.cloudRecoveryError = undefined;
+    try {
+      const { action, pointId } = event.detail;
+      if (action === "restore") {
+        if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
+        this.screen = "provisioning";
+        await this.api.restoreFromCloud(pointId);
+        if (this.isConnected) this.screen = "done";
+      } else {
+        this.cloudRecoveryView =
+          action === "start"
+            ? await this.api.startCloudRecovery()
+            : action === "start-again"
+              ? await this.api.startCloudRecoveryAgain()
+              : await this.api.cloudRecoveryStatus();
+      }
+    } catch {
+      if (this.isConnected) {
+        this.cloudRecoveryError =
+          "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+        this.screen = "cloud-restore";
+      }
+    } finally {
+      this.cloudRecoveryBusy = false;
+    }
+  }
+
   async #onConfigurationRequested(
     event: CustomEvent<{ request: ConfigurationRequestDetail }>,
   ): Promise<void> {
@@ -556,6 +598,7 @@ export class SetupApp extends LitElement {
       @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
       @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
         void this.#onRestoreRequested(e)}
+      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string }>) => void this.#onCloudRestoreAction(e)}
       @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
         void this.#onConfigurationRequested(e)}
       @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
@@ -581,6 +624,13 @@ export class SetupApp extends LitElement {
           data-test="screen-restore"
           .errorMessage=${this.restoreError}
         ></setup-restore-screen>`;
+      case "cloud-restore":
+        return html`<setup-cloud-restore-screen
+          data-test="screen-cloud-restore"
+          .view=${this.cloudRecoveryView}
+          .errorMessage=${this.cloudRecoveryError}
+          .busy=${this.cloudRecoveryBusy}
+        ></setup-cloud-restore-screen>`;
       case "live-source":
         return html`<setup-live-source-screen
           data-test="screen-live-source"

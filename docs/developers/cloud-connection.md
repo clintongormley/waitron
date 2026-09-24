@@ -85,7 +85,7 @@ session idle time unchanged. Clicking Check connection or Refresh status counts 
 
 Version 1 returns exactly three services. Adding services requires a negotiated protocol
 version before changing that response. Stopping access permanently retires the key;
-the replacement flow is not implemented yet. Do not delete the state file to reconnect:
+Cloud replacement enrollment is not implemented yet. Do not delete the state file to reconnect:
 a new key does not take over the existing venue. A stop request waits for the local
 worker, rechecks your permission, and saves the stop intent before contacting Cloud.
 
@@ -139,6 +139,35 @@ a restart cannot extend it. Expiry closes remote connections while local HTTPS
 continues. The local peer container grants no access to the rest of your LAN and
 has no SSH support feature.
 
+### Recover a test venue from a Cloud snapshot
+
+If a venue server has failed, open **Restore from backup** on a fresh replacement and choose
+**Restore from Waitron Cloud**. The replacement shows a code and a Cloud link. Sign in there,
+choose a verified snapshot, enter the code, and confirm that the old server and any surviving
+peers are stopped. Return to the replacement and choose **Check approval**. Review the snapshot
+capture time before you confirm the local restore; later changes are absent from that snapshot.
+
+This path supports preparation and demo venues. It restores a retained snapshot through the
+same local cold restore and module hooks as a backup file. It does not recover changes after the
+snapshot, activate a Cloud route, enroll the replacement with Cloud, or fence a running server.
+Use a backup file for the existing local recovery path. Do not start trading on a replacement
+while another server may hold newer data.
+
+The replacement saves its recovery request and signing key in `cloud-recovery.json` under
+`WAITRON_STATE_DIR` before contacting Cloud. The file is mode 0600 and is outside the named
+archive capture list. A lost reply or server restart reuses that request. When a request expires,
+choose **Start a new request**; a network failure leaves the existing request intact. The
+browser receives the code, link, deadline and approved snapshot details, while the archive key
+and temporary storage credentials stay on the server. A managed restore excludes the captured
+`backup.env`, so the replacement does not inherit the old backup destination credentials.
+
+The Cloud account page authorizes a target to read one snapshot. It does not confirm that local
+restore has finished. Waitron stages and validates the encrypted archive, restarts, runs cold
+restore, then tries to report completion to Cloud. Reporting is best effort and does not hold up
+the restored server if Cloud is unavailable. If a failed cold restore clears its staged request
+and leaves the replacement in setup, retry the approved snapshot. Waitron keeps the same
+request identity; an expired approval requires a new request.
+
 ### Reissue staff TLS after a restore
 
 A recovery archive deliberately excludes `cloud-staff.key` and `cloud-staff.crt`.
@@ -170,10 +199,11 @@ Upload uses a conditional PUT. If a retry finds an existing object, publication 
 actual bytes; upload credentials do not need read permission. Publication starts pending
 verification. A trusted Cloud worker checks the restored archive separately.
 
-Retain the same UUID, archive bytes and metadata until publication succeeds. The transport
-methods do not schedule captures or persist that archive for you. Durable local spooling
-and automatic daily/monthly capture are the next integration task. These methods refuse
-production installations; the local proof has not established production storage behavior.
+Retain the same UUID, archive bytes and metadata until publication succeeds. The scheduled
+worker keeps one encrypted archive in a durable local spool and retries publication after a
+restart. It schedules daily captures using the venue clock, with the first capture of each
+month retained as monthly. The transport methods remain callable separately. Managed capture
+refuses production installations; the local proof has not established production storage behavior.
 
 Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
 installed checkout. It calls `apps/server/scripts/cloud-capture-client-fixture.ts` only on disposable
@@ -181,9 +211,8 @@ roots and exercises actual signatures, temporary storage access and Waitron rest
 The fixture is not an operator command for a real venue.
 
 
-The local uploader buffers at most 512 MiB and has a 30-second total request deadline.
-It makes one attempt per call. Before using scheduled uploads on real venue uplinks,
-add a deadline based on transfer size or idle time, bounded retry/backoff and streamed
-object I/O. Preserve the same archive across retries. A cancelled call currently returns
-`cloud.unavailable`, matching the connection client; the scheduler must check its abort
-signal and avoid recording an outage when it deliberately stops work.
+The byte-array uploader accepts at most 512 MiB and has a 30-second request deadline.
+Scheduled captures use `uploadCloudCaptureFile`, which streams the saved archive with a
+deadline capped at fourteen minutes and the temporary credentials’ expiry. Each upload call
+makes one attempt; the scheduler retries from the durable spool with backoff. It checks its
+abort signal so deliberate shutdown does not record a service outage.

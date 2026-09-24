@@ -39,6 +39,14 @@ async function summaryItems(el: SetupRestoreScreen): Promise<string[]> {
 }
 
 describe("SetupRestoreScreen", () => {
+  it("opens guided Cloud recovery from backup file restore", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    const navigation = vi.fn();
+    host.addEventListener("setup-goto", navigation);
+    q(el, "[data-test=cloud-restore]")!.click();
+    expect(navigation.mock.calls[0]?.[0].detail).toEqual({ screen: "cloud-restore" });
+  });
+
   it("marks every required decision and emits nothing when blank", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const listener = vi.fn();
