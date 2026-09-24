@@ -45,6 +45,7 @@ import {
 } from "./working-order.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // What this suite proves: the check being table-less, and the line partition — plain row state. The
@@ -119,8 +120,10 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "reduced",
     });
     await assignCatalogueToLocation(tx, locationId, cat.id);
-    const t1 = await createTable(tx, cfg, { label: "T1" });
-    const t2 = await createTable(tx, cfg, { label: "T2" });
+    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    offersByCfg.set(cfg, offers);
+    const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+    const t2 = await createTable(tx, cfg, { label: "T2", zoneId: offers.zoneId });
     // Through the table definition: `id` and `created_at` are `$defaultFn` generators on this
     // engine, which a raw insert never reaches — it failed with
     // `NOT NULL constraint failed: table_service_statuses.id`.
@@ -137,6 +140,21 @@ async function setupVenue(): Promise<Seeded> {
     };
   });
   return { cfg, ...seeded };
+}
+
+/** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
+const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
+
+/** `openTab`, selling each line through the venue's offer for its product. */
+function openTabWith(
+  tx: Transaction,
+  cfg: TillConfig,
+  req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+) {
+  return openTab(tx, cfg, {
+    tableId: req.tableId,
+    lines: offersByCfg.get(cfg)!.toOfferLines(req.lines ?? []),
+  });
 }
 
 /**
@@ -176,7 +194,7 @@ describe("receipt order grouping", () => {
 
   it("uses the same table for a joined tab regardless of query order", async () => {
     const { cfg, tableId, tableId2 } = await setupVenue();
-    const { tabId, orderNumber } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId, orderNumber } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
     expect(await asApp(cfg, (tx) => readReceiptOrder(tx, cfg, tabId))).toEqual({
       orderLabel: tableId < tableId2 ? "T1" : "T2",
@@ -198,7 +216,7 @@ describe("splitOffCheck", () => {
   it("spins selected items into a NEW open check that no table points at (detached)", async () => {
     const { cfg, aguaId, jamonId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openTabWith(tx, cfg, {
         tableId,
         lines: [
           { productId: aguaId, quantity: "3" },
@@ -254,7 +272,7 @@ describe("splitOffCheck", () => {
     // A check is a payment unit, NOT a seat: no dining_tables row points at it (design §2).
     expect(state.anchoring).toEqual([]);
     // The check holds the moved items. Order follows the landed move/split core (TS-4): WHOLE lines are
-    // moved first (moveTabLines appends the whole jamón at check line 1), THEN partial splits (the 1 agua
+    // moved first (moveOrderLines appends the whole jamón at check line 1), THEN partial splits (the 1 agua
     // appended at check line 2) — not the transfers-array order.
     // Read straight off the column, so each quantity is a count of whole THOUSANDTHS: 300 is the
     // 0.300 kg of jamón and 1000 is one agua.
@@ -282,7 +300,7 @@ describe("splitOffCheck", () => {
     // pointing at it, so it fails closed to `tab.not_open`.
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
     );
     // Mint a real detached check off the tab, then try to split off IT — its checkId is a table-less
     // open order.
@@ -297,7 +315,7 @@ describe("splitOffCheck", () => {
   it("rejects a batch repeating a lineNo (tab.transfer_duplicate_line), minting nothing and conserving quantity", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
     );
     // Two partial "1"s off the SAME line 1: without the guard each validates against the static 3 and the
     // source is set to 3−1 twice (non-cumulative), so the check would gain 1.000+1.000 and the origin drop
@@ -334,7 +352,7 @@ describe("splitOffCheck", () => {
   it("inherits TS-4's move guards (tab.transfer_quantity_invalid, tab.line_not_found)", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
     );
     await expect(
       asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "5" }])),
@@ -347,7 +365,7 @@ describe("splitOffCheck", () => {
   it("refuses an EMPTY transfers array (sale.empty_basket), minting nothing", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
     );
     // An empty `transfers` array makes carveOffLines' `inArray(col, [])` render `false` — a no-op WHERE
     // clause — so without an up-front guard the call would SUCCEED after createOpenOrder had already
@@ -382,7 +400,7 @@ describe("unjoinTable", () => {
   it("with items: anchors a NEW open tab to the detached table and moves the items onto it", async () => {
     const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
     );
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2)); // both tables now point at tabId
 
@@ -424,7 +442,7 @@ describe("unjoinTable", () => {
     // un-join has no join to split off, so it must reject honestly rather than repoint the table away and
     // let transferLines' back-pointer check throw a misleading tab.not_open on the now-anchorless tab.
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
     );
 
     await expect(
@@ -450,7 +468,7 @@ describe("unjoinTable", () => {
   it("without items: frees the table (tab_id → NULL) and clears its TS-2 status", async () => {
     const { cfg, aguaId, tableId, tableId2, activeStatusId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
     // Give the joined table a NON-NULL manual status FIRST, so the post-unjoin null assertion below can
@@ -481,7 +499,7 @@ describe("unjoinTable", () => {
   it("refuses to un-join a table that isn't part of the tab (table.not_joined)", async () => {
     const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
     );
     // tableId2 is FREE (never joined) → not part of tabId.
     await expect(asApp(cfg, (tx) => unjoinTable(tx, cfg, tabId, tableId2))).rejects.toMatchObject({
@@ -492,7 +510,7 @@ describe("unjoinTable", () => {
   it("refuses to un-join from a tab whose shared order is no longer open (tab.not_open)", async () => {
     const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
     // Abandon the shared order WITHOUT clearing the tables' tab_id — a STALE pointer, exactly the state
@@ -508,7 +526,7 @@ describe("unjoinTable", () => {
 it("retains the frozen options answers and the frozen names when a dish quantity is split onto a check", async () => {
   const { cfg, aguaId, tableId } = await setupVenue();
   await asApp(cfg, async (tx) => {
-    const { tabId } = await openTab(tx, cfg, {
+    const { tabId } = await openTabWith(tx, cfg, {
       tableId,
       lines: [{ productId: aguaId, quantity: "3" }],
     });

@@ -29,6 +29,7 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { joinTable, openTab } from "./working-order.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // `splitOffCheck`/`unjoinTable`'s own WRITE behaviour (check minting,
@@ -44,6 +45,9 @@ let ana: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
 // and the `check_locales` trigger demands its `es-ES` description key match the location's `es-ES` locale.
 let cafeId: string;
+// The café's offer, and the table_tab zone offering it, where every table here sits.
+let cafeMenuItemId: string;
+let tablesZoneId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -93,6 +97,9 @@ const suite = useVenueDb({
       return p;
     });
     cafeId = product.id;
+    const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+    cafeMenuItemId = offers.offerFor(cafeId);
+    tablesZoneId = offers.zoneId;
   },
 });
 
@@ -176,10 +183,10 @@ async function setupTabApp(
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tableA } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
+    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     const tabAResult = await openTab(tx, d.cfg, {
       tableId: a.id,
-      lines: [{ productId: cafeId, quantity: aQty }],
+      lines: [{ menuItemId: cafeMenuItemId, quantity: aQty }],
     });
     return { tabA: tabAResult.tabId, tableA: a.id };
   });
@@ -202,12 +209,12 @@ async function setupJoinedApp(): Promise<{
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tableB, tableFree } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
-    const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
-    const free = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
+    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
+    const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
+    const free = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     const tabAResult = await openTab(tx, d.cfg, {
       tableId: a.id,
-      lines: [{ productId: cafeId, quantity: "2" }],
+      lines: [{ menuItemId: cafeMenuItemId, quantity: "2" }],
     });
     await joinTable(tx, d.cfg, tabAResult.tabId, b.id);
     return { tabA: tabAResult.tabId, tableB: b.id, tableFree: free.id };

@@ -23,7 +23,7 @@ import "./errors.js";
 export interface CoreServices {
   openTab(
     tx: Transaction,
-    req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+    req: { tableId: string },
   ): Promise<{ tabId: string; orderNumber: number }>;
 }
 

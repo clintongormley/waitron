@@ -471,7 +471,7 @@ describe("an extra that is a parent with Active variants", () => {
   });
 });
 
-describe("the two reads a till sells from", () => {
+describe("listAvailableProducts and listMenuOffers", () => {
   it("listAvailableProducts carries the product-side walk", async () => {
     const seeded = await run(async (tx) => {
       return attach(tx, ["options", "extras"]);

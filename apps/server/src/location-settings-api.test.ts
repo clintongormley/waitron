@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -39,8 +41,10 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 let venue: Venue;
+let offers: ZoneOffers;
 beforeAll(async () => {
   venue = await setupVenue(suite.db);
+  offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
 });
 function app(locationId?: string) {
   const app = new Hono();
@@ -90,7 +94,8 @@ describe("location invoice settings", () => {
     });
     const sell = () =>
       recordTillSale({ db: suite.db, backend, clock }, venue.cfg, {
-        lines: [{ productId: venue.cafeId, quantity: "1" }],
+        zoneId: offers.zoneId,
+        lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       });
     await sell();

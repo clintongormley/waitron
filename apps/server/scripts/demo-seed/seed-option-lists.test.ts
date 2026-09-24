@@ -5,9 +5,9 @@
 // What this does NOT establish is that a TILL asks it. What is asserted is the seed and three reads
 // of what it stored: `listOptionLists` (the list, its three names and its labels),
 // `readProductModifiers` (the attachment row on the steak and none on the coffee), and
-// `listAvailableProducts` — whose `offeredModifiers` is the field a till draws from
-// (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`). Reaching that field is
-// as far as this file goes. The screen that draws it is
+// `listAvailableProducts` — whose `offeredModifiers` is the field a till draws from, there read
+// through `listMenuOffers` (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`).
+// Reaching that field is as far as this file goes. The screen that draws it is
 // `apps/till/src/widgets/modifier-picker.ts`, which draws one group per entry.
 // THREE doors open that screen, and only one of them turns on `offeredModifiers` alone:
 // `apps/till/src/widgets/product-grid.ts` and `apps/till/src/widgets/tender-pay.ts` both gate on

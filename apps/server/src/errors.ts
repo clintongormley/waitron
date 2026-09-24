@@ -308,10 +308,13 @@ declare module "@waitron/shared" {
      */
     "reader.battery_low": { reader: string; percent: number };
     /**
-     * The deployment holds one tenant per database. A basket line named a product the till cannot
-     * sell at its location — it is not in the location's assigned catalogue or is deactivated.
-     * `productId` is a uuid the caller already holds, not a secret, so echoing it is what makes
-     * the error actionable.
+     * NOTHING RAISES THIS ANY MORE. It named a product a basket line asked for that the location's
+     * catalogue did not sell; a sale line now names a zone's menu offer, and one not offered there
+     * is refused `service_zone.offer_not_allowed` instead (`priceOrderLines`,
+     * `apps/server/src/working-order.ts`). Registered and kept because a shipped code is never
+     * removed.
+     *
+     * `productId` was a uuid the caller already held, not a secret.
      *
      * `sale.*`, not `server.*`: it is a fact about the SALE the till is ringing, not about the
      * process (`tenant.not_found`'s note above gives the rule). Registered here by the same
@@ -365,8 +368,8 @@ declare module "@waitron/shared" {
     /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
      *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
      *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
-     *  to, which the two order paths read from different places (docs/backlog.md). Neither is a
-     *  secret: both are values the caller's own request resolved to.
+     *  to. Neither `productId` nor `pricingUnit` is a secret: both are values the caller's own
+     *  request resolved to.
      *
      *  `extras.*` names the DOMAIN CONCEPT — the picks the line sent — never the throwing package
      *  (`tenant.not_found`'s note above gives the rule), beside `extras.invalid`,
@@ -634,10 +637,9 @@ declare module "@waitron/shared" {
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
      * A tab named as BOTH source and destination of a line-move — `mergeTabs(intoTabId === fromTabId)`,
-     * or the shared `moveTabLines(fromTabId === toTabId)` primitive that `mergeTabs` and (later) TS-4
-     * transfer call. Refused before any line move or lock: moving a tab's lines onto itself would move
+     * or the line-move `moveOrderLines(fromTabId === toTabId)` behind `moveTabLines`. Refused before any line move or lock: moving a tab's lines onto itself would move
      * them then abandon it (`mergeTabs`), or append duplicates the trailing delete then removes wholesale,
-     * emptying the tab (`moveTabLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
+     * emptying the tab (`moveOrderLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
      * the DOMAIN CONCEPT (the running tab), never the throwing package (the rule `tenant.not_found`'s note
      * gives). A request-shape error — the two arguments are equal regardless of any tab's STATE — so it
      * is mapped to 400 (a bad request), distinct from the state-conflict `tab.not_open` (409).
@@ -1750,6 +1752,7 @@ declare module "@waitron/shared" {
      * once shipped. */
     "restore.hook_failed": { module: string; code: string };
     // The server's working-order paths throw these contributed venue-service codes directly.
+    "order.service_context_missing": { workingOrderId: string };
     "service_zone.mode_incompatible": {
       zoneId: string;
       expected: string;

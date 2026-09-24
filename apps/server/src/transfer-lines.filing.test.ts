@@ -29,6 +29,7 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { openTab, transferLines } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 /**
@@ -205,15 +206,16 @@ async function setupTwoTabs(): Promise<{
 }> {
   const { cfg, cafe } = await setupVenue();
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, cfg, { label: "A" });
-    const b = await createTable(tx, cfg, { label: "B" });
+    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const a = await createTable(tx, cfg, { label: "A", zoneId: offers.zoneId });
+    const b = await createTable(tx, cfg, { label: "B", zoneId: offers.zoneId });
     const ta = await openTab(tx, cfg, {
       tableId: a.id,
-      lines: [{ productId: cafe.id, quantity: "4" }],
+      lines: [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
     });
     const tb = await openTab(tx, cfg, {
       tableId: b.id,
-      lines: [{ productId: cafe.id, quantity: "4" }],
+      lines: [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
     });
     return { tabA: ta.tabId, tabB: tb.tabId };
   });

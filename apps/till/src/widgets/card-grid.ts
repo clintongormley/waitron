@@ -124,7 +124,7 @@ export class TillCardGrid extends LitElement {
   /** The open tab's lines, threaded to the embedded table-order screen (its own `lines` prop). The app
    * owns and reloads them; renamed `tabLines` here so it never collides with a future basket-lines prop. */
   @property({ attribute: false }) tabLines: TabLine[] = [];
-  /** The location's accessible menus, threaded to the embedded table-order screen's menu switcher. */
+  /** The zone's menus, threaded to the embedded table-order screen's menu switcher. */
   @property({ attribute: false }) menus: TillMenu[] = [];
   /** The menu (catalogue) the table-order round grid currently shows, threaded straight through. */
   @property() selectedMenuId = "";

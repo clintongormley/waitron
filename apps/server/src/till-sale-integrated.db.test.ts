@@ -44,6 +44,7 @@ import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till
 import type { IntegratedPayDeps } from "./till-sale.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude } from "./testing/decode-ticket.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one migrated venue file.
@@ -110,7 +111,7 @@ function nextNif(): string {
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
   return {
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
@@ -119,18 +120,22 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
-    orderFlow: "prepay",
+    orderFlow,
   };
 }
 
+/** A product with the offer that sells it in the venue's counter zone. */
+type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
+
 interface SeededVenue {
   cfg: TillConfig;
-  cafe: AvailableProduct;
+  cafe: OfferedProduct;
 }
 
 /** A fresh chained venue + registered SIF, with one "Café" (each, 1.50 gross, general 21%) product
- * seeded. Each test gets its OWN tenant so counts are order-independent (CLAUDE.md §4). */
-async function setupVenue(): Promise<SeededVenue> {
+ * seeded and offered in the counter zone under `orderFlow`. Each test gets its OWN tenant so counts
+ * are order-independent (CLAUDE.md §4). */
+async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -165,8 +170,8 @@ async function setupVenue(): Promise<SeededVenue> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(suite.db, async (tx) => {
+  const cfg = tillConfigFromVenue(venue, orderFlow);
+  const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -178,16 +183,22 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    return (await listAvailableProducts(tx, cfg.locationId)).products;
+    return {
+      available: (await listAvailableProducts(tx, cfg.locationId)).products,
+      offers: await offerProducts(tx, cfg),
+    };
   });
   const cafe = available.find((p) => p.name === "Café")!;
-  return { cfg, cafe };
+  return {
+    cfg,
+    cafe: { ...cafe, menuItemId: offers.offerFor(cafe.id), zoneId: offers.zoneId },
+  };
 }
 
 /** Flip the location's `order_flow` AND the in-memory cfg to `mode`, the way boot wires them — so
  * `placeOrder`/`payWorkingOrderIntegrated` dispatch on the same value the DB carries. */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
-  const venue = await setupVenue();
+  const venue = await setupVenue(mode);
   suite.db.run(sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`);
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
@@ -463,7 +474,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       simulationOutcome: "captured",
     });
 
@@ -482,7 +494,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       simulationOutcome: "declined",
     });
 
@@ -500,7 +513,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     expect(out.outcome).toBe("captured");
@@ -537,7 +551,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     expect(out.outcome).toBe("declined");
@@ -555,7 +570,11 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const app = suite.db;
     const { deps, client } = integratedDeps(cfg, app);
     const id = randomUUID();
-    const req = { id, lines: [{ productId: cafe.id, quantity: "1" }] };
+    const req = {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    };
 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(first.outcome).toBe("captured");
@@ -587,7 +606,11 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const app = suite.db;
     const { deps } = integratedDeps(cfg, app);
     const id = randomUUID();
-    const req = { id, lines: [{ productId: cafe.id, quantity: "1" }] };
+    const req = {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    };
 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(first.outcome).toBe("captured");
@@ -622,7 +645,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tip: "0.30",
     });
 
@@ -643,7 +667,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       tip: "5.00", // ignored — tips are disabled on this till
     });
 
@@ -658,7 +683,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "2" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       label: "Mesa 4",
     });
 
@@ -684,7 +710,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     // Place it: open → placed, NO fiscal document filed yet (ticket_then_pay issues at pay). Placing
     // FIRES one ticket item to the default station, so the order shows on that station's queue,
@@ -719,7 +746,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     suite.db.run(sql`update working_orders set status = 'abandoned' where id = ${id}`);
 
@@ -755,7 +783,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     // The provider, mid-`collect` (i.e. AFTER P1 committed tx A and read the order `open`, BEFORE P3),
@@ -801,7 +830,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     await expect(
       payWorkingOrderIntegrated(deps, cfg, {
         id,
-        lines: [{ productId: cafe.id, quantity: "1" }],
+        zoneId: cafe.zoneId,
+        lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       }),
     ).rejects.toMatchObject({ code: "payment.not_found" });
 
@@ -840,7 +870,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
     const out = await payWorkingOrderIntegrated(deps, cfg, {
       id: randomUUID(),
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
 
     expect(out.outcome).toBe("captured");
@@ -861,7 +892,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
    *  was charged (total, or total+tip). Returns the order id. */
   async function seedLostCapture(
     cfg: TillConfig,
-    cafe: AvailableProduct,
+    cafe: OfferedProduct,
     quantity: string,
     capturedAmount: string,
   ): Promise<{ id: string; externalRef: string }> {
@@ -872,7 +903,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // Kept per seed for the same reason as `nextNif`.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
+      await createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
+        zoneId: cafe.zoneId,
+      });
       await insertCapturedPayment(tx, {
         workingOrderId: id,
         provider: "stripe",
@@ -928,7 +961,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     await withTransaction(suite.db, async (tx) => {
@@ -1002,7 +1036,8 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
       label: "Mesa 7",
     });
 
@@ -1091,13 +1126,14 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
    *  placing (open → placed), leaving one chained-but-unsettled sale. Returns the order id + its saleId. */
   async function placeInvoiceFirst(
     cfg: TillConfig,
-    cafe: AvailableProduct,
+    cafe: OfferedProduct,
     quantity = "1",
   ): Promise<{ id: string; saleId: string }> {
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity }],
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity }],
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     return { id, saleId: await saleIdFor(id) };

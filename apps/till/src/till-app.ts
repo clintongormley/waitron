@@ -1034,7 +1034,7 @@ export class TillApp extends LitElement {
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
     }
-    // A fresh login starts on the location default, regardless of the previous menu preference.
+    // A fresh login starts on the zone's default menu, regardless of the previous menu preference.
     this.#selectMenu(this.#defaultCatalogueId());
     this.#selectDiet(null);
     this.operatorName = displayName;
@@ -1119,7 +1119,7 @@ export class TillApp extends LitElement {
     return this.stations.find((station) => station.isDefault)?.id;
   }
 
-  /** Use the location default at login, or the first accessible menu when none is marked default. */
+  /** The zone's default menu, or its first menu when none is marked default. */
   #defaultCatalogueId(menus: TillMenu[] = this.menus): string {
     return menus.find((menu) => menu.isDefault)?.id ?? menus[0]?.id ?? "";
   }

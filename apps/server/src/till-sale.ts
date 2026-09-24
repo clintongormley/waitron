@@ -71,9 +71,9 @@ export interface TillTender {
 }
 
 /**
- * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one
- * tender (cash or card). Deliberately carries NO price of any kind — the server re-reads the
- * catalogue and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
+ * A walk-up sale as the counter till captures it: a basket of `{ menuItemId, quantity }` and one
+ * tender (cash or card). Deliberately carries NO price of any kind — the server reads the
+ * zone's menu offers and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
  * total. `quantity` is a positive decimal string validated against the selected unit's precision.
  *
  * `workingOrderId` is the pay-idempotency key (park & retrieve, sub-project 7b). The till mints it and
@@ -94,8 +94,7 @@ export interface TillSaleRequest {
    *  never threaded into any sale/fiscal projection. Declared here because the till already sends them
    *  on this wire. */
   lines: ({
-    productId?: string;
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -260,8 +259,9 @@ export async function readTenderBlock(
  * `lines` is the basket to price and file, and how it is used depends ENTIRELY on the shape (line-add
  * snapshot, 7c):
  *  - WALK-UP (no `working_orders` row exists for `id`): `lines` is the basket the till captured. Like
- *    `TillSaleRequest` it carries NO price — the server re-reads the catalogue, prices authoritatively
- *    (`priceBasket`), creates the order OPEN with those priced lines, and files from that fresh price.
+ *    `TillSaleRequest` it carries NO price — the server reads the zone's menu offers, prices
+ *    authoritatively (`priceBasket`), creates the order OPEN with those priced lines, and files
+ *    from that fresh price.
  *  - RETRIEVED order (the row already exists, parked earlier): `lines` is IGNORED. A retrieved order is
  *    filed from its own STORED `working_order_lines`, whose gross unit was LOCKED at add-time, via
  *    `priceLockedLines` — so a catalogue price change between park and pay never moves the filed total.
@@ -276,8 +276,7 @@ export interface PayWorkingOrderRequest {
    *  also carry per-line `LineExtras` (NON-FISCAL), validated + persisted server-side and never threaded
    *  into a fiscal projection. Declared here because the till already sends them on this wire. */
   lines: ({
-    productId?: string;
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -309,8 +308,7 @@ export interface IntegratedPayRequest {
    *  all validated server-side; the customisation is never threaded into a fiscal projection. Declared
    *  here because the till already sends them on this wire. */
   lines: ({
-    productId?: string;
-    menuItemId?: string;
+    menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
@@ -509,7 +507,7 @@ export async function payWorkingOrder(
     });
   } catch (error) {
     // Step 6. The CONCURRENT backstop. Anything but a unique violation is a real failure (a shortfall,
-    // an unknown product, a chain error) and surfaces unchanged.
+    // an offer the zone does not list, a chain error) and surfaces unchanged.
     if (!isUniqueViolation(error)) {
       throw error;
     }

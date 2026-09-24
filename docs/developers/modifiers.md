@@ -199,7 +199,7 @@ hold parts of it, each re-numbered from the body of whatever save writes it.
 
 | Column | What it orders | Written by | A route reaches it |
 | --- | --- | --- | --- |
-| `product_modifiers.sort` | a dish's options lists, and its extras lists on a line naming a plain PRODUCT | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
+| `product_modifiers.sort` | a dish's options lists | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
 | `extra_list_items.sort` | the items WITHIN one extras list, which is the order its picks come back in | `writeItems` (`packages/catalogue/src/extras.ts`), from the list save's body | yes — `PATCH /management-api/modifiers/extras/:id`, and the `POST` that creates a list |
 | `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the publication body | no — nothing outside `packages/catalogue` and the test suites calls it |
 
@@ -276,7 +276,9 @@ The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
 extras and options lists a dish puts in front of a diner, already resolved. It is built by
 `readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
 beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
-`OfferedOptionsList`, `OfferedExtraItem`).
+`OfferedOptionsList`, `OfferedExtraItem`). The till app itself reads only `listMenuOffers`, through
+its zone-offer routes; nothing in `apps/till` outside its tests calls `GET /api/products`, the
+route over `listAvailableProducts`.
 
 Nothing else on those two payloads describes a modifier. The till's picker walks
 `offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
@@ -318,13 +320,12 @@ Six things it is worth knowing about that payload:
   An extras list also leaves out a product that has an Active variant (spec §15.1: it is never sold
   as itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
-  (`apps/server/src/working-order.ts`), on the zone and zone-less paths alike. A pick of a variant
+  (`apps/server/src/working-order.ts`). A pick of a variant
   still sells, as does a product whose only variants are Inactive. Tests: "an extra that is a
   parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`; "refuses a
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
-  `apps/server/src/working-order.test.ts`; and "refuses an extras pick of a parent with an Active
-  variant, and parks nothing" and "still sells an extras pick of a variant, or of a product whose
-  only variant is Inactive" in `apps/server/src/till-api.zoneless-variants.test.ts`.
+  `apps/server/src/working-order.test.ts`; and "sells an extras pick of a product whose only
+  variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.
 - **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them (spec §3.1). Each is the product's own or, where a variant leaves it blank, its parent's —

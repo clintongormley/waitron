@@ -28,6 +28,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
@@ -40,9 +41,12 @@ import "./errors.js";
 // `till-api.move-merge.test.ts`, itself ported from `till-api.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
-// One product so a tab can open with a real line to transfer — `openTab` prices it and the
-// `check_locales` trigger demands its `es-ES` description key match the location's `es-ES` locale.
+// One product, offered in a table zone, so a tab can open with a real line to transfer — `openTab`
+// prices it and the `check_locales` trigger demands its `es-ES` description key match the
+// location's `es-ES` locale. Both tabs' tables sit in that zone, so a transfer joins like modes.
 let cafeId: string;
+let cafeOffer: string;
+let tablesZoneId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -77,7 +81,7 @@ const suite = useVenueDb({
     cfg = makeCfg(till!.id, loc!.id, nodeId);
     // One product in a catalogue assigned to the counter location, seeded via the catalogue
     // helpers — the same `withTransaction` path `openTab` prices it through.
-    const product = await withTransaction(db, async (tx) => {
+    const offers = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
       const p = await createProduct(tx, {
@@ -89,9 +93,12 @@ const suite = useVenueDb({
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, loc!.id, cat.id);
-      return p;
+      const zoneOffers = await offerProducts(tx, cfg, { zone: "tables" });
+      return { zoneId: zoneOffers.zoneId, cafeId: p.id, cafe: zoneOffers.offerFor(p.id) };
     });
-    cafeId = product.id;
+    cafeId = offers.cafeId;
+    cafeOffer = offers.cafe;
+    tablesZoneId = offers.zoneId;
   },
 });
 
@@ -176,11 +183,11 @@ async function setupTabsApp(
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
-    const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
+    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
+    const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     const tabAResult = await openTab(tx, d.cfg, {
       tableId: a.id,
-      lines: [{ productId: cafeId, quantity: aQty }],
+      lines: [{ menuItemId: cafeOffer, quantity: aQty }],
     });
     const tabBResult = await openTab(tx, d.cfg, { tableId: b.id });
     return { tabA: tabAResult.tabId, tabB: tabBResult.tabId };

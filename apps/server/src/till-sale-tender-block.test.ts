@@ -32,6 +32,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // `readTenderBlock` reads back the committed tender (+ payment) rows through the same handle that
@@ -96,7 +97,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 let cfg: TillConfig;
-let productId: string;
+let menuItemId: string;
+let zoneId: string;
 
 beforeAll(async () => {
   clock = systemClock();
@@ -146,7 +148,7 @@ beforeAll(async () => {
   );
 
   cfg = tillConfigFromVenue(venue);
-  productId = await withTransaction(suite.db, async (tx) => {
+  ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     // A product priced at exactly 1.00 gross so the filed total is "1.00" — the figure every case
@@ -160,8 +162,9 @@ beforeAll(async () => {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
-    return product.id;
-  });
+    const offers = await offerProducts(tx, cfg);
+    return { menuItemId: offers.offerFor(product.id), zoneId: offers.zoneId };
+  }));
 });
 
 /**
@@ -180,8 +183,9 @@ async function seedSale(
     tx,
     cfg,
     workingOrderId,
-    [{ productId, quantity: "1" }],
+    [{ menuItemId, quantity: "1" }],
     null,
+    { zoneId },
   );
   const { saleId } = await recordSale(tx, backend, {
     tillId: cfg.tillId,

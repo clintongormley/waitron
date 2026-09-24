@@ -7,6 +7,7 @@ import {
   quantityLabel,
   toWireLineExtras,
   toWireModifiers,
+  toWireProductIdentity,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
@@ -172,6 +173,24 @@ describe("order-line pricing", () => {
       const line: OrderLine = { product: cafe, quantity: "1", extras: [shot] };
       const wire = toWireModifiers(line);
       expect(wire.extras![0]!.picks[0]).toEqual({ productId: "p-shot", quantity: 1 });
+    });
+  });
+
+  describe("toWireProductIdentity", () => {
+    it("sends the menu item and no product id", () => {
+      expect(toWireProductIdentity({ id: "cafe", menuItemId: "mi-cafe" })).toEqual({
+        menuItemId: "mi-cafe",
+      });
+    });
+
+    it("sends the chosen variant beside the menu item", () => {
+      expect(
+        toWireProductIdentity({ id: "cafe", menuItemId: "mi-cafe", variantId: "v-large" }),
+      ).toEqual({ menuItemId: "mi-cafe", variantId: "v-large" });
+    });
+
+    it("refuses a product with no menu item, naming the product", () => {
+      expect(() => toWireProductIdentity({ id: "cafe" })).toThrow(/cafe/);
     });
   });
 });

@@ -694,25 +694,27 @@ rows: **this task needs no venue reset of its own.** What it left open:
 - **DONE (Task 9): on a venue with no service zones a parent with Active variants is refused.**
   The owner's answer to lane B's question Q3, as the supervising watcher relayed it: _"a parent
   product should never be for sale as itself — you should always have to pick a variant. This
-  doesn't depend on zones."_ And: _"a zone is required."_ The
-  till's three line-carrying routes price by bare `productId` on such a venue, a path that cannot
-  name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) now refuses the parent
-  with `product.variant_required`, Available variants or not; a product whose variants are all
-  Inactive still sells as itself. The same refusal covers an extras pick of such a product on
-  either path (a pick of a variant still sells), and a raised quantity on a held line whose product,
-  or one of whose extras, has gained an Active variant since it was parked (`updateHeldOrder`).
+  doesn't depend on zones."_ And: _"a zone is required."_ At the time the
+  till's three line-carrying routes priced by bare `productId` on such a venue, a path that cannot
+  name a variant, so #556 made `priceOrderLines` (`apps/server/src/working-order.ts`) refuse the
+  parent there with `product.variant_required`, Available variants or not. That path is gone since
+  B4 (the next bullet), so the refusal now happens only on a zone's menu offer. A product whose
+  variants are all Inactive still sells as itself. The same refusal covers an extras pick of such a
+  product (a pick of a variant still sells), and a raised quantity on a held line whose product, or
+  one of whose extras, has gained an Active variant since it was parked (`updateHeldOrder`).
   The till's extras lists no
   longer offer such a product (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`).
-  Pinned by `apps/server/src/till-api.zoneless-variants.test.ts`, the "never sold as itself, as an
-  extra or on a raise" cases in `apps/server/src/working-order.test.ts`, and "an extra that is a
-  parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`.
-  The zone-less path itself stays. That was the implementer's choice on this branch, not an owner
-  decision: removing it would touch every suite that rings up by `productId`. `GET /api/products`
-  (`listAvailableProducts`) still lists such a parent; no production screen in `apps/till` calls it
-  (the till builds its buttons from zone offers).
-- **A venue with no service zones still sells by bare `productId`, though the owner said _"a zone
-  is required"_ (above).** **Next action:** owner to confirm whether that path should be removed;
-  if so, require a zone and move the suites that ring up by `productId` onto zone offers.
+  Pinned by the "a parent with Active variants is never sold as itself, as an extra or on a raise"
+  cases and "refuses a parent with Active variants rung up alone, and sells one whose variants are
+  all Inactive as itself" in `apps/server/src/working-order.test.ts`, "sells an extras pick of a
+  product whose only variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`, and
+  "an extra that is a parent with Active variants" in
+  `packages/catalogue/src/offered-modifiers.test.ts`. `GET /api/products`
+  (`listAvailableProducts`) still lists such a parent; nothing in `apps/till` outside its tests
+  calls it (the till builds its buttons from zone offers).
+- **DONE (B4, 2026-09-24): a venue with no service zone sells nothing.** The path that priced a
+  line by bare `productId` is gone. See "A sale needs a zone" below Task 9 for what now happens and
+  what it left open.
 - **`@waitron/fiscal-verifactu`'s tests now depend on `@waitron/catalogue`** (its VAT-per-variant
   test runs the real `selectMenuVariant`), so a catalogue change also runs fiscal-verifactu's test
   shard in CI. Kept deliberately; worth revisiting only if that shard's time becomes a problem.
@@ -732,7 +734,8 @@ left open, besides the bullets above that it updated:
   pricing unit** — for top-level products as well as variants. Found by the review; I believe it
   predates Task 6, not checked with `git blame`. **Next action:** check whether anything still reads
   `products.pricing_unit` for a product with a unit row, and either update it on reassignment or
-  say why it does not matter.
+  say why it does not matter. No sale reads it since B4: see the B4 update on "Two different
+  signals say whether a dish is sold by weight" below.
 - **Review suggestions not taken:** split the editor's types into a product shape and a variant
   shape (removing the non-null workarounds in `saveProductEditor` and the dashboard), derive
   `InheritedValues` from the product type, and write a parent's variant republishes in one
@@ -826,7 +829,8 @@ measured 2026-09-24 through `applyMigrations` on Node v26.7.0: a venue migrated 
 `0003` and holding one product with one `product_variants` row took the new migration with no
 error, the table was gone and the product row kept. A
 product with Active variants is now refused on the till's plain product path, as an extras pick on
-either path, and on a raised held line (the Task 5 bullet above). What Task 9 leaves open:
+either path, and on a raised held line (the Task 5 bullet above). (2026-09-24: B4 has since removed
+the plain product path; see "A sale needs a zone" below.) What Task 9 leaves open:
 - **Paying a held order does not re-check its lines.** A line, or an extras pick, whose product
   gained an Active variant after the order was parked is billed as parked: the cash and card pays
   price a retrieved order from its stored lines (`priceStoredOrder`,
@@ -848,6 +852,108 @@ either path, and on a raised held line (the Task 5 bullet above). What Task 9 le
   `menu_item_variants`.** It is a frozen record of the grants before the storage switch, when both
   tables existed, and its one reader (`scripts/write-path-tables.test.ts`) reads only its
   read-but-never-written rows, which these two are not. Left as it is.
+
+**A sale needs a zone — DONE (B4, 2026-09-24; lane B's queue item B4, not Track B's B4 below).**
+The owner said _"a zone is required"_ (the Task 5 bullets above), so every sale line is now priced
+from the menu offers of its order's service zone, and the path that priced a line by bare
+`productId` is gone:
+- `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, sent with lines and no
+  `zoneId`, take the venue's counter-default zone. A venue with none, including one with no zones
+  at all, is refused `service_zone.default_missing` (409) (`resolveHttpOrderZone`,
+  `apps/server/src/till-api.ts`, and `resolveNewOrderZone`,
+  `packages/venue-service/src/operations.ts`).
+- `priceOrderLines` (`apps/server/src/working-order.ts`) refuses a line on an order with no zone
+  with `order.service_context_missing` (409), and a line that names a product instead of a menu
+  offer with `management.request_invalid`, field `lines` (400). An order with no lines still opens
+  without a zone.
+- Pricing reads the invoice languages through `readInvoiceLocales`
+  (`packages/catalogue/src/operations.ts`), one row of `locations`, no longer through
+  `listAvailableProducts`.
+- The till always sends a line's `menuItemId`; `toWireProductIdentity`
+  (`apps/till/src/state/order-line.ts`) throws for a product that has none.
+- `CoreServices.openTab` (`packages/module/src/module.ts`) takes only `{ tableId }`.
+- A server test gives its venue a zone whose menu offers its products with `offerProducts`
+  (`apps/server/src/testing/zone-offers.ts`).
+
+The refusals are pinned by `apps/server/src/till-api.zone-required.test.ts`. No migration: the
+branch adds no file under any `drizzle/` directory. What B4 leaves open:
+- **The old station chain in `fireLines` routes nothing the till can sell now.** For an order with
+  no zone, `fireLines` (`apps/server/src/working-order.ts`) takes each line's kitchen station from
+  the product, then its category, then the venue's default station, and refuses
+  `station.no_default` when none is set. On an order in a zone, a line that names a product routes
+  by the zone's preparation routes, and `resolvePreparationRoutes`
+  (`packages/venue-service/src/operations.ts`) refuses `route.missing` rather than fall back to the
+  chain. Every path that prices new lines now refuses
+  an order with no zone, so the chain is reached by orders parked with lines before B4, and by the
+  tests that build such an order directly (`createOpenOrder` with no lines, a line inserted by
+  hand, then `fireLines`), which keep it covered. A transfer from a zoned tab onto an empty tab on
+  a table in no zone is refused `service_zone.mode_incompatible` for part of a line as for a whole
+  one (`transferLines`, pinned by "refuses a transfer onto an empty tab on a table in no zone" in
+  `apps/server/src/transfer-lines.test.ts`). So
+  three dashboard settings no longer route anything sold today: the product editor's station
+  (saved through `setProductStation`, `apps/server/src/catalogue-api.ts`), a category's station
+  (`PUT /management-api/categories/:id/station`, `apps/server/src/management-api.ts`; the
+  dashboard's API client has `setCategoryStation`, and no screen calls it) and the Kitchen
+  screen's default station (`apps/dashboard/src/screens/kitchen-screen.ts`). **Next action:** owner
+  to decide whether to delete the chain and those settings, or keep them.
+- **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
+  path.** The till builds its buttons from zone offers (`GET /api/default-service-zone/offers` and
+  `GET /api/service-zones/:zoneId/offers`). `TillApi.listProducts` (`apps/till/src/api/client.ts`)
+  is kept because the till's tests stub it and derive their zone offers from it. Outside tests,
+  `listAvailableProducts` is called by that route (`apps/server/src/till-api.ts`) and two dev
+  scripts (`apps/server/scripts/demo-seed/seed.ts`, `apps/server/scripts/allergens-demo.ts`).
+  **Next action:** decide whether to retire the route and move the till's tests onto zone-offer
+  fixtures, or keep both.
+- **A location's menu list is read by no sale.** A sale takes its menus from the zone
+  (`zone_menus`, read by `listZoneOffers` in `packages/venue-service/src/operations.ts`). The
+  location's list (`locations.catalogue_id` plus `location_catalogues`) is still read and written
+  elsewhere — among them `GET /api/products`, the management API's location routes
+  (`apps/server/src/catalogue-api.ts`; no dashboard screen calls them since #297), configuration
+  transfer, both provisioning seeds, two dev scripts and the server's `offerProducts` test helper.
+  `git grep -n "locationCatalogues\|location_catalogues\|resolveAccessibleCatalogueIds\|listAvailableProducts\|listAccessibleCatalogues" -- apps packages ':!*.test.ts'`
+  finds the table's and its helpers' users; a read of `catalogue_id` alone, as the venue-service
+  seed and configuration transfer make, needs a separate grep for `catalogue_id`/`catalogueId`.
+  **Next action:** owner to decide whether to retire `location_catalogues` and those routes with
+  `GET /api/products`, or keep them.
+- **A table in no zone still opens a tab, and nothing can be added to it.** The till opens a tab
+  with no lines (`#onOpenTable`, `apps/till/src/till-app.ts`), and a booking seated at a table does
+  the same through `core.openTab` (`seatBooking`, `packages/bookings/src/bookings.ts`); on a table
+  in no zone that tab opens, and every round on it is refused `order.service_context_missing`. The
+  till shows no products there: `#onOpenTable` loads offers only for a table with a zone and leaves
+  the grid empty otherwise. Pinned by "openTab with no lines on a table in no zone opens an empty
+  tab" and "addTabRound on that empty tab refuses order.service_context_missing"
+  (`apps/server/src/till-api.zone-required.test.ts`). **Next action:** owner to decide whether to
+  refuse opening a tab on a table in no zone, or to require every table to have a zone.
+- **Moving that empty tab onto a zoned table does not give it a zone.** `moveTab` and `joinTable`
+  (`apps/server/src/working-order.ts`) only re-point a zone record the tab already has
+  (`findOrderContext`, then `retargetOrderContext` or the `service_zone.join_mismatch` check), and
+  a tab opened on a table in no zone has none. So after either one, a round naming an offer the
+  new table's zone lists is refused `order.service_context_missing` (409), and the tab can never
+  take a round. Measured 2026-09-24 by the B4 review with a scratch HTTP test. Before B4 the till's
+  round, which names menu offers, also failed there, with `sale.unknown_product`. **Next action:**
+  the same owner decision as the entry above; if tabs on tables in no zone stay allowed, `moveTab`
+  and `joinTable` must create the zone record rather than only re-point one.
+- **Two branches still read a held line that names no menu offer, and only an order parked before
+  B4 should have one.** `getHeldOrder` (`apps/server/src/working-order.ts`, its
+  `context === undefined || line.productId === null` arm) returns such a line by its product alone,
+  and the till's retrieve (`#onRetrieveOrder`, `apps/till/src/till-app.ts`, the `liveByProduct`
+  lookup) finds it among today's offers by product id or drops it with `held.product_gone`. Every
+  line priced since B4 records its offer (`lineContexts`, `priceOrderLines`), and a partial transfer
+  copies it to the new line (`copyLineContext`, `transferLines`). Measured 2026-09-24: with a
+  `throw` planted at the top of that server arm, seven suites all passed: `till-api.test.ts`,
+  `till-api.courses.test.ts`, `till-api.reprint.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
+  `working-order.test.ts` and `working-order.pay-and-dispatch.test.ts` under `apps/server/src`, and
+  `apps/server/scripts/demo-seed/seed.integration.test.ts`. They include every `apps/server` suite
+  whose text calls `getHeldOrder` or builds a `/api/working-orders/${…}` URL, so none of those
+  reaches it.
+  **Next action:** delete both branches, since no backwards-compatibility code is owed before
+  production (CLAUDE.md §3), or say what keeps them.
+- **`sale.unknown_product` is no longer raised.** A line naming an item the zone does not offer is
+  refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
+  `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
+  status map (`apps/server/src/till-api.ts`), because a shipped code is never renamed or removed.
+  **Next action:** none unless a retired code should also leave the status map; recorded so a
+  reader who meets it knows it is retired.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
@@ -1204,8 +1310,13 @@ What the order path (the plan's Task 7) left behind:
   the product path. Only the
   refusing half is pinned by a test ("refuses an extras pick on a menu offer whose dish is sold by
   weight", `apps/server/src/working-order.test.ts`). This is a second instance of the shape the
-  Units entry above already warns about. **Next action:** whoever builds Units decides which column
-  answers "is this sold one at a time" and makes both paths read it.
+  Units entry above already warns about. **Update (B4, 2026-09-24):** the product path is gone, so
+  the order path now reads only the unit (`priceOrderLines`, `selection.unit.hardwareUnit === null ?
+  "each" : "weight"`) and the fractional billing above can no longer happen on a sale. B4 did not
+  touch `products.pricing_unit` or what writes it, so the two can still disagree in storage (the
+  Task 6 bullet on reassigning a unit's products is the same shape). **Next action:** whoever builds
+  Units decides whether `products.pricing_unit` is kept in step with the unit or dropped, now that
+  no sale reads it.
 - **The definition reads on the sale path take NO lock at all, while their writers serialise.** The
   entry used to set the four new reads against an OLD lock, `lockModifierDefinitions(tx, "read")`,
   that `priceOrderLines` still took over the `option_groups` tables. That lock is gone with them —
@@ -1567,12 +1678,12 @@ What it left open:
   `products.name` now.) **Next action:** decide whether the columns want a check
   constraint and the write paths a domain refusal.
 
-- **The legacy product-id order path loses the configured kitchen name.** `AvailableProduct` carries
-  no kitchen name, so a line added by product id freezes `kitchen_name` as null; `resolveHttpOrderZone`
-  sends all three line-carrying routes down that branch when a venue has no service zones. The
-  supported menu-offer path is unaffected, and the developer guide now says so rather than claiming
-  the name appears everywhere. Pre-existing. **Next action:** either carry the field on that path or
-  leave the narrowed claim standing.
+- **DONE (B4, 2026-09-24): the legacy product-id order path lost the configured kitchen name.**
+  `AvailableProduct` carries no kitchen name, so a line added by product id froze `kitchen_name` as
+  null. B4 removed that path: every line is now priced from a menu offer, whose selection carries the
+  product's and the variant's kitchen names (`selectMenuVariant`, frozen by `priceOrderLines` in
+  `apps/server/src/working-order.ts`), and the developer guide says so
+  ([products.md](developers/products.md)).
 
 - **A refused customer name cannot say which value it refused.** `content.translation_required`
   carries only the language, so the editor resolves the offending field by reading the body it just

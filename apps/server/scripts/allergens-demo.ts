@@ -21,7 +21,7 @@
 //    - "Ensalada de la huerta"→ {} — reviewed, no declarable allergens — the empty-but-reviewed
 //      case
 //    - "Sopa del día" → allergens unset (null) — NOT yet reviewed → PENDING
-// 4. reads the sellable products back with `listAvailableProducts`, exactly as the till does, and
+// 4. reads the sellable products back with `listAvailableProducts`, and
 //    prints (a) an allergen matrix (product × allergen) and (b) a single-product
 //    operator-lookup view.
 //

@@ -415,8 +415,7 @@ describe("a variant's reporting category comes from the product whose category r
 });
 
 describe("listAvailableProducts", () => {
-  // The plain product list sells an entry under its own frozen names; a variant sold that way
-  // would be filed as if it were a product in its own right (Review Focus 4).
+  // A variant listed here would read as a product in its own right (Review Focus 4).
   it("lists the parent and neither variant", async () => {
     const { products: listed } = await run((tx) => listAvailableProducts(tx, f.locationId));
     const ids = listed.map((p) => p.id);

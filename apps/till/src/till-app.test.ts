@@ -40,6 +40,7 @@ const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
 const cafe: TillProduct = {
   id: "cafe",
+  menuItemId: "menu-item-cafe-0",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
@@ -53,6 +54,7 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
+  menuItemId: "menu-item-jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
@@ -1410,7 +1412,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ productId: "cafe", quantity: "2" }],
+      [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       // The workingOrderId sent is the store's stable id, NOT a fresh uuid, so a lost-response re-tap
       // replays and a retrieved order settles under its own id (see the retrieve→pay and retry tests
@@ -1454,11 +1456,11 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       [
         {
-          productId: "cafe",
+          menuItemId: "menu-item-cafe-0",
           quantity: "1",
           extras: [{ listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] }],
         },
-        { productId: "cafe", quantity: "2" },
+        { menuItemId: "menu-item-cafe-0", quantity: "2" },
       ],
       { method: "cash", amount: "5" },
       c.store.id,
@@ -1497,7 +1499,7 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       [
         {
-          productId: "cafe",
+          menuItemId: "menu-item-cafe-0",
           quantity: "1",
           extras: [
             { listId: "list-extras", picks: [{ productId: "p-shot", quantity: 2 }] },
@@ -1897,7 +1899,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [{ productId: "cafe", quantity: "1" }],
+      [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
       { method: "card", amount: "1.50", externalRef: "OP-42" },
       workingOrderId,
     );
@@ -2020,7 +2022,7 @@ describe("till-app", () => {
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
         { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { productId: "cafe", quantity: "1" },
+        { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
     });
@@ -2029,7 +2031,7 @@ describe("till-app", () => {
     expect(recordSale).toHaveBeenCalledWith(
       [
         { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { productId: "cafe", quantity: "1" },
+        { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       { method: "cash", amount: "5" },
       "wo-1",
@@ -2169,7 +2171,7 @@ describe("till-app", () => {
       lines: [
         {
           workingOrderLineId: "line-customised",
-          productId: "cafe",
+          menuItemId: "menu-item-cafe-0",
           quantity: "3",
           note: "Sin espuma",
           extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
@@ -2333,7 +2335,7 @@ describe("till-app", () => {
       lines: [
         {
           workingOrderLineId: "line-answered",
-          productId: "cafe",
+          menuItemId: "menu-item-cafe-0",
           quantity: "3",
           options: [{ listId: "list-punto", labelId: "label-medium" }],
         },
@@ -2390,7 +2392,7 @@ describe("till-app", () => {
     expect(recordSale).toHaveBeenCalledWith(
       [
         { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { productId: "cafe", quantity: "1" },
+        { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       { method: "cash", amount: "5" },
       "wo-1",
@@ -2535,7 +2537,7 @@ describe("till-app", () => {
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
       id: parkedId,
-      lines: [{ productId: "cafe", quantity: "2" }],
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
       label: "Mesa 4",
     });
     // The basket is emptied and its id re-minted, ready for the next customer; still on the counter.
@@ -2556,7 +2558,7 @@ describe("till-app", () => {
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
       id: expect.any(String),
-      lines: [{ productId: "cafe", quantity: "2" }],
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
       label: undefined,
     });
   });
@@ -2652,7 +2654,7 @@ describe("till-app", () => {
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
         { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { productId: "cafe", quantity: "1" },
+        { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
     });
@@ -2716,7 +2718,7 @@ describe("till-app", () => {
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
         { menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { productId: "cafe", quantity: "1" },
+        { menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
       label: "Mesa 4",
     });
@@ -3520,6 +3522,7 @@ describe("till-app", () => {
             {
               ...cafe,
               id: "negroni",
+              menuItemId: "menu-item-negroni-0",
               name: "Negroni",
               customerName: { en: "Negroni for the customer" },
               unitPrice: "11.00",
@@ -3683,11 +3686,13 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
-        emit(screen, "send-round", { lines: [{ productId: "cafe", quantity: "1" }] });
+        emit(screen, "send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] });
         await flush(el);
 
         // Appended to the tab's own working order, then re-read so the drawer reflects the new round.
-        expect(addTabRound).toHaveBeenCalledWith("wo-7", [{ productId: "cafe", quantity: "1" }]);
+        expect(addTabRound).toHaveBeenCalledWith("wo-7", [
+          { menuItemId: "menu-item-cafe-0", quantity: "1" },
+        ]);
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -3701,11 +3706,11 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
         emit(screen, "send-round", {
-          lines: [{ productId: "cafe", quantity: "1", courseId: "postres" }],
+          lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" }],
         });
         await flush(el);
         expect(addTabRound).toHaveBeenCalledWith("wo-7", [
-          { productId: "cafe", quantity: "1", courseId: "postres" },
+          { menuItemId: "menu-item-cafe-0", quantity: "1", courseId: "postres" },
         ]);
       });
 
@@ -3719,11 +3724,11 @@ describe("till-app", () => {
         });
         const screen = await toTableOrder(el, openTable);
         emit(screen, "send-round", {
-          lines: [{ productId: "cafe", quantity: "1", hold: true }],
+          lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", hold: true }],
         });
         await flush(el);
         expect(addTabRound).toHaveBeenCalledWith("wo-7", [
-          { productId: "cafe", quantity: "1", hold: true },
+          { menuItemId: "menu-item-cafe-0", quantity: "1", hold: true },
         ]);
       });
 
@@ -3863,7 +3868,7 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, openTable);
 
         for (const [type, detail] of [
-          ["send-round", { lines: [{ productId: "cafe", quantity: "1" }] }],
+          ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }],
           ["serve-line", { lineNo: 1 }],
           ["set-line-course", { lineNo: 1, courseId: "c2" }],
           ["set-status", { statusId: "s1" }],
@@ -4468,7 +4473,7 @@ describe("till-app", () => {
 
       expect(pay).toHaveBeenCalledWith({
         id: workingOrderId,
-        lines: [{ productId: "cafe", quantity: "2" }],
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
         tip: "0.50",
         allowOffline: true,
       });
@@ -4489,7 +4494,7 @@ describe("till-app", () => {
 
       expect(pay).toHaveBeenCalledWith({
         id: c.store.id,
-        lines: [{ productId: "cafe", quantity: "1" }],
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }],
       });
     });
 
@@ -4782,7 +4787,7 @@ describe("till-app", () => {
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
         lines: [
           { menuItemId: "menu-item-cafe-0", quantity: "2" },
-          { productId: "cafe", quantity: "1" },
+          { menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
         label: "Mesa 4",
       });
@@ -4790,7 +4795,7 @@ describe("till-app", () => {
         id: "wo-1",
         lines: [
           { menuItemId: "menu-item-cafe-0", quantity: "2" },
-          { productId: "cafe", quantity: "1" },
+          { menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
       });
       expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -4948,7 +4953,7 @@ describe("till-app", () => {
 
       expect(currentApi.parkOrder).toHaveBeenCalledWith({
         id,
-        lines: [{ productId: "cafe", quantity: "2" }],
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
         label: undefined,
       });
       expect(currentApi.placeOrder).toHaveBeenCalledWith(id);
@@ -5016,7 +5021,7 @@ describe("till-app", () => {
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
         lines: [
           { menuItemId: "menu-item-cafe-0", quantity: "2" }, // retrieved
-          { productId: "cafe", quantity: "1" }, // the edit
+          { menuItemId: "menu-item-cafe-0", quantity: "1" }, // the edit
         ],
         label: "Mesa 4",
       });
@@ -6529,8 +6534,8 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("es-ES"); // guard skipped setLocale on the detached app
   });
 
-  // Multi-menu till: the switcher over the counter grid. A location may sell across several accessible
-  // menus; the grid shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
+  // Multi-menu till: the switcher over the counter grid. A zone may offer several menus; the grid
+  // shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
   // (resetting to the default menu at login), so a switcher pick re-filters the grid without touching
   // the working order — an in-flight cart line survives.
   it("switches a kitchen display's language without writing an operator preference", async () => {
@@ -6557,6 +6562,7 @@ describe("till-app", () => {
     const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
     const bocadillo: TillProduct = {
       id: "bocadillo",
+      menuItemId: "menu-item-bocadillo",
       name: "Bocadillo",
       customerName: { es: "Bocadillo para el cliente" },
       pricingUnit: "each",
@@ -6569,6 +6575,7 @@ describe("till-app", () => {
     };
     const cerveza: TillProduct = {
       id: "cerveza",
+      menuItemId: "menu-item-cerveza",
       name: "Cerveza",
       customerName: { es: "Cerveza para el cliente" },
       pricingUnit: "each",
@@ -6734,7 +6741,7 @@ describe("till-app", () => {
       const { el } = await mountApp({ listProducts: twoMenuProducts });
       const c = await toCounter(el);
 
-      // Login lands on the location default (Comida).
+      // Login lands on the zone's default menu (Comida).
       expect(selected(el)).toBe("cat-food");
 
       // Switch to the non-default menu and ring a line — a mid-order switch STICKS (the control: it must

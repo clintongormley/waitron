@@ -34,6 +34,7 @@ import { createTable } from "./tables.js";
 import { openTab, splitOffCheck } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";
@@ -100,6 +101,8 @@ interface Seeded {
   /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
   jamonId: string;
   tableId: string;
+  /** Both products offered in the table's zone. */
+  offers: ZoneOffers;
 }
 
 /**
@@ -164,8 +167,9 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const t1 = await createTable(tx, cfg, { label: "T1" });
-    return { aguaId: agua.id, jamonId: jamon.id, tableId: t1.id };
+    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+    return { aguaId: agua.id, jamonId: jamon.id, tableId: t1.id, offers };
   });
   return { cfg, ...seeded };
 }
@@ -203,14 +207,14 @@ async function splitIntoThreeChecks(
   seeded: Seeded,
   deps: Parameters<typeof payWorkingOrder>[0],
 ): Promise<ThreeChecks> {
-  const { cfg, aguaId, jamonId, tableId } = seeded;
+  const { cfg, aguaId, jamonId, tableId, offers } = seeded;
   const { tabId } = await asApp(cfg, (tx) =>
     openTab(tx, cfg, {
       tableId,
-      lines: [
+      lines: offers.toOfferLines([
         { productId: aguaId, quantity: "3" },
         { productId: jamonId, quantity: "0.300" },
-      ],
+      ]),
     }),
   );
   const { checkId: a } = await asApp(cfg, (tx) =>
@@ -391,11 +395,14 @@ describe("split-bill: pay each check files its own registro", () => {
   });
 
   it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
-    const { cfg, aguaId, tableId } = await setupVenue();
+    const { cfg, aguaId, tableId, offers } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     // Open a 2× agua tab and carve ONE agua onto a detached check — the working order under proof.
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
+      openTab(tx, cfg, {
+        tableId,
+        lines: offers.toOfferLines([{ productId: aguaId, quantity: "2" }]),
+      }),
     );
     const { checkId } = await asApp(cfg, (tx) =>
       splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),

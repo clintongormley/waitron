@@ -202,10 +202,10 @@ async function resolveHttpOrderZone(
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
-  return withTransaction(deps.db, async (tx) => {
-    if ((await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).length === 0) return undefined;
-    return (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId;
-  });
+  return withTransaction(
+    deps.db,
+    async (tx) => (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId,
+  );
 }
 
 /** The till app's closed card-provider union, as far as this surface hands it out (`apps/till`'s own
@@ -1057,11 +1057,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
-  // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs
+  // The menu list of this till's location. SESSION-GUARDED: `requireSession` runs
   // FIRST, so an unauthenticated request 401s (`session.required`) before any catalogue is read —
   // the operator must be logged in to see prices. The read itself runs under the till's tenant
   // (`withTransaction`), in the database holding this tenant. `menus` (the
-  // location's accessible catalogues, default flagged, for the till's menu switcher) and
+  // location's accessible catalogues, default flagged) and
   // `products` (tagged with the catalogue each came from) are read in the SAME transaction so
   // they describe one consistent snapshot of the accessible set.
   app.get("/api/products", (c) =>
@@ -1276,9 +1276,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // the primary key, and `parkOrder` catches that refusal and REPLAYS the existing open order's
   // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
   // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
-  // is no longer open re-throws the raw refusal). `parkOrder` re-reads the catalogue and prices
-  // authoritatively (the request carries no price), opening its OWN `withTransaction` transaction,
-  // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
+  // is no longer open re-throws the raw refusal). `parkOrder` reads the zone's menu offers and
+  // prices authoritatively (the request carries no price), opening its OWN `withTransaction`
+  // transaction, so it is called OUTSIDE any transaction here. Returns the persisted
+  // `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -1288,8 +1289,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // (NON-FISCAL) — all forwarded to `parkOrder` → `priceOrderLines`, which validates them
         // against the dish's own definitions.
         lines: ({
-          productId?: string;
-          menuItemId?: string;
+          menuItemId: string;
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
@@ -1368,8 +1368,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // (NON-FISCAL) — all forwarded to `updateHeldOrder`, which compares them against what the
         // stored line froze before deciding whether the edit is quantity-only.
         lines: ({
-          productId?: string;
-          menuItemId?: string;
+          menuItemId: string;
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
@@ -1932,7 +1931,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{
-        lines?: { productId?: string; menuItemId?: string; quantity: string }[];
+        lines?: { menuItemId: string; quantity: string }[];
       }>(c);
       const result = await withTransaction(deps.db, async (tx) => {
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
@@ -1954,15 +1953,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         // A round line MAY carry `extras` and `options` — threaded through `addTabRound` →
         // `priceOrderLines`, which validates both against the dish's own definitions and expands each
-        // pick into a child row. Optional, so a plain `{productId, quantity}` round is unchanged. A round
-        // line
-        // MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
+        // pick into a child row. A round line MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
         // line and snapshotted onto its ticket item at fire. Coursing editing (A3): a round line MAY carry
         // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
         // print) regardless of course, released later by `sendLines`.
         lines: ({
-          productId?: string;
-          menuItemId?: string;
+          menuItemId: string;
           quantity: string;
           courseId?: string | null;
           extras?: ExtraSelection[];

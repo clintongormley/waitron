@@ -26,6 +26,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -51,6 +52,10 @@ let ana: { id: string };
 // can name the held course's id and the queue assertions can pin the serialised `course` object.
 let entCourseId: string;
 let priCourseId: string;
+// The products offered in the counter zone (a parked order's) and in a tables zone (a tab's). One
+// menu serves both zones, so a product's offer is the same id in each.
+let counterOffers: ZoneOffers;
+let tablesZoneId: string;
 
 // Distinct staff names, so a queue item can be matched back to the product it was fired from (the
 // queue serialises the resolved kitchen name, not `productId`, and none of these three carries a
@@ -82,7 +87,7 @@ const suite = useVenueDb({
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
     const locationId = brandLocationId(loc!.id);
-    // A default kitchen station so the place-time fire (placeOrder → fireLines) has a fallback route.
+    // A default kitchen station, the one each product's route sends a fire (placeOrder → fireLines) to.
     await seedKitchenStation(db, { locationId });
     const [till] = await db
       .insert(tills)
@@ -123,6 +128,8 @@ const suite = useVenueDb({
       await setProductCourse(tx, cfg, sopa, ent.id);
       await setProductCourse(tx, cfg, filete, pri.id);
       await assignCatalogueToLocation(tx, loc!.id, catalogue.id);
+      counterOffers = await offerProducts(tx, cfg);
+      tablesZoneId = (await offerProducts(tx, cfg, { zone: "tables" })).zoneId;
     });
   },
 });
@@ -251,25 +258,26 @@ async function queueItemsByName(orderId: string, station: string): Promise<Map<s
   return new Map(group.items.map((i) => [i.name, i]));
 }
 
-// The product ids are resolved once (by staff name) from GET /api/products, so park bodies can name
-// them — the queue serialises names, not productId, so this is the only place ids are needed.
-// The route now returns `{ menus, products }`; only `products` is needed here.
-async function productIdsByName(): Promise<Map<string, string>> {
+// The product ids are resolved once (by staff name) from GET /api/products, and each is mapped to its
+// offer so park and round bodies can name it — the queue serialises names, not ids, so this is the
+// only place ids are needed. The route now returns `{ menus, products }`; only `products` is needed.
+async function offerIdsByName(): Promise<Map<string, string>> {
   const res = await app.request("/api/products", { headers: { cookie } });
   expect(res.status).toBe(200);
   const { products } = (await res.json()) as { products: { id: string; name: string }[] };
-  return new Map(products.map((p) => [p.name, p.id]));
+  return new Map(products.map((p) => [p.name, counterOffers.offerFor(p.id)]));
 }
 
 async function placeOrder(names: string[]): Promise<string> {
-  const ids = await productIdsByName();
+  const ids = await offerIdsByName();
   const id = randomUUID();
   const park = await app.request("/api/working-orders", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       id,
-      lines: names.map((d) => ({ productId: ids.get(d)!, quantity: "1" })),
+      zoneId: counterOffers.zoneId,
+      lines: names.map((d) => ({ menuItemId: ids.get(d)!, quantity: "1" })),
     }),
   });
   expect(park.status).toBe(200);
@@ -285,11 +293,11 @@ async function placeOrder(names: string[]): Promise<string> {
  *  2) as one round; returns the tab id. SOPA is fired-not-started (recallable); FILETE holds a Principales
  *  ticket-item snapshot until it is sent. Shared by the A1 re-course, A2 send and A4 recall blocks. */
 async function tabWithSopaAndFilete(): Promise<string> {
-  const ids = await productIdsByName();
+  const ids = await offerIdsByName();
   const table = await app.request("/api/tables", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ label: `Mesa-${randomUUID().slice(0, 8)}` }),
+    body: JSON.stringify({ label: `Mesa-${randomUUID().slice(0, 8)}`, zoneId: tablesZoneId }),
   });
   expect(table.status).toBe(200);
   const { id: tableId } = (await table.json()) as { id: string };
@@ -305,8 +313,8 @@ async function tabWithSopaAndFilete(): Promise<string> {
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       lines: [
-        { productId: ids.get(SOPA)!, quantity: "1" },
-        { productId: ids.get(FILETE)!, quantity: "1" },
+        { menuItemId: ids.get(SOPA)!, quantity: "1" },
+        { menuItemId: ids.get(FILETE)!, quantity: "1" },
       ],
     }),
   });

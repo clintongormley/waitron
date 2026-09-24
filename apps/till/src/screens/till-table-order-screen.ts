@@ -83,8 +83,8 @@ class TabPayStore extends WorkingOrderStore {
  *
  *  - a full-width **product grid** (reused `till-product-grid`) whose taps accumulate the CURRENT
  *    round into a round-scoped `WorkingOrderStore`, shown by a reused `till-basket` in a bottom bar;
- *    **Enviar ronda** emits `send-round` with the picked `{ productId, quantity }` lines and clears the
- *    round (the round bar is the current round ONLY, never the whole tab);
+ *    **Enviar ronda** emits `send-round` with the picked lines and clears the round (the round bar is
+ *    the current round ONLY, never the whole tab);
  *  - a right-edge **drawer**, its handle badged with the count of lines still to serve, listing
  *    **Pendiente de servir** (each a `Servido` tick → `serve-line`), **Servido**, the tab **total**
  *    (summed from the LOCKED add-time prices — never a catalogue recompute), **Cobrar** (the reused
@@ -385,13 +385,13 @@ export class TillTableOrderScreen extends LitElement {
    * loaded via `getTabLines` and reloaded after each round/serve — and threads them in; the drawer,
    * total and badge render from these, never a re-price. */
   @property({ attribute: false }) lines: TabLine[] = [];
-  /** ALL sellable products across the location's accessible menus. The round grid shows only the SELECTED
+  /** ALL sellable products across the zone's menus. The round grid shows only the SELECTED
    * menu's (via {@link filterProductsByMenu}); a tab line's name is resolved against the FULL set
    * ({@link #nameFor}), because a tab may span several menus and every line must still render its name
    * whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The location's accessible menus, handed to the menu switcher above the round grid. With one menu (or
-   * none) the switcher renders nothing, so a single-menu location looks exactly as before. */
+  /** The zone's menus, handed to the menu switcher above the round grid. With one menu (or
+   * none) the switcher renders nothing. */
   @property({ attribute: false }) menus: TillMenu[] = [];
   /** The menu (catalogue) the round grid currently shows — narrows the grid via {@link filterProductsByMenu}
    * and marks the active switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected`. */

@@ -43,6 +43,7 @@ import {
 } from "./kitchen-print.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // Print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx, and the invariants HERE are
@@ -191,6 +192,30 @@ async function makePrinter(
   return id;
 }
 
+type ProductLine = {
+  productId: string;
+  quantity: string;
+  extras?: ExtraSelection[];
+  options?: OptionSelection[];
+  // Order-line customisation (spec §2/§3): a parent line MAY carry a note, snapshotted at fire.
+  note?: string;
+};
+
+/** Open a working order in the counter zone, selling each line through the zone's offer for its
+ *  product. Call once the suite's products, stations and extras are final: the offers' routes mirror
+ *  the product/category/default station each product would have taken. */
+async function createOfferedOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  lines: ProductLine[],
+): ReturnType<typeof createOpenOrder> {
+  const offers = await offerProducts(tx, cfg);
+  return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+    zoneId: offers.zoneId,
+  });
+}
+
 /** Open a fresh working order carrying `lines` and FIRE it — the isolated createOpenOrder → fireLines
  *  sequence placeOrder/sendToPrep run (the brief's order-firing helper). Passes ALL persisted lines
  *  (parent dishes AND child modifier lines) to `fireLines`, exactly as placeOrder/sendToPrep do — so
@@ -198,17 +223,61 @@ async function makePrinter(
 async function fireNewOrder(
   tx: Transaction,
   cfg: TillConfig,
-  lines: {
-    productId: string;
-    quantity: string;
-    extras?: ExtraSelection[];
-    options?: OptionSelection[];
-    // Order-line customisation (spec §2/§3): a parent line MAY carry a note, snapshotted at fire.
-    note?: string;
-  }[],
+  lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();
-  await createOpenOrder(tx, cfg, id, lines, null);
+  await createOfferedOrder(tx, cfg, id, lines);
+  const fired = await tx
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      courseId: workingOrderLines.courseId,
+      parentLineId: workingOrderLines.parentLineId,
+      note: workingOrderLines.note,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+  await fireLines(tx, cfg, id, fired);
+  return id;
+}
+
+/**
+ * Open an order with NO service context holding one dish line and one child line per pick, then FIRE
+ * it, so the dish takes `fireLines`' context-less station chain (product, then category, then the
+ * default station) rather than a preparation route. The lines are written straight to the table
+ * because pricing one needs a zone; the price and name columns are placeholders nothing here reads.
+ */
+async function fireContextlessDish(
+  tx: Transaction,
+  cfg: TillConfig,
+  dishId: string,
+  pickIds: string[],
+): Promise<string> {
+  const id = randomUUID();
+  await createOpenOrder(tx, cfg, id, [], null);
+  const placeholder = {
+    workingOrderId: id,
+    name: "Line",
+    descriptions: { [LOCALE]: "Line" },
+    quantity: 1000,
+    unitPrice: 124,
+    unitPriceGross: 150,
+    vatRate: 2100,
+    lineTotal: 150,
+  };
+  const [parent] = await tx
+    .insert(workingOrderLines)
+    .values({ ...placeholder, lineNo: 1, productId: dishId })
+    .returning({ id: workingOrderLines.id });
+  await tx.insert(workingOrderLines).values(
+    pickIds.map((productId, index) => ({
+      ...placeholder,
+      lineNo: index + 2,
+      productId,
+      parentLineId: parent!.id,
+    })),
+  );
   const fired = await tx
     .select({
       id: workingOrderLines.id,
@@ -419,13 +488,14 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       // A tab bound to a dining table → the order carries the table label the ticket header prints.
       // Through the table definition: `dining_tables.id` is a `$defaultFn` generator on this engine
       // and a raw insert reaches none of them (`NOT NULL constraint failed: dining_tables.id`).
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "Mesa 5" })
+        .values({ locationId: cfg.locationId, label: "Mesa 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       const { tabId } = await openTab(tx, cfg, { tableId: table!.id });
       // Fire the round with the FOREIGN-locale config so name resolution takes the fallback path.
-      await addTabRound(tx, foreignCfg, tabId, [line(drink)]);
+      await addTabRound(tx, foreignCfg, tabId, offers.toOfferLines([line(drink)]));
       return { printerId, jobs: await printJobsFor(tx) };
     });
 
@@ -472,7 +542,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const drink = await makeProduct(tx, cfg, catalogueId, "Zumo", { stationId: cocina.id });
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [line(drink)], null);
+      await createOfferedOrder(tx, cfg, orderId, [line(drink)]);
       // A counter-delivery table the order delivers to — the order points AT it (no tab back-pointer).
       const [table] = await tx
         .insert(diningTables)
@@ -511,7 +581,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       // detail reads WOULD succeed (the rows exist) if they ran, isolating the count as the only signal.
       const dish = await makeProduct(tx, cfg, catalogueId, "Tortilla", { stationId: cocina.id });
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [line(dish)], null);
+      await createOfferedOrder(tx, cfg, orderId, [line(dish)]);
       const [lineRow] = await tx
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
@@ -827,18 +897,10 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       // line that resolves neither a product nor category route has nowhere to go (station.no_default).
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
-      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cafe, [
-        { name: "Nata" },
-      ]);
+      const { productIds } = await addExtras(tx, cfg, catalogueId, cafe, [{ name: "Nata" }]);
 
       // This must NOT throw station.no_default — the child is filtered before station resolution.
-      const orderId = await fireNewOrder(tx, cfg, [
-        {
-          productId: cafe,
-          quantity: "1",
-          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 1 }] }],
-        },
-      ]);
+      const orderId = await fireContextlessDish(tx, cfg, cafe, [productIds[0]!]);
       const ticketItemRows = await tx
         .select({
           workingOrderLineId: ticketItems.workingOrderLineId,
@@ -945,7 +1007,7 @@ it("prints a line's stored options answers, each side taking its KITCHEN name", 
     await attachPrinterToStation(tx, { stationId: station.id, printerId });
     const productId = await makeProduct(tx, cfg, catalogueId, "Coffee", { stationId: station.id });
     const orderId = randomUUID();
-    const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
+    const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
     const parent = lineRows[0]!;
     // A frozen answer's two staff names are keyed by CONTENT language, which is what the order path
     // widens them under (`buildLineExtras`, modifier-selection.ts).
@@ -1015,7 +1077,7 @@ async function ticketWithNames(frozen: {
     });
     await setProductStation(tx, cfg, productId, station.id);
     const orderId = randomUUID();
-    const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
+    const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
     const parent = lineRows[0]!;
     await tx.update(workingOrderLines).set(frozen).where(eq(workingOrderLines.id, parent.id!));
     await enqueueKitchenTickets(tx, cfg, orderId, [

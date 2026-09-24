@@ -134,19 +134,14 @@ Where each one surfaces:
 Two of those rows are worth reading twice.
 
 A cook sees the same name whether the order arrives on paper or on a screen: the ticket, the station
-queue and the pass all resolve through `kitchenPresentationName`. What that resolver is *given*,
-though, depends on how the line was added. A line added from a menu offer carries the product's and
-the variant's kitchen names, so a venue that types a short kitchen name sees it on all three
-surfaces, and one that leaves it blank sees the staff name — the variant's, on a variant line.
-
-**A line added by bare `productId` carries neither.** That is the shape the till's three
-line-carrying routes — `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders` — fall back
-to when the venue has no service zones configured (`resolveHttpOrderZone`,
-`apps/server/src/till-api.ts`), and it resolves against the plain catalogue projection:
-`AvailableProduct` (`packages/catalogue/src/operations.ts`) has no kitchen-name field at all. So
-`apps/server/src/working-order.ts` freezes `kitchen_name` and `variant_kitchen_name` as `null`, and
-the kitchen sees the staff name however the product is configured. The paragraph above is about
-menu-offer lines; it does not hold for these, and nothing on this path closes the gap today.
+queue and the pass all resolve through `kitchenPresentationName`. Every line is added from a zone's
+menu offer, which carries the product's and the variant's kitchen names (`priceOrderLines`,
+`apps/server/src/working-order.ts`), so a venue that types a short kitchen name sees it on all three
+surfaces, and one that leaves it blank sees the staff name — the variant's, on a variant line. A
+venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
+routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the venue's
+counter-default zone, and refuse `service_zone.default_missing` when it has none
+(`resolveHttpOrderZone`, `apps/server/src/till-api.ts`).
 
 The top-sellers report groups lines under the parent's staff name, `sale_lines.name`, ranks those
 products by quantity sold (name breaks a tie), and lists
@@ -241,8 +236,8 @@ variants with it.
 
 Every Active, Available, top-level product on a menu gets a button, whether or not it is marked as
 sold alone (`listMenuOffers`). A variant never has a button: it is listed only nested under its
-parent's offer (`MenuOffer.variants`), and the plain product list (`listAvailableProducts`,
-`packages/catalogue/src/operations.ts`) reads top-level products alone.
+parent's offer (`MenuOffer.variants`). The till reads its offers from the zone
+(`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
 Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
 (`#pick`, `apps/till/src/widgets/product-grid.ts`). A parent sold by weight or in fractions, or
@@ -261,17 +256,12 @@ since the order path refuses one picked as an extra (below).
 
 **A product with an Active variant, Available or not, is never sold as itself** (spec §15.1): a
 line that rings it up without naming a variant is refused `product.variant_required`, and so is an
-extras pick of it. On a zone's menu offer `selectMenuVariant` (`packages/catalogue/src/variants.ts`)
-refuses a dish line that names no variant. On a venue with no service zones the till's three
-line-carrying routes — `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders` — price by
-bare `productId` (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`), a path that cannot name a
-variant at all, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses every such parent
-there. An extras pick cannot name a variant on either path, so `priceOrderLines` refuses a pick of
-such a product on both; a pick of a variant itself sells. Both refusals come from one read for the
-whole basket (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). So a venue with no
-service zones can sell neither such a product nor its variants as dishes: a variant is sold as a
-dish only from a zone's menu offer. A product whose variants are all Inactive sells as itself on
-both paths.
+extras pick of it. Every sale line names a zone's menu offer, and `selectMenuVariant`
+(`packages/catalogue/src/variants.ts`) refuses a dish line that names no variant. An extras pick
+cannot name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses a pick of
+such a product; a pick of a variant itself sells. That refusal comes from one read for the whole
+basket's picks (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). A product whose
+variants are all Inactive sells as itself.
 
 A held order keeps a line whose product, or one of whose extras, has since gained an Active
 variant, and lowering or keeping its quantity is allowed; raising it is refused
@@ -406,7 +396,7 @@ A product has two states (spec §15.6). **Active / Inactive** is whether it exis
 Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
-it is both (`listMenuOffers`, `listAvailableProducts` and `readExtraProducts` in
+it is both (`listMenuOffers` and `readExtraProducts` in
 `packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`) —
 except that a held order's line kept at or below its quantity is still billed although its dish or
 an extra has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`.

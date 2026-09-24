@@ -271,7 +271,7 @@ export interface CatalogueSummary {
 }
 
 /** One `GET /management-api/locations/:id/catalogues` row — mirrors catalogue's `LocationCatalogue`:
- * a `CatalogueSummary` plus whether this location may sell it (`sellable`) and whether it is the
+ * a `CatalogueSummary` plus whether it is in this location's menu list (`sellable`) and whether it is the
  * location's default menu (`isDefault`). */
 export interface LocationCatalogueSummary extends CatalogueSummary {
   sellable: boolean;
@@ -1791,7 +1791,7 @@ export class DashboardApi {
   }
 
   /** `DELETE /management-api/locations/:id/catalogues/:catalogueId` — remove a catalogue from the
-   * location's accessible set (stop selling it there). Never removes the default. Answers 204. */
+   * location's accessible set. Never removes the default. Answers 204. */
   removeLocationCatalogue(locationId: string, catalogueId: string): Promise<void> {
     return this.#request<void>(
       `/management-api/locations/${locationId}/catalogues/${catalogueId}`,

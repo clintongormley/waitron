@@ -17,7 +17,8 @@ itself:
 1. **Lock screen** — pick your name from the pre-login staff roster (`GET /api/staff`) and enter a
    PIN (`POST /api/session`).
 2. **Counter screen** — a layout-driven composition of the product grid, basket, total and pay
-   widgets, priced from `GET /api/products`.
+   widgets, showing the menu offers of the device's default zone, or else the venue's
+   counter-default zone (`GET /api/default-service-zone/offers`).
 3. **Pay** — one **cash** tender; the sale is filed by `POST /api/sales`, which re-prices the basket
    authoritatively (the browser never sends a price).
 4. **Ticket** — the filed invoice number, per-rate VAT desglose, change and the AEAT verification QR,

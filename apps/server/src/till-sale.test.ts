@@ -51,6 +51,8 @@ import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import type { ZoneOffers } from "./testing/zone-offers.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.
@@ -127,6 +129,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   waterOfferId: string;
   waterProductId: string;
   variantIds?: { double: string; unavailable: string };
+  /** Every product offered at its own price in the counter zone, from a menu of the helper's own. */
+  offers: ZoneOffers;
 }> {
   const venue = await applyVenue(
     planVenue(
@@ -256,7 +260,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       variantIds,
     };
   });
-  return { cfg, ...catalogue };
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+  return { cfg, ...catalogue, offers };
 }
 
 beforeAll(() => {
@@ -575,11 +580,12 @@ describe("recordTillSale", () => {
   });
 
   it("walk-up: prices the sent basket authoritatively and files a chained immediate cash sale", async () => {
-    const { cfg, available } = await setupVenue();
+    const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
-      lines: [{ productId: each.id, quantity: "2" }],
+      zoneId,
+      lines: [{ menuItemId: offers.offerFor(each.id), quantity: "2" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
@@ -601,16 +607,17 @@ describe("recordTillSale", () => {
     expect(rows.length).toBe(1);
   });
 
-  it("ignores a browser-sent price — it only reads productId + quantity", async () => {
-    const { cfg, available } = await setupVenue();
+  it("ignores a browser-sent price — it only reads menuItemId + quantity", async () => {
+    const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
 
     // TillSaleRequest.lines has no price field; sending an extra `unitPrice` cast `as any` must not
     // change the filed total — the server re-reads the catalogue and prices authoritatively.
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+      zoneId,
       lines: [
-        { productId: each.id, quantity: "1", unitPrice: "0.01" } as unknown as {
-          productId: string;
+        { menuItemId: offers.offerFor(each.id), quantity: "1", unitPrice: "0.01" } as unknown as {
+          menuItemId: string;
           quantity: string;
         },
       ],
@@ -621,24 +628,25 @@ describe("recordTillSale", () => {
     expect(result.tender).toEqual({ method: "cash", change: "0.00" });
   });
 
-  it("rejects an empty basket, an unknown product, an unsupported tender, and a shortfall", async () => {
-    const { cfg, available } = await setupVenue();
+  it("rejects an empty basket, an unknown offer, an unsupported tender, and a shortfall", async () => {
+    const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
     const deps = { db: suite.db, backend, clock };
 
     await expect(
-      recordTillSale(deps, cfg, { lines: [], tender: { method: "cash", amount: "0" } }),
+      recordTillSale(deps, cfg, { zoneId, lines: [], tender: { method: "cash", amount: "0" } }),
     ).rejects.toMatchObject({ code: "sale.empty_basket" });
 
     await expect(
       recordTillSale(deps, cfg, {
-        lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
         tender: { method: "cash", amount: "1" },
       }),
     ).rejects.toMatchObject({
-      code: "sale.unknown_product",
-      params: { productId: UUID_NOT_IN_CAT },
+      code: "service_zone.offer_not_allowed",
+      params: { menuItemId: UUID_NOT_IN_CAT, zoneId },
     });
 
     // cash and card are supported (7a cash + this slice's manual card); every other tender_method is
@@ -646,7 +654,8 @@ describe("recordTillSale", () => {
     for (const method of ["voucher", "transfer", "other"] as const) {
       await expect(
         recordTillSale(deps, cfg, {
-          lines: [{ productId: each.id, quantity: "1" }],
+          zoneId,
+          lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
           tender: { method: method as unknown as "cash", amount: "1.50" },
         }),
       ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
@@ -656,40 +665,11 @@ describe("recordTillSale", () => {
     // mode) raises `sale.tender_shortfall`; the whole transaction rolls back.
     await expect(
       recordTillSale(deps, cfg, {
-        lines: [{ productId: each.id, quantity: "1" }],
+        zoneId,
+        lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
         tender: { method: "cash", amount: "1.00" },
       }),
     ).rejects.toMatchObject({ code: "sale.tender_shortfall" });
-  });
-
-  // A variant (spec §1.2) is sold only through its parent's menu offer. On the plain `productId`
-  // path it is refused like an id the catalogue does not hold, rather than sold — and filed — under
-  // its own names as if it had no parent.
-  it("refuses a variant's id on the plain product path", async () => {
-    const { cfg, available } = await setupVenue();
-    const water = available.find((p) => p.name === "Agua mineral")!;
-    const variantId = await withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
-        .insert(products)
-        .values({
-          catalogueId: water.catalogueId,
-          parentId: water.id,
-          name: "Agua con gas",
-          pricingUnit: null,
-          unitPrice: null,
-          vatClass: null,
-          dietaryDeclarations: null,
-        })
-        .returning({ id: products.id });
-      return row!.id;
-    });
-
-    await expect(
-      recordTillSale({ db: suite.db, backend, clock }, cfg, {
-        lines: [{ productId: variantId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.unknown_product", params: { productId: variantId } });
   });
 
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
@@ -698,7 +678,7 @@ describe("recordTillSale", () => {
     // uses `FakeFiscalBackend` — a real test double writing through the caller's transaction — whose
     // records carry none. It exercises the same `recordSale` write path (real sale/lines/tenders/
     // settlement rows), only the fiscal record's own link is absent.
-    const { cfg, available } = await setupVenue();
+    const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
 
     await FakeFiscalBackend.install(suite.db);
@@ -708,7 +688,8 @@ describe("recordTillSale", () => {
     });
 
     const result = await recordTillSale({ db: suite.db, backend: fake, clock }, cfg, {
-      lines: [{ productId: each.id, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
 
@@ -733,7 +714,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   async function setupBareVenue(
     invoiceLocales: string[],
     customerName: Record<string, string>,
-  ): Promise<{ cfg: TillConfig; productId: string }> {
+  ): Promise<{ cfg: TillConfig; zoneId: string; menuItemId: string }> {
     const venue = await applyVenue(
       planVenue(
         {
@@ -783,7 +764,8 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
       return product.id;
     });
-    return { cfg, productId };
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+    return { cfg, zoneId: offers.zoneId, menuItemId: offers.offerFor(productId) };
   }
 
   it("re-keys bare `es` to full-tag `es-ES` — reading invoice_locales FRESH from the DB, not cfg", async () => {
@@ -791,13 +773,14 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     // deliberately DRIFT `cfg.invoiceLocales` to a WRONG value — if the re-key read cfg (env-derived)
     // rather than the DB, it would produce `ca-ES` and the trigger (checking the DB's {es-ES}) would
     // REJECT the insert. That it succeeds with `es-ES` proves the re-key reads the location fresh.
-    const { cfg, productId } = await setupBareVenue(["es-ES"], { es: "Café" });
+    const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const driftedCfg: TillConfig = { ...cfg, invoiceLocales: ["ca-ES"], locale: "ca-ES" };
     const workingOrderId = randomUUID();
 
     const result = await payWorkingOrder({ db: suite.db, backend, clock }, driftedCfg, {
       id: workingOrderId,
-      lines: [{ productId, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
@@ -827,12 +810,16 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   });
 
   it("re-keys a bilingual bare product to both venue locales", async () => {
-    const { cfg, productId } = await setupBareVenue(["es-ES", "ca-ES"], { es: "Café", ca: "Cafè" });
+    const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES", "ca-ES"], {
+      es: "Café",
+      ca: "Cafè",
+    });
     const workingOrderId = randomUUID();
 
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: workingOrderId,
-      lines: [{ productId, quantity: "1" }],
+      zoneId,
+      lines: [{ menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
 
@@ -857,6 +844,12 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {
     cfg: TillConfig;
+    /** The counter-default zone, which offers every product at its own price. */
+    zoneId: string;
+    /** A second zone, `table_tab`, offering the same menu, for the tabs' dining tables. */
+    tablesZoneId: string;
+    /** The offer of a product in either zone — both zones share one menu. */
+    offerFor: (productId: string) => string;
     burgerId: string;
     menuProductId: string;
     jamonId: string;
@@ -1071,7 +1064,17 @@ describe("ordering extras and options — parent + child lines", () => {
         salsaLabelId: salsaList.labels.find((label) => label.name === "Alioli")!.id,
       };
     });
-    return { cfg, ...seeded };
+    const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
+      counter: await offerProducts(tx, cfg),
+      tables: await offerProducts(tx, cfg, { zone: "tables" }),
+    }));
+    return {
+      cfg,
+      ...seeded,
+      zoneId: counter.zoneId,
+      tablesZoneId: tables.zoneId,
+      offerFor: counter.offerFor,
+    };
   }
 
   /** One answer to the burger's "Extras" list, in the wire shape every order path takes. */
@@ -1084,9 +1087,10 @@ describe("ordering extras and options — parent + child lines", () => {
     const workingOrderId = randomUUID();
 
     const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
       lines: [
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "1",
           extras: extrasPick(v, [
             { productId: v.baconId, quantity: 1 },
@@ -1159,10 +1163,11 @@ describe("ordering extras and options — parent + child lines", () => {
     const workingOrderId = randomUUID();
 
     const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
       // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × pick(3) = 6.
       lines: [
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "2",
           extras: extrasPick(v, [{ productId: v.baconId, quantity: 3 }]),
         },
@@ -1310,13 +1315,19 @@ describe("ordering extras and options — parent + child lines", () => {
         v.cfg.locale,
       );
       await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
-      return { dishId: dish.id, listId: list.id, variantId: variant!.id };
+      const offers = await offerProducts(tx, v.cfg);
+      return {
+        dishOfferId: offers.offerFor(dish.id),
+        listId: list.id,
+        variantId: variant!.id,
+      };
     });
 
     const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
       lines: [
         {
-          productId: seeded.dishId,
+          menuItemId: seeded.dishOfferId,
           quantity: "1",
           extras: [
             { listId: seeded.listId, picks: [{ productId: seeded.variantId, quantity: 1 }] },
@@ -1369,9 +1380,10 @@ describe("ordering extras and options — parent + child lines", () => {
     const workingOrderId = randomUUID();
 
     await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
       lines: [
         {
-          productId: v.menuProductId,
+          menuItemId: v.offerFor(v.menuProductId),
           quantity: "1",
           options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
         },
@@ -1400,12 +1412,13 @@ describe("ordering extras and options — parent + child lines", () => {
         workingOrderId,
         [
           {
-            productId: v.menuProductId,
+            menuItemId: v.offerFor(v.menuProductId),
             quantity: "1",
             options: [{ listId: v.sizeListId, labelId: v.sizeLabelGrandeId }],
           },
         ],
         null,
+        { zoneId: v.zoneId },
       );
     });
 
@@ -1428,9 +1441,10 @@ describe("ordering extras and options — parent + child lines", () => {
     const workingOrderId = randomUUID();
 
     await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      zoneId: v.zoneId,
       lines: [
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "2",
           extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
         },
@@ -1491,7 +1505,7 @@ describe("ordering extras and options — parent + child lines", () => {
         workingOrderId,
         [
           {
-            productId: v.burgerId,
+            menuItemId: v.offerFor(v.burgerId),
             quantity: "1",
             extras: extrasPick(v, [
               { productId: v.baconId, quantity: 1 },
@@ -1500,6 +1514,7 @@ describe("ordering extras and options — parent + child lines", () => {
           },
         ],
         null,
+        { zoneId: v.zoneId },
       );
       return priced;
     });
@@ -1566,9 +1581,13 @@ describe("ordering extras and options — parent + child lines", () => {
 
     const tableId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(diningTables)
-        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa 1", active: true });
+      await tx.insert(diningTables).values({
+        id: tableId,
+        locationId: v.cfg.locationId,
+        zoneId: v.tablesZoneId,
+        label: "Mesa 1",
+        active: true,
+      });
     });
 
     // Open a tab and send a round of the burger with two extras.
@@ -1576,7 +1595,7 @@ describe("ordering extras and options — parent + child lines", () => {
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "1",
           extras: extrasPick(v, [
             { productId: v.baconId, quantity: 1 },
@@ -1624,11 +1643,15 @@ describe("ordering extras and options — parent + child lines", () => {
 
     const tableId = randomUUID();
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(diningTables)
-        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa 1", active: true });
+      await tx.insert(diningTables).values({
+        id: tableId,
+        locationId: v.cfg.locationId,
+        zoneId: v.tablesZoneId,
+        label: "Mesa 1",
+        active: true,
+      });
       const { tabId } = await openTab(tx, v.cfg, { tableId });
-      await addTabRound(tx, v.cfg, tabId, [{ productId: v.burgerId, quantity: "1" }]);
+      await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]);
       return tabId;
     });
 
@@ -1652,9 +1675,13 @@ describe("ordering extras and options — parent + child lines", () => {
 
     const tableId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(diningTables)
-        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa NC", active: true });
+      await tx.insert(diningTables).values({
+        id: tableId,
+        locationId: v.cfg.locationId,
+        zoneId: v.tablesZoneId,
+        label: "Mesa NC",
+        active: true,
+      });
     });
 
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
@@ -1663,12 +1690,12 @@ describe("ordering extras and options — parent + child lines", () => {
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "1",
           extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
         },
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "1",
           extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
         },
@@ -1718,7 +1745,14 @@ describe("ordering extras and options — parent + child lines", () => {
     // (a) a list the dish does not attach → extras.invalid naming the offending field.
     await expect(
       recordTillSale(deps, v.cfg, {
-        lines: [{ productId: v.burgerId, quantity: "1", extras: [{ listId: bogus, picks: [] }] }],
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "1",
+            extras: [{ listId: bogus, picks: [] }],
+          },
+        ],
         tender: { method: "cash", amount: "20.00" },
       }),
     ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "listId" } });
@@ -1726,9 +1760,10 @@ describe("ordering extras and options — parent + child lines", () => {
     // (a2) a pick naming a product the attached list does not offer → extras.invalid.
     await expect(
       recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
         lines: [
           {
-            productId: v.burgerId,
+            menuItemId: v.offerFor(v.burgerId),
             quantity: "1",
             extras: extrasPick(v, [{ productId: bogus, quantity: 1 }]),
           },
@@ -1740,7 +1775,8 @@ describe("ordering extras and options — parent + child lines", () => {
     // (b) an ACTIVE options list (Tamaño) left unanswered → options.label_required.
     await expect(
       recordTillSale(deps, v.cfg, {
-        lines: [{ productId: v.menuProductId, quantity: "1", options: [] }],
+        zoneId: v.zoneId,
+        lines: [{ menuItemId: v.offerFor(v.menuProductId), quantity: "1", options: [] }],
         tender: { method: "cash", amount: "20.00" },
       }),
     ).rejects.toMatchObject({
@@ -1752,9 +1788,10 @@ describe("ordering extras and options — parent + child lines", () => {
     // extras.limit_exceeded.
     await expect(
       recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
         lines: [
           {
-            productId: v.burgerId,
+            menuItemId: v.offerFor(v.burgerId),
             quantity: "1",
             extras: extrasPick(v, [
               { productId: v.baconId, quantity: 3 },
@@ -1773,9 +1810,10 @@ describe("ordering extras and options — parent + child lines", () => {
     // dishQuantity × pickQuantity, so 0.250 kg of ham would bill a quarter of a rasher.
     await expect(
       recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
         lines: [
           {
-            productId: v.jamonId,
+            menuItemId: v.offerFor(v.jamonId),
             quantity: "0.250",
             extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
           },
@@ -1790,9 +1828,10 @@ describe("ordering extras and options — parent + child lines", () => {
     // (d) fewer picks than a list's floor (Guarnición demands two, one sent) → extras.limit_exceeded.
     await expect(
       recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
         lines: [
           {
-            productId: v.platoId,
+            menuItemId: v.offerFor(v.platoId),
             quantity: "1",
             extras: [
               { listId: v.guarnicionListId, picks: [{ productId: v.patatasId, quantity: 1 }] },
@@ -1814,9 +1853,10 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const deps = { db: suite.db, backend, clock };
     const burgerWith = (productId: string) => ({
+      zoneId: v.zoneId,
       lines: [
         {
-          productId: v.burgerId,
+          menuItemId: v.offerFor(v.burgerId),
           quantity: "1",
           extras: extrasPick(v, [{ productId, quantity: 1 }]),
         },
@@ -1847,7 +1887,8 @@ describe("ordering extras and options — parent + child lines", () => {
     // stale menu is refused rather than selling the dish with nothing chosen.
     await expect(
       recordTillSale(deps, v.cfg, {
-        lines: [{ productId: v.comboId, quantity: "1", options: [] }],
+        zoneId: v.zoneId,
+        lines: [{ menuItemId: v.offerFor(v.comboId), quantity: "1", options: [] }],
         tender: { method: "cash", amount: "10.00" },
       }),
     ).rejects.toMatchObject({
@@ -1856,9 +1897,10 @@ describe("ordering extras and options — parent + child lines", () => {
     });
     await expect(
       recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
         lines: [
           {
-            productId: v.comboId,
+            menuItemId: v.offerFor(v.comboId),
             quantity: "1",
             options: [{ listId: v.salsaListId, labelId: v.salsaLabelId }],
           },

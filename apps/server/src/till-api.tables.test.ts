@@ -26,6 +26,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 // These routes are wiring — session guard + isUuid screen + STATUS mapping
@@ -40,6 +41,10 @@ let ana: { id: string };
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the location's `es-ES` locale).
 let productId: string;
+// The product's offer, and the table_tab zone offering it: a tab's table sits in that zone, and its
+// lines name the offer.
+let menuItemId: string;
+let tablesZoneId: string;
 // A real `floor_zones` row in the counter location — a table's `zoneId` is now a FK to
 // `floor_zones`, not a free-text string, so the create/patch table tests point at THIS id. (The zone
 // CRUD verbs have no HTTP route yet — that is a later FP-1 task — so it is seeded directly here.)
@@ -66,8 +71,7 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
-    // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
-    // directly here, as the surrounding venue rows are.
+    // KDS-1: a default kitchen station, the one the product's route sends addTabRound's fire to.
     await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
     const [till] = await db
       .insert(tills)
@@ -107,6 +111,9 @@ const suite = useVenueDb({
       .returning({ id: floorZones.id });
     seededZoneId = zone!.id;
     cfg = makeCfg(till!.id, loc!.id, nodeId);
+    const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+    menuItemId = offers.offerFor(productId);
+    tablesZoneId = offers.zoneId;
   },
 });
 
@@ -363,11 +370,14 @@ describe("table + tab routes", () => {
 
   it("POST /api/tables/:id/tab opens a tab; a second → 409 tab.already_open", async () => {
     const { id } = (await (
-      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "3" }) })
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "3", zoneId: tablesZoneId }),
+      })
     ).json()) as { id: string };
     const open = await request(`/api/tables/${id}/tab`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
     });
     expect(open.status).toBe(200);
     const { tabId } = (await open.json()) as { tabId: string };
@@ -392,18 +402,21 @@ describe("table + tab routes", () => {
 
   it("POST /api/working-orders/:id/round appends; DELETE .../lines/:lineNo voids; GET /api/tables/state reflects it", async () => {
     const { id } = (await (
-      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "5" }) })
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "5", zoneId: tablesZoneId }),
+      })
     ).json()) as { id: string };
     const { tabId } = (await (
       await request(`/api/tables/${id}/tab`, {
         method: "POST",
-        body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
       })
     ).json()) as { tabId: string };
 
     const round = await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
     });
     expect(round.status).toBe(200);
     expect(await round.text()).toBe("");
@@ -422,18 +435,21 @@ describe("table + tab routes", () => {
 
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
     const { id } = (await (
-      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "9" }) })
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "9", zoneId: tablesZoneId }),
+      })
     ).json()) as { id: string };
     const { tabId } = (await (
       await request(`/api/tables/${id}/tab`, {
         method: "POST",
-        body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
       })
     ).json()) as { tabId: string };
     // A second round so there are two lines, then serve line 1 (the two floor states the screen renders).
     await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ productId, quantity: "2" }] }),
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "2" }] }),
     });
     await request(`/api/working-orders/${tabId}/lines/1/served`, { method: "POST" });
 
@@ -502,12 +518,15 @@ describe("table + tab routes", () => {
     // names no line) BEFORE any query. Dropping the `> 2_147_483_647` bound makes this a 500 — the
     // prove-by-deletion this fix is for.
     const { id } = (await (
-      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "88" }) })
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "88", zoneId: tablesZoneId }),
+      })
     ).json()) as { id: string };
     const { tabId } = (await (
       await request(`/api/tables/${id}/tab`, {
         method: "POST",
-        body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
       })
     ).json()) as { tabId: string };
 

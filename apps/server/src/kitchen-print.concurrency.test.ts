@@ -78,6 +78,7 @@ import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { enqueueKitchenTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -183,7 +184,15 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
         vatClass: "general",
       });
       const orderId = randomUUID();
-      await createOpenOrder(tx, cfg, orderId, [{ productId: product, quantity: "1" }], null);
+      const offers = await offerProducts(tx, cfg);
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        offers.toOfferLines([{ productId: product, quantity: "1" }]),
+        null,
+        { zoneId: offers.zoneId },
+      );
       const [line] = await tx
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)

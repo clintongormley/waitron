@@ -88,7 +88,7 @@ async function reads() {
 }
 
 describe("Active and Available", () => {
-  it("an Unavailable product stays Active, leaves both reads the till sells from and stays managed", async () => {
+  it("an Unavailable product stays Active, leaves listMenuOffers and listAvailableProducts and stays managed", async () => {
     await save({ active: true, available: false });
 
     expect(await reads()).toEqual({
@@ -100,7 +100,7 @@ describe("Active and Available", () => {
     });
   });
 
-  it("an Inactive product keeps its availability and leaves both reads the till sells from", async () => {
+  it("an Inactive product keeps its availability and leaves listMenuOffers and listAvailableProducts", async () => {
     await save({ active: false, available: true });
 
     expect(await reads()).toEqual({
