@@ -103,7 +103,11 @@ through Waitron validation, migration and module hooks for Cloud's local two-ven
 proof. The backup fixture supplies normal on-disk identity/TLS state, proves source
 Cloud credentials and staff TLS keys are excluded, and drops old backup destination
 settings on the test replacement. It never starts the restored server. This changes
-test tooling only: the production backup adapter and customer recovery UI remain open.
+the local restore fixture only. The signed capture client now reserves upload authority,
+uploads directly with scoped credentials, and publishes exact snapshot metadata through Cloud.
+It renews the current control lease, rejects unbound replies and keeps upload secrets out
+of connection state. Scheduled capture, durable local archive spooling, production
+deployment and customer recovery UI remain open.
 Cloud's independent Litestream storage proof does not supply the sealed state row,
 stream supervisor or cold-restore activation still owned by SQLite slice 2. Next,
 connect those landed interfaces to Cloud's scoped storage and owner recovery flow;
