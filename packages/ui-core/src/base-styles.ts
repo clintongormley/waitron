@@ -26,8 +26,7 @@ export const baseStyles = css`
 
 /**
  * The disabled-state treatment shared by every primitive that dims its own interactive element
- * on `:disabled`/`[disabled]` — wt-button's `button:disabled` and wt-input's `input:disabled`
- * both apply this verbatim. Interpolate it into the selector body, e.g.
+ * on `:disabled`/`[disabled]`. Interpolate it into the selector body, e.g.
  * `button:disabled { ${disabledStyles} }`, rather than re-spelling the declarations (and the
  * --wt-opacity-disabled token they read) in each component.
  *

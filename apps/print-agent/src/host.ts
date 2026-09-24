@@ -15,7 +15,7 @@ import type { EnvConfig } from "./config.js";
 import { type LinuxDevices, createLinuxDevices } from "./linux-devices.js";
 import type { FileState } from "./state.js";
 
-/** A one-line-per-call sink the structured logger writes to. `console` satisfies it. */
+/** `console` satisfies it. */
 export interface LineSink {
   info(line: string): void;
   warn(line: string): void;
@@ -31,8 +31,6 @@ export interface ContainerHostOptions {
   log?: LineSink;
   /** The loop calls this on every status change; the setup page reads the latest value. */
   onStatus: (status: AgentStatus) => void;
-  /** The device seam — USB/network/Bluetooth discovery, pairing and resolution. Defaults to the real
-   * Linux implementation reading `/sys` and `/dev`; injected in tests so the host stays hermetic. */
   devices?: LinuxDevices;
   /** The IPP paper-size query behind `markPagePrinters`; defaults to the live query. */
   mediaQuery?: MediaQuery;
@@ -40,7 +38,6 @@ export interface ContainerHostOptions {
   now?: () => number;
 }
 
-/** The name a config gets when neither env nor the saved file names one — env pins only the url. */
 const FALLBACK_NAME = "print-agent";
 
 function structuredLog(sink: LineSink): HostLog {
@@ -52,11 +49,6 @@ function structuredLog(sink: LineSink): HostLog {
   return { info: emit("info"), warn: emit("warn"), error: emit("error") };
 }
 
-/**
- * Assembles the {@link Host} the agent loop runs on inside the container (base spec §2.2): config and
- * token from the state directory, the real hardware transports, the global clock/timer/fetch, and a
- * structured logger. The loop never touches any of these directly — only through this seam.
- */
 export function createContainerHost(opts: ContainerHostOptions): Host {
   const transport = new RoutingTransport({
     network_tcp: new NetworkTcpTransport(),
@@ -68,8 +60,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
   return {
     hostname,
     config: async (): Promise<AgentConfig | null> => {
-      // Env wins over the file: a compose-supplied address is never overridden by the setup page.
-      // The saved name and environment still ride along — env pins only the url.
+      // Env pins only the url; the saved name and environment still ride along.
       if (opts.env.serverUrl !== undefined) {
         const saved = await opts.state.readConfig();
         return {
@@ -94,8 +85,6 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
       query: opts.mediaQuery ?? queryMediaSupported,
       now,
     }),
-    // The device seam (design §7) — the real Linux USB/network/Bluetooth implementation, or an
-    // injected fake in tests. Its four methods ARE the host's.
     visibleDevices: devices.visibleDevices,
     scan: devices.scan,
     pair: devices.pair,

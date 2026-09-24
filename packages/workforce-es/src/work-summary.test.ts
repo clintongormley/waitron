@@ -14,10 +14,6 @@ const backend = new WorkforceBackend();
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core (the setup seeds its `tenants`; `convenio_config` references its `locations`), identity
-  // (`persons`, which workforce's tables reference), workforce and workforce-es: the end-to-end path
-  // reads all four. Listed in manifest order; the suite also passes with the list reversed
-  // (measured 2026-09-23).
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
@@ -58,11 +54,7 @@ async function clockDay(
 
 describe("workSummary driven by a resolved convenio_config ruleset", () => {
   it("reproduces today's numbers exactly from a DEFAULT convenio_config row", async () => {
-    // The behaviour-preserving proof (§3, §7): with a default convenio_config row — working_days=5,
-    // overtime_model=daily_accrual — the resolved ruleset drives workSummary to the SAME output the
-    // hard-coded defaults produced. Five 9h days against a 40h week: 2700 worked, 300 overtime, each
-    // day 60 over its 480 target. These are the identical figures clocking.test.ts pins for the
-    // pre-D2 path.
+    // Five 9h days against a 40h week: 2700 worked, 300 overtime, each day 60 over its 480 target.
     const locationId = await seedLocation(suite.db);
     const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     const personId = await seedPerson(suite.db, "es-default");
@@ -100,9 +92,7 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
 
   it("changes only the headline when the convenio's overtime_model is flipped to period_net", async () => {
     // Same worked data, two convenio_config rows differing ONLY in overtime_model. A 9h day then a 7h
-    // day is 60 daily-accrual but 0 period-net against a full-week baseline. The two rulesets must
-    // move ONLY the headline `overtimeMinutes`; both underlying figures are computed regardless and
-    // stay identical between the two calls.
+    // day is 60 daily-accrual but 0 period-net against a full-week baseline.
     const dailyLoc = await seedLocation(suite.db);
     const dailyNode = await seedNode(suite.db, brandLocationId(dailyLoc));
     const periodLoc = await seedLocation(suite.db);
@@ -130,7 +120,6 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
 
     expect(daily.overtimeMinutes).toBe(60);
     expect(period.overtimeMinutes).toBe(0);
-    // Only the headline moved: both underlying figures are identical between the two calls.
     expect(daily.dailyAccrualOvertimeMinutes).toBe(60);
     expect(period.dailyAccrualOvertimeMinutes).toBe(60);
     expect(daily.periodNetOvertimeMinutes).toBe(0);

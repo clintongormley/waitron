@@ -9,7 +9,7 @@ import type { DashboardRequest } from "./request.js";
 /** A dashboard nav-group id; the app validates a contribution's group against its own known ids. */
 export type NavGroupId = string;
 
-/** What a contributed screen is handed at construction — the API request primitive, so far. */
+/** What a contributed screen is handed at construction. */
 export interface DashboardModuleContext {
   request: DashboardRequest;
   liveData?: LiveData;

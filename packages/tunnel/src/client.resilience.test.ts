@@ -10,11 +10,6 @@ import {
   type ScriptRelay,
 } from "./testing/script-relay.js";
 
-// Task 4 drives every backoff/heartbeat delay through the INJECTED `sleep`, so these suites assert
-// durations and tick counts rather than waiting real time out. The one exception is the "keeps a
-// ponging connection alive" test, whose fake sleep yields a few real milliseconds so a loopback
-// ping→pong round trip can complete between injected ticks (see its comment).
-
 let scripted: ScriptRelay | undefined;
 let ac: AbortController | undefined;
 afterEach(async () => {
@@ -50,9 +45,6 @@ describe("runTunnelClient resilience", () => {
   });
 
   it("drops a silent (never-pongs) connection after a missed pong, logs connection_lost, and re-registers", async () => {
-    // The relay acks a registration then goes silent — it never answers a heartbeat ping. The client
-    // sends `ping` on the first tick and, finding no `pong` by the next tick, must destroy the
-    // connection (logging connection_lost) and dial a replacement.
     const codes: string[] = [];
     scripted = await scriptRelay((box) => {
       void onceRegister(box).then(() => box.write(encodeFrame({ t: "ack" })));
@@ -80,12 +72,11 @@ describe("runTunnelClient resilience", () => {
   });
 
   it("keeps a ponging connection alive across heartbeat ticks (consumes pong, never lost)", async () => {
-    // The relay answers every ping with a pong. The heartbeat must therefore never fire connection_lost
-    // and the single connection is never replaced. The fake sleep yields a few real milliseconds so the
-    // loopback ping→pong round trip lands before the next injected tick reads `awaitingPong`.
+    // The fake sleep yields a few real milliseconds so the loopback ping→pong round trip lands
+    // before the next injected tick reads `awaitingPong`.
     const codes: string[] = [];
     scripted = await scriptRelay((box) => {
-      // Widened to `Buffer` so it accepts decodeFrame's `rest` (a `subarray` view), as in client.ts.
+      // Widened to `Buffer` so it accepts decodeFrame's `rest` (a `subarray` view).
       let buf: Buffer = Buffer.alloc(0);
       box.on("data", (d: Buffer) => {
         buf = Buffer.concat([buf, d]);
@@ -149,9 +140,8 @@ describe("runTunnelClient resilience", () => {
     await wait(50); // let the pool of three register
     expect(boxSockets.length).toBe(3);
     ac.abort();
-    // Resolves promptly — it must not wait out a heartbeat interval. A hang fails the test by timeout.
+    // Must not wait out a heartbeat interval; a hang fails the test by timeout.
     await done;
-    // Every relay-side box socket saw its client end torn down.
     await Promise.all(
       boxSockets.map((b) =>
         b.destroyed ? Promise.resolve() : new Promise<void>((r) => b.once("close", () => r())),

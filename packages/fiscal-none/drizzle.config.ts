@@ -7,7 +7,8 @@ export default defineConfig({
   // scripts/migrations-match-schema.test.ts checks.
   out: "./drizzle",
   schema: "./src/index.ts",
-  // Its own journal table, so the no-regime lane stays migration-isolated from every other sequence:
-  // journals never collide, so the lanes run in parallel with no shared bookkeeping.
+  // Its own journal table: drizzle runs only migrations newer than the table's latest
+  // `created_at`, so on a shared table this set's migrations older than another set's newest
+  // would never run.
   migrations: { table: "__drizzle_migrations_fiscal_none" },
 });

@@ -10,8 +10,7 @@ import {
 import { INGREDIENT_COLUMNS } from "./columns.js";
 import { productsUsingIngredient, recomputeProductDerivations } from "./recipes.js";
 
-/** Ingredient writes share the caller's transaction. Deactivation preserves recipe references.
- * All SQL is built with Drizzle query builders — no string concatenation. */
+/** Ingredient writes share the caller's transaction. Deactivation preserves recipe references. */
 
 export interface Ingredient {
   id: string;
@@ -44,12 +43,7 @@ export async function createIngredient(
   tx: Transaction,
   input: CreateIngredientInput,
 ): Promise<Ingredient> {
-  // Validate before the write: an unreviewed ingredient stores null, a supplied map is checked
-  // against the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
-  // before any row is inserted.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
-  // A supplied origin is validated against `DIETARY_ORIGINS` (throws `diet.invalid_origin`); omitted
-  // and `null` both store null (uncategorised), which makes dependent products publish diet-PENDING.
   const dietaryOrigin = input.dietaryOrigin == null ? null : validateOrigin(input.dietaryOrigin);
   const [row] = await tx
     .insert(ingredients)
@@ -75,33 +69,18 @@ export async function updateIngredient(
   id: string,
   patch: UpdateIngredientInput,
 ): Promise<void> {
-  // A supplied allergen map / origin is validated before the write; `null` (clear) and `undefined`
-  // (leave unchanged) both skip validation. `validateOrigin` throws `diet.invalid_origin` on a value
-  // outside `DIETARY_ORIGINS`; `null` is a legal uncategorise. The patch keys map 1:1 to `ingredients`
-  // columns, so the spread stays fully typed against `.set()`.
+  // The patch keys map 1:1 to `ingredients` columns, so the spread stays fully typed against `.set()`.
   if (patch.allergens != null) validateAllergens(patch.allergens);
   if (patch.dietaryOrigin != null) validateOrigin(patch.dietaryOrigin);
   await tx
     .update(ingredients)
     .set({ ...patch, updatedAt: now() })
     .where(eq(ingredients.id, id));
-  // Propagate only when a derivation input actually moved: a rename or an `active` toggle leaves both
-  // the ingredient's allergens AND its dietary origin unchanged, so re-deriving dependent products
-  // would recompute the identical floor (the folds read `allergens`/`dietary_origin`, never
-  // `name`/`active`) — idempotent, and pure wasted queries. Mirrors updateProduct's "republish only
-  // when the relevant field was in the patch" guard.
-  //
-  // The gate fires when EITHER the allergen declaration OR the dietary origin was in the patch, and
-  // both roll-ups run from the SAME recipe read (`recomputeProductDerivations`) so they never drift
-  // apart. An origin-only edit (no `allergens` key) must still re-derive the diet, or a product's diet
-  // goes stale — the gap the earlier allergen-only guard left, closed here (see recipes.test.ts's
-  // origin-only fan-out test, proven by deletion). Recomputing both on either change is a cheap,
-  // always-correct idempotency.
+  // Propagate only when a derivation input moved: the folds read `allergens`/`dietary_origin`, never
+  // `name`/`active`, so a rename or an `active` toggle would recompute the identical floor.
   //
   // Fans out O(N) over the products sharing this ingredient — each recompute is its own SELECT-join
-  // plus a republish round-trip. A set-based batched rewrite (one join query → a JS fold → one batched
-  // `UPDATE … FROM (VALUES …)`) is a deferred, scale-gated optimization, matching the repo's #76/#87
-  // scale-gated-deferral precedent; not worth the complexity at deli scale today.
+  // plus a republish round-trip. A set-based batched rewrite is a deferred, scale-gated optimization.
   if (patch.allergens !== undefined || patch.dietaryOrigin !== undefined) {
     for (const productId of await productsUsingIngredient(tx, id)) {
       await recomputeProductDerivations(tx, productId);

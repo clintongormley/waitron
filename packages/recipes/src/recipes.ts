@@ -15,7 +15,6 @@ import type { Ingredient } from "./ingredients.js";
 
 /**
  * Recipe changes and their derived allergen and diet values share the caller's transaction.
- * All SQL is built with Drizzle query builders — no string concatenation.
  *
  * `Ingredient` is an `import type`, erased at runtime: ingredients imports this module's
  * propagation helpers, so a value import back would create a cycle. Shared column selections
@@ -36,11 +35,8 @@ export async function getProductRecipe(tx: Transaction, productId: string): Prom
 }
 
 /** Recompute BOTH a product's derived allergen floor and its derived DIET floor from its recipe, and
- * republish each, from a SINGLE recipe read. The allergen and diet folds are independent but read the
- * same `recipe_lines ⋈ ingredients` rows, so running one join and folding both accumulators in one
- * pass gives byte-for-byte the same two derivations the separate reads did — with one round-trip
- * instead of two. It is always safe to recompute both together: every caller that changes a recipe or
- * a derivation input (`setProductRecipe`, the ingredient fan-out) needs both refreshed.
+ * republish each, from a SINGLE recipe read. Every caller that changes a recipe or a derivation input
+ * (`setProductRecipe`, the ingredient fan-out) needs both refreshed.
  *
  * Allergens: no recipe lines → clears the derivation (null → falls back to the manual overlay); any
  * unreviewed (allergens = null) ingredient → allergen pending = true (publishes PENDING).
@@ -48,7 +44,7 @@ export async function getProductRecipe(tx: Transaction, productId: string): Prom
  * (dietary_origin = null) ingredient sets diet pending, so the product publishes diet-PENDING
  * (vegan/vegetarian read "unknown") rather than a false "vegan"; no recipe lines → clears the
  * derivation (null → the published profile reverts to the override overlaid on the empty profile).
- * The two `pending` flags are computed independently, exactly as the two separate reads did. */
+ * The two `pending` flags are computed independently. */
 export async function recomputeProductDerivations(
   tx: Transaction,
   productId: string,
@@ -60,7 +56,6 @@ export async function recomputeProductDerivations(
     .where(eq(recipeLines.productId, productId));
 
   if (rows.length === 0) {
-    // Empty recipe: clear BOTH derivations to null, exactly as each separate recompute did.
     await applyRecipeDerivation(tx, productId, null);
     await applyDietDerivation(tx, productId, null);
     return;
@@ -105,8 +100,7 @@ export async function setProductRecipe(
   await recomputeProductDerivations(tx, productId);
 }
 
-/** Every product whose recipe includes the given ingredient — used to propagate an ingredient's
- * allergen change. */
+/** Every product whose recipe includes the given ingredient. */
 export async function productsUsingIngredient(
   tx: Transaction,
   ingredientId: string,

@@ -330,9 +330,7 @@ describe("createAgent — on-node self-enrol", () => {
   });
 
   it("self-enrol runs even when the configured server reports no accepting primary", async () => {
-    // Proves the placement: the block sits BEFORE the router probe and its `anyAccepting` gate (spec
-    // §2). A self-enrol that only ran after that gate would be coupled to config.serverUrl being an
-    // accepting primary — so here the probe reports none AND is never reached, yet the token is stored.
+    // The probe reports no accepting primary AND is never reached, yet the token is stored.
     const host = fakeHost({ config: CONFIG });
     const c = client({
       probeNode: vi.fn(async () =>
@@ -778,13 +776,11 @@ describe("createAgent — inventory, discovery and resolve", () => {
   });
 
   it("a throwing discovery scan never blocks the job pull (isolated failure)", async () => {
-    // The real box has no Bluetooth adapter, so scan(["bluetooth"]) throws `spawn bluetoothctl ENOENT`.
-    // A scan failure inside an open window must be isolated: the tick still pulls jobs every time.
+    // A box with no Bluetooth adapter throws `spawn bluetoothctl ENOENT` from scan(["bluetooth"]).
     const scan = vi.fn(async () => {
       throw new Error("spawn bluetoothctl ENOENT");
     });
     const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
-    // Every reply keeps the discovery window open (far-future instant), so ticks 2 and 3 both scan.
     const pulls = vi.fn(async () =>
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
     );

@@ -33,7 +33,6 @@ const supportedJurisdictions = COUNTRY_PACKS.flatMap((pack) =>
 
 export const FISCAL_TERRITORIES: readonly string[] = supportedJurisdictions.map(({ id }) => id);
 
-/** `filing` selects the filing adapter; `tax` selects tax rules. `none` is an unimplemented slot. */
 export function findFiscalModules(territory: string): FiscalModules | undefined {
   return supportedJurisdictions.find(({ id }) => id === territory)?.modules;
 }

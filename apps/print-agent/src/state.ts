@@ -3,12 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentConfig } from "@waitron/print-agent";
 
-/**
- * The container host's on-disk state (base spec §2.2): the setup page's saved `config.json` and the
- * join token. The state directory is a named volume, so both survive a container restart. The token
- * carries a bearer secret, so it is written 0600 and atomically (temp file + rename) — a reader never
- * sees a half-written token, and it is never world-readable.
- */
+/** The token is a bearer secret, so it is written 0600 and atomically. */
 export class FileState {
   private readonly configPath: string;
   private readonly tokenPath: string;
@@ -25,8 +20,7 @@ export class FileState {
     } catch {
       return null;
     }
-    // A corrupt or partial config reads as null so the setup page simply asks again, rather than
-    // crashing the agent on a file the operator can fix from the page.
+    // A corrupt config reads as null, so the setup page asks again rather than the agent crashing.
     try {
       const parsed: unknown = JSON.parse(raw);
       if (
@@ -67,7 +61,6 @@ export class FileState {
     }
   }
 
-  /** Persists the bearer token, or clears it when `null`. Clearing an absent token is a no-op. */
   async writeToken(token: string | null): Promise<void> {
     if (token === null) {
       await rm(this.tokenPath, { force: true });
@@ -78,9 +71,8 @@ export class FileState {
 
   private async atomicWrite(path: string, data: string, mode: number): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    // A per-write temp name (pid + random), so two concurrent writers — the loop persisting the pinned
-    // environment or the pending number while the setup handler saves the address — never share one
-    // temp file and race on the rename (19 of 20 concurrent saves failed ENOENT with a single `.tmp`).
+    // A per-write temp name, so concurrent writers (the loop and the setup page) never race on one
+    // temp file's rename.
     const tmp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
     await writeFile(tmp, data, { mode });
     await rename(tmp, path);

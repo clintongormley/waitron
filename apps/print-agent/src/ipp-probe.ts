@@ -121,11 +121,9 @@ export interface PagePrinterMarkerOptions {
  * office printer. Every other device is returned unchanged, never marked `false`, so a failed or
  * unanswered check leaves a receipt printer selectable. Each host is asked at most once per call, at
  * most {@link QUERY_CONCURRENCY} at a time. An answer — including a failure — is reused for
- * {@link CACHE_LIFETIME_MS}, or until the clock moves back past it, so a printer the agent reports on every 2-second pull is not asked on
- * every pull. IPv6 literals are skipped: the request URI would need brackets and zone ids. A host may
- * also be a name — the mDNS decoder (`network.ts`) falls back to the SRV target's `.local` name when
- * the answer carries no A record — and a name lookup slower than the query deadline leaves that device
- * unmarked.
+ * {@link CACHE_LIFETIME_MS}, or until the clock moves back past it. IPv6 literals are skipped: the
+ * request URI would need brackets and zone ids. A host may also be a name, and a name lookup slower
+ * than the query deadline leaves that device unmarked.
  */
 export function createPagePrinterMarker(
   opts: PagePrinterMarkerOptions,

@@ -8,8 +8,7 @@ import type { CSSResult } from "lit";
 // docs/developers/design-system.md).
 // The negative pattern is required, not cosmetic: eagerly importing a *.test.ts file here would
 // execute its top-level `test(...)` calls as a side effect of the import, registering them into
-// THIS file's run (confirmed empirically — omitting the exclusion inflated this file from 12
-// tests to 60, silently absorbing every other component test file's suite).
+// THIS file's run.
 const modules = import.meta.glob(["./components/*.ts", "!./components/*.test.ts"], {
   eager: true,
 }) as Record<string, Record<string, unknown>>;
@@ -78,11 +77,9 @@ for (const [name, ctor] of Object.entries(components)) {
     // rem/em outright regardless of magnitude, so even 0.5rem must resolve through a token —
     // and min()/max()/clamp() must always resolve through a token too (e.g.
     // min(90vw, var(--wt-dialog-max-width))), not spell out a literal rem/em value inline.
-    // The number pattern (`-?\d*\.?\d+`) catches decimals (2.5px, 1.25px — bare `\d+` missed
-    // these) and signed values: the lookbehind `(?<![\w-])` that keeps this from matching inside
-    // an identifier previously sat *between* the sign and the digits, which meant it silently
-    // blocked matching negative numbers too (`-2px`'s "-" is itself excluded by `[\w-]`) — moving
-    // the optional sign inside the guarded token fixes both gaps at once.
+    // The number pattern (`-?\d*\.?\d+`) catches decimals (2.5px, 1.25px) and signed values: the
+    // lookbehind `(?<![\w-])` keeps it from matching inside an identifier, and sits before the
+    // optional sign because `-2px`'s "-" is itself excluded by `[\w-]`.
     const css = cssOf(ctor.styles);
     const pxOffenders = numbersWithUnit(css, "px").filter((n) => Math.abs(n) > 1);
     const remEmOffenders = numbersWithUnit(css, String.raw`(?:rem|em)\b`);

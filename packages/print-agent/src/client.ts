@@ -1,9 +1,4 @@
-/**
- * The wire client (design §3) — every call the agent makes to a Waitron server, each folded into a
- * {@link Result} so no network condition reaches the caller as a throw. `probeNode` asks a server "are
- * you the node accepting sales right now?" for the router's poll; `join`/`joinStatus` run the
- * join-and-accept handshake; `pullJobs`/`report` are the runtime's claim/settle loop.
- */
+// Every call is folded into a Result, so no network condition reaches the caller as a throw.
 
 import type { DiscoveredDevice, NetworkProbe, VisibleDevice } from "./host.js";
 import type { PrintTransport } from "./transport.js";
@@ -15,7 +10,6 @@ export interface AgentInventory {
   scanned: DiscoveredDevice[];
 }
 
-/** The `/api/node` response, decoded into the shape the router compares across servers. */
 export interface NodeProbe {
   nodeId: string;
   term: number | null;
@@ -23,16 +17,12 @@ export interface NodeProbe {
   environment: string;
 }
 
-/** One server the venue's router knows about. `nodeId` is filled in once a probe has confirmed it;
- * a freshly-added entry carries only the `url` the operator typed. */
+/** `nodeId` is filled in once a probe has confirmed it. */
 export interface ServerEntry {
   url: string;
   nodeId?: string;
 }
 
-/** Every network condition a wire call can produce, as a value — never a throw, so a box that is off
- * can never crash the router's poll loop or the runtime. The fold lives in one place
- * ({@link foldFetch}) so a new status maps in one function. */
 export type Failure =
   | { kind: "unreachable"; detail: string }
   | { kind: "unauthorized" }
@@ -43,33 +33,25 @@ export type Failure =
 
 export type Result<T> = { ok: true; value: T } | { ok: false; failure: Failure };
 
-/** The three states a pending join can be in, as the server reports them. */
 export type JoinStatus = "pending" | "approved" | "not_approved";
 
-/** What `join` returns: the bearer token the agent stores, and the number the operator reads back to
- * confirm this is the device they mean to approve. */
+/** `verificationNumber` is what the operator reads back to confirm which device they approve. */
 export interface JoinReply {
   token: string;
   verificationNumber: string;
 }
 
-/** One job the pull hands back, decoded off the wire — `payload` is the raw ESC/POS bytes (base64 on
- * the wire, `Uint8Array` here). The connection fields mirror the printer's transport columns. */
 export interface WireJob {
   id: string;
   printerId: string;
   transport: PrintTransport;
   host: string | null;
   port: number | null;
-  /** The printer's stable local handle (USB serial, Bluetooth MAC) — the agent's host resolves it to
-   * a device path before sending. `null` for a network printer. */
+  /** USB serial or Bluetooth MAC; the host resolves it to a device path. */
   localKey: string | null;
   payload: Uint8Array;
 }
 
-/** The pull response: the serving node's id, the servers the venue holds (so the router can refresh
- * its set), the claimed jobs, and — when the server has a discovery window open — the epoch-ms
- * instant (`discoveryUntil`) until which the agent should actively scan on each pull. */
 export interface PullReply {
   nodeId: string;
   servers: ServerEntry[];
@@ -78,32 +60,24 @@ export interface PullReply {
   networkProbes?: NetworkProbe[];
 }
 
-/** The result the runtime reports back per job — `done`, or `failed` with the error text. */
 export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
 
 export interface AgentClient {
   probeNode(url: string): Promise<Result<NodeProbe>>;
   join(url: string, name: string): Promise<Result<JoinReply>>;
-  /** Silently enrol on THIS box's own loopback (design §3, on-node auto-enrolment). Unlike {@link join}
-   * this never reaches a pairing window: a 201 hands back a ready token, and any other status folds to
-   * one `refused` — the box will not self-enrol us — while a transport failure is `unreachable`. */
+  /** Enrol on THIS box's own loopback, never through a pairing window: any status but 201 is
+   * `refused`. */
   enrolSelf(url: string, name: string): Promise<Result<{ token: string }>>;
   joinStatus(url: string, token: string): Promise<Result<JoinStatus>>;
   pullJobs(url: string, token: string, inventory: AgentInventory): Promise<Result<PullReply>>;
   report(url: string, token: string, jobId: string, outcome: JobOutcome): Promise<Result<void>>;
 }
 
-/** The per-request deadline (ms) for {@link createClient}'s calls. A LAN round trip to a live server
- * is well under a second; a few seconds is generous headroom while still bounding a dead box's probe
- * so the router's poll loop is never held open. */
+/** Bounds a dead box's probe so the router's poll loop is never held open. */
 export const DEFAULT_TIMEOUT_MS = 3_000;
 
-/**
- * A rejection value rendered as a string, without ever throwing. A rejection is not guaranteed to be
- * an `Error`, nor even stringifiable: `String(value)` invokes `toString`, which an object is free to
- * implement badly. That throw would leave the catch block and escape this module's one contract —
- * that no network condition reaches the caller as an exception — so it is contained here.
- */
+/** `String(value)` invokes a `toString` an object is free to implement badly, and that throw must not
+ * escape this module. */
 function describeRejection(error: unknown): string {
   if (error instanceof Error) return error.message;
   try {
@@ -123,10 +97,7 @@ function isNodeProbe(value: unknown): value is Omit<NodeProbe, "term"> & { term?
   );
 }
 
-/** Runs one `fetch`, folding every outcome — a thrown rejection, an abort, and every HTTP status —
- * into a {@link Result}. `init` carries the method/headers/body (GET with no body by default);
- * `parseOk` decodes a 2xx body into `T`, returning `undefined` for a body that fails validation
- * (folded here to `bad_reply`) so callers never see a thrown parse error either. */
+/** `parseOk` returns `undefined` for a body that fails validation, which folds to `bad_reply`. */
 async function foldFetch<T>(
   fetchImpl: typeof fetch,
   url: string,
@@ -161,8 +132,6 @@ async function foldFetch<T>(
     }
     return { ok: true, value };
   } catch (error) {
-    // A thrown fetch (connection refused, DNS failure, …) and an aborted deadline land here
-    // identically — both mean the server could not be reached in time.
     return { ok: false, failure: { kind: "unreachable", detail: describeRejection(error) } };
   } finally {
     clearTimeout(timer);
@@ -185,8 +154,6 @@ async function parseNodeProbe(response: Response): Promise<NodeProbe | undefined
   };
 }
 
-/** Reads a JSON body into a plain object, or `undefined` for a non-JSON body or a non-object JSON
- * value (`typeof null === "object"`, so the null check guards a property read on it). */
 async function readJson(response: Response): Promise<Record<string, unknown> | undefined> {
   let body: unknown;
   try {
@@ -197,8 +164,7 @@ async function readJson(response: Response): Promise<Record<string, unknown> | u
   return typeof body === "object" && body !== null ? (body as Record<string, unknown>) : undefined;
 }
 
-/** A `parseOk` for a bodyless success (204). Returns a non-`undefined` sentinel so `foldFetch`'s
- * `undefined`-means-bad_reply check passes; `report` maps it back to `undefined`. */
+/** A non-`undefined` sentinel, because `undefined` means bad_reply to `foldFetch`. */
 function parseVoid(): Promise<true> {
   return Promise.resolve(true);
 }
@@ -275,8 +241,6 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
   };
 }
 
-/** Builds an {@link AgentClient}. `fetch` is injected (never the global) so tests run without a
- * network; `timeoutMs` bounds every request (default {@link DEFAULT_TIMEOUT_MS}). */
 export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }): AgentClient {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return {
@@ -307,11 +271,8 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
       );
     },
     async enrolSelf(url, name) {
-      // NOT foldFetch: that helper maps the status to a failure kind BEFORE the body (403 →
-      // pairing_closed, 409 → bad_reply, 429 → rate_limited), so it can never emit `refused` and would
-      // mislabel a self-enrol refusal as a pairing event. A self-enrol is a local POST to this box's own
-      // loopback, so every non-2xx means one thing — the box will not self-enrol us — and folds to one
-      // `refused`; a transport throw/abort/timeout is `unreachable` (nothing answered on the device).
+      // NOT foldFetch, which would mislabel a self-enrol refusal as a pairing event: here every
+      // non-201 means one thing — the box will not self-enrol us.
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -323,8 +284,6 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
         });
         if (response.status !== 201) return { ok: false, failure: { kind: "refused" } };
         const b = await readJson(response);
-        // A 201 without a usable token is our own server breaking its contract; we still have no token,
-        // so it is not an enrolment — fold it to `refused` rather than inventing a bad_reply surface.
         if (b === undefined || typeof b.token !== "string") {
           return { ok: false, failure: { kind: "refused" } };
         }

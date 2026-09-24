@@ -1,4 +1,3 @@
-/** A node's serving standing in the venue (design §3). */
 export type NodeStanding = "serving-primary" | "serving-secondary" | "sell-only" | "evicted";
 
 export interface MembershipNode {
@@ -7,15 +6,13 @@ export interface MembershipNode {
   readonly standing: NodeStanding;
 }
 
-/** The signed payload. `term` is the monotonic membership generation (design §3). */
+/** The signed payload. `term` is the monotonic membership generation. */
 export interface MembershipDocumentBody {
-  // A JS `number` here — safe, as a per-edit counter never approaches 2^53. The Slice-2 storage
-  // boundary uses `bigint`; reconcile the two there.
   readonly term: number;
   readonly nodes: readonly MembershipNode[];
 }
 
-/** A member key vouched for by an already-trusted node, chaining back to setup (design §4). */
+/** A member key vouched for by an already-trusted node, chaining back to setup. */
 export interface Endorsement {
   readonly nodeId: string;
   readonly publicKey: string; // base64 SPKI DER of the endorsed node's identity key

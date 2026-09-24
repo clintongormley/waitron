@@ -1,13 +1,8 @@
 import type { DiscoveredDevice } from "@waitron/print-agent";
 
 /**
- * The mDNS service under which printers announce a raw-9100 (ESC/POS) queue — `_pdl-datastream._tcp`.
- * The packets here are synthesised
- * from the design's §7 shape; that a real printer announces exactly this is to be confirmed by the
- * Step 6d real-LAN receipt (the controller runs it), not yet verified. `parsePdlResponse` decodes one
- * response packet into the printers it advertises. The live multicast socket is a separate, gated seam
- * (`liveMdnsScan` in linux-devices.ts); this parser is pure and fully tested, because a wrong decode is
- * the failure that reaches a real print.
+ * The mDNS service under which printers announce a raw-9100 (ESC/POS) queue. The test packets are
+ * synthesised, not captured from a real printer.
  */
 export const PDL_SERVICE = "_pdl-datastream._tcp.local";
 
@@ -21,10 +16,8 @@ interface Reader {
   offset: number;
 }
 
-/** Reads a DNS name, following compression pointers (0xC0) to earlier offsets. Bounds- and loop-guarded:
- * a pointer past the buffer or a longer-than-the-packet chain throws, caught by {@link parsePdlResponse}
- * so a malformed packet yields no devices rather than a crash. Advances `r.offset` past the name in the
- * record stream (a pointer ends the name; the offset stops just after the two pointer bytes). */
+/** A pointer past the buffer or a pointer loop throws, which {@link parsePdlResponse} catches. A
+ * pointer ends the name, so `r.offset` stops just after the two pointer bytes. */
 function readName(r: Reader): string {
   const labels: string[] = [];
   let offset = r.offset;
@@ -153,8 +146,7 @@ export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
         transport: "network_tcp",
         host,
         port: srv.port,
-        // The instance label the printer chose (the first label of its SRV owner), which the operator
-        // recognises on the dashboard's discovered list.
+        // The instance label the printer chose, which the operator recognises.
         name: srv.name.split(".")[0] ?? srv.name,
         ...(make !== undefined ? { make } : {}),
         ...(model !== undefined ? { model } : {}),
@@ -162,7 +154,6 @@ export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
     }
     return devices;
   } catch {
-    // A truncated or malformed packet (a stray multicast frame) yields no devices, never a throw.
     return [];
   }
 }

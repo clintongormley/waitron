@@ -132,8 +132,7 @@ describe("parsePdlResponse", () => {
   });
 
   it("returns no devices when a record overruns the buffer (malformed mid-parse)", () => {
-    // Header claims one answer, but the buffer ends immediately — reading the record overruns and the
-    // parser folds it to an empty result rather than throwing.
+    // Header claims one answer, but the buffer ends immediately.
     const header = Buffer.alloc(12);
     header.writeUInt16BE(0x8400, 2);
     header.writeUInt16BE(1, 6); // ancount = 1, no record follows

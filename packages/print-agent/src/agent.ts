@@ -8,7 +8,7 @@ import {
 import type { AgentConfig, AgentStatus, DiscoveredDevice, Host, NetworkProbe } from "./host.js";
 import { Router } from "./router.js";
 
-/** The idle poll interval (base spec §4 step 6). A non-empty batch re-polls at once; only an empty pull sleeps. */
+/** A non-empty batch re-polls at once; only an empty pull sleeps. */
 export const POLL_INTERVAL_MS = 2_000;
 
 export interface AgentOptions {
@@ -29,15 +29,11 @@ function describe(failure: Failure): string {
 }
 
 /**
- * The loop (base spec §4, as amended by device-join §7). `runOnce` is one tick and NEVER throws —
- * every failure becomes a status the host renders. Enrolment is join-and-accept: a knocking agent
- * JOINS (creating a shared join-request), then POLLS its status until an admin accepts, and only THEN
- * pulls. It never pulls with an unapproved token (that reads as `unauthorized` and would halt it).
- *
- * Cross-tick state: the router (server list + current), `approved` (set once the status poll first
- * says so, so later ticks skip the poll and pull straight away — a restart re-confirms it in one
- * poll), and `halted` (set on `not_approved`/`unauthorized` — the token is dead and re-joining on our
- * own would put a denied agent straight back into the admin's list, so only a restart asks again).
+ * `runOnce` turns whatever a tick throws into a status the host renders; a throw from that
+ * handling itself (the host's logger or `status` callback, or a thrown value that cannot be turned
+ * into a string) still escapes. An agent never pulls with an unapproved token (that reads as
+ * `unauthorized` and would halt it). Once `halted`, re-joining on our own would put a denied agent
+ * straight back into the admin's list, so only a restart asks again.
  */
 export function createAgent(opts: AgentOptions): Agent {
   const host = opts.host;
@@ -47,9 +43,7 @@ export function createAgent(opts: AgentOptions): Agent {
   let approved = false;
   let halted = false;
   let running = false;
-  // Cross-tick: the epoch-ms instant the server's last reply said discovery is open until. The NEXT
-  // tick actively scans (and posts the results) only while `host.now()` is still under it; 0 means no
-  // window, so an initial tick and a closed window both skip the scan.
+  // 0 means no discovery window.
   let discoveryUntil = 0;
   let networkProbes: { target: NetworkProbe; expiresAt: number }[] = [];
   let probeServer: string | undefined;
@@ -85,7 +79,6 @@ export function createAgent(opts: AgentOptions): Agent {
     halted = true;
     approved = false;
     await host.saveToken(null);
-    // The join request is dead; drop the persisted verification number so a restart shows no stale code.
     if (config.pendingVerificationNumber !== undefined) {
       await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
     }
@@ -97,16 +90,11 @@ export function createAgent(opts: AgentOptions): Agent {
     });
   }
 
-  /** Sends one job and reports its outcome. Returns true if the send FAILED (not the report delivery),
-   * so the caller knows whether this tick was clean. `lastError` is set on a failed send and left
-   * alone on a successful one — a same-batch failure stays visible; the end-of-tick running report is
-   * the only place that clears it, and only for a fully clean tick. */
+  /** True if the SEND failed (not the report delivery). */
   async function push(job: WireJob, token: string, current: string): Promise<boolean> {
     let outcome: JobOutcome;
     let failed = false;
     try {
-      // Resolve the job's connection facts to a concrete target on THIS box (a localKey → device
-      // path) before sending. A device that is gone throws here and lands in the catch → `failed`.
       const target = await host.resolve(job);
       await host.transport.send(target, job.payload);
       outcome = { status: "done" };
@@ -127,8 +115,8 @@ export function createAgent(opts: AgentOptions): Agent {
 
   /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
   async function tick(): Promise<boolean> {
-    // Tracked across the tick's own `saveConfig` calls so a later merge (the pinned environment, the
-    // pending number) never clobbers an earlier one — the loop, not the host, holds the live config.
+    // The loop, not the host, holds the live config, so a later merge never clobbers an earlier
+    // one.
     let config = await host.config();
     if (config === null) {
       report({ phase: "unconfigured", serverUrl: null, current: null });
@@ -139,21 +127,16 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
 
-    // Before probing the configured server, ask our OWN box to enrol us (design §1.1/§2). This sits
-    // BEFORE the probe and its `anyAccepting` gate ON PURPOSE: a print agent on the primary box is
-    // inside the node's trust boundary and must enrol even when its configured server is momentarily
-    // not an accepting primary (spec §2) — placing it after that gate would couple self-enrol to the
-    // configured server being up. A LITERAL loopback origin, NOT config.serverUrl (which on a till is
-    // the primary's LAN address), with the configured port/protocol kept. On the primary box this
-    // succeeds; on a device nothing answers its own loopback (`unreachable`) and on a mirror the local
-    // server refuses (`refused`) — both fall through unchanged to the probe + knock below.
+    // Self-enrol sits BEFORE the `anyAccepting` gate ON PURPOSE: an agent on the primary box must
+    // enrol even when its configured server is momentarily not an accepting primary. A LITERAL
+    // loopback origin, not config.serverUrl; anywhere but the primary box it falls through below.
     if ((await host.token()) === null) {
       const loopback = new URL(config.serverUrl);
       loopback.hostname = "127.0.0.1";
       const self = await client.enrolSelf(loopback.origin, config.name);
       if (self.ok) {
         await host.saveToken(self.value.token);
-        approved = true; // skip the join-status poll next tick; go straight to work
+        approved = true;
         report({ phase: "running", serverUrl: config.serverUrl, current: loopback.origin });
         return false;
       }
@@ -167,9 +150,7 @@ export function createAgent(opts: AgentOptions): Agent {
     }
     const current = r.current;
 
-    // The round found no accepting primary in the agent's own environment — a server answering a
-    // DIFFERENT environment is `standby`, not `primary`, and its token must never be sent there
-    // (CLAUDE.md §5). End the tick with NO network write; only an eligible in-env primary proceeds.
+    // A server in a DIFFERENT environment must never be sent the token (CLAUDE.md §5).
     if (!round.anyAccepting) {
       report({
         phase: "unreachable",
@@ -199,8 +180,7 @@ export function createAgent(opts: AgentOptions): Agent {
       token = joined.value.token;
       await host.saveToken(token);
       approved = false;
-      // Persist the number so a restart-while-pending still shows it: the reloaded token keeps polling
-      // the SAME join request, so this is the only surviving copy of the code the admin must match.
+      // The only surviving copy, after a restart, of the code the admin must match.
       config = { ...config, pendingVerificationNumber: joined.value.verificationNumber };
       await host.saveConfig(config);
       report({
@@ -224,7 +204,6 @@ export function createAgent(opts: AgentOptions): Agent {
         return false;
       }
       if (s.value === "pending") {
-        // Sourced from the persisted config, so it survives a restart (the join reply is long gone).
         report({
           phase: "pending",
           serverUrl: config.serverUrl,
@@ -238,19 +217,14 @@ export function createAgent(opts: AgentOptions): Agent {
         return false;
       }
       approved = true;
-      // Approved: the number has served its purpose, so drop it from the persisted config.
       if (config.pendingVerificationNumber !== undefined) {
         config = { ...config, pendingVerificationNumber: undefined };
         await host.saveConfig(config);
       }
     }
 
-    // Report the box's device inventory on every pull. `visible` is always gathered; `scanned` is an
-    // active discovery pass, run only while the previous reply's window is still open (cross-tick).
     const visible = await host.visibleDevices();
-    // Discovery is isolated from the pull: a throwing scan (e.g. the box has no Bluetooth adapter, so
-    // `scan(["bluetooth"])` throws `spawn bluetoothctl ENOENT`) must NEVER stop the job pull. Catch it,
-    // log it, and pull with whatever inventory we have — repeated scan failures must not suppress printing.
+    // A throwing scan (a box with no Bluetooth adapter, say) must NEVER stop the job pull.
     let scanned: DiscoveredDevice[] = [];
     if (host.now() < discoveryUntil) {
       try {
@@ -316,7 +290,6 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
     r.merge(pulled.value.servers);
-    // Carry the window forward so the NEXT tick knows whether to scan; a null reply closes it (0).
     discoveryUntil = pulled.value.discoveryUntil ?? 0;
     // A remote server's epoch deadline cannot be compared with this host's clock.
     const receivedAt = host.now();
@@ -325,11 +298,10 @@ export function createAgent(opts: AgentOptions): Agent {
       expiresAt: receivedAt + target.expiresInMs,
     }));
     probeServer = current;
-    // Tick-local, reset every tick (never `lastError` itself mid-loop): did ANY send fail this tick?
     let anyFailed = false;
     for (const job of pulled.value.jobs) if (await push(job, token, current)) anyFailed = true;
-    // `lastError` is overwritten only by a later failed send and cleared only by a fully clean running
-    // tick — an all-success batch or an empty pull. A partial-failure batch keeps the failure visible.
+    // `lastError` is cleared only by a fully clean tick, so a partial-failure batch keeps it
+    // visible.
     report({
       phase: "running",
       serverUrl: config.serverUrl,

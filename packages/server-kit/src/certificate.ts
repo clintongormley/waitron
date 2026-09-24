@@ -1,9 +1,7 @@
 import forge from "node-forge";
 
 /**
- * The extension shapes `forge.pki.Certificate#setExtensions` accepts. `@types/node-forge` types that
- * parameter as `any[]` and exports no extension type, so this is a narrower stand-in covering the
- * fields Waitron's certificates use.
+ * `@types/node-forge` types `setExtensions`' parameter as `any[]`, so this is a narrower stand-in.
  */
 export interface CertExtension {
   name: string;
@@ -31,10 +29,7 @@ interface CertificateIssuer {
   key: forge.pki.rsa.PrivateKey;
 }
 
-/**
- * An X.509 certificate with a single-CN subject and issuer, signed SHA-256 by `issuer.key`. A
- * self-signed certificate passes its own CN and private key as the issuer.
- */
+/** A self-signed certificate passes its own CN and private key as the issuer. */
 export function certificate(
   subjectCn: string,
   subjectKeys: forge.pki.rsa.KeyPair,

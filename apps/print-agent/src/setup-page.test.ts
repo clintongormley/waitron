@@ -247,8 +247,7 @@ describe("createSetupApp — POST /setup", () => {
     );
     const html = await (await app.request("/")).text();
     expect(html).toContain("https://box.test");
-    // No Save button — the locked address form is read-only. (The Bluetooth card's Scan button is a
-    // separate, always-present action, so the assertion targets the Save action specifically.)
+    // The Bluetooth card's Scan button is always present, so this targets the Save action.
     expect(html).not.toContain(">Save</button>");
   });
 });

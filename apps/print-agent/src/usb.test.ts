@@ -4,10 +4,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readUsbPrinters } from "./usb.js";
 
-// Recreates the real box's usblp sysfs shape under a tmpdir root (captured 2026-09-10,
-// task-6-hardware-facts.md): a `class/usbmisc/lpN` SYMLINK into
+// The real box's usblp sysfs shape, captured 2026-09-10: a `class/usbmisc/lpN` SYMLINK into
 // `devices/.../1-11/1-11:1.0/usbmisc/lpN`, with the identity attrs on the device dir three parents up.
-// Returns the root; `readUsbPrinters(root)` derives its device node under `<root>/dev/usb/lpN`.
 async function writeSysfsFixture(opts: {
   lp: string;
   serial?: string;
@@ -82,7 +80,7 @@ describe("readUsbPrinters", () => {
   });
 
   it("reads the real box's printer (YICHIP3121 / B120300001) into /dev/usb/lp0", async () => {
-    // The exact identity captured off clinton@waitron.local (task-6-hardware-facts.md).
+    // The exact identity captured off the real box.
     const root = await writeSysfsFixture({
       lp: "lp0",
       serial: "B120300001",

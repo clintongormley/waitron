@@ -19,52 +19,30 @@ const STANDINGS: readonly NodeStanding[] = [
   "evicted",
 ];
 
-// Structural cap on how many endorsements a document may carry. Spec §2 caps the topology at 3
-// nodes (2 local + 1 cloud), so a legitimate document needs only a couple of endorsements; 8 is
-// generous headroom. The bound stops an adversarial document from the (future) network surface
-// forcing an unbounded number of Ed25519 verifications. Raising it later is a widen, not a
-// breaking change.
+// Both caps bound what an adversarial document can make us do (Ed25519 verifications, memory);
+// neither is a topology rule.
 const MAX_ENDORSEMENTS = 8;
 
-// Structural cap on how many nodes a document's body may list. This is a memory/DoS BOUND with
-// generous headroom, NOT a topology assertion: spec §2 is a 3-node topology (2 local + 1 cloud),
-// and a node-replacement transition may transiently list a few more (an evicted old node alongside
-// its replacement). 8 sits well above any legitimate count while rejecting an unbounded adversarial
-// array; the exact serving-node policy stays a Slice-2/3 concern.
 const MAX_NODES = 8;
 
 export function signDocumentBody(body: MembershipDocumentBody, signerPrivateKey: string): string {
-  // signerNodeId is deliberately NOT part of the signed bytes (bodyMessage covers the whole body —
-  // term + nodes — and nothing else): it merely selects which trusted key to verify against. A
-  // mutated signerNodeId is always rejected — as untrusted_signer or endorsement_invalid if it
-  // resolves to no trusted key, or as bad_signature if it resolves to a DIFFERENT trusted key —
-  // because the signature must still verify against whichever key it selects; it is authenticated
-  // TRANSITIVELY, not directly. Do not "fix" this by folding signerNodeId (or, for endorsements,
-  // endorsedBy) into the signed payload; that would change the wire format.
+  // signerNodeId is deliberately NOT signed: it only selects the key, and the signature must verify
+  // against whichever key it selects, so it is authenticated transitively. Folding it in would
+  // change the wire format.
   return signBytes(bodyMessage(body), signerPrivateKey);
 }
 
-/**
- * The exact bytes a document signature covers: the canonicalized WHOLE body (spec §3). The strict
- * key-count guards in isNode/isDocument guarantee a verified body carries only its declared fields,
- * so signing `body` directly is byte-identical to the old hand-picked projection for any valid body
- * while making it impossible for a future-added, unsigned field to slip through verify unsigned.
- */
+/** Signs the WHOLE body, so no field added later can pass verification unsigned. */
 function bodyMessage(body: MembershipDocumentBody): string {
   return canonicalize(body as unknown as CanonicalValue);
 }
 
-// Note: typeof [] === "object", so isRecord([]) is true — the per-field checks below (and the
-// Array.isArray guards on nodes/endorsements) do the array-vs-plain-object discrimination.
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object";
 }
 
-// Each guard also asserts an exact own-key COUNT after the required fields check, so an object
-// carrying an EXTRA (unsigned) field is rejected as malformed. This is what makes "a verified
-// document IS exactly its signed content" true: bodyMessage signs the whole body, and these guards
-// guarantee the body (and its nodes) hold nothing beyond the fields that were signed. Object.keys
-// returns only own enumerable keys, which is exactly the shape of JSON-parsed wire input.
+// The exact key COUNTS refuse any field beyond the declared ones, at every level — including an
+// unsigned one beside `body`, which the signature does not cover.
 function isNode(v: unknown): v is MembershipNode {
   if (!isRecord(v)) return false;
   return (
@@ -72,7 +50,7 @@ function isNode(v: unknown): v is MembershipNode {
     typeof v.contactUrl === "string" &&
     typeof v.standing === "string" &&
     STANDINGS.includes(v.standing as NodeStanding) &&
-    Object.keys(v).length === 3 // nodeId, contactUrl, standing — no extra keys
+    Object.keys(v).length === 3
   );
 }
 
@@ -83,7 +61,7 @@ function isEndorsement(v: unknown): v is Endorsement {
     typeof v.publicKey === "string" &&
     typeof v.endorsedBy === "string" &&
     typeof v.signature === "string" &&
-    Object.keys(v).length === 4 // nodeId, publicKey, endorsedBy, signature — no extra keys
+    Object.keys(v).length === 4
   );
 }
 
@@ -91,18 +69,16 @@ function isDocument(v: unknown): v is SignedMembershipDocument {
   if (!isRecord(v)) return false;
   if (typeof v.signerNodeId !== "string" || typeof v.signature !== "string") return false;
   if (!Array.isArray(v.endorsements)) return false;
-  if (v.endorsements.length > MAX_ENDORSEMENTS) return false; // fail fast before the per-item scan
+  if (v.endorsements.length > MAX_ENDORSEMENTS) return false;
   if (!v.endorsements.every(isEndorsement)) return false;
   const b = v.body;
-  // typeof undefined !== "object", so isRecord also rejects a missing body — no separate
-  // `=== undefined` arm needed.
   if (!isRecord(b)) return false;
   if (typeof b.term !== "number" || !Number.isInteger(b.term) || b.term < 0) return false;
   if (!Array.isArray(b.nodes)) return false;
-  if (b.nodes.length > MAX_NODES) return false; // fail fast before the per-item scan
+  if (b.nodes.length > MAX_NODES) return false;
   if (!b.nodes.every(isNode)) return false;
-  if (Object.keys(b).length !== 2) return false; // body: term, nodes — no extra keys
-  if (Object.keys(v).length !== 4) return false; // document: body, signerNodeId, signature, endorsements
+  if (Object.keys(b).length !== 2) return false;
+  if (Object.keys(v).length !== 4) return false;
   return true;
 }
 
@@ -113,7 +89,6 @@ export function verifyMembershipDocument(
   if (!isDocument(doc)) return { valid: false, reason: "malformed" };
   const signerKey = resolveSignerKey(doc.signerNodeId, doc.endorsements, trustSet);
   if (signerKey === null) {
-    // Either the signer is unknown, or an endorsement it relied on failed to chain/verify.
     return {
       valid: false,
       reason: doc.endorsements.length > 0 ? "endorsement_invalid" : "untrusted_signer",

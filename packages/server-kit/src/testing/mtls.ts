@@ -22,13 +22,8 @@ function keypair(): forge.pki.rsa.KeyPair {
   return forge.pki.rsa.generateKeyPair(2048);
 }
 
-/**
- * A private CA, a server certificate for `localhost` and `127.0.0.1`, and a client certificate
- * exported as PKCS#12 — everything a real client-certificate handshake needs, minted in-process.
- *
- * node-forge rather than `openssl`: no binary need be installed, and `node:crypto` can read PKCS#12
- * but not create it.
- */
+/** node-forge rather than `openssl`: no binary need be installed, and `node:crypto` can read PKCS#12
+ * but not create it. */
 export function mintMtlsMaterial(): MtlsMaterial {
   const caKeys = keypair();
   const issuer = { cn: CA_CN, key: caKeys.privateKey };

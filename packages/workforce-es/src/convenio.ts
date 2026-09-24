@@ -16,23 +16,17 @@ const DB_TO_OVERTIME_MODEL: Record<"daily_accrual" | "period_net", OvertimeModel
 
 /**
  * A rate column comes back as a count of basis points; the ruleset carries the same rate as a
- * PERCENTAGE — 25% is 25, not 0.25 (owner, 2026-09-18) — as a number-or-null. Rendering the literal
- * first and reading that keeps the divide-by-a-hundred in one place, `basisPointsToDecimal`, rather
- * than spelling it here, and it keeps the basis-point form from leaking past this boundary.
- * `basisPointsToDecimal` discards no digit — the literal is an exact render of the integer. `Number`
- * then takes the nearest double, and two different things happen there: a rate with a nonzero
- * hundredths digit is not held exactly (999.99 is 999.99000000000000909…), and one ending in a
- * zero IS held exactly but no longer renders with it (25.00 becomes 25, and 12.50 becomes 12.5).
- * Neither belongs to this conversion; both belong to the ruleset's `number` type.
+ * PERCENTAGE — 25% is 25, not 0.25 — as a number-or-null. Rendering the literal first and reading
+ * that keeps the divide-by-a-hundred in one place, `basisPointsToDecimal`, rather than spelling it
+ * here.
  */
 function rateNum(basisPoints: number | null): number | null {
   return basisPoints === null ? null : Number(basisPointsToDecimal(basisPoints));
 }
 
 /**
- * A money column comes back as a count of cents; the ruleset carries a per-day amount in the
- * tenant's currency, as a number. Rendering the literal first and reading that is the same value
- * the ruleset has always carried, and it keeps the cents form from leaking past this boundary.
+ * A money column comes back as a count of cents. Rendering the literal first and reading that keeps
+ * the money scale in `centsToDecimal` rather than spelling `/ 100` here.
  */
 function moneyNum(cents: number | null): number | null {
   return cents === null ? null : Number(centsToDecimal(cents));
@@ -40,9 +34,7 @@ function moneyNum(cents: number | null): number | null {
 
 /**
  * Resolves the location's `convenio_config` row into the regime-neutral `WorkTimeRuleset`
- * the generic engine consumes — the Spain→generic boundary the plan §3.3 draws: the engine never
- * imports `convenio_config` or names a convenio, this resolver does the mapping and passes neutral
- * numbers in. Throws `convenio.not_found` when no row is configured for the location.
+ * the generic engine consumes. Throws `convenio.not_found` when no row is configured for the location.
  */
 export async function resolveWorkTimeRuleset(
   tx: Transaction | Database,
@@ -79,9 +71,7 @@ export async function resolveWorkTimeRuleset(
   }
   // The `.select({...})` above aliases every column to its exact `WorkTimeRuleset` field name and
   // narrows to precisely the ruleset's columns (no id/createdAt), so `...row` supplies all
-  // but the three fields that need a transform: the DB enum → the hyphenated `OvertimeModel`, and the
-  // night premium (a count of basis points) and the split-shift premium (a count of cents) →
-  // number-or-null.
+  // but the three fields that need a transform.
   return {
     ...row,
     overtimeModel: DB_TO_OVERTIME_MODEL[row.overtimeModel],

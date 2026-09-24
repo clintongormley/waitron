@@ -154,9 +154,8 @@ describe("Router", () => {
     router.merge([{ url: B }]);
     expect(await router.probe()).toEqual({ moved: true, anyAccepting: true });
     expect(router.current).toBe(B);
-    // Now equalise the terms. `current` is B and the earlier list entry is A, so the two candidate
-    // rules disagree and the assertion discriminates: list order moves back to A, incumbent
-    // preference would stay on B. (The old shape started with A as BOTH, and passed either way.)
+    // `current` is B and the earlier list entry is A, so list order and incumbent preference
+    // disagree.
     table[A] = { acceptingSales: true, term: 5 };
     expect(await router.probe()).toEqual({ moved: true, anyAccepting: true });
     expect(router.current).toBe(A);
@@ -291,7 +290,6 @@ describe("Router", () => {
     expect(firstRound).toEqual(secondRound);
     expect(firstRound).toEqual({ moved: true, anyAccepting: true });
     expect(router.current).toBe(B);
-    // The round is released once it settles, so a later call probes afresh.
     await router.probe();
     expect(probe).toHaveBeenCalledTimes(4);
   });

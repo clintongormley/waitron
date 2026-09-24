@@ -67,18 +67,18 @@ import {
  * `scripts/module-seams.test.ts` enforces is narrower than "nothing else imports a module package":
  * the boundary is the swappable fiscal REGIME (`@waitron/fiscal-verifactu`, `@waitron/verifactu`),
  * which nothing under `packages/provisioning/src` may import (its `bin.ts` is the CLI's composition
- * root and imports this list instead) and which no file under `apps/server/src` may import outside
- * the allowlisted deferred runtime pass. `@waitron/identity` and `@waitron/layouts` are ordinary
- * dependencies of the packages that use them, not slots, and the guard says nothing about them.
+ * root and imports this list instead) and which no file under `apps/server/src` may import. Test
+ * files and `testing/` directories are outside the guard.
+ * `@waitron/identity` and `@waitron/layouts` are ordinary dependencies of the packages that use them,
+ * not slots, and the guard says nothing about them.
  *
  * Each `migrations` object carries the exact `{ name, table, from }` from
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
- * while both exist. `requires` names every cross-set edge the SQL creates — FK `REFERENCES` and
- * `CREATE TRIGGER … ON <table>` — which the root `module-graph-honesty` guard cross-checks against the
- * migrations. The seats a module may fill are the fields of `WaitronModule`
- * (`packages/module/src/module.ts`); the entries below show which each module fills.
- * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
- * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory.
+ * while both exist. `requires` must name every set whose table this set's SQL `REFERENCES`, puts a
+ * trigger `ON`, or names inside a trigger body; the root `module-graph-honesty` guard checks the
+ * first two only — it never reads a trigger body. Two modules fill the `fiscal` slot —
+ * `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly one is enabled per deployment
+ * (`fiscalSlot`); provisioning selects it from the venue's territory.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
@@ -227,10 +227,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: { kind: "none" },
   },
   {
-    // The no-regime fiscal-slot member (after `fiscal-verifactu`). It owns no tables (an empty
-    // migration set), enrols nothing and contributes only `fiscal` — the sale path records nothing and
-    // `drain` has no authority to reach. A core-only dep, so Kahn emits it right after fiscal-verifactu
-    // and `orderedMigrationSets(ALL_MODULES)` still equals `manifestSets()` (composition.test.ts pins it).
     name: "fiscal-none",
     version: "0.0.0",
     tier: "provision-only",
@@ -244,9 +240,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: { kind: "none" },
   },
   {
-    // Bookings — the first UI-bearing AND first genuinely-toggleable module (SP1: server + data). It
-    // FKs into `core`, so it requires it; `routes` are the seven booking routes boot mounts
-    // generically. The descriptor is the only place bookings is named.
     name: "bookings",
     version: "0.0.0",
     tier: "toggleable",

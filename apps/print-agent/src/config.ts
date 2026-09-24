@@ -1,8 +1,5 @@
-/**
- * The container host's boot config, read from the process env once at start (base spec §2.2). Env is
- * the ONLY source here — the state directory's `config.json` is read later by the Host, and env wins
- * over it — so a compose-supplied address is never overridden by the setup page.
- */
+/** Env wins over the state directory's `config.json`, so the setup page never overrides a
+ * compose-supplied address. */
 export interface EnvConfig {
   /** The venue server's origin, or undefined when the operator must enter it on the setup page. */
   serverUrl?: string;
@@ -15,18 +12,13 @@ export interface EnvConfig {
 export const DEFAULT_STATE_DIR = "/var/lib/waitron-print-agent";
 export const DEFAULT_SETUP_PORT = 9110;
 
-/** Trim, then treat an empty string as unset — an env var set to `""` is NOT a value (CLAUDE.md §3,
- * "an empty connection string is a valid connection string"; we refuse it before it can stamp a
- * default onto localhost). */
+/** An env var set to `""` falls back exactly as an unset one does (CLAUDE.md §3). */
 function value(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   const trimmed = raw.trim();
   return trimmed === "" ? undefined : trimmed;
 }
 
-/** Reads and validates the boot config. Throws — with the offending variable named — on a server url
- * that is not an http(s) origin or a setup port outside 1..65535, so a mis-set container fails loudly
- * at boot rather than dialling the wrong place. */
 export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
   const rawUrl = value(env.WAITRON_SERVER_URL);
   let serverUrl: string | undefined;

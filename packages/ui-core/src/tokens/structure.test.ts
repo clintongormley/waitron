@@ -112,14 +112,10 @@ test("deployment rules override the token layer's defaults", () => {
 });
 
 test("deployment rules override the token layer's defaults even when data-theme is set", () => {
-  // The bug this guards against: colors.css's `[data-wt-theme-root][data-theme="light"|"dark"]`
-  // blocks used plain attribute selectors (specificity 0,2,0) while the base/media defaults were
-  // `:where()`-wrapped (specificity 0,0,0). A deployment override like `.brand { --wt-color-primary:
-  // purple }` (specificity 0,1,0) beat the base defaults but LOST to the data-theme blocks whenever
-  // data-theme was set — which is the shipped workbench's own configuration. The structure-token
-  // test above never catches this: structure.css has no data-theme-scoped rules, so a
-  // structure-token override wins regardless of data-theme. Only a colour token — which colors.css
-  // does define per data-theme — can prove this.
+  // A deployment override like `.brand { --wt-color-primary: purple }` (specificity 0,1,0) must
+  // beat colors.css's data-theme blocks while data-theme is set. The structure-token test above
+  // never catches this: structure.css has no data-theme-scoped rules. Only a colour token — which
+  // colors.css does define per data-theme — can prove this.
   const el = mount();
   el.classList.add("wt-color-override-target");
   el.setAttribute("data-theme", "light");

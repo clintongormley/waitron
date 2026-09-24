@@ -23,9 +23,7 @@ function generatedSql(): string {
     .toLowerCase();
 }
 
-/** How drizzle-kit writes a table name in this package's generated SQL. SQLite quotes an
- * identifier with backticks where PostgreSQL used double quotes, measured by reading
- * `drizzle/0000_baseline.sql` on 2026-09-21. */
+/** How drizzle-kit writes a table name in this package's generated SQL. */
 function createTable(table: string): string {
   return `create table \`${table}\``;
 }

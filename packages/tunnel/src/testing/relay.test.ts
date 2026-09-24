@@ -16,10 +16,8 @@ const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res
 
 const closed = (s: Socket): Promise<void> => new Promise((res) => s.once("close", () => res()));
 
-// A test-side box: consume the handshake frames (`ack`, then `go`), then echo every raw byte back.
-// Robust to `ack` and `go` coalescing into one TCP segment (which happens when the box is handed
-// straight to a waiting client), unlike an inline `decodeFrame(chunk)` that would drop the second
-// frame's `rest`.
+// Robust to `ack` and `go` coalescing into one TCP segment, which happens when the box is handed
+// straight to a waiting client.
 function echoAfterGo(box: Socket): void {
   let buf: Buffer = Buffer.alloc(0);
   let live = false;
@@ -67,7 +65,6 @@ describe("createRelayStandin", () => {
 
   it("pairs a client with an idle box connection and splices both directions", async () => {
     relay = await createRelayStandin({ verifyToken: () => true });
-    // Box registers and waits for `go`, then echoes.
     const box = connect(relay.boxPort, "127.0.0.1");
     box.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
     await readFrame(box); // ack
@@ -78,7 +75,6 @@ describe("createRelayStandin", () => {
         box.on("data", (chunk) => box.write(chunk)); // echo subsequent bytes
       }
     });
-    // Client connects and sends a payload; expects it echoed back through the splice.
     const client = connect(relay.clientPort, "127.0.0.1");
     const got = new Promise<string>((res) => client.once("data", (d) => res(d.toString())));
     // Give the relay a tick to send `go` before the client speaks.
@@ -97,13 +93,10 @@ describe("createRelayStandin", () => {
 
   it("drops a box that sends a garbage line and keeps serving other connections", async () => {
     relay = await createRelayStandin({ verifyToken: () => true });
-    // A malformed (non-JSON) line makes decodeFrame's JSON.parse throw. It must destroy only this
-    // one socket, never crash the relay (Task 1 review carry-forward).
     const bad = connect(relay.boxPort, "127.0.0.1");
     const badClosed = closed(bad);
     bad.write(Buffer.from("this is not json\n"));
     await badClosed;
-    // The relay still serves a subsequent valid registration.
     const good = connect(relay.boxPort, "127.0.0.1");
     good.write(encodeFrame({ t: "register", boxId: "b", token: "t" }));
     expect((await readFrame(good))!.frame).toEqual({ t: "ack" });

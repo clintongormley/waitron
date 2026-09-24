@@ -10,8 +10,6 @@ import "@waitron/shared";
  *
  * Reachability: every file that throws one of these imports "./errors.js" directly, and this
  * package has no public barrel to keep them reachable from — it is an application, not a library.
- * `errors.reachability.test.ts` exists in library packages for consumers that only see `index.ts`;
- * there is no such consumer here.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

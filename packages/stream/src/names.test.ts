@@ -63,7 +63,7 @@ describe("generationName", () => {
 
   it("names a generation at term 0, the term a venue's first membership document carries", () => {
     // `buildNextMembershipDocument` starts at 0 when no document is held
-    // (packages/membership/src/build.ts:24), so the first box of every venue streams at term 0.
+    // (packages/membership/src/build.ts:18), so the first box of every venue streams at term 0.
     expect(generationName(0, NODE, new Date("2026-09-23T10:11:12Z"))).toBe(
       `gen-0-${NODE}-20260923T101112Z`,
     );

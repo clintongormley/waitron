@@ -13,10 +13,6 @@ import {
 } from "./transport.js";
 import type { PrinterTarget, Transport } from "./transport.js";
 
-// The transport adapters are the hardware seam. CI exercises them against LOCAL fakes — a loopback
-// TCP server and a temp file — never a real printer (real hardware is verified manually, design §5).
-// The FakeSink is the byte-capturing double the agent-runtime suites push through.
-
 function target(overrides: Partial<PrinterTarget>): PrinterTarget {
   return {
     id: "11111111-1111-1111-1111-111111111111",
@@ -89,11 +85,8 @@ describe("NetworkTcpTransport", () => {
   });
 
   it("rejects (rather than hanging) when the printer accepts the connection but never drains", async () => {
-    // The isolation receipt (runtime.ts / spec §3c): a printer that accepts the TCP connection but
-    // never reads a byte would otherwise block the agent's serial push for the OS default (~1-2 min).
-    // The server here never attaches a `data` listener, so its connection socket stays PAUSED, the
-    // kernel receive buffer fills, and TCP flow-control stalls the client's write. A payload larger
-    // than any socket buffer guarantees the flush cannot complete → the inactivity timeout fires.
+    // The server never attaches a `data` listener, so TCP flow control stalls the client's write,
+    // and a payload larger than any socket buffer cannot finish flushing.
     const conns: net.Socket[] = [];
     const server = net.createServer((socket) => conns.push(socket)); // never read → stays paused
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -127,8 +120,7 @@ describe("NetworkTcpTransport", () => {
     let dialledPort: number | undefined;
     const fake = new EventEmitter() as unknown as net.Socket;
     (fake as unknown as { end: (data: unknown, cb: () => void) => void }).end = (_data, cb) => cb();
-    // The transport now arms an inactivity timeout on the socket; the fake needs a no-op `setTimeout`
-    // (a plain EventEmitter has none) so the clean connect+flush path never touches a real timer.
+    // A plain EventEmitter has no `setTimeout`, which the transport calls.
     (fake as unknown as { setTimeout: (ms: number) => void }).setTimeout = () => {};
     const spy = vi.spyOn(net, "createConnection").mockImplementation(((
       opts: net.NetConnectOpts,
@@ -215,7 +207,6 @@ describe("RoutingTransport", () => {
     for (const c of cleanups.splice(0)) await c();
   });
 
-  /** A recording double standing in for a real adapter. */
   class Recorder implements Transport {
     readonly seen: string[] = [];
     send(printer: PrinterTarget): Promise<void> {

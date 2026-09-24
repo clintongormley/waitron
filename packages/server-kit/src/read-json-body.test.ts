@@ -10,8 +10,6 @@ function contextRejectingWith(cause: unknown): Context {
   return { req: { json: () => Promise.reject(cause) } } as unknown as Context;
 }
 
-// A throwaway app whose one route echoes back whatever `readJsonBody` hands it, so each case below
-// asserts the helper's own return value rather than any downstream validation.
 const app = new Hono();
 app.post("/echo", async (c) => c.json(await readJsonBody<{ a?: unknown }>(c)));
 
@@ -31,8 +29,6 @@ describe("readJsonBody", () => {
   });
 
   it("returns {} for a malformed body instead of letting c.req.json() throw", async () => {
-    // `c.req.json()` throws a SyntaxError here; without the helper's `.catch` that throw would escape
-    // the route (→ the error boundary's opaque 500). The helper coerces it to {} and the route resolves.
     const res = await post("{ not json");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({});
@@ -45,15 +41,13 @@ describe("readJsonBody", () => {
   });
 
   it("returns {} for a literal JSON null body (the ?? {} branch)", async () => {
-    // A body of the literal `null` parses successfully to `null` — no throw — so this exercises the
-    // `?? {}` fallback rather than the `.catch`.
+    // `null` parses without a throw, so this exercises the `?? {}` rather than the `.catch`.
     const res = await post("null");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({});
   });
 
   it("coerces a SyntaxError (parse failure) to {}", async () => {
-    // The one throw the helper is meant to swallow — a body-parse failure.
     const body = await readJsonBody(
       contextRejectingWith(new SyntaxError("Unexpected end of JSON input")),
     );
@@ -61,18 +55,12 @@ describe("readJsonBody", () => {
   });
 
   it("rethrows a non-SyntaxError from c.req.json() instead of masking it as {}", async () => {
-    // A "Body already used" double-read (or any other fault) rejects with a TypeError, NOT a
-    // SyntaxError. The helper must let it through so the error boundary surfaces it as a 500 rather
-    // than hiding a real bug behind a client 4xx. (Proven by deletion: drop the `if (cause instanceof
-    // SyntaxError)` guard so the catch returns `{}` unconditionally, and this expectation fails.)
+    // A "Body already used" double-read is a real server fault, not a client one.
     const boom = new TypeError("Body has already been read");
     await expect(readJsonBody(contextRejectingWith(boom))).rejects.toBe(boom);
   });
 });
 
-// A second echo app for readRawJsonBody, which returns the parsed body UNCHANGED (or null), so each
-// case asserts exactly what the helper returned — including the distinction the /split and /unjoin
-// routes depend on: a literal/absent/malformed body arrives as `null`, an object arrives as itself.
 const rawApp = new Hono();
 rawApp.post("/echo", async (c) => c.json(await readRawJsonBody<{ a?: unknown }>(c)));
 
@@ -104,8 +92,6 @@ describe("readRawJsonBody", () => {
   });
 
   it("returns null for a literal JSON null body (NOT coerced to {})", async () => {
-    // The whole reason this sibling exists: /split and /unjoin must tell a literal `null` body apart
-    // from an object, so unlike readJsonBody it must NOT coerce null to {}.
     const res = await postRaw("null");
     expect(res.status).toBe(200);
     expect(await res.json()).toBeNull();
@@ -119,8 +105,6 @@ describe("readRawJsonBody", () => {
   });
 
   it("rethrows a non-SyntaxError from c.req.json() instead of masking it as null", async () => {
-    // Proven by deletion: drop the `if (cause instanceof SyntaxError)` guard so the catch returns
-    // `null` unconditionally, and this expectation fails.
     const boom = new TypeError("Body has already been read");
     await expect(readRawJsonBody(contextRejectingWith(boom))).rejects.toBe(boom);
   });

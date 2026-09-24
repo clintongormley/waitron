@@ -244,8 +244,7 @@ describe("createLinuxDevices — resolve()", () => {
   });
 
   it("resolves a USB job to the production /dev node when no devRoot is given (sibling, not nested under /sys)", async () => {
-    // Production supplies neither devRoot NOR a custom sysfsRoot; the fixture supplies sysfsRoot only,
-    // so devRoot must fall back to the production default `/dev` (a sibling of `/sys`), NOT `<sysfs>/dev`.
+    // devRoot must fall back to `/dev` (a sibling of `/sys`), NOT `<sysfs>/dev`.
     const devices = createLinuxDevices({ sysfsRoot: root });
     expect(
       await devices.resolve(wireJob({ transport: "usb", localKey: "B120300001" })),
@@ -272,8 +271,6 @@ describe("createLinuxDevices — resolve()", () => {
   });
 
   it("throws for a bluetooth job when the live per-MAC binding is not implemented (default btDevicePath)", async () => {
-    // No btDevicePath override → the live (deferred) binding is used. Two MACs would collide on one
-    // /dev/rfcomm0 node, so resolving a BT job must FAIL LOUD, not return a shared bogus path.
     const devices = createLinuxDevices({
       sysfsRoot: root,
       bluetooth: fakeBluetooth({

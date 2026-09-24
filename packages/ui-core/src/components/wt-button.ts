@@ -120,7 +120,7 @@ export class WtButton extends LitElement {
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
 
   // No `type` property: a shadow-DOM <button> is never form-associated (see
-  // ../../../docs/developers/design-system.md, "Forms"), so a `type="submit"` here would be
+  // docs/developers/design-system.md, "Forms"), so a `type="submit"` here would be
   // documented but inert — it produces zero submit events and the enclosing form never lists this
   // control in `form.elements`. Forms are handled in JS via `wt-change`, not native submission.
   // Full form association via ElementInternals is out of scope for this component.

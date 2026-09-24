@@ -111,13 +111,9 @@ test("emits wt-change with the new value", async () => {
 });
 
 test("wt-change bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
-  // Regression guard for the mutation-testing survivor on `bubbles`/`composed` here: dispatched
-  // straight into document's light DOM (what mount()+el.addEventListener gives every other test
-  // in this file), an event only ever needs to *bubble* to reach a listener — composed never
-  // comes into play, so a mutant flipping `composed: true` to `false` survives even a listener on
-  // `document`. Nesting wt-input inside a wrapper's own shadow root (mountInShadowRoot) and
-  // listening on `document` — genuinely outside that shadow root — makes both flags load-bearing:
-  // flipping either bubbles or composed to false stops the event from arriving here.
+  // Nesting wt-input inside a wrapper's own shadow root (mountInShadowRoot) and listening on
+  // `document` — genuinely outside that shadow root — means flipping either bubbles or composed to
+  // false stops the event from arriving here.
   const el = await mountInShadowRoot("<wt-input></wt-input>");
   let received: CustomEvent<{ value: string }> | undefined;
   document.addEventListener(

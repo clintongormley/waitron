@@ -22,7 +22,6 @@ describe("FileState", () => {
     await state.writeToken("a1.secret");
     expect(await state.readToken()).toBe("a1.secret");
     expect((await stat(join(dir, "token"))).mode & 0o777).toBe(0o600);
-    // Written via a temp file + rename, so a reader never sees a half-written token.
     expect(await readdir(dir)).not.toContain("token.tmp");
 
     await state.writeToken(null);

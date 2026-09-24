@@ -84,9 +84,6 @@ test("data-theme overrides the media preference in both directions", async () =>
 test("tells the browser which scheme to draw native controls in", async () => {
   // A native control the app does not paint itself — a radio, a checkbox, a scrollbar — is drawn by
   // the user agent, which picks its appearance from `color-scheme` and NOT from `data-theme`.
-  // Without this the dark theme got the light drawing: an UNCHECKED radio rendered as a solid white
-  // dot, heavier than the checked one's ring, so the wrong row read as the selected one. Measured
-  // side by side in headless Chromium, `accent-color` alone does not change that fill.
   await commands.emulateColorScheme("light");
   expect(getComputedStyle(mount("dark")).colorScheme).toBe("dark");
   host.remove();
@@ -104,12 +101,8 @@ test("a nested theme root does not inherit the outer root's scheme", async () =>
   // `color-scheme` is an inherited property, so a theme root nested inside a DARK one and carrying
   // no data-theme of its own would be drawn dark while its colour tokens resolve light — light
   // surfaces with dark-drawn radios and checkboxes. The base block's `color-scheme: light` is the
-  // only thing that stops it: measured with that one declaration removed, this reads `dark` while
-  // --wt-color-bg still reads #f7f7f8. NOTHING nests a theme root today — `grep -rn applyTokens`
-  // over apps and packages shows the three apps calling it on document.documentElement alone, the
-  // demo making two SIBLING panels, and the rest applying it to a test host on document.body — so
-  // this case is constructed here rather than observed, and the declaration is what keeps the
-  // answer right if one ever is nested.
+  // only thing that stops it. Nothing nests a theme root today, so this case is constructed here
+  // rather than observed.
   await commands.emulateColorScheme("light");
   const outer = mount("dark");
   const inner = document.createElement("div");

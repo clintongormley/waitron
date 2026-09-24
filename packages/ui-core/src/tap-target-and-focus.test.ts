@@ -25,20 +25,16 @@ interface DiscoveredComponent {
 const allComponents: DiscoveredComponent[] = [];
 for (const [path, mod] of Object.entries(modules)) {
   // "./components/wt-button.ts" -> "wt-button". Every primitive's file name is its own custom
-  // element tag (confirmed across all six today), so no separate tag-name registry is needed.
+  // element tag, so no separate tag-name registry is needed.
   const tag = path.replace(/^\.\/components\//, "").replace(/\.ts$/, "");
   for (const value of Object.values(mod)) {
     if (isStyledCtor(value)) allComponents.push({ tag, ctor: value });
   }
 }
 
-// "Interactive" = reflects a `disabled` property. That's the same line docs/developers/design-
-// system.md's own "Primitives" table and "--wt-tap-min"/"Focus delegation" sections already draw
-// between wt-button/wt-input/wt-switch (which document `disabled` and both rules) and
-// wt-card/wt-icon/wt-dialog (which don't). Reading it off Lit's own `elementProperties` — a
+// "Interactive" = reflects a `disabled` property. Reading it off Lit's own `elementProperties` — a
 // static map populated at class-definition time, no instance required — keeps this filter in
-// sync with the components automatically, the same way the glob above keeps the file list itself
-// in sync; nothing to remember to update when a new primitive is added.
+// sync with the components automatically.
 const interactiveComponents = allComponents.filter(
   ({ ctor }) => ctor.elementProperties?.get("disabled")?.reflect === true,
 );
