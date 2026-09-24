@@ -54,7 +54,16 @@ const holderPath = (directory: string) => join(directory, VENUE_HOLDER_FILE);
 const holderFiles = (directory: string) =>
   readdirSync(directory).filter((name) => name.startsWith("venue.holder"));
 
-async function until<T>(read: () => T, done: (value: T) => boolean, withinMs = 5000): Promise<T> {
+/** Well under {@link IN_PROCESS_TIMEOUT_MS}, so a wait that never ends fails as itself. */
+const UNTIL_MS = 2000;
+/** The sum of a test's waits: at most two {@link until}s and a 200 ms sleep, with room. */
+const IN_PROCESS_TIMEOUT_MS = 10_000;
+
+async function until<T>(
+  read: () => T,
+  done: (value: T) => boolean,
+  withinMs = UNTIL_MS,
+): Promise<T> {
   const deadline = Date.now() + withinMs;
   for (;;) {
     const value = read();
@@ -100,18 +109,22 @@ describe("the holder file", () => {
     expect(readVenueHolder(directory)?.kind).toBe("server");
   });
 
-  it("has its heartbeat rewritten while the folder is held, and its lock time kept", async () => {
-    setVenueLivenessTimings({ heartbeatMs: 40 });
-    const directory = tempDir();
-    await lock(directory);
-    const first = readVenueHolder(directory)!;
-    const later = await until(
-      () => readVenueHolder(directory)!,
-      (holder) => holder.heartbeatAt > first.heartbeatAt,
-    );
-    expect(later.lockedAt).toBe(first.lockedAt);
-    expect(later.pid).toBe(process.pid);
-  });
+  it(
+    "has its heartbeat rewritten while the folder is held, and its lock time kept",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      setVenueLivenessTimings({ heartbeatMs: 40 });
+      const directory = tempDir();
+      await lock(directory);
+      const first = readVenueHolder(directory)!;
+      const later = await until(
+        () => readVenueHolder(directory)!,
+        (holder) => holder.heartbeatAt > first.heartbeatAt,
+      );
+      expect(later.lockedAt).toBe(first.lockedAt);
+      expect(later.pid).toBe(process.pid);
+    },
+  );
 
   it("is kept while another share is held, and removed with the last release", async () => {
     const directory = tempDir();
@@ -142,53 +155,61 @@ describe("the holder file", () => {
     expect(readVenueHolder(directory)?.pid).toBe(process.pid);
   });
 
-  it("still gives the lock up when the file cannot be removed", async () => {
-    const directory = tempDir();
-    const warnings: Error[] = [];
-    const onWarning = (warning: Error) => warnings.push(warning);
-    process.on("warning", onWarning);
-    try {
-      const held = await lockVenueDirectory(directory);
-      rmSync(holderPath(directory));
-      mkdirSync(join(holderPath(directory), "occupied"), { recursive: true });
-      held.release();
-      await until(
-        () => warnings.length,
-        (count) => count > 0,
-      );
-      expect(warnings.map((warning) => warning.name)).toEqual(["VenueHolderRemoveWarning"]);
-      rmSync(holderPath(directory), { recursive: true });
-      await lock(directory);
-    } finally {
-      process.off("warning", onWarning);
-    }
-  });
+  it(
+    "still gives the lock up when the file cannot be removed",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      const directory = tempDir();
+      const warnings: Error[] = [];
+      const onWarning = (warning: Error) => warnings.push(warning);
+      process.on("warning", onWarning);
+      try {
+        const held = await lockVenueDirectory(directory);
+        rmSync(holderPath(directory));
+        mkdirSync(join(holderPath(directory), "occupied"), { recursive: true });
+        held.release();
+        await until(
+          () => warnings.length,
+          (count) => count > 0,
+        );
+        expect(warnings.map((warning) => warning.name)).toEqual(["VenueHolderRemoveWarning"]);
+        rmSync(holderPath(directory), { recursive: true });
+        await lock(directory);
+      } finally {
+        process.off("warning", onWarning);
+      }
+    },
+  );
 
-  it("warns once when a heartbeat cannot be written, and recovers when it can", async () => {
-    setVenueLivenessTimings({ heartbeatMs: 20 });
-    const directory = tempDir();
-    const warnings: Error[] = [];
-    const onWarning = (warning: Error) => warnings.push(warning);
-    process.on("warning", onWarning);
-    try {
-      await lock(directory);
-      rmSync(holderPath(directory));
-      mkdirSync(join(holderPath(directory), "occupied"), { recursive: true });
-      await until(
-        () => warnings.length,
-        (count) => count > 0,
-      );
-      await sleep(200);
-      expect(warnings.map((warning) => warning.name)).toEqual(["VenueHolderHeartbeatWarning"]);
-      rmSync(holderPath(directory), { recursive: true });
-      await until(
-        () => readVenueHolder(directory),
-        (holder) => holder !== null,
-      );
-    } finally {
-      process.off("warning", onWarning);
-    }
-  });
+  it(
+    "warns once when a heartbeat cannot be written, and recovers when it can",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      setVenueLivenessTimings({ heartbeatMs: 20 });
+      const directory = tempDir();
+      const warnings: Error[] = [];
+      const onWarning = (warning: Error) => warnings.push(warning);
+      process.on("warning", onWarning);
+      try {
+        await lock(directory);
+        rmSync(holderPath(directory));
+        mkdirSync(join(holderPath(directory), "occupied"), { recursive: true });
+        await until(
+          () => warnings.length,
+          (count) => count > 0,
+        );
+        await sleep(200);
+        expect(warnings.map((warning) => warning.name)).toEqual(["VenueHolderHeartbeatWarning"]);
+        rmSync(holderPath(directory), { recursive: true });
+        await until(
+          () => readVenueHolder(directory),
+          (holder) => holder !== null,
+        );
+      } finally {
+        process.off("warning", onWarning);
+      }
+    },
+  );
 });
 
 describe("the watchdog thread", () => {
