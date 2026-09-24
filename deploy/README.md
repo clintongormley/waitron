@@ -219,9 +219,19 @@ command against it treat that entrypoint differently:
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
   before it writes, moves or removes any database, identity or secret file. Break-glass is the exception by design: it runs beside the
-  server and takes no lock. A server start refused the same way — a second copy of the app beside
-  the running one — does not count toward the three failed starts that put the box on its recovery
-  page.
+  server and takes no lock. Whatever holds the folder keeps a small file beside it,
+  `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
+  seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of
+  the app beside the running one — does not count toward the three failed starts that put the box
+  on its recovery page. A refusal by a holder whose heartbeat is older, or that left no such file,
+  does count, and the recovery page then names which kind of program holds the folder. A holder
+  whose main thread has not run for two minutes is ended by its own watchdog thread. Before the
+  kill, the watchdog writes a one-line report to the program's own output, which is
+  `docker compose logs` for the app. The report includes the main thread's stack when it can be
+  read. It could not be read in a test where that thread was running one long database statement. The server,
+  restore and rejoin also append that line to `waitron.log` and write it as a JSON file in the
+  `logs` volume's `crash-reports` folder. `GET /health` reports the same holder file, without the
+  process id or host.
 
 ## The box's environment — `deploy/.env`
 

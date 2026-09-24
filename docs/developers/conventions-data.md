@@ -1274,6 +1274,59 @@ real `applyMigrations`; with the migrator's `begin immediate` removed it fails w
 `provisioning.database_in_use`. The file's older peer case holds `migrations.lock` alone and never
 opens the store, so it could not see this.
 
+**Who holds it: the holder file.** The first take of a folder in a process writes
+`venue.holder.json` beside `venue.lock`, in the same synchronous step as the lock
+(`packages/store/src/venue-lock.ts` → `beginHolding` in `venue-liveness.ts`). It names the holder's
+`kind` (`server`, `restore`, `rejoin`, `provisioning`, or `script` for anything that did not name
+itself), `pid`, `host`, `lockedAt` and `heartbeatAt`. A main-thread timer rewrites the heartbeat
+every 5 s, and the last release removes the file before it lets the lock go. The entry points name
+themselves through `setVenueHolderKind`: `apps/server/src/holder-identity.ts` for the server, restore
+and rejoin, and `packages/provisioning/src/bin.ts`. A holder that dies leaves its file behind; the
+next holder overwrites it.
+
+**Two limits, on purpose.** A start refused `provisioning.database_in_use`
+(`apps/server/src/node-entry.ts`) and `/health` read the file with `readVenueHolder`, and call the
+heartbeat stale at 30 s (`VENUE_HOLDER_STALE_MS`). A stale, missing or unreadable file makes the
+refusal count toward the recovery page, as `provisioning.database_holder_stalled`; a fresh one puts
+the count back. The holder's own watchdog kills it only after 120 s without a main-thread tick
+(`WATCHDOG_KILL_MS`). The gap is for synchronous work that stops the timers without anything being
+stuck: `VACUUM INTO` of a 2.3 GB database took 2412 ms and `wal_checkpoint(truncate)` 32 ms (Node
+v26.7.0, macOS, NVMe). A box on slower storage could come near 30 s, and killing a backup in the
+middle every cycle is worse than a stuck holder living 90 s longer.
+
+**The watchdog, and how the stack is read.** One `worker_threads` worker per process watches a
+tick the main thread stamps every second. After 120 s without one it connects to the main thread
+through the inspector (`Session.connectToMainThread`, `Debugger.pause`), waits up to 2 s for the
+paused frames, writes one line to standard error (and to the log file it was given), writes a JSON
+report file to the directory it was given, and sends the process `SIGKILL`, which releases the lock
+like any other death. Experiments, 2026-09-24, Node v26.7.0, macOS, against a deliberately frozen
+process:
+
+- The inspector route printed the frozen function for a `while (true) {}` and for an
+  `Atomics.wait`. For a long synchronous `node:sqlite` statement and a blocking read of a FIFO it
+  got no paused frames in 2 s, and the process was killed without a stack.
+- `process.report.getReport()` called in the worker reported the WORKER's own stack, and included
+  31 environment variables although the main thread had set `excludeEnv`.
+- `reportOnSignal` with the worker sending `SIGUSR2` to its own process wrote no report within 2 s
+  while the main thread spun.
+- A worker's `console.error` is relayed through the main thread, so it never printed while that
+  thread was frozen; the worker writes to file descriptor 2 directly.
+- Control: a main thread awaiting a 4 s timer was not killed.
+
+The report file holds exactly `code`, `stack`, `kind`, `pid`, `host`, `lockedAt`, `lastTickAt`,
+`killedAt` and `version`: no environment, no command line, no venue data. The server, restore and
+rejoin put these files in `<logDir>/crash-reports`, which is the `logs` volume on a box. The
+recovery page reads only `waitron.log`.
+
+**`recovery.json` has a lock of its own.** Every change to the recovery count (the count before a
+boot, the classified failure, a refused start's undo, the stayed-up clear, the recovery page's
+retry) is one read and one write while holding `recovery.lock` in the state folder
+(`apps/server/src/recovery-lock.ts`). It is the same `begin immediate` technique, but it polls
+instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
+connection in one process with `busy_timeout = 1500` blocked for 4093 ms with a 50 ms timer firing 0
+times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`, whose
+real child processes lose a write in every case once the lock is removed.
+
 **What the guard does not see.** `packages/store/src/venue-lock.test.ts` proves the lock itself. It
 does not prove that every caller that should take the lock does: a new caller passing `exclusive:
 false` wrongly, or a new command that changes the folder's files without `lockVenueDatabase`, is seen
