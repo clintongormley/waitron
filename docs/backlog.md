@@ -2778,11 +2778,12 @@ image constraints under *Detail → Box image*.
   included), `packages/bookings` (#574, about 1,020 to about 270, tests included),
   `packages/credentials` (#577, about 990 to about 410, tests included), `packages/shared` (#579,
   about 945 to about 330, tests included) and `packages/scheduler` (#581, about 820 to about 350,
-  tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included;
-  the rest of `packages/db` is its own pull request). A pruning pull request
+  tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included)
+  and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included). A pruning pull
+  request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581 and #585 and left for the package that owns each, all still OPEN:
+  #579, #581, #585 and #589 and left for the package that owns each, all still OPEN:
   - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
     and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
     engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
@@ -2950,6 +2951,19 @@ image constraints under *Detail → Box image*.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
     dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
     making them static imports is a small code follow-up.
+  - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
+    packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
+    the end of their file: `apps/server/src/boot.test.ts:2761`, `join-requests.test.ts:388` and
+    `:700`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
+    and `:227`, `till-api.fiscal-sale-paths.test.ts:662`, `till-api.ts:895` and `:902`,
+    `till-sale.test.ts:255`, `working-order.test.ts:103` (all under `apps/server/src`),
+    `packages/venue-service/src/operations.ts:351` and `scripts/catalogue-engine-neutral.test.ts:43-44`
+    — name the file and the column instead, with each package's pruning. In
+    `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
+    repeats the first case under another name (a test change, not a comment one). The same
+    "as the table owner" wording #589 deleted from `packages/db/src/change-feed.ts` and
+    `configuration-transfer.ts` (this engine has no table owners) was also in
+    `docs/developers/dashboard-live-updates.md`, removed by the docs push after the land.
   - `packages/credentials`, found by #577 and not changed. Nothing now checks at run time that a
     read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
     suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
@@ -2961,12 +2975,10 @@ image constraints under *Detail → Box image*.
   - The same false comments outside credentials, found by #577: "open database files keep the
     process alive" in `apps/server/scripts/record-one-sale.ts`, `register-till.ts` and
     `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
-    status 0); `packages/db/src/mirror-config.ts` says the mirror token is read at mirror boot
-    (nothing seals or reads `sync.mirror_token`); `apps/server/src/node-identity.ts` still says "ONE
+    status 0); `apps/server/src/node-identity.ts` still says "ONE
     tenant transaction" and omits `credentials.key_version_unknown` among another node's read
     failures; pointers to a missing `errors.reachability.test.ts` in `core`, `fiscal`,
-    `workforce-es` and `reporting` (the guard is `scripts/errors-reachable.test.ts`);
-    `packages/db/src/migrate.ts`'s `MigrationOptions` journal-table reason is unchecked; and two
+    `workforce-es` and `reporting` (the guard is `scripts/errors-reachable.test.ts`); and two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
     `docs/compliance/getting-to-production.md` §4 closed that day.
   - `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
@@ -2999,8 +3011,8 @@ image constraints under *Detail → Box image*.
     error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
     it" comment #588 removed from layouts (it was written about the deleted `tenantId` field and
     left on the next field down) is also at `packages/core/src/incidents.ts:16`,
-    `packages/core/src/settle-sale.ts:27` and `packages/db/src/append-order-amendment.ts:26`, not
-    re-checked there. Comments quoting the PostgreSQL numbers for these two stores remain at
+    `packages/core/src/settle-sale.ts:27`, not re-checked there (#589 deleted the copy in
+    `packages/db/src/append-order-amendment.ts`, whose function reads the field three times). Comments quoting the PostgreSQL numbers for these two stores remain at
     `apps/server/src/management-api.ts:299` and `:358`,
     `apps/server/src/management-api.canvases.test.ts:277` and
     `apps/dashboard/src/i18n/codes.test.ts:92`. `packages/printing/src/errors.test.ts:5` says the
@@ -4583,8 +4595,8 @@ any of this code, so you can still read how something worked under PostgreSQL.
   switched on. It assumes ONE server process per venue folder — a second process filing from the
   same database would have its claims undone — and slice 2's Task 3a (#566) now refuses a second
   process `provisioning.database_in_use`; see the slice-2 entry below.
-- **`apps/server/src/restore-fiscal-e2e.test.ts`'s header gives a reason that no longer holds — OPEN
-  (2026-09-23, found by review of PR #520).** It says `useVenueDb` is not used because it "never
+- **`apps/server/src/restore-fiscal-e2e.test.ts`'s header gives a reason that no longer holds — DONE
+  (2026-09-24, #589 deleted the claim and its line pointers; found by review of PR #520).** It says `useVenueDb` is not used because it "never
   reaches the trigger installer". Traced, not run: `useVenueDb` applies each set through
   `applyMigrationSet` (`packages/db/src/testing/venue-db.ts:227`), which calls
   `installAppendOnlyTriggers` (`:117`). The header also cites `venue-db.ts:169` and
@@ -4855,10 +4867,12 @@ it; and a correction must not decrement a count where it should drop it.
   path it actually takes, then rewording. The candidates are what
   `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
   also includes test fixtures that build a wrapped error by hand; among the comments are
-  `packages/core/src/record-sale.test.ts`,
-  `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
+  `packages/core/src/record-sale.test.ts`.
   #579 took the sentence out of `packages/shared/src/cause-chain.ts` and `engine-failure.ts`, and
-  #585 out of `packages/db/src/schema/series.test.ts`.
+  #585 out of `packages/db/src/schema/series.test.ts`; #589 reworded `packages/db`'s own copies
+  (`deployment.test.ts`, `unique-violation.test.ts`, `testing/errors.test.ts`, `tenancy.test.ts`)
+  after running both paths: through `db.run` a refused insert rejects with a `DrizzleError` whose
+  `.cause` is the engine's error, through `db.execute` with the engine's error itself.
   (`packages/credentials/src/bin.ts`'s claim that the message carries the bind parameters went
   with #577, which measured a refused credential write: a plain engine error reading
   `CHECK constraint failed: …`, with no SQL and no parameter.) The thrown text

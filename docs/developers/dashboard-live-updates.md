@@ -17,7 +17,7 @@ A contributed module receives `liveData` alongside `request` in `DashboardModule
 `src/dashboard/live-queries.ts`. The root subscription guard checks these names against the shipped
 server resources; behavioral tests must still check that your query lists every contributing table. Your server
 module's `changes` declaration identifies its tables and any related objects a write affects. The
-server installs those declarations as the table owner at trading boot, including on mirrors.
+server installs those declarations at trading boot, including on mirrors.
 
 Keep form drafts separate from query snapshots. Update list rows and report values in the observer;
 do not call a whole-screen loader that resets a modal or performs a mutation. `DraftRows` helps with
