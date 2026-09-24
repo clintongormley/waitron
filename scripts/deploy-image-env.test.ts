@@ -480,6 +480,20 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     );
   });
 
+  // The header line is the only thing that ties the notice file to a version, so a pin moved
+  // without rerunning scripts/litestream-notices.mjs fails here; the module list under it is not
+  // compared with the binary.
+  it("ships the notices of what the binary bundles, generated for the pinned version", () => {
+    const bundled = read("deploy/third-party/litestream/NOTICES.txt");
+    expect(bundled.match(/^Litestream version: ([0-9.]+)$/gm)).toEqual([
+      `Litestream version: ${pinned}`,
+    ]);
+    expect(noticeSection("Litestream")).toContain("`litestream/NOTICES.txt`");
+    expect(IMAGE_SMOKE).toContain(
+      'grep -qx "Litestream version: $pinned" /app/third-party/litestream/NOTICES.txt',
+    );
+  });
+
   it("holds the Apache License 2.0 text", () => {
     const apache = read("deploy/third-party/licenses/Apache-2.0.txt");
     expect(apache).toContain("Apache License");

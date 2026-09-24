@@ -49,3 +49,9 @@ release's published SHA-256 before installing it. Litestream is licensed under t
 Version 2.0.
 
 - `licenses/Apache-2.0.txt` is that licence, copied from the `LICENSE` file at the tag.
+- `litestream/NOTICES.txt` holds the licence and notice files of everything built into the binary:
+  the Go standard library and runtime, and every Go module the binary lists as built in. Its header
+  names the Litestream version and the command that produced it,
+  `node scripts/litestream-notices.mjs`, which reads the module list from `go version -m` run on
+  the pinned Linux binaries and copies each module's files unmodified from the Go module proxy.
+  Rerun it whenever the pinned version changes.

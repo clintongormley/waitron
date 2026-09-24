@@ -177,6 +177,7 @@ jobs:
           [ "$reported" = "$pinned" ]
           docker exec "$app" sh -c 'test -s /app/third-party/licenses/Apache-2.0.txt \
             && grep -q "^## Litestream" /app/third-party/README.md'
+          docker exec "$app" grep -qx "Litestream version: $pinned" /app/third-party/litestream/NOTICES.txt
 
       - name: The print agent came up and picked up its server URL
         run: |
