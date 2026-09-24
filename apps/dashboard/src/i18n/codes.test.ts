@@ -3,52 +3,39 @@ import { codeMessage, codeOf } from "./codes.js";
 import { setLocale } from "./t.js";
 
 afterEach(() => {
-  // codes.ts defaults to t.ts's module-level locale (via currentLocale()); reset
-  // to the shipped default so a setLocale in one test cannot leak into another.
+  // Reset to the shipped default so a setLocale in one test cannot leak into another.
   setLocale("es-ES");
 });
 
 it("resolves a known code to its Spanish copy", () => {
-  // Exercises CODE_MESSAGES[code] (first ?? arm) and entry[lang] with lang "es".
   expect(codeMessage("password.invalid", "es")).toBe("Contraseña incorrecta, inténtalo de nuevo");
 });
 
 it("degrades an unknown code to the generic message, NEVER the raw code", () => {
-  // The load-bearing guarantee: an unmapped code must render human copy, never leak
-  // the wire code to the operator. This is the CODE_MESSAGES[code] ?? GENERIC arm.
   const message = codeMessage("totally.made.up", "en");
   expect(message).toBe("Something went wrong, try again");
   expect(message).not.toBe("totally.made.up");
 });
 
 it("degrades a prototype-chain code (toString/constructor) to GENERIC, never undefined", () => {
-  // A code colliding with an Object.prototype member (`toString`, `constructor`, `valueOf`,
-  // `hasOwnProperty`) must still degrade to GENERIC copy — the "only ever a sentence, never the raw
-  // code (and never undefined)" guarantee has to hold for EVERY string, not just registry codes. A
-  // bare `CODE_MESSAGES[code]` would resolve the inherited method (truthy), skip the `?? GENERIC`
-  // arm, and return undefined → an empty banner; an own-key check is what keeps the guarantee true.
   for (const code of ["toString", "constructor", "valueOf", "hasOwnProperty"]) {
     expect(codeMessage(code, "en")).toBe("Something went wrong, try again");
   }
 });
 
 it("resolves a known code to its English copy", () => {
-  // entry[lang] with lang "en" — the other side of the language selection.
   expect(codeMessage("password.invalid", "en")).toBe("Incorrect password, try again");
 });
 
 it("falls back to English for a known code in an unknown language", () => {
-  // "fr" is not a column, so entry["fr"] is undefined and the `?? entry.en` arm fires.
   expect(codeMessage("password.invalid", "fr")).toBe("Incorrect password, try again");
 });
 
 it("strips a region subtag before the language lookup", () => {
-  // "es-ES" → "es"; proves locale.replace(/-.*$/, "") runs before indexing entry.
   expect(codeMessage("totp.invalid", "es-ES")).toBe("Código incorrecto, inténtalo de nuevo");
 });
 
 it("defaults to the active locale when none is passed", () => {
-  // No locale arg → currentLocale(). The shipped default is es-ES.
   expect(codeMessage("passkey.registered")).toBe("Passkey añadida");
   setLocale("en");
   expect(codeMessage("passkey.registered")).toBe("Passkey added");
@@ -64,10 +51,6 @@ it("has actionable copy for Google login failures", () => {
 });
 
 it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)", () => {
-  // Every code the roster surface can surface must map to real copy, never the raw wire code and never
-  // the GENERIC "something went wrong" fallback — so the banner reads as an actionable message. Proven
-  // by deletion: drop any of these from CODE_MESSAGES and codeMessage returns GENERIC_ES → the
-  // not.toBe(GENERIC_ES) assertion goes red. GENERIC is not exported, so its Spanish text is inlined.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of [
     "roster.draft_exists",
@@ -88,13 +71,6 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
 });
 
 it("has a sentence for each in-use delete code (device-profile follow-ons)", () => {
-  // The canvas / device-profile editors DELETE a row that another row still references (a profile
-  // pointing at a canvas, a device pointing at a profile) — the store translates the FK's 23001 into
-  // these, mapped to 409. Each must map to real copy in BOTH languages, never the raw wire code and
-  // never the GENERIC fallback (compared against ITS OWN language's generic). Proven by deletion: drop
-  // either from CODE_MESSAGES and both codeMessage calls return their language's generic → red.
-  // GENERIC is not exported, so derive each language's generic from the fallback path itself — an
-  // unmapped code degrades to GENERIC — rather than hard-coding the copy (which drifts if it changes).
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   for (const code of ["canvas.in_use", "device_profile.in_use"]) {
@@ -106,11 +82,6 @@ it("has a sentence for each in-use delete code (device-profile follow-ons)", () 
 });
 
 describe("codeOf", () => {
-  // codeOf is the companion to codeMessage: it pulls the wire CODE out of a rejected value (the
-  // dashboard API client rejects with a plain object carrying `code`, see
-  // packages/dashboard-kit/src/request.ts), so the same body that
-  // was hand-copied across the screens now lives once beside the code→message seam. Behaviour it
-  // must preserve exactly: `.code` when present, else `fallback` (default `server.internal`).
   it("returns the code when the rejection carries one", () => {
     expect(codeOf({ code: "x" })).toBe("x");
   });
@@ -134,11 +105,6 @@ describe("codeOf", () => {
 });
 
 it("has a sentence for each staff self-service code (my-schedule portal)", () => {
-  // Every code the staff schedule surface (apps/server/src/me-api.ts) can reject with must map to real
-  // copy, never the raw wire code and never the GENERIC fallback — so the banner reads as an actionable
-  // message. These four are the staff-only additions beyond the roster codes above (swap.not_found /
-  // absence.not_found / shift.not_found are already covered). Proven by deletion: drop any of these from
-  // CODE_MESSAGES and codeMessage returns GENERIC_ES → the not.toBe(GENERIC_ES) assertion goes red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of [
     "swap.not_permitted",
@@ -152,11 +118,6 @@ it("has a sentence for each staff self-service code (my-schedule portal)", () =>
 });
 
 it("has a sentence for each gate and request-screen code the management routes answer", () => {
-  // The codes every management surface can be answered with, whatever screen the operator is on: the
-  // session gate (`management_session.*`), the two authorization refusals, and the two request screens
-  // every route runs before its own work. The per-screen cases below say these "are covered above" and
-  // point here, so this is the case that makes that sentence true. Proven by deletion: drop any of
-  // these from CODE_MESSAGES and codeMessage returns its language's generic → red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   const GENERIC_EN = "Something went wrong, try again";
   for (const code of [
@@ -174,12 +135,6 @@ it("has a sentence for each gate and request-screen code the management routes a
 });
 
 it("has a sentence for each printing code (Impresoras screen)", () => {
-  // Every code the Impresoras surface (apps/server/src/print-api.ts) can reject with must map to real
-  // copy, never the raw wire code and never the GENERIC fallback — so the banner reads as an actionable
-  // message. `management.request_invalid` / `shared.invalid_id` (body/id screens) and
-  // `management_session.*` / `authorization.not_permitted` (the gate) are asserted by the gate case
-  // directly above, so this case lists only what is particular to this screen. Proven
-  // by deletion: drop any of these from CODE_MESSAGES and codeMessage returns GENERIC_ES → red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of ["printer.invalid_config", "printer.not_found", "agent.not_found"]) {
     expect(codeMessage(code, "es")).not.toBe(code);
@@ -188,12 +143,6 @@ it("has a sentence for each printing code (Impresoras screen)", () => {
 });
 
 it("has a sentence for each purchase-invoice code (Compras screen)", () => {
-  // Every code the purchase-invoice routes (apps/server/src/purchasing-api.ts) can reject with must map
-  // to real copy: the Compras screen renders ONE banner, `codeMessage(this.errorKey)`, so an unmapped
-  // code reaches the operator as the GENERIC fallback and tells them nothing about which amount is
-  // wrong. `management.request_invalid` / `shared.invalid_id` and the gate codes are asserted by the
-  // gate case above. Proven by deletion: drop any of these from CODE_MESSAGES and codeMessage returns
-  // its language's generic → red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   const GENERIC_EN = "Something went wrong, try again";
   for (const code of [
@@ -210,15 +159,6 @@ it("has a sentence for each purchase-invoice code (Compras screen)", () => {
 });
 
 it("has a sentence for a missing catalogue", () => {
-  // The location↔menu writes (apps/server/src/catalogue-api.ts) reject with `catalogue.not_found` when
-  // a catalogueId names no catalogue the tenant can see. The catalogue management surfaces render
-  // codeMessage(errorKey), so it must map to real copy, never the raw wire code and never the GENERIC
-  // fallback. `management.request_invalid` / `shared.invalid_id` and the gate codes are asserted by the
-  // gate case above.
-  // Each language is compared against ITS OWN generic (the "es" copy against GENERIC_ES, the "en" copy
-  // against GENERIC_EN) — comparing the English result against the Spanish generic would never catch an
-  // English regression to the English fallback. Proven by deletion: drop `catalogue.not_found` from
-  // CODE_MESSAGES and both codeMessage calls return their language's generic → the assertions go red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   const GENERIC_EN = "Something went wrong, try again";
   expect(codeMessage("catalogue.not_found", "es")).not.toBe("catalogue.not_found");
@@ -227,11 +167,6 @@ it("has a sentence for a missing catalogue", () => {
 });
 
 it("has a sentence for the allergen declaration codes", () => {
-  // The allergen picker's declaration (apps/server/src/catalogue-api.ts →
-  // packages/catalogue/src/allergens.ts) rejects with `allergen.invalid_code` for an unknown EU-14
-  // code (400). It must map to real copy, never the raw wire code and never the GENERIC fallback.
-  // Proven by deletion: drop it from CODE_MESSAGES and codeMessage returns GENERIC_ES → the
-  // not.toBe(GENERIC_ES) assertion goes red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of ["allergen.invalid_code"]) {
     expect(codeMessage(code, "es")).not.toBe(code);
@@ -247,16 +182,6 @@ it.each(["modifier.invalid", "modifier.not_found", "modifier.in_use"])(
 );
 
 it("has a sentence for each options/extras list code the dashboard can be answered with", () => {
-  // The six-routes-per-kind list surface (`mountListSurface`, apps/server/src/catalogue-api.ts:482,
-  // mounted at :641 and :662) can answer a DASHBOARD caller with exactly these: the authoring-body
-  // refusals `options.invalid` / `extras.invalid`, the default-language refusals
-  // `options.translation_required` / `extras.translation_required`, and the two not-founds. The
-  // order-time codes on the same STATUS map — `options.label_required` and `extras.limit_exceeded` —
-  // are NOT here: their only throwers are `validateOptionSelections` / `validateExtraSelections`
-  // (packages/catalogue/src/option-contract.ts:172, extra-contract.ts:285 and :291), reached from the
-  // till's order path, never from a management route. Each language is compared against ITS OWN
-  // generic. Proven by deletion: drop any of these from CODE_MESSAGES and both calls return that
-  // language's generic → red.
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   for (const code of [

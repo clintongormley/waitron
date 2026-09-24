@@ -9,13 +9,8 @@ import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
 
 /**
- * Installs a CONTROLLABLE stub for `window.matchMedia`, targeting only the drawer breakpoint
- * (`(max-width: 48rem)`); every other query (e.g. prefers-color-scheme) delegates to the real one, so
- * theming is untouched. Returns `set(narrow)` — which flips `matches` and fires the shell's registered
- * change listener — and `restore()`. Used instead of a real viewport resize because a genuine
- * desktop↔narrow resize does NOT reliably re-fire matchMedia in this headless browser within a test
- * budget (proven: the narrow→desktop transition timed out). This drives the shell's `narrow` state
- * deterministically. Install it BEFORE mountWidget so the element's connectedCallback reads the stub.
+ * Stubs `window.matchMedia` for the drawer breakpoint only; every other query delegates to the real
+ * one. Install it BEFORE mountWidget so the element's connectedCallback reads the stub.
  */
 function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () => void } {
   const DRAWER_QUERY = "(max-width: 48rem)";
@@ -57,9 +52,6 @@ import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
 
-/** A stub of the module request primitive: every module screen reads through it on connect. Resolves an
- * empty array for the reads the bundled bookings screen makes (listTables + the day's bookings), so
- * mounting it in the generic-mount test leaves no stray rejection. */
 const stubRequest: DashboardRequest = async () => [] as never;
 
 const people: PersonSummary[] = [
@@ -74,12 +66,6 @@ const people: PersonSummary[] = [
   },
 ];
 
-/**
- * The default WHOAMI body every `stubApi` hands back — the one fixture the locale tests extend, so a
- * field added to the real response is added here once rather than in a second, drifting copy.
- * `locale` is null (nobody has chosen a language) and `sessionDefault` is the server's
- * Accept-Language match, which for this Spanish venue's default browser is the venue's own language.
- */
 const meResponse = {
   personId: "p1",
   role: "manager",
@@ -93,24 +79,10 @@ const meResponse = {
   modules: ["bookings"],
 };
 
-/**
- * A fake `DashboardApi` covering every method the shell (and the screens it mounts) calls: the shell
- * itself calls `getMe` (the WHOAMI session probe) and `logout`; the login screen it mounts calls
- * `getStaffRoster`/`login`, the manager staff screen calls `listStaff`/`createPerson`, and the staff
- * self-service screen calls `getStaffRoster`/`listMyShifts`/`listMySwaps`/`listMyAbsences`. Each
- * defaults to a resolved value; `getMe` defaults to a MANAGER (so the default probe lands on the
- * manager `staff` screen, the pre-role-awareness behaviour). A test overrides any with its own
- * `vi.fn()`. Cast through `unknown` because the shell touches only this method surface, mirroring
- * `apps/till/src/till-app.test.ts`'s `stubApi`.
- */
+/** Every read the shell and the screens it mounts make on connect resolves: a stray rejection is a
+ * finding. */
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
-    // Per-user-language-preference (Task 10): getMe now carries the person's stored `locale` + the
-    // `venueLocale` fallback (default: no preference at a Spanish venue → the UI stays es-ES); the boot
-    // seed reads `getLocales` (loginDefault es-ES) and the logged-in persist path writes `putLocale`.
-    // Module gating (Task 4): the default probe is a manager HOLDING `booking.manage` with `bookings`
-    // enabled — reproducing the prior always-on bookings module for the Task-3 nav/screen tests. A test
-    // that gates on the module supplies its own `permissions`/`modules`.
     getMe: vi.fn().mockResolvedValue({ ...meResponse }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -132,63 +104,33 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       .mockResolvedValue({ email: "new@example.test", purpose: "invitation" }),
     createPerson: vi.fn().mockResolvedValue({ id: "p2" }),
     logout: vi.fn().mockResolvedValue(undefined),
-    // The staff self-service (my-schedule) screen loads these on connect; resolve them so a staff-role
-    // session (or navigating there) leaves no stray rejection.
     listMyShifts: vi.fn().mockResolvedValue([]),
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
-    // The catalogue screen the nav mounts loads these on connect; resolve them so navigating to it
-    // does not leave a stray rejection (a rejection is a finding — the suite runs pristine). The
-    // catalogue screen also loads `listStations` (KDS-1 routing selects), as does the Cocina screen.
     listCatalogues: vi.fn().mockResolvedValue([]),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
-    // The receipt screen the nav mounts loads `getReceipt` on connect; resolve it (and stub the
-    // writer it calls on Guardar) so navigating to it leaves no stray rejection.
     getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
-    // The service-status screen the nav mounts loads this on connect; resolve it so navigating to it
-    // leaves no stray rejection.
     listStatuses: vi.fn().mockResolvedValue([]),
-    // The roster screen the nav mounts loads these on connect; resolve them so navigating to it leaves
-    // no stray rejection.
     getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
     getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
-    // The approvals screen the nav mounts loads both queues on connect; resolve them so navigating to
-    // it leaves no stray rejection.
     listPendingSwaps: vi.fn().mockResolvedValue([]),
     listPendingAbsences: vi.fn().mockResolvedValue([]),
-    // The planned-vs-actual screen the nav mounts loads this on connect (after getLocations/listStaff,
-    // both already stubbed above); resolve it so navigating to it leaves no stray rejection.
     getPlannedVsActual: vi.fn().mockResolvedValue([]),
-    // The purchases screen the nav mounts loads this on connect; resolve it so navigating to it leaves
-    // no stray rejection.
     listPurchaseInvoices: vi.fn().mockResolvedValue([]),
-    // The floor-plan screen the nav mounts loads this on connect; resolve it so navigating to it leaves
-    // no stray rejection. (The bookings screen is a MODULE now — it loads through the injected `.request`,
-    // not this api — so its reads are stubbed by `stubRequest`, not here.)
     listTables: vi.fn().mockResolvedValue([]),
-    // The devices screen the nav mounts loads this on connect (listStations is already stubbed above);
-    // resolve it so navigating to it leaves no stray rejection.
     listDevices: vi.fn().mockResolvedValue([]),
-    // The printers screen the nav mounts loads these on connect; resolve them so navigating to it
-    // leaves no stray rejection.
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
     listTills: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
-    // The canvas-editor screen the nav mounts loads this on connect; resolve it so navigating to it
-    // leaves no stray rejection.
     listCanvases: vi.fn().mockResolvedValue([]),
-    // The diagnostics screen (manager-gated nav) polls these on connect; resolve them so navigating to
-    // it leaves no stray rejection.
     getRecentLogs: vi.fn().mockResolvedValue({ lines: [] }),
     getVerbosity: vi.fn().mockResolvedValue({ level: "info", revertsAt: null }),
     setVerbosity: vi.fn().mockResolvedValue(undefined),
-    // The overview screen is the non-staff LANDING (Task 9), so it loads on connect for almost every
-    // manager/supervisor/admin session in this suite; resolve it so booting leaves no stray rejection.
     getSalesOverview: vi.fn().mockResolvedValue({
       businessDay: "2026-08-30",
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
@@ -196,8 +138,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       openTables: { open: 0, total: 0 },
       topSellers: [],
     }),
-    // The sales screen the nav mounts loads a single-day close by default (from === to === today());
-    // resolve both report calls so navigating to it leaves no stray rejection.
     getDailyClose: vi.fn().mockResolvedValue({
       businessDay: "2026-08-30",
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
@@ -211,7 +151,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
       topSellers: [],
     }),
-    // The shell watches alerts for every non-staff session; default to none visible.
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
@@ -222,8 +161,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
 it.each(["staff", "supervisor", "manager", "admin"])(
   "makes Your profile reachable for %s as a modal over their ordinary landing face, by URL",
   async (role) => {
-    // "Your profile" is not itself a face — /manage/profile opens it as a modal OVER whatever the
-    // person would normally land on, since it has no sidebar entry to be "the current page" for.
     history.replaceState(null, "", "/manage/profile");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -252,8 +189,6 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     expect(modal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
     if (role === "staff") expect(el.shadowRoot!.querySelector("nav")).toBeNull();
-    // The URL still says "profile" (deep-linking still works), but the person's ordinary default
-    // is what's actually mounted underneath — never a page called "profile".
     expect(new URL(location.href).pathname).toBe("/manage/profile");
     expect(
       el.shadowRoot!.querySelector(
@@ -265,14 +200,12 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     await flush(el);
     expect(modal.open).toBe(false);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).toBeNull();
-    // Closing replaces the URL with the underlying page's own — "profile" leaves no Back-button stop.
     expect(new URL(location.href).pathname).toBe(
       role === "staff" ? "/manage/my-schedule" : "/manage/overview",
     );
   },
 );
 
-/** Drains the microtask queue (settling the awaited probe/logout promises) then Lit's render. */
 async function flush(el: DashboardApp): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -340,20 +273,10 @@ const navPrinters = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printers]");
 const navCanvasEditor = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-canvas-editor]");
-/** The sidebar's navigation landmark (present only for a non-staff logged-in session). */
 const sidebarNav = (el: DashboardApp) => el.shadowRoot!.querySelector("nav[aria-label]");
-/** A nav item by its stable `data-test="nav-<screen>"` id (the ids every downstream consumer pins). */
 const navItem = (el: DashboardApp, screen: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="nav-${screen}"]`);
 
-/** The faces the grouped sidebar switches between for a manager/admin session (`diagnostics` is
- * manager-gated), every one keeping its `data-test` id — used to assert each item is present and to
- * pin the count. `bookings` is the bookings module face, always enabled by
- * this suite's default stub (`modules: ["bookings"]` + `booking.manage`), so it is folded into the
- * fixture. A module face renders AFTER its group's core items, so `bookings` sorts to the END of the
- * Service group (after kitchen), which this order mirrors — pinned overview+sales, then Menu /
- * Service (+ the bookings module face) / Team / Purchasing / Configuration. The membership test below
- * asserts presence and count, not order. */
 const NAV_SCREENS = [
   "overview",
   "sales",
@@ -378,7 +301,6 @@ const NAV_SCREENS = [
   "email",
 ] as const;
 
-/** The five group-header i18n keys the sidebar renders (the pinned overview+sales group has none). */
 const NAV_GROUP_KEYS = [
   "nav.group.menu",
   "nav.group.service",
@@ -386,15 +308,11 @@ const NAV_GROUP_KEYS = [
   "nav.group.purchasing",
   "nav.group.configuration",
 ] as const;
-/** The chooser in the logged-in shell (present only when logged in). */
 const shellChooser = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
-/** The chooser nested inside the login screen's OWN shadow root (present only on the login screen). */
 const loginChooser = (el: DashboardApp) =>
   login(el)!.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
 
-/** The logged-in screen tags — exactly one is mounted at a time (the staff self-service face plus the
- * manager faces the shell test navigates). */
 const SCREEN_TAGS = [
   "dashboard-my-schedule-screen",
   "dashboard-overview-screen",
@@ -416,13 +334,10 @@ const SCREEN_TAGS = [
   "dashboard-email-screen",
 ] as const;
 
-/** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
 function mountedScreens(el: DashboardApp): string[] {
   return SCREEN_TAGS.filter((tag) => el.shadowRoot!.querySelector(tag));
 }
 
-/** Count every `<h1>` in the composed tree: the shell's own (there are none) plus the mounted
- * screen's — the heading-outline invariant is exactly one across the whole DOM. */
 function countH1(el: DashboardApp): number {
   const shellH1 = el.shadowRoot!.querySelectorAll("h1").length;
   const screenH1 = SCREEN_TAGS.reduce((n, tag) => {
@@ -432,15 +347,12 @@ function countH1(el: DashboardApp): number {
   return shellH1 + screenH1;
 }
 
-/** Fires the login screen's composed, bubbling `logged-in` — the exact shape it emits on success. */
 function emitLoggedIn(source: Element): void {
   source.dispatchEvent(
     new CustomEvent("logged-in", { detail: { personId: "p1" }, bubbles: true, composed: true }),
   );
 }
 
-/** Fires a composed, bubbling CustomEvent from `source` — the shape the chooser's `locale-selected`
- * (and every screen's event) emits, so it crosses the shadow boundary up to the shell's handler. */
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
@@ -452,8 +364,7 @@ afterEach(() => {
   sessionStorage.clear();
   localStorage.clear();
 });
-// `setLocale` mutates module-global state that outlives a test, so pin it back to the shipped default
-// around every case — otherwise one test's switch leaks into the next.
+// `setLocale` is module-global state that outlives a test.
 beforeEach(() => setLocale("es-ES"));
 afterEach(() => setLocale("es-ES"));
 
@@ -856,10 +767,7 @@ describe("dashboard-app", () => {
   });
 
   it("shows login when no session, business overview after a manager logs in", async () => {
-    // getMe rejects at boot (no session) then resolves as a MANAGER after login — the real shape: the
-    // whoami 401s before login and resolves once the cookie is set. Since Task 9 a non-staff login
-    // lands on the business `overview` screen (was the manager `staff` screen — still one nav click
-    // away, see the "navigates between the staff and catalogue screens" test).
+    // getMe rejects at boot (no session), then resolves as a MANAGER after login.
     const api = stubApi({
       getMe: vi
         .fn()
@@ -889,8 +797,6 @@ describe("dashboard-app", () => {
   });
 
   it("starts on the business overview screen when a manager session already exists", async () => {
-    // Default getMe resolves as a manager → the shell lands on the business `overview` screen (Task 9's
-    // non-staff landing).
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
     expect(overview(el)).toBeTruthy();
@@ -900,10 +806,6 @@ describe("dashboard-app", () => {
   });
 
   it("a STAFF-role session opens on the self-service my-schedule screen, never the manager staff screen", async () => {
-    // The whole point of the fast-follow: a staff person (empty permission set) resolves via role-blind
-    // getMe and lands on the self-service view, not the manager screens. Proven by deletion: dropping
-    // the `role === "staff" ? "my-schedule" : "overview"` branch in #applyMe lands them on `overview`
-    // instead — the non-staff default screen.
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
@@ -937,11 +839,9 @@ describe("dashboard-app", () => {
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
-    // No nav faces…
     expect(navStaff(el)).toBeNull();
     expect(navCatalogue(el)).toBeNull();
     expect(navRoster(el)).toBeNull();
-    // …but the logout control is still present (a staff person can sign out).
     expect(logoutBtn(el)).toBeTruthy();
   });
 
@@ -1016,9 +916,6 @@ describe("dashboard-app", () => {
   });
 
   it("opens profile from any screen without navigating away, and returns to exactly that screen on close", async () => {
-    // The whole point of profile being a modal: opening it from Catalogue must not lose Catalogue —
-    // no nav item should light up for it (it has none), and closing must land back on Catalogue,
-    // not some generic default the way a real navigation away-and-back would.
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -1032,7 +929,6 @@ describe("dashboard-app", () => {
     await flush(el);
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     expect(modal.open).toBe(true);
-    // Catalogue is still mounted behind the modal — profile opened OVER it, not instead of it.
     expect(el.shadowRoot!.querySelector("dashboard-catalogue-screen")).not.toBeNull();
     expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
     expect(new URL(location.href).pathname).toBe("/manage/profile");
@@ -1045,12 +941,8 @@ describe("dashboard-app", () => {
   });
 
   it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
-    // profile-screen's "profile-updated" (dispatched on a successful save) re-probes the session,
-    // which resolves the screen from the CURRENT url — still "profile" at that point, since the
-    // modal has not closed. #applyRequestedScreen("profile") must leave the underlying screen
-    // alone rather than falling through #permittedScreen(null) to the "overview" default: it did
-    // exactly that here before the fix, so closing after a save silently landed on Overview
-    // instead of Catalogue, even though the modal itself looked untouched throughout.
+    // A save's profile-updated re-probes the session while the URL still reads "profile"; the
+    // screen under the modal must survive that.
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
@@ -1099,12 +991,8 @@ describe("dashboard-app", () => {
   });
 
   it("disables the relocated Edit button until profile data has actually loaded, and never throws if clicked early", async () => {
-    // Edit used to live INSIDE profile-screen.ts's own render, which only ever ran once
-    // `profile !== null` — so the button and its data always existed together. Moving it into
-    // dashboard-app.ts's own footer decoupled the two: without this, the footer button renders
-    // (and is clickable) the instant the modal opens, before getProfile() has resolved, and
-    // editDetails() dereferences `this.profile!.displayName` — a real crash on a slow load or a
-    // fast double click.
+    // Edit lives in the shell's footer, so it renders before getProfile() resolves, and
+    // editDetails() reads the loaded profile.
     let resolveProfile!: (value: unknown) => void;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -1142,13 +1030,8 @@ describe("dashboard-app", () => {
   });
 
   it("resets both the active tab and the Edit button's readiness on a fresh reopen, not stale state from the previous visit", async () => {
-    // `<dashboard-profile-screen>` is destroyed and recreated on every open/close
-    // (`${this.profileOpen ? html\`<dashboard-profile-screen...\` : nothing}`), and both
-    // `profileTab` and `profileReady` only ever reset via that fresh instance's own
-    // `connectedCallback` re-announcing "details"/not-ready. Nothing else in dashboard-app.ts
-    // resets them on close — if that announce were ever lost, a reopen would carry over the
-    // PREVIOUS visit's tab and (more seriously) its readiness, showing an enabled Edit button over
-    // data that has not loaded yet for the new visit.
+    // Only the fresh profile-screen instance announcing itself on connect resets `profileTab` and
+    // `profileReady`; nothing in the shell resets them on close.
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
@@ -1186,9 +1069,6 @@ describe("dashboard-app", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
 
-    // Reopen: a fresh profile-screen instance loads fresh — Edit is back on "details" (present,
-    // not carried over as hidden from the previous visit's Security tab) and, once its own load
-    // resolves, enabled — never inheriting the previous visit's readiness by accident.
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="profile"]')!.click();
     await flush(el);
     expect(editButton()).not.toBeNull();
@@ -1196,11 +1076,6 @@ describe("dashboard-app", () => {
   });
 
   it("closing profile-screen's OWN nested edit modal does not also close the outer profile modal", async () => {
-    // wt-close is composed+bubbling. profile-screen's per-field edit modal is nested inside the
-    // outer profile modal, and both listen for that same event type — without a target===
-    // currentTarget guard, dismissing the inner one also dismissed the outer one, since its event
-    // bubbles straight through it. Reproduced live: Cancel on "Your details" dropped all the way
-    // back to the page behind Your profile, not back to Your profile's own view.
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
@@ -1238,14 +1113,11 @@ describe("dashboard-app", () => {
     await profileScreen.updateComplete;
     await flush(el);
     expect(innerModal.open).toBe(false);
-    expect(outerModal.open).toBe(true); // the bug: this used to also be false
+    expect(outerModal.open).toBe(true);
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
   });
 
   it("treats ANY probe rejection as not-logged-in, never an unhandled rejection", async () => {
-    // The common case is the `management_session.required`/401 reject, but the probe catches
-    // EVERYTHING so a stray/network rejection still lands on login rather than escaping unhandled
-    // (the whole suite runs with pristine output, which pins that). A bare Error carries no `code`.
     const api = stubApi({ getMe: vi.fn().mockRejectedValue(new Error("network down")) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -1254,9 +1126,7 @@ describe("dashboard-app", () => {
   });
 
   it("contains the logged-in event so it does not leak past the shell (stopPropagation)", async () => {
-    // House pattern: the shell is the final consumer of the composed `logged-in`, so it stops it at
-    // the shadow boundary rather than letting it bubble on to the document. `host` is the light-DOM
-    // node OUTSIDE the shell's shadow root, so a listener there fires only if propagation escaped.
+    // `host` is outside the shell's shadow root, so a listener there fires only if propagation escaped.
     const api = stubApi({
       getMe: vi
         .fn()
@@ -1485,8 +1355,6 @@ describe("dashboard-app", () => {
     expect(logoutBtn(el)).toBeNull();
   });
 
-  // The logged-in shell gains a nav between the staff and catalogue screens. It opens on overview (the
-  // probe's landing, Task 9), and the nav switches the mounted screen — exactly one shows at a time.
   it("opens a product's editor on the catalogue screen from the units in-use modal", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
@@ -1551,36 +1419,29 @@ describe("dashboard-app", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
 
-    // Opens on overview, with both nav controls present.
     expect(overview(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
     expect(catalogue(el)).toBeNull();
     expect(navStaff(el)).toBeTruthy();
     expect(navCatalogue(el)).toBeTruthy();
 
-    // To staff.
     navStaff(el)!.click();
     await flush(el);
     expect(staff(el)).toBeTruthy();
     expect((staff(el) as unknown as { currentPersonId: string }).currentPersonId).toBe("p1");
     expect(overview(el)).toBeNull();
 
-    // To catalogue.
     navCatalogue(el)!.click();
     await flush(el);
     expect(catalogue(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
 
-    // Back to staff.
     navStaff(el)!.click();
     await flush(el);
     expect(staff(el)).toBeTruthy();
     expect(catalogue(el)).toBeNull();
   });
 
-  // Task 9: the two new reporting faces. The shell opens on overview (Task 9's landing), navigating to
-  // sales mounts the sales screen, and navigating back to overview mounts it again (proving the "home"
-  // nav button also works as a plain switch, not just the boot-time default).
   it("navigates to the sales screen and back to overview", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -1722,45 +1583,35 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  // Roster ("Turnos"), approvals ("Aprobaciones"), planned-actual ("Previsto vs real"), purchases
-  // ("Compras") and service-status ("Estados de servicio") each have their own dedicated nav test
-  // above, so this test walks the remaining three faces (staff / catalogue / receipt).
-  // Exactly one screen — and exactly one <h1> (each screen owns its own; the shell adds none) — shows
-  // at a time.
   it("navigates the three non-roster logged-in screens, one screen and one h1 at a time", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
 
-    // Opens on overview (Task 9's non-staff landing), with all three nav controls present.
     expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
     expect(countH1(el)).toBe(1);
     expect(navStaff(el)).toBeTruthy();
     expect(navCatalogue(el)).toBeTruthy();
     expect(navReceipt(el)).toBeTruthy();
 
-    // To staff.
     navStaff(el)!.click();
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
     expect(staff(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
 
-    // To receipt.
     navReceipt(el)!.click();
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-receipt-screen"]);
     expect(receipt(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
 
-    // To catalogue.
     navCatalogue(el)!.click();
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-catalogue-screen"]);
     expect(catalogue(el)).toBeTruthy();
     expect(countH1(el)).toBe(1);
 
-    // Back to staff.
     navStaff(el)!.click();
     await flush(el);
     expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
@@ -1785,20 +1636,15 @@ describe("dashboard-app", () => {
     expect(nav?.fields.screen).toBe("sales");
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every manager
-  // faces (a manager session sees the gated configuration tools too) keeps its `data-test="nav-<screen>"`
-  // id, and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all nav items", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    // Every group header (a toggle button.nav-group) renders its localised label…
     const headers = [...el.shadowRoot!.querySelectorAll("button.nav-group")].map((h) =>
       h.textContent?.trim(),
     );
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
-    // …and every manager face is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
     expect(navItem(el, "recipe")).toBeNull();
     expect(navItem(el, "location-menus")).toBeNull();
@@ -1852,13 +1698,8 @@ describe("dashboard-app", () => {
   });
 
   it("keeps the clicked group header at the same on-screen position when collapsing shrinks the list above the fold", async () => {
-    // A scrollable sidebar whose content shrinks below the current scroll offset gets its scrollTop
-    // clamped by the browser — collapsing a group below the fold used to visibly snap the whole
-    // list upward as a result. Reproduced with real geometry: a short viewport, scrolled partway
-    // down (not pinned to an extreme edge — that can make exact preservation mathematically
-    // impossible if the group being collapsed is itself propping up the scrollable range, which
-    // is a real but separate constraint from the bug this guards), collapsing a MIDDLE group so
-    // there's real content both above and below to absorb the shrink.
+    // Scrolled partway, not to an edge, where exact preservation can be impossible; a MIDDLE group
+    // leaves content above and below to absorb the shrink.
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1200, 550);
@@ -1883,34 +1724,20 @@ describe("dashboard-app", () => {
     }
   });
 
-  // The module-UI seam (SP2 Task 3): a BUNDLED module's screen and nav are mounted GENERICALLY from the
-  // registry, not hand-wired. `bookings` is now a module contribution (its screen + widget live in
-  // @waitron/bookings/dashboard, reached only via @waitron/dashboard-modules); here it is active with no
-  // gate, so a non-staff session shows its nav item and routing to it renders <dashboard-bookings-screen>
-  // through the generic path. Proof-by-deletion: dropping the `#activeScreens.get(this.screen)` lookup in
-  // #renderScreen (or the module-items append in #nav) makes the respective assertion below go red.
   it("renders a bundled module's screen and nav via the generic path", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
       request: stubRequest,
     });
     await flush(el);
-    // The module's nav item shows (in its declared `service` group), by its stable data-test id…
     expect(navItem(el, "bookings")).toBeTruthy();
-    // …and routing to it mounts the module's own screen element through the generic mount path.
     navItem(el, "bookings")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
   });
 
-  // The two runtime gates (SP2 Task 4): a module's nav/screen shows only when the module is ENABLED
-  // (`me.modules`) AND the signed-in person HOLDS its permission (`me.permissions` ⊇ requiresPermission).
-  // Both directions are proven: enabled-but-not-permitted and permitted-but-not-enabled each HIDE it,
-  // and only enabled+permitted shows it and routes to it.
   it("hides a module's nav AND denies its screen when the permission is absent (enabled but not permitted)", async () => {
-    // bookings is ENABLED (`modules: ["bookings"]`) but the manager does NOT hold `booking.manage`, so
-    // the nav item is filtered out and a URL naming the module falls back to overview. Drive the URL
-    // restore path to prove `#permittedScreen` denies the module id, not just the nav filter.
+    // Drive the URL restore path, so `#permittedScreen` is tested and not just the nav filter.
     const url = new URL(location.href);
     url.pathname = "/manage/bookings";
     history.replaceState(null, "", url);
@@ -1930,14 +1757,11 @@ describe("dashboard-app", () => {
     });
     await flush(el);
     expect(navItem(el, "bookings")).toBeNull();
-    // The requested `bookings` URL is denied and falls back to the overview landing.
     expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).toBeNull();
     expect(overview(el)).toBeTruthy();
   });
 
   it("hides a module entirely when it is not in the enabled set (permitted but not enabled)", async () => {
-    // The manager HOLDS `booking.manage`, but bookings is NOT enabled (`modules: []`), so the module is
-    // never activated: its nav item is absent and its screen never mounts.
     const url = new URL(location.href);
     url.pathname = "/manage/bookings";
     history.replaceState(null, "", url);
@@ -1983,11 +1807,6 @@ describe("dashboard-app", () => {
     expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
   });
 
-  // Module activation RECONCILES per session, it is not once-ever: a second /me (a re-probe or re-login)
-  // whose `modules` set no longer enables a module must stop showing it, even though a tab stayed open.
-  // A run-it probe falsified the once-ever early-return — `modules: []` on a second session still
-  // permitted bookings. Proof-by-deletion: restoring the `if (this.#activeScreens.size) return` guard to
-  // #activate makes the post-re-login assertions go red (the module lingers).
   it("reconciles the active module set on a re-login — a now-disabled module stops showing", async () => {
     const session1 = {
       personId: "p1",
@@ -1998,7 +1817,6 @@ describe("dashboard-app", () => {
       permissions: ["booking.manage"],
       modules: ["bookings"],
     };
-    // Second session: SAME person and permission, but bookings is no longer enabled server-side.
     const session2 = { ...session1, modules: [] as string[] };
     const getMe = vi.fn().mockResolvedValueOnce(session1).mockResolvedValue(session2);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -2006,14 +1824,11 @@ describe("dashboard-app", () => {
       request: stubRequest,
     });
     await flush(el);
-    // First session: bookings enabled + permitted → its nav shows and it routes.
     expect(navItem(el, "bookings")).not.toBeNull();
     navItem(el, "bookings")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-bookings-screen")).not.toBeNull();
 
-    // Re-login on the SAME element: logout drops to login, the login screen's `logged-in` re-probes,
-    // and the second /me disables bookings. The active set must be rebuilt from it, not left once-ever.
     logoutBtn(el)!.click();
     await flush(el);
     emitLoggedIn(login(el)!);
@@ -2024,12 +1839,9 @@ describe("dashboard-app", () => {
     expect(overview(el)).toBeTruthy();
   });
 
-  // A contribution naming a nav group the app does not know is a WIRING ERROR — #activate THROWS rather
-  // than silently skipping the screen. The throw fires in #applyMe, inside #probeSession's total catch,
-  // so it surfaces as the app dropping the otherwise-valid MANAGER session to login (nothing mounts).
-  // That distinguishes throw from a silent `continue`: a silent skip would let the manager through to
-  // overview. Driven by monkey-patching the shared registry array for this one mount (restored in a
-  // finally), so the guard is exercised without a second fixture module.
+  // The throw lands in #probeSession's total catch, so it shows as a manager session dropping to
+  // login; a silent skip would have reached overview. The shared registry array is patched for this
+  // one mount and restored in a finally.
   it("refuses to mount when a contribution names an unknown nav group (throws in #activate)", async () => {
     const bad = {
       module: "bookings",
@@ -2061,10 +1873,6 @@ describe("dashboard-app", () => {
     }
   });
 
-  // The diagnostics nav is manager-gated (`requiresManager: true`, Task 15): a `supervisor` session
-  // must NOT see it, while a `manager` (and `admin`) session does. Proof-by-deletion: dropping the
-  // `.filter((item) => !item.requiresManager || …)` from `#nav()` renders it for the supervisor too,
-  // so the first assertion below goes red.
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -2080,7 +1888,6 @@ describe("dashboard-app", () => {
     });
     const { el: sup } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
     await flush(sup);
-    // A supervisor sees the ordinary configuration items but not the gated diagnostics one.
     expect(navItem(sup, "devices")).toBeTruthy();
     expect(navItem(sup, "diagnostics")).toBeNull();
 
@@ -2096,13 +1903,11 @@ describe("dashboard-app", () => {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    // Opens on overview (Task 9's landing) → overview is the current item.
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBe("page");
 
     navItem(el, "catalogue")!.click();
     await flush(el);
     expect(catalogue(el)).toBeTruthy();
-    // The clicked item becomes current, and the previously-current one drops the marker.
     expect(navItem(el, "catalogue")!.getAttribute("aria-current")).toBe("page");
     expect(navItem(el, "overview")!.getAttribute("aria-current")).toBeNull();
   });
@@ -2114,14 +1919,10 @@ describe("dashboard-app", () => {
     await flush(el);
     host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
-    // Opens on overview (Task 9's landing) → overview is current, catalogue is resting.
     expect(getComputedStyle(navItem(el, "overview")!).color).toBe("rgb(4, 5, 6)");
     expect(getComputedStyle(navItem(el, "catalogue")!).color).toBe("rgb(1, 2, 3)");
   });
 
-  // Task 12: the responsive drawer. On narrow screens the sidebar is an off-canvas drawer toggled by
-  // the hamburger; opening it flips `.layout.drawer-open` and shows a scrim, and selecting any nav item
-  // closes it again while STILL switching the screen (so a phone tap navigates and dismisses in one go).
   it("shows the gear icon on the Settings group header, and no other group header", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -2150,13 +1951,11 @@ describe("dashboard-app", () => {
     expect(layout().classList.contains("drawer-open")).toBe(false);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
 
-    // Open it via the hamburger.
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
     await el.updateComplete;
     expect(layout().classList.contains("drawer-open")).toBe(true);
     expect(el.shadowRoot!.querySelector(".scrim")).toBeTruthy();
 
-    // Selecting a nav item closes the drawer AND switches the screen.
     navCatalogue(el)!.click();
     await flush(el);
     expect(layout().classList.contains("drawer-open")).toBe(false);
@@ -2164,17 +1963,7 @@ describe("dashboard-app", () => {
     expect(catalogue(el)).toBeTruthy();
   });
 
-  // Real viewport resizes below — the matchMedia STUB the other drawer tests use never applies the
-  // actual CSS @media rule, so it cannot catch a real off-canvas layout bug (see the two below).
   it("keeps the off-canvas drawer a fixed width, unaffected by which nav groups are expanded", async () => {
-    // .sidebar drops out of flex layout under position:absolute (the narrow media query), so
-    // without its own explicit width it fell back to shrink-to-fit over the nav's content — a width
-    // that could change with every group expand/collapse, making the closed drawer's
-    // translateX(-100%) resolve against a moving target instead of a fixed one (measured live at
-    // 211px vs the intended 170px/18ch — this fixture's own nav content happens not to diverge
-    // enough to fail these two assertions on the unfixed CSS, but they still pin the invariant an
-    // explicit width guarantees: the narrow drawer is exactly as wide as the desktop sidebar, and
-    // never moves when a group's disclosure state changes).
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -2202,10 +1991,6 @@ describe("dashboard-app", () => {
   });
 
   it("keeps the venue name on a legible line width at narrow viewport, never squeezed into one letter per line", async () => {
-    // .venue-name had no floor on how far it could shrink (min-width: 0, no lower bound), so at a
-    // narrow banner width the flex algorithm could squeeze it down to a sliver a couple of pixels
-    // wide — with overflow-wrap: anywhere, that wraps every single CHARACTER onto its own line
-    // instead of wrapping at word boundaries, producing a tall, unreadable vertical column.
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -2243,14 +2028,7 @@ describe("dashboard-app", () => {
     expect(el.shadowRoot!.querySelector(".scrim")).toBeNull();
   });
 
-  // Task 12 (a11y): when the sidebar is off-canvas (narrow viewport) AND closed, it must be `inert` so
-  // its nav buttons leave the tab order + a11y tree rather than lurking off-screen ahead of
-  // every visible control. It stays interactive at desktop width and whenever the drawer is open.
-  // Proof-by-deletion: dropping the `?inert=${this.narrow && !this.drawerOpen}` binding leaves the
-  // sidebar never-inert, so the narrow+closed assertion below goes red.
   it("makes the off-canvas sidebar inert only when narrow and closed", async () => {
-    // Drive the breakpoint via a controllable matchMedia stub (installed BEFORE mount so the shell's
-    // connectedCallback reads it) — deterministic, unlike a real viewport resize here.
     const mq = stubDrawerMatchMedia();
     try {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -2259,25 +2037,20 @@ describe("dashboard-app", () => {
       await flush(el);
       const sidebar = () => el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!;
 
-      // Desktop (matchMedia does not match): in-flow and fully interactive.
       expect(sidebar().hasAttribute("inert")).toBe(false);
 
-      // Narrow + closed → inert (the nav buttons leave the tab order + a11y tree).
       mq.set(true);
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(true);
 
-      // Opening the drawer makes it interactive again (narrow but open)…
       const toggle = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!;
       toggle.click();
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(false);
-      // …and closing it again re-inerts it (still narrow).
       toggle.click();
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(true);
 
-      // Back to desktop width while still CLOSED → interactive again (desktop overrides closed).
       mq.set(false);
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(false);
@@ -2286,11 +2059,6 @@ describe("dashboard-app", () => {
     }
   });
 
-  // Task 12 (regression): a drawer opened at narrow width must be force-closed when the viewport
-  // crosses to desktop — otherwise its full-viewport scrim keeps veiling the desktop layout after a
-  // resize/rotate. Proof-by-deletion: dropping `if (!e.matches) this.drawerOpen = false` from
-  // #onBreakpointChange leaves `.drawer-open` + `.scrim` present at desktop, so the last two
-  // assertions go red.
   it("force-closes the drawer (and drops the scrim) when widened from narrow to desktop", async () => {
     const mq = stubDrawerMatchMedia();
     try {
@@ -2301,7 +2069,6 @@ describe("dashboard-app", () => {
       const layout = () => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
       const scrim = () => el.shadowRoot!.querySelector<HTMLElement>(".scrim");
 
-      // Narrow, then open the drawer via the hamburger: drawer-open class + scrim both present.
       mq.set(true);
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
@@ -2309,8 +2076,6 @@ describe("dashboard-app", () => {
       expect(layout().classList.contains("drawer-open")).toBe(true);
       expect(scrim()).not.toBeNull();
 
-      // Widen to desktop WITHOUT first closing the drawer → the drawer is force-closed and the scrim
-      // (which would otherwise veil the whole desktop app) is gone.
       mq.set(false);
       await el.updateComplete;
       expect(layout().classList.contains("drawer-open")).toBe(false);
@@ -2330,7 +2095,6 @@ describe("dashboard-app", () => {
     await el.updateComplete;
     expect(layout().classList.contains("drawer-open")).toBe(true);
 
-    // A keydown anywhere inside the layout bubbles to the wrapper's handler.
     layout().dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
     );
@@ -2339,12 +2103,6 @@ describe("dashboard-app", () => {
   });
 
   it("keeps the shell within one screen height so the sidebar and content scroll independently, not the page", async () => {
-    // A screen taller than the viewport used to grow the whole page past one screen while the
-    // sidebar capped itself to exactly one screen height — the sidebar then visibly stopped short
-    // of the page's real bottom. Bounding the shell to the viewport and letting both panes scroll
-    // internally fixes that; this proves it by measuring the actual rendered geometry in a real
-    // browser, not by inspecting styles. A long staff list stands in for "content taller than the
-    // viewport" (profile — the original repro — is a modal now, independent of this mechanism).
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1000, 600);
@@ -2440,9 +2198,7 @@ describe("dashboard-app", () => {
   });
 
   it("logout: a FAILED logout still drops to login and never rejects", async () => {
-    // A rejected `logout()` must not be an unhandled rejection and must not strand the operator on
-    // the staff screen — the shell wraps the await and drops to login regardless. Deleting the
-    // try/catch would surface the rejection; deleting the post-await `screen = "login"` would strand.
+    // A rejected `logout()` must not be an unhandled rejection, and must not strand the operator.
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
       logout: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -2459,14 +2215,12 @@ describe("dashboard-app", () => {
   });
 });
 
-/** The resolved shape `getLocales` answers with (used by the controllable-promise disconnect tests). */
 type LocalesResponse = {
   locales: { code: string; label: string }[];
   venueDefault: string;
   loginDefault: string;
   venueName: string;
 };
-/** The resolved shape the widened `getMe` answers with. */
 type MeResponse = {
   personId: string;
   role: string;
@@ -2641,9 +2395,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("applies the supplied login default in nested controls", async () => {
-    // No session → stays on `login`; the boot seed reads getLocales and applies its loginDefault (en-GB,
-    // which differs from the es-ES module default so the switch is observable). The login controller
-    // repaints its translated content without recreating the current attempt.
+    // No session, so the boot seed applies getLocales' loginDefault (en-GB, which differs from the
+    // es-ES module default so the switch is observable).
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
       getLocales: vi.fn().mockResolvedValue({
@@ -2666,10 +2419,8 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("applies the person's stored locale on a logged-in boot — the seed never clobbers it, and never runs", async () => {
-    // Pins the race fix. Venue default es-ES; the signed-in person's stored locale is en-GB. Because a
-    // session is found, the login-language seed is SKIPPED entirely (serialized: probe first, seed only
-    // when still on `login`), so the UI ends on the PERSON's en-GB — never the venue default — and
-    // getLocales is never called (one WHOAMI round trip). A DEEP child (the my-schedule <h1>) renders it.
+    // A session is found, so the login-language seed is skipped and getLocales is never called: the UI
+    // ends on the person's en-GB, never the venue default.
     const getLocales = vi
       .fn()
       .mockResolvedValue({ locales: [], venueDefault: "es-ES", loginDefault: "es-ES" });
@@ -2744,9 +2495,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("a locale pick on the login screen switches transiently — setLocale, NOT putLocale (and the chooser renders + bubbles)", async () => {
-    // A pre-login pick is transient: switch the UI but write NOTHING (no session to attach it to). The
-    // chooser lives inside the login screen; its composed event bubbles to the shell. Proven-by-deletion
-    // target: dropping the `screen === "login"` branch makes this fail (putLocale would fire).
+    // A pre-login pick is transient: switch the UI but write nothing.
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
     });
@@ -2810,8 +2559,6 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("a rejected putLocale leaves the language unchanged (the switch is gated behind the durable write)", async () => {
-    // The persist failed, so the UI must NOT switch — setLocale is gated behind the successful write.
-    // Moving `setLocale` before/outside the try would wrongly switch on a failed save.
     const putLocale = vi.fn().mockRejectedValue({ code: "locale.unsupported" });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ putLocale }),
@@ -2852,9 +2599,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   // ── Pending responses must not repaint a detached app ──
 
   it("does not seed the login default if the app disconnects mid-getLocales", async () => {
-    // The seed's setLocale(loginDefault) runs AFTER `await getLocales()`. Start with no session so the
-    // seed runs; make getLocales pending, detach, then resolve: the seed must be SKIPPED. Deleting the
-    // `if (!this.isConnected) return` after getLocales makes the seed fire and this fail.
+    // Detached while the seed's getLocales is pending: the seed must be skipped.
     let resolveLocales!: (v: LocalesResponse) => void;
     const getLocales = vi.fn(() => new Promise<LocalesResponse>((r) => (resolveLocales = r)));
     const api = stubApi({
@@ -2877,9 +2622,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("does not switch the locale if the app disconnects mid-probe (getMe / #applyMe)", async () => {
-    // #applyMe runs post-await (`#applyMe(await getMe())`), so a teardown during the probe must not
-    // repaint a live sibling's locale. Make getMe pending, detach, resolve as an en-GB person: the
-    // applied setLocale must be SKIPPED. Deleting #applyMe's `if (!this.isConnected) return` fails this.
+    // Detached while the probe is pending: #applyMe's setLocale must be skipped.
     let resolveMe!: (v: MeResponse) => void;
     const getMe = vi.fn(() => new Promise<MeResponse>((r) => (resolveMe = r)));
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -2902,9 +2645,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   });
 
   it("does not switch the locale if the app disconnects mid-putLocale (persist path)", async () => {
-    // #onLocaleSelected's setLocale(code) runs AFTER `await putLocale(code)`. The durable write has
-    // already landed (the next login re-applies it), so a teardown during the write skips only the
-    // now-pointless local repaint. Deleting the new `if (!this.isConnected) return` after putLocale fails.
+    // The durable write has landed, so a teardown during it skips only the local repaint.
     let resolvePut!: () => void;
     const putLocale = vi.fn(() => new Promise<void>((r) => (resolvePut = r)));
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -3646,7 +3387,7 @@ describe("alerts in the shell", () => {
           {
             key: "printer.offline:kitchen",
             kind: "ongoing",
-            // No printer code has wording on this branch; the wording is not under test here.
+            // `printer.offline` has no alert wording; the wording is not under test here.
             code: "printer.offline",
             params: { printerName: "Kitchen" },
             severity: "warning",

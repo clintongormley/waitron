@@ -1,19 +1,3 @@
-// The management dashboard's string catalogue.
-//
-// English is the SOURCE of truth: `en` below is the base map, `StringKey` is
-// derived from its keys, and every other locale is a translation that may only
-// re-say what `en` already names. Spanish (`es`) is what the deli actually
-// renders (the shipped default locale is es-ES; see t.ts), but it is a
-// translation, not the origin — a key must exist in `en` first.
-//
-// `apps/*` is exempt from the english-only guard (packages/db/src/english-only.ts),
-// so the English UI copy here is deliberate and allowed; the Spanish below is
-// user-facing translation, not schema vocabulary.
-//
-// Later dashboard screens append keys here. Add the English base entry AND its
-// Spanish translation together — `es` is typed `Record<StringKey, string>`, so a
-// key added to `en` without a Spanish sibling is a compile error, which is the
-// guard that keeps the two in step.
 export const en = {
   "nav.cloud": "Cloud services",
   "cloud.intro": "Connect this venue to your Waitron Cloud account.",
@@ -172,10 +156,8 @@ export const en = {
   "options.label_name_required": "Enter a name for this label.",
   "options.labels_required": "Add or enable a label, or take this list out of use.",
 
-  // Extras lists (reusable lists of PRODUCTS a dish can be added to), the Extras tab and its form.
-  // The three names mean the same three things as in the options block above. A blank price is not
-  // a price of zero: it means the item charges the product's own, which the form shows as the
-  // field's hint (2026-09-18-one-product-model-design.md §9.1).
+  // The three names mean the same three things as in the options block above. A blank price is
+  // not zero: the item charges the product's own (2026-09-18-one-product-model-design.md §9.1).
   "extras.title": "Extras",
   "extras.add": "Add extras list",
   "extras.search": "Search extras lists",
@@ -307,7 +289,6 @@ export const en = {
   "printers.preview_empty": "This job has no printable content.",
   "printers.discovery_hint": "Searching for network, USB and paired Bluetooth printers.",
   "printers.seen_on": "Seen on",
-  // Shared actions
   "action.save": "Save",
   "action.create": "Create",
   "action.edit": "Edit",
@@ -331,7 +312,6 @@ export const en = {
   "mode.prepare": "Preparation",
   "mode.live": "Live",
   "account.privacy_notice": "Privacy notice",
-  // Shared form feedback
   "form.error_heading": "There is a problem with this form",
   "form.name_required": "Enter a name",
   "form.first_names_required": "Enter the first name or names",
@@ -342,13 +322,9 @@ export const en = {
   "form.password_required": "Enter a password",
   "form.factor_required": "Enter your authenticator or recovery code",
   "form.confirm_password_required": "Confirm the password",
-  // Shell nav
   "nav.sections": "Sections",
-  // The hamburger that opens/closes the off-canvas nav drawer on narrow screens (icon-only, so this is
-  // its accessible name).
+  // The next two label icon-only buttons, so each is the button's accessible name.
   "nav.toggle": "Toggle navigation",
-  // The banner's account-icon trigger (icon-only, so this is its accessible name) and the two
-  // actions inside the menu it opens.
   "nav.account_menu": "Account menu",
   "alerts.bell": "Alerts",
   "alerts.bell_count": "Alerts, {count} open",
@@ -380,7 +356,6 @@ export const en = {
   "alerts.area.printing": "Printing",
   "alerts.area.card_reader": "Card readers",
   "action.account_settings": "Account settings",
-  // Sidebar group headers (grouping the seventeen manager faces; the pinned overview+sales group has none)
   "nav.group.menu": "Products and recipes",
   "nav.group.service": "Service",
   "nav.group.team": "Team",
@@ -408,7 +383,6 @@ export const en = {
   "nav.backup": "Backups",
   "nav.email": "Test inbox",
   "nav.payments": "Card payments",
-  // Account email
   "email.title": "Account email",
   "email.local_capture":
     "Messages are captured on this box. No email is sent to the public internet.",
@@ -420,7 +394,6 @@ export const en = {
   "email.from": "From",
   "email.to": "To",
   "email.open_link": "Open account link",
-  // Login screen
   "profile.title": "Your profile",
   "profile.details": "Your details",
   "profile.security": "Security",
@@ -518,7 +491,6 @@ export const en = {
   "account.validating_link": "Checking your link…",
   "account.resend_link": "Send a new link",
   "account.link_resent": "If this account is available, a new setup or reset link has been sent.",
-  // Staff screen
   "staff.title": "Users",
   "staff.add_passkey": "Add passkey",
   "staff.add_user": "Add user",
@@ -546,7 +518,6 @@ export const en = {
   "staff.invitation_sent": "Invitation email sent.",
   "staff.invitation_not_sent":
     "The account was created, but the invitation could not be sent. Check email settings, then ask the user to reset their password.",
-  // Catalogue screen
   "catalogue.title": "Products",
   "units.title": "Units",
   "units.description": "Define how product quantities are measured and displayed.",
@@ -582,11 +553,9 @@ export const en = {
   "catalogue.empty_prompt": "Create a menu in Venue operations before adding products.",
   "catalogue.new": "New catalogue",
   "catalogue.create": "Create catalogue",
-  // Receipt screen
   "receipt.title": "Receipt",
   "receipt.header_subtitle": "Header subtitle",
   "receipt.footer_message": "Footer message",
-  // Service-status screen (configurable table statuses)
   "status.title": "Service statuses",
   "status.label": "Label",
   "status.color": "Colour",
@@ -594,7 +563,6 @@ export const en = {
   "status.active": "Active",
   "status.new_label": "New status",
   "status.new_color": "Colour",
-  // Floor-plan config screen — zones + tables
   "floor.title": "Floor plan",
   "floor.zones_title": "Zones",
   "floor.tables_title": "Tables",
@@ -610,7 +578,6 @@ export const en = {
   "floor.add_table": "Add table",
   "floor.no_zone": "— no zone —",
   "floor.no_tables": "No tables yet",
-  // Floor-plan editor (FP-2) — the Plano tab hosting the shared wt-floor-canvas
   "floor.tab_config": "Zones & tables",
   "floor.tab_plano": "Plan",
   "floor.zoneless": "No zone",
@@ -623,7 +590,6 @@ export const en = {
   "floor.shape_round": "Round",
   "floor.shape_square": "Square",
   "floor.shape_rect": "Rectangular",
-  // Kitchen (Cocina) config screen — stations + bump mode (KDS-1)
   "kitchen.title": "Kitchen",
   "kitchen.stations_title": "Stations",
   "kitchen.station_name": "Name",
@@ -633,16 +599,12 @@ export const en = {
   "kitchen.no_stations": "No stations yet",
   "kitchen.make_default": "Make default",
   "kitchen.default_badge": "Default",
-  // The per-station timing-threshold editor (KDS order-timing alerts, design §8) — three minute
-  // fields saved together through the same PATCH the name/order fields use.
   "kitchen.station_warm": "Warm after (min)",
   "kitchen.station_overdue": "Overdue after (min)",
   "kitchen.station_forgotten": "Forgotten after (min)",
   "kitchen.bump_mode": "Bump mode",
   "kitchen.bump_line": "Per item",
   "kitchen.bump_ticket": "Whole ticket",
-  // KDS-2: the Cursos panel (course CRUD + order) beside the Estaciones panel, and the fire-control
-  // toggle. Courses have no default (a null course fires earliest), so no make-default / badge here.
   "kitchen.courses_title": "Courses",
   "kitchen.course_name": "Name",
   "kitchen.course_order": "Order",
@@ -653,11 +615,8 @@ export const en = {
   "kitchen.fire_waiter": "Waiter",
   "kitchen.fire_kitchen": "Kitchen",
   "kitchen.fire_expo": "Expo",
-  // Devices screen — the enrolled-device list with its per-row revoke / reassign / hardware editor,
-  // plus the join half (device-join-and-accept): the venue-wide pairing window, the queue of devices
-  // waiting to be let in, and the accept dialog's three-number match. `devices.join_choice_label` and
-  // the two `{…}` strings below are composed with `.replace("{…}", value)` at the render edge — this
-  // catalogue has no interpolation (the `diagnostics.verbosity.window` idiom).
+  // The `{…}` strings are filled with `.replace` at the render edge; this catalogue has no
+  // interpolation.
   "devices.title": "Devices",
   "devices.no_devices": "No devices yet",
   "devices.status_active": "Active",
@@ -705,11 +664,7 @@ export const en = {
   "devices.join_choice_label": "Number {number}",
   "devices.hardware": "Hardware",
   "devices.save_hardware": "Save hardware",
-  // Printers (Impresoras) screen — print agents (the shared pairing window + join-and-accept queue ·
-  // revoke · last-seen), printers CRUD (create / edit / deactivate + test print), and recent
-  // job/printer status. The `pairing_*` / `join_*` keys mirror the `devices.*` twins (a print agent
-  // joins through the same mechanism); `join_choice_label` / the two `{…}` strings are composed with
-  // `.replace("{…}", value)` at the render edge (this catalogue has no interpolation).
+  // The `{…}` strings are filled with `.replace` at the render edge.
   "printers.disable": "Disable",
   "printers.scan_agents": "Scan for print agents",
   "printers.agent_setup_hint":
@@ -805,7 +760,6 @@ export const en = {
   "printers.job_attempts": "Failed attempts",
   "printers.stations_title": "Stations this printer serves",
   "printers.no_stations": "No stations yet",
-  // Counter receipt/drawer (§5): the per-till receipt-printer picker + the per-location print-mode toggle.
   "printers.receipt_title": "Customer receipts",
   "printers.receipt_printer_title": "Receipt printer per cash register",
   "printers.receipt_printer": "Receipt printer",
@@ -816,7 +770,6 @@ export const en = {
   "printers.no_locations": "No locations yet",
   "printers.drawer_policy_title": "Cash drawer per location",
   "printers.drawer_policy": "Cash drawer",
-  // Diagnostics screen (recent logs + runtime verbosity)
   "diagnostics.title": "Diagnostics",
   "diagnostics.verbosity.on": "Detailed logging is on",
   "diagnostics.verbosity.raise": "Turn on detailed logging",
@@ -825,7 +778,6 @@ export const en = {
   "diagnostics.action.resume": "Resume",
   "diagnostics.action.clear": "Clear",
   "diagnostics.empty": "No log lines yet",
-  // Backup admin screen (destination + recovery key + policy + status; recovery-key wizard)
   "backup.title": "Backups",
   "backup.configuration.title": "Move your preparation to production",
   "backup.configuration.explanation":
@@ -900,7 +852,6 @@ export const en = {
   "backup.weekday.fri": "Fri",
   "backup.weekday.sat": "Sat",
   "backup.weekday.sun": "Sun",
-  // Person form
   "person.new": "New user",
   "person.name": "Name",
   "person.first_names": "First name(s)",
@@ -909,12 +860,9 @@ export const en = {
   "person.telephone": "Telephone",
   "person.role": "Role",
   "person.pin": "PIN",
-  // The dashboard sign-in email — grouped with the password as the dashboard credential (the PIN is
-  // the till credential); shown on both the create and edit forms and in the staff list.
   "person.email": "Email",
   "person.email_help": "This address receives the account invitation and password-reset links.",
   "person.email_help_label": "About the email address",
-  // Person edit
   "person.edit": "Edit user",
   "person.save_role": "Save role",
   "person.status_label": "Status",
@@ -935,7 +883,6 @@ export const en = {
   "person.set_password": "Set password",
   "person.save_email": "Save email",
   "person.resend_invitation": "Send new invitation",
-  // Allergen picker
   "allergen.add": "Add allergen",
   "allergen.search": "Search allergens",
   "allergen.no_matches": "No matching allergens.",
@@ -1007,7 +954,6 @@ export const en = {
   "allergen.origin": "Origin",
   "allergen.contains": "Contains",
   "allergen.may_contain": "May contain",
-  // Dietary-origin picker (ingredient form)
   "origin.label": "Dietary origin",
   "origin.uncategorised": "Not categorised",
   "origin.plant": "Plant",
@@ -1018,19 +964,15 @@ export const en = {
   "origin.egg": "Egg",
   "origin.honey": "Honey",
   "origin.other_animal": "Other animal",
-  // Category manager
   "category.new": "New category",
   "category.title": "Categories",
   "category.empty": "No categories yet.",
-  // Category → kitchen-station routing (KDS-1)
   "category.station": "Station",
   "category.no_station": "— none —",
-  // Image upload
   "image.label": "Image",
   "image.choose": "Choose image",
   "image.remove": "Remove image",
   "image.preview_alt": "Product preview",
-  // Product form
   "product.new": "New product",
   "product.edit": "Edit product",
   "product.name": "Name",
@@ -1056,7 +998,6 @@ export const en = {
     "This makes the variant inactive: the till stops offering it and it leaves this list until you choose to show inactive products. You can restore it, and its past sales are kept.",
   "product.status": "Status",
   "product.allergens": "Allergens",
-  // Product → diet override (Task 8b): tri-state forced labels + contains-tag add/remove
   "diet.section": "Dietary override",
   "diet.vegan": "Vegan",
   "diet.vegetarian": "Vegetarian",
@@ -1070,7 +1011,6 @@ export const en = {
   "diet.contains_auto": "Auto (from recipe)",
   "diet.contains_add": "Add",
   "diet.contains_remove": "Remove",
-  // Product list
   "product.active_badge": "Active",
   "product.inactive_badge": "Inactive",
   "product.unavailable_badge": "Unavailable",
@@ -1082,24 +1022,20 @@ export const en = {
   "product.sold_alone_badge": "On its own",
   "product.not_sold_alone_badge": "Extra or ingredient only",
   "product.filter_sold_alone_all": "All products",
-  // Ingredient form / list
   "ingredient.new": "New ingredient",
   "ingredient.edit": "Edit ingredient",
   "ingredient.name": "Name",
   "ingredient.active": "Active",
-  // Recipe screen (ingredients + product recipes)
   "recipe.title": "Recipes",
   "recipe.ingredients_heading": "Ingredients",
   "recipe.products_heading": "Product recipes",
   "recipe.select_catalogue": "Choose a catalogue",
   "recipe.select_product": "Choose a product",
-  // Roster — shift dialog
   "roster.new_shift": "New shift",
   "roster.edit_shift": "Edit shift",
   "roster.shift_start": "Start",
   "roster.shift_end": "End",
   "roster.shift_role": "Role",
-  // Roster — screen
   "roster.title": "Shifts",
   "roster.week": "Week",
   "roster.location": "Location",
@@ -1109,7 +1045,6 @@ export const en = {
   "roster.breaches_intro": "Published with advisory warnings:",
   "roster.published_readonly":
     "This week is published — create changes as a new draft (coming soon).",
-  // Approvals screen
   "approvals.title": "Approvals",
   "approvals.swaps_title": "Shift swaps",
   "approvals.absences_title": "Absences",
@@ -1117,7 +1052,6 @@ export const en = {
   "approvals.none_absences": "No absences awaiting a decision.",
   "approvals.approve": "Approve",
   "approvals.reject": "Reject",
-  // Planned-vs-actual screen
   "planned.title": "Planned vs actual",
   "planned.location": "Location",
   "planned.week": "Week",
@@ -1131,7 +1065,6 @@ export const en = {
   "planned.unplanned": "Unplanned",
   "planned.empty": "No planned or worked time for this week.",
   "planned.no_location": "No location configured yet.",
-  // My schedule (staff self-service portal) — the staff-role landing screen
   "myschedule.title": "My schedule",
   "myschedule.loading": "Loading…",
   "myschedule.load_failed": "Could not load your schedule, try again",
@@ -1152,13 +1085,11 @@ export const en = {
   "myschedule.absence_to": "To",
   "myschedule.absence_note": "Note (optional)",
   "myschedule.absence_submit": "Request time off",
-  // Purchases screen (received supplier invoices / facturas recibidas)
   "purchase.title": "Purchases",
   "purchase.add": "Add invoice",
   "purchase.empty": "No purchase invoices yet.",
   "purchase.delete": "Delete",
   "purchase.delete_confirm": "Confirm delete?",
-  // Purchase form — header
   "purchase.new": "New purchase invoice",
   "purchase.edit": "Edit purchase invoice",
   "purchase.supplier_tax_id": "Supplier tax ID",
@@ -1170,7 +1101,6 @@ export const en = {
   "purchase.regime": "VAT regime",
   "purchase.deductible_proportion": "Deductible %",
   "purchase.note": "Note",
-  // Purchase form — VAT desglose sub-editor
   "purchase.lines": "VAT breakdown",
   "purchase.line_rate": "Rate %",
   "purchase.line_base": "Base",
@@ -1178,7 +1108,6 @@ export const en = {
   "purchase.line_kind": "Kind",
   "purchase.add_line": "Add line",
   "purchase.remove_line": "Remove line",
-  // Business-overview home screen (the "today at a glance" post-login landing for non-staff roles)
   "overview.title": "Today at a glance",
   "overview.takings_title": "Takings today",
   "overview.tender_total": "Tender total",
@@ -1194,11 +1123,7 @@ export const en = {
   "overview.quantity": "Qty",
   "overview.total": "Total",
   "overview.empty_sellers": "No sales yet today",
-  // The overdue-orders tile + list (KDS order-timing alerts, design §7.4) — a polled monitor, not a
-  // business-day query. `overview.overdue_count` is a SUFFIX word (like till's `station.overdue_count`),
-  // composed by the screen as `${count} ${t("overview.overdue_count")}` → "2 orders overdue", never a
-  // full templated sentence (this catalogue has no interpolation). `overview.band_*` name the two bands
-  // the route ever returns; there is no separate label for fresh/warm because they never appear here.
+  // `overview.overdue_count` is a suffix word: the screen renders `${count} ${t(...)}`.
   "overview.overdue_title": "Orders taking too long",
   "overview.overdue_count": "orders overdue",
   "overview.overdue_none": "No overdue orders",
@@ -1235,7 +1160,6 @@ export const en = {
   "sales.empty_sellers": "No sales in this range.",
   "sales.period_note":
     "Per-cash-register tender detail is available for a single day only. Pick one day to see the cash-up.",
-  // Canvas editor (SP-B3.2) — the per-device grid-layout gallery + editor
   "canvas_editor.title": "Canvases",
   "canvas_editor.create": "New canvas",
   "canvas_editor.duplicate": "Duplicate",
@@ -1250,8 +1174,7 @@ export const en = {
   "canvas_editor.form_factor_label": "Form factor",
   "canvas_editor.duplicate_title": "Duplicate canvas",
   "canvas_editor.duplicate_name_label": "Name",
-  // Appended to the source canvas's name to prefill the duplicate-name field (leading space is
-  // deliberate — it joins directly onto the name with no separator added at the call site).
+  // The leading space is deliberate: the call site appends this directly to the name.
   "canvas_editor.copy_suffix": " (copy)",
   "canvas_editor.delete_title": "Delete canvas",
   "canvas_editor.delete_message": "Delete this canvas? This cannot be undone.",
@@ -1271,32 +1194,24 @@ export const en = {
   "canvas_editor.card.kds-board": "Kitchen board",
   "canvas_editor.card.expo": "Expo",
   "canvas_editor.card.table-order": "Table order",
-  // Canvas editor — editor mode (SP-B3.2 Task B6)
   "canvas_editor.new_tab": "New tab",
   "canvas_editor.add_tab": "Add tab",
   "canvas_editor.palette_title": "Cards",
   "canvas_editor.colspan": "Width (columns)",
   "canvas_editor.rowspan": "Height (rows)",
   "canvas_editor.remove_card": "Remove card",
-  // Property panel — per-card config, visibility, notes (B7)
   "canvas_editor.no_config": "No settings",
   "canvas_editor.config_columns": "Product columns",
   "canvas_editor.visible_when": "Show only when",
   "canvas_editor.permission_note": "Only shown to staff with the required permission",
-  // Tab settings (B7)
   "canvas_editor.tab_settings": "Tab settings",
   "canvas_editor.tab_title": "Tab name",
   "canvas_editor.tab_columns": "Columns",
   "canvas_editor.tab_delete": "Delete tab",
-  // Canvas settings (B7)
   "canvas_editor.canvas_settings": "Canvas settings",
   "canvas_editor.name": "Name",
   "canvas_editor.save": "Save",
   "canvas_editor.cancel": "Cancel",
-  // NOTE: the canvas-editor client-side validation banner pseudo-codes (canvas_editor.err_*) live in
-  // i18n/codes.ts's CODE_MESSAGES, not here, so the editor's one banner resolves them and the server's
-  // canvas.* codes through the same codeMessage() call.
-  // Device-profiles screen — LIST (name + referenced canvas + capability summary) and the editor FORM.
   "device_profiles.title": "Device profiles",
   "device_profiles.create": "New profile",
   "device_profiles.empty": "No device profiles yet",
@@ -1317,20 +1232,13 @@ export const en = {
   "device_profiles.capability.open-cash-drawer": "Open cash drawer",
   "device_profiles.capability.act-as-kds": "Act as kitchen display",
   "device_profiles.capability.print-receipt": "Print receipts and payment slips",
-  // The form-factor picker: the field label plus one human label per FORM_FACTORS value (the `till`
-  // form factor is the CASH REGISTER, the owner's chosen word — never the raw token).
+  // The `till` form factor is the cash register, the owner's chosen word.
   "device_profiles.form_factor": "Form factor",
   "device_profiles.form_factor.till": "Cash register",
   "device_profiles.form_factor.phone-portrait": "Handheld phone",
   "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
   "device_profiles.form_factor.kds": "Kitchen display",
   "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
-  // NOTE: the empty-name banner pseudo-code (device_profiles.err_no_name) and the server's
-  // device_profile.* rejections live in i18n/codes.ts's CODE_MESSAGES, resolved via codeMessage().
-  // Card payments (the generic Payments screen). Each provider's OWN copy (SumUp/Stripe field labels,
-  // pairing steps) lives in that provider's panel strings and is merged into this catalogue when the
-  // screen mounts the panel; the error CODES live in i18n/codes.ts. These keys are the screen's own
-  // provider-neutral chrome.
   "payments.title": "Card payments",
   "payments.providers_heading": "Providers",
   "payments.readers_heading": "Card readers",
@@ -1390,9 +1298,7 @@ export const en = {
 
 export type StringKey = keyof typeof en;
 
-// A full translation of the base map. Typed `Record<StringKey, string>` (not
-// Partial): every base key must be translated, so an untranslated addition fails
-// typecheck rather than silently falling through to English at runtime.
+// Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
   "nav.cloud": "Servicios Cloud",
   "cloud.intro": "Conecta este local con tu cuenta de Waitron Cloud.",
@@ -2177,7 +2083,6 @@ export const es: Record<StringKey, string> = {
   "diagnostics.action.resume": "Reanudar",
   "diagnostics.action.clear": "Borrar",
   "diagnostics.empty": "Aún no hay líneas de registro",
-  // Backup admin screen (destination + recovery key + policy + status; recovery-key wizard)
   "backup.title": "Copias de seguridad",
   "backup.configuration.title": "Lleva tu preparación a producción",
   "backup.configuration.explanation":
@@ -2562,7 +2467,6 @@ export const es: Record<StringKey, string> = {
   "sales.empty_sellers": "No hay ventas en este intervalo.",
   "sales.period_note":
     "El detalle de cobros por caja solo está disponible para un único día. Elige un día para ver el arqueo.",
-  // Editor de lienzos (SP-B3.2)
   "canvas_editor.title": "Lienzos",
   "canvas_editor.create": "Nuevo lienzo",
   "canvas_editor.duplicate": "Duplicar",
@@ -2596,30 +2500,24 @@ export const es: Record<StringKey, string> = {
   "canvas_editor.card.kds-board": "Panel de cocina",
   "canvas_editor.card.expo": "Pase",
   "canvas_editor.card.table-order": "Comanda de mesa",
-  // Editor de lienzos — modo edición (SP-B3.2 Tarea B6)
   "canvas_editor.new_tab": "Nueva pestaña",
   "canvas_editor.add_tab": "Añadir pestaña",
   "canvas_editor.palette_title": "Tarjetas",
   "canvas_editor.colspan": "Ancho (columnas)",
   "canvas_editor.rowspan": "Alto (filas)",
   "canvas_editor.remove_card": "Eliminar tarjeta",
-  // Panel de propiedades — configuración por tarjeta, visibilidad, notas (B7)
   "canvas_editor.no_config": "Sin ajustes",
   "canvas_editor.config_columns": "Columnas de productos",
   "canvas_editor.visible_when": "Mostrar solo cuando",
   "canvas_editor.permission_note": "Solo se muestra al personal con el permiso necesario",
-  // Ajustes de pestaña (B7)
   "canvas_editor.tab_settings": "Ajustes de pestaña",
   "canvas_editor.tab_title": "Nombre de la pestaña",
   "canvas_editor.tab_columns": "Columnas",
   "canvas_editor.tab_delete": "Eliminar pestaña",
-  // Ajustes del lienzo (B7)
   "canvas_editor.canvas_settings": "Ajustes del lienzo",
   "canvas_editor.name": "Nombre",
   "canvas_editor.save": "Guardar",
   "canvas_editor.cancel": "Cancelar",
-  // (canvas_editor.err_* viven en i18n/codes.ts, no aquí — ver la nota en el mapa `en`.)
-  // Pantalla de perfiles de dispositivo — lista y formulario de edición
   "device_profiles.title": "Perfiles de dispositivo",
   "device_profiles.create": "Nuevo perfil",
   "device_profiles.empty": "Aún no hay perfiles de dispositivo",
@@ -2647,7 +2545,6 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
   "device_profiles.form_factor.kds": "Pantalla de cocina",
   "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
-  // (device_profiles.err_no_name y device_profile.* viven en i18n/codes.ts — ver la nota en `en`.)
   "payments.title": "Pagos con tarjeta",
   "payments.providers_heading": "Proveedores",
   "payments.readers_heading": "Lectores de tarjetas",
@@ -2705,12 +2602,6 @@ export const es: Record<StringKey, string> = {
   "payments.reader_pairing_processing": "Emparejando…",
 };
 
-// Locale → catalogue. `en` is included as its own catalogue so an explicit
-// English request resolves directly rather than only through t()'s fallback.
-// Both the language tag `es` and the region tag `es-ES` map to the same Spanish
-// catalogue — the dashboard's default locale is es-ES. Catalogues are typed
-// Partial<Record<StringKey, string>> so a future locale may be introduced with
-// only some keys translated; t() fills the gaps from the English base.
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {
   en,
   "en-GB": en,

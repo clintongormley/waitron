@@ -1,22 +1,8 @@
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
 import type { AllergenDeclaration } from "../api/client.js";
 
-// Localised DISPLAY NAMES for the enum tokens the server hands the dashboard — roles, statuses,
-// VAT classes, sale units, allergen-declaration states, and the 14 EU allergen codes. The dashboard
-// receives these as raw string tokens (see api/client.ts's local type copies) and must render human
-// copy for them, so this module owns the token → name tables.
-//
-// Each table is `string`-keyed on purpose: the dashboard is deliberately DECOUPLED from
-// `@waitron/catalogue` (a runtime import would drag its barrel — and through it `@waitron/db` and Node
-// builtins — into the browser bundle; see api/client.ts and widgets/allergen-picker.ts). So these are
-// LOCAL copies of the token sets, exactly as the client's payload types are local copies, not imports.
-//
-// English is the source of truth and `apps/*` is exempt from the english-only guard, so the Spanish
-// below is user-facing translation, not schema vocabulary.
-
-// The token → display-name resolver is the kit's `resolveNameTable` (region-strip, English-degrade,
-// raw-token fallback, Object.hasOwn own-key guard); the module's own `strings.ts` shares it. The tables
-// below are its data.
+// Each table is a local, `string`-keyed copy of a server token set; api/client.ts says why the
+// dashboard does not import `@waitron/catalogue`'s main entry.
 
 const ROLE_NAMES: NameTable = {
   staff: { en: "Staff", es: "Empleado" },
@@ -43,19 +29,16 @@ const UNIT_NAMES: NameTable = {
   weight: { en: "By weight", es: "Por peso" },
 };
 
-// The three allergen-declaration states the till renders. These MUST read as three distinct strings:
-// a screen reader and a colour-blind operator have to tell them apart without relying on colour.
+// These must read as three distinct strings: a screen reader and a colour-blind operator have to
+// tell them apart without relying on colour.
 const ALLERGEN_STATE_NAMES: NameTable = {
   pending: { en: "Pending", es: "Pendiente" },
   none: { en: "None", es: "Ninguno" },
   declared: { en: "Declared", es: "Declarado" },
 };
 
-// Display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II). The Spanish column
-// is copied VERBATIM from `apps/till/src/i18n/allergen-names.ts`, whose `es` text was checked against
-// the official Spanish text of Annex II (Diario Oficial de la Unión Europea, L 304/43-44, 22.11.2011).
-// Kept as a plain `string`-keyed table, NOT `AllergenCode` from `@waitron/catalogue`, for the same
-// bundle-decoupling reason as the tables above.
+// Regulated text (Regulation (EU) No 1169/2011, Annex II), copied from
+// `apps/till/src/i18n/allergen-names.ts`; `scripts/allergen-names-drift.test.ts` pins the two equal.
 const ALLERGEN_NAMES: NameTable = {
   gluten: { en: "Cereals containing gluten", es: "Cereales con gluten" },
   crustaceans: { en: "Crustaceans", es: "Crustáceos" },
@@ -73,9 +56,6 @@ const ALLERGEN_NAMES: NameTable = {
   molluscs: { en: "Molluscs", es: "Moluscos" },
 };
 
-// The 7 advisory roster-breach kinds `validateRoster` reports (`@waitron/workforce`'s
-// RosterBreachKind), shown in the publish banner. A raw string-keyed LOCAL copy of the token set, same
-// bundle-decoupling reason as the tables above.
 const BREACH_KIND_NAMES: NameTable = {
   rest_too_short: {
     en: "Too little rest between shifts",
@@ -89,8 +69,6 @@ const BREACH_KIND_NAMES: NameTable = {
   night_work: { en: "Night work", es: "Trabajo nocturno" },
 };
 
-// The four absence kinds (@waitron/workforce absence_kind), shown on the approvals screen. Raw
-// string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
 const ABSENCE_KIND_NAMES: NameTable = {
   holiday: { en: "Holiday", es: "Vacaciones" },
   sick_leave: { en: "Sick leave", es: "Baja" },
@@ -98,18 +76,14 @@ const ABSENCE_KIND_NAMES: NameTable = {
   unpaid: { en: "Unpaid leave", es: "Permiso sin sueldo" },
 };
 
-// The three absence statuses (@waitron/workforce absence_status), shown on the staff self-service
-// portal so a staff member sees where each of their own requests stands. Raw string-keyed LOCAL copy,
-// same bundle-decoupling reason as the tables above. (Feminine agreement — "ausencia" is feminine.)
+// Feminine agreement: "ausencia" is feminine.
 const ABSENCE_STATUS_NAMES: NameTable = {
   requested: { en: "Requested", es: "Solicitada" },
   approved: { en: "Approved", es: "Aprobada" },
   rejected: { en: "Rejected", es: "Rechazada" },
 };
 
-// The four shift-swap statuses (@waitron/workforce shift_swap_status), shown on the staff self-service
-// portal. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above. (Masculine
-// agreement — "cambio" is masculine.)
+// Masculine agreement: "cambio" is masculine.
 const SWAP_STATUS_NAMES: NameTable = {
   requested: { en: "Requested", es: "Solicitado" },
   accepted: { en: "Accepted", es: "Aceptado" },
@@ -117,31 +91,22 @@ const SWAP_STATUS_NAMES: NameTable = {
   rejected: { en: "Rejected", es: "Rechazado" },
 };
 
-// Which side of a swap the staff member is on (@waitron/workforce SwapDirection), shown on the staff
-// self-service portal so the two directions read distinctly. Raw string-keyed LOCAL copy, same
-// bundle-decoupling reason as the tables above.
 const SWAP_DIRECTION_NAMES: NameTable = {
   offered_to_me: { en: "Offered to me", es: "Me lo ofrecen" },
   requested_by_me: { en: "Requested by me", es: "Lo pido yo" },
 };
 
-// The two purchase-invoice VAT regimes (@waitron/purchasing PurchaseRegime), shown on the purchases
-// screen/form. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
 const PURCHASE_REGIME_NAMES: NameTable = {
   general: { en: "General regime", es: "Régimen general" },
   equivalence_surcharge: { en: "Equivalence surcharge", es: "Recargo de equivalencia" },
 };
 
-// The two purchase-invoice VAT kinds (@waitron/purchasing PurchaseVatKind), the desglose line's
-// box-split marker. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
 const PURCHASE_VAT_KIND_NAMES: NameTable = {
   ordinary: { en: "Ordinary", es: "Corriente" },
   capital: { en: "Capital goods", es: "Bien de inversión" },
 };
 
-// The three printer transports (@waitron/printing PrintTransport / the `print_transport` column), shown
-// on the Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables
-// above. "USB" / "TCP" stay as-is in both columns (they are the wire/protocol names).
+// "USB" and "TCP" stay as-is in both columns: they are protocol names.
 const PRINT_TRANSPORT_NAMES: NameTable = {
   usb: { en: "USB", es: "USB" },
   network_tcp: { en: "Network (TCP)", es: "Red (TCP)" },
@@ -149,9 +114,6 @@ const PRINT_TRANSPORT_NAMES: NameTable = {
   cloud_poll: { en: "Cloud poll", es: "Sondeo en la nube" },
 };
 
-// The four print-job statuses (@waitron/printing PrintJobStatus / the `print_job_status` column), shown
-// on the Impresoras screen's recent-jobs list. Raw string-keyed LOCAL copy, same bundle-decoupling
-// reason as the tables above.
 const PRINT_JOB_STATUS_NAMES: NameTable = {
   queued: { en: "Queued", es: "En cola" },
   printing: { en: "Printing", es: "Imprimiendo" },
@@ -159,131 +121,95 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
   failed: { en: "Failed", es: "Fallido" },
 };
 
-// The three receipt print modes (the `receipt_print_mode` column), the per-location toggle on the
-// Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
 const PRINT_MODE_NAMES: NameTable = {
   auto: { en: "Automatic", es: "Automático" },
   on_request: { en: "On request", es: "Bajo petición" },
   never: { en: "Never", es: "Nunca" },
 };
 
-// The two cash-drawer-open policies (the `drawer_open_policy` column), the per-location toggle on the
-// Impresoras screen. `gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is
-// held by supervisor/manager/admin — (the SECURE default); `open` = any operator may. Raw string-keyed
-// LOCAL copy, same bundle-decoupling reason as above.
 const DRAWER_OPEN_POLICY_NAMES: NameTable = {
   gated: { en: "Supervisor approval required", es: "Requiere autorización de un responsable" },
   open: { en: "Any operator", es: "Cualquier operario" },
 };
 
-/** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(ROLE_NAMES, value, locale);
 }
 
-/** A printer transport (usb / network_tcp / bluetooth / cloud_poll) → its display name (raw-value fallback). */
 export function transportName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PRINT_TRANSPORT_NAMES, value, locale);
 }
 
-/** A print-job status (queued / printing / done / failed) → its display name (raw-value fallback). */
 export function jobStatusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PRINT_JOB_STATUS_NAMES, value, locale);
 }
 
-/** A receipt print mode (auto / on_request / never) → its display name (raw-value fallback). */
 export function printModeName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PRINT_MODE_NAMES, value, locale);
 }
 
-/** A cash-drawer-open policy (gated / open) → its display name (raw-value fallback). */
 export function drawerPolicyName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(DRAWER_OPEN_POLICY_NAMES, value, locale);
 }
 
-/** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */
 export function breachKindName(kind: string, locale: string = currentLocale()): string {
   return resolveNameTable(BREACH_KIND_NAMES, kind, locale);
 }
 
-/** An absence kind (holiday / sick_leave / leave / unpaid) → its display name (raw-value fallback). */
 export function absenceKindName(kind: string, locale: string = currentLocale()): string {
   return resolveNameTable(ABSENCE_KIND_NAMES, kind, locale);
 }
 
-/** An absence status (requested / approved / rejected) → its display name (raw-value fallback). */
 export function absenceStatusName(status: string, locale: string = currentLocale()): string {
   return resolveNameTable(ABSENCE_STATUS_NAMES, status, locale);
 }
 
-/** A shift-swap status (requested / accepted / approved / rejected) → its display name (raw fallback). */
 export function swapStatusName(status: string, locale: string = currentLocale()): string {
   return resolveNameTable(SWAP_STATUS_NAMES, status, locale);
 }
 
-/** A swap direction (offered_to_me / requested_by_me) → its display name (raw-value fallback). */
 export function swapDirectionName(direction: string, locale: string = currentLocale()): string {
   return resolveNameTable(SWAP_DIRECTION_NAMES, direction, locale);
 }
 
-/** A person's account status (pending / active / disabled) → its display name. */
 export function statusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(STATUS_NAMES, value, locale);
 }
 
-/** A product's VAT class (general / reduced / super_reduced / zero) → its display name. */
 export function vatClassName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(VAT_CLASS_NAMES, value, locale);
 }
 
-/** A product's sale unit (each / weight) → its display name. */
 export function unitName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(UNIT_NAMES, value, locale);
 }
 
-/** The three allergen-declaration states a pill renders, keyed off the §7 / §1 invariant. */
 export type AllergenState = "pending" | "none" | "declared";
 
 /**
- * The three-state read of an allergen declaration (design §7, the till's null/{}/{…} distinction —
- * `apps/till/src/screens/till-allergen-screen.ts`): `null` is PENDING (not yet reviewed — a compliance
- * gap, NEVER "allergen-free"), `{}` is reviewed-with-none, a non-empty map is declared. `null` and `{}`
- * MUST stay distinct — collapsing them is the exact defect the invariant exists to prevent, so it is a
- * `=== null` test, not a falsy/length-only one. Shared by every widget that renders an allergen pill
- * (`product-list`, `ingredient-list`) so the compliance invariant has ONE definition, beside the
- * `allergenStateName` that localises its output.
+ * `null` is PENDING (not yet reviewed, never "allergen-free"); `{}` is reviewed with none. The two
+ * must stay distinct, so this is a `=== null` test, not a falsy or length one.
  */
 export function allergenState(allergens: AllergenDeclaration): AllergenState {
   if (allergens === null) return "pending";
   return Object.keys(allergens).length === 0 ? "none" : "declared";
 }
 
-/** An allergen-declaration state (pending / none / declared) → its display name. */
 export function allergenStateName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(ALLERGEN_STATE_NAMES, value, locale);
 }
 
-/** An EU allergen code → its display name. */
 export function allergenName(code: string, locale: string = currentLocale()): string {
   return resolveNameTable(ALLERGEN_NAMES, code, locale);
 }
 
-/**
- * The 14 EU allergen codes (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order — the keys of
- * {@link ALLERGEN_NAMES}, so the list and its localised labels stay single-sourced (one table, no
- * second order to drift). Exposed for a widget that renders a plain code list, where the allergen
- * picker's three-state grid is the wrong control. Same order the picker's own local
- * `ALLERGEN_DISPLAY_ORDER` uses.
- */
+// Key order in ALLERGEN_NAMES is the option order in allergen-dietary-picker.ts.
 export const ALLERGEN_CODES: readonly string[] = Object.keys(ALLERGEN_NAMES);
 
-/** A purchase-invoice VAT regime (general / equivalence_surcharge) → its display name (raw-value
- * fallback for an unmapped regime). */
 export function regimeName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PURCHASE_REGIME_NAMES, value, locale);
 }
 
-/** A purchase-invoice VAT kind (ordinary / capital) → its display name (raw-value fallback). */
 export function vatKindName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PURCHASE_VAT_KIND_NAMES, value, locale);
 }
