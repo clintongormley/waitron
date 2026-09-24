@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    // `testTimeout` covers each test's own seeding, which runs in the test body rather than a hook.
     // `hookTimeout` does not bound `useVenueDb`'s `beforeAll`, which passes its own timeout.
     testTimeout: 120_000,
     hookTimeout: 180_000,

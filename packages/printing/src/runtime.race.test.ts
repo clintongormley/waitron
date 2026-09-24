@@ -16,7 +16,8 @@ import type { PrintConfig } from "./printers.js";
  * Two agents pulling one venue's queue deliver each job at most once.
  *
  * One writer holds the venue file at a time, so contention shows as the second agent's transaction
- * not STARTING while the first is open — which `parkedThenRelease` asserts.
+ * not STARTING while the first is open — which `parkedThenRelease` asserts. For the same reason
+ * this suite cannot tell a one-statement claim from a select followed by a separate stamp.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -92,7 +93,8 @@ async function parkedThenRelease<A, B>(
 describe("double-pull race", () => {
   it("marks printing atomically so two agents don't double-print", async () => {
     const cfg = await setup();
-    // Two agent RUNS will both try to pull it — the reimaged-agent / two-boxes topology.
+    // Two agent RUNS will both try to pull the one queued job — the reimaged-agent / two-boxes
+    // topology.
     const agentId = await seedAgent(cfg, "Kitchen");
     const printerId = await withTransaction(suite.db, (tx: Transaction) =>
       createPrinter(tx, cfg, {

@@ -24,9 +24,11 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
  * (the agent crashed or the box died) and the pull re-claims it. Long enough not to reclaim a live
  * push, which takes seconds.
  *
- * `claimed_at` is stamped once per BATCH, so a large batch to a slow printer can age its unsent tail
- * past the lease. Delivery is deliberately at-least-once: a reclaim can reprint a job that printed but
- * whose `done` report was lost, which is accepted over a dropped kitchen ticket.
+ * `claimed_at` is stamped once per BATCH, so a large batch to a slow printer can age its unsent
+ * tail past the lease, and another agent in the venue can then re-claim a network printer's unsent
+ * jobs and print them while the first is still pushing. Delivery is deliberately at-least-once: a
+ * reclaim can reprint a job that printed but whose `done` report was lost, which is accepted over a
+ * dropped kitchen ticket.
  */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
@@ -119,8 +121,8 @@ export async function claimPrintJobs(
  * `printing`, so a retried report on a finished job is a no-op rather than a second `attempts` bump.
  * An unknown job, another agent's and a finished one all return the same `{ updated: false }`.
  *
- * A duplicate report that arrives after the job was re-claimed applies to the new claim: telling the
- * two apart would need a per-claim token the schema does not carry.
+ * A duplicate report that arrives after the SAME agent re-claimed the job applies to the new claim:
+ * telling the two apart would need a per-claim token the schema does not carry.
  */
 export async function reportPrintJob(
   tx: Transaction,
@@ -158,8 +160,9 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       devicePath: job.local_key,
     };
     // Gap, deliberately left: if the database refuses the `done` report inside this `try`, the
-    // catch records `failed` for a job whose bytes were sent, so a later batch can print it again. No
-    // caller in the tree reaches it (`apps/server/src/print-api.ts` calls the split functions).
+    // catch records `failed` for a job whose bytes were sent, so a later batch can print it again.
+    // No production caller reaches it today (`apps/server/src/print-api.ts` calls the split
+    // functions), but it is exported from `index.ts`.
     try {
       // `ClaimedJob.payload` is typed `Buffer`, but this raw read delivers a plain `Uint8Array`
       // (measured 2026-09-22).

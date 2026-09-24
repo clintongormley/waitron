@@ -26,8 +26,7 @@ export const FEED_BEFORE_CUT = 5;
 const TEXT_ENCODING = "latin1";
 
 /**
- * QR error-correction level → the `GS ( k` Function 169 parameter byte. Level M is mandated for the
- * fiscal QR by Orden HAC/1177/2024 art. 21.1. Source:
+ * QR error-correction level → the `GS ( k` Function 169 parameter byte. Source:
  * https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn169.html
  */
 const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
@@ -107,7 +106,8 @@ export class EscBuilder {
   /**
    * Native QR through the printer's own `GS ( k` engine (cn = 0x31 selects QR). The five functions
    * must be sent in this order: model, module size, EC level, store data, print. `text` is always
-   * stored as Latin-1, whatever the builder's character set.
+   * stored as Latin-1, whatever the builder's character set. The receipt's fiscal QR does not use
+   * this: it is a `qrRaster` image sized by `chooseQrDots`.
    */
   qr(text: string, opts: { ecLevel?: "L" | "M" | "Q" | "H"; moduleSize?: number } = {}): this {
     const { ecLevel = "M", moduleSize = QR_DEFAULT_MODULE_SIZE } = opts;

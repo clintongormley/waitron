@@ -80,8 +80,6 @@ describe("esc() ESC/POS builder", () => {
   });
 
   // --- QR Code -------------------------------------------------------------------------------------
-  // The fiscal cotejo QR is a legal element, so EC level M (0x31, mandated by Orden HAC/1177/2024
-  // art. 21.1) is pinned explicitly.
 
   it("qr emits the native GS ( k sequence (model → size → EC M → store → print) in order", () => {
     // "https://a.es" = 12 Latin-1 data bytes, so the <Function 180> store length is 12 + 3 = 15
