@@ -13,8 +13,8 @@ const workingName = (path: string) => `${path}.partial`;
  *
  * The final name appears only once the whole copy is written, so an interrupted archive leaves
  * nothing a later reader would take for a good one. The working file is cleared before the copy as
- * well as after a failure, because `VACUUM INTO` refuses a target that already holds bytes, so a
- * leftover would fail every later archive to that path.
+ * well as after a failure, because `VACUUM INTO` refuses a target that is already a database, so a
+ * leftover completed copy would fail every later archive to that path.
  *
  * **Not callable from inside a transaction.** `VACUUM INTO` on a connection with one open is
  * refused — `cannot VACUUM from within a transaction` — so an archive cannot be taken inside

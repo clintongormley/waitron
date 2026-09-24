@@ -19,10 +19,13 @@ const suffix = "is append-only";
  *
  * `RAISE(ABORT, …)` in a `BEFORE` trigger backs out the STATEMENT it refused and nothing else: the
  * enclosing transaction stays open and usable, and earlier writes inside a savepoint are not rolled
- * back — confining those is the savepoint's job. The pair of triggers covers four shapes between
- * them: a plain `UPDATE`, a plain `DELETE`, `INSERT OR REPLACE` (whose internal delete fires the
- * delete trigger) and `INSERT … ON CONFLICT DO UPDATE` (the update trigger). `INSERT` and
- * `INSERT … ON CONFLICT DO NOTHING` are untouched, which is what append-only means.
+ * back (measured on Node v26.7.0: a marker row written inside a savepoint, before an update that
+ * this trigger refuses, is still there afterwards) — confining those is the savepoint's job. The
+ * pair of triggers covers four shapes between them: a plain `UPDATE`, a plain `DELETE`,
+ * `INSERT OR REPLACE` (whose internal delete fires the delete trigger) and
+ * `INSERT … ON CONFLICT DO UPDATE` (the update trigger). Measured on Node v26.7.0 against
+ * `node:sqlite`, one real refusal per shape. `INSERT` and `INSERT … ON CONFLICT DO NOTHING` are
+ * untouched, which is what append-only means.
  *
  * **`PRAGMA recursive_triggers` must be on**, and `packages/store/src/index.ts` turns it on beside
  * `foreign_keys`. Without it the delete `INSERT OR REPLACE` performs internally does not fire a

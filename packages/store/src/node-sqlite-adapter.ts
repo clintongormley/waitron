@@ -47,7 +47,8 @@ export function adaptNodeSqlite(connections: Connections) {
      * **A statement the read connection refuses because it is read-only is re-run on the write
      * connection.** That case is a write issued from an asynchronous context outside a transaction
      * while some other transaction is open; re-run there, it joins that transaction and commits or
-     * rolls back with it. It is safe to re-run because the refusal arrives before any work — see
+     * rolls back with it, rather than meeting a refusal no caller in this tree is written to
+     * expect. It is safe to re-run because the refusal arrives before any work — see
      * `SQLITE_READONLY` in `./connections.ts`. Nothing else is retried.
      */
     prepare(query: string) {
@@ -112,8 +113,9 @@ export function adaptNodeSqlite(connections: Connections) {
         (behaviour: Behaviour) =>
         (...args: A): R =>
           // The marking wraps the WHOLE transaction, `keep`/`undo` included, rather than the body
-          // alone: a handler registered on the body's own promise runs between the body settling
-          // and this transaction finishing, and must not read the writer's uncommitted rows.
+          // alone: a handler registered on the body's own promise can run between the body
+          // settling and this transaction finishing, and must not read the writer's uncommitted
+          // rows.
           connections.asTransactionBody(() => {
             const write = connections.write;
             const savepoint = write.isTransaction ? nextSavepoint() : undefined;
@@ -178,7 +180,8 @@ export type NodeSqliteDatabase<TSchema extends Record<string, unknown> = Record<
     /**
      * A transaction body is handed this same type, not Drizzle's bare `SQLiteTransaction`:
      * {@link addExecute} decorates the transaction object at runtime, so the value really does
-     * carry `execute`.
+     * carry `execute`. `@waitron/db` also declares one `Transaction` type for a database and a
+     * transaction alike, so a write path taking a `tx` can be handed either.
      */
     transaction<T>(
       body: (tx: NodeSqliteDatabase<TSchema>) => T,

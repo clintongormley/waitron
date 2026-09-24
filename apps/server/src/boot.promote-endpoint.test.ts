@@ -50,9 +50,9 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 // what the gate refuses from what a grant refuses.
 //
 // **The suite keeps a handle open on each venue directory while a server holds one.** Write-ahead
-// mode admits a second connection and both opens set `busy_timeout`
-// (`packages/store/src/index.ts:128-136`); every seeding write below happens while no server is
-// running, so the two handles never want the write lock at the same moment.
+// mode admits a second connection and both opens set `busy_timeout` (`packages/store/src/index.ts`,
+// `openConnection`); every seeding write below happens while no server is running, so the two
+// handles never want the write lock at the same moment.
 
 // `undici`'s `fetch` is mocked to REJECT so no background pull/tunnel dial reaches a real host; Node's
 // own global `fetch` (a distinct module identity — see boot.promote.test.ts) still serves the probes.

@@ -761,7 +761,7 @@ describe("loadConfig", () => {
   });
 
   // The venue directory — where `openVenueStore` creates `venue.db` and `node.db`
-  // (`packages/store/src/index.ts:159`). Defaults under whichever state root actually won, so it
+  // (`packages/store/src/index.ts`). Defaults under whichever state root actually won, so it
   // tracks a WAITRON_STATE_DIR override rather than the boot default root, the same way logDir above
   // does.
   it("defaults venueDir to join(stateDir, 'venue')", () => {

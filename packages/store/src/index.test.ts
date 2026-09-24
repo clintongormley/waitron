@@ -274,9 +274,8 @@ describe("openVenueStore", () => {
 
   /**
    * A write from outside the body, while a transaction is open, is refused by the read connection
-   * and re-run on the writer, where it joins the open transaction and goes with its rollback. On
-   * the read connection it would throw; on a second read-write connection it would survive the
-   * rollback. Only the writer outcome was run; the other two name what the assertion separates.
+   * and re-run on the writer, where it joins the open transaction and goes with its rollback.
+   * Weaker than its name: it passes with the routing deleted.
    */
   it("sends a write issued outside the lock to the writer rather than refusing it", async () => {
     const { store } = await open();
@@ -325,7 +324,7 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * The shim's mark has to outlast the BODY, until its `rollback`. Narrower than its name: as
+   * The shim's mark has to outlast the BODY, until its `rollback`. Weaker than its name: as
    * shipped the read runs after the rollback, so it reads the committed state rather than having
    * uncommitted rows withheld, and it passes with the routing deleted. What it catches is the mark
    * wrapping `fn(...args)` alone, which sends the read to the writer before the rollback.
@@ -361,7 +360,7 @@ describe("openVenueStore", () => {
 
   /**
    * The same shape for the WRITE QUEUE, which issues its `rollback` after the body has settled.
-   * Narrower than its name in the same way: as shipped the read runs after the rollback and passes
+   * Weaker than its name in the same way: as shipped the read runs after the rollback and passes
    * with the routing deleted. What it catches is the queue's mark wrapping the body alone.
    */
   it("sends a read registered on the write lock's body promise to the reader", async () => {
@@ -386,8 +385,7 @@ describe("openVenueStore", () => {
     });
 
     await started;
-    // Registered from OUTSIDE the body, on the rejection that ends it, so it runs between the body
-    // finishing and the queue undoing its work.
+    // Registered from OUTSIDE the body, on the rejection that ends it.
     let observed: unknown;
     const watcher = gate.catch(() => {
       observed = store.venue.all(sql`select id from t`);
@@ -525,9 +523,8 @@ describe("openVenueStore", () => {
   });
 
   /**
-   * `busy_timeout` defaults to 0 on this driver, so 5000 shows the setting was applied. It does not
-   * show which connection served the read: both carry 5000, and this case passes with the routing
-   * deleted.
+   * Weaker than its name: 5000 (the driver's default is 0) shows the setting was applied, not which
+   * connection served the read — both carry 5000, and this case passes with the routing deleted.
    */
   it("sets a busy timeout on the connection a concurrent read lands on", async () => {
     const { store } = await open();

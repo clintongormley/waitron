@@ -72,8 +72,9 @@ const WAL_RETRY_INTERVAL_MS = 25;
 
 /**
  * Switches the file into write-ahead mode, waiting out whoever else holds it. `busy_timeout` is no
- * substitute: under a held write the switch is refused at once however long the timeout is
- * (`openVenueStore under contention` in `./index.test.ts`).
+ * substitute: under a held write, switching a file not yet in write-ahead mode was refused at once
+ * with `busy_timeout` at 5000 (measured on Node v26.7.0 against `node:sqlite`). The wait is pinned
+ * by `openVenueStore under contention` in `./index.test.ts`.
  */
 async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
   const deadline = Date.now() + BUSY_TIMEOUT_MS;
@@ -123,15 +124,16 @@ async function openConnection(path: string): Promise<DatabaseSync> {
 /**
  * Opens the read-only connection that runs beside a file's writer.
  *
- * **Read-only is what makes a misrouted write loud.** On a second read-WRITE connection such a
- * statement would commit quietly, outside the queue and outside whatever transaction is open; here
- * it is refused errcode 8 with nothing written, which `./node-sqlite-adapter.ts` then sends to the
- * writer instead.
+ * **A misrouted write is refused here**, errcode 8 with nothing written, and
+ * `./node-sqlite-adapter.ts` then sends it to the writer instead.
  *
  * **What it refuses is a write to the database FILE, which is narrower than "a write".** A
  * statement that changes the CONNECTION instead — `create temp table`, an `ATTACH` of a file that
  * exists, a connection-scoped pragma — succeeds here, so it lands on this connection and stays
  * there rather than being routed back.
+ *
+ * `foreign_keys` and `recursive_triggers` are not set here because both govern writes to the
+ * database file, which this connection cannot make.
  */
 function openReadConnection(path: string): DatabaseSync {
   const connection = new DatabaseSync(path, { readOnly: true });

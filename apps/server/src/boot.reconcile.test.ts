@@ -51,8 +51,9 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 //
 // **The suite keeps its own handle open while the server holds one, and only READS through it.**
 // Write-ahead mode admits a reader beside the writer, and both opens set `busy_timeout`
-// (`packages/store/src/index.ts:128-136`); the seeding writes all happen before `startServer` and
-// the read-backs after it, so the two handles never want the write lock at the same moment.
+// (`packages/store/src/index.ts`, `openConnection`); the seeding writes all happen before
+// `startServer` and the read-backs after it, so the two handles never want the write lock at the
+// same moment.
 
 // The box's own fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING + PRIMARY mode.
 const TILL_ENV = {

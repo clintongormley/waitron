@@ -95,9 +95,9 @@ describe("archiveTo", () => {
   });
 
   /**
-   * `VACUUM INTO` refuses a target that already holds bytes, so a leftover working file would end
-   * archiving to that path for good. The leftover here is a completed copy that was never renamed,
-   * which is refused `output file already exists`.
+   * `VACUUM INTO` refuses a target that is already a database, so without clearing it a leftover
+   * working file would end archiving to that path for good. The leftover here is a completed copy
+   * that was never renamed, which `VACUUM INTO` alone refuses with `output file already exists`.
    */
   it("archives again after an interrupted run left its working file behind", async () => {
     const { directory, db } = open();

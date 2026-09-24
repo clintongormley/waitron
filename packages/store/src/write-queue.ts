@@ -35,8 +35,9 @@ export function createWriteQueue(connections: Connections) {
         throw new Error("write lock: a body asked for the lock it is already holding");
       }
       // The store's marking wraps the WHOLE transaction, `commit` and `rollback` included, not
-      // just the body: a handler registered on the body's own promise runs after the body settles
-      // and before the transaction finishes, and must not read the writer's uncommitted rows.
+      // just the body: a handler registered on the body's own promise can run after the body
+      // settles and before the transaction finishes, and must not read the writer's uncommitted
+      // rows.
       //
       // Two markings, and they answer different questions: `inBody` refuses a body that asks for
       // the lock it holds; `asTransactionBody` routes a read from here to the write connection

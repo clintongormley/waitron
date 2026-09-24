@@ -24,8 +24,7 @@ function temp(prefix: string): string {
 
 /**
  * A peer process that takes the venue's migration lock, holds it, records that it let go, and
- * exits. Plain JavaScript on purpose: a child cannot load this repository's TypeScript without a
- * transpiling runtime, and `node:sqlite` is a builtin, so this needs no resolution at all.
+ * exits. `node:sqlite` is a builtin, so the child needs no module resolution.
  *
  * With `takeLock` = `no` it does everything EXCEPT take the lock. That is the control: the same
  * timings, the same log line, nothing for `applyMigrations` to wait for.

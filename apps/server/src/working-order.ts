@@ -1036,9 +1036,9 @@ export async function parkOrder(
  * cannot be running at the same time at all: one write transaction runs on the venue file at a
  * time. `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`) carries the mechanism and
  * the receipt for that; the call chain from here is `withTransaction`
- * (`packages/db/src/tenancy.ts:34`) → `StoreHandle.withWriteLock`
- * (`packages/store/src/index.ts:176`) → `createWriteQueue(...).run`
- * (`packages/store/src/write-queue.ts:19`), which issues `begin immediate`, awaits the body and
+ * (`packages/db/src/tenancy.ts`) → `StoreHandle.withWriteLock`
+ * (`packages/store/src/index.ts`, `openVenueStore`) → `createWriteQueue(...).run`
+ * (`packages/store/src/write-queue.ts`), which issues `begin immediate`, awaits the body and
  * only then `commit`s, so the next caller's `begin` has not run yet.
  *
  * The second `openTab` therefore runs after the first has committed, reads the now-set `tab_id`,
@@ -1121,9 +1121,9 @@ export async function openTab(
  * interleave with the caller's read-then-write. There is no second writer to interleave with. One
  * write transaction runs on the venue file at a time; `assertExtraListForWrite`
  * (`packages/catalogue/src/extras.ts`) carries the mechanism and the receipt, and the chain from
- * here is `withTransaction` (`packages/db/src/tenancy.ts:34`) → `StoreHandle.withWriteLock`
- * (`packages/store/src/index.ts:176`) → `createWriteQueue(...).run`
- * (`packages/store/src/write-queue.ts:19`). What the name says now is all this function does: it
+ * here is `withTransaction` (`packages/db/src/tenancy.ts`) → `StoreHandle.withWriteLock`
+ * (`packages/store/src/index.ts`, `openVenueStore`) → `createWriteQueue(...).run`
+ * (`packages/store/src/write-queue.ts`). What the name says now is all this function does: it
  * asserts, and every caller's subsequent statements were already safe from anyone else.
  *
  * The back-pointer read never held a lock even on PostgreSQL — it was a plain SELECT — so nothing

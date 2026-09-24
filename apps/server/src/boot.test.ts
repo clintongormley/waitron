@@ -220,12 +220,12 @@ beforeEach(() => {
  *
  * One COST of the second handle, seen rather than assumed: a suite write beside a running server
  * makes the server's own pending-card-payment sweep lose the write lock, and it logs
- * `resolve_pending.failed` with `Error: database is locked` and carries on (`boot.ts:370`). One such
- * line appears per full run of this file. The 5s `busy_timeout`
- * (`packages/store/src/index.ts:66`) did not absorb it; WHY it did not is not established here — no
- * probe was run for that — so treat the mechanism as open. Nothing here depends on that sweep, and
- * production opens the directory once, from one process — so this is a property of the ARRANGEMENT
- * this file chose, not a finding about the box.
+ * `resolve_pending.failed` with `Error: database is locked` and carries on (`boot.ts:370`). One
+ * such line appears per full run of this file. The 5s `busy_timeout`
+ * (`packages/store/src/index.ts`, `BUSY_TIMEOUT_MS`) did not absorb it; WHY it did not is not
+ * established here — no probe was run for that — so treat the mechanism as open. Nothing here
+ * depends on that sweep, and production opens the directory once, from one process — so this is a
+ * property of the ARRANGEMENT this file chose, not a finding about the box.
  */
 // The till's fiscal identity. `loadConfig` resolves `config.till` OPTIONALLY via `tryLoadTillConfig`
 // (undefined when none of the four ids are set — setup mode, slice 1b); it is boot's TRADING branch
@@ -296,7 +296,7 @@ let sharedDb: Database;
  *
  * It replaces `postgres://unused:unused@localhost/unused`. A merely absent path is NOT the
  * equivalent: `openVenueStore` does `mkdir(config.directory, { recursive: true })`
- * (`packages/store/src/index.ts:165`), so one would simply be created and the boot would carry on
+ * (`packages/store/src/index.ts`), so one would simply be created and the boot would carry on
  * past the point these tests claim it never reaches. A path UNDER a non-directory is refused —
  * `mkdir("/dev/null/venue", { recursive: true })` throws `ENOTDIR`, measured on this host with
  * `node -e` on 2026-09-22 — so a boot that got that far would fail with `ENOTDIR` rather than with
@@ -1177,7 +1177,7 @@ describe("startServer, against a migrated venue directory", () => {
     // An EMPTY venue directory — the `template0` clone's counterpart. Nothing has migrated it, so
     // the two files it will hold do not exist yet and nothing but boot's own migration run can
     // create the journals read below. `openVenueStore` creates the directory itself
-    // (`packages/store/src/index.ts:165`), so handing boot a path that does not exist is enough;
+    // (`packages/store/src/index.ts`), so handing boot a path that does not exist is enough;
     // the `mkdtemp` is only so the teardown has one thing to remove.
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-venue-"));
     let server: StartedServer | undefined;

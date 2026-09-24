@@ -54,8 +54,8 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 //
 // **The suite keeps a handle open on each venue directory while a server holds one, and only READS
 // through it while a server is up.** Write-ahead mode admits a reader beside the writer and both
-// opens set `busy_timeout` (`packages/store/src/index.ts:128-136`); every write this file makes —
-// the seeding, and `cleanupFiscalWork` in each `finally` — happens with no server running.
+// opens set `busy_timeout` (`packages/store/src/index.ts`, `openConnection`); every write this file
+// makes — the seeding, and `cleanupFiscalWork` in each `finally` — happens with no server running.
 //
 // ## One case below is RED, and it is a PRODUCT path, not a test to edit
 //
