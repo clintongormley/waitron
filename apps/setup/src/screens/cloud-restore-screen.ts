@@ -30,10 +30,32 @@ export class SetupCloudRestoreScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   @state() private acknowledged = false;
   @state() private showError = false;
+  #approvalBinding?: string;
+
+  #currentApprovalBinding(): string | undefined {
+    return this.view?.state === "approved" && this.view.point
+      ? JSON.stringify([this.view.requestId, this.view.point])
+      : undefined;
+  }
+
+  override willUpdate(): void {
+    const binding = this.#currentApprovalBinding();
+    if (binding !== this.#approvalBinding) {
+      this.acknowledged = false;
+      this.showError = false;
+      this.#approvalBinding = binding;
+    }
+  }
 
   #action(action: "start" | "status" | "start-again" | "restore"): void {
     if (this.busy) return;
-    if (action === "restore" && (!this.acknowledged || !this.view?.point)) {
+    if (
+      action === "restore" &&
+      (!this.acknowledged ||
+        this.view?.state !== "approved" ||
+        !this.view.point ||
+        this.#currentApprovalBinding() !== this.#approvalBinding)
+    ) {
       this.showError = true;
       return;
     }
