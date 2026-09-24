@@ -165,8 +165,8 @@ describe("scopeForPaths", () => {
   });
 
   // The repository's own machinery is ROOT scope, not global, so it gives the repo-level Vitest
-  // project work and gives no package any — including the two files members do read, which
-  // changed-scope.mjs names above ROOT_SCOPE_PREFIXES.
+  // project work and gives no package any. The files members do read are in ROOT_SCOPE_CONSUMERS,
+  // covered by the "a root file that workspace members read" block.
   it.each([
     ".github/workflows/ci.yml",
     "scripts/changed-scope.mjs",
@@ -202,6 +202,83 @@ describe("scopeForPaths", () => {
       kind: "packages",
       packages: ["@waitron/db"],
       root: false,
+    });
+  });
+
+  describe("a root file that workspace members read", () => {
+    const consumers = workspacePackages(
+      ls(
+        member("@waitron/server", "apps/server"),
+        member("@waitron/print-agent-app", "apps/print-agent"),
+        member("@waitron/credentials", "packages/credentials"),
+        member("@waitron/provisioning", "packages/provisioning"),
+        member("@waitron/dashboard", "apps/dashboard"),
+        member("@waitron/setup", "apps/setup"),
+        member("@waitron/till", "apps/till"),
+        member("@waitron/db", "packages/db"),
+      ),
+      ROOT,
+    );
+
+    it("selects the four members whose build runs scripts/bundle-node.mjs", () => {
+      expect(scopeForPaths(["scripts/bundle-node.mjs"], workspace(consumers))).toMatchObject({
+        kind: "packages",
+        packages: [
+          "@waitron/credentials",
+          "@waitron/print-agent-app",
+          "@waitron/provisioning",
+          "@waitron/server",
+        ],
+        root: true,
+      });
+    });
+
+    it("selects the three front-ends whose vite.config.ts imports scripts/dev-server-proxy.ts", () => {
+      expect(scopeForPaths(["scripts/dev-server-proxy.ts"], workspace(consumers))).toMatchObject({
+        kind: "packages",
+        packages: ["@waitron/dashboard", "@waitron/setup", "@waitron/till"],
+        root: true,
+      });
+    });
+
+    it("still gives any other scripts/ file root scope alone", () => {
+      const load = loader(consumers);
+      expect(scopeForPaths(["scripts/changed-scope.mjs"], load)).toMatchObject({
+        kind: "root",
+        packages: [],
+      });
+      expect(load.called).toBe(false);
+    });
+
+    it("adds the consumers to the packages a push already names", () => {
+      expect(
+        scopeForPaths(["scripts/bundle-node.mjs", "packages/db/src/y.ts"], workspace(consumers)),
+      ).toMatchObject({
+        kind: "packages",
+        packages: [
+          "@waitron/credentials",
+          "@waitron/db",
+          "@waitron/print-agent-app",
+          "@waitron/provisioning",
+          "@waitron/server",
+        ],
+      });
+    });
+
+    // A consumer the workspace no longer lists could be a moved member whose build still runs the
+    // file under another directory; narrowing without it is the silent direction.
+    it("runs everything when a listed consumer is not a workspace member", () => {
+      expect(scopeForPaths(["scripts/bundle-node.mjs"], workspace())).toMatchObject({
+        kind: "global",
+        packages: [],
+        root: true,
+      });
+    });
+
+    it("runs everything when the workspace could not be read", () => {
+      expect(scopeForPaths(["scripts/dev-server-proxy.ts"], loader(null))).toMatchObject({
+        kind: "global",
+      });
     });
   });
 
@@ -426,9 +503,10 @@ describe("formatScope", () => {
     );
   });
 
-  // The FOURTH outcome. `code=false` is what makes a pure-root pull request skip every code-gated
-  // job in ci.yml — the ungated `lint` job runs the repo-level project there — and `scope=root` is
-  // what makes the hook skip package typechecks while still running the root guards.
+  // The FOURTH outcome. `code=false` is what makes a `scope=root` pull request skip every
+  // code-gated job in ci.yml — the ungated `lint` job runs the repo-level project there — and
+  // `scope=root` is what makes the hook skip package typechecks while still running the root
+  // guards.
   it("emits its own line for a root-only push", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
       "code=false\nscope=root\npackages=\nroot=true\ndeploy=false",
@@ -459,8 +537,8 @@ describe("formatScope", () => {
   });
 
   // The one place the two part company, and the reason `code` is not simply `classify`'s verdict
-  // any more. A root path IS code — `isInertPath` says so, and it can break the repo-level suite —
-  // but it gives no `code`-gated job in ci.yml anything to do.
+  // any more. A root path ROOT_SCOPE_CONSUMERS does not list IS code — `isInertPath` says so, and
+  // it can break the repo-level suite — but gives no `code`-gated job in ci.yml anything to do.
   it("emits code=false for a root-only push, where classify says code", () => {
     expect(classify([".husky/pre-push"]).code).toBe(true);
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace())).split("\n")[0]).toBe(
@@ -642,6 +720,23 @@ describe("the CLI", () => {
   it("reports a root run for the repository\u2019s own machinery", () => {
     expect(run(".husky/pre-push\n").stdout).toBe(
       "code=false\nscope=root\npackages=\nroot=true\ndeploy=false\n",
+    );
+  });
+
+  // What ci.yml's `changes` job reads: `code=true` is what runs `bundle-smoke`, the workspace
+  // typecheck, and the tests of the selected members and their dependents on a pull request that
+  // changes only the shared build script.
+  it("selects the real members that build through scripts/bundle-node.mjs", () => {
+    expect(run("scripts/bundle-node.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/credentials @waitron/print-agent-app " +
+        "@waitron/provisioning @waitron/server\nroot=true\ndeploy=false\n",
+    );
+  });
+
+  it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
+    expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/setup @waitron/till\n" +
+        "root=true\ndeploy=false\n",
     );
   });
 

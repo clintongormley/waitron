@@ -1146,9 +1146,10 @@ and their dependents. Root guards stay local because they check the code that se
 The hook checks commit sign-offs first and stops at a failed check with a command to reproduce it.
 
 A documentation-only push stops after formatting. Repository machinery changes (`scripts/`,
-`.husky/`, `.github/`) stop after the root guards. Shared configuration or an unknown push range
-selects all workspace typechecks. Deleting branches without updating any ref skips the hook.
-Package browser and database suites run in CI rather than in the hook.
+`.husky/`, `.github/`) stop after the root guards, unless they touch a file `ROOT_SCOPE_CONSUMERS`
+lists. Shared configuration or an unknown push range selects all workspace typechecks. Deleting
+branches without updating any ref skips the hook. Package browser and database suites run in CI
+rather than in the hook.
 
 Run a package's tests or coverage locally when you need them to reproduce a failure or investigate
 changed behavior, for example `pnpm --filter @waitron/ui test:coverage`. Use `pnpm reap` before local

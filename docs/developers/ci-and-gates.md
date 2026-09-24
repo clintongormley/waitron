@@ -60,8 +60,10 @@ which is the change it would most have been wanted for; that upgrade's build evi
 taken locally instead. `docs/backlog.md` carries the work item.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
-guards. A documentation-only push stops after formatting. Deletion-only pushes run no checks.
-Unknown ranges keep the full local gate, including workspace typechecking.
+guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
+also selects the members that read it and their dependents. A documentation-only push stops after
+formatting. Deletion-only pushes run no checks. Unknown ranges keep the full local gate, including
+workspace typechecking.
 
 The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
 its two halves. `pnpm reap` (`scripts/reap-testcontainers.mjs`) removes stale containers and, as a
@@ -514,16 +516,23 @@ The `changes` job skips the expensive `code`-gated jobs when every changed path 
 documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
 `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
-the changed packages and their dependents.
+the changed packages and their dependents. A root file that members read —
+`scripts/bundle-node.mjs`, `scripts/dev-server-proxy.ts` — is the exception: `ROOT_SCOPE_CONSUMERS`
+in `scripts/changed-scope.mjs` selects the members that read it, so its change is `code=true`, and
+`scripts/root-scope-consumers.test.mjs` fails when a member starts reading an unlisted one. That
+guard is weaker than its name: it reads text, so only a relative `../scripts/…` spelling counts and
+a path built from parts is invisible to it; a comment spelling the path counts as a reference; and
+only root `scripts/` is scanned.
 
 `lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
 project — so a regression in a skipped path is caught there only as far as the root suites
 exercise it.
 
-A merge to `main` runs the unfiltered suite whenever anything outside those two sets changed; that
-run verifies the narrowing, and a root-only or docs-only merge does not get one. Read the
-`changes` job's `code`, `scope` and `packages` outputs before treating a green PR as evidence
-about the workspace. Design: `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
+A merge to `main` runs the unfiltered suite whenever its `code` output is true — anything but a
+change made only of inert paths, documentation, or machinery `ROOT_SCOPE_CONSUMERS` does not list;
+that run verifies the narrowing. Read the `changes` job's `code`, `scope` and `packages` outputs
+before treating a green PR as evidence about the workspace. Design:
+`docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
 
 ### Two pushes to `main` must never share a concurrency group
 

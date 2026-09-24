@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import {
   PACKAGES_WITHOUT_TESTS,
+  ROOT_SCOPE_CONSUMERS,
   classify,
   isImageInputPath,
   isInertPath,
@@ -163,9 +164,10 @@ function owningPackage(path, packages) {
  *                    `--file-info CLAUDE.md` is `"ignored": false, "inferredParser": "markdown"`,
  *                    and appending a mis-formatted heading to CLAUDE.md makes `prettier --check`
  *                    exit 1). Nothing else can read it.
- *   "root"           every changed CODE path is the repository's own machinery (`isRootScopePath`).
- *                    The repo-level Vitest project is the only suite that reads it, so that is the
- *                    only suite that runs; no package is typechecked or tested.
+ *   "root"           every changed CODE path is the repository's own machinery (`isRootScopePath`)
+ *                    and none is a file members read (`ROOT_SCOPE_CONSUMERS`). The repo-level Vitest
+ *                    project is the only suite that reads it, so that is the only suite that runs;
+ *                    no package is typechecked or tested.
  *   "global"         run everything: a path outside every package that is not root scope, an
  *                    unreadable workspace, or a push whose contents could not be determined at all.
  *   "packages"       `packages` names the members to narrow to. Non-empty exactly here.
@@ -224,10 +226,11 @@ export function scopeForPaths(changedPaths, loadPackages) {
   const rootPaths = codePaths.filter(isRootScopePath);
   const root = rootPaths.length > 0;
   const attributable = codePaths.filter((path) => !isRootScopePath(path));
+  const consumed = rootPaths.filter((path) => ROOT_SCOPE_CONSUMERS.has(path));
 
   // Nothing for any package to run. Returning before `loadPackages` is what keeps a hook-only or
   // workflow-only push off the 191-200ms `pnpm ls -r`, the same saving the documentation path takes.
-  if (attributable.length === 0) {
+  if (attributable.length === 0 && consumed.length === 0) {
     return {
       kind: "root",
       packages: [],
@@ -255,8 +258,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
     // `pnpm-workspace.yaml`, `tsconfig.base.json`, the root manifest, the lockfile and the lint and
     // format config all land here. Those can affect anything. The two other kinds of root path are
     // already gone: `isInertPath` filtered out the config no `code`-gated job reads, and
-    // `isRootScopePath` the machinery that gives no package any CI work (the two files members do
-    // read are named in `scripts/changed-scope.mjs` above ROOT_SCOPE_PREFIXES).
+    // `isRootScopePath` the machinery, whose member-read files ROOT_SCOPE_CONSUMERS handles below.
     if (owner === undefined) {
       return {
         kind: "global",
@@ -269,13 +271,29 @@ export function scopeForPaths(changedPaths, loadPackages) {
     attributed.add(owner.name);
   }
 
+  for (const path of consumed) {
+    for (const dir of ROOT_SCOPE_CONSUMERS.get(path)) {
+      const consumer = packages.find((pkg) => pkg.dir === dir);
+      if (consumer === undefined) {
+        return {
+          kind: "global",
+          packages: [],
+          root,
+          deploy,
+          reason: `${path} is read by ${dir}, which is not a workspace member — running everything`,
+        };
+      }
+      attributed.add(consumer.name);
+    }
+  }
+
   const names = [...attributed].sort();
   return {
     kind: "packages",
     packages: names,
     root,
     deploy,
-    reason: `${attributable.length} changed code path(s) map to ${names.join(", ")}`,
+    reason: `${attributable.length + consumed.length} changed code path(s) map to ${names.join(", ")}`,
   };
 }
 
@@ -283,15 +301,15 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * Renders a scope as the five lines its two callers read.
  *
  * `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE, which
- * is why `kind: "root"` answers it false alongside `documentation`: a change to `scripts/`,
- * `.husky/` or `.github/` gives none of them work, and ci.yml's UNGATED `lint` job is what runs the
- * repo-level project that does read it. It is emitted from here rather than recomputed by the
- * workflow's shell so the two cannot drift. ci.yml reads `code=`, `scope=`, `packages=` and
- * `deploy=` into job outputs with `sed`; the hook reads `scope=` and `packages=` and routes a
- * root-only push on `scope=root`. `root=` is emitted for the record — a mixed push says `packages`
- * AND `root=true` — and is read by no consumer today: the hook runs the repo-level suite on every
- * non-documentation push anyway, and ci.yml's `lint` job runs it on every push. `deploy=` is read
- * only by ci.yml (its `image` job); the hook builds no image.
+ * is why `kind: "root"` answers it false alongside `documentation`: a `kind: "root"` change —
+ * machinery ROOT_SCOPE_CONSUMERS does not list — gives none of them work, and ci.yml's UNGATED
+ * `lint` job is what runs the repo-level project that does read it. It is emitted from here rather
+ * than recomputed by the workflow's shell so the two cannot drift. ci.yml reads `code=`, `scope=`,
+ * `packages=` and `deploy=` into job outputs with `sed`; the hook reads `scope=` and `packages=`
+ * and routes a root-only push on `scope=root`. `root=` is emitted for the record — a mixed push
+ * says `packages` AND `root=true` — and is read by no consumer today: the hook runs the repo-level
+ * suite on every non-documentation push anyway, and ci.yml's `lint` job runs it on every push.
+ * `deploy=` is read only by ci.yml (its `image` job); the hook builds no image.
  *
  * A single space separates the package names, and that separator is the contract between this file
  * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in

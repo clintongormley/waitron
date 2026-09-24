@@ -2623,22 +2623,19 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle** (left by #580,
-  which moved every Node bundle's esbuild flags into that script). The shared
-  script every Node bundle is built with lives under `scripts/`, which `scripts/changed-scope.mjs`
-  classifies as root scope, and root scope emits `code=false`, so neither ci.yml's `bundle-smoke`
-  nor any member's build runs on that pull request (checked 2026-09-24 by running the classifier
-  over that one path). The push to `main` after the merge does not build one either: ci.yml widens
-  `scope` to `global` there but keeps the classifier's `code`, which gates `bundle-smoke` and the
-  image job. Unless a code-gated run comes first, the first CI build of a bundle after such a merge
-  is `image-nightly.yml`'s 03:00 UTC run on `main`, whose `deploy/Dockerfile` builds the server's
-  and print-agent's bundles, not credentials' or provisioning's. Before the flags moved, a flag
-  change was an edit to a package's `package.json`, which set `code=true` and ran `bundle-smoke`,
-  which builds the credentials and server bundles, not print-agent's or provisioning's. What still
-  runs is the root project, whose `scripts/bundle-node.test.mjs` bundles one small file through the
-  script. Decide whether root scope should report `code=true` for this file, or name the four
-  members as its consumers. `scripts/dev-server-proxy.ts` has the same shape for the three
-  front-ends' `vite.config.ts`.
+- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (the
+  owner's answer (a), 2026-09-24, to the note lane B's campaign queue item B8 raised about #580 —
+  not §B8 above; branch `fix/ci-root-script-consumers`).** `scripts/changed-scope.mjs` now carries
+  `ROOT_SCOPE_CONSUMERS`, which maps `scripts/bundle-node.mjs` to the four members whose `build`
+  runs it (server, print-agent, credentials, provisioning) and `scripts/dev-server-proxy.ts` to the
+  three front-ends whose `vite.config.ts` imports it; `scopeForPaths` selects those members, so a
+  change to either is `code=true` and `bundle-smoke` runs. The list is hand-written, and
+  `scripts/root-scope-consumers.test.mjs` fails in both directions — a member file naming a root
+  `scripts/` file by relative path that is not listed, or a listed pair no file makes. That guard
+  reads text: a path assembled from parts is invisible to it. **Still open:** `bundle-smoke` builds
+  only the credentials and server bundles, so a change to the shared script selects print-agent and
+  provisioning for typecheck and tests but builds neither of their bundles in CI. `bundle-smoke`
+  built the same two before #580 (`git show 7b1ad8889^:.github/workflows/ci.yml`).
 - **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
   floor retired 2026-09-24 by **PR #549**).** Every package and the root project now hold
   the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package
