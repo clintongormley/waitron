@@ -2794,11 +2794,36 @@ image constraints under *Detail → Box image*.
   `server-kit`, `tunnel`, `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`,
   `fiscal-none`, `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages,
   `ui-core` and `dashboard-kit`) and `packages/reporting` (#601, about 1,885 to about 1,265, tests
-  included; the generated `src/dr303-layout.ts`, 185 of those lines, is untouched). A pruning pull request
+  included; the generated `src/dr303-layout.ts`, 185 of those lines, is untouched) and `scripts/`
+  (#602, every `.ts` and `.mjs` file, about 4,870 to about 2,770 counted with the same `grep -cE`;
+  the `.sh` files and `write-path-tables.json` are outside the checker and were left). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600 and #601 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601 and #602 and left for the package that owns each, all
   still OPEN:
+  - Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
+    `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
+    `.husky/pre-push` beside the same loop; it is not there. `CLAUDE.md` §2 and the entry "The
+    guard sees ci.yml alone" below say `scripts/ci-workflow.test.mjs` reads only `ci.yml`; one of
+    its cases also reads `mutation.yml`. `CLAUDE.md` §3 says `scripts/no-tenant-column.test.ts`
+    exempts the core migration files that historically carried the column, whole; its
+    `HISTORICAL_TENANT_SQL` list is empty. `docs/developers/modifiers.md` (about lines 469-472)
+    calls the `catalogue-engine-neutral` header paragraph "the receipt" for not checking `pgEnum`
+    in the order and sale files; #602 deleted that paragraph because those columns are now
+    `enumType` (text plus a check). `docs/developers/testing-guide.md` (about line 294) says
+    `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
+    file's comment to what testing-guide itself measured (the per-test timer does not fire during
+    a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
+    matches. `packages/catalogue/src/options.ts` (about lines 116-117) and the "Checking one
+    product's translations takes a lock" entry below still say an advisory lock is taken, while
+    `packages/catalogue/src/content-languages.ts` says the write queue replaced it.
+    `packages/media/drizzle/0001_image_references.sql` (about lines 22-24) says `workspace-cycles`
+    refuses an "import"; that guard reads `package.json` files (a shipped migration, likely left).
+    Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
+    top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
+    decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
+    provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
+    spec §6 step 5).
   - Found by #601 (`packages/reporting`). **Re-deriving a closed day does not reproduce its
     snapshot once a later void touches that day's sales**: #601's Codex seat recorded a void on 5
     August for a 4 August sale, and 4 August's recomputed VAT went from 21.00 to 0.00. So
@@ -2998,7 +3023,9 @@ image constraints under *Detail → Box image*.
     deleted from `apps/setup/src/server-fields.ts`, is too wide: with
     `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime
     checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
-    `scripts/setup-wizard-fiscal-fields.test.ts` and `packages/fiscal-verifactu/src/venue-fields.ts`.
+    `packages/fiscal-verifactu/src/venue-fields.ts` (#602 removed it from
+    `scripts/setup-wizard-fiscal-fields.test.ts`, and `scripts/module-seams.test.ts`'s header now
+    states the two roots it checks).
     Prune with those.
   - `packages/store`, found by #568 and not changed: `isLocked` in `venue-lock.ts` reads `.errcode`
     without a null check, so a thrown `null` would raise a `TypeError` (the driver throws real
@@ -3031,10 +3058,10 @@ image constraints under *Detail → Box image*.
     comments and test names in about ten suites (layouts, printing, catalogue, core, `apps/server`;
     `git grep -l 23505 -- packages apps`) still cite the PostgreSQL code 23505, and
     `apps/server/src/working-order.test.ts:2782` says the refusal "poisons" its transaction, which
-    CLAUDE.md §3's measured rule contradicts. `scripts/behavioural-triggers.test.ts:737` and the
-    shipped migration `packages/db/drizzle/0001_behavioural_triggers.sql:348` say `requireDevice`
-    touches `last_seen_at` "on every authenticated request", which the review found too wide (the
-    migration cannot be edited). Stale line pointers:
+    CLAUDE.md §3's measured rule contradicts. The shipped migration
+    `packages/db/drizzle/0001_behavioural_triggers.sql:348` says `requireDevice` touches
+    `last_seen_at` "on every authenticated request", which the review found too wide (the migration
+    cannot be edited; #602 removed the same claim from `scripts/behavioural-triggers.test.ts`). Stale line pointers:
     `apps/server/src/till-api.fiscal-sale-paths.test.ts:662` cites `sales.ts:247`, and the shipped
     migration's line 378 points at history deleted from `device-profiles.trigger.test.ts`.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
@@ -3046,7 +3073,8 @@ image constraints under *Detail → Box image*.
     `:700`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
     and `:227`, `till-api.fiscal-sale-paths.test.ts:662`, `till-api.ts:895` and `:902`,
     `till-sale.test.ts:255`, `working-order.test.ts:103` (all under `apps/server/src`),
-    `packages/venue-service/src/operations.ts:351` and `scripts/catalogue-engine-neutral.test.ts:43-44`
+    `packages/venue-service/src/operations.ts:351` (the `scripts/catalogue-engine-neutral.test.ts`
+    pointers were removed by #602)
     — name the file and the column instead, with each package's pruning. In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
     repeats the first case under another name (a test change, not a comment one). The same
