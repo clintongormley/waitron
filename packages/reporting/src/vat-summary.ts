@@ -11,8 +11,8 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
-  businessDayClause,
-  businessDayRangeClause,
+  businessDayRangeWindow,
+  businessDayWindow,
   issuedSalesClause,
   nodeScopeClause,
   reversedSalesClause,
@@ -26,8 +26,8 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
  * The shared VAT-aggregation core behind every per-rate summary. Reads the filed per-rate desglose
  * from `sales.vat_breakdown` — the cuota as filed, whichever method (direct or difference) computed
  * it — and sums base and tax per rate. Corrections (negative breakdowns) net in. `counted` selects
- * the sales added; `reversed`, when given, selects voided sales (`sv` joined to `s`) whose breakdown
- * is subtracted.
+ * the sales added; `reversed`, when given, selects voided sales (`sv` joined to `s`) whose
+ * breakdown is subtracted.
  *
  * Exported for `vat-return.ts`'s modelo 303 aggregate; not in the public barrel.
  */
@@ -103,15 +103,12 @@ export async function aggregateVatByRate(
   };
 }
 
-/**
- * VAT summary for one node, or the whole venue, over one business day: sales on their issue day,
- * a void as a reversal on the day it was made.
- */
+/** VAT summary for one node, or the whole venue, over one business day. */
 export async function computeVatSummary(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<VatSummary> {
-  const window = (column: SQL) => businessDayClause(column, input);
+  const window = businessDayWindow(input);
   return aggregateVatByRate(tx, {
     nodeId: input.nodeId,
     counted: issuedSalesClause(window),
@@ -121,8 +118,7 @@ export async function computeVatSummary(
 
 /**
  * VAT summary over a closed RANGE of business days, for one node or, when `nodeId` is omitted, the
- * whole venue. Same bucketing, voids and exclusions as the daily close. Invalid
- * inputs are a caller precondition and throw a plain `Error`.
+ * whole venue. Invalid inputs are a caller precondition and throw a plain `Error`.
  */
 export async function computeVatSummaryForPeriod(
   tx: Transaction,
@@ -131,7 +127,7 @@ export async function computeVatSummaryForPeriod(
   validateTimeZone(input.timeZone);
   validateCutover(input.dayCutover);
   validateBusinessDayRange(input);
-  const window = (column: SQL) => businessDayRangeClause(column, input);
+  const window = businessDayRangeWindow(input);
   return aggregateVatByRate(tx, {
     nodeId: input.nodeId,
     counted: issuedSalesClause(window),

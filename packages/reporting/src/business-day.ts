@@ -137,26 +137,28 @@ function businessDayBoundary(
   return new Date(instantOfWallClock(wallMs, clock.timeZone)).toISOString();
 }
 
+/** A timestamp column's business-day window predicate. */
+export type WindowClause = (column: SQL) => SQL;
+
 /**
- * The DST-aware business-day predicate every aggregate reuses: the half-open instant window
+ * The DST-aware business-day predicate: the half-open instant window
  * `[start of from, start of the day after to)`, compared against a timestamp column. The two
- * boundary instants are computed once rather than each row's instant being mapped to a local date.
- * Measured against such a per-row mapping, the two differed only where a cutover sits inside the
- * zone's DST transition hour, on the two change days a year, by up to the transition's length.
+ * boundary instants are computed once, here, rather than each row's instant being mapped to a local
+ * date. Measured against such a per-row mapping, the two differed only where a cutover sits inside
+ * the zone's DST transition hour, on the two change days a year, by up to the transition's length.
  *
  * A timestamp column is TEXT, so this compares strings. That is correct only while the stored value
  * is in `toISOString()`'s canonical spelling, as both boundaries are; a value stored with a `+02:00`
  * offset, or written `2026-08-04 03:00:00`, would sort wrong against them.
  */
-function businessDayWindow(
-  column: SQL,
+function windowBetween(
   from: string,
   to: string,
   clock: { timeZone: string; dayCutover: string },
-): SQL {
+): WindowClause {
   const start = businessDayBoundary(from, 0, clock);
   const end = businessDayBoundary(to, 1, clock);
-  return sql`${column} >= ${start} and ${column} < ${end}`;
+  return (column) => sql`${column} >= ${start} and ${column} < ${end}`;
 }
 
 /**
@@ -185,24 +187,28 @@ export function currentBusinessDay(input: { timeZone: string; dayCutover: string
 }
 
 /**
- * The business-day predicate for ONE day. `column` is a timestamp column (`sales.issued_at` or
- * `tenders.settled_at`); a row belongs to `businessDay` when its instant falls in that day's
- * window ({@link businessDayWindow}).
+ * The window of ONE business day ({@link windowBetween}), for a report that applies it to several
+ * columns: its boundaries are computed once, here, not once per column.
  */
-export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
-  return businessDayWindow(column, input.businessDay, input.businessDay, input);
+export function businessDayWindow(input: DailyCloseInput): WindowClause {
+  return windowBetween(input.businessDay, input.businessDay, input);
 }
 
 /**
- * The closed-range generalisation of `businessDayClause`: the same window, opened at `from` and
- * closed after `to`, both inclusive. A single-day range is the predicate `businessDayClause` builds.
+ * The closed-range generalisation of `businessDayWindow`: the same window, opened at `from` and
+ * closed after `to`, both inclusive. A single-day range is the window `businessDayWindow` builds.
  */
-export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL {
-  return businessDayWindow(column, input.fromBusinessDay, input.toBusinessDay, input);
+export function businessDayRangeWindow(input: PeriodVatInput): WindowClause {
+  return windowBetween(input.fromBusinessDay, input.toBusinessDay, input);
 }
 
-/** A timestamp column's business-day window predicate: `businessDayClause` or its range form. */
-export type WindowClause = (column: SQL) => SQL;
+/**
+ * The business-day predicate for ONE day over one timestamp column: a row belongs to `businessDay`
+ * when its instant falls in that day's window.
+ */
+export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
+  return businessDayWindow(input)(column);
+}
 
 /** F3-canje substitutes are never counted: their VAT is already in the F2 tickets they replace. */
 function notSubstituteClause(): SQL {
@@ -235,8 +241,8 @@ export function issuedSalesClause(window: WindowClause): SQL {
 
 /**
  * The sales a day-scoped report REVERSES: voided in the window, issued outside it, and not an
- * F3-canje substitute (never counted, so never reversed). Assumes the outer query joins `sale_voids`
- * as `sv` to `sales` as `s`. No leading `and`.
+ * F3-canje substitute (never counted, so never reversed). Assumes the outer query joins
+ * `sale_voids` as `sv` to `sales` as `s`. No leading `and`.
  */
 export function reversedSalesClause(window: WindowClause): SQL {
   return sql`${window(sql`sv.voided_at`)}
