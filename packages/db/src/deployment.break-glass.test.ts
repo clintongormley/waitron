@@ -5,7 +5,13 @@
 // asserts nothing, and nothing in this package now states the rule.
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { readBreakGlassVerifier, setBreakGlassVerifierTx, stampDeployment } from "./deployment.js";
+import {
+  readBreakGlassVerifier,
+  readDeploymentMode,
+  setBreakGlassVerifierTx,
+  setDeploymentMode,
+  stampDeployment,
+} from "./deployment.js";
 import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
@@ -21,11 +27,12 @@ describe("the deployment break-glass verifier", () => {
     expect(await readBreakGlassVerifier(suite.db, NODE)).toBeNull();
   });
 
-  it("reads null on a migrated database nothing has stamped", async () => {
-    // No stampDeployment here, and this node has no `node_roles` row. This reader takes a plain
-    // select rather than the table-presence probe its neighbours use, so the missing row is what
-    // answers null; without this case the reader could stop tolerating a missing row and every
-    // test would still pass, because every other one stamps first.
+  it("reads null for a node whose row holds a role but no verifier", async () => {
+    // The case above reads a node with no `node_roles` row at all; this one has a row, written by
+    // a role write, whose verifier column is empty.
+    await stampDeployment(suite.db, "preproduction");
+    await setDeploymentMode(suite.db, NODE, "mirror");
+    expect(await readDeploymentMode(suite.db, NODE)).toBe("mirror");
     expect(await readBreakGlassVerifier(suite.db, NODE)).toBeNull();
   });
 

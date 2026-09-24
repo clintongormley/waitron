@@ -45,10 +45,10 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 /**
  * Refuses every write verb when `isReadOnly()` is true. Read PER REQUEST (not captured once) so a
  * live mirror→primary promotion — `node_roles.mode = 'primary'` + a refresh of the holder boot
- * passes in — opens every write route without a restart (design §10). Boot builds the predicate; today it is
- * `() => holders.mode.current === "mirror" || fenced` — a read-only MIRROR, or a FENCED returned
- * ex-primary that adopted a superseding sell-only/evicted document (membership rejoin R1, design §6).
- * On an unfenced primary it is a pure pass-through.
+ * passes in — opens every write route without a restart (design §10). Boot builds the predicate;
+ * today it is `() => holders.mode.current === "mirror" || fenced` — a read-only MIRROR, or a FENCED
+ * returned ex-primary that adopted a superseding sell-only/evicted document (membership rejoin R1,
+ * design §6). On an unfenced primary it is a pure pass-through.
  *
  * Returns the error-boundary response shape directly (`{ error: { code, params } }`) rather than
  * throwing: a Hono middleware is not inside a route's `createErrorBoundary` wrapper; the code is built

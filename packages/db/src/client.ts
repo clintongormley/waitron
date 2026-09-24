@@ -33,9 +33,10 @@ export type Database = StoreHandle<Schema>;
 
 /** This node's two open files. */
 export interface VenueDatabase {
-  /** Every table classified `ledger` or `state`: what the venue did, and how it is configured. */
+  /** `venue.db`, which every migration set is applied to (`packages/migrations/src/apply.ts`). */
   venue: Database;
-  /** Every table classified `local`: this node's identity, sessions, pairing codes, keys. */
+  /** `node.db`, which no migration set is applied to; reserved for a later slice (slice-2 spec
+   * §2). */
   node: Database;
   /** Closes both files. */
   close(): Promise<void>;

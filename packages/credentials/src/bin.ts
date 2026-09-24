@@ -31,9 +31,9 @@ const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
  * value would seal a credential wherever the process happened to be running.
  *
  * `store.venue` is the handle, not `store.node`. `tenant_credentials` is classified `local`
- * (`./classification.ts`), which describes where it will live once replication splits the files;
- * today no set is split, and `packages/migrations/src/apply.ts` applies every migration set to the
- * venue file. Both handles are typed on the whole schema barrel, so the compiler cannot tell these
+ * (`./classification.ts`), which says whose rows they are, not which file holds them:
+ * `packages/migrations/src/apply.ts` applies every migration set to the venue file and none to the
+ * node file. Both handles are typed on the whole schema barrel, so the compiler cannot tell these
  * apart — `bin.test.ts`'s `set`/`list` round trip is what does.
  */
 export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo): Promise<number> {

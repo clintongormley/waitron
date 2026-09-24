@@ -315,8 +315,9 @@ with at most three reads; `working-order.test.ts` checks the single call and
 `tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
 2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (slice-2
 spec §2); it inherits `deployment`'s rule and is not in the frozen matrix, which the guard's
-`ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM. The database used to: a request was served on a connection wearing `app_user`, which
-held `SELECT` and no write on the four, so PostgreSQL answered a write with `42501`. SQLite has no
+`ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM. The
+database used to: a request was served on a connection wearing `app_user`, which held `SELECT` and
+no write on the four, so PostgreSQL answered a write with `42501`. SQLite has no
 roles and no grants — one process opens one file, and every path, request and provisioning alike,
 shares that one venue handle. So the rule survives as a convention over source text, and that guard
 is not a second opinion on an engine that would refuse the write anyway.
@@ -330,10 +331,10 @@ chain; it walks `<member>/src` under `apps` and `packages` alone; and what the g
 operation at a time it does not cover at all (`docs/backlog.md` → B9). Read those hedges in the guard
 rather than trusting this line.
 
-Real code does write all five, legitimately: the promote route reaches `node_roles`, and the
-setup-mode provision and adopt routes reach `tenants`, `nodes`, `deployment`, `node_roles` and
-`mirror_config`. Each does it by calling into one of the files `scripts/write-path-tables.json` names, which is where such a
-write is allowed to live. Keeping them in a handful of named files is the whole of the property now,
+Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
+`nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
+`mirror_config`; and the promote route reaches `node_roles`. Each does it by calling into one of the
+files `scripts/write-path-tables.json` names, which is where such a write is allowed to live. Keeping them in a handful of named files is the whole of the property now,
 because no connection makes the distinction for us any more.
 
 HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in
@@ -853,10 +854,11 @@ Run both after adding any table anywhere.
 
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
-Every table is in `venue.db` and streams (slice-2 spec §2, which replaced the topology design's
-plan to put `local` tables in `node.db`). A `local` row means nothing to another node, so no venue
-row may depend on one, and `node.db` stays reserved for a later slice that may move `local` tables
-into it — which a key in either direction would block. Guard: `scripts/two-file-foreign-keys.test.ts`.
+Every table is in `venue.db`, the file slice 2 will stream (slice-2 spec §2, which replaced the
+topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
+node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
+move `local` tables into it — which a key in either direction would block. Guard:
+`scripts/two-file-foreign-keys.test.ts`.
 
 **What it reads, and the two things it therefore cannot see.** It reads drizzle's own generated head
 snapshot for each migration set — `meta/_journal.json` names the head and `tables[*].foreignKeys[*]`

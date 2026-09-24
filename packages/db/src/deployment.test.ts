@@ -66,9 +66,11 @@ describe("the deployment stamp", () => {
   });
 
   it("reads as a sole primary on a migrated database nothing has stamped", async () => {
-    // The table exists but holds no row — no migration seeds one, only stampDeployment does — so
-    // the readers fall back rather than reading an absent row. A box between its first migration
-    // and its first stamp is in exactly this state, and it must still sell.
+    // `node_roles` exists but holds no row for this node: no migration seeds one, stampDeployment
+    // writes `deployment` only, and a row appears at the first write of the node's mode, singleton
+    // role or break-glass verifier. So the readers fall back rather than reading an absent row. A
+    // box between its first migration and that first write is in exactly this state, and it must
+    // still sell.
     expect(await readSingletonRole(db, NODE)).toBe("primary");
     expect(await readDeploymentMode(db, NODE)).toBe("primary");
   });
@@ -114,8 +116,8 @@ describe("the deployment stamp", () => {
   it("readDeploymentMode returns 'primary' by default and 'mirror' after setDeploymentMode", async () => {
     // Fresh migrated DB, unstamped: an unstamped database is a primary.
     expect(await readDeploymentMode(db, NODE)).toBe("primary");
-    await stampDeployment(db, "preproduction"); // creates the id=1 row
-    expect(await readDeploymentMode(db, NODE)).toBe("primary"); // default on the new row
+    await stampDeployment(db, "preproduction"); // writes `deployment`, not a `node_roles` row
+    expect(await readDeploymentMode(db, NODE)).toBe("primary"); // the missing-row fallback
     await setDeploymentMode(db, NODE, "mirror");
     expect(await readDeploymentMode(db, NODE)).toBe("mirror");
     await setDeploymentMode(db, NODE, "primary"); // promotion is a legitimate reverse

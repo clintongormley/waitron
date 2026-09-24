@@ -115,10 +115,10 @@ async function nodeRolesTableExists(db: Database): Promise<boolean> {
 }
 
 /**
- * Both of one node's axes, `mode` and `singleton_role`, from ONE read of that node's row, so the pair
- * is never torn — never the `(mirror, primary)` pair `node_roles_role_valid_ck` forbids. A node with no
- * row, or a database whose migrations have not run, reads as a sole primary: a box between its first
- * migration and its first role write must still sell.
+ * Both of one node's axes, `mode` and `singleton_role`, from ONE read of that node's row, so the
+ * pair is never torn — never the `(mirror, primary)` pair `node_roles_role_valid_ck` forbids. A
+ * node with no row, or a database whose migrations have not run, reads as a sole primary: a box
+ * between its first migration and its first role write must still sell.
  */
 export async function readDeploymentAxes(
   db: Database,
@@ -144,8 +144,8 @@ export async function readSingletonRole(db: Database, nodeId: string): Promise<S
 
 /**
  * Refuses a role write on a database that has not been stamped with its environment. These are
- * promotion primitives: a mis-sequenced adopt or promote that "succeeded" before the stamp would leave
- * a node's role recorded on a database nothing has claimed for an environment.
+ * promotion primitives: a mis-sequenced adopt or promote that "succeeded" before the stamp would
+ * leave a node's role recorded on a database nothing has claimed for an environment.
  */
 async function requireStamp(tx: Transaction): Promise<void> {
   const [row] = await tx.select({ id: deployment.id }).from(deployment).where(eq(deployment.id, 1));
@@ -166,8 +166,10 @@ export async function setDeploymentMode(
  * co-sets `singleton_role = 'secondary'` in the same write, so the pair `node_roles_role_valid_ck`
  * forbids is never written even transiently; `primary` leaves `singleton_role` as it is — which of
  * the two a primary holds is the promote action's call. Nothing in the database refuses another
- * caller this write; `scripts/write-path-tables.test.ts` flags a `node_roles` write it finds in the
- * text of any file but this one.
+ * caller this write. `scripts/write-path-tables.test.ts` flags a `node_roles` write it recognises —
+ * a raw SQL statement, or a drizzle builder call on a handle-named receiver — in the production
+ * source under each app's and package's `src`, outside this file; its header lists what it cannot
+ * see.
  */
 export async function setDeploymentModeTx(
   tx: Transaction,

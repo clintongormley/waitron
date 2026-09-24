@@ -1,7 +1,7 @@
 import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 
 const LOCAL =
-  "sealed under the key ring of the node that wrote it, so only that node opens a row; streamed with the venue, and a rebuild brings the same node's key back (slice-2 spec §3.1). Not keyed by node id: slice 3 moves the vault to a venue key (§3.3)";
+  "sealed under the key ring of the node that wrote it, so only that node opens a row; in venue.db like every table, and once slice-2 spec §3.1 lands a rebuild will bring the same node's key back with it. Not keyed by node id: slice 3 moves the vault to a venue key (§3.3)";
 
 /**
  * Credentials' tables. A stored secret belongs to the node that sealed it: the blob is sealed under

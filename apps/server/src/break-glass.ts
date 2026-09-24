@@ -8,8 +8,8 @@ import {
 } from "@waitron/db";
 
 // The offline break-glass secret: minted once at adopt, verified later by the promote endpoint.
-// Only the scrypt verifier is ever persisted (this node's `node_roles` row); the raw secret is returned
-// exactly once and never stored or logged.
+// Only the scrypt verifier is ever persisted (this node's `node_roles` row); the raw secret is
+// returned exactly once and never stored or logged.
 
 /**
  * Generates a high-entropy break-glass secret, stores only its scrypt verifier, and returns the RAW

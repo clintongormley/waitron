@@ -335,8 +335,7 @@ describe("runCli venue", () => {
     expect(h.askedSecretly).toEqual([]);
 
     // One open of the venue directory, and the apply writes through its VENUE handle — the file
-    // that holds every `ledger` and `state` table. The node file holds this node's own identity and
-    // is not what a venue plan writes.
+    // every migration set is applied to. None is applied to the node file.
     expect(h.openVenue).toHaveBeenCalledTimes(1);
     expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
     const opened = (await h.openVenue.mock.results[0].value) as VenueDatabase;

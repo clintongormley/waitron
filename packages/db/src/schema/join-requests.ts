@@ -31,17 +31,19 @@ export const joinRequests = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     // The node that received the knock (`cfg.nodeId`). Every verb in
-    // `apps/server/src/join-requests.ts` filters on it, so another node holding this database neither
-    // lists nor accepts the request — the same fail-closed posture as the in-memory pairing window.
-    // No foreign key to `nodes`, for the reason on `node_roles.node_id` (`./node-roles.ts`).
+    // `apps/server/src/join-requests.ts` filters on it, so another node holding this database
+    // neither lists nor accepts the request — the same fail-closed posture as the in-memory pairing
+    // window. No foreign key to `nodes`, for the reason on `node_roles.node_id`
+    // (`./node-roles.ts`).
     nodeId: id("node_id").notNull(),
-    // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked for,
-    // so a joiner says nothing about which venue it is joining. No foreign key to `locations`: a
-    // `local` table holds no key into a venue table (guard: `scripts/two-file-foreign-keys.test.ts`).
-    // Unlike the identity tables, that id is configuration rather than a row this request read, and
-    // nothing checks it exists when the row is written; a misconfigured venue is refused later, when
-    // accept copies it into the accepted row — `devices` for a device, `print_agents` for an agent —
-    // both of which do hold a key to `locations`.
+    // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked
+    // for, so a joiner says nothing about which venue it is joining. No foreign key to `locations`:
+    // a `local` table holds no key into a venue table (guard:
+    // `scripts/two-file-foreign-keys.test.ts`). Unlike the identity tables, that id is
+    // configuration rather than a row this request read, and nothing checks it exists when the row
+    // is written; a misconfigured venue is refused later, when accept copies it into the accepted
+    // row — `devices` for a device, `print_agents` for an agent — both of which do hold a key to
+    // `locations`.
     locationId: id("location_id").notNull(),
     kind: joinRequestKind("kind").notNull(),
     // The name the joiner asked for. A device accept copies it to `devices.label`, an agent accept to

@@ -1351,11 +1351,12 @@ export async function startServer(
   // a mirror; `mirror-bundle.ts`'s header says what the deleted replication used to supply and that no
   // replacement has landed. A primary is today's flow.
   // Read ONCE here into a refreshable holder that the promote action
-  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its write — so a mode flip
-  // would take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
-  // flip the mode: a local-secondary promote refreshes this holder without changing its value ('primary'
-  // stays 'primary'). What FLIPS this node's `node_roles.mode` to 'primary' to open the read-only
-  // gate live is the mirror→primary path (spec §5b), a later slice. The store is already open, so this read is free.
+  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its write — so a mode flip would
+  // take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
+  // flip the mode: a local-secondary promote refreshes this holder without changing its value
+  // ('primary' stays 'primary'). What FLIPS this node's `node_roles.mode` to 'primary' to open the
+  // read-only gate live is the mirror→primary path (spec §5b), a later slice. The store is already
+  // open, so this read is free.
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
   // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this
@@ -1467,15 +1468,16 @@ export async function startServer(
   // gate's own per-request predicate re-reads `mode` live (so a promotion lifts it without a restart),
   // and is deliberately kept separate below.
   const fencedOrMirror = isMirror || fenced;
-  // The primary-only SINGLETON duties below (scheduled backup, outbound tunnel client, and the fiscal
-  // drain/reconcile pass) gate on THIS, not on `isMirror`: they must run on the ONE
-  // `singleton_role='primary'` node, never on every non-mirror node (promotion runbook design §2/§3c —
-  // the same axis `singletonPass` already gates the fiscal drain/reconcile pass on, #158). The bug this
-  // fixes: a SELL-ONLY LOCAL SECONDARY (`mode='primary'`, `singleton_role='secondary'`) is NOT a mirror,
-  // so the old `!isMirror` gate ran them on it too — a second node dialing the one outbound tunnel and
-  // writing scheduled backups, duplicating the primary (active-active). Because
-  // `node_roles_role_valid_ck` rejects `(mirror, primary)`, `singleton_role='primary'` already implies
-  // `mode='primary'`, so this predicate alone is correct and a mirror is always 'secondary'.
+  // The primary-only SINGLETON duties below (scheduled backup, outbound tunnel client, and the
+  // fiscal drain/reconcile pass) gate on THIS, not on `isMirror`: they must run on the ONE
+  // `singleton_role='primary'` node, never on every non-mirror node (promotion runbook design
+  // §2/§3c — the same axis `singletonPass` already gates the fiscal drain/reconcile pass on, #158).
+  // The bug this fixes: a SELL-ONLY LOCAL SECONDARY (`mode='primary'`,
+  // `singleton_role='secondary'`) is NOT a mirror, so the old `!isMirror` gate ran them on it too —
+  // a second node dialing the one outbound tunnel and writing scheduled backups, duplicating the
+  // primary (active-active). Because `node_roles_role_valid_ck` rejects `(mirror, primary)`,
+  // `singleton_role='primary'` already implies `mode='primary'`, so this predicate alone is correct
+  // and a mirror is always 'secondary'.
   //
   // BOOT decision, captured once like `isMirror` — DELIBERATELY not live. An in-process promotion (#160
   // `promoteLocalSecondaryToPrimary` flips `singleton_role` live and starts the fiscal pass next tick) will
@@ -1720,11 +1722,11 @@ export async function startServer(
     },
     log,
   );
-  // The public role probe a till polls to follow the venue's primary across a failover (till-reroute
-  // §3.1). Mounted on every trading boot, not in setup: "not accepting sales" from a mirror or a fenced
-  // node is the answer that steers a till away, so those boots must answer it too. `!fencedOrMirror`
-  // is redundant while `node_roles_role_valid_ck` rejects (mirror, primary) and the fence above
-  // demotes the singleton axis; kept so the probe refuses if either stops.
+  // The public role probe a till polls to follow the venue's primary across a failover
+  // (till-reroute §3.1). Mounted on every trading boot, not in setup: "not accepting sales" from a
+  // mirror or a fenced node is the answer that steers a till away, so those boots must answer it
+  // too. `!fencedOrMirror` is redundant while `node_roles_role_valid_ck` rejects (mirror, primary)
+  // and the fence above demotes the singleton axis; kept so the probe refuses if either stops.
   mountNodeApi(
     app,
     {

@@ -8,8 +8,10 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openVenueStore } from "./index.js";
 
-// Two one-table schemas standing in for the real split: a `ledger`/`state` table belongs in the
-// venue file, a `local` one in the node file.
+// Two one-table schemas, one per file, to show each handle reaches its own file. The product
+// applies every migration set to the venue file and leaves the node file empty
+// (`packages/migrations/src/apply.ts`); this package does not know that, and the split here is the
+// test's own.
 const sales = sqliteTable("sales", { id: integer("id").primaryKey(), total: integer("total") });
 const sessions = sqliteTable("sessions", { id: integer("id").primaryKey(), token: text("token") });
 

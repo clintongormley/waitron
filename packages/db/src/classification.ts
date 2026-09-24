@@ -5,7 +5,7 @@ import type { ChangeSource } from "@waitron/shared";
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
 const LOCAL =
-  "one node's own row, keyed by its node id; streamed with the venue, read and written only by that node";
+  "one node's own row, keyed by its node id; in venue.db like every table, read and written only by that node";
 
 /**
  * Core's tables, classified for native replication (swap spec §2.1). `canvases` is `state` (it

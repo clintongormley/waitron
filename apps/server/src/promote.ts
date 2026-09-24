@@ -196,14 +196,14 @@ export interface MirrorPromoteDeps extends PromoteDeps {
 }
 
 /**
- * The point-of-no-return body of a mirror→primary promote, extracted so the term-guard can be proven
- * as a unit (parent spec §8 "R3 sharp edge"; CLAUDE.md §4). Runs in ONE transaction, in an order
- * that respects `node_roles_role_valid_ck`: flip `mode → primary` FIRST (leaving `singleton_role`, so
- * the transient pair is the valid `(primary, secondary)`, never the forbidden `(mirror, primary)`), then
- * `singleton_role → primary`, then the TERM-GUARDED document write. A `false` from the guard means a
- * concurrent gossip-adopt already landed a >= term, so writing would REGRESS the org chart — the whole
- * transaction is aborted (`promotion.membership_superseded`) and the mode/singleton flip does not commit
- * against a superseded chart.
+ * The point-of-no-return body of a mirror→primary promote, extracted so the term-guard can be
+ * proven as a unit (parent spec §8 "R3 sharp edge"; CLAUDE.md §4). Runs in ONE transaction, in an
+ * order that respects `node_roles_role_valid_ck`: flip `mode → primary` FIRST (leaving
+ * `singleton_role`, so the transient pair is the valid `(primary, secondary)`, never the forbidden
+ * `(mirror, primary)`), then `singleton_role → primary`, then the TERM-GUARDED document write. A
+ * `false` from the guard means a concurrent gossip-adopt already landed a >= term, so writing would
+ * REGRESS the org chart — the whole transaction is aborted (`promotion.membership_superseded`) and
+ * the mode/singleton flip does not commit against a superseded chart.
  *
  * The diagnostic held-term read runs `readNodeMembership` on `tx`, the handle this transaction is open
  * on. The value is only for the error message; the throw is what rolls the transaction back regardless.

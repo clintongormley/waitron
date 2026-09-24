@@ -61,11 +61,11 @@ journalling, foreign keys on and a busy timeout. The operating-system permission
 are the whole of the access control; there is nothing to `GRANT`, and nothing that could be granted
 too widely.
 
-Two files, because a table's declared class chooses which one it belongs in — but **today every
-migration set is applied to `venue.db`, and `node.db` is created and left empty**
+**Every migration set is applied to `venue.db`, and `node.db` is created and left empty**
 (`packages/migrations/src/apply.ts`, and `useVenueDb`'s own note in
-`packages/db/src/testing/venue-db.ts`). That is what is true now, not a prediction: nothing yet
-splits a set across the two.
+`packages/db/src/testing/venue-db.ts`). A table's class does not choose a file: a `local` table's
+rows each belong to one node and sit in `venue.db` beside every other table. `node.db` is reserved
+for a later slice (slice-2 spec §2).
 
 `WAITRON_VENUE_DIR` names the directory. Left unset — or set to the empty string, which counts as
 unset everywhere in this codebase — it is `venue` under `WAITRON_STATE_DIR`, so the databases live

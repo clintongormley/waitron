@@ -22,9 +22,9 @@ export interface VenueStoreConfig<
 > {
   /** Where the two files live. Created if it does not exist. */
   directory: string;
-  /** Every table classified `ledger` or `state`. */
+  /** The schema Drizzle maps over the venue file. */
   venueSchema: TVenueSchema;
-  /** Every table classified `local`: this node's identity, sessions, pairing codes, keys. */
+  /** The schema Drizzle maps over the node file. */
   nodeSchema: TNodeSchema;
 }
 
@@ -58,7 +58,7 @@ export interface VenueStore<
   node: StoreHandle<TNodeSchema>;
   /** Runs `body` as the only write transaction on the venue file at that moment. */
   withWriteLock: <T>(body: () => Promise<T>) => Promise<T>;
-  /** Copies the VENUE file to `path`; the node file carries only this box's own local rows. */
+  /** Copies the VENUE file to `path`, and not the node file. */
   archiveTo: (path: string) => Promise<void>;
   close: () => Promise<void>;
 }

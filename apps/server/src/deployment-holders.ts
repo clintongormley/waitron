@@ -8,8 +8,9 @@ import {
 /**
  * This node's two orthogonal role axes (`node_roles`) the running process gates on, each in a
  * one-field cell read live per request / per pass so a promotion is a genuine flag-flip with no
- * restart (promotion runbook design §3b). `mode` fronts the read-only gate + ambient viewer; `singletonRole` gates the fiscal drain/reconcile
- * pass (see `singletonPass`). Held together so the promote action refreshes both in one call.
+ * restart (promotion runbook design §3b). `mode` fronts the read-only gate + ambient viewer;
+ * `singletonRole` gates the fiscal drain/reconcile pass (see `singletonPass`). Held together so the
+ * promote action refreshes both in one call.
  */
 export interface DeploymentHolders {
   readonly mode: { current: DeploymentMode };

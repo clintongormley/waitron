@@ -24,8 +24,8 @@ export const JOIN_TTL_MS = 15 * 60 * 1000;
 export const PENDING_CAP = 10;
 
 /** Delete every lapsed request this node holds. Called at the head of every verb that reads or
- * counts them, so a lapsed row never occupies the cap, never blocks a number, and never appears in the
- * pending list. Swept opportunistically at read, not by a background job. */
+ * counts them, so a lapsed row never occupies the cap, never blocks a number, and never appears in
+ * the pending list. Swept opportunistically at read, not by a background job. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
   await tx
     .delete(joinRequests)
@@ -38,8 +38,8 @@ async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
 }
 
 /** Every number currently spoken for among this node's requests, EITHER kind, split by role. The
- * cross-surface scope is the point (design §1.2 rule 3): an agent request and a device request must never show the
- * same number, or an admin comparing across two screens can be honestly misled. */
+ * cross-surface scope is the point (design §1.2 rule 3): an agent request and a device request must
+ * never show the same number, or an admin comparing across two screens can be honestly misled. */
 export async function pendingNumbers(
   tx: Transaction,
   cfg: TillConfig,
@@ -72,8 +72,8 @@ function twoDigits(n: number): string {
  * insert to 11 (bypassing the cap and the decoy budget).
  *
  * WHAT ARRANGES IT is the venue file's write queue, not a lock this function takes:
- * `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside that queue, which admits ONE
- * write transaction on the file at a time — the mechanism, and the receipt, are written out on
+ * `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside that queue, which admits
+ * ONE write transaction on the file at a time — the mechanism, and the receipt, are written out on
  * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The queue is per FILE, so it
  * serialises every creator on the file, never only those of one location or kind.
  */

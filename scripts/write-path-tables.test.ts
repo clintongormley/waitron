@@ -13,9 +13,10 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  * Read the four hedges below before trusting it.
  *
  * It is about WHICH FILE does the write, not about being a request. A request can legitimately
- * reach these tables: the promote route reaches `deployment`, and the setup-mode provision and
- * adopt routes reach `tenants`, `nodes` and `mirror_config`. Each does it by calling into one of
- * the files `write-path-tables.json` names, which is where such a write is allowed to live. Keeping
+ * reach these tables: the setup-mode provision route reaches `tenants`, `nodes` and `deployment`,
+ * the setup-mode adopt route reaches `deployment`, `node_roles` and `mirror_config`, and the
+ * promote route reaches `node_roles`. Each does it by calling into one of the files
+ * `write-path-tables.json` names, which is where such a write is allowed to live. Keeping
  * those writes in a handful of named files is the property being defended; hedge 2 below is what it
  * costs.
  *
@@ -31,8 +32,9 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  * is a frozen record, not a measurement: nothing checks it against a database. It only ever
  * measured TABLE-level grants, so a column-scoped write grant on one of the four never showed up in
  * it or here. `write-path-tables.json` beside this file holds the same four FROZEN, plus
- * `node_roles`, because the matrix goes when the rest of the grant-era record does; the case below cross-checks the two while
- * both exist, and deleting the matrix breaks this file's import rather than making it quietly pass.
+ * `node_roles`, because the matrix goes when the rest of the grant-era record does; the case below
+ * cross-checks the two while both exist, and deleting the matrix breaks this file's import rather
+ * than making it quietly pass.
  *
  * It is WEAKER than "no write path touches a forbidden table", in four ways that are worth stating
  * because a failing test can never restore a missing hedge:
@@ -53,8 +55,9 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *    `test/` directory, `apps/<app>/scripts` (four demo scripts there write `tenants`, three of them `nodes` too),
  *    and anything at a package root.
  * 4. **It is about the tables that were refused AT ALL**, plus `node_roles`. The grants used to
- *    refuse plenty more one operation at a time — no DELETE on the sale tables, UPDATE narrowed to named columns on two
- *    others — and none of that was ever checked here, nor is any of it refused now.
+ *    refuse plenty more one operation at a time — no DELETE on the sale tables, UPDATE narrowed to
+ *    named columns on two others — and none of that was ever checked here, nor is any of it
+ *    refused now.
  *    `docs/backlog.md` → B9 carries the decision.
  */
 
@@ -64,7 +67,8 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  * table -> the files allowed to write it, repo-relative.
  *
  * A frozen JSON file rather than a constant here, because it has to outlive the grants it was taken
- * from. Why each entry is allowed, traced caller by caller on 2026-09-19:
+ * from. Why each entry is allowed, traced caller by caller on 2026-09-19 (the `deployment.ts` entry
+ * re-traced on 2026-09-24):
  *
  *   `packages/provisioning/src/venue-apply.ts`   creates the taxpayer row and the node, under the
  *                                                setup-mode provision route, the `waitron-provision`
@@ -74,11 +78,14 @@ const REPO_ROOT = join(import.meta.dirname, "..");
  *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
  *                                                adoption worker.
- *   `packages/db/src/deployment.ts`              stamps the environment, and writes a node's mode,
- *                                                singleton role and break-glass verifier, from setup
- *                                                provision and adopt, the promote path, the boot
- *                                                demote, the break-glass mint and the provisioning
- *                                                command line.
+ *   `packages/db/src/deployment.ts`              stamps the environment, from the setup-mode
+ *                                                provision and adopt routes and the
+ *                                                `waitron-provision` command line; writes a node's
+ *                                                mode from adopt and the mirror promotion (a
+ *                                                `mirror` mode write sets the singleton role with
+ *                                                it); its singleton role from both promote paths
+ *                                                and the boot demote; and its break-glass verifier
+ *                                                from adopt, through the break-glass mint.
  *   `packages/db/src/mirror-config.ts`           writes the cloud mirror's connection config, from
  *                                                the setup-mode adopt route.
  */

@@ -36,9 +36,9 @@ export const ALL_MODULE_PERMISSIONS: readonly ModulePermission[] = ALL_MODULES.f
   (m) => m.permissions ?? [],
 );
 
-/** Every module's table classification, in ALL_MODULES order. The class decides which database file
- * a table lives in (`ledger`/`state` together, `local` apart), which is why no foreign key may cross
- * between the two. */
+/** Every module's table classification, in ALL_MODULES order. What each class means is on
+ * `TableClass` (`@waitron/sync-enrolment`); no foreign key may join a `local` table to a
+ * `ledger`/`state` one (`scripts/two-file-foreign-keys.test.ts`). */
 export const ALL_CLASSIFICATIONS: readonly ClassifiedTable[] = ALL_MODULES.flatMap(
   (m) => m.classification ?? [],
 );

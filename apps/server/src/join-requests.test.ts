@@ -49,6 +49,7 @@ import {
   challengeFor,
   createJoinRequest,
   denyJoinRequest,
+  joinRequestKind,
   listPendingJoinRequests,
   readAgentJoinStatus,
   readJoinStatus,
@@ -137,6 +138,107 @@ describe("pending joins belong to the node that received them", () => {
         withTransaction(suite.db, (tx) => challengeFor(tx, otherNode, made.joinId)),
       ),
     ).toBe("join_request.not_found");
+  });
+
+  it("tells another node's poller not_approved, and reads no kind for it", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const device = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+    const agent = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "kitchen-pi" }),
+    );
+
+    expect(await asApp((tx) => readJoinStatus(tx, venue.cfg, device.joinId, device.token))).toBe(
+      "pending",
+    );
+    expect(await asApp((tx) => readJoinStatus(tx, otherNode, device.joinId, device.token))).toBe(
+      "not_approved",
+    );
+    expect(await asApp((tx) => readAgentJoinStatus(tx, venue.cfg, agent.joinId, agent.token))).toBe(
+      "pending",
+    );
+    expect(await asApp((tx) => readAgentJoinStatus(tx, otherNode, agent.joinId, agent.token))).toBe(
+      "not_approved",
+    );
+    expect(await asApp((tx) => joinRequestKind(tx, venue.cfg, device.joinId))).toBe("device");
+    expect(await asApp((tx) => joinRequestKind(tx, otherNode, device.joinId))).toBeUndefined();
+  });
+
+  it("does not let another node accept a pending request, of either kind", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const profileId = await seedProfile("till");
+    const device = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+    const agent = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "kitchen-pi" }),
+    );
+
+    expect(
+      await codeOf(() =>
+        asApp((tx) =>
+          acceptDeviceJoinRequest(tx, otherNode, device.joinId, {
+            choice: device.verificationNumber,
+            profileId,
+          }),
+        ),
+      ),
+    ).toBe("join_request.not_found");
+    expect(
+      await codeOf(() =>
+        asApp((tx) =>
+          acceptPrintAgentJoinRequest(tx, otherNode, agent.joinId, {
+            choice: agent.verificationNumber,
+          }),
+        ),
+      ),
+    ).toBe("join_request.not_found");
+    // Both requests are still pending for the node that received them.
+    const still = await asApp((tx) => tx.select({ id: joinRequests.id }).from(joinRequests));
+    expect(still.map((r) => r.id).sort()).toEqual([device.joinId, agent.joinId].sort());
+  });
+
+  it("counts neither the cap nor the spoken-for numbers across nodes", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const always47 = () => 47;
+    await asApp(async (tx) => {
+      await createJoinRequest(tx, otherNode, { kind: "device", label: "d0", numbers: always47 });
+      for (let i = 1; i < PENDING_CAP; i++) {
+        await createJoinRequest(tx, otherNode, { kind: "device", label: `d${i}` });
+      }
+    });
+
+    // The other node is at the cap and holds 47, and neither is this node's concern.
+    const mine = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "mine", numbers: always47 }),
+    );
+    expect(mine.verificationNumber).toBe("47");
+  });
+
+  it("leaves another node's lapsed request for that node to sweep", async () => {
+    const venue = await setupVenue(suite.db);
+    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const theirs = await asApp((tx) =>
+      createJoinRequest(tx, otherNode, { kind: "device", label: "theirs" }),
+    );
+    // A fixture back-date, for the reason the sweep case under `createJoinRequest` states.
+    const lapsed = new Date(Date.now() - JOIN_TTL_MS - 60_000).toISOString();
+    await suite.db.execute(
+      sql`update join_requests set created_at = ${lapsed} where id = ${theirs.joinId}`,
+    );
+
+    await asApp((tx) => listPendingJoinRequests(tx, venue.cfg, "device"));
+    const rows = await asApp((tx) =>
+      tx
+        .select({ id: joinRequests.id })
+        .from(joinRequests)
+        .where(eq(joinRequests.id, theirs.joinId)),
+    );
+    expect(rows).toHaveLength(1);
   });
 });
 

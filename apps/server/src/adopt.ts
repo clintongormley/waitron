@@ -37,9 +37,11 @@ export interface AdoptRequest {
 }
 
 export interface AdoptDeps {
-  /** The handle that stamps `deployment`, writes `mirror_config` and mints the break-glass
-   * verifier. There is one handle and nothing in the engine refuses these writes —
-   * `scripts/write-path-tables.test.ts` is what keeps them in named files. */
+  /** The handle that stamps `deployment`, sets this node's mode to `mirror` on `node_roles` (which
+   * sets its singleton role to `secondary` in the same write), writes `mirror_config` and mints the
+   * break-glass verifier onto the same `node_roles` row. There is one handle and nothing in the
+   * engine refuses these writes — `scripts/write-path-tables.test.ts` is what keeps them in named
+   * files. */
   ownerDb: Database;
   /** Fetches the bundle from the primary, carrying the mirror's own `standby` identity so the primary
    * can reserve + endorse it (membership promotion R2). Injected so the HTTP call is stubbable and the

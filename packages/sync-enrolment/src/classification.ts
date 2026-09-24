@@ -1,15 +1,15 @@
 /**
- * A table's CLASS. Every table lives in `venue.db` and is streamed with it (slice-2 spec §2).
+ * A table's CLASS. Every table lives in `venue.db`, the file slice 2 will stream (slice-2 spec §2).
  * `ledger` — what happened (sales, payments, fiscal records, closes, clock-ins), keyed by the node
- * that wrote it. `state` — what a manager configures, live service in flight, and anything else that
- * means the same on every node. `local` — a row that belongs to one node and means nothing to
+ * that wrote it. `state` — what a manager configures, live service in flight, and anything else
+ * that means the same on every node. `local` — a row that belongs to one node and means nothing to
  * another; the table's reason says what ties a row to its node: a `node_id` column every read and
- * write names, a seal only that node's key opens, or never outliving the transaction that wrote it.
+ * write names, a seal only that node's key opens, or rows the transaction that wrote them deletes.
  *
  * No foreign key joins a `local` table to a `ledger`/`state` one — guard:
- * `scripts/two-file-foreign-keys.test.ts`, which reads drizzle's GENERATED snapshots, so a key only in
- * hand-written migration SQL is outside it. `node.db` is created empty and reserved for a later slice
- * (spec §2); a slice that moves `local` tables into it then has no key to cut first.
+ * `scripts/two-file-foreign-keys.test.ts`, which reads drizzle's GENERATED snapshots, so a key only
+ * in hand-written migration SQL is outside it. `node.db` is created empty and reserved for a later
+ * slice (spec §2); a slice that moves `local` tables into it then has no key to cut first.
  *
  * The copy-and-drain directions the three names were coined for belonged to the deleted
  * PostgreSQL replication; the per-module reason strings still describe them, as does every module
