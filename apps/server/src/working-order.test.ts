@@ -6850,3 +6850,287 @@ describe("a variant is sold as the product it is", () => {
     ]);
   });
 });
+
+describe("a parent with Active variants is never sold as itself, as an extra or on a raise", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** An extras list on Café, published on its offer, offering the wine parent and one of its
+   * variants. */
+  async function wineExtras(
+    tx: Transaction,
+    cafeId: string,
+    cafeOfferId: string,
+    wine: { parentId: string; wine125: string },
+  ) {
+    const list = await catalogue.createExtraList(
+      tx,
+      {
+        name: "Vino list staff",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: null,
+        active: true,
+        items: [wine.parentId, wine.wine125].map((productId) => ({
+          productId,
+          maxQuantity: 1,
+          preselected: false,
+          price: "1.00",
+        })),
+      },
+      LOCALE,
+    );
+    await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
+    await catalogue.setMenuItemExtraLists(tx, cafeOfferId, [
+      {
+        listId: list.id,
+        items: [wine.parentId, wine.wine125].map((productId) => ({
+          productId,
+          price: "1.00",
+          available: true,
+        })),
+      },
+    ]);
+    return list.id;
+  }
+
+  it("refuses a menu offer's extras pick of a parent with an Active variant, and sells its variant", async () => {
+    const { cfg, zoneId, catalogueId, cafeId, cafeOfferId } = await setupVenue();
+    const wine = await withTransaction(db, (tx) => seedWine(tx, cfg, catalogueId));
+    const listId = await withTransaction(db, (tx) => wineExtras(tx, cafeId, cafeOfferId, wine));
+    const park = (productId: string, id = randomUUID()) =>
+      parkOrder({ db }, cfg, {
+        id,
+        zoneId,
+        lines: [
+          {
+            menuItemId: cafeOfferId,
+            quantity: "1",
+            extras: [{ listId, picks: [{ productId, quantity: 1 }] }],
+          },
+        ],
+      });
+
+    await expect(park(wine.parentId)).rejects.toMatchObject({
+      code: "product.variant_required",
+      params: { productId: wine.parentId },
+    });
+    const id = randomUUID();
+    await park(wine.wine125, id);
+    const rows = await db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(rows).toEqual([{ productId: cafeId }, { productId: wine.wine125 }]);
+
+    // The wine's own offer, with a variant chosen, still sells in a basket whose extras list
+    // offers the wine parent.
+    const both = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id: both,
+      zoneId,
+      lines: [
+        { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+        {
+          menuItemId: cafeOfferId,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: wine.wine125, quantity: 1 }] }],
+        },
+      ],
+    });
+    const sold = await db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, both))
+      .orderBy(workingOrderLines.lineNo);
+    expect(sold).toEqual([
+      { productId: wine.wine175 },
+      { productId: cafeId },
+      { productId: wine.wine125 },
+    ]);
+  });
+
+  // CLAUDE.md §3: read once for the basket. A three-line basket, one line carrying an extras pick,
+  // is what can tell one read from one per line.
+  it("asks which products have Active variants once for the whole basket, extras picks included", async () => {
+    const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
+    const bacon = await withTransaction(db, (tx) => addExtraList(tx, catalogueId, cafeId, "Bacon"));
+    const spy = vi.spyOn(catalogue, "parentsWithActiveVariants");
+
+    await parkOrder({ db }, cfg, {
+      id: randomUUID(),
+      lines: [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
+        },
+        { productId: cafeId, quantity: "2" },
+        { productId: aguaId, quantity: "1" },
+      ],
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect([...spy.mock.calls[0]![1]].sort()).toEqual(
+      [cafeId, cafeId, aguaId, bacon.productId].sort(),
+    );
+  });
+
+  it("refuses raising a held line whose product has gained an Active variant, and keeps an unchanged one", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const coffee = await withTransaction(db, async (tx) => {
+      const product = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Coffee",
+        pricingUnit: "each",
+        unitPrice: "1.20",
+        vatClass: "general",
+      });
+      const [doble] = await setProductVariants(
+        tx,
+        product.id,
+        [
+          {
+            name: "Doble",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.80",
+            available: true,
+            active: false,
+          },
+        ],
+        LOCALE,
+      );
+      return { id: product.id, doble: doble! };
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: coffee.id, quantity: "1" }] });
+    const [parked] = await db
+      .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await withTransaction(db, (tx) =>
+      setProductVariants(tx, coffee.id, [{ ...coffee.doble, active: true }], LOCALE),
+    );
+    const edit = (quantity: string) =>
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [{ workingOrderLineId: parked!.id, productId: coffee.id, quantity }],
+      });
+    const stored = () =>
+      db
+        .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+
+    await expect(edit("2")).rejects.toMatchObject({
+      code: "product.variant_required",
+      params: { productId: coffee.id },
+    });
+    expect(await stored()).toEqual([parked]);
+    await edit("1");
+    expect(await stored()).toEqual([parked]);
+  });
+  it("refuses raising a held line whose extra has gained an Active variant, and keeps an unchanged one", async () => {
+    const { cfg, catalogueId, cafeId } = await setupVenue();
+    const bacon = await withTransaction(db, (tx) => addExtraList(tx, catalogueId, cafeId, "Bacon"));
+    const extras = [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1", extras }] });
+    const stored = () =>
+      db
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+    const parked = await stored();
+    expect(parked.map((row) => row.productId)).toEqual([cafeId, bacon.productId]);
+    await withTransaction(db, (tx) =>
+      setProductVariants(
+        tx,
+        bacon.productId,
+        [
+          {
+            name: "Bacon ahumado",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.20",
+            available: true,
+          },
+        ],
+        LOCALE,
+      ),
+    );
+    const edit = (quantity: string) =>
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [{ workingOrderLineId: parked[0]!.id, productId: cafeId, quantity, extras }],
+      });
+
+    await expect(edit("2")).rejects.toMatchObject({
+      code: "product.variant_required",
+      params: { productId: bacon.productId },
+    });
+    expect(await stored()).toEqual(parked);
+    await edit("1");
+    expect(await stored()).toEqual(parked);
+  });
+
+  it("refuses raising a menu offer's held line whose product has gained an Active variant", async () => {
+    const { cfg, zoneId, cafeId, cafeOfferId } = await setupVenue();
+    const [doble] = await withTransaction(db, (tx) =>
+      setProductVariants(
+        tx,
+        cafeId,
+        [
+          {
+            name: "Doble",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.80",
+            available: true,
+            active: false,
+          },
+        ],
+        LOCALE,
+      ),
+    );
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafeOfferId, quantity: "1" }],
+    });
+    const [parked] = await db
+      .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await withTransaction(db, (tx) =>
+      setProductVariants(tx, cafeId, [{ ...doble!, active: true }], LOCALE),
+    );
+    const edit = (quantity: string) =>
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [{ workingOrderLineId: parked!.id, menuItemId: cafeOfferId, quantity }],
+      });
+
+    await expect(edit("2")).rejects.toMatchObject({
+      code: "product.variant_required",
+      params: { productId: cafeId },
+    });
+    await edit("1");
+    expect(
+      await db
+        .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id)),
+    ).toEqual([parked]);
+  });
+});

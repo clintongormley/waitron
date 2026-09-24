@@ -1,4 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { products, type Transaction } from "@waitron/db";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
@@ -126,6 +127,8 @@ async function walkAttachedModifiers(
  * map plus the allergens and dietary labels a picker draws. */
 type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
+const activeVariant = alias(products, "active_variant");
+
 /** One query for every product any offered list names, and none at all when no list names one. */
 async function readExtraProducts(
   tx: Transaction,
@@ -149,6 +152,12 @@ async function readExtraProducts(
         inArray(products.id, productIds),
         eq(products.active, true),
         eq(products.available, true),
+        notExists(
+          tx
+            .select({ one: sql`1` })
+            .from(activeVariant)
+            .where(and(eq(activeVariant.parentId, products.id), eq(activeVariant.active, true))),
+        ),
       ),
     );
   return new Map(
@@ -196,6 +205,10 @@ type WalkedList =
  * An item whose product is Inactive or Unavailable is left out too (spec §15.6): the till sells
  * nothing that is not both. The order path refuses a pick of one on its own read
  * (`resolveBasketModifiers`, `apps/server/src/working-order.ts`).
+ *
+ * So is a product that has an Active variant, which is never sold as itself (spec §15.1): the
+ * order path refuses a pick of one with `product.variant_required` (`priceOrderLines`,
+ * `apps/server/src/working-order.ts`).
  *
  * A bounded number of queries whatever the number of dishes: {@link walkAttachedModifiers}'s — the
  * same set {@link resolveAttachedModifiers} issues — plus one for the products the offered items

@@ -7,7 +7,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "unit_seed_states" },
     { name: "units" },
     { name: "product_units" },
-    { name: "product_variants" },
     { name: "menu_sections" },
     { name: "menu_items" },
     // After both parents its keys name: the menu item above and the variant's `products` row.

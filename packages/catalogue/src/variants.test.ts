@@ -9,8 +9,6 @@ import {
   createMenuSection,
   listMenuOffers,
   listProducts,
-  updateMenuItem,
-  updateProduct,
 } from "./operations.js";
 import {
   listProductVariants,
@@ -18,10 +16,8 @@ import {
   variantsOfProducts,
   listMenuVariants,
   setMenuVariants,
-  resolveMenuVariant,
+  parentsWithActiveVariants,
 } from "./variants.js";
-import { priceBasketWithOptions } from "./pricing.js";
-import { customerPresentationText } from "./product-presentation.js";
 import { createUnit } from "./units.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
@@ -289,163 +285,61 @@ describe("product variants", () => {
   });
 });
 
-it("prices a required variant at its menu price, falling back to its own", async () => {
-  const [small] = await run((tx) =>
-    setProductVariants(tx, productId, [variant("Small", "2.00")], "en"),
-  );
-  await expect(run((tx) => resolveMenuVariant(tx, offerId, null))).rejects.toMatchObject({
-    code: "product.variant_required",
-  });
-  // A variant follows its parent onto the menu (spec §15.5), at its own price until the menu
-  // sets one.
-  expect(await run((tx) => resolveMenuVariant(tx, offerId, small!.id))).toMatchObject({
-    productId: small!.id,
-    unitPrice: "2.00",
-  });
-  await run((tx) =>
-    setMenuVariants(tx, offerId, [{ variantId: small!.id, price: "4.00", offered: true }]),
-  );
-  const selected = await run((tx) => resolveMenuVariant(tx, offerId, small!.id));
-  expect(selected).toEqual({
-    productId: small!.id,
-    name: "Coffee",
-    customerName: null,
-    kitchenName: null,
-    variantName: "Small",
-    variantCustomerName: null,
-    variantKitchenName: null,
-    unitPrice: "4.00",
-  });
-  // The selection is resolved into the priceable through `product-presentation.ts` — the one home
-  // for the blank-falls-back-to-the-staff-name rule — rather than a name written out by hand here.
-  const customer = customerPresentationText(selected, "en");
-  const priced = priceBasketWithOptions([
-    {
-      product: {
-        name: selected.name,
-        descriptions: customer.product,
-        variantName: selected.variantName,
-        variantDescriptions: customer.variant,
-        variantKitchenName: selected.variantKitchenName,
-        kitchenName: selected.kitchenName,
-        unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
-        unitPrice: selected.unitPrice,
-        vatClass: "reduced",
-        category: null,
-      },
-      quantity: "2",
-      options: [
-        {
-          name: "Milk",
-          descriptions: { en: "Milk" },
-          priceDelta: "1.00",
-          vatClass: null,
-          quantity: 1,
-        },
-      ],
-    },
-  ]);
-  expect(priced.total).toBe("10.00");
-  // Neither variant carries customer text, so both fall back to the staff names.
-  expect(priced.lines[0]).toMatchObject({
-    name: "Coffee",
-    descriptions: { en: "Coffee" },
-    variantName: "Small",
-    variantDescriptions: { en: "Small" },
-  });
-  await run((tx) =>
-    updateProduct(tx, productId, {
-      name: "Renamed",
-      unitPrice: "99.00",
-      active: false,
-    }),
-  );
-  expect(selected.name).toBe("Coffee");
-  expect(selected.unitPrice).toBe("4.00");
-  await expect(run((tx) => resolveMenuVariant(tx, offerId, small!.id))).rejects.toMatchObject({
-    code: "product.unavailable",
-  });
-});
-
-it("charges a blank menu price at the product's own price, with or without a variant", async () => {
-  // The product's own price (9.00) differs from the menu's (8.00), so reading the wrong one fails.
-  const [inherits, owns] = await run((tx) =>
-    setProductVariants(
-      tx,
-      productId,
-      [{ ...variant("Small", "2.00"), unitPrice: null }, variant("Large", "6.00")],
-      "en",
-    ),
-  );
-  expect((await run((tx) => resolveMenuVariant(tx, offerId, inherits!.id))).unitPrice).toBe("8.00");
-  await run((tx) => updateMenuItem(tx, menuId, offerId, { grossPrice: null }));
-  expect((await run((tx) => resolveMenuVariant(tx, offerId, inherits!.id))).unitPrice).toBe("9.00");
-  expect((await run((tx) => resolveMenuVariant(tx, offerId, owns!.id))).unitPrice).toBe("6.00");
-  // With every variant removed the product sells as itself, at its own price.
-  await run((tx) => setProductVariants(tx, productId, [], "en"));
-  expect((await run((tx) => resolveMenuVariant(tx, offerId, null))).unitPrice).toBe("9.00");
-});
-
-it("refuses a variant of a product that is Active but Unavailable", async () => {
-  await run((tx) => updateProduct(tx, productId, { available: false }));
-
-  await expect(run((tx) => resolveMenuVariant(tx, offerId, null))).rejects.toMatchObject({
-    code: "product.unavailable",
-  });
-});
-
-describe("resolving a menu offer's line", () => {
-  it("refuses an offer id no menu item holds", async () => {
-    const missing = "00000000-0000-4000-8000-0000000000cc";
-    await expect(run((tx) => resolveMenuVariant(tx, missing, null))).rejects.toMatchObject({
-      code: "menu_item.not_found",
-      params: { menuItemId: missing },
+describe("which products have an Active variant", () => {
+  it("names a parent with an Active variant, Available or not, and none whose variants are all Inactive", async () => {
+    const other = await run(async (tx) => {
+      const [product] = await listProducts(tx);
+      const make = (name: string) =>
+        createProduct(tx, {
+          catalogueId: menuId,
+          categoryId: null,
+          name,
+          unitId: product!.unitId,
+          unitPrice: "5.00",
+          vatClass: "general",
+        });
+      return {
+        unavailable: await make("Tea"),
+        inactive: await make("Juice"),
+        none: await make("Soda"),
+      };
     });
-  });
-
-  it("sells a product with no variant as itself, at the menu's price", async () => {
-    expect(await run((tx) => resolveMenuVariant(tx, offerId, null))).toEqual({
-      productId,
-      name: "Coffee",
-      customerName: null,
-      kitchenName: null,
-      variantName: null,
-      variantCustomerName: null,
-      variantKitchenName: null,
-      unitPrice: "8.00",
-    });
-  });
-
-  it("refuses a variant that is Unavailable, or that this menu does not offer", async () => {
-    const [small, large] = await run((tx) =>
-      setProductVariants(
+    await run(async (tx) => {
+      await setProductVariants(tx, productId, [variant("Small", "2.00")], "en");
+      await setProductVariants(
         tx,
-        productId,
-        [{ ...variant("Small", "2.00"), available: false }, variant("Large", "3.00")],
+        other.unavailable.id,
+        [{ ...variant("Green", "2.00"), available: false }],
         "en",
-      ),
-    );
-    await run((tx) =>
-      setMenuVariants(tx, offerId, [{ variantId: large!.id, price: null, offered: false }]),
-    );
+      );
+      await setProductVariants(
+        tx,
+        other.inactive.id,
+        [{ ...variant("Orange", "2.00"), active: false }],
+        "en",
+      );
+    });
 
-    for (const refused of [small!, large!]) {
-      await expect(run((tx) => resolveMenuVariant(tx, offerId, refused.id))).rejects.toMatchObject({
-        code: "product.variant_unavailable",
-        params: { variantId: refused.id },
-      });
-    }
+    const found = await run((tx) =>
+      parentsWithActiveVariants(tx, [
+        productId,
+        productId,
+        other.unavailable.id,
+        other.inactive.id,
+        other.none.id,
+      ]),
+    );
+    expect([...found].sort()).toEqual([productId, other.unavailable.id].sort());
   });
 
-  it("prices a variant with no price of its own at the offer's price", async () => {
-    const [small] = await run((tx) =>
-      setProductVariants(tx, productId, [{ ...variant("Small", "2.00"), unitPrice: null }], "en"),
-    );
+  it("asks the database nothing for an empty product list", async () => {
+    const refuses = {
+      selectDistinct: () => {
+        throw new Error("parentsWithActiveVariants queried the database for no products");
+      },
+    } as unknown as Transaction;
 
-    expect(await run((tx) => resolveMenuVariant(tx, offerId, small!.id))).toMatchObject({
-      productId: small!.id,
-      unitPrice: "8.00",
-    });
+    expect(await parentsWithActiveVariants(refuses, [])).toEqual(new Set());
   });
 });
 

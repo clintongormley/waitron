@@ -88,8 +88,9 @@ declare module "@waitron/shared" {
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
-    /** A product with Active variants cannot be sold from a menu offer without selecting one; the
-     * bare-`productId` path does not throw it. */
+    /** A product with Active variants was sold as itself: a dish line from a menu offer that named
+     * no variant, a dish line on the plain `productId` path or an extras pick (neither can name a
+     * variant), or a raised quantity on a held line whose product has gained one since. */
     "product.variant_required": { productId: string };
     /** A selected variant is disabled or absent from the menu offer. */
     "product.variant_unavailable": { variantId: string };

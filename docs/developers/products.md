@@ -76,9 +76,8 @@ rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
   columns above like any other line.
 
 The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
-or the product itself when it has no Active variant — when rung up from a menu offer; the
-bare-`productId` path does not check this. The filed `sale_lines` row keeps the frozen names and no
-catalogue id at all (spec decision 11); neither table has a `variant_id` column.
+or the product itself when it has no Active variant. The filed `sale_lines` row keeps the frozen
+names and no catalogue id at all (spec decision 11); neither table has a `variant_id` column.
 
 Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied
 *before* being frozen, neither falls back again at render time, except that
@@ -181,11 +180,125 @@ holds no map for the report to read.
 
 ## Variants
 
-The server accepts a product with any number of variants, one included (spec
-`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15.1).
-`product.variant_count_invalid` stays registered and nothing throws it.
+A variant is a `products` row whose `parent_id` names its parent product — "Wine 125" and
+"Wine 175" under "Wine by the glass". There is no separate variant table. A variant's parent is a
+top-level product in the same catalogue, is fixed when the variant is created, and a variant has no
+variants of its own (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15; the
+one-level rule is the core migration `packages/db/drizzle/0004_variant_one_level.sql`). A product
+may have any number of variants, one included (§15.1); `product.variant_count_invalid` stays
+registered and nothing throws it.
 
-The editor allows any number too, one included (`apps/dashboard/src/widgets/product-editor.ts`):
+### What a variant reads from its parent
+
+**Every field a variant leaves blank reads its parent's, except its three names.** Among them its
+tax rate, station, course, description, image, pricing unit and allergen and dietary declarations
+are its parent's while its own column is blank and its own once it sets them
+(`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
+`packages/catalogue/src/variant-fallback.ts`). Its unit, and its categories with
+the reporting category among them, are its parent's while it stores none of its own
+(`unitOwnerJoin`, `categoryOwnerJoin`, same file). Its extras and options lists are always its
+parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
+kitchen name falls back to the variant's own staff name (_The three names_, above).
+
+A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
+its own, and its published diet likewise until it sets a diet override of its own; once set, each is
+computed over the parent's recipe-derived values and recomputed when those change
+(`republishOverlays`, `packages/catalogue/src/operations.ts`).
+
+### Price
+
+A variant's own price may be blank. On a menu it is charged the most specific price that is set
+(`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`):
+
+1. that menu's price for the variant (`menu_item_variant_overrides.price`);
+2. else the variant's own price (`products.unit_price` on its row);
+3. else its parent's price on that menu (`menu_items.gross_price`);
+4. else its parent's own price.
+
+A menu may leave any product's price blank (`menu_items.gross_price` is nullable), which means the
+product's own price, and the menu screen shows that price as the empty field's hint. The
+product-editor save accepts a blank variant price both in the parent's variants list and on the
+variant's own page (`parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`),
+and `setProductVariants` (`packages/catalogue/src/variants.ts`) stores it blank.
+
+A variant follows its parent onto every menu the parent is on; it never gets a `menu_items` row of
+its own (`createMenuItem` refuses one with `menu_item.variant_not_allowed`). A menu stores something
+for a variant only to override its price or switch it off there: a `menu_item_variant_overrides`
+row exists only while it does one of those, keyed by the parent's menu row and the variant
+(`setMenuVariants`, `packages/catalogue/src/variants.ts`).
+
+### Active and Available
+
+A variant has the same two states as a product (spec §15.6; _One save, one transaction_ below).
+Removing a variant makes it Inactive and keeps its row; a saved variant left out of a product save
+is made Inactive too (`setProductVariants`). An Inactive variant is on no menu offer. An Active one
+is listed under its parent's offer, and marked available only while it is Available and that menu
+has not switched it off (`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`).
+The offer read the till sells from leaves out a parent that is Inactive or Unavailable, and its
+variants with it.
+
+### On the till
+
+Every Active, Available, top-level product on a menu gets a button, whether or not it is marked as
+sold alone (`listMenuOffers`). A variant never has a button: it is listed only nested under its
+parent's offer (`MenuOffer.variants`), and the plain product list (`listAvailableProducts`,
+`packages/catalogue/src/operations.ts`) reads top-level products alone.
+
+Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
+(`#pick`, `apps/till/src/widgets/product-grid.ts`). A parent sold by weight or in fractions, or
+tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
+`apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
+`products.variant_order`, set by the product editor (`setProductVariants` writes the order the
+variants were sent in). The first available one is chosen to start with; an unavailable one stays
+listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
+("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
+the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
+available on that menu gets no button (`product-grid.ts`). An extras list does not offer a product
+that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
+since the order path refuses one picked as an extra (below).
+
+### The sale line
+
+**A product with an Active variant, Available or not, is never sold as itself** (spec §15.1): a
+line that rings it up without naming a variant is refused `product.variant_required`, and so is an
+extras pick of it. On a zone's menu offer `selectMenuVariant` (`packages/catalogue/src/variants.ts`)
+refuses a dish line that names no variant. On a venue with no service zones the till's three
+line-carrying routes — `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders` — price by
+bare `productId` (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`), a path that cannot name a
+variant at all, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses every such parent
+there. An extras pick cannot name a variant on either path, so `priceOrderLines` refuses a pick of
+such a product on both; a pick of a variant itself sells. Both refusals come from one read for the
+whole basket (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). So a venue with no
+service zones can sell neither such a product nor its variants as dishes: a variant is sold as a
+dish only from a zone's menu offer. A product whose variants are all Inactive sells as itself on
+both paths.
+
+A held order keeps a line whose product, or one of whose extras, has since gained an Active
+variant, and lowering or keeping its quantity is allowed; raising it is refused
+`product.variant_required`, as a raise of a line whose product has become Inactive or Unavailable
+is refused (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
+re-check them (`priceStoredOrder`, same file). On the till, retrieving the order drops such an extra
+from the basket with the `held.product_gone` notice, as it drops a sold-out one, because the extras
+lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
+`apps/till/src/state/held-extras.ts`); any edit then re-prices the order without it, but paying with
+no edit still bills it, since an unedited retrieved basket sends no update (`#syncIfDirty`,
+`apps/till/src/till-app.ts`).
+
+A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
+variant's effective values above, and freezes the parent's names beside the variant's own
+(_What a sold line freezes_, above), so reports can group it under its parent. The filed
+`sale_lines` row carries no catalogue id. In the kitchen it takes its parent's product-level
+preparation routes (a route can name only a top-level product, so a variant has none of its own)
+and the category routes of its effective category; its station, course, category, allergens and
+dietary labels are its effective values (`effectiveProductColumns`; for category, the
+`categoryOwnerJoin` rule above; `resolvePreparationRouteOutcomes`,
+`packages/venue-service/src/operations.ts`; `priceOrderLines`, `fireLines` and `readQueueSubItems`,
+`apps/server/src/working-order.ts`). The till splits a tab line by the unit precision the line
+froze (`TabLine.unitPrecision`), since a variant is not one of the till's products.
+
+### In the product editor
+
+The editor allows any number of variants, one included (`apps/dashboard/src/widgets/product-editor.ts`):
 
 - **Add variant** opens the Add window for one variant, and saving that window adds one row.
   Cancelling it adds nothing.
@@ -201,21 +314,6 @@ The editor allows any number too, one included (`apps/dashboard/src/widgets/prod
   newly added unsaved variant would otherwise be hidden (`dashboard-variant-table`,
   `apps/dashboard/src/widgets/variant-table.ts`).
 
-A variant has its own name (all three of them) and availability. Its tax rate, station, course,
-image and allergen and dietary declarations are its parent's while it leaves them blank and its own
-once it sets them (`effectiveProductColumns`, `packages/catalogue/src/variant-fallback.ts`); its
-unit, and its categories with the reporting category among them, are its parent's while it stores
-none of its own (`unitOwnerJoin`, `categoryOwnerJoin`, same file). Its extras and options lists are
-always its parent's. On a menu it is charged the most specific price set (`resolveOfferPrice`,
-`packages/catalogue/src/offer-price.ts`): that menu's price for the variant, else its own price,
-else its parent's price on that menu, else its parent's own price. A menu may leave any product's
-price blank (`menu_items.gross_price` is nullable), which means the product's own price; the menu
-screen shows that price as the empty field's hint. A variant's own price may be blank, which sends
-it down that chain to its parent's prices: the product-editor save accepts a blank one both in the
-parent's variants list and on the variant's own page (`parseProductEditorInput`,
-`packages/catalogue/src/product-editor-input.ts`), and `setProductVariants`
-(`packages/catalogue/src/variants.ts`) stores it blank.
-
 A variant also has its own product page: the product editor's routes read and save a variant's id.
 The value it reads is the variant's own row, a field it leaves blank read blank, and its parent's
 value for each of those fields in `inherited` — for allergens, the parent's published declaration
@@ -226,26 +324,9 @@ the variant. Saving a blank keeps the field inheriting, and saving a value overr
 variant alone. A variant's body may leave its price, tax rate and dietary declarations blank, which
 a product with no parent may not; it carries no variants and no extras or options lists of its own;
 and its parent never changes, so a body naming a different `parentId` is refused
-(`saveProductEditor`, `packages/catalogue/src/product-editor.ts`). A variant's published allergens
-stay blank, and so read as its parent's, until it sets allergens of its own, and its published diet
-likewise until it sets a diet override of its own; once set, each is computed over the parent's
-recipe-derived values and recomputed when those change (`republishOverlays`,
-`packages/catalogue/src/operations.ts`).
+(`saveProductEditor`, `packages/catalogue/src/product-editor.ts`).
 
-A variant is sold as the product it is. A product with an Active variant is never sold as itself
-when rung up from a menu offer (`product.variant_required`); the bare-`productId` path does not
-check this. On the till it is one button, and tapping it opens its variants with the first
-available one chosen, each labelled with its difference from the parent's price ("+€1.50") where it
-has one; a product none of whose variants is available here gets no button. The line's
-`product_id` is the variant, and it is priced and taxed at the variant's effective values above. In
-the kitchen it takes its parent's product-level preparation routes (a route can name only a
-top-level product, so a variant has none of its own) and the category routes of its effective
-category; its station, course, category, allergens and dietary labels are its effective values
-(`effectiveProductColumns`; for category, the `categoryOwnerJoin` rule above;
-`resolvePreparationRouteOutcomes`, `packages/venue-service/src/operations.ts`; `priceOrderLines`,
-`fireLines` and `readQueueSubItems`, `apps/server/src/working-order.ts`). The till splits a tab
-line by the unit precision the line froze (`TabLine.unitPrecision`), since a variant is not one of
-the till's products.
+### Photos
 
 A variant's own photo is `products.image` on its row. The image library lists it among a photo's
 uses as a `variant` of its parent and refuses to delete a photo one still uses (`listImageUsages`
@@ -266,7 +347,12 @@ keys from the engine sees it; and the refusal arrives as errcode 1811
 row, measured 2026-09-23 with a throwaway suite over the core, catalogue and media migration sets:
 inserting a variant naming a photo that does not exist, and deleting with raw SQL a photo a variant
 uses, were each refused with errcode 1811 by `products_media_image_fk`, while a variant naming a
-photo that exists was accepted.
+photo that exists was accepted. That header also has a paragraph about `product_variants.image`: it
+was written while that table still existed, and the table has since been dropped
+(`packages/catalogue/drizzle/0004_drop_product_variants.sql`). The file is left as it shipped: a
+box's boot check compares the hash of each migration the database recorded with the image's files,
+and reports an edited file as a migration the image does not have (the case "reports an EDITED
+migration, whose hash changed although the count did not", `packages/provisioning/src/schema-ahead.test.ts`).
 
 ## The editor form
 

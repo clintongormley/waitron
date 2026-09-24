@@ -187,7 +187,9 @@ A quantity-only edit of a held order sends the same answers with a new quantity.
 rebuilds what those answers would freeze NOW and compares the result with what the stored line
 holds, by value; equal, every line and its locked price are kept — except that a line whose
 quantity rises also needs its dish's product and every extra's product to be Active and Available,
-otherwise the edit falls to the replacement path and is refused. One line that does not match
+and neither the product the line sold nor any extra's product may have an Active variant (spec
+§15.1). A line that fails either check sends the edit to the replacement path, where it is refused
+— a product with an Active variant as `product.variant_required`. One line that does not match
 sends the WHOLE order down the replacement path, which re-prices every line on it.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
@@ -313,6 +315,16 @@ Six things it is worth knowing about that payload:
   extras' states itself. Tests: "an extra the till cannot sell" in
   `packages/catalogue/src/offered-modifiers.test.ts`, and "refuses an extras pick of an Unavailable
   or an Inactive product as a pick the list does not offer" in `apps/server/src/till-sale.test.ts`.
+  An extras list also leaves out a product that has an Active variant (spec §15.1: it is never sold
+  as itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
+  different code, `product.variant_required`, in `priceOrderLines`
+  (`apps/server/src/working-order.ts`), on the zone and zone-less paths alike. A pick of a variant
+  still sells, as does a product whose only variants are Inactive. Tests: "an extra that is a
+  parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`; "refuses a
+  menu offer's extras pick of a parent with an Active variant, and sells its variant" in
+  `apps/server/src/working-order.test.ts`; and "refuses an extras pick of a parent with an Active
+  variant, and parks nothing" and "still sells an extras pick of a variant, or of a product whose
+  only variant is Inactive" in `apps/server/src/till-api.zoneless-variants.test.ts`.
 - **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them (spec §3.1). Each is the product's own or, where a variant leaves it blank, its parent's —

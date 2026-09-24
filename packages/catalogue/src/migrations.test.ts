@@ -26,7 +26,6 @@ import {
 } from "./schema/extras.js";
 import { optionLabels } from "./schema/options.js";
 import { productUnits, unitSeedStates, units } from "./schema/units.js";
-import { productVariants } from "./schema/variants.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 
 // One SQLite file with the core set and this package's set applied, which is what the product
@@ -50,7 +49,6 @@ const TABLES = [
   "units",
   "unit_seed_states",
   "product_units",
-  "product_variants",
   "menu_item_variant_overrides",
   "option_lists",
   "option_labels",
@@ -161,7 +159,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       units: "id",
       unit_seed_states: "id",
       product_units: "product_id",
-      product_variants: "id",
       menu_item_variant_overrides: "menu_item_id, variant_id",
       option_lists: "id",
       option_labels: "id",
@@ -198,7 +195,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       "product_modifiers(product_id)": "products(id) on delete cascade",
       "product_units(product_id)": "products(id) on delete cascade",
       "product_units(unit_id)": "units(id) on delete restrict",
-      "product_variants(product_id)": "products(id) on delete restrict",
     });
 
     expect(checks).toEqual({
@@ -214,7 +210,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       units_precision_ck: `"units"."precision" between 0 and 3`,
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
       unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
-      product_variants_price_ck: `"product_variants"."unit_price" >= 0`,
       menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
       menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" = 0`,
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
@@ -228,11 +223,8 @@ describe("the catalogue migration set carries no tenant column", () => {
   /**
    * Every index the set declares, whether it backs a UNIQUE constraint or only a lookup.
    *
-   * The PostgreSQL version of this case excluded the constraint-backed indexes, because there they
-   * were reachable through `pg_constraint` and the case above read them. SQLite declares a
-   * multi-column UNIQUE as a `CREATE UNIQUE INDEX` and nothing else, so they belong here; the
-   * `unique` flag is what keeps the two kinds apart, and the five unique entries below are the
-   * five `UNIQUE (...)` rows the case above used to carry.
+   * SQLite declares a multi-column UNIQUE as a `CREATE UNIQUE INDEX` and nothing else, so those
+   * belong here; the `unique` flag is what keeps the two kinds apart.
    *
    * `sql is null` is the filter, not a name pattern: SQLite stores no statement for an index it
    * created itself for a `PRIMARY KEY` or a single-column `UNIQUE` declaration.
@@ -273,9 +265,20 @@ describe("the catalogue migration set carries no tenant column", () => {
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
       product_units_unit_idx: { unique: false, columns: "unit_id" },
-      product_variants_product_id_key: { unique: true, columns: "product_id, id" },
       units_seed_key_key: { unique: true, columns: "seed_key" },
     });
+  });
+});
+
+describe("the catalogue set keeps no variant table of its own", () => {
+  it("leaves neither product_variants nor menu_item_variants behind: a variant is a products row", async () => {
+    const left = (
+      await db.execute<{ name: string }>(
+        sql`select name from sqlite_master
+            where type = 'table' and name in ('product_variants', 'menu_item_variants')`,
+      )
+    ).rows.map((row) => row.name);
+    expect(left).toEqual([]);
   });
 });
 
@@ -504,14 +507,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     await refusal(
       () => db.insert(productUnits).values({ productId: c.productId, unitId: missing }),
       "product_units_unit_fk",
-    );
-  });
-
-  it("refuses a product_variants row whose product does not exist", async () => {
-    await catalogue();
-    await refusal(
-      () => db.insert(productVariants).values({ productId: missing, name: "X", unitPrice: 1 }),
-      "product_variants_product_fk",
     );
   });
 
