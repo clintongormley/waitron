@@ -2769,10 +2769,11 @@ image constraints under *Detail → Box image*.
   included), `packages/bookings` (#574, about 1,020 to about 270, tests included),
   `packages/credentials` (#577, about 990 to about 410, tests included), `packages/shared` (#579,
   about 945 to about 330, tests included) and `packages/scheduler` (#581, about 820 to about 350,
-  tests included). A pruning pull request
+  tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included;
+  the rest of `packages/db` is its own pull request). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
-  push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577
-  #579 and #581 and left for the package that owns each, all still OPEN:
+  push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
+  #579, #581 and #585 and left for the package that owns each, all still OPEN:
   - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
     and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
     engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
@@ -2806,12 +2807,13 @@ image constraints under *Detail → Box image*.
     measured false in identity (2026-09-24: `sessions.ts`'s function of the same kind, with no
     ignore, read 1 of 1 covered) and again by #562's review (making the foreign-key callback in
     `packages/fiscal-verifactu/src/schema/acks.ts` throw failed `schema-conformance.test.ts`;
-    making a table's extra-config callback throw failed the file as it loaded). The reason still
-    stands in `packages/db/src/schema` (`grep -rln "vitest run" packages/db/src/schema`). Four
+    making a table's extra-config callback throw failed the file as it loaded). #585 took the
+    reason out of `packages/db/src/schema` (`grep -rln "vitest run" packages/db/src/schema` prints
+    nothing); the ignore pairs there stay. Four
     identity schema files and six in `packages/fiscal-verifactu/src/schema` keep the ignore pairs
     with no reason; removing a pair is a code change, for whoever next changes that package's code.
   - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `catalogue`, `media`,
-    `venue-service`, `workforce-es` and `db` say an unnamed unique constraint reaches the factory's
+    `venue-service` and `workforce-es` say an unnamed unique constraint reaches the factory's
     refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
     (`packages/db/src/testing/schema-conformance.ts`).
   - Identity code, found by #559 and not changed: `setEmail` in `packages/identity/src/staff.ts`,
@@ -2925,6 +2927,20 @@ image constraints under *Detail → Box image*.
     propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
     `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
+  - Found by #585's review in files outside `packages/db/src/schema`, not changed there:
+    comments and test names in about ten suites (layouts, printing, catalogue, core, `apps/server`;
+    `git grep -l 23505 -- packages apps`) still cite the PostgreSQL code 23505, and
+    `apps/server/src/working-order.test.ts:2782` says the refusal "poisons" its transaction, which
+    CLAUDE.md §3's measured rule contradicts. `scripts/behavioural-triggers.test.ts:737` and the
+    shipped migration `packages/db/drizzle/0001_behavioural_triggers.sql:348` say `requireDevice`
+    touches `last_seen_at` "on every authenticated request", which the review found too wide (the
+    migration cannot be edited). `packages/core/src/incidents.test.ts:314-318` describes plan 3 and
+    Task 18 as the review found no longer true (not re-checked by the land). Stale line pointers:
+    `apps/server/src/till-api.fiscal-sale-paths.test.ts:662` cites `sales.ts:247`, and the shipped
+    migration's line 378 points at history deleted from `device-profiles.trigger.test.ts`.
+    `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
+    dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
+    making them static imports is a small code follow-up.
   - `packages/credentials`, found by #577 and not changed. Nothing now checks at run time that a
     read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
     suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
@@ -4804,9 +4820,10 @@ it; and a correction must not decrement a count where it should drop it.
   path it actually takes, then rewording. The candidates are what
   `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
   also includes test fixtures that build a wrapped error by hand; among the comments are
-  `packages/core/src/record-sale.test.ts`, `packages/db/src/schema/series.test.ts`,
+  `packages/core/src/record-sale.test.ts`,
   `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
-  #579 took the sentence out of `packages/shared/src/cause-chain.ts` and `engine-failure.ts`.
+  #579 took the sentence out of `packages/shared/src/cause-chain.ts` and `engine-failure.ts`, and
+  #585 out of `packages/db/src/schema/series.test.ts`.
   (`packages/credentials/src/bin.ts`'s claim that the message carries the bind parameters went
   with #577, which measured a refused credential write: a plain engine error reading
   `CHECK constraint failed: …`, with no SQL and no parameter.) The thrown text
