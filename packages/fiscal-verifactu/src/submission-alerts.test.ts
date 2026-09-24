@@ -6,9 +6,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
-// SQLite has no roles and no grants, so the reads run with whatever the one open handle can do.
-// What these cases prove is therefore the source's own arithmetic over the two tables, not that it
-// works under a narrower set of privileges — there is no narrower set here.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const NOW = new Date("2026-09-15T12:00:00Z");
@@ -40,14 +37,7 @@ let seq = 0;
 async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<string> {
   seq += 1;
   const s = seq;
-  // Three spellings in the statements below changed with the engine, each measured by running
-  // this file. `id` on all three tables is stated rather than omitted, because it is a
-  // `$defaultFn` column only the insert BUILDER fills — the raw statement this replaces was
-  // refused `NOT NULL constraint failed: invoice_series.id`. `'[]'::jsonb` and `'{}'::jsonb` lose
-  // their casts: the columns are TEXT holding JSON, and a `::` reaches SQLite's parser as
-  // `unrecognized token: ":"`. And `array['es']` becomes the JSON array `'["es"]'`, which is what
-  // `invoice_locales` holds now (`packages/db/src/schema/sales.ts` checks it with
-  // `json_array_length`).
+  // `id` is stated because it is a `$defaultFn` column only the insert builder fills.
   const series = await db.execute<{ id: string }>(sql`
     insert into invoice_series (id, node_id, code)
     values (${newId()}, ${id.nodeId}, ${"W" + String(s)})
@@ -84,10 +74,7 @@ async function seedWaiting(
   estado: string,
 ): Promise<void> {
   const registroId = await seedRegistro(db, id, genTime);
-  // `proximo_intento_en` joins the list of `$defaultFn` columns a raw statement must state —
-  // measured here as `NOT NULL constraint failed: envios.proximo_intento_en`. The value is the
-  // record's own generation time, and nothing under test reads it: `fiscalSubmissionSource` reads
-  // `envios.estado` and the registro's `fecha_hora_huso_gen_registro`, and nothing else.
+  // `proximo_intento_en` is another `$defaultFn` column; nothing under test reads it.
   await db.execute(sql`
     insert into envios (registro_id, estado, proximo_intento_en)
     values (${registroId}, ${estado}, ${genTime.toISOString()})

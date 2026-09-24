@@ -32,14 +32,7 @@ function nextSecuencia(): number {
   return secuenciaSeq;
 }
 
-/**
- * A JSON bind fragment: the stringified value, or a NULL.
- *
- * The `::jsonb` casts these two fragments carried are PostgreSQL's. The columns are TEXT holding
- * JSON here (`packages/db/src/schema/columns.ts`'s `json` helper), and a `::` reaches SQLite's
- * parser as `unrecognized token: ":"` — the colon opens a bind parameter — which is the failure
- * every case in this file opened with.
- */
+/** A JSON bind fragment: the stringified value, or a NULL. */
 function jsonParam(value: unknown) {
   return value === undefined || value === null ? sql`null` : sql`${JSON.stringify(value)}`;
 }
@@ -58,13 +51,8 @@ const A_FACTURA_SUSTITUIDA = {
 };
 
 /**
- * Insert a canje alta.
- *
- * `id` and `creado_en` are stated rather than omitted: both are `$defaultFn` columns only the
- * insert BUILDER fills, so a raw statement omitting them is refused `NOT NULL constraint failed:
- * registros_facturacion.id` — which would let a CHECK case below pass for the wrong reason.
- * `repeat('F', 64)` is `no such function: repeat` on this engine, so the huella is built in
- * JavaScript and bound.
+ * Insert a canje alta. `id` and `creado_en` are stated because only the insert BUILDER fills their
+ * defaults; omitting them would let a CHECK case below pass for the wrong reason.
  */
 async function insertRegistro(exec: Database, fields: RegistroFields = {}): Promise<void> {
   const secuencia = nextSecuencia();
@@ -96,9 +84,7 @@ describe("the destinatarios column is JSON and round-trips", () => {
       sql`select destinatarios from registros_facturacion
            where destinatarios is not null order by secuencia desc limit 1`,
     );
-    // A raw read returns the column's TEXT: drizzle's `json` read mapping runs only for a select
-    // through the table definition, not for a hand-written statement. Parsing is what makes this
-    // the same document comparison the PostgreSQL `jsonb` read did.
+    // A raw read returns the column's TEXT; drizzle's `json` read mapping does not run.
     expect(JSON.parse(rows[0]!.destinatarios)).toEqual(A_DESTINATARIO);
   });
 
@@ -127,7 +113,6 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
   });
 
   it("rejects a facturas_sustituidas sitting on a non-F3 tipo_factura", async () => {
-    // An F2 or R-type invoice cannot carry the F3 substitution block.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "F2", facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
@@ -136,12 +121,8 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
   });
 
   it("rejects a facturas_sustituidas sitting on a NULL tipo_factura", async () => {
-    // The three-valued-logic hole, closed the same way registros_tipo_factura_rectificativa_ck
-    // closes it (Copilot's finding on #46): written `facturas_sustituidas is null or tipo_factura =
-    // 'F3'`, a NULL tipo_factura makes `NULL = 'F3'` evaluate to NULL, which a CHECK treats as
-    // PASSING — so a substitution block on an anulación-shaped row (no TipoFactura) would slip past.
-    // The `tipo_factura is not null and` arm is what rejects it. PROVEN BY DELETION IN REVERSE:
-    // against a constraint lacking that arm, this exact insert SUCCEEDS.
+    // A NULL tipo_factura makes `NULL = 'F3'` NULL, which a CHECK treats as passing; the
+    // `tipo_factura is not null and` arm is what rejects this.
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: null, facturasSustituidas: A_FACTURA_SUSTITUIDA }),
     );
@@ -152,15 +133,12 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
 
 describe("the destinatarios column inherits the table's immutability", () => {
   it("refuses an UPDATE of destinatarios by the append-only trigger", async () => {
-    // The table-wide append-only trigger covers the new column with NO new DDL, and it is what the
-    // UPDATE meets directly.
     await insertRegistro(pg.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
     const error = await captureError(async () =>
       pg.db.execute(sql`update registros_facturacion set destinatarios = '{}'`),
     );
-    // The trigger's own `RAISE(ABORT, …)` text, chosen by `packages/store/src/append-only.ts`.
-    // `triggerRaised` matches the class AND the words, so an `ON DELETE RESTRICT` refusal — which
-    // arrives under the same result code — cannot satisfy it.
+    // `triggerRaised` matches the words too, so an `ON DELETE RESTRICT` refusal under the same
+    // result code cannot satisfy it.
     expect(triggerRaised(error, "registros_facturacion is append-only")).toBe(true);
   });
 });

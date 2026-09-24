@@ -14,18 +14,12 @@ import { reconcile, type ReconcileDeps } from "./reconcile.js";
 /**
  * Which calendar month `reconcile` audits, and what form the date reaches an incident in.
  *
- * Its own file, not a case inside `reconcile.test.ts`, for a reason that is about the FIXTURE, not
- * about tidiness: every seeding helper in `../test/drain-fixtures.ts` stamps one shared expedition
- * date (`PAST_FECHA`, 2026-07-20), so a suite built on those helpers cannot put two rows in two
- * different months, and a period filter tested against rows that all share a month would pass
+ * Its own file because every seeding helper in `../test/drain-fixtures.ts` stamps a July 2026
+ * expedition date, and a period filter tested against rows that all share a month would pass
  * whichever month it selected. This file seeds each row's date itself.
  *
- * It also reaches `reconcile` WITHOUT going through `drain`, which the storage switch has left
- * failing for an unrelated reason (`setEstado` binds a value `node:sqlite` refuses —
- * `TypeError: Provided value cannot be bound to SQLite parameter 6`, measured 2026-09-22). A
- * `pendiente` row AEAT has no trace of is in-flight rather than a mismatch (`reconcile`'s own doc
- * comment), so an empty authority is all the audit cases below need: `checked` counts exactly the
- * rows `rowsForPeriod` selected, and nothing else moves.
+ * A `pendiente` row AEAT has no trace of is in flight rather than a mismatch, so with an empty
+ * authority `checked` counts exactly the rows `rowsForPeriod` selected.
  */
 
 const CLOCK_INSTANT = steadyClock.now().instant;
@@ -47,12 +41,7 @@ beforeEach(async () => {
 
 /**
  * One alta registro stamped with `fecha` (the stored `YYYY-MM-DD` form), plus its `envios` sidecar.
- *
- * Written through the TABLE DEFINITIONS rather than raw SQL, for the reason
- * `../test/drain-fixtures.ts`'s header gives: `id` and the timestamp defaults are `$defaultFn`
- * generators that only the insert builder runs, so a raw insert omitting them is refused NOT NULL.
- * Deliberately NOT routed through `recordSale`: this file needs to CHOOSE the expedition date, and
- * the write path derives it from the clock.
+ * Not routed through `recordSale`, which derives the expedition date from the clock.
  */
 async function seedAltaOn(db: Database, fecha: string): Promise<string> {
   sequence += 1;
@@ -180,9 +169,8 @@ describe("reconcile — which calendar month the audit selects", () => {
 describe("reconcile — the date form an incident carries", () => {
   it("reports the expedition date in AEAT's own DD-MM-YYYY, not the stored YYYY-MM-DD", async () => {
     const registroId = await seedAltaOn(suite.db, "2026-07-05");
-    // A record we believe AEAT accepted, already re-submitted once by an earlier sweep: the
-    // second `noTrace` detection is the path that escalates to an incident carrying the
-    // `IDFactura` triple. Set directly rather than driven through `drain`, per this file's header.
+    // Already re-submitted once by an earlier sweep, so this `noTrace` escalates to an incident
+    // carrying the `IDFactura` triple.
     await suite.db.execute(sql`
       update envios set estado = 'aceptado', reconciled_resubmit_at = ${CLOCK_INSTANT.toISOString()}
       where registro_id = ${registroId}
@@ -202,9 +190,7 @@ describe("reconcile — the date form an incident carries", () => {
         ? (JSON.parse(rows[0]!.params) as Record<string, unknown>)
         : (rows[0]!.params as Record<string, unknown>)
     ).fechaExpedicionFactura;
-    // Day first, then month, then year — the form AEAT's own consulta echoes back, and the form
-    // `@waitron/verifactu`'s fake builds its `keyOf` from. `2026-07-05` here would mean the audit
-    // was reporting our storage spelling to an operator chasing a record at the tax agency.
+    // AEAT's own `DD-MM-YYYY`, not our storage spelling.
     expect(params).toBe("05-07-2026");
   });
 });

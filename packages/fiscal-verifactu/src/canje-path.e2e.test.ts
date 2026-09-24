@@ -14,24 +14,12 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  * Store an F3 record and serialize its stored columns through the drainer path. Both
  * Destinatarios and FacturasSustituidas must reach the wire. The fixture builds the record
  * directly to isolate storage and serialization.
- *
- * What refuses a rewrite of a stored fiscal record is the append-only trigger, installed here
- * because `TEST_MIGRATIONS` carries each set's `appendOnlyTables`
- * (`packages/migrations/src/manifest.ts:163`). That refusal was MEASURED on this engine rather than
- * assumed — the probe, its output and why `inmutabilidad.test.ts` could not be cited are in
- * `chain.concurrency.test.ts`'s header.
  */
-// The whole migration manifest, the SQLite counterpart of the shared container's `manifest`
-// template this file used to clone.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
 beforeEach(async () => {
-  // Each call mints a fresh node (and NIF). `useVenueDb` also empties every data table between
-  // tests, dropping and recreating the append-only triggers around the delete
-  // (`packages/db/src/testing/venue-db.ts`, `buildResetPlan`/`applyReset`) — which is why the
-  // reseed-without-truncate reasoning this comment used to carry no longer applies.
   till = await seedTill(suite.db, "A");
 });
 
@@ -96,14 +84,12 @@ async function storeF3(record: RegistroAlta): Promise<string> {
 /** One `select *` row in the snake_case `RegistroRow` shape `fromRegistroRow` reads — never
  * Drizzle's camelCase `.select()` (see `./registro-row.ts`'s own note on why the two differ).
  *
- * Through `decodeRegistroRow`, which is the whole point of reading the row this way: a raw select
- * reaches no drizzle column mapper, so `facturas_sustituidas`, `destinatarios` and `desglose`
- * arrive as the stored TEXT and `primer_registro` as `0`/`1`, and `fromRegistroRow` spreads them
- * as objects. Hand-parsing the columns HERE would turn this case green while leaving the drainer
- * broken, which is the one thing this case exists to catch — so it calls the same function the
- * product's own raw reads call (`drain.ts`'s `select r.*, e.intentos from envios e ...`,
- * `verify.ts`'s chain read, `backend.ts`'s two). Delete that call and this case fails with
- * `Cannot read properties of undefined (reading 'map')` out of `serializeEnvio`. */
+ * Through `decodeRegistroRow`, the function the product's own raw reads call: a raw select
+ * reaches no drizzle column mapper, so the JSON columns arrive as the stored TEXT and
+ * `primer_registro` as `0`/`1`. Hand-parsing the columns HERE would turn this case green while
+ * leaving the drainer broken, which is the one thing this case exists to catch. Delete that call
+ * and this case fails with `Cannot read properties of undefined (reading 'map')` out of
+ * `serializeEnvio`. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
@@ -134,14 +120,13 @@ describe("the F3 canje drain path", () => {
   });
 
   it("serialises AEAT XML carrying both Destinatarios and FacturasSustituidas from the stored row", async () => {
-    // The submission gap made concrete for the F3 canje. The stored registro is run through the
-    // EXACT path the drainer submits by (drain.ts:722-729 `toEnvioRegistro` -> serializeEnvio). If
-    // `destinatarios` had not survived `fromRegistroRow`, the XML AEAT receives would omit the
-    // mandatory recipient and the F3 would be rejected — the same class of bug #46 fixed for the R5.
+    // The stored registro is run through the path the drainer submits by (drain.ts's
+    // `toEnvioRegistro` -> serializeEnvio). If `destinatarios` had not survived `fromRegistroRow`,
+    // the XML AEAT receives would omit the mandatory recipient and the F3 would be rejected.
     const saleId = await storeF3(f3CanjeRecord());
     const row = await rawRegistro(saleId);
 
-    // Mirrors drain.ts:722-729 `toEnvioRegistro` and :733-735 `cabeceraFor`, both module-private:
+    // Mirrors drain.ts's `toEnvioRegistro` and `cabeceraFor`, both module-private:
     // rebuild the record, stamp our registro id as RefExterna, and wrap it as the drainer does.
     const record = fromRegistroRow(row) as RegistroAlta;
     const envio: EnvioRegistro = { RegistroAlta: { ...record, RefExterna: row.id } };

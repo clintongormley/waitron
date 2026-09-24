@@ -11,16 +11,11 @@ import {
 import { hasCode, isAppError } from "@waitron/shared";
 import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
 
-// This suite exercises the SHAPE validator and the seal ROUND-TRIP: write, then read back the three
-// fields. Nothing here needs a taxpayer row — `tenant_credentials` is keyed by `purpose` alone
-// (`packages/credentials/src/schema/tenant-credentials.ts`) and references no other table.
-
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 120_000,
 });
 
-/** A ring built the way a host builds one at boot — one fresh 32-byte key, version 1. */
 function testRing(): KeyRing {
   return loadKeyRing({
     WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
@@ -28,7 +23,6 @@ function testRing(): KeyRing {
   });
 }
 
-/** A fresh, valid AEAT cert fixture. `pfxBase64` is opaque bytes; the vault never opens it. */
 function aeatCert(overrides: Partial<AeatCert> = {}): AeatCert {
   return {
     pfxBase64: randomBytes(48).toString("base64"),
@@ -57,8 +51,7 @@ describe("sealAeatSecret", () => {
 
   it("refuses a certKind outside {sello, representante} and seals nothing", async () => {
     const ring = testRing();
-    // `bogus` is a non-empty string, so `putCredential`'s own `validatePayload` would ACCEPT it —
-    // only this module's certKind guard rejects it (the deletion-proof for that guard).
+    // A non-empty string, so `putCredential`'s own `validatePayload` would accept it.
     const cert = aeatCert({ certKind: "bogus" as AeatCert["certKind"] });
 
     const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
@@ -67,21 +60,13 @@ describe("sealAeatSecret", () => {
       "certKind",
     );
 
-    // Nothing was written — a read finds no row.
     const missing = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });
 
-  // Every unusable pfxBase64 SHAPE is refused BEFORE the seal, with the field named and no row
-  // written. `""` exercises the non-empty check; `"not valid base64!!!"` the alphabet; `"QQ"` the
-  // length/padding (valid characters, but not a whole 4-char group — exactly the shape a looser
-  // `[A-Za-z0-9+/]+={0,2}` would have waved through). `putCredential`'s own `validatePayload`
-  // accepts any non-empty string, so only this module's `BASE64_RE` guard stands between a bogus
-  // blob and a clean seal that fails far downstream at drain/AEAT-submit — the deletion-proof for
-  // that guard: replace the regex with a length-only `pfxBase64 === ""` check and the
-  // non-base64 / malformed-length cases below go RED while the empty case stays GREEN.
+  // `"QQ"` is valid characters but not a whole 4-char group.
   it.each([
     { label: "empty", pfxBase64: "" },
     { label: "non-base64 characters", pfxBase64: "not valid base64!!!" },
@@ -104,9 +89,7 @@ describe("sealAeatSecret", () => {
 
   it("accepts a short, canonically-padded base64 pfxBase64 (the tightened regex does not over-reject)", async () => {
     const ring = testRing();
-    // "aGVsbG8=" is `Buffer.from("hello").toString("base64")` — a real 5-byte payload whose base64
-    // carries a 3-char padded tail (`bG8=`), the branch a length-only check would never reach. The
-    // seal must accept it, proving the length/padding-enforcing regex rejects no genuine encoding.
+    // `Buffer.from("hello").toString("base64")`: a genuine encoding with a padded tail.
     const cert = aeatCert({ pfxBase64: "aGVsbG8=" });
 
     await sealAeatSecret({ db: suite.db, ring }, cert);
@@ -134,10 +117,8 @@ describe("sealAeatSecret", () => {
   });
 });
 
-// The SHAPE validator both the host's pre-provision guard (`FISCAL_SLOT.provisioningSecret.validate`)
-// and `sealAeatSecret` run. Tested directly (not only through the seal) because the empty-passphrase
-// branch is unreachable from `parseAeatCert`'s own non-empty `asString` screen, so a direct test is
-// what proves it fires — the coverage the host's `setup-api.ts` used to carry before the move.
+// Tested directly: the empty-passphrase branch is unreachable through `parseAeatCert`, whose
+// `asString` already refuses an empty string.
 describe("validateAeatCert — full cert-value validation", () => {
   function goodCert(overrides: Partial<AeatCert> = {}): AeatCert {
     return {

@@ -21,16 +21,6 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-/**
- * `registerNode`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the `FiscalBackend`
- * interface — TypeScript requires every one of them on a class declared `implements
- * FiscalBackend` — but are secondary to this task's own graded deliverable (`recordSale`,
- * proven end to end by `./write-path.e2e.test.ts`). These tests exist so the coverage gate does
- * not merely tolerate untested code, and so each method's own documented limitation (see
- * `backend.ts`'s doc comments) is backed by at least one real assertion rather than an
- * unexercised claim.
- */
-
 let backend: VerifactuBackend;
 let tillId: TillId;
 let nodeId: NodeId;
@@ -127,9 +117,6 @@ describe("registerNode", () => {
   });
 
   it("throws the structured sif.not_registered error for a node with no live SIF", async () => {
-    // A well-formed UUID that `seedTenantWithSif` never provisioned — `currentSif` (and
-    // therefore `registerNode`) treats "no matching row" identically whether the node simply
-    // does not exist or once had a SIF that was later revoked.
     const neverProvisioned = brandNodeId("00000000-0000-4000-8000-000000000000");
     await expect(
       withTransaction(pg.db, (tx) => backend.registerNode(tx, neverProvisioned)),
@@ -139,11 +126,8 @@ describe("registerNode", () => {
 
 describe("the taxpayer every record is filed as", () => {
   it("refuses to file when the tenants table is empty, loudly and without a domain code", async () => {
-    // Every record carries `NombreRazonEmisor`, read from the one taxpayer row at filing time. With
-    // the tenant columns gone, no foreign key holds that row in place any more, so an empty table is
-    // reachable by a corrupt or half-provisioned database — and filing a record under a blank or
-    // guessed issuer name is unrepairable (CLAUDE.md §5). It must fail, and as a plain `Error`: no
-    // `AppError` code, because there is nothing an operator can do at a till about it.
+    // Filing under a blank or guessed issuer name is unrepairable, so it must fail — as a plain
+    // `Error`, since nothing an operator does at a till can fix it.
     await pg.db.execute(sql`delete from tenants`);
     const error = await captureError(() =>
       withTransaction(pg.db, async (tx) => {
@@ -176,11 +160,7 @@ describe("recordVoid", () => {
     expect(anulacion?.idEmisorFactura).toBe(alta?.idEmisorFactura);
     expect(anulacion?.numSerieFactura).toBe("A/1");
     expect(anulacion?.secuencia).toBe(2);
-    // `buildCadenaAnulacion` (in `@waitron/verifactu`) hashes exactly 5 fields, none of
-    // them an amount — so the stored row must carry NULL here, not "0.00": a `RegistroAnulacion`
-    // has no `CuotaTotal`/`ImporteTotal` to begin with, and a schema or row-mapping regression that
-    // started writing a zero-string amount would silently misrepresent the anulación as having a
-    // value it structurally cannot have.
+    // A `RegistroAnulacion` has no amounts, so the row carries NULL, never "0.00".
     expect(anulacion?.cuotaTotal).toBeNull();
     expect(anulacion?.importeTotal).toBeNull();
 
@@ -190,18 +170,10 @@ describe("recordVoid", () => {
 });
 
 /**
- * Task 16 review, Minor: `recordVoid` reconstructed `FechaExpedicionFacturaAnulada` from the
- * stored `fecha_expedicion_factura` (a plain `date`, no offset) via a NOON-UTC anchor reformatted
- * with the VOID's own `offsetMinutes` — safe only within roughly ±12h, and exercised only at the
- * fixture's own +60. Task 17 replaces that anchor with an exact algebraic cancellation (see
- * `backend.ts`'s own comment on the fix) and these two tests are what actually distinguish the two:
- * both offsets below are chosen so that noon ± the offset crosses midnight — the exact case the
- * OLD anchor could not survive — which a moderate offset like +120 would not exercise at all
- * (noon + 2h is still the same UTC day, and the old code already handled that case). Constructs its
- * OWN `VerifactuBackend`, sharing `pg.db` with the suite's own `backend`, so the SALE can be recorded
- * under the fixture's ordinary +01:00 (`steadyClock`) while only the VOID step reads an extreme
- * offset — reproducing "the alta and its anulación are generated under different offsets", which is
- * the ordinary case (a sale voided hours or days later) rather than a contrived one.
+ * `FechaExpedicionFacturaAnulada` must come back as the stored calendar day for any offset. Both
+ * offsets below cross midnight from a noon-UTC anchor, the case a noon anchor got wrong, which a
+ * moderate offset such as +120 would not exercise. The sale is recorded at the fixture's +01:00 and
+ * only the void reads the extreme offset, as when a sale is voided hours later.
  */
 describe("recordVoid — date reconstruction", () => {
   function clockAt(offsetMinutes: number): TrustedClock {
@@ -297,9 +269,7 @@ describe("recordCorrection — refusals", () => {
   });
 
   it("refuses to correct a non-simplified invoice, since only F2 → R5 is supported (R1 deferred)", async () => {
-    // The R-type derivation asserts rather than assumes: rectifying an F1 is an R1, not the R5 this
-    // method assembles, and filing the wrong TipoFactura is unrepairable (§5). Build a real F1 alta
-    // directly (bypassing core, which only ever issues F2), then try to correct it.
+    // A real F1 alta, built directly: core only ever issues F2.
     const original = brandSaleId("44444444-4444-4444-8444-444444444444");
     await withTransaction(pg.db, async (tx) => {
       await tx.insert(sales).values({
@@ -311,9 +281,7 @@ describe("recordCorrection — refusals", () => {
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
         total: 0,
-        // The filed per-rate desglose; `[]` — this suite asserts against the
-        // registro backend.recordSale builds, not the sales row's breakdown, so the column just
-        // needs a valid NOT NULL jsonb array.
+        // `[]`: this suite asserts against the registro, not the sales row's breakdown.
         vatBreakdown: [],
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
@@ -353,11 +321,8 @@ describe("recordSubstitution — refusals", () => {
   // chain append. That path, and the five-callers-started-together case, are
   // `substitution-path.e2e.test.ts`'s.
 
-  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and a NON-null counterparty, which the
-   * interface REQUIRES here and leaves optional on `recordSale`, because a full invoice must always
-   * name its recipient. Its own fields
-   * are never read on the refusal paths that throw before assembling anything from `sale`, but a
-   * well-formed value keeps the call type-correct. */
+  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and a NON-null counterparty, since a
+   * full invoice must always name its recipient. */
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
     return {
       tillId,
@@ -391,12 +356,8 @@ describe("recordSubstitution — refusals", () => {
   });
 
   it("refuses to substitute a non-simplified invoice, since only an F2 ticket may be exchanged", async () => {
-    // An F3 canje exchanges SIMPLIFIED tickets (F2 → F3, findings §10.2); substituting a full
-    // invoice (F1) is not a canje, and mis-filing an F3 is unrepairable (§5), so this asserts rather
-    // than assumes. Build a real F1 alta directly (core only ever issues F2), then try to substitute
-    // it — the same setup `recordCorrection`'s own F1 refusal uses.
-    // A distinct id from the `recordCorrection` F1 refusal test above: `sales` is keyed by `id`
-    // alone, so each case keeps its own literal rather than sharing one with a sibling.
+    // A real F1 alta, built directly: core only ever issues F2. A distinct sale id from the
+    // correction case above, since `sales` is keyed by `id` alone.
     const original = brandSaleId("66666666-6666-4666-8666-666666666666");
     await withTransaction(pg.db, async (tx) => {
       await tx.insert(sales).values({
@@ -479,19 +440,11 @@ describe("recordSubstitution — refusals", () => {
 
 describe("recordSale — invoice type selection", () => {
   it("uses F1 (factura completa) once a real counterparty is supplied", async () => {
-    // Unreachable through `packages/core`'s own `recordSale`, which always passes
-    // `counterparty: null` today (no task yet wires up a recipient-identified sale) — this
-    // calls `VerifactuBackend.recordSale` directly, bypassing core entirely, to prove the
-    // branch itself rather than leave it an untested assumption about code nothing exercises.
+    // Called on the backend directly: `packages/core`'s `recordSale` always passes
+    // `counterparty: null`.
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
     await withTransaction(pg.db, async (tx) => {
-      // total is zero with no tender and no settlement — the simplest possible sale row now that
-      // migration 0012 dropped `tip_amount`/`amount_charged` and retired the commit-time
-      // coverage trigger (a bare, unsettled sale is a legitimate steady state, design §3) — the same
-      // convention `test/fixtures.ts`'s `seedTenantTillSif` and `src/testing/seed.ts`'s `seedSale`
-      // already use. Nothing ties this column to `registros_facturacion.importe_total` at the
-      // database level (Task 12's own design: the two are allowed to disagree in representation,
-      // since only one is hashed), so this sale's own total is irrelevant to the assertion below.
+      // The sales row's own total is irrelevant here: only the registro's is asserted.
       await tx.insert(sales).values({
         id: freshSaleId,
         tillId,
@@ -530,9 +483,8 @@ describe("recordSale — invoice type selection", () => {
     expect(row?.tipoFactura).toBe("F1");
   });
 
-  /** Records one recipient-identified sale directly through the backend, bypassing
-   * `packages/core` for the same reason the F1 case above does: core always passes
-   * `counterparty: null` today, so this branch has no other caller. */
+  /** Records one recipient-identified sale directly through the backend: core always passes
+   * `counterparty: null`. */
   async function sellWithRecipient(
     saleId: string,
     invoiceNumber: number,
@@ -589,13 +541,9 @@ describe("recordSale — invoice type selection", () => {
 
   /**
    * Pins a DECISION: a foreign recipient is refused rather than guessed at, because a guessed AEAT
-   * identifier type would be filed into an append-only table and could never be unfiled (CLAUDE.md
-   * §5). The refusal is `buildDestinatarios`' own, explicit and named, and it is the SAME refusal
-   * the F3 canje path gets — one decision in one place, rather than one path refusing explicitly
-   * and the other by leaving the recipient block out and letting the chain guard notice. The
-   * vocabulary this is waiting on has one home (`buildDestinatarios`' doc comment) and is not
-   * restated here. If a future B2B task builds the `IDOtro` shape, this test is the one it must
-   * replace.
+   * identifier type would be filed into an append-only table and could never be unfiled. The F3
+   * canje path gets the SAME refusal. A future B2B task that builds the `IDOtro` shape replaces
+   * this test.
    */
   it("refuses a non-Spanish recipient rather than guessing an identifier type", async () => {
     await expect(
@@ -687,9 +635,7 @@ describe("filedReceiptFor", () => {
       { rate: decimal("21.00"), base: decimal("82.64"), tax: decimal("17.36") },
       { rate: decimal("10.00"), base: decimal("9.09"), tax: decimal("0.91") },
     ];
-    // `registros_facturacion.sale_id` FKs onto `sales.id`, so the sale row must exist before the
-    // registro is chained — inserted directly (like the "F1" case above), bypassing core, so the
-    // divergence-prone breakdown reaches the backend verbatim.
+    // The sale row must exist first (`registros_facturacion.sale_id` references it).
     const ref = await withTransaction(pg.db, async (tx) => {
       await tx.insert(sales).values({
         id: freshSaleId,
@@ -733,9 +679,8 @@ describe("filedReceiptFor", () => {
       { rate: "21.00", base: "82.64", tax: "17.36" },
       { rate: "10.00", base: "9.09", tax: "0.91" },
     ]);
-    // Control (CLAUDE.md §1): the normal method gives a DIFFERENT cuota (17.35) for the 21% group, so
-    // a recomputing implementation fails this exact assertion; `filedReceiptFor` returned the filed
-    // 17.36, proving it read the record rather than recomputing it.
+    // Control: the normal method gives 17.35 for the 21% group, so a recomputing implementation
+    // fails the assertion above.
     const normalTax = divideDecimal(
       multiplyDecimal(decimal("82.64"), decimal("21.00")),
       decimal("100"),

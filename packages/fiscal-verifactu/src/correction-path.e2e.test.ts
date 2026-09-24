@@ -23,18 +23,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 /**
  * Record an R5 correction, including callers that start together. Check its chain position,
  * recomputed hash, original invoice identity and pending sidecar.
- *
- * TWO THINGS LOST when this file moved off PostgreSQL, neither replaceable here:
- *
- * - **The deployment ROLE.** SQLite has no roles. What still refuses a REWRITE of a stored fiscal
- *   record is the append-only trigger `TEST_MIGRATIONS` installs
- *   (`packages/migrations/src/manifest.ts:163`);
- *   that refusal was MEASURED on this engine, and the probe and its output are in
- *   `chain.concurrency.test.ts`'s header. The role half is covered by nothing.
- * - **Contention on distinct backends.** See the second describe's own comment.
  */
-// The whole migration manifest, the SQLite counterpart of the shared container's `manifest`
-// template this file used to clone.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
@@ -45,14 +34,9 @@ let till: SeededTill;
 let rectificativeSeriesId: string;
 
 beforeEach(async () => {
-  // Each call mints a fresh node (and NIF). `useVenueDb` also empties every data table between
-  // tests, dropping and recreating the append-only triggers around the delete
-  // (`packages/db/src/testing/venue-db.ts`), which is why the reseed-without-truncate reasoning
-  // this comment used to carry no longer applies.
   till = await seedTill(suite.db, "A");
-  // Through the table, not the raw `insert into invoice_series ... returning id` this replaces:
-  // `id` and `created_at` are `$defaultFn` generators that only the insert BUILDER runs, so a raw
-  // insert omitting them is refused NOT NULL at run time (`packages/db/src/schema/columns.ts`).
+  // Through the table: `id` and `created_at` are `$defaultFn` generators that only the insert
+  // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId: till.nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
@@ -76,7 +60,7 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
     saleId: brandSaleId(saleId),
     // `seriesId` is never read by `recordCorrection` (it uses `seriesCode`/`invoiceNumber` for the
     // NumSerieFactura); branded only to satisfy the type. Enforcing that this is a `rectificative`
-    // series is a core/Slice-4 concern, not the backend's.
+    // series is a core concern, not the backend's.
     seriesId: brandSeriesId(rectificativeSeriesId),
     seriesCode: "R",
     invoiceNumber,
@@ -108,8 +92,8 @@ function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRe
   };
 }
 
-/** Records the original F2 alta (seeding its `sales` row first) under the deployment role. Returns
- * the original sale's id — the `correctsSaleId` a correction points at. */
+/** Records the original F2 alta (seeding its `sales` row first). Returns the original sale's id —
+ * the `correctsSaleId` a correction points at. */
 async function recordOriginal(): Promise<string> {
   const originalId = await seedSale(suite.db, till, 1);
   await withTransaction(suite.db, async (tx) => {
@@ -118,16 +102,14 @@ async function recordOriginal(): Promise<string> {
   return originalId;
 }
 
-/** Insert a corrective sale as the fixture owner and return its id. */
+/** Insert a corrective sale and return its id. */
 async function seedCorrectiveRow(
   invoiceNumber: number,
   correctsSaleId: string,
   total: Decimal,
 ): Promise<string> {
-  // Through the table for the same two reasons `src/testing/seed.ts`'s `seedSale` states: `id`
-  // and `created_at` are builder-side `$defaultFn` generators a raw insert never reaches, and
-  // `vat_breakdown`/`invoice_locales` are JSON columns here, so the `'[]'::jsonb` and
-  // `array['es']` literals this replaces are both syntax errors on this engine.
+  // Through the table: `id` and `created_at` are builder-side `$defaultFn` generators a raw insert
+  // never reaches.
   const [row] = await suite.db
     .insert(sales)
     .values({
@@ -150,8 +132,8 @@ async function seedCorrectiveRow(
   return row.id;
 }
 
-/** Records one correction against `correctsSaleId` under the deployment role, seeding its own
- * corrective `sales` row first. Returns the corrective sale's id. */
+/** Records one correction against `correctsSaleId`, seeding its own corrective `sales` row first.
+ * Returns the corrective sale's id. */
 async function correct(
   correctsSaleId: string,
   overrides: Partial<SaleForFiscalRecord> = {},
@@ -191,8 +173,8 @@ async function registro(saleId: string) {
   // The AEAT shapes, restated here because `./schema/registros.ts` declares these columns as a
   // bare `json(...)` with no `$type`, so drizzle types them `{}` and a property access on one is a
   // TS2339. `RegistroRow` (`./registro-row.ts`) carries the real types for the same columns under
-  // their snake_case names, and they are quoted from it rather than invented. A cast, not a
-  // runtime change: the values are already parsed by the column's own `mode: "json"` mapping.
+  // their snake_case names. A cast, not a runtime change: the values are already parsed by the
+  // column's own `mode: "json"` mapping.
   return row as typeof row & {
     facturasRectificadas: RegistroRow["facturas_rectificadas"];
     facturasSustituidas: RegistroRow["facturas_sustituidas"];
@@ -235,12 +217,8 @@ describe("recordCorrection against the real Veri*Factu backend", () => {
     const originalId = await recordOriginal();
     const correctiveId = await correct(originalId);
 
-    // Through the TABLE, not `rawRegistro`. This case is about what the column holds, and a raw
-    // `select *` skips drizzle's read mapping: `facturas_rectificadas` comes back as the stored
-    // TEXT, so the `toEqual` below compared a JSON string with an object (measured, 2026-09-22).
-    // Reading it through the column applies that column's own `mode: "json"` mapping and changes
-    // nothing about what is asserted. `rawRegistro` stays for the huella case above, which needs
-    // the snake_case shape `computeHuella`'s input is rebuilt from.
+    // Through the TABLE, not `rawRegistro`: a raw `select *` skips drizzle's read mapping, so
+    // `facturas_rectificadas` would come back as the stored JSON text rather than an object.
     const original = await registro(originalId);
     const corrective = await registro(correctiveId);
     // Read from the ORIGINAL row, not from the fixture: this is what pins "the original's exact
@@ -298,44 +276,17 @@ describe("recordCorrection against the real Veri*Factu backend", () => {
 
 describe("recordCorrection from five callers started together", () => {
   // A correction ALWAYS follows an existing original alta (recordCorrection reads it, or throws), so
-  // the chain head always exists before any correction runs — the from-empty head-creation race that
-  // drives `appendToChain`'s duplicate-position retry is structurally unreachable here.
+  // the chain head always exists before any correction runs: this case never exercises
+  // `readChainHead`'s create-the-head branch.
   //
-  // WHAT THIS BLOCK LOST, stated plainly. It used to open five SEPARATE PostgreSQL backends
-  // (`suite.pg.connect()`) and have them race the chain-head row LOCK. Neither exists on this
-  // engine: a venue file has one write connection, `chain.ts`'s `selectHead` no longer takes `for
-  // update`, and there is nothing left to contend for. So this is no longer a lock test and does
-  // not claim to be.
-  //
-  // WHAT IT STILL PROVES, and why it was not deleted: five callers are started together, without
-  // awaiting each other, against the ONE handle. The venue file's write queue is what makes them
-  // run one at a time — `withTransaction` (`packages/db/src/tenancy.ts`) runs inside
-  // `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues `begin immediate` … `commit`
-  // so the next caller's `begin` does not run until the previous `commit` returned. The chain's
-  // own guarantee — distinct, contiguous secuencias, each record linked to its predecessor's
-  // huella — is exactly what a queue that did NOT serialise would break, because five appends
-  // reading the same head would all compute the same next position. `registros_tenant_node_secuencia_uq`
-  // refuses the duplicate whatever wrote it (proven by deletion in `chain.test.ts`, "rejects a
-  // second record claiming an occupied chain position"), so a failure here arrives as a refusal
-  // rather than a silently forked chain.
-  //
-  // CONTROL RUN, 2026-09-22, stated as what it printed rather than as a conclusion. With
-  // `withTransaction` replaced by a bare `backend.recordCorrection(suite.db, …)` — the same five
-  // bodies, the same assertions, no write queue — the case failed with
-  // `Error: no such savepoint: wt_sp_3` (`ERR_SQLITE_ERROR`, errcode 1) thrown from
-  // `appendToChain` (`src/chain.ts:322`): the five bodies interleaved on the one write connection
-  // and released each other's savepoints. It never reached the chain assertions. So the green this
-  // case reports with the queue in place is not a reading that could never have printed anything
-  // else. (I expected the duplicate-position refusal and got this instead — the interleaving
-  // breaks the retry's savepoint nesting before the unique index is reached.)
-  //
-  // RE-RUN 2026-09-23, after `packages/store` gained a read connection per file: the same control
-  // printed the same failure, `Error: no such savepoint: wt_sp_13`, one failed case and five
-  // passed. A proof by deletion belongs to the shape of the code it was taken against, and the
-  // routing change is exactly the kind of restructure that can quietly stop one failing.
-  //
-  // Five, not two, for the same reason chain.concurrency ran twenty: a wider start is a stronger
-  // probe of the same property.
+  // Not a lock test. Five callers started together against the ONE handle are serialised by the
+  // venue file's write queue: `withTransaction` (`packages/db/src/tenancy.ts`) runs inside
+  // `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues `begin immediate` … `commit`.
+  // The chain's own guarantee — distinct, contiguous secuencias, each record linked to its
+  // predecessor's huella — is exactly what a queue that did NOT serialise would break, and
+  // `registros_tenant_node_secuencia_uq` refuses a duplicate position whatever wrote it.
+  // Control: with `withTransaction` replaced by a bare `backend.recordCorrection(...)` call, this
+  // case fails with `no such savepoint`.
   const RACERS = 5;
 
   it("commits five simultaneously-started corrections into one gap-free, correctly-chained sequence", async () => {

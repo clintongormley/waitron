@@ -17,16 +17,14 @@ import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro
  *   2. Ours: n−1's huella recomputes from n−1's own stored inputs. Free, since hashing is a pure
  *      function of values already read, and it catches tampering with n−1's content that check 1
  *      is structurally blind to (an edit to n−1's `importe_total` moves nothing that check 1 looks
- *      at). It does not extend to `Desglose`, which is not a huella input at all (huella.ts's
- *      `buildCadena` hashes exactly eight alta fields / five anulación fields) — an edit there is
- *      the immutability control's job (revoked UPDATE, trigger backstop), not this one's.
+ *      at). It does not extend to `Desglose`, which is not a huella input at all
+ *      (`@waitron/verifactu`'s `buildCadena` hashes exactly eight alta fields / five anulación
+ *      fields) — an edit there is the append-only trigger's job, not this one's.
  *
  * NEVER throws on a verification failure. A throw here would propagate out of the sale
  * transaction and roll back the sale — exactly what AEAT forbids: «será preciso generar el
  * siguiente RF, ya que la facturación por este motivo NUNCA debe interrumpirse». Failures are
- * RETURNED as `{ ok: false, ... }` for the caller to record as an incident and carry on. An
- * earlier draft of this design had a verification failure halt the till; that was wrong in the
- * specific way that reads as caution, and this function's one job is not to repeat it. Genuine
+ * RETURNED as `{ ok: false, ... }` for the caller to record as an incident and carry on. Genuine
  * database errors (a lost connection, a missing table) DO propagate — those are ordinary
  * operational failures and should stop a sale like any other failed write.
  *
@@ -34,21 +32,19 @@ import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro
  * in `ok`: `checked: 0` when n is itself the first record (no predecessor, neither check runs),
  * `checked: 1` when n−1 carries `PrimerRegistro=S` (no n−2, so the link check is vacuously true
  * and only the recomputation applies), `checked: 2` once both n−1 and n−2 exist. The chain is
- * per-NODE (node-id rekey, 2026-08-03), so `checked: 0` is the genesis record of a node's chain —
+ * per-NODE, so `checked: 0` is the genesis record of a node's chain —
  * the first sale ever recorded on a fresh node, whichever till rings it up — NOT every till's
  * first sale: a second till's first sale on the SAME node has a predecessor and is already
  * `checked: 1`/`2`. A verifier that reported `ok: false` on that genesis record would raise an
  * incident on the first record of every node's chain.
  */
 export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
-  // Under the same lock, in the same transaction, as the append that follows. Verifying a
-  // predecessor another writer is concurrently replacing verifies nothing; re-acquiring the lock
-  // inside appendToChain afterwards is free (chain.ts's own doc comment on readChainHead).
+  // In the same transaction as the append that follows: verifying a predecessor another writer is
+  // concurrently replacing verifies nothing.
   await readChainHead(tx, nodeId);
 
-  // (node_id, secuencia) is already uniquely indexed (node-id rekey, 2026-08-03's
-  // registros_tenant_node_secuencia_uq) — this is the same index, no new one. Ordered by chain
-  // POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
+  // (node_id, secuencia) is already uniquely indexed (registros_tenant_node_secuencia_uq). Ordered
+  // by chain POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
   // invoice 44, so sorting on num_serie_factura would compare the wrong pair and report a failure
   // on an intact chain.
   const { rows } = await tx.execute<Record<string, unknown>>(sql`
@@ -101,9 +97,7 @@ export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<Inte
       // the pointer against. found: what n−1's own stored predecessor pointer actually says, which
       // may not agree with it. No `?? ""` fallback needed: `previous.primer_registro` was already
       // false to reach this line, and registros_encadenamiento_ck (./schema/registros.ts)
-      // guarantees `anterior_huella` is NOT NULL whenever that is the case. `params` is
-      // `Record<string, unknown>` (packages/fiscal's own IntegrityIssue), so the `string | null`
-      // static type here needs no cast either.
+      // guarantees `anterior_huella` is NOT NULL whenever that is the case.
       params: { expected: beforePrevious.huella, found: previous.anterior_huella },
     });
   }

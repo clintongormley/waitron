@@ -25,20 +25,14 @@ const WRITERS = 20;
  * Node-keyed chain and series allocation, with the appends started together rather than awaited in
  * turn.
  *
- * LOST when this file moved off PostgreSQL: **twenty independent connections.** There is one
- * write connection per venue file, so the twenty appends below are twenty transactions started together
- * and serialised by the file's write queue (`packages/store/src/write-queue.ts`). What they still
- * prove is the chain's own guarantee — twenty distinct, contiguous positions, each linked to its
- * predecessor — which a queue that failed to serialise would break. The serialisation itself is
- * observed, with its control, in `chain.concurrency.test.ts` ("holds a second appender on the same
- * chain until the first commits"); it is not re-observed here.
+ * The twenty appends below are serialised by the venue file's write queue
+ * (`packages/store/src/write-queue.ts`). What they prove is the chain's own guarantee — twenty
+ * distinct, contiguous positions, each linked to its predecessor — which a queue that failed to
+ * serialise would break. The serialisation itself is observed in `chain.concurrency.test.ts`
+ * ("holds a second appender on the same chain until the first commits"), not here.
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-// `useVenueDb` empties every data table between tests (`packages/db/src/testing/venue-db.ts`), so
-// the reseed-without-truncate reasoning this file used to carry no longer applies. `seedTill`
-// still mints a FRESH node and nif per call, which keeps `registro_sif`'s identity unique across
-// a file's many `beforeEach`es.
 let node: SeededTill;
 
 beforeEach(async () => {
@@ -60,11 +54,11 @@ describe("appendToChain from many callers started together, keyed by node", () =
         ),
       ),
     );
-    // Naive read-then-write committed 3 of 20 on this hardware; anything below 20 is that failure.
+    // Anything below 20 is a lost append, not a flake.
     expect(results).toHaveLength(WRITERS);
 
     // `primer_registro` comes back as `0`/`1` from a raw select — it skips drizzle's read mapping —
-    // so the first row is checked against `1`. What is asserted is unchanged.
+    // so the first row is checked against `1`.
     const { rows } = await suite.db.execute<{
       secuencia: number;
       huella: string;
@@ -82,9 +76,8 @@ describe("appendToChain from many callers started together, keyed by node", () =
     }
   });
 
-  // Property 2 (design §9, the behaviour the rekey INTRODUCES): two tills of ONE node → ONE chain.
-  // Before the rekey, each till had its own chain; now the chain is the node's, so sales rung at
-  // EITHER till take the next secuencia on the same per-node chain. This did not exist before.
+  // Two tills of ONE node → ONE chain: sales rung at EITHER till take the next secuencia on the
+  // node's chain.
   it("continues one node chain across sales rung at two different tills of that node", async () => {
     const tillB = await addTillToNode(suite.db, node, "B");
 
@@ -111,7 +104,7 @@ describe("appendToChain from many callers started together, keyed by node", () =
 });
 
 describe("currentSif resolves per node", () => {
-  // Property 4 (design §9.4): two nodes of one taxpayer resolve to distinct SIFs / distinct chains.
+  // Two nodes of one taxpayer resolve to distinct SIFs / distinct chains.
   it("gives two nodes of one taxpayer distinct SIF identities and distinct chains", async () => {
     const nodeA = node;
     // A second node under nodeA's OWN location and NIF, so the two genuinely share one obligado.
@@ -144,10 +137,8 @@ describe("currentSif resolves per node", () => {
   // its node id. Its own fresh location keeps it a distinct node under the same obligado.
   async function addSiblingNode(): Promise<NodeId> {
     return suite.db.transaction(async (tx) => {
-      // Through the tables, not the raw inserts this replaces: `id` and `created_at` are
-      // builder-side `$defaultFn` generators a raw insert never reaches (refused NOT NULL at run
-      // time), and `invoice_locales` is a JSON column here, so the `array['es']` literal is a
-      // syntax error on this engine.
+      // Through the tables, not raw SQL: `id` and `created_at` are builder-side `$defaultFn`
+      // generators a raw insert never reaches.
       const [loc] = await tx
         .insert(locations)
         .values({
@@ -178,9 +169,8 @@ describe("currentSif resolves per node", () => {
 });
 
 describe("the series↔node guard (record-sale)", () => {
-  // Property 3 (design §9.2): a sale whose input.nodeId ≠ the series' node throws
-  // sale.series_wrong_node; the matching case succeeds. Driven through @waitron/core's recordSale,
-  // the guard's real home.
+  // A sale whose input.nodeId ≠ the series' node throws sale.series_wrong_node; the matching case
+  // succeeds. Driven through @waitron/core's recordSale, the guard's real home.
   function backendFor(): VerifactuBackend {
     return new VerifactuBackend({
       deploymentEnvironment: "production",

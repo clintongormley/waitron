@@ -10,23 +10,18 @@ import { count, table, ts } from "@waitron/db";
  * and the write path defaults each new `envios` row to `now()`, so a per-record column cannot bound
  * the interval between envíos.
  *
- * ONE ROW (the `tenant_receipts` / `tenant_themes` shape in `@waitron/db`): `id` is pinned to 1 by
- * `envio_flujo_singleton_ck`, and that id doubles as the `ON CONFLICT` target the drainer upserts
- * against. Lazily created: no row means nothing has ever been sent, which reads as "may send now";
- * the drainer upserts one after the first response.
+ * ONE ROW: `id` is pinned to 1 by `envio_flujo_singleton_ck`, and that id doubles as the
+ * `ON CONFLICT` target the drainer upserts against. Lazily created: no row means nothing has ever
+ * been sent, which reads as "may send now"; the drainer upserts one after the first response.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as packages/db/src/schema/sales.ts.
 export const envioFlujo = table(
   "envio_flujo",
   {
     id: count("id").primaryKey().notNull().default(1),
     // When the next envío may go. Persisted, never an in-memory timer.
     proximoEnvioEn: ts("proximo_envio_en").notNull(),
-    // The last TiempoEsperaEnvio AEAT returned. `\d{0,4}` in the schema → up to 9999; an integer
-    // column holds it exactly, where baking it into a timestamptz would not make the seconds
-    // re-readable.
+    // The last TiempoEsperaEnvio AEAT returned, in seconds: `\d{0,4}` in AEAT's XSD, so at most
+    // 9999.
     tiempoEsperaSeg: count("tiempo_espera_seg").notNull(),
   },
   /* v8 ignore start */

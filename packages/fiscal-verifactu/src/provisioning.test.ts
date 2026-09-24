@@ -9,22 +9,8 @@ import { TENANT_A, seedTenants } from "../test/fixtures.js";
 import { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 import { ID_SISTEMA_MAX_LENGTH, currentSif, registerSif } from "./registro-sif.js";
 
-// ONE database for the suite, emptied by the helper after every test.
-//
-// The requirement this replaces is unchanged and still stated where it was: the installation-number
-// counter is monotonic and never resets, so every case below must start from an empty one or its
-// assertion about a specific number depends on execution order. What meets it now is the helper's
-// per-test reset rather than a brand-new database — the counter is an ordinary data table
-// (`contadores_instalacion`, ./schema/sif.ts) and the reset deletes every data table
-// (packages/db/src/testing/venue-db.ts's `buildResetPlan`).
-//
-// Control run, because "the reset is what makes this pass" is otherwise unchecked. Command:
-// `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/provisioning.test.ts`. With the
-// reset on: 16 passed. With `resetPerTest: false` added to the options below: 15 failed | 1 passed,
-// the first error `UNIQUE constraint failed: locations.id` — the per-test `seedTenants` refuses
-// before any case reaches the counter, so what that control shows is the reset, not the counter
-// specifically. The counter's own evidence is that this file asserts `numeroInstalacion` 1 in one
-// case and 2 in three others, all against one database, and all four pass.
+// The installation-number counter never resets, so each case relies on the helper's per-test reset
+// to start from an empty `contadores_instalacion`.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
@@ -48,9 +34,6 @@ beforeEach(async () => {
 
 describe("WAITRON_ID_SISTEMA", () => {
   it("is a product code within the bound registerSif enforces", () => {
-    // The product constant the deleted provisioning-side case pinned. AEAT's `IDSistemaInformatico`
-    // is at most `ID_SISTEMA_MAX_LENGTH` characters, and the value is stamped into every SIF row a
-    // seed writes — an out-of-bound constant would be refused at provision, not at review.
     expect(WAITRON_ID_SISTEMA.length).toBeGreaterThan(0);
     expect(WAITRON_ID_SISTEMA.length).toBeLessThanOrEqual(ID_SISTEMA_MAX_LENGTH);
   });
@@ -72,11 +55,7 @@ describe("FISCAL_PROVISIONING.seed", () => {
   });
 
   it("refuses to seed a database with no taxpayer row, loudly and without a domain code", async () => {
-    // The NIF every registro is filed under comes from the one taxpayer row, never from an
-    // argument. Nothing in the schema holds that row in place any more — the foreign keys onto
-    // `tenants` went with the tenant columns — so an empty table is reachable by a corrupt or
-    // half-provisioned database, and minting a SIF under a guessed NIF is unrepairable
-    // (CLAUDE.md §5). It must fail, and as a plain `Error`: no operator action fixes it.
+    // Minting a SIF under a guessed NIF is unrepairable; no operator action fixes an empty table.
     await db.execute(sql`delete from tenants`);
     const error = await captureError(() => withTransaction(db, (tx) => seed.run(tx, NODE)));
     expect(isAppError(error)).toBe(false);
@@ -99,11 +78,6 @@ describe("FISCAL_PROVISIONING.standby", () => {
   beforeEach(async () => {
     // The primary must hold a live SIF and its series before it can reserve for a standby.
     await withTransaction(db, (tx) => seed.run(tx, NODE));
-    // Through the table definition rather than as raw SQL, for the reason ../test/fixtures.ts
-    // records for the same table: `invoice_series.id` is a `$defaultFn` on this engine
-    // (packages/db/src/schema/series.ts), which a raw statement never reaches. Measured by running
-    // the raw insert this replaces: `NOT NULL constraint failed: invoice_series.id`. The two rows
-    // and their values are unchanged.
     await db.insert(invoiceSeries).values([
       { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard" },
       { nodeId: TENANT_A.nodeId, code: "RF", purpose: "rectificative" },
@@ -120,12 +94,6 @@ describe("FISCAL_PROVISIONING.standby", () => {
       }),
     );
     // What a restored primary holds: `FA` retired, `FA-<its installation number>` and `RE-<n>` live.
-    //
-    // Through the table definition for the `id` default the beforeEach above records, and the
-    // retired stamp is a `Date` rather than `now()`: measured by running the raw statement this
-    // replaces, with an `id` supplied so the previous error could not mask this one —
-    // `no such function: now`. Only whether `retired_at` is null is read here; the assertion below
-    // is on the series CODES, so the stamp's value reaches nothing.
     await db.insert(invoiceSeries).values([
       { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard", retiredAt: new Date() },
       {
@@ -169,9 +137,7 @@ describe("FISCAL_PROVISIONING.standby", () => {
     ["not an object", "W1/2"],
     ["missing the nif", { idSistemaInformatico: "W1", numeroInstalacion: 2 }],
     ["an empty software id", { nif: "89890001K", idSistemaInformatico: "", numeroInstalacion: 2 }],
-    // The column carries no CHECK, so `establish` is the second write path that must apply
-    // `registerSif`'s own length bound — a 3-character id would otherwise land in the field the
-    // guard exists to protect.
+    // The column carries no CHECK, so `establish` must apply `registerSif`'s length bound itself.
     [
       "a software id over two characters",
       { nif: "89890001K", idSistemaInformatico: "WTX", numeroInstalacion: 2 },

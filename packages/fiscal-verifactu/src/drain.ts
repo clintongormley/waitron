@@ -21,67 +21,38 @@ import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.j
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
- * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`, from
- * `@waitron/verifactu`) — the wait a database with no `envio_flujo` row
- * yet (never sent, so `readFlujo` reports `tiempoEsperaSeg: 0`) should assume before its first
- * envío. `drainDue`'s own `let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG` is the
- * one call site — kept as a named constant, not a bare literal, so this file's one guess at "what
- * to wait before we've ever heard from AEAT" is stated once rather than duplicated.
+ * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`, `@waitron/verifactu`): the
+ * wait `t` assumed until AEAT has supplied a non-zero one.
  */
 export const TIEMPO_ESPERA_INICIAL_SEG = 60;
 
 /**
- * How long a row may sit `enviando` before a LATER `drain()` pass treats it as abandoned rather
- * than genuinely in flight. The T1/T2 split (Task 6, spec §7.2) is what makes this meaningful: T1
- * commits `estado = 'enviando'` BEFORE the network call, so a process that crashes between T1 and
- * T2 leaves a real, committed `enviando` row behind — not an uncommitted claim that simply
- * vanishes with the process. Five minutes is comfortably longer than one AEAT round trip (a normal
- * in-flight submission never approaches it) but short enough that a claim abandoned while this
- * process stays up does not leave a record stuck for art. 16.4's hourly duty to notice. A crashed
- * run's claims are requeued by `resetInFlightClaims` before the next drain of a restarted filing
- * node (`resetBeforeFirstDrain`, `apps/server/src/restart-reset.ts`).
+ * How long a row may sit `enviando` before a later pass treats it as abandoned. The claim commits
+ * before the network call, so a crash leaves a real `enviando` row behind. Five minutes is well
+ * above one AEAT round trip and well inside art. 16.4's hourly duty. A crashed run's claims are
+ * requeued by `resetInFlightClaims` before the next drain of a restarted filing node
+ * (`resetBeforeFirstDrain`, `apps/server/src/restart-reset.ts`).
  */
 export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 
 /**
- * How long after a SKIPPED pass `drain` reports work is due again.
+ * How long after a SKIPPED pass `drain` reports work is due again. Reporting `now` would pin a
+ * host sleeping on `nextDueAt` at its minimum tick for as long as a certificate is missing; five
+ * minutes still gives twelve retries inside art. 16.4's hour.
  *
- * A skip used to report `now`, which a host sleeping on `nextDueAt` turns into its MIN_TICK floor
- * — 5 seconds, forever, while the certificate only a human can provision is missing. Five minutes is
- * twelve retries inside art. 16.4's hour, so a transient skip (an expired vault key, a dead
- * credentials connection) costs minutes of that legal budget rather than all of it.
- *
- * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs` holds the same value for `runDue`. The two are
- * DELIBERATELY independent — two duties, two cadences, no invariant requiring them to agree — and
- * `apps/server` overrides both from one `WAITRON_SKIP_RETRY_MS`, so they can only diverge in a
- * deployment that does not use that host. Nothing asserts they are equal, on purpose: a test
- * policing that copy would fail the day someone legitimately splits them.
- *
- * INERT IN PRODUCTION, worth stating plainly rather than leaving a reader to discover it:
- * `apps/server/src/config.ts` sources `WAITRON_SKIP_RETRY_MS`'s default from
- * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs`, not from this constant, and `boot.ts` passes that
- * one resulting value to BOTH `drain` and `runDue`. `VerifactuBackend` does apply this constant
- * (`VerifactuBackendOptions.skipRetryMs`'s own doc comment), but `apps/server` always supplies its
- * own `skipRetryMs` explicitly (`config.skipRetryMs`, sourced as above) to the standalone `drain`
- * function this file exports — never to `VerifactuBackend`'s constructor — so `VerifactuBackend`'s
- * default has no production caller today. Editing THIS constant changes nothing about the deployed
- * fiscal cadence; editing `@waitron/scheduler`'s `DEFAULTS.skipRetryMs` silently changes it instead.
+ * No production caller: `apps/server` passes `config.skipRetryMs`, whose default comes from
+ * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs`, so editing this constant changes nothing deployed.
  */
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
-/** The retry ceiling: no transiently-failed batch waits longer than one hour before its next
- * attempt, however many times it has already failed. */
+/** The retry ceiling: a batch that keeps failing retries hourly, as art. 16.4 requires. */
 export const BACKOFF_MAX_MS = 3_600_000;
 
 /**
- * Exponential backoff for the `intentos`-th attempt (1-indexed: `intentos` already reflects the
- * increment `claimBatch` applies at claim time, so the FIRST failed attempt calls this with `1`
- * and waits `BACKOFF_BASE_MS` once, not `BACKOFF_BASE_MS * 2`). Capped at `BACKOFF_MAX_MS` — a
- * row that keeps failing settles at retrying hourly rather than waiting arbitrarily longer.
- * `Math.max(0, intentos - 1)` guards a defensive floor only: `claimBatch` never returns a row with
- * `intentos < 1`, so the exponent is never negative in practice.
+ * Exponential backoff for the `intentos`-th attempt. `intentos` is 1-indexed — `claimBatch`
+ * returns it already incremented — so the first failure waits `BACKOFF_BASE_MS`.
  */
 export function backoffMs(intentos: number): number {
   return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, intentos - 1));
@@ -91,48 +62,22 @@ export interface DrainDeps {
   db: Database;
   /**
    * The venue's AEAT transport. A FUNCTION, not a fixed client, so the certificate is decrypted
-   * only when this pass actually has something to send: a certificate decrypted for a pass with
-   * nothing to submit is a secret in memory for no reason. Mirrors
-   * `StripeReconcilerOptions.resolveAccount`, resolved lazily for the same reason.
+   * only when this pass actually has something to send.
    */
   resolveClient: () => Promise<VerifactuClient>;
-  /** How long after an abandoned pass to report work due again. `DEFAULT_SKIP_RETRY_MS` owns the
-   * default and its reasoning; required here so a caller that forgets is a compile error rather
-   * than a silent cadence. `VerifactuBackend` applies the default on its callers' behalf. */
+  /** How long after a skipped pass to report work due again. Required, so a caller that forgets
+   * is a compile error rather than a silent cadence. */
   skipRetryMs: number;
   /**
-   * Which deployment THIS host is draining for — compared, per claimed row, against that row's
-   * own `entorno` (`RegistroRow.entorno`, stamped at generation time by
-   * `VerifactuBackendOptions.deploymentEnvironment`; `./registro-row.ts`'s own doc comment on
-   * `Entorno`). `claimBatch` refuses a row whose `entorno` disagrees, or carries none at all,
-   * rather than submitting it — see that function's own doc comment and `errors.ts`'s
-   * `fiscal.environment_mismatch`/`fiscal.environment_unknown`. Submitting a pre-production
-   * record to the real AEAT is unrecoverable: chains cannot be merged or migrated, and invoice
-   * numbers are never reused.
-   *
-   * `Entorno`, not a bare `string`, for the identical reason `VerifactuBackendOptions.deploymentEnvironment`
-   * is typed that way: an unrepresentable value is a `tsc` error here, not a runtime surprise
-   * discovered only once a whole backlog is silently refused.
+   * Which deployment THIS host is draining for, compared per claimed row against the row's own
+   * `entorno`. `claimBatch` refuses a row that disagrees or carries none: submitting a
+   * pre-production record to the real AEAT is unrecoverable.
    */
   environment: Entorno;
   /**
    * The batch cap — the most registros claimed, submitted, and counted as a full envío per chunk.
-   * OPTIONAL, defaulting to `MAX_REGISTROS_POR_ENVIO` (`@waitron/verifactu`), the real XSD limit
-   * AEAT enforces (`@waitron/verifactu`'s `maxOccurs="1000"` guard, which throws error 4113/4114 above
-   * it). EVERY production caller omits it — `apps/server`'s `boot.ts` builds `DrainDeps` without
-   * this field — so the default reproduces AEAT's own 1000-row cap exactly; nothing about a real
-   * submission changes.
-   *
-   * Present only as a TEST SEAM. A suite proving the >cap split, or a cap-filling refused backlog,
-   * would otherwise have to seed 1000+ rows through `seedPendingEnvios`'s per-row insert loop
-   * (~4 round trips each) — which timed out under CI Docker contention (~32s vs ~1s locally) and
-   * is the flake this seam was added to kill. Injecting a small cap (e.g. 3) reproduces the
-   * IDENTICAL batching semantics — a full chunk sent now, the sub-cap tail deferred to the next
-   * gated pass — against a handful of rows. VALIDATED when provided: `drain()` throws unless it is
-   * an integer in `1..MAX_REGISTROS_POR_ENVIO`. `0` would claim nothing (work stuck `pendiente`),
-   * a negative becomes Postgres `LIMIT -1` (NO limit → an oversized envío `serializeEnvio` rejects),
-   * and the upper cap at `MAX_REGISTROS_POR_ENVIO` means an injected cap can never build an envío the
-   * XSD guard would refuse — the drain never sends more than the cap per envío.
+   * Defaults to `MAX_REGISTROS_POR_ENVIO`, the XSD's 1000-row limit; production never sets it.
+   * A test seam, so a suite can exercise the over-the-cap split without seeding 1000+ rows.
    */
   maxRegistrosPorEnvio?: number;
 }
@@ -141,39 +86,16 @@ export interface DrainDeps {
 type DueRow = RegistroRow & { intentos: number };
 
 /**
- * Is there anything to send, read on the supplied handle before the drain opens its own
- * transaction? Lone stale claims count, so `drainDue` can recover them even with no pending row.
+ * Is there anything to send, read before the drain opens its own transaction? Lone stale claims
+ * count, so `drainDue` can recover them even with no pending row.
  *
- * An ordinary query. It replaces a PostgreSQL function, `envios_work_due(timestamptz)`, which this
- * engine has no counterpart for — SQLite defines no SQL functions of its own and parses no
- * `::timestamptz` cast, and the two gaps were measured one at a time: with the cast the call threw
- * `unrecognized token: ":"`, and with the cast removed `no such function: envios_work_due`
- * (`packages/fiscal-verifactu/src/drain.containment.test.ts`, run 2026-09-22 before this
- * replacement). The old body is at
- * `git show aabdde6a8^:packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`.
+ * - `proximo_intento_en <= now` is INCLUSIVE, the same comparison `countDue` and `claimBatch`
+ *   make, so this gate never opens on a row neither of them would claim.
+ * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` is STRICT, the same cutoff `recoverStaleClaims`
+ *   computes, so a row this reports stale is a row that pass will recover.
  *
- * Its two disjuncts are carried over with their comparisons unchanged, and the difference between
- * them is not cosmetic:
- *
- * - `proximo_intento_en <= now` — INCLUSIVE, so a row whose next attempt falls exactly on this
- *   instant is due now rather than one pass later. The same comparison `countDue` and `claimBatch`
- *   make below, which is what stops this gate from opening on a row neither of them would claim.
- * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` — STRICT, and the threshold is read from that
- *   constant instead of the `interval '300000 milliseconds'` literal the SQL carried. Two literals
- *   across a TS/SQL boundary are what `migrations.test.ts`'s threshold cases were written to pin;
- *   there is one literal now, so the drift they watched for is unrepresentable rather than merely
- *   tested. (Those cases still call the SQL function directly and are red — see that file.)
- *   `recoverStaleClaims` recomputes the identical cutoff the identical way, so a row this reports
- *   stale is a row that pass will actually recover.
- *
- * Both columns are compared as TEXT, which is what the ISO-8601 encoding makes sound: the `ts`
- * helper writes every value through `Date.prototype.toISOString`
- * (`packages/db/src/schema/columns.ts`'s `isoTimestamp`), whose output is fixed-width UTC, so
- * lexical order is chronological order. Same treatment as `countDue`, `claimBatch` and
- * `recoverStaleClaims` in this file.
- *
- * Boundary coverage: `drain.containment.test.ts`'s two threshold cases, each with the other side of
- * the boundary beside it.
+ * Timestamps are compared as TEXT, as everywhere in this file: the `ts` column writes
+ * `Date.prototype.toISOString`, fixed-width UTC, so lexical order is chronological order.
  */
 async function workIsDue(db: Database, now: Date): Promise<boolean> {
   const staleCutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
@@ -188,22 +110,9 @@ async function workIsDue(db: Database, now: Date): Promise<boolean> {
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   const result = emptyDrainResult();
-  // The batch cap, resolved ONCE here (default `MAX_REGISTROS_POR_ENVIO`) and threaded to every
-  // use site below, so a test injecting a small cap and production's default 1000 share one code
-  // path. See `DrainDeps.maxRegistrosPorEnvio`'s own doc comment for why this is injectable.
-  //
-  // Validated the moment it is PROVIDED, never on the `?? MAX_REGISTROS_POR_ENVIO` default path
-  // (field omitted → 1000, production unchanged and unguarded). `maxRegistrosPorEnvio` is a public,
-  // plain-`number` input, and each out-of-range value fails a fiscal invariant silently rather than
-  // loudly if it reaches the SQL: `0` claims nothing, leaving due work stuck `pendiente` forever;
-  // a NEGATIVE value becomes Postgres `LIMIT -1`, i.e. NO limit, so a claim could pull >1000 rows
-  // and build an envío that `serializeEnvio` (`@waitron/verifactu`) then rejects for exceeding the XSD
-  // `MAX_REGISTROS_POR_ENVIO` — a failure discovered only at submission, not at the input; a
-  // non-integer is nonsense to `limit`. Capping the upper bound at `MAX_REGISTROS_POR_ENVIO` (not
-  // merely `>= 1`) is what makes it impossible to inject a cap that could ever build an envío the
-  // XSD guard would refuse. A plain `throw new Error` matches this package's own dev/precondition
-  // guards (e.g. `backend.ts`'s `recordSubstitution` argument checks); no `AppError` code, which
-  // this file reserves for fiscal-domain outcomes, not a caller-side misconfiguration.
+  // Out of range, the cap fails silently in SQL: `0` claims nothing, leaving work `pendiente`
+  // forever, and a negative `limit` means no limit on this engine, building an envío over the
+  // XSD's cap. A plain Error: this is caller misconfiguration, not a fiscal-domain outcome.
   if (deps.maxRegistrosPorEnvio !== undefined) {
     const cap = deps.maxRegistrosPorEnvio;
     if (!Number.isInteger(cap) || cap < 1 || cap > MAX_REGISTROS_POR_ENVIO) {
@@ -214,44 +123,21 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   }
   const maxPorEnvio = deps.maxRegistrosPorEnvio ?? MAX_REGISTROS_POR_ENVIO;
   if (await workIsDue(deps.db, now)) {
-    // Counted the moment the work is attempted, before `resolveClient` — a pass skipped for a
-    // missing cert still HAD due work, and the awaiting-cert flag (pass.ts) must tell a no-work pass
-    // (this branch never runs) apart from one that exercised the cert and skipped.
+    // Counted before `resolveClient`: a pass skipped for a missing certificate still had due work,
+    // and the host's awaiting-certificate flag must tell that apart from a pass with none.
     result.tenantsWithWork += 1;
     try {
       const client = await deps.resolveClient();
       await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio);
     } catch (error) {
-      // Contained, deliberately: a failure here is reported in `skipped` rather than thrown out of
-      // the sweep, so the host's pass still records what this duty did and schedules its retry.
+      // Contained: reported in `skipped` rather than thrown, so the host still schedules a retry.
       result.skipped.push({ errorCode: codeOf(error) });
     }
   }
-  // NOT "a skipped pass has no future instant of its own" (Copilot, 2026-07-27 — the same
-  // correction F4 of that day's pre-merge review made to `runDue`'s twin comment, applied there and
-  // missed here). `drainDue` calls `bumpNextDue` itself, per chunk, so a pass that threw AFTER
-  // sending one — a mid-sweep AEAT failure on its second batch, say — has already folded a real gate
-  // into `result.nextDueAt` and still lands in `skipped`. A skipped pass may therefore have
-  // contributed to `nextDueAt`, and may have mutated state (claimed rows) besides.
-  //
-  // What is genuinely true, and what this fold exists for, is the case that did NOT get that far:
-  // a transport that could not be built at all never reached `drainDue`, so nothing was scheduled —
-  // no gate, no backoff row — and nothing else in this pass reports it. Reporting only what the
-  // sweep itself computed, or `null` when it skipped, would tell a long-running host nothing is
-  // due, and one transient failure (an expired vault key, a dead credentials connection) would stop
-  // it polling while a `pendiente` row sits past its art. 16.4 hour.
-  //
-  // FOLDED AS A MINIMUM, not assigned — and folded through `bumpNextDue`, the same helper every
-  // gate goes through, so there is one definition of "fold an instant into `nextDueAt`" in this
-  // file rather than two that must be kept in step. This used to assign `now` unconditionally, and
-  // the comment here used to justify that by observing `now` is always earlier than any real gate —
-  // true, and no longer the point: `now + skipRetryMs` IS later than a gate this same pass may have
-  // computed before it failed, so assigning it would delay a submission behind a broken retry. The
-  // minimum can only pull the reported instant earlier.
-  //
-  // Not `now`, because a skip is frequently NOT transient: a certificate nobody has provisioned
-  // produces the identical answer every pass, and `now` pins the host's loop at its MIN_TICK floor
-  // indefinitely — the expected state of the first deployment.
+  // A pass that failed before `drainDue` scheduled anything must still report a future instant,
+  // or a long-running host stops polling while a `pendiente` row sits past its art. 16.4 hour.
+  // Folded as a MINIMUM: `drainDue` may have folded an earlier instant (a backoff) before it
+  // threw, and the retry instant must not delay it.
   if (result.skipped.length > 0) {
     bumpNextDue(result, new Date(now.getTime() + deps.skipRetryMs));
   }
@@ -259,43 +145,21 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
 }
 
 /**
- * T1/T2 split (spec §7.2): claim due rows in their own short transaction (T1), which commits
- * before the network call — so the venue file's single writer slot is not held across the AEAT
- * round-trip (the whole of what makes `claimBatch`'s selection a claim; see its own paragraph), and
- * a crash leaves real committed `enviando` rows, which `resetInFlightClaims` requeues before the
- * next drain of a restarted filing node (`resetBeforeFirstDrain`,
- * `apps/server/src/restart-reset.ts`); `recoverStaleClaims` (called at the top of this function)
- * requeues a claim abandoned while this process stays up.
- * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
- * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
- * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk the due
- * backlog is split into (spec §7.2's flow-control race, art. 16.4). `maxPorEnvio` is
- * the batch cap `drain` resolved from `DrainDeps.maxRegistrosPorEnvio` (default
- * `MAX_REGISTROS_POR_ENVIO`, the XSD's 1000-row limit — production always takes the default; only a
- * test injects a smaller cap):
+ * Each chunk is claimed in its own short transaction (T1) that commits before the network call,
+ * so the venue file's single writer slot is not held across `client.submit`. `client.submit` runs
+ * outside any transaction; the response is persisted in a second short transaction (T2), or, if
+ * `client.submit` or T2 throws, the batch is backed off in one instead. Route B's
+ * `client.consultar` is the exception to the round-trip rule: it runs inside T2, so a failed
+ * consulta rolls back the whole response and backs the batch off.
  *
- *   - If `envio_flujo.proximo_envio_en` (the "gate") has not yet elapsed AND fewer than
- *     `maxPorEnvio` rows are currently due, nothing is sent this pass — the backlog is
- *     deferred to the gate (`bumpNextDue`), matching AEAT's own rule that a software system must
- *     otherwise wait `TiempoEsperaEnvio` seconds between envíos.
- *   - Otherwise (gate open, OR ≥ `maxPorEnvio` already accumulated), the pass is authorised: the
- *     loop below claims/submits/persists ≤`maxPorEnvio`-row chunks BACK TO BACK while ≥ `maxPorEnvio`
- *     rows remain due (the "full envío accumulated" exception) — but STOPS the moment fewer than
- *     `maxPorEnvio` remain after a chunk has been sent this pass. That remaining tail is neither a
- *     full batch nor `t`-elapsed, so it is deferred to a LATER `drain()` call gated on `t`
- *     (`bumpNextDue` below), not flushed back-to-back in the same pass.
+ * AEAT's flow control: send when `TiempoEsperaEnvio` has elapsed since the last envío OR a full
+ * envío has accumulated, whichever comes first.
  *
- * Concretely, at the production default cap of 1000: a 1001-row backlog on an open gate sends its
- * first 1000-row chunk, sees 1 row left (< 1000), and stops — `batchesSent: 1`,
- * `recordsSubmitted: 1000` from THIS `drain()` call, with the last row deferred until `nextDueAt`.
- * `drain.test.ts`'s two-pass batching test proves this SAME split with a small injected cap
- * (`maxRegistrosPorEnvio: 3`, a 4-row backlog → a chunk of 3 now, the 1-row tail next pass) so it
- * need not seed 1000+ rows. The pass's FIRST envío still always goes once authorised — a standalone
- * sub-cap backlog on an open gate sends now, per the top-of-function gate check — only a tail that
- * FOLLOWS a sent chunk within the same pass is deferred. `dueCount` therefore stays > 0 after the
- * loop either via this
- * intentional break (a deferred tail) or the defensive `batch.length === 0` guard below (a
- * countDue/claimBatch race) — either way `bumpNextDue` below picks it up.
+ *   - Gate (`envio_flujo.proximo_envio_en`) not yet elapsed AND fewer than `maxPorEnvio` rows due:
+ *     nothing is sent; the backlog is deferred to the gate.
+ *   - Otherwise the pass sends its first chunk, and keeps sending full chunks back to back while at
+ *     least `maxPorEnvio` rows remain due. A sub-cap tail left after a chunk has gone is neither a
+ *     full envío nor past the wait, so it is deferred to a later pass gated on `t`.
  */
 async function drainDue(
   db: Database,
@@ -305,14 +169,10 @@ async function drainDue(
   result: DrainResult,
   maxPorEnvio: number,
 ): Promise<void> {
-  // Recovery gets its OWN short tx, ahead of (and separate from) the flujo/dueCount0 read below —
-  // it must COMMIT before anything else in this pass reads `envios`, so that a row it just
-  // recovered is visible to countDue/claimBatch's own, later transactions as an ordinary
-  // `pendiente` row rather than something they need to special-case.
+  // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
+  // `pendiente` row to the later transactions.
   await withTransaction(db, (tx) => recoverStaleClaims(tx, now));
 
-  // Read flow state + the current due count in one short tx — mirrors T1's own claim tx: short-
-  // lived, no network call inside it.
   const { flujo, dueCount0 } = await withTransaction(db, async (tx) => ({
     flujo: await readFlujo(tx),
     dueCount0: await countDue(tx, now),
@@ -320,8 +180,6 @@ async function drainDue(
   if (dueCount0 === 0) return;
 
   const gateOpen = flujo.proximoEnvioEn === null || flujo.proximoEnvioEn.getTime() <= now.getTime();
-  // The race (spec §7.2, art. 16.4): send if the gate is open OR a full envío has already
-  // accumulated. Otherwise defer the whole pass — nothing claimed, nothing sent.
   if (!gateOpen && dueCount0 < maxPorEnvio) {
     bumpNextDue(result, flujo.proximoEnvioEn);
     return;
@@ -329,33 +187,15 @@ async function drainDue(
 
   let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG;
   let dueCount = dueCount0;
-  // Chains the environment guard has refused SOMEWHERE in this pass (`claimBatch`'s own doc
-  // comment on `blockedSifIds`) — one `Set`, shared and mutated across every claim below, for the
-  // WHOLE pass, not reset per chunk: that is what lets a LATER chunk's claim exclude a chain a
-  // PREVIOUS chunk already found refused, rather than re-discovering (and re-incidenting) it.
-  // Reset to empty on every `drainDue` call, i.e. fresh each pass — a chain blocked THIS pass
-  // is re-examined, not assumed still-blocked, on the next one. For a chain blocked on a
-  // MISMATCHED `entorno`, that means correcting `WAITRON_ENV` between passes needs no database
-  // repair at all (that guard's own doc comment). For a chain blocked because a row's `entorno`
-  // is NULL, no value of `WAITRON_ENV` ever makes it agree — re-examining it every pass finds it
-  // refused again, forever; see that guard's own doc comment for what actually releases it.
+  // Chains the environment guard refused anywhere in this pass, shared across every claim so a
+  // later chunk does not re-discover (and re-incident) them. Fresh each pass, so a chain is
+  // re-examined next time rather than assumed still blocked.
   const blockedSifIds = new Set<string>();
   while (dueCount > 0) {
-    // T1 — claim in its own transaction; ≤`maxPorEnvio` due pending rows, ordered by chain sequence
-    // within each SIF. Any claimed row whose chain already carries an open `rechazado`/
-    // `detenido` envío (Task 9's Incidencia-while-open rule, `haltOpenChainClaims`'s own doc
-    // comment) is redirected straight to `detenido` here, in the SAME transaction as the claim —
-    // never handed to AEAT, since submitting over an unresolved gap would be submitting out of
-    // chain order.
-    //
-    // Retried, not called once: a claim window can come back with rows but nothing sendable —
-    // every row in it belonged to a chain the environment guard just blocked (`claimBatch`'s own
-    // doc comment) — and `blockedSifIds` growing is exactly what lets the NEXT attempt's SELECT
-    // exclude that chain and reach whatever sendable work sorts behind it. Bounded: each iteration
-    // that finds nothing sendable adds at least one NEW sif_id to `blockedSifIds` (the database's
-    // own distinct chain count is finite), or `rawCount` is already 0 and the loop stops — so a
-    // backlog of refused rows can cost extra round trips here but can never make sendable work
-    // behind it unreachable, this pass or any later one.
+    // Retried until something is sendable or nothing was claimed: a window can hold only rows of
+    // chains the environment guard just blocked, and the growing `blockedSifIds` lets the next
+    // SELECT reach past them. Bounded: each empty round either blocks a new chain or moves its rows
+    // to `detenido` (`haltOpenChainClaims`), and the next SELECT sees neither.
     let claimed: { sendable: DueRow[]; rawCount: number };
     for (;;) {
       claimed = await withTransaction(db, async (tx) => {
@@ -366,59 +206,34 @@ async function drainDue(
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     const batch = claimed.sendable;
-    // Defensive only, and — now that the retry loop above only ever exits with `sendable.length >
-    // 0` or `rawCount === 0` — this can ONLY mean the latter: the countDue/claimBatch race this
-    // function's own doc comment describes (dueCount0 saw work a moment ago that is genuinely gone
-    // by claim time). A round where `haltOpenChainClaims` redirects every claimed row to `detenido`
-    // no longer reaches here at all: that leaves `sendable` empty with `rawCount > 0` (the rows
-    // existed, they just weren't submittable), which does NOT satisfy the retry loop's own break
-    // condition — it loops again, and only stops once a LATER `claimBatch` call sees `rawCount ===
-    // 0` (those rows are `detenido` now, not `pendiente`, so a fresh SELECT no longer finds them).
-    // The backlog is deferred to the next gated pass rather than re-attempting immediately.
+    // Only when the claim found nothing at all: the work `countDue` saw is gone by claim time.
     if (batch.length === 0) break;
 
     const cabecera = cabeceraFor(batch[0]!);
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
     try {
-      // Network — OUTSIDE any transaction, so T1's claim is already committed and no lock/
-      // connection is held while waiting on AEAT.
       const respuesta = await client.submit(cabecera, registros);
 
-      // T2 — persist the response (CSV + estados) atomically, then recount what's still due.
       dueCount = await withTransaction(db, async (tx) => {
         await persistResponse(tx, client, batch, respuesta, now, result);
         return countDue(tx, now);
       });
       t = respuesta.TiempoEsperaEnvio;
-      // A chunk was just sent this pass; if fewer than a full envío's worth remain due, that
-      // tail is neither a full batch nor `t`-elapsed — stop here and defer it to the NEXT pass
-      // (gated on `t`, via `bumpNextDue` below), rather than riding back-to-back in this pass.
       if (dueCount < maxPorEnvio) break;
     } catch {
-      // Scope boundary (Task 8): this catches `client.submit` THROWING — a transient network/
-      // transport failure. It does NOT catch a successful response carrying per-record
-      // rejections/AceptadoConErrores/error-3000 (Task 9/10's resolution, `persistResponse`'s own
-      // scope note) — `persistResponse` never throws on those; it always returns normally.
-      //
-      // T1 already committed this batch's claim, so nothing here is lost: back it off (->
-      // pendiente, incidencia, an exponentially later proximo_intento_en per row) rather than
-      // leave it stuck `enviando`, and stop the loop — the retry is scheduled via each
-      // row's own `proximo_intento_en`, not retried immediately against a server that just failed.
+      // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
+      // stop: each row's own `proximo_intento_en` schedules the retry.
       await withTransaction(db, (tx) => backoffBatch(tx, batch, now, result));
       break;
     }
   }
 
-  // Persist the server's latest wait `t` as the gate for the NEXT pass — never an in-memory timer
-  // (envio-flujo.ts's own doc comment).
   const proximoEnvioEn = new Date(now.getTime() + t * 1000);
   await withTransaction(db, (tx) => upsertFlujo(tx, proximoEnvioEn, t));
-  // `dueCount > 0` here only via the defensive break above; see this function's own doc comment.
   if (dueCount > 0) bumpNextDue(result, proximoEnvioEn);
 }
 
-/** Current flow-control state. No row yet = never sent = "may send now" (the gate reads open) —
- * `envio-flujo.ts`'s own doc comment on why the row is lazily created. */
+/** Current flow-control state. No row yet means nothing was ever sent, so the gate reads open. */
 async function readFlujo(
   tx: Transaction,
 ): Promise<{ proximoEnvioEn: Date | null; tiempoEsperaSeg: number }> {
@@ -431,21 +246,7 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/**
- * How many rows are due right now — the SAME predicate `claimBatch` re-runs a moment later, so it
- * can also be used to decide whether more work remains after a chunk.
- *
- * The count comes back as a plain JavaScript number, so nothing converts it. This used to read
- * `count(*)::text` and wrap the result in `Number(...)`, because the PostgreSQL driver handed a
- * `count` over as a BigInt. SQLite parses no `::` cast — it reads the first colon as the start of a
- * bind parameter and refuses the whole statement at prepare time with `unrecognized token: ":"`,
- * which is where every drain pass stopped: this is the second statement `drainDue` runs. Measured
- * 2026-09-22 on Node v26.7.0 against `node:sqlite`, with the identical statement minus the cast as
- * the control: the cast threw, the control returned `[{ count: 3 }]`, and `typeof` on that value
- * read `number`. Measured again on an empty selection, where the row is `{ count: 0 }` and `typeof`
- * still reads `number` — so a zero count is a row carrying 0, never a missing row, and `rows[0]!`
- * is sound. `proximo_intento_en` is compared as TEXT, the same treatment as `workIsDue` above.
- */
+/** How many rows are due right now — the same predicate `claimBatch` runs. */
 async function countDue(tx: Transaction, now: Date): Promise<number> {
   const rows = await tx.execute<{ count: number }>(sql`
     select count(*) as count from envios
@@ -465,17 +266,8 @@ async function upsertFlujo(tx: Transaction, proximoEnvioEn: Date, t: number): Pr
   `);
 }
 
-/**
- * Folds one instant into `result.nextDueAt` as a MINIMUM — the earliest instant `drain` needs
- * calling again, per `DrainResult`'s own doc comment.
- *
- * NOT only "the gate time" (F5 of the 2026-07-27 pre-merge review corrected this): that was true
- * of every call site until the skip-cadence fix, but `drain`'s own skip branch now folds
- * `now + skipRetryMs` through this same helper too, and that instant is not a gate time at all —
- * it exists precisely for the work this pass did NOT drain. One definition of "fold an instant into
- * `nextDueAt`" either way, which is the point; the doc just no longer gets to say every caller's
- * instant means the same thing.
- */
+/** Folds one instant into `result.nextDueAt` as a MINIMUM — the earliest instant `drain` needs
+ * calling again. */
 function bumpNextDue(result: DrainResult, at: Date | null): void {
   if (at === null) return;
   result.nextDueAt =
@@ -484,15 +276,8 @@ function bumpNextDue(result: DrainResult, at: Date | null): void {
 
 /**
  * Resets timed-out `enviando` rows back to `pendiente`, raising `incidencia` — the signal that this
- * record needed operator attention, even though the happy path below will most likely resubmit and
- * accept it within the same pass. Runs BEFORE `claimBatch`, in its own committed transaction
- * (`drainDue`'s own doc comment on the split), so a row it recovers here is an ordinary committed
- * `pendiente` row by the time `countDue`/`claimBatch` look — no special-casing needed anywhere
- * else.
- *
- * `incidencia = true` is deliberately NOT paired with an `incidents` table row here — the
- * boolean flag is this task's whole scope; the incident RECORD is Task 9 (see this file's own
- * scope note, `drain.test.ts`, and the Task 8 brief).
+ * record needed operator attention, even though it will most likely be resubmitted and accepted
+ * within the same pass. Raises the flag only, never an `incidents` row.
  */
 async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
   await requeueClaims(tx, now, new Date(now.getTime() - RECUPERACION_ENVIANDO_MS));
@@ -530,91 +315,36 @@ async function requeueClaims(
 
 /**
  * Claim due pending rows → `enviando`, incrementing `intentos` and stamping `enviado_en` at claim
- * time (not at persist time) — `enviado_en` is what `recoverStaleClaims` above measures staleness
- * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
- * attempt's wait from if the submit below fails.
+ * time — `enviado_en` is what `recoverStaleClaims` measures staleness from, and the returned
+ * `intentos` is what `backoffBatch` computes this attempt's wait from.
  *
  * **What keeps a second drainer off these rows is THIS TRANSACTION, not a clause in the statement.**
- * `withTransaction` runs its body inside `db.withWriteLock` (`packages/db/src/tenancy.ts:44`), and
- * the queue behind that issues `begin immediate` (`packages/store/src/write-queue.ts:51`), so one
- * writer holds the venue file at a time: a second drainer — another scheduler instance, or a retried
- * call overlapping a slow one — does not begin until the selection below and its `enviando` stamp
- * have committed together, and it then matches none of those rows because they are no longer
- * `pendiente`. What that arranges against is a genuine DUPLICATE SUBMISSION of the same batch to
- * AEAT, not merely a wasted query. So the SELECT and the stamp must stay inside one
- * `withTransaction`, and the SELECT must stamp nothing itself: the deployment-environment cases in
- * `drain.test.ts` go red if it does. A second PROCESS starting on this database is outside that:
- * its restart reset, `resetInFlightClaims`, puts these claims back to `pendiente`, which is sound
- * only under that reset's assumption of one process per venue database.
+ * `withTransaction` runs its body under `db.withWriteLock` (`packages/db/src/tenancy.ts`), whose
+ * queue issues `begin immediate` (`packages/store/src/write-queue.ts`), so a second drainer does
+ * not begin until the selection and its `enviando` stamp have committed together, and then matches
+ * none of those rows. What that prevents is a DUPLICATE SUBMISSION of the same batch to AEAT, so
+ * the SELECT and the stamp must stay inside one `withTransaction`, and the SELECT must stamp
+ * nothing itself: most of the deployment-environment cases in `drain.test.ts` go red if it does.
+ * A second PROCESS on this database is outside that: its restart reset, `resetInFlightClaims`,
+ * assumes one process per venue database.
  *
- * **The deployment-environment guard** (Task 6 of the deployment-environment plan; chain-order and
- * starvation properties added in that task's fix round after review). Every SELECTed row's OWN
- * `entorno` (stamped at generation time — `RegistroRow.entorno`, `./registro-row.ts`) is checked
- * against this DRAINING host's `environment` BEFORE the `enviando` UPDATE below runs. A row that
- * disagrees, or carries no `entorno` at all (written before migration 0009 added the column), is
- * EXCLUDED from that UPDATE's id list — never included, never flipped, never reverted — and
- * `raiseIncident` reports it on THIS SAME transaction instead. Because the row is simply never
- * touched, no explicit UPDATE is needed to leave it `pendiente`: the SELECT above stamps nothing,
- * and nothing else here or in any caller ever sets its `estado`. Also never backed off via
- * `backoffMs` like a transient submit
- * failure would be — neither refusal is a fact about AEAT's availability, so neither schedules a
- * timer. But the two refusals release differently, and only one of them releases at all:
- * `fiscal.environment_mismatch` is a configuration fact, and correcting `WAITRON_ENV` and
- * restarting is what releases the row. `fiscal.environment_unknown` is not — the row's `entorno`
- * is NULL, and no value of `WAITRON_ENV` ever makes NULL agree with it, so this guard leaves it
- * `pendiente` forever with no configuration change able to release it. The only honest remedy is
- * re-registering the node as a SIF (which starts a fresh chain and leaves this record permanently
- * unfiled): the stored registro's own `entorno` cannot be corrected in place, because
- * `registros_facturacion` is append-only (`CLAUDE.md` §5) — see `errors.ts`'s own
- * `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
+ * **The deployment-environment guard.** Each row's own `entorno` is checked against this host's
+ * `environment` before the stamp. A row that disagrees, or carries none, is left untouched and
+ * `pendiente`, with an incident on this same transaction, and is never backed off: neither refusal
+ * is a fact about AEAT's availability. `fiscal.environment_mismatch` releases when `WAITRON_ENV` is
+ * corrected; `fiscal.environment_unknown` never does, because `registros_facturacion` is
+ * append-only and a NULL `entorno` cannot be corrected in place — see `errors.ts`.
  *
- * `blockedSifIds` is the chain-order half of the guard, and is exactly as load-bearing as the
- * per-row check above. Rows arrive ordered `(sif_id, secuencia)`, so a refused row's SUCCESSORS on
- * the SAME chain (higher `secuencia`, not yet examined) would otherwise still pass their OWN
- * entorno check and be handed to AEAT carrying `Encadenamiento.RegistroAnterior` pointing at a
- * huella AEAT never received — exactly the "submitting out of chain order" `haltOpenChainClaims`'s
- * own doc comment (below) calls unacceptable, just for a NEWLY-discovered gap rather than an
- * already-recorded rejection. So: the MOMENT a row is found refused, its `sif_id` is added to
- * `blockedSifIds` (mutated in place — the caller's SAME `Set` instance, shared across every
- * `claimBatch` call in this pass), and every row on that chain seen AFTERWARDS —
- * in this same call's iteration, or a LATER call within the same pass, via the `sif_id not in`
- * exclusion below — is dropped silently, with NO second incident: one incident per newly-blocked
- * chain per pass, mirroring `haltOpenChainClaims`'s own "flag once, don't duplicate" precedent for
- * an identical shape of problem (a chain-wide condition, not a fact about any one row). The blocked
- * row(s) stay exactly as untouched-and-`pendiente` as the row that triggered the block — property 2
- * of the fix-round review is "the chain halts behind a refusal, and the HALTED SUCCESSORS ALSO STAY
- * PENDIENTE", not `detenido`: unlike a genuine AEAT rejection, this condition is not something a
- * human resolves through reconciliation. For a MISMATCHED predecessor, correcting `WAITRON_ENV`
- * alone makes its own entorno agree again, and the very next pass reclaims the whole chain in
- * order with no database repair. For a predecessor whose `entorno` is NULL, no configuration
- * change ever makes it agree — the chain stays blocked, pass after pass, until a human
- * re-registers the node as a SIF (a fresh chain, leaving the blocked one permanently unfiled).
+ * `blockedSifIds` keeps chain order behind a refusal: a refused row's successors would otherwise
+ * pass their own check and reach AEAT pointing at a huella AEAT never received. Once a row is
+ * refused, every later row on its chain this pass is dropped with no second incident, and stays
+ * `pendiente` rather than `detenido`, so a corrected `WAITRON_ENV` lets the next pass reclaim the
+ * chain in order. The block lives only in this pass's memory, so another drainer cannot see it;
+ * whether that gap is reachable on this engine is not established, and persisting the block is an
+ * open design decision.
  *
- * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,
- * accepted limitation. `blockedSifIds` is a plain in-memory `Set`, process-local to this one
- * `drainDue()` call; nothing about a block is written anywhere another drainer's transaction can
- * see, unlike the `rechazado`/`detenido` estados `haltOpenChainClaims` reads (a real, committed
- * fact any drainer's claim observes). The gap's shape: drainer A refuses row 1 of chain X, blocking
- * it only in ITS OWN `blockedSifIds`, and a second drainer has no way to know that, so it can
- * submit X's later rows carrying `Encadenamiento.RegistroAnterior` pointing at a huella nobody
- * sent. **Whether it is still reachable on this engine is NOT established here.** The reading it
- * was written against was PostgreSQL's: B's `SELECT ... SKIP LOCKED` stepped past A's locked row 1
- * while A's T1 was still open. Neither half of that survives — no drainer's transaction overlaps
- * another's now (see the write-queue paragraph above), and a refused row is left `pendiente` and
- * sorts FIRST on its own chain, so the next claim re-reads it and refuses it again. Closing the gap
- * for real would need the block to be PERSISTED (a real committed fact, like
- * `haltOpenChainClaims`'s own bulk `detenido` UPDATE) rather than held in one process's memory,
- * which is a deliberate follow-up design decision.
- *
- * The `sif_id not in (...)` exclusion in the WHERE clause exists for the OTHER property the review
- * found missing: without it, a claim window entirely filled by refused rows (`maxPorEnvio` of them
- * at the production default, or however many distinct blocked chains sort ahead of everything else
- * under `order by sif_id` fill the `limit`) would
- * return the SAME rows to every subsequent `claimBatch` call THIS PASS, since nothing about a
- * refused row changes its own due-ness — `drainDue`'s retry loop could never advance past it,
- * and any genuinely sendable work sorting behind it would starve, this pass and every later one,
- * forever. Filtering already-blocked chains out of the SELECT itself is what lets a LATER call in
- * the same pass reach past them to whatever sorts next — see `drainDue`'s own retry loop.
+ * The `sif_id not in (...)` exclusion stops a window filled by refused rows from coming back on
+ * every retry, which would starve sendable work sorting behind it.
  */
 async function claimBatch(
   tx: Transaction,
@@ -625,7 +355,6 @@ async function claimBatch(
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
-  // A plain SELECT that stamps nothing: the claim is this transaction, per the paragraph above.
   const claimed = (
     await tx.execute<Record<string, unknown>>(sql`
     select r.*, e.intentos from envios e
@@ -642,8 +371,8 @@ async function claimBatch(
 
   const sendable: DueRow[] = [];
   for (const row of rows) {
-    // A successor of a refusal this SAME call already found (the SQL exclusion above only screens
-    // out chains blocked in an EARLIER call this pass) — dropped with no incident of its own.
+    // A successor of a refusal found earlier in this same call; the SQL exclusion covers earlier
+    // calls only.
     if (blockedSifIds.has(row.sif_id)) continue;
 
     const mismatch =
@@ -669,40 +398,15 @@ async function claimBatch(
 
   if (sendable.length > 0) {
     const ids = sendable.map((r) => r.id);
-    // NOT `= any(${ids})`, and NOT `in (${ids})` either: drizzle-orm's `sql` tag expands a JS
-    // array parameter into an ALREADY-PARENTHESISED placeholder list for exactly this `IN` shape,
-    // so `in ${ids}`, with no extra parens of our own, is the form that expansion is already
-    // shaped for. The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment
-    // above relies on for its own array parameter. What the two other spellings do on THIS engine
-    // is not established here; the refusals recorded when this was written were PostgreSQL's,
-    // confirmed live against PGlite — `any(($1, $2, $3))` rejected 42809 ("op ANY/ALL (array)
-    // requires array on right side"), and `in (($1, $2, $3))` 42883 ("operator does not exist:
-    // uuid = record"), a one-element list holding a ROW rather than three scalars.
-    // Named by id alone, with no `and estado = 'pendiente'` of its own — the SELECT above already
-    // applied that, and these ids came from it. The distinction `claimRows`' doc comment draws
-    // between a caller whose predicate excludes the state it stamps and one whose does not puts
-    // this drainer in the first group: while these rows are `enviando` a second drainer's SELECT
-    // does not match them at all. Only for as long as they stay that way, though — both
-    // `recoverStaleClaims` above and `backoffBatch` below deliberately set them back to
-    // `pendiente`, which is how an abandoned claim becomes somebody else's work. The window before
-    // this transaction commits, in which the rows are still `pendiente` on disk, is closed by the
-    // write queue admitting one writer at a time rather than by anything in these statements — the
-    // paragraph on `claimBatch` above names the mechanism and where to read it.
+    // drizzle expands an array parameter into an already-parenthesised list, so `in ${ids}` takes
+    // no parentheses of its own.
     await tx.execute(sql`
       update envios set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
       where registro_id in ${ids}
     `);
   }
-  // `r.intentos + 1` reflects the UPDATE just committed above — the SELECT ran before it, so its
-  // own `e.intentos` is still the PRE-increment value. Returned already incremented so
-  // `backoffBatch` (if the submit below fails) computes THIS attempt's wait, not the previous
-  // one's. Only ever computed for `sendable` rows: a row the environment guard above excluded was
-  // never part of that UPDATE, so its own `intentos` was never touched either, and it is never
-  // returned from here for a caller to see a bumped value that was never actually persisted.
-  //
-  // `rawCount` (this call's `rows.length`, BEFORE partitioning) is what `drainDue`'s retry
-  // loop uses to tell "everything in this window was refused/blocked, try again past it" apart
-  // from "genuinely nothing left" — `sendable.length` alone cannot distinguish the two.
+  // The SELECT read `intentos` before the UPDATE incremented it. `rawCount` counts every row
+  // claimed, so `drainDue` can tell "all refused, try past them" from "nothing left".
   return {
     sendable: sendable.map((r) => ({ ...r, intentos: r.intentos + 1 })),
     rawCount: rows.length,
@@ -710,36 +414,16 @@ async function claimBatch(
 }
 
 /**
- * Task 9's "Incidencia-while-open" rule. A row `claimBatch` just claimed (now `enviando`) is
- * redirected straight to `detenido` + `incidencia = true`, and dropped from what is returned, if
- * its OWN chain (`sif_id`) already carries an open `rechazado`/`detenido` envío — i.e. an earlier
- * rejection this drainer has not yet resolved. Runs in the SAME T1 transaction as the claim, so a
- * row this catches never reaches `client.submit` at all.
+ * A row `claimBatch` just claimed is redirected straight to `detenido` + `incidencia = true`, and
+ * dropped from what is returned, if its own chain already carries an open `rechazado`/`detenido`
+ * envío: submitting over that gap would submit out of chain order. Runs in the claim's own
+ * transaction, so a row this catches never reaches `client.submit`.
  *
- * Why this can only ever catch a NEW gap, never one `haltSuccessors` already covered at rejection
- * time: submission (and therefore claiming) always proceeds in ascending `secuencia` order within
- * one chain (`claimBatch`'s own `order by r.sif_id, r.secuencia`), so any row still `pendiente`
- * at the moment a predecessor is rejected is, by construction, a SUCCESSOR — exactly what
- * `haltSuccessors` (called from `applyOutcome`'s `"rejected"` branch) already swept to `detenido`
- * there and then. A row this function halts is therefore always one that did not exist yet at
- * rejection time — e.g. a sale recorded (and its `envios` row inserted) AFTER the rejection, on a
- * chain the local write path has no reason to block (the local hash chain does not depend on
- * AEAT's verdict — spec's own art. 16.4 framing is "keep issuing, keep trying to report") but the
- * drainer must still never submit over the resulting gap.
+ * Successors pending at rejection time were already halted by `haltSuccessors`, so this catches
+ * rows enqueued AFTER the rejection: AEAT's verdict never blocks a sale, so the chain keeps growing.
  *
- * Deliberately does NOT raise a fresh `incidents` row: the rejection that opened this chain's gap
- * already raised one (`applyOutcome`), and it is still unresolved — a second row per newly-
- * enqueued successor would spam duplicate incidents for one still-open condition. The boolean flag
- * (never a duplicate incident) is set here, mirroring `recoverStaleClaims`'s identical precedent
- * and doc comment (a few functions above) for the same "flag, don't duplicate the incident record"
- * reasoning.
- *
- * A `halted` ack IS written per halted id, though — right after the bulk `detenido` UPDATE and in
- * the SAME T1 tx, via `writeAck` (which derives `state = 'halted'` from the just-committed
- * `detenido` row). This bulk path bypasses `setEstado`'s own per-row `writeAck` choke point, so
- * without this a claim-time-halted record would carry its counted-and-flagged status but never emit
- * it downstream (plan 3b §7.2 — the flag rides the ack). `enviado_en` was stamped at claim, so the
- * ack's `submitted_at` is populated.
+ * No fresh `incidents` row: the rejection that opened the gap already raised one. A `halted` ack
+ * is written per halted id, because this bulk UPDATE bypasses `setEstado`'s `writeAck`.
  */
 async function haltOpenChainClaims(
   tx: Transaction,
@@ -767,16 +451,9 @@ async function haltOpenChainClaims(
     }
   }
   if (haltedIds.length > 0) {
-    // Same `in ${ids}` shape as claimBatch's own claim UPDATE above — see that function's own
-    // doc comment for why neither `any(${ids})` nor `in (${ids})` works against drizzle's array
-    // parameter expansion.
     await tx.execute(sql`
       update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
     `);
-    // Write the `halted` ack for each — this bulk path never reaches `setEstado`, so its per-row
-    // `writeAck` choke point would otherwise never fire for these records. Same T1 tx as the UPDATE
-    // above; `writeAck` derives `state = 'halted'` from the committed `detenido` row, so the
-    // ack↔estado invariant holds.
     for (const id of haltedIds) await writeAck(tx, id, now);
     result.recordsHalted += haltedIds.length;
   }
@@ -784,17 +461,9 @@ async function haltOpenChainClaims(
 }
 
 /**
- * Backs a transiently-failed batch off: `enviando` -> `pendiente`, `incidencia = true`, and each
- * row's OWN `proximo_intento_en` pushed out by `backoffMs(row.intentos)` — per-row rather than a
- * single batch-wide delay, so a row that has failed more times than its batch-mates (impossible
- * within one batch today, since a batch's rows share one claim, but true across passes once a row
- * survives into a later batch after other rows' `intentos` have diverged) waits accordingly.
- *
- * Scope boundary (Task 8, see this file's own top-level note): this ALWAYS treats the whole batch
- * as "failed, retry later" — it does not distinguish per-record acceptance/rejection, because it
- * is only ever reached when `client.submit` THREW (no response to read per-line state from at
- * all). A successful response with per-line rejections is Task 9/10's `persistResponse` scope,
- * not this function's.
+ * Backs a failed batch off: `enviando` -> `pendiente`, `incidencia = true`, and each row's own
+ * `proximo_intento_en` pushed out by `backoffMs(row.intentos)`. The whole batch is treated as
+ * "retry later": there is no persisted response to read per-line outcomes from.
  */
 async function backoffBatch(
   tx: Transaction,
@@ -814,8 +483,7 @@ async function backoffBatch(
 
 function toEnvioRegistro(row: RegistroRow): EnvioRegistro {
   const record = fromRegistroRow(row);
-  // RefExterna = our registro id (spec §10). Derived, not stored; not a huella input, so safe to
-  // attach after hashing. row.id is the registros_facturacion UUID.
+  // RefExterna is our registro id. Not a huella input, so safe to attach after hashing.
   if (row.tipo_registro === "anulacion") {
     return { RegistroAnulacion: { ...record, RefExterna: row.id } as never };
   }
@@ -828,28 +496,13 @@ function cabeceraFor(row: RegistroRow): Cabecera {
 }
 
 /**
- * Task 9: resolves EACH response line via `resolveEstadoEfectivo` (`@waitron/verifactu`) and
- * matches it to its claimed batch row by `RefExterna` (= `row.id` — every line this package ever
- * sends carries it, stamped by `toEnvioRegistro`, spec §10), rather than assuming the happy-path
- * "every claimed row accepted" Task 6 through 8 got away with.
+ * Resolves each response line via `resolveEstadoEfectivo` and matches it to its claimed row by
+ * `RefExterna`.
  *
- * `client` is threaded through to `applyOutcome`/`handleDuplicate` even though nothing in THIS
- * task reads it — Task 10's Route B (`duplicate_unknown`) needs `client.consultar`, and there is
- * no module-global client this function could reach for instead; wiring the parameter through now
- * avoids a second signature churn across every call site in this chain later.
- *
- * `halted` tracks registro ids halted as a SUCCESSOR earlier in THIS SAME response (`applyOutcome`'s
- * `"rejected"` branch adds to it via `haltSuccessors`) — confirmed live while implementing this
- * task: a >1-record batch that rejects one line and accepts a LATER line on the SAME chain (e.g.
- * secuencia 1 accepted, 2 rejected, 3 accepted — the fake AEAT has no chain awareness at all and
- * happily reports "Correcto" for 3 even though its own predecessor, 2, was just rejected in the
- * SAME envío) would otherwise process secuencia 3's own "accepted" line AFTER `haltSuccessors`
- * already moved it to `detenido`, and silently overwrite the halt back to `aceptado` — response
- * lines are applied in the order AEAT returned them (mirroring submission order, ascending
- * `secuencia` within a chain — `claimBatch`'s own `order by`), not re-sorted so a rejection is
- * guaranteed to be seen before its successors', but a fake (or real) AEAT's own per-line verdict
- * for an already-halted successor must never be allowed to win over our own halt regardless of
- * ordering.
+ * `halted` holds ids halted as a SUCCESSOR earlier in this same response. Lines are applied in
+ * the order AEAT returned them, and AEAT's per-line verdict is chain-blind: a line reporting
+ * "Correcto" for a successor of a record rejected in the same envío must not overwrite the halt
+ * back to `aceptado`.
  */
 async function persistResponse(
   tx: Transaction,
@@ -861,27 +514,15 @@ async function persistResponse(
 ): Promise<void> {
   result.batchesSent += 1;
   result.recordsSubmitted += batch.length;
-  // `respuesta.CSV` is only ever undefined for a wholesale-rejected envío (`RespuestaSuministro`'s
-  // own doc comment in `@waitron/verifactu`) — not reachable through this
-  // package's own fake AEAT (`createFakeAeat` always returns a CSV, per-line rejections included;
-  // see its own `handleEnvio` doc comment), so the `?? null` fallback stays unexercised by this
-  // task's tests too, same as Task 6's original note here.
   const csv = respuesta.CSV ?? null;
   const byId = new Map(batch.map((row) => [row.id, row]));
   const halted = new Set<string>();
 
   for (const linea of respuesta.RespuestaLinea) {
-    // `RefExterna` is our own registro id, stamped on every outgoing line by `toEnvioRegistro` —
-    // always present in practice for a response to OUR OWN submission. Skipped defensively rather
-    // than throwing: a line this batch cannot match would otherwise crash the whole T2 over one
-    // unparseable line, leaving every OTHER line in this same response unpersisted too. A row that
-    // is skipped here simply stays `enviando` — recovered by `recoverStaleClaims` on a later pass,
-    // or by `resetInFlightClaims` if the process restarts first, as a crash mid-T2 is.
+    // Skipped rather than thrown: one unmatched line must not roll back every other line of this
+    // response. The skipped row stays `enviando` until `recoverStaleClaims` or a restart requeues it.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
-    // Already halted as a successor of an earlier rejection IN THIS SAME RESPONSE — see this
-    // function's own doc comment on `halted`. AEAT's own verdict for this specific line must not
-    // un-halt it.
     if (halted.has(row.id)) continue;
     const efectivo = resolveEstadoEfectivo(linea);
     await applyOutcome(tx, client, row, efectivo, linea, csv, now, result, halted);
@@ -889,8 +530,7 @@ async function persistResponse(
 }
 
 /** Routes one resolved line to its estado transition + side effects. `halted` collects any
- * SUCCESSOR ids this call halts, so `persistResponse`'s own loop skips them if their own response
- * line arrives later in the SAME response — see `persistResponse`'s doc comment on `halted`. */
+ * successor ids this call halts. */
 async function applyOutcome(
   tx: Transaction,
   client: VerifactuClient,
@@ -904,15 +544,13 @@ async function applyOutcome(
 ): Promise<void> {
   switch (efectivo) {
     case "accepted":
-      // CSV is written in the SAME transaction as the response — the highest-consequence line in
-      // the outbox (spec §7). Dropping this write must fail drain.test.ts's TEETH test.
+      // CSV is written in the SAME transaction as the response: AEAT never returns it again.
+      // drain.test.ts's TEETH test fails if this write is dropped.
       await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
     case "accepted_with_errors": {
-      // Still an accept — DrainResult.recordsAccepted's own doc comment: "includes
-      // accepted-with-errors — still counts as accepted". The record IS stored by AEAT; only a
-      // warning incident distinguishes this from a clean accept.
+      // Still an accept: AEAT stored the record, and only a warning incident marks the difference.
       await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
       const codigo = linea.CodigoErrorRegistro ?? null;
       const mensaje = linea.DescripcionErrorRegistro ?? null;
@@ -944,46 +582,21 @@ async function applyOutcome(
         now,
         result,
       );
-      // 1 (this record) + however many still-pending/in-flight successors on the SAME chain this
-      // rejection just orphaned. Their ids are folded into `halted` (not just counted) so
-      // `persistResponse`'s own loop skips them if THEIR OWN response line also appears in this
-      // same batch — see `persistResponse`'s doc comment on `halted` for why that matters.
       const haltedIds = await haltSuccessors(tx, row, now);
       for (const id of haltedIds) halted.add(id);
       result.recordsHalted += 1 + haltedIds.length;
       return;
     }
-    // duplicate_annulled / duplicate_unknown — error-3000 Route A / Route B resolution; see
-    // handleDuplicate's own doc comment. `halted` is threaded through for the same reason the
-    // "rejected" branch above threads it: both of handleDuplicate's halting outcomes (Route A,
-    // and Route B's mismatch) may ALSO halt successors claimed in this SAME batch/response.
+    // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
       await handleDuplicate(tx, client, row, efectivo, csv, now, result, halted);
   }
 }
 
 /**
- * Writes one row's estado transition. `confirmadoEn`/`codigoError`/`mensajeError`/`incidencia` are
- * all optional because each `applyOutcome`/`handleDuplicate` branch supplies only what it has — an
- * accept has no error code, a rejection has no `confirmadoEn`. `csv` alone is REQUIRED, not
- * optional: every branch across `applyOutcome` and `handleDuplicate` (Task 9's accept/
- * accepted-with-errors/rejected, and Task 10's Route A/B) has the envío's own CSV in hand — even a
- * duplicate LINE's envío still returns one (AEAT's CSV is per-submission, not per-line), and Route
- * B's own `routeB` never needs to read one off its consulta response (which carries none at all —
- * `RegistroConsultado`'s own doc comment in `@waitron/verifactu`) because it
- * reuses the SAME outer envío CSV every other branch already has. An earlier draft of this
- * function made `csv` optional and `coalesce`d it against the existing column, anticipating a
- * hypothetical future caller with no CSV to report at all — no such caller exists as of this
- * package's last drainer task, so a required parameter (TypeScript-enforced at every call site)
- * replaces a defensive branch nothing here exercises. A later caller with a genuine no-CSV
- * resolution (e.g. a stand-alone reconciliation sweep outside `persistResponse`'s own envío-response
- * flow) can reintroduce that shape then, with its own test proving it needed.
- *
- * `codigoError`/`mensajeError` are cast to `String(...)` explicitly rather than left as the raw
- * `number` `resolveEstadoEfectivo`'s caller reads off `RespuestaLinea.CodigoErrorRegistro` —
- * `codigo_error` (`./schema/envios.ts`) is a text column (`label`, from the column vocabulary), so
- * this file converts the value itself rather than leaving the conversion to the driver. What the
- * driver would store for a bound numeric parameter against that column is not established here.
+ * Writes one row's estado transition. `csv` is REQUIRED: every branch has the envío's own CSV in
+ * hand, since AEAT's CSV is per submission, not per line. `codigoError` is converted to text here
+ * because `codigo_error` is a text column.
  */
 async function setEstado(
   tx: Transaction,
@@ -1010,43 +623,19 @@ async function setEstado(
       incidencia = ${opts.incidencia ? 1 : 0} or incidencia
     where registro_id = ${registroId}
   `);
-  // The choke point for the per-row terminal estados THIS function writes (accepted /
-  // accepted-with-errors / rejected / a direct duplicate-annulled or huella-divergente halt) — the
-  // ack that reflects each is produced HERE, in the SAME tx, from the row this UPDATE just
-  // committed. The two BULK chain-halt paths do NOT route through here: `haltOpenChainClaims` (T1)
-  // and `haltSuccessors` (T2) write their own `halted` acks alongside their own bulk `detenido`
-  // UPDATEs, in the same tx, so the ack↔estado invariant holds for those records too. `ackStateOf`
-  // no-ops on any non-terminal estado, so this is safe even though today every caller here is
-  // terminal. Plan 3b's ack↔estado atomicity invariant.
+  // The ack is written in the same transaction as the estado it reflects, so the two never
+  // disagree. The bulk halt paths write their own.
   await writeAck(tx, registroId, now);
 }
 
 /**
  * Halts still-`pendiente`/`enviando` successors in the SAME chain (same `sif_id`, higher
- * `secuencia`) to `detenido`, flagging `incidencia` — so nothing later submits over the gap this
- * rejection just opened. Returns the halted registro ids (not merely a count): `applyOutcome`
- * folds them into `persistResponse`'s own `halted` set, because one of them may ALSO have its own
- * response line later in this SAME batch — see `persistResponse`'s doc comment on `halted` for
- * why that must not be allowed to overwrite the halt back to `aceptado`.
+ * `secuencia`) to `detenido`, flagging `incidencia`, so nothing later submits over the gap this
+ * rejection opened. Returns the halted ids so `persistResponse` can skip their own lines in this
+ * response. Writes a `halted` ack for each, because this bulk UPDATE bypasses `setEstado`.
  *
- * Each swept successor ALSO gets a `halted` ack written here, in this same T2 tx — this bulk UPDATE
- * bypasses `setEstado`'s per-row `writeAck`, so the ack that carries the counted-and-flagged status
- * downstream (plan 3b §7.2 — the flag rides the ack) would otherwise never be produced for a halted
- * successor. `writeAck` derives `state = 'halted'` from the just-committed `detenido` row, keeping
- * the ack↔estado invariant intact. Each successor id is distinct from the rejected `row.id` whose
- * ack `setEstado` already wrote, so there is no double-write.
- *
- * No `WHERE ... AND registro_id <> ${row.id}` guard is needed: `row`'s own estado was already
- * moved to `rechazado` by `setEstado` (called by `applyOutcome` before this), so it can never
- * match this UPDATE's own `estado in ('pendiente', 'enviando')` filter a second time.
- *
- * The chain is reached through a subquery rather than the `UPDATE ... FROM` this statement used
- * to carry, which is the same replacement `packages/db/src/job-claim.ts` already made and for the
- * same reason. Measured on this engine (`node:sqlite`, probe kept at `/tmp/f1-updfrom-probe.mjs`):
- * `update envios e set … from registros_facturacion r …` is refused `near "e": syntax error`, and
- * spelling the alias `as e` gets past the parser only to be refused `no such column: e.registro_id`
- * in the `returning` clause. The subquery form and `returning registro_id` both name the same two
- * successor rows the `FROM` form named.
+ * A subquery rather than `UPDATE ... FROM`, which this engine refused with an alias on the target
+ * table.
  */
 async function haltSuccessors(tx: Transaction, row: DueRow, now: Date): Promise<string[]> {
   const halted = await tx.execute<{ registro_id: string }>(sql`
@@ -1064,13 +653,8 @@ async function haltSuccessors(tx: Transaction, row: DueRow, now: Date): Promise<
 }
 
 /**
- * Raises a structured fiscal incident on THIS transaction — never a fresh connection, so an
- * incident can never commit while the estado update it describes rolls back alongside it.
- * Delegates to `@waitron/core`'s `recordIncident`, the same function `packages/core`'s
- * `record-sale.ts`/`record-void.ts` already use for `chain.verification_failed`, rather than a
- * second, hand-rolled `insert into incidents` here: one place owns the table's shape and the
- * "code + params from an `AppError`, never prose" rule (spec §9), and this drainer is simply
- * another caller of it, exactly like `packages/core`'s own incident sites.
+ * Raises a structured fiscal incident on THIS transaction, so an incident can never commit while
+ * the estado update it describes rolls back.
  */
 async function raiseIncident(
   tx: Transaction,
@@ -1092,21 +676,11 @@ async function raiseIncident(
 
 /**
  * Route B (error 3000, `duplicate_unknown`): AEAT reported a duplicate without saying what it
- * holds (`resolveEstadoEfectivo`'s own doc comment on the "3000 inverts" rule) — a targeted
- * consulta for exactly this one record is how the ambiguity resolves. Comparing AEAT's stored
- * `Huella` against ours is deliberately the ONLY field compared: `RegistroConsultado`'s own doc
- * comment (in `@waitron/verifactu`) — "a single-field check equivalent to
- * diffing every hashed field" — the huella already IS the summary of every hashed field on the
- * record, so nothing else `DatosRegistroFacturacion` carries needs comparing.
+ * holds, so a targeted consulta for this one record resolves it. Only the `Huella` is compared:
+ * it already summarises every hashed field.
  *
- * Period derivation: `Ejercicio`/`Periodo` come straight off the record's own
- * `fecha_expedicion_factura` (stored `YYYY-MM-DD`), never a separate `FechaOperacion` — our
- * records never carry one (`AltaInput.FechaOperacion` is optional and `toRegistroRow`,
- * ./registro-row.ts, never populates it), so operation month is always the expedition month
- * (spec §1), with no ambiguity about which period to query. `FechaExpedicionFactura` in the
- * filtro is `toAeatDate`'s `YYYY-MM-DD` -> `DD-MM-YYYY` flip (./registro-row.ts, exported for
- * this call site — the exact inverse of the `toIsoDate` transform that wrote this column in the
- * first place, so this is not a second, independently-drifting copy of that formatting).
+ * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
+ * `FechaOperacion`, so the operation month is the expedition month.
  */
 async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
   const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
@@ -1126,33 +700,17 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
 }
 
 /**
- * Replaces Task 9's stub with the real error-3000 resolution for the two duplicate cases
- * `resolveEstadoEfectivo` can hand back (a plain accept never reaches here — that's the
- * `"accepted"`/`"accepted_with_errors"` branches in `applyOutcome` above):
+ * The two error-3000 duplicate cases:
  *
- *   - Route A (`duplicate_annulled`): AEAT's own copy of this identity is itself `Anulada`.
- *     Whatever produced that state, this record can never become a confirmed accept from our side
- *     under this identity — the invoice number is burned, and retrying changes nothing — so it
- *     halts visibly with its own incident (`fiscal.duplicado_anulado`) rather than looping on
- *     `proximo_intento_en` forever.
- *   - Route B (`duplicate_unknown`): resolved by `routeB` above. A matching huella means this IS
- *     our own record, already genuinely stored at AEAT (spec §7's own trap: "a naive reading of
- *     error 3000 marks an accepted record rejected") — resolves to `aceptado`, exactly like a
- *     plain accept. A differing huella means the identity collided with something AEAT holds that
- *     is NOT our record — halts with its own incident (`fiscal.huella_divergente`).
+ *   - Route A (`duplicate_annulled`): AEAT's own copy of this identity is `Anulada`. This record
+ *     can never become a confirmed accept under this identity, so it halts with its own incident
+ *     rather than retrying forever.
+ *   - Route B (`duplicate_unknown`): a matching huella means AEAT already holds OUR record, so it
+ *     resolves to `aceptado`; reading it as a rejection would be wrong. A differing huella means
+ *     the identity collided with something that is not our record, and it halts.
  *
- * Both halting branches (Route A, and Route B's mismatch) ALSO halt this chain's successors,
- * mirroring `applyOutcome`'s `"rejected"` branch and for the identical reason: in neither case
- * does THIS record end up a confirmed accept at AEAT, so a successor's own `RegistroAnterior`
- * pointer at this record's locally-computed huella is not something AEAT has actually confirmed
- * either — precisely the unresolved-predecessor gap `haltSuccessors`/`haltOpenChainClaims` exist
- * to stop a later submission from crossing. The halted ids are folded into `persistResponse`'s own
- * `halted` set for the same reason `applyOutcome`'s `"rejected"` branch does: a successor claimed
- * in this SAME batch may carry its own (chain-blind) "Correcto" response line later in this very
- * response, which must not be allowed to overwrite the halt back to `aceptado` — see
- * `persistResponse`'s doc comment on `halted`. Route B's MATCH branch does not halt anything,
- * matching the plain `"accepted"` branch above: the record IS a confirmed accept, so nothing
- * downstream is blocked.
+ * Both halting outcomes also halt this chain's successors, as a rejection does: AEAT has not
+ * confirmed the huella their `RegistroAnterior` points at.
  */
 async function handleDuplicate(
   tx: Transaction,

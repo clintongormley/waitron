@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // Keep at most four fork workers alive; scripts/fiscal-test-budget.test.ts pins it.
+    // scripts/fiscal-test-budget.test.ts pins this.
     maxWorkers: 4,
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

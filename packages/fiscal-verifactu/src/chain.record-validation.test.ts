@@ -34,8 +34,7 @@ beforeEach(async () => {
 });
 
 /** Point the seeded series at a code AEAT's character set forbids. A space is the shape an
- * operator actually types ("Serie A"), and it is what reached `registros_facturacion` before this
- * guard existed. */
+ * operator actually types ("Serie A"). */
 async function useSeriesCode(code: string): Promise<void> {
   await pg.db.execute(sql`update invoice_series set code = ${code} where id = ${seriesId}`);
 }
@@ -87,10 +86,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
   // The anulación arm reaches `validate` through the SAME `const record =` line as every alta, but
   // "the same line" is an argument, not evidence, so it gets its own case. It cannot be provoked
   // through `recordVoid`: that rebuilds its identity from the original alta's stored columns
-  // (backend.ts), and for a record written AFTER this guard exists those columns are valid. (A
-  // database already holding a bad record written before the guard is the exception, and it is a
-  // one-way door: such a record can no longer be annulled at all.) So the record is appended
-  // directly, which is also the only way to reach the anulación branch with a bad value.
+  // (backend.ts), which this guard already checked. So the record is appended directly.
   it("refuses an anulación whose voided invoice number is illegal", async () => {
     const bad = anulacionFor(tillId, brandSaleId("00000000-0000-4000-8000-000000000001"), 1, 1);
     const registro = {
@@ -110,7 +106,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
 describe("a record whose totals disagree with themselves is written, filed and flagged", () => {
   /** A sale whose stated total is far from its own VAT lines, breaching the 10.00 tolerance
    * without breaking any FORMAT rule — the only way to reach a warning without also reaching an
-   * error, which Task 1's guard would refuse.
+   * error, which the guard would refuse.
    *
    * `settlement: "deferred"` matters and is not incidental: `saleInput`'s default is an IMMEDIATE
    * settlement whose tender matches its original total, and `settleSale` throws
@@ -170,19 +166,13 @@ describe("a record whose totals disagree with themselves is written, filed and f
 });
 
 describe("a recipient's name is checked as closely as the issuer's", () => {
-  /** The run-it review's own reproduction, at the seam it got past. A Spanish business customer's
-   * name is typed or pasted at the till, so U+0007 reaches the record exactly the way it reached
-   * the reviewer's: the F1 path this branch opened is the second path that writes a recipient —
-   * `recordSubstitution`'s F3 was the first, and `validate` scanned neither. `registros_facturacion`
-   * is append-only, so a bell character stored there could never be taken out again.
+  /** A business customer's name is typed or pasted at the till, and `registros_facturacion` is
+   * append-only, so a control character stored there could never be taken out again.
    *
    * `packages/core`'s `recordSale` hardcodes `counterparty: null`, so the F1 branch is reached by
    * calling the backend directly — the same bypass `backend.test.ts`'s own F1 cases use. The sale
    * row is inserted on the SAME `withTransaction` transaction, which is what makes the "nothing was
    * written" assertions below meaningful: a refusal rolls back both or neither. */
-  // `sales_pkey` is global while the node is fresh each `beforeEach`, so each case mints its own
-  // id and invoice number — a shared literal would make a case that EXPECTS the write to succeed
-  // depend on its siblings having rolled theirs back.
   let sequence = 0;
 
   function sellToNamedRecipient(legalName: string) {

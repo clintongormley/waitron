@@ -4,10 +4,8 @@ import { count, id, label, nodes, now, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
- * The chain head — MUTABLE, unlike everything it points at. One row per node (node-id rekey,
- * 2026-08-03: the chain owner moved from till to node — the SIF is the node, #33). It took a
- * `FOR UPDATE` row lock during append until the engine change; `selectHead` (`../chain.ts`) is
- * where that clause went, and why.
+ * The chain head — MUTABLE, unlike everything it points at. One row per node; `selectHead`
+ * (`../chain.ts`) says why it is read without a row lock.
  *
  * The predecessor's serie/número/fecha are deliberately NOT denormalised here. Building the
  * four-part Encadenamiento pointer costs one read of `ultimo_registro_id`'s row inside the
@@ -15,14 +13,9 @@ import { registrosFacturacion } from "./registros.js";
  * source of truth for four values that must match the immutable row exactly — and the mutable copy
  * is the one that can drift.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as packages/db/src/schema/sales.ts.
 export const cadenas = table(
   "cadenas",
   {
-    // The node that owns this chain (node-id rekey, 2026-08-03: was `till_id`). Plain one-argument
-    // FK.
     nodeId: id("node_id")
       .notNull()
       /* v8 ignore start */
@@ -38,17 +31,6 @@ export const cadenas = table(
     ultimaHuella: label("ultima_huella"),
     actualizadoEn: ts("actualizado_en").notNull().$defaultFn(now),
   },
-  // Drizzle stores this extraConfig callback lazily and invokes it only when something walks the
-  // table's full metadata — `drizzle-kit generate`, in its own separate CLI process, or a
-  // `drizzle(client, { schema })` wired to THIS package's own schema (no test in this package
-  // constructs one; every test here reaches a database through `@waitron/db`'s `useVenueDb`, whose
-  // handle is wired to CORE's schema barrel — `packages/db/src/client.ts` hands
-  // `./schema/index.js` to `openVenueStore` as both schemas, and that barrel names none of this
-  // package's tables — so these tables are reached by raw `sql` execution alone). It never runs
-  // inside this package's own `vitest run`. The ignore markers bracket the WHOLE arrow function, not just its returned
-  // array's elements: v8 tracks "was this function ever called" as well as per-statement
-  // coverage, and a range that opened only after the arrow function's own `(t) => [` left the
-  // function's closing bracket itself reported as a separately uncovered line.
   /* v8 ignore start */
   (t) => [
     primaryKey({ columns: [t.nodeId] }),

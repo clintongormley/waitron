@@ -42,9 +42,6 @@ describe("FISCAL_SLOT", () => {
   });
 });
 
-// The runtime submission seat: the host injects the vault ring, deployment identity and cadence, and
-// the regime owns the transport it builds inside the pass. A pass with no due work builds no
-// transport at all (resolveClient is called lazily, only when there is work) and returns the empty result.
 describe("FISCAL_SLOT.drain", () => {
   const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
   const ring = loadKeyRing({
@@ -86,10 +83,7 @@ describe("FISCAL_SLOT.resetInFlight", () => {
   });
 });
 
-// The provision-time secret seat the host reaches instead of importing the regime: `required` gates on
-// environment, `validate` refuses a malformed blob without writing, `seal` writes it under withTransaction.
-// (The validator + seal internals have their own exhaustive suite in provisioning-secret.test.ts; here
-// we pin the SEAT wiring — that FISCAL_SLOT actually exposes and forwards to them.)
+// The seat WIRING only; the validator and seal have their own suite in provisioning-secret.test.ts.
 describe("FISCAL_SLOT.provisioningSecret", () => {
   const secret = FISCAL_SLOT.provisioningSecret!;
   const pg = useVenueDb({
@@ -133,10 +127,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
   });
 });
 
-// The venue-field seat, pinned the same way and for the same reason as `provisioningSecret` above:
-// the rules themselves have their own suite (venue-fields.test.ts), so what is checked here is the
-// WIRING — that FISCAL_SLOT exposes the seat at all and forwards to the real validator. Without
-// this, deleting the seat from slot.ts would leave every other test green.
+// The seat WIRING only; the rules have their own suite in venue-fields.test.ts.
 describe("FISCAL_SLOT.venueFields", () => {
   it("exposes the seat and forwards to the real validator", () => {
     const seat = FISCAL_SLOT.venueFields;

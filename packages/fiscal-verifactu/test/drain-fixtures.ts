@@ -12,65 +12,37 @@ import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
 
 /**
- * Every row here is written through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
- * header gives: the `$defaultFn` generators on `id`, `creado_en`, `registrado_en` and
- * `proximo_intento_en` are drizzle-side on this engine and a raw statement reaches none of them —
- * measured here as `NOT NULL constraint failed: invoice_series.id`.
+ * Every row here is inserted through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
+ * header gives: the `$defaultFn` generators are drizzle-side, and a raw statement reaches none.
  */
 
 /** The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. */
 const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
 /**
- * The `proximo_intento_en` every seeded envío carries: this task's fake AEAT's `serverNow`, so
- * `drain` sees the batch as due. A `Date`, so the `ts` column's own encoder writes the canonical
- * `2026-07-21T00:00:00.000Z` — `drain` compares this column against `now.toISOString()` as TEXT
- * (`../src/drain.ts`'s `claimBatch`), and the bare `Z` spelling the raw statement used to store
- * sorts AFTER a `.000Z` one of the same instant. Measured on node:sqlite:
- * `select '2026-07-21T00:00:00Z' <= '2026-07-21T00:00:00.000Z'` is 0, and the same comparison with
- * both sides canonical is 1 — so a drain at exactly this instant would not have seen the old
- * spelling as due. Which consumers drain at exactly this instant was NOT enumerated; what was
- * measured is that the change moved no case from passing to failing across this package.
+ * The `proximo_intento_en` every seeded envío carries: the fake AEAT's `serverNow`, so `drain` sees
+ * the batch as due. A `Date`, so the `ts` column writes the canonical `.000Z` spelling: `drain`
+ * compares this column as TEXT, and a bare `Z` sorts AFTER `.000Z` for the same instant.
  */
 const DUE_AT = new Date("2026-07-21T00:00:00Z");
 
-/**
- * Every existing caller of `seedPendingEnvios` (before the deployment-environment plan's Task 6)
- * constructs its `VerifactuBackend` with `deploymentEnvironment: "production"` — this fixture's
- * own default keeps every one of those callers submitting exactly as before Task 6's drain guard
- * landed, without touching a single one of their call sites.
- */
 const DEFAULT_ENTORNO: Entorno = "production";
 
 export interface SeededDrainOptions {
   count: number;
   /** Reuse an operational venue's fiscal identity instead of creating another venue. */
   identity?: { tillId: string; nodeId: string; nif: string };
-  /**
-   * Future task hook (Task 9's error-2004/AceptadoConErrores path) — the fake AEAT this suite
-   * uses defaults `serverNow` to 2026-07-21T00:00:00Z, so a `futureDated` row is stamped
-   * `FUTURE_FECHA` (after it) instead of `PAST_FECHA` (before it). Nothing in Task 6 asserts on
-   * this: happy-path `drain` marks every claimed row `aceptado` unconditionally, regardless of
-   * which fecha it carries — the fake's own per-line "AceptadoConErrores" distinction only starts
-   * to matter once `persistResponse` reads per-line state (Task 9).
-   */
+  /** Stamps `FUTURE_FECHA`, after the fake AEAT's `serverNow`, which the fake answers with error
+   * 2004 (AceptadoConErrores). */
   futureDated?: boolean;
   /**
-   * The deployment-environment plan's Task 6: which `entorno` every seeded row carries — the fact
-   * `drain`'s new guard (`../src/drain.ts`) compares against `DrainDeps.environment`. Defaults to
-   * `"production"` (`DEFAULT_ENTORNO` above) so every EXISTING caller of this fixture — none of
-   * which know this field exists — keeps submitting exactly as it did before the guard landed.
-   * `null` seeds a row as if written before migration 0009 added the column at all, for a test
-   * that needs to exercise `fiscal.environment_unknown` rather than `fiscal.environment_mismatch`.
+   * The `entorno` every seeded row carries, which `drain` compares against
+   * `DrainDeps.environment`. Defaults to `"production"`; `null` exercises
+   * `fiscal.environment_unknown`.
    */
   entorno?: Entorno | null;
 }
 
-/**
- * Full shape defined once here — later tasks (Route B / error-3000 resolution, rejection
- * handling, flow control) read `facturaKeys`/`clock`, which nothing in Task 6 itself consumes.
- * Do not narrow this interface for one task's convenience.
- */
 export interface SeededDrain {
   tillId: TillId;
   nodeId: NodeId;
@@ -80,14 +52,12 @@ export interface SeededDrain {
   /** `registros_facturacion.id` per seeded row — the RefExterna `drain` is expected to stamp. */
   registroIds: string[];
   /** `keyOf(record)` per row (from `@waitron/verifactu`'s fake AEAT), for `aeat.reject`/
-   * `aeat.dropRegistroDuplicadoDetail` in Tasks 9-10. */
+   * `aeat.dropRegistroDuplicadoDetail`. */
   facturaKeys: string[];
   clock: TrustedClock;
 }
 
-// The suite-wide convention: every `createFakeAeat({ serverNow })` in this task's tests uses this
-// instant, so PAST/FUTURE below are fixed relative to it rather than threaded through as a param
-// (`SeededDrainOptions` carries no `serverNow` field — matching the brief's interface literally).
+// Fixed either side of the `serverNow` (2026-07-21T00:00:00Z) every suite's fake AEAT uses.
 const PAST_FECHA = "2026-07-20";
 const FUTURE_FECHA = "2026-07-22";
 let reusedIdentitySequence = 10_000;
@@ -100,13 +70,7 @@ function toAeatDate(isoDate: string): string {
 
 /**
  * A pending alta, modelled on `seedSoldRegistro` (./fixtures.ts) but with a configurable
- * `fecha_expedicion_factura` — `seedSoldRegistro` hardcodes '2026-07-20', which cannot express
- * `SeededDrainOptions.futureDated`'s 2004/AceptadoConErrores case. Duplicated rather than
- * extending `seedSoldRegistro`'s own signature, to avoid touching a fixture other suites
- * (registro-sif.test.ts) already depend on for this task's own narrower need.
- *
- * Exported (Task 6's fix round) for `seedIndependentChain` below, which needs the SAME insert
- * against a `sif_id` it controls explicitly rather than one `registerSif` mints at random.
+ * `fecha_expedicion_factura`, which `SeededDrainOptions.futureDated` needs.
  */
 export async function insertPendingAlta(
   db: Database,
@@ -118,9 +82,7 @@ export async function insertPendingAlta(
     secuencia: number;
     huella: string;
     fecha: string;
-    /** See `SeededDrainOptions.entorno`'s own doc comment — required here (no default at this
-     * low level) so every caller states it explicitly, matching this file's own house style of
-     * defaulting once, at the public `seedPendingEnvios` boundary, never silently deeper down. */
+    /** Required here: the default is applied once, at `seedPendingEnvios`. */
     entorno: Entorno | null;
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
@@ -146,14 +108,8 @@ export async function insertPendingAlta(
       fiscalState: "recorded",
     })
     .returning({ id: sales.id });
-  // Unlike `seedSoldRegistro` (whose only consumer, registro-sif.test.ts, never serialises the
-  // row), a row seeded here is fed to the REAL `serializeEnvio` via `client.submit` — `drain.ts`
-  // rebuilds it with `fromRegistroRow` and hands it to AEAT. `tipo_factura`/`descripcion_operacion`/
-  // `desglose`/`cuota_total`/`importe_total` are therefore populated with a genuine, well-formed
-  // "F2" line, not left NULL: `registroAlta` (in `@waitron/verifactu`) reads
-  // `DescripcionOperacion`/`TipoFactura` as required strings and `.map`s over `Desglose`
-  // unconditionally, so a NULL here throws inside `escapeXml`/crashes on `null.map` — confirmed
-  // live while implementing this task.
+  // Fed to the REAL `serializeEnvio` through `client.submit`, so the alta columns carry a
+  // well-formed F2 line rather than NULL, which the serialiser cannot handle.
   const desglose = [
     {
       BaseImponibleOimporteNoSujeto: "10.00",
@@ -192,9 +148,7 @@ export async function insertPendingAlta(
   const registroId = registro?.id;
   /* v8 ignore start */
   if (registroId === undefined) {
-    // Structurally unreachable: the insert above carries no WHERE clause, so it always inserts
-    // and returns exactly one row (mirrors seedSoldRegistro's identical, un-ignored assumption —
-    // ignored here only because THIS file's coverage is held to the same 98%/95% package gate).
+    // Structurally unreachable: the insert always returns exactly one row.
     throw new Error("insertPendingAlta: insert returned no row");
   }
   /* v8 ignore stop */
@@ -207,15 +161,8 @@ export async function insertPendingAlta(
 }
 
 /**
- * Seeds a till + live SIF identity (`seedTenantWithSif`), then `opts.count` pending
- * altas: a `registros_facturacion` row per `insertPendingAlta` above, plus the `envios` sidecar
- * row `seedSoldRegistro`/`seedTenantWithSif` do not create — `estado` takes the column's own
- * `'pendiente'` default, `proximo_intento_en` is stamped `2026-07-21T00:00:00Z` to match this
- * task's fake AEAT's `serverNow`, so `drain` sees the batch as due.
- *
- * `sif_id`/`nif` are resolved via `currentSif` (`../src/registro-sif.ts`) — the same function
- * `VerifactuBackend` itself uses — rather than re-deriving them from a second, hand-written
- * `registro_sif` query.
+ * Seeds a till + live SIF identity (`seedTenantWithSif`), then `opts.count` pending altas, each
+ * with its `pendiente` `envios` row due at the fake AEAT's `serverNow`.
  */
 export async function seedPendingEnvios(
   db: Database,
@@ -243,16 +190,14 @@ export async function seedPendingEnvios(
   const legalName = tenantRow.rows[0]?.legal_name ?? "Waitron SL";
 
   const fecha = opts.futureDated === true ? FUTURE_FECHA : PAST_FECHA;
-  // `undefined` (the field was never mentioned) defaults to production; an EXPLICIT `null` is a
-  // deliberate request to model a pre-migration row, and must not be coalesced away by `??`.
+  // An EXPLICIT `null` must survive, so not `??`.
   const entorno = opts.entorno === undefined ? DEFAULT_ENTORNO : opts.entorno;
   const registroIds: string[] = [];
   const facturaKeys: string[] = [];
 
   for (let offset = 0; offset < opts.count; offset += 1) {
     const sequence = firstSequence + offset;
-    // Deterministic, distinct, and hex-valid (registros_huella_ck: /^[0-9A-F]{64}$/) — digits
-    // alone already satisfy that character class, so no hex letters are needed.
+    // Deterministic, distinct, and hex-valid for `registros_huella_ck` (`^[0-9A-F]{64}$`).
     const huella = String(sequence).padStart(64, "0");
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
       tillId,
@@ -282,12 +227,8 @@ export async function seedPendingEnvios(
 }
 
 /**
- * Appends ONE more pending alta onto an ALREADY-seeded chain (`seedPendingEnvios`) — for tests
- * that need new work to land on a chain that already has state, e.g. Task 9's
- * Incidencia-while-open test, which needs a record enqueued AFTER an earlier one in the SAME
- * chain was rejected and its successors halted. Reuses `insertPendingAlta` (this file's own
- * `seedPendingEnvios` helper) rather than re-deriving the same raw-SQL insert, and follows its
- * identical PAST_FECHA convention.
+ * Appends ONE more pending alta onto an ALREADY-seeded chain, for tests that need new work to
+ * land on a chain that already has state.
  */
 export async function appendPendingAlta(
   db: Database,
@@ -295,10 +236,7 @@ export async function appendPendingAlta(
   secuencia: number,
 ): Promise<{ registroId: string; facturaKey: string }> {
   const huella = String(secuencia).padStart(64, "0");
-  // `DEFAULT_ENTORNO`, matching every `seedPendingEnvios` call this helper's own callers seed
-  // `seeded` from: none of them pass a non-default `entorno`, so a row appended onto that SAME
-  // chain must agree with it too, or Task 6's drain guard would refuse it for a reason entirely
-  // unrelated to whatever THIS helper's own caller is testing.
+  // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tillId: seeded.tillId,
     nodeId: seeded.nodeId,
@@ -314,24 +252,14 @@ export async function appendPendingAlta(
 }
 
 /**
- * Adds a SECOND, entirely independent chain — a new till, its own live SIF registration (same
- * `nif`, a new `IdSistemaInformatico`/installation pair, so its own distinct `sif_id`) — under an
- * ALREADY-seeded venue, with one pending alta on it at `secuencia`.
- *
- * For tests that need to prove one venue's chains are isolated from one another: Task 9's
- * `haltOpenChainClaims` (`../src/drain.ts`) must halt a claim on a chain with an open
- * `rechazado`/`detenido` row WITHOUT also halting or skipping a claim on a DIFFERENT, healthy
- * chain claimed in the same batch — a property `seedPendingEnvios`'s
- * single-chain shape cannot exercise on its own.
+ * Adds a SECOND, independent chain — a new till and node with its own live SIF registration, so
+ * its own `sif_id` — under an ALREADY-seeded venue, with one pending alta at `secuencia`.
  */
 export async function seedSecondChain(
   db: Database,
   seeded: SeededDrain,
   secuencia: number,
 ): Promise<{ registroId: string; facturaKey: string }> {
-  // Untransacted — matching `seedPendingEnvios`'s own convention (plain sequential `db.execute`
-  // calls; only `currentSif`/`registerSif`, which are typed against `Transaction`, get their own
-  // `db.transaction(...)` wrapper below).
   const [location] = await db
     .insert(locations)
     .values({
@@ -351,18 +279,13 @@ export async function seedSecondChain(
     .returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "B" });
-  // Same `nif`, same `idSistemaInformatico` ("WT" — `seedTenantWithSif`'s own literal) as
-  // `seeded`'s own chain: `registerSif` mints installation numbers per (nif,
-  // idSistemaInformatico), so a NEW node under that pair gets its OWN `sif_id` — a second,
-  // independent chain for the SAME obligado, exactly like two nodes at one shop (node-id rekey,
-  // 2026-08-03: the chain is the node's).
+  // Same `nif` and `idSistemaInformatico` as `seeded`'s chain: `registerSif` mints installation
+  // numbers per (nif, idSistemaInformatico), so a new node gets its OWN `sif_id`.
   const sif = await db.transaction((tx) =>
     registerSif(tx, { nodeId, nif: seeded.nif, idSistemaInformatico: "WT" }),
   );
 
   const huella = `B${String(secuencia).padStart(63, "0")}`;
-  // `DEFAULT_ENTORNO` — same reasoning as `appendPendingAlta` above: this second chain sits beside
-  // `seeded`'s own, and every existing caller seeds that one at the default.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tillId,
     nodeId,
@@ -378,36 +301,14 @@ export async function seedSecondChain(
 }
 
 /**
- * Task 6's fix round (starvation property, I2): mints an INDEPENDENT chain's `registro_sif` row
- * with an EXPLICIT `sifId`, bypassing `registerSif`'s counter bookkeeping entirely — this chain
- * needs no real installation-number history, since `drain.ts` never reads `registro_sif` at all,
- * only `registros_facturacion.sif_id`'s grouping and `envios`. A fresh, throwaway `nif`
- * (`idSistemaInformatico`/`numeroInstalacion` are likewise arbitrary-but-fixed) keeps this insert
- * clear of `registro_sif_instalacion_uq`, with no need to touch `contadores_instalacion` at all.
+ * Mints an INDEPENDENT chain's `registro_sif` row with an EXPLICIT `sifId`, bypassing
+ * `registerSif`'s counter bookkeeping: `drain` never reads `registro_sif`; it groups chains by
+ * `registros_facturacion.sif_id`. The explicit id lets a test force this chain to sort
+ * deterministically under `claimBatch`'s `order by r.sif_id, r.secuencia`.
  *
- * The explicit id is the whole point: it lets a test force this chain to sort deterministically
- * relative to another chain under `claimBatch`'s `order by r.sif_id, r.secuencia` —
- * `registerSif`'s own `defaultRandom()` id gives no such control, and sif_id ordering is otherwise
- * unobservable and uncontrollable from a test. The all-`f` literal
- * (`ffffffff-ffff-ffff-ffff-ffffffffffff`) sorting after any `registerSif`-minted id is not merely
- * likely, it is STRUCTURALLY GUARANTEED. `registerSif`'s id comes from `newId`
- * (`packages/db/src/schema/columns.ts`), which is `node:crypto`'s `randomUUID()` — a version-4
- * UUID in the canonical LOWERCASE hex spelling, stored in a `text` column that SQLite compares
- * with the BINARY collation, i.e. byte by byte. The hyphens line up, every hex position of the
- * literal holds `f` (0x66, the largest character a lowercase hex digit can be), and position 14
- * holds the version digit `4` on every v4 id. So the comparison either resolves before position 14
- * at some digit strictly below `f`, or ties through it and then meets `4 < f`. There is no path by
- * which a `randomUUID()` reaches or exceeds this literal.
- *
- * Measured on node:sqlite (Node v26.7.0): the LARGEST of 200,000 `randomUUID()` values was
- * `ffffa92e-ecac-42a7-ac35-4b38bda798e0`, whose position-14 digit is `4`, and `order by id` put it
- * BEFORE the literal; the control in the other direction — the same value against
- * `00000000-0000-4000-8000-000000000000` — put it AFTER. (Until 2026-09-22 this paragraph argued
- * the same conclusion from `gen_random_uuid()` and PostgreSQL's bytewise `uuid` comparison;
- * neither exists on this engine.)
- *
- * The "does not starve..." test in drain.test.ts relies on this to put this chain's one healthy
- * row LAST, behind a large backlog of refused rows, with certainty rather than probability.
+ * The all-`f` literal sorts after every `registerSif`-minted id: those are `randomUUID()` v4 ids
+ * in lowercase hex, compared byte by byte, and position 14 holds the version digit `4` where the
+ * literal holds `f`.
  */
 export async function seedIndependentChain(
   db: Database,
@@ -433,9 +334,7 @@ export async function seedIndependentChain(
     .returning({ id: nodes.id });
   const nodeId = brandNodeId(node!.id);
   await db.insert(invoiceSeries).values({ nodeId, code: "Z" });
-  // A fresh nif (not `seeded.nif`), so this row's own installation number can just be a fixed
-  // literal with no risk of colliding with `seeded`'s real, `registerSif`-minted chain — this
-  // chain's own NIF is never asserted on anywhere, only its sif_id ordering.
+  // A fresh nif, so this fixed installation number cannot collide with `seeded`'s chain.
   const nif = `ZZ${String(seeded.nodeId).replace(/-/g, "").slice(0, 7)}`;
   await db.insert(registroSif).values({
     id: params.sifId,
@@ -446,8 +345,7 @@ export async function seedIndependentChain(
   });
 
   const entorno = params.entorno === undefined ? DEFAULT_ENTORNO : params.entorno;
-  // `registros_huella_ck` requires exactly 64 hex digits (`^[0-9A-F]{64}$`) — "E" (not "Z"), a
-  // distinct valid hex letter from `seedSecondChain`'s own "B" prefix.
+  // 64 hex digits for `registros_huella_ck`, prefixed apart from `seedSecondChain`'s "B".
   const huella = `E${String(params.secuencia).padStart(63, "0")}`;
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tillId,

@@ -8,10 +8,6 @@ import type { Entorno } from "./registro-row.js";
 import { verifyChain } from "./verify.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
-// ONE database for the suite, reseeded per test — chain.test.ts's convention, for the same reason:
-// `seedTill` mints a fresh node per call and every statement below (including `corrupt`'s UPDATE
-// and the deletion in "omits expected and found") is scoped to that node's `node_id`, so an earlier
-// test's rows are out of scope rather than something to clean up.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
@@ -37,26 +33,10 @@ async function appendAltas(n: number): Promise<void> {
  * immutability control removed first is that control working. Nothing on the application's own
  * write path reaches this code.
  *
- * `ALTER TABLE … DISABLE TRIGGER`, which this used to issue, answers `near "disable": syntax error`
- * on this engine — measured on this file before the conversion, `pnpm --filter
- * @waitron/fiscal-verifactu exec vitest run src/engine-clock-and-floor.test.ts src/verify.test.ts
- * --reporter=dot` (2026-09-22), where it was the reported failure of every case that reached this
- * helper. Dropping each trigger and recreating it from the text SQLite stored for it is the way
- * through, and it is the same one `packages/db/src/testing/venue-db.ts`'s per-test reset takes.
- *
- * The drop is not ceremony, and that was measured too, as a control: with both loops below removed
- * so that only the caller's own statement can fail, every case that reaches this helper fails with
- * `registros_facturacion is append-only` — the triggers are live and they refuse the corruption.
- *
- * The triggers are READ off `sqlite_master` rather than named here, so a rename cannot leave this
- * helper silently dropping nothing; the empty case throws for the same reason. Both of the table's
- * triggers come down on every call, which keeps the UPDATE and the DELETE call sites on one path —
- * `packages/store/src/append-only.ts` installs one per event.
- *
- * WHAT WENT: the version before the SQLite flip carried a note that reaching the trigger-disable
- * step needed the OWNER role, and pointed at inmutabilidad.test.ts for the role side. No assertion
- * is lost with it — that note documented a dependency, it never tested one — but there are no roles
- * on this engine at all, so the cross-reference has no subject and is not replaced by anything here.
+ * SQLite has no `DISABLE TRIGGER`, so each trigger is dropped and recreated from the text SQLite
+ * stored for it, as `packages/db/src/testing/venue-db.ts`'s per-test reset does. The triggers are
+ * READ off `sqlite_master` rather than named here, so a rename cannot leave this helper silently
+ * dropping nothing; the empty case throws for the same reason.
  */
 async function withoutImmutability(statement: SQL): Promise<void> {
   const triggers = pg.db.all<{ name: string; sql: string }>(
@@ -219,19 +199,9 @@ describe("entorno is not part of the huella", () => {
   // would become unverifiable under the other.
   //
   // A DATABASE PER RECORD, not two fixtures in one: the two records must be byte-identical except
-  // for `entorno`, and one database will not hold both. Measured — both `appendOne` calls pointed
-  // at `productionDb.db`, the rest of the file unchanged: the second append fails with
-  // `chain.append_contention`, `appendToChain`'s wrapper once its retries are spent on a conflicting
-  // write. A fresh node does not make room for a second record, because the unique index over
-  // (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro) does not carry
-  // `node_id` — packages/fiscal-verifactu/drizzle/0000_baseline.sql:126 — and `altaFor` hardcodes
-  // `TEST_NIF` and `A/1` (src/testing/seed.ts), which is exactly why the two records are
-  // byte-identical in the first place. In its own database each record is also a *first* record
-  // (same `null` predecessor), so any hash difference between the two can only come from entorno.
-  //
-  // Two `useVenueDb` calls rather than a database this suite opens and closes itself: the helper
-  // owns the lifecycle (CLAUDE.md §4), and hooks registered inside a `describe` belong to that
-  // describe. The suite-level `pg` above is untouched by either.
+  // for `entorno`, and one database will not hold both — `registros_identidad_uq` does not carry
+  // `node_id`. In its own database each record is also a *first* record (same `null` predecessor),
+  // so any hash difference between the two can only come from entorno.
   const productionDb = useVenueDb({ migrations: TEST_MIGRATIONS });
   const preproductionDb = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -275,10 +245,9 @@ describe("verifyChain — never blocks the sale", () => {
   });
 
   it("chains the next record anyway after a detected corruption", async () => {
-    // The spec §10 teeth check, in full: corrupt a stored predecessor huella, art. 7.i detects
-    // it, and the sale STILL COMPLETES. A test asserting the sale is blocked would enforce the
-    // opposite of the requirement — if you find yourself writing `.rejects` here, stop and
-    // re-read spec §4.
+    // The teeth check, in full: corrupt a stored predecessor huella, art. 7.i detects it, and the
+    // sale STILL COMPLETES. A test asserting the sale is blocked would enforce the opposite of the
+    // requirement.
     await appendAltas(2);
     await corrupt(1, "huella", BOGUS);
 
@@ -307,8 +276,8 @@ describe("verifyChain — never blocks the sale", () => {
   });
 
   it("hands the incident recorder a regime-neutral payload", async () => {
-    // What Task 18 receives. No huellas by that name, no registro rows, no chain vocabulary — it
-    // must work unchanged for a TicketBAI backend.
+    // No huellas by that name, no registro rows, no chain vocabulary — the incident recorder must
+    // work unchanged for a TicketBAI backend.
     await appendAltas(2);
     await corrupt(2, "importe_total", "999.99");
     const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));

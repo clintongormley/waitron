@@ -29,10 +29,9 @@ let invoiceSequence = 0;
 
 /**
  * Flattens `record` through `toRegistroRow`, inserts it under a fresh sale on the shared till, and
- * returns the raw `select *` row — the snake_case `RegistroRow` shape `fromRegistroRow` reads (never
- * Drizzle's camelCase `.select()`, per `./registro-row.ts`'s own note). `secuencia: 1` + a
- * `PrimerRegistro` record keeps every stored row a first record, so the tests need no chain
- * bookkeeping (`cadenas`) at all.
+ * returns the raw `select *` row — the snake_case `RegistroRow` shape `fromRegistroRow` reads.
+ * `secuencia: 1` + a `PrimerRegistro` record keeps every stored row a first record, so the tests
+ * need no chain bookkeeping (`cadenas`) at all.
  */
 async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
@@ -44,8 +43,7 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
     saleId,
     secuencia: 1,
     // Must equal the record's own offsetMinutes, so `fromRegistroRow` reproduces the exact
-    // FechaHoraHusoGenRegistro literal that was hashed (this is what makes the deep-equal hold on
-    // that field, and is the property write-path.e2e.test.ts pins via the huella).
+    // FechaHoraHusoGenRegistro literal that was hashed.
     offsetMinutes: 120,
     entorno: "production",
   });
@@ -59,7 +57,7 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
 }
 
 /** The reachable v1 case: an R5 rectificativa por diferencias — TipoRectificativa "I", one rectified
- * invoice, negative totals (plan §1, findings §10.2). PrimerRegistro so no predecessor is needed. */
+ * invoice, negative totals. PrimerRegistro so no predecessor is needed. */
 function r5RectificativaInput(): AltaInput {
   return {
     IDEmisorFactura: TEST_NIF,
@@ -95,16 +93,16 @@ function r5RectificativaInput(): AltaInput {
 
 describe("registro-row round-trip of the four AEAT rectificativa fields", () => {
   it("round-trips an R5 rectificativa including TipoRectificativa and FacturasRectificadas", async () => {
-    // The gap-closing invariant: a stored rectificativa must rebuild into the SAME record it was
-    // flattened from, four AEAT fields and all — otherwise the drainer files it stripped of its
-    // mandatory TipoRectificativa and AEAT rejects it (error 1114). A full deep-equal is the
-    // strongest form: it fails if ANY field the record carried fails to survive storage.
+    // A stored rectificativa must rebuild into the SAME record it was flattened from, four AEAT
+    // fields and all — otherwise the drainer files it stripped of its mandatory TipoRectificativa
+    // and AEAT rejects it (error 1114). A full deep-equal is the strongest form: it fails if ANY
+    // field the record carried fails to survive storage.
     const built = buildAltaRecord(r5RectificativaInput());
     const row = await storeAndReadBack(built);
 
     expect(fromRegistroRow(row)).toEqual(built);
     // Named, not only covered by the deep-equal, so a regression report points straight at the two
-    // fields this slice exists to preserve.
+    // rectificativa fields.
     const rebuilt = fromRegistroRow(row) as RegistroAlta;
     expect(rebuilt.TipoRectificativa).toBe("I");
     expect(rebuilt.FacturasRectificadas).toEqual(built.FacturasRectificadas);
@@ -115,12 +113,8 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     // storage (the S-mode field, absent from the I-mode case above) alongside TipoRectificativa and
     // FacturasRectificadas — the "present" arm of three of fromRegistroRow's conditional spreads.
     //
-    // FacturasSustituidas — the F3 canje block — is deliberately NOT set here. It was, in an earlier
-    // version of this test, purely to store all four columns non-null in one row; but migration 0011
-    // added registros_facturas_sustituidas_f3_ck, which requires FacturasSustituidas to sit on an F3
-    // (tipo_factura R1–R5 and F3 are mutually exclusive), so an R5 carrying it is no longer
-    // storable. Its round-trip moved to the F3 case below — the fourth "present" arm — so no
-    // coverage is lost.
+    // FacturasSustituidas — the F3 canje block — is deliberately NOT set here:
+    // registros_facturas_sustituidas_f3_ck requires it to sit on an F3. The F3 case below covers it.
     const built = buildAltaRecord({
       ...r5RectificativaInput(),
       TipoRectificativa: "S",
@@ -136,14 +130,11 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
   });
 
   it("round-trips an F3 canje carrying FacturasSustituidas and Destinatarios", async () => {
-    // The fourth conditional-spread "present" arm, plus the recipient this slice adds:
-    // FacturasSustituidas names the substituted simplified tickets on an F3 canje (plan §1), and
-    // Destinatarios carries the recipient an F3 must always bear (findings §10.2 — "siempre debe
-    // llevar el destinatario"). An F3 is a full invoice with a POSITIVE total and carries none of
-    // the three rectificativa fields; registros_facturas_sustituidas_f3_ck requires the block to sit
-    // on an F3, so this is the one record shape that stores both. If `destinatarios` did NOT
-    // round-trip, the drainer would file the F3 stripped of its mandatory recipient and AEAT would
-    // reject it — the same failure mode #46 fixed for the R5's TipoRectificativa (plan §2.3).
+    // The fourth conditional-spread "present" arm, plus the recipient: FacturasSustituidas names
+    // the substituted simplified tickets on an F3 canje, and Destinatarios carries the recipient an
+    // F3 must always bear. An F3 is a full invoice with a POSITIVE total and carries none of the
+    // three rectificativa fields; registros_facturas_sustituidas_f3_ck requires the block to sit on
+    // an F3, so this is the one record shape that stores both.
     const built = buildAltaRecord({
       IDEmisorFactura: TEST_NIF,
       NumSerieFactura: "F3/1",
@@ -194,7 +185,7 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     //
     // F2, not F1: this record goes to the database only, never through `validate`, because it
     // calls `buildAltaRecord` directly. A missing `Destinatarios` on an F1 is the fault the chain
-    // guard now refuses, so building one here would leave a fixture describing a record production
+    // guard refuses, so building one here would leave a fixture describing a record production
     // code can no longer produce. The rate is written with its two decimals only so the literal
     // matches what `buildAltaRecord` emits — it runs every rate through `formatAmountExact`, so a
     // bare "21" would reach `validate` as "21.00" and raise nothing. The round-trip property this
@@ -237,17 +228,15 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
 
 describe("drain serialisation files the mandatory rectificativa fields (the gap-closing test)", () => {
   it("produces AEAT XML carrying TipoRectificativa and FacturasRectificadas from a stored row", async () => {
-    // The submission gap made concrete. A rectificativa registro is stored, then run through the
-    // EXACT path the drainer submits by (drain.ts:722-729 `toEnvioRegistro` -> serializeEnvio, and
-    // the real client serialises via the very same serializeEnvio — client.ts:50). If the four
-    // fields did not survive `fromRegistroRow`, the XML AEAT receives would omit the mandatory
-    // TipoRectificativa and be rejected (error 1114). Built directly via `toRegistroRow`, NOT
-    // through `recordCorrection`, so this isolates the storage round-trip and serialisation from the
-    // record-assembly path.
+    // A rectificativa registro is stored, then run through the path the drainer submits by
+    // (drain.ts's `toEnvioRegistro` -> serializeEnvio). If the four fields did not survive
+    // `fromRegistroRow`, the XML AEAT receives would omit the mandatory TipoRectificativa and be
+    // rejected (error 1114). Built directly via `toRegistroRow`, NOT through `recordCorrection`, so
+    // this isolates the storage round-trip and serialisation from the record-assembly path.
     const built = buildAltaRecord(r5RectificativaInput());
     const row = await storeAndReadBack(built);
 
-    // Mirrors drain.ts:722-729 `toEnvioRegistro` and :733-735 `cabeceraFor`, both module-private:
+    // Mirrors drain.ts's `toEnvioRegistro` and `cabeceraFor`, both module-private:
     // rebuild the record, stamp our registro id as RefExterna, and wrap it as the drainer does.
     const record = fromRegistroRow(row) as RegistroAlta;
     const envio: EnvioRegistro = { RegistroAlta: { ...record, RefExterna: row.id } };
@@ -324,9 +313,7 @@ describe("decodeRegistroRow", () => {
       ]),
     );
     expect(decoded).toEqual(renamed);
-    // Named as well, because the deep-equal above would also hold if BOTH sides were text: these
-    // are the four the raw read gets wrong on this engine, and the two defects behind this
-    // function were a `desglose` that was a string and a `facturas_sustituidas` that was one.
+    // Named as well, because the deep-equal above would also hold if BOTH sides were text.
     expect(Array.isArray(decoded.desglose)).toBe(true);
     expect(typeof decoded.facturas_sustituidas).toBe("object");
     expect(typeof decoded.destinatarios).toBe("object");

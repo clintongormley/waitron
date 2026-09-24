@@ -15,28 +15,16 @@ import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-// This file's fixtures all stamp `fecha_expedicion_factura` = 2026-07-20 (drain-fixtures' own
-// PAST_FECHA), so every seeded record falls in this one period.
+// The drain fixtures stamp `fecha_expedicion_factura` = 2026-07-20, inside this one period.
 const SERVER_NOW = new Date("2026-07-21T00:00:00Z");
 const DRAIN_AT = new Date("2026-07-21T00:01:00Z"); // past the seeded `proximo_intento_en`
 const PERIOD = { year: "2026", month: "07" };
 
-// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
-// `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-// Real per-test isolation, deliberately NOT drain.test.ts's shared-and-accumulating convention: the
-// drainer's due-work sweep must find nothing but THIS test's freshly-seeded rows, and every
-// incident-count assertion must see only this test's own incidents. `useVenueDb` empties every data
-// table between tests, dropping and recreating the append-only triggers around the delete
-// (`packages/db/src/testing/venue-db.ts`, `buildResetPlan`/`applyReset`), which is what supplies
-// that isolation now — the `truncate table acks, incidents, envios cascade` this file used to run
-// here reached the engine as `near "truncate": syntax error` (measured 2026-09-22, the failure
-// every case in this file opened with), because SQLite has no TRUNCATE at all.
+// Every case relies on `useVenueDb` emptying the data tables between tests: the drainer's due-work
+// sweep and every incident count must see only this test's own rows.
 
-// The drainer/reconcile deps a `VerifactuBackend` used to assemble internally — built here directly
-// now that the runtime pass lives on the standalone `drain`/`reconcile` functions. `pg.db` is this
-// file's one handle; `staticResolver(...)` and the seeded clock are per-test.
 const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
   db: pg.db,
   resolveClient,
@@ -63,15 +51,10 @@ async function incidentsFor(): Promise<
       sql`select code, severity, params from incidents`,
     ),
   );
-  // `params` is a `json` column (`packages/db/src/schema/incidents.ts:40`). Drizzle decodes one
-  // read through the table definition; a raw read hands back the stored text, so the parse happens
-  // here rather than each `toMatchObject` below being loosened to compare against a string.
-  // `./reconcile.period.test.ts` and `packages/payments/src/reconcile.test.ts` do the same.
+  // A raw read hands back a `json` column's stored text.
   return rows.map((row) => ({ ...row, params: JSON.parse(row.params) as Record<string, unknown> }));
 }
 
-/** The committed `envios.estado` per registro — used to prove reconcile now CORRECTS state toward
- * the authority (plan 3b Task 5), on top of the classification the cases above already assert. */
 async function estadosFor(): Promise<Map<string, string>> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ registro_id: string; estado: string }>(
@@ -81,8 +64,6 @@ async function estadosFor(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.registro_id, r.estado]));
 }
 
-/** The committed `acks.state` per registro — used to prove the ack↔estado invariant still holds
- * after a drift correction (the acks row must agree with whatever `envios.estado` converged to). */
 async function ackStatesFor(): Promise<Map<string, string>> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ registro_id: string; state: string }>(sql`select registro_id, state from acks`),
@@ -90,9 +71,6 @@ async function ackStatesFor(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.registro_id, r.state]));
 }
 
-/** The committed `envios.reconciled_resubmit_at` marker for one registro — the `noTrace`
- * remediation lifecycle's own state: null until a first `noTrace` detection stamps it, set while
- * the remediation is outstanding, and cleared again once AEAT has a trace of the record. */
 async function reconciledResubmitAtFor(registroId: string): Promise<string | null> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ reconciled_resubmit_at: string | null }>(
@@ -102,14 +80,9 @@ async function reconciledResubmitAtFor(registroId: string): Promise<string | nul
   return rows[0]?.reconciled_resubmit_at ?? null;
 }
 
-/** The alta registro's own id and its AEAT consulta key (`nif|numSerieFactura|DD-MM-YYYY`, the
- * same triple `@waitron/verifactu`'s fake `keyOf` builds). The date piece goes through
- * `toAeatDate` (src/registro-row.ts), the one place this package owns the `YYYY-MM-DD` →
- * `DD-MM-YYYY` flip, so this never re-derives that formatting by hand; it used to read
- * `to_char(..., 'DD-MM-YYYY')`, which SQLite refuses with `no such function: to_char`.
- * Looked up post-hoc by `sale_id` rather than threaded through the caller: unlike
- * `seedPendingEnvios`'s fixture, a `recordSale`-created alta's identity is assigned by the write
- * path itself (series/invoice-number allocation), not chosen by the test. */
+/** The alta registro's id and its fake-AEAT consulta key (`nif|numSerieFactura|DD-MM-YYYY`, the
+ * triple `@waitron/verifactu`'s fake `keyOf` builds). Looked up by `sale_id` because a
+ * `recordSale`-created alta's identity is assigned by the write path, not chosen by the test. */
 async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey: string }> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ id: string; id_emisor_factura: string; num_serie_factura: string; fecha: string }>(
@@ -129,9 +102,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
   };
 }
 
-/** Whether a sibling anulación registro (same `sale_id`) exists for the given alta — the local
- * mirror of `reconcile.ts`'s own `hasSiblingAnulacion`, used here only to confirm the fixture set
- * up the state the reconcile test actually means to exercise. */
+/** Confirms the fixture set up the sibling anulación the void case means to exercise. */
 async function hasAnulacion(altaRegistroId: string): Promise<boolean> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ sale_id: string }>(sql`
@@ -167,7 +138,7 @@ describe("reconcile — the three audit cases", () => {
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient); // AEAT now holds all three as Correcta
 
-    // Our acknowledgement was lost: our side reads pendiente though AEAT already holds them.
+    // Our acknowledgement was lost.
     await withTransaction(pg.db, (tx) => tx.execute(sql`update envios set estado = 'pendiente'`));
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
@@ -181,21 +152,16 @@ describe("reconcile — the three audit cases", () => {
     ).toBe(true);
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
-    // A lost ack is never an incident (classification unchanged from Task 4).
+    // A lost ack is never an incident.
     expect(result.incidentsRaised).toBe(0);
     expect(await incidentsFor()).toHaveLength(0);
 
-    // Task 5: reconcile ALSO corrects the local estado toward the authority (Correcta → aceptado).
-    // The audit above still reports the mismatch; this proves the correction is applied too.
+    // Reported above AND corrected toward the authority.
     const estados = await estadosFor();
     expect([...estados.values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
   });
 
   it("noTrace first detection: resets to pendiente, deletes the ack, sets the marker, no incident", async () => {
-    // Task 4 (reconcile resolution semantics): a FIRST noTrace no longer raises an incident — it is
-    // usually just consulta lag, so reconcile self-heals it silently by re-submitting (reset to
-    // `pendiente`) and dropping the stale `accepted` ack (the acks invariant — a `pendiente` row
-    // carries no ack). Only a SECOND, still-missing detection escalates (see the test below).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
@@ -277,10 +243,6 @@ describe("reconcile — the three audit cases", () => {
   });
 
   it("ack↔estado invariant holds across a noTrace reset: no accepted ack for a now-pendiente row", async () => {
-    // The load-bearing property the marker-set/error-incident test above does not itself check:
-    // after a first-detection remediation, the record must carry NO acks row at all — an `accepted`
-    // ack sitting on a `pendiente` envío would disagree with the estado it is supposed to reflect
-    // (the acks invariant `acks.test.ts`'s own INVARIANT test guards from the other direction).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
@@ -347,18 +309,12 @@ describe("reconcile — the three audit cases", () => {
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_errores");
     expect(inc[0]?.severity).toBe("warning");
 
-    // Task 5: AceptadaConErrores drift is corrected toward the authority (→ aceptado_con_errores),
-    // on top of the warning incident above.
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
   });
 
   it("drift: we believe aceptado, AEAT holds Anulada → drift + error incident", async () => {
-    // Task 6 (reconcile resolution semantics): this seeds an alta with NO sibling anulación, so
-    // AEAT reporting Anulada here is the ANOMALOUS path (see `hasSiblingAnulacion` in reconcile.ts)
-    // — AEAT never annuls on its own, but the classification must still hold when it does. This
-    // test stays green unchanged; the genuine-void "clean" case and the anomalous path's
-    // cross-sweep idempotency are covered by the two tests below.
+    // No sibling anulación, so this is the anomalous Anulada path.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
@@ -383,39 +339,24 @@ describe("reconcile — the three audit cases", () => {
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_anulada");
     expect(inc[0]?.severity).toBe("error");
 
-    // Task 5: Anulada has no clean local estado, so reconcile does NOT correct — it stays aceptado
-    // (incident-only, exactly as Task 4 left it). The `correct` no-op branch must bite here.
+    // Anulada has no local estado to correct toward.
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado");
   });
 
   it("drift-Anulada with a local anulacion is clean — no drift entry, no incident", async () => {
-    // The genuine void path (Task 6): AEAT marks the alta Anulada once it accepts the anulación we
-    // submitted for the SAME sale, while the alta's own envío stays `aceptado` (its own state never
-    // changes — only the anulación's identity travels to AEAT via IDFacturaAnulada). Voided via the
-    // REAL `recordVoid` (packages/core), exactly as `void-path.e2e.test.ts` drives it — never a raw
-    // insert, since `registros_facturacion` is append-only and carries required chain columns.
+    // AEAT marks the alta Anulada once it accepts the anulación we submitted for the same sale,
+    // while the alta's own envío stays `aceptado`.
     //
-    // The alta itself must come from the REAL write path (`recordSale`), not `seedPendingEnvios`'s
-    // fixture: that fixture hand-writes a deterministic-but-fake `huella` (its own doc comment)
-    // purely to exercise the drainer, which is never chain-valid — `recordVoid`'s own
-    // `checkIntegrity` call recomputes the chain for real and would raise a genuine
-    // `chain.verification_failed` incident against it (confirmed live while writing this test),
-    // an artifact of the fixture that has nothing to do with reconcile's own classification. This
-    // mirrors `drain.test.ts`'s "drain — happy path, an anulación row" describe block, the one
-    // other place in this package that pairs `recordSale`+`recordVoid` instead. `steadyClock`'s
-    // fixed instant (write-path-fixtures.ts) is 2026-03-01, not this file's usual July, so this
-    // test reconciles a LOCAL March period, not the shared `PERIOD` constant.
+    // The sale comes from the real `recordSale`, not `seedPendingEnvios`: that fixture's `huella`
+    // is not chain-valid, and `recordVoid` verifies the chain. `steadyClock`'s instant is in March,
+    // hence the local period.
     const period = { year: "2026", month: "03" };
     const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
-    // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
+    // recordVoid requires `sale.void`: a manager session authorizes it.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
-      // `id` and `created_at` are supplied here rather than left to the table: both come from a
-      // `$defaultFn` generator (packages/identity/src/schema/persons.ts:27,67), which drizzle runs
-      // for a builder insert and never for raw SQL, and the generated DDL declares neither with a
-      // SQL DEFAULT (packages/identity/drizzle/0000_baseline.sql:46,62) — omitting them is refused
-      // `NOT NULL constraint failed: persons.id`. Same idiom as
-      // packages/workforce/src/migrations.test.ts:43-50.
+      // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder
+      // insert), so raw SQL supplies them.
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
@@ -434,11 +375,8 @@ describe("reconcile — the three audit cases", () => {
     const sale = await withTransaction(pg.db, async (tx) => {
       return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
-    // `recordSale`'s own envío row takes `proximo_intento_en`'s column DEFAULT (real wall-clock
-    // `now()` at insert), NOT this file's simulated `DRAIN_AT` — `seedPendingEnvios`'s fixture stamps
-    // that column itself, which is the only reason `DRAIN_AT` works for every OTHER test in this file.
-    // Pin it to `DRAIN_AT` so the drain below is deterministic rather than wall-clock-relative (a
-    // Copilot review point — clock skew / slow CI could otherwise flake a `Date.now()`-based due time).
+    // `recordSale`'s envío takes `proximo_intento_en` from the wall clock; pin it so the drain is
+    // deterministic.
     await withTransaction(pg.db, async (tx) => {
       await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
     });
@@ -448,9 +386,7 @@ describe("reconcile — the three audit cases", () => {
     await withTransaction(pg.db, async (tx) => {
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
-    // The void appends a sibling anulación registro (same sale_id) with its own pendiente envío —
-    // present in this period too (it carries the annulled invoice's own expedition date), but never
-    // submitted to AEAT here, so it stays an ordinary in-flight row, not a mismatch.
+    // The void's own anulación envío is never submitted here, so it stays in flight.
     expect(await hasAnulacion(alta.id)).toBe(true);
 
     // AEAT now reports the alta itself Anulada — the expected authority state post-void.
@@ -471,9 +407,7 @@ describe("reconcile — the three audit cases", () => {
   });
 
   it("drift-Anulada with NO local anulacion is idempotent across sweeps — one incident, not two", async () => {
-    // The anomalous path's OTHER property (on top of the "stays green" test above): `raiseOnce`
-    // must dedup a persistently-reported Anulada, since Anulada is never corrected (`CORRECTION`
-    // has no entry for it) and so re-detects as drift on every sweep for as long as it stays open.
+    // Anulada is never corrected, so it re-detects as drift on every sweep.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
@@ -485,8 +419,7 @@ describe("reconcile — the three audit cases", () => {
     expect(first.incidentsRaised).toBe(1);
     expect(await incidentsFor()).toHaveLength(1);
 
-    // Sweep 2 re-detects the SAME persistent Anulada — still classified as drift (there is no
-    // converged state to agree with), but must NOT insert a second incident row.
+    // Sweep 2: still drift, but no second incident row.
     const second = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(second.drift).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
@@ -497,20 +430,13 @@ describe("reconcile — the three audit cases", () => {
   });
 
   it("drift-AceptadaConErrores CONVERGES: a second sweep does not re-raise the incident", async () => {
-    // Reviewer finding (plan 3b Task 5): the drift branch fired on ACEPTADO.has(row.estado)
-    // (which includes aceptado_con_errores) with no check that local and AEAT actually disagree.
-    // Sweep 1 corrects aceptado → aceptado_con_errores; sweep 2 then saw local
-    // aceptado_con_errores vs AEAT AceptadaConErrores and mis-classified that AGREEMENT as drift
-    // all over again — a second incident, a reset `delivered_at`, and no convergence. This test
-    // proves sweep 2 now finds a clean match: exactly ONE incident total, not two.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient); // local aceptado, AEAT Correcta
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores"); // AEAT now disagrees
 
-    // Sweep 1: genuine aceptado → AceptadaConErrores divergence — classifies as drift, raises the
-    // warning incident, and corrects local estado toward the authority.
+    // Sweep 1: drift, a warning incident, and a correction.
     const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.drift).toHaveLength(1);
     expect(first.drift[0]).toEqual({
@@ -524,9 +450,7 @@ describe("reconcile — the three audit cases", () => {
       new Map([[seeded.registroIds[0]!, "aceptado_con_errores"]]),
     );
 
-    // Sweep 2: local is now aceptado_con_errores, AEAT still reports AceptadaConErrores — the SAME
-    // state, which is agreement, not a fresh divergence. The fix must classify this as a clean
-    // match: no drift entry, no new incident, no re-correction.
+    // Sweep 2: the corrected state now agrees with AEAT.
     const second = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(second.drift).toEqual([]);
     expect(second.incidentsRaised).toBe(0);
@@ -546,21 +470,12 @@ describe("reconcile — the three audit cases", () => {
   });
 
   it("clean match: a drainer-set aceptado_con_errores agrees with AEAT's AceptadaConErrores — not drift", async () => {
-    // The other half of the same reviewer finding: a record the DRAINER itself set to
-    // aceptado_con_errores (the accept-with-errors path, drain.test.ts's own 2004/futureDated
-    // case) must be recognised as a clean match against AEAT's AceptadaConErrores — never
-    // re-flagged as drift just because aceptado_con_errores is a member of the accepted family.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 1, futureDated: true }); // 2004 → AceptadoConErrores
     const resolveClient = staticResolver(aeat.client());
-    await drain(drainDeps(resolveClient), DRAIN_AT); // sets local aceptado_con_errores; AEAT's own store already
-    // holds AceptadaConErrores for this key too (createFakeAeat's future-dated branch) — no
-    // `setConsultaState` needed, this is the drainer's own genuine happy-with-errors path.
+    await drain(drainDeps(resolveClient), DRAIN_AT); // local aceptado_con_errores, AEAT AceptadaConErrores
 
     // Isolate reconcile's own incidents from the drainer's `fiscal.aceptado_con_errores` warning.
-    // `delete`, not TRUNCATE: SQLite has none (`near "truncate": syntax error`), and `incidents`
-    // carries no append-only trigger to refuse the delete (`packages/db/src/classification.ts`
-    // classifies it `state` via `classify`, not `appendOnly`).
     await pg.db.execute(sql`delete from incidents`);
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
@@ -583,8 +498,6 @@ describe("reconcile — paging", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW, consultaPageSize: 2 });
     const seeded = await seedPendingEnvios(pg.db, { count: 5 });
 
-    // Count the reconcile sweep's own consulta round trips. Reset AFTER `drain` so only the sweep's
-    // pages are counted (drain's happy path never consults, but the reset makes that irrelevant).
     let consultarCalls = 0;
     const base = aeat.client();
     const counting: VerifactuClient = {
@@ -601,9 +514,7 @@ describe("reconcile — paging", () => {
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(5);
-    // The teeth: if paging stopped after page 1, records 3-5 would be aceptado locally but absent
-    // from the authority map, surfacing as noTrace. An empty noTrace with checked=5 proves every
-    // page was fetched and keyed.
+    // Had paging stopped after page 1, records 3-5 would surface as noTrace.
     expect(result.noTrace).toEqual([]);
     expect(result.lostAck).toEqual([]);
     expect(result.drift).toEqual([]);
@@ -696,11 +607,6 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
 
 describe("reconcile — period normalization", () => {
   it("Copilot finding A: an unpadded month audits the SAME records as the zero-padded form", async () => {
-    // The stored `fecha_expedicion_factura` always carries a zero-padded 2-digit month, so an
-    // unpadded `period.month` like "7" must be normalized before it reaches the SQL comparison —
-    // otherwise the query matches nothing and reconcile silently reports a false-clean `checked: 0`
-    // instead of auditing July. What makes the stored month two digits, and the measurement behind
-    // it, is in `reconcile.ts`'s `rowsForPeriod`.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
     const resolveClient = staticResolver(aeat.client());
@@ -711,13 +617,10 @@ describe("reconcile — period normalization", () => {
       month: "7",
     });
 
-    // Must audit the same 3 records the zero-padded "07" form audits (see the "clean audit" case
-    // above) — not the false-clean `checked: 0` an un-normalized query silently returns.
     expect(result.checked).toBe(3);
     expect(result.lostAck).toEqual([]);
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
-    // The result echoes back what was ACTUALLY audited, not the caller's raw (unpadded) input.
     expect(result.year).toBe("2026");
     expect(result.month).toBe("07");
   });
@@ -725,10 +628,6 @@ describe("reconcile — period normalization", () => {
 
 describe("reconcile — malformed consulta paging", () => {
   it("Copilot finding B: throws when AEAT reports more pages but gives no continuation key", async () => {
-    // `fetchAuthority` pages while `IndicadorPaginacion === "S"`, echoing `ClavePaginacion` back. If
-    // AEAT ever reports "S" with NO `ClavePaginacion`, the old code set the continuation key to
-    // `undefined` and silently STOPPED — later, unpaged records then get mis-flagged as `noTrace`
-    // (false error incidents) or missed entirely. Failing loud is correct for a compliance audit.
     const seeded = await seedPendingEnvios(pg.db, { count: 1 }); // ≥1 local row so T1 does not short-circuit
     const malformed: VerifactuClient = {
       submit: () => Promise.reject(new Error("this test must not submit")),
@@ -752,22 +651,11 @@ describe("reconcile — malformed consulta paging", () => {
 
 describe("reconcile — lazy client resolution", () => {
   it("a zero-row period never resolves a client, even one that would throw", async () => {
-    // The regression this test guards: `reconcile` used to resolve the client BEFORE checking
-    // whether the period held any records at all, so a period with nothing to reconcile — a clean
-    // `checked: 0` no-op that contacts AEAT for nothing — was turned into a hard failure whenever
-    // the venue's credential happened to be missing or unusable. `resolveClient` below rejects
-    // with a distinctive, unmistakable message (never a client that merely COULD have been asked and
-    // happened to succeed) so this test fails loudly if the fix regresses, and asserts the resolver
-    // was never even called — a test that only checked the returned result would still pass if the
-    // resolver were called and happened to succeed.
+    // A zero-row period must not fail because the venue's credential is missing or unusable.
     await seedTenantWithSif(pg.db); // a venue with a till/SIF but no envios
     let calls = 0;
     const resolveClient = (): Promise<VerifactuClient> => {
       calls += 1;
-      // A plain Error with a distinctive message, not an AppError: `credentials.missing` is
-      // `@waitron/credentials`'s own code, and this package does not depend on that package — the
-      // point here is only that resolution is unmistakably never reached, not to construct a
-      // cross-package error type this test has no business typing.
       return Promise.reject(new Error("resolveClient must not be called for a zero-row period"));
     };
 
@@ -786,9 +674,8 @@ describe("reconcile — lazy client resolution", () => {
   });
 });
 
-/** A well-formed alta for the querying obligado carrying NO RefExterna and a distinct identity, so
- * the fake stores and later reports it in a consulta but `reconcile` cannot attribute it to any of
- * our registros. Mirrors drain.test.ts's own hand-built `collidingRecord` shape. */
+/** A well-formed alta for the querying obligado carrying NO RefExterna, so the fake reports it in a
+ * consulta but `reconcile` cannot attribute it to any of our registros. */
 function foreignAlta(nif: string, legalName: string): RegistroAlta {
   return {
     IDVersion: "1.0",

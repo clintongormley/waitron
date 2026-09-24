@@ -18,18 +18,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  * Record an F3 substitution, including callers that start together. Check its chain position,
  * hash, substituted identities, recipients and pending sidecar, and verify that the original
  * tickets retain their alta records.
- *
- * TWO THINGS LOST when this file moved off PostgreSQL, neither replaceable here:
- *
- * - **The deployment ROLE.** SQLite has no roles. What still refuses a REWRITE of a
- *   stored fiscal record is the append-only trigger `TEST_MIGRATIONS` installs
- *   (`packages/migrations/src/manifest.ts:163`); that refusal was MEASURED on this engine, and the
- *   probe and its output are in `chain.concurrency.test.ts`'s header. The role half is covered by
- *   nothing.
- * - **Contention on distinct backends.** See the second describe's own comment.
  */
-// The whole migration manifest, the SQLite counterpart of the shared container's `manifest`
-// template this file used to clone.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
@@ -37,9 +26,8 @@ let till: SeededTill;
 // A SECOND series for the F3 canje invoices. The F3 draws its own number, and `sales` is unique on
 // (series_id, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
 // 'standard' rather than a bespoke 'substitution' value: the invoice_series CHECK admits only
-// 'standard'/'rectificative' today, and giving F3 its own purpose is a core/Slice-4 decision (plan
-// §5.3) the BACKEND does not enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`,
-// never from this row.
+// 'standard'/'rectificative', and giving F3 its own purpose is a core decision the BACKEND does not
+// enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`, never from this row.
 let substitutionSeriesId: string;
 
 const RECIPIENT: Counterparty = {
@@ -49,14 +37,9 @@ const RECIPIENT: Counterparty = {
 };
 
 beforeEach(async () => {
-  // Each call mints a fresh node (and NIF). `useVenueDb` also empties every data table between
-  // tests, dropping and recreating the append-only triggers around the delete
-  // (`packages/db/src/testing/venue-db.ts`), which is why the reseed-without-truncate reasoning
-  // this comment used to carry no longer applies.
   till = await seedTill(suite.db, "A");
-  // Through the table, not the raw `insert into invoice_series ... returning id` this replaces:
-  // `id` and `created_at` are `$defaultFn` generators that only the insert BUILDER runs, so a raw
-  // insert omitting them is refused NOT NULL at run time.
+  // Through the table: `id` and `created_at` are `$defaultFn` generators that only the insert
+  // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId: till.nodeId, code: "F3", purpose: "standard", nextNumber: 1 })
@@ -84,7 +67,7 @@ function substitutionSaleFor(
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     // Never read by `recordSubstitution` (it uses `seriesCode`/`invoiceNumber` for NumSerieFactura);
-    // branded only to satisfy the type, exactly as `correction-path`'s corrective fixture does.
+    // branded only to satisfy the type.
     seriesId: brandSeriesId(substitutionSeriesId),
     seriesCode: "F3",
     invoiceNumber,
@@ -117,8 +100,8 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
   };
 }
 
-/** Records one substituted F2 ticket (seeding its `sales` row first) under the deployment role.
- * Returns the ticket sale's id — a `substitutedSaleId` an F3 points at. */
+/** Records one substituted F2 ticket (seeding its `sales` row first). Returns the ticket sale's
+ * id — a `substitutedSaleId` an F3 points at. */
 async function recordTicket(invoiceNumber: number): Promise<string> {
   const ticketId = await seedSale(suite.db, till, invoiceNumber);
   await withTransaction(suite.db, async (tx) => {
@@ -127,13 +110,10 @@ async function recordTicket(invoiceNumber: number): Promise<string> {
   return ticketId;
 }
 
-/** Insert an F3 sale with counterparty columns as the fixture owner and return its id. */
+/** Insert an F3 sale with counterparty columns and return its id. */
 async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
-  // Through the table for the same two reasons `src/testing/seed.ts`'s `seedSale` states: `id`
-  // and `created_at` are builder-side `$defaultFn` generators a raw insert never reaches, and
-  // `vat_breakdown`/`invoice_locales` are JSON columns here, so the `'[]'::jsonb` and
-  // `array['es']` literals this replaces are both syntax errors on this engine. `total` stays the
-  // same count of whole cents.
+  // Through the table: `id` and `created_at` are builder-side `$defaultFn` generators a raw insert
+  // never reaches.
   const [row] = await suite.db
     .insert(sales)
     .values({
@@ -158,8 +138,8 @@ async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   return row.id;
 }
 
-/** Records one F3 substituting `substitutedSaleIds` under the deployment role, seeding its own F3
- * `sales` row first. Returns the F3 sale's id. */
+/** Records one F3 substituting `substitutedSaleIds`, seeding its own F3 `sales` row first. Returns
+ * the F3 sale's id. */
 async function substitute(
   substitutedSaleIds: string[],
   overrides: Partial<SaleForFiscalRecord> = {},
@@ -191,8 +171,7 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
  * columns come back parsed and the booleans as booleans. Used by the cases whose subject is what a
  * column HOLDS; `rawRegistro` above is for the one case that rebuilds the record `computeHuella`
  * hashes, which needs the snake_case shape. A raw `select *` skips drizzle's read mapping and
- * answers the stored TEXT, which made every `facturas_sustituidas`/`destinatarios` comparison below
- * compare a JSON string with an object (measured, 2026-09-22). */
+ * answers the stored JSON text. */
 async function registro(saleId: string) {
   const [row] = await suite.db
     .select()
@@ -201,9 +180,9 @@ async function registro(saleId: string) {
   if (row === undefined) throw new Error(`registro: no row for sale ${saleId}`);
   // The AEAT shapes, restated here because `./schema/registros.ts` declares these columns as a
   // bare `json(...)` with no `$type`, so drizzle types them `{}` and a property access on one is a
-  // TS2339. Quoted from `RegistroRow` (`./registro-row.ts`), which carries the real types for the
-  // same columns under their snake_case names. A cast, not a runtime change: the values are
-  // already parsed by the column's own `mode: "json"` mapping.
+  // TS2339. `RegistroRow` (`./registro-row.ts`) carries the real types for the same columns under
+  // their snake_case names. A cast, not a runtime change: the values are already parsed by the
+  // column's own `mode: "json"` mapping.
   return row as typeof row & {
     facturasSustituidas: RegistroRow["facturas_sustituidas"];
     destinatarios: RegistroRow["destinatarios"];
@@ -225,7 +204,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     // Ticket at 1, F3 at 2 — an alta takes the next secuencia in generation order.
     expect(row?.secuencia).toBe(2);
     expect(row?.primerRegistro).toBe(false);
-    // An F3 is NOT a rectificativa: none of the four rectificativa columns is populated.
+    // An F3 is NOT a rectificativa: none of the three rectificativa columns is populated.
     expect(row?.tipoRectificativa).toBeNull();
     expect(row?.facturasRectificadas).toBeNull();
     expect(row?.importeRectificacion).toBeNull();
@@ -314,7 +293,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
   });
 
   it("does NOT annul the substituted tickets — no anulación registro is written for them", async () => {
-    // The crux (findings §10.2): the substituted tickets stay declared exactly once. There is no
+    // The crux: the substituted tickets stay declared exactly once. There is no
     // anulación in this flow at all — `TipoFactura=F3` + `FacturasSustituidas` is what tells AEAT the
     // amount was already declared on the tickets, not any negation or annulment on our side.
     const ticketA = await recordTicket(1);
@@ -373,32 +352,15 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
 
 describe("recordSubstitution from five callers started together", () => {
   // An F3 ALWAYS follows an existing ticket alta (recordSubstitution reads it, or throws), so the
-  // chain head always exists before any F3 runs — the from-empty head-creation race is structurally
-  // unreachable here, exactly as for `recordCorrection`.
+  // chain head always exists before any F3 runs: this case never exercises `readChainHead`'s
+  // create-the-head branch.
   //
-  // WHAT THIS BLOCK LOST. It used to open five SEPARATE PostgreSQL backends
-  // (`suite.pg.connect()`) and have them race the chain-head row LOCK. Neither exists on this
-  // engine: a venue file has one write connection, `chain.ts`'s `selectHead` no longer takes `for
-  // update`, and there is nothing left to contend for. So this is no longer a lock test.
-  //
-  // WHAT IT STILL PROVES. Five callers are started together, without awaiting each other, against
-  // the ONE handle. The venue file's write queue is what makes them run one at a time —
-  // `withTransaction` (`packages/db/src/tenancy.ts`) runs inside `db.withWriteLock`, and
-  // `packages/store/src/write-queue.ts` issues `begin immediate` … `commit`. Distinct, contiguous
-  // secuencias each linked to the predecessor's huella is exactly what a queue that did NOT
-  // serialise would break, because five appends reading the same head would all compute the same
+  // Not a lock test. Five callers started together against the ONE handle are serialised by the
+  // venue file's write queue: `withTransaction` (`packages/db/src/tenancy.ts`) runs inside
+  // `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues `begin immediate` … `commit`.
+  // Distinct, contiguous secuencias each linked to the predecessor's huella is exactly what a queue
+  // that did NOT serialise would break, because appends reading the same head compute the same
   // next position.
-  //
-  // CONTROL RUN, 2026-09-22, on `correction-path.e2e.test.ts`'s identical block (same helper
-  // shape, same engine): with `withTransaction` replaced by a bare call on `suite.db` — the same
-  // five bodies, no queue — the case failed with `Error: no such savepoint: wt_sp_3`
-  // (`ERR_SQLITE_ERROR`, errcode 1) from `appendToChain` (`src/chain.ts:322`), the five bodies
-  // having interleaved on the one write connection and released each other's savepoints. It never
-  // reached the chain assertions. Re-run there on 2026-09-23, after `packages/store` gained a read
-  // connection per file, and it printed the same failure. The control was not re-run HERE; the
-  // receipt names the file it WAS run on rather than claiming a run that did not happen.
-  //
-  // Five, like `correction-path`, for the same reason: a wider start is a stronger probe.
   const RACERS = 5;
 
   it("commits five simultaneously-started substitutions into one gap-free, correctly-chained sequence", async () => {

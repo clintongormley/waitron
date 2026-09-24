@@ -45,9 +45,8 @@ async function sell(overrides: Record<string, unknown> = {}) {
   });
 }
 
-/** The snake_case row the huella is recomputed from, read raw — the same convention
- * `./write-path.e2e.test.ts` and `./verify.ts` use, and not interchangeable with drizzle's
- * camelCase select shape. */
+/** The snake_case row the huella is recomputed from, read raw — not interchangeable with
+ * drizzle's camelCase select shape. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,

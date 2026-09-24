@@ -23,8 +23,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // These fixtures have no filed records; clear only their mutable identity rows. No capture triggers
-  // remain (the outbox is gone — swap S5), so these are plain deletes.
+  // These fixtures have no filed records; clear only their mutable identity rows.
   await suite.db.transaction(async (tx) => {
     for (const table of [
       "cadenas",
@@ -100,6 +99,6 @@ describe("reserved-sif primitives", () => {
           numeroInstalacion: numero,
         }),
       ),
-    ).rejects.toThrow(); // 23505 on registro_sif_instalacion_uq
+    ).rejects.toThrow(); // registro_sif_instalacion_uq
   });
 });

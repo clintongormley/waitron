@@ -47,10 +47,8 @@ export const FISCAL_SLOT: FiscalContribution = {
   },
   resetInFlight: ({ db }, now) => resetInFlightClaims(db, now),
   // The provision-time secret: a Veri*Factu venue's AEAT signing certificate. Required only for a
-  // PRODUCTION provision (a preproduction box records its chain locally and never submits, so the
-  // cert is optional there — spec §10). `validate` refuses a malformed blob with `setup.request_invalid`
-  // and writes nothing, run by the host BEFORE `provisionVenue` mints the unrepairable SIF/chain
-  // (CLAUDE.md §5); `seal` writes it under the tenant's transaction after the mint.
+  // PRODUCTION provision: a preproduction box records its chain locally and never submits.
+  // `validate` writes nothing and runs BEFORE `provisionVenue` mints the unrepairable SIF/chain.
   provisioningSecret: {
     required: (environment) => environment === "production",
     validate: (raw) => {

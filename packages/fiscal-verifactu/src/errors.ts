@@ -1,188 +1,85 @@
-// A bare side-effect import, not a value used anywhere in this file. It is what makes TypeScript
-// treat "@waitron/shared" as a real module to augment rather than defining a fresh ambient module
-// of the same name — the same idiom packages/db/src/errors.ts and packages/fiscal/src/errors.ts
-// already use for their own contributions.
+// Side-effect import: makes TypeScript augment the real "@waitron/shared" module rather than
+// declare a fresh ambient module of the same name.
 import "@waitron/shared";
 
-/**
- * packages/fiscal-verifactu's own contribution to the shared error registry, added by declaration
- * merging rather than pre-declared in packages/shared itself — see the design note atop
- * packages/shared/src/errors.ts. packages/shared is the leaf every package depends on and must
- * never need to change just because a dependent package adds a code; this file is how
- * packages/fiscal-verifactu adds its own without packages/shared knowing about it in advance.
- *
- * **Deviation from Task 13's brief.** The brief's Step 3 said to append `SIF_NOT_REGISTERED`
- * (SCREAMING_SNAKE_CASE) directly to packages/shared/src/errors.ts's `ErrorCode` union. Both parts
- * of that instruction are wrong under this repo's OWN documented conventions and were overridden
- * per the task's own governing context, not invented here:
- *
- *   - packages/shared/src/errors.ts's design note is explicit that only codes NATIVE to
- *     packages/shared itself (ids.ts, money.ts) belong in that file; every dependent package
- *     (packages/db, packages/fiscal, and now packages/fiscal-verifactu) contributes its own by
- *     `declare module "@waitron/shared"`, exactly as packages/db/src/errors.ts and
- *     packages/fiscal/src/errors.ts already do.
- *   - The naming convention is DOMAIN-CONCEPT, lowercase, dot-namespaced (`series.not_found`,
- *     `clock.degraded`, `fiscal.node_not_registered`) — never SCREAMING_SNAKE_CASE and never the
- *     name of the package whose source throws it.
- *
- * Namespace choice: `sif.*`, not `node.not_registered` and not a reuse of packages/fiscal's own
- * `fiscal.node_not_registered`. Those are DIFFERENT facts. `fiscal.node_not_registered`
- * (packages/fiscal/src/errors.ts) is the regime-neutral `FiscalBackend`'s own bookkeeping — no
- * `registerNode` call on record with the generic backend, whatever the regime. This code is about
- * a narrower and later fact: a node that IS known to some backend but has no *live* Veri*Factu SIF
- * identity — a NIF + IdSIF + NúmeroInstalación triple (node-id rekey, 2026-08-03: the SIF is the
- * node, #33). A node can only reach `currentSif`/`esPrimerRegistro` after a generic
- * `FiscalBackend.registerNode` already succeeded, so collapsing the two into one code would erase
- * which layer refused. `sif.*` names the concept this package's own vocabulary already uses
- * throughout (`registro_sif`, `esPrimerRegistro`) and reads naturally as a translation key: "no SIF
- * is registered [for this node]".
- *
- * Reachability: this file is a side-effect import of ./registro-sif.ts (`import "./errors.js"`),
- * which is re-exported from ./index.ts, so this augmentation is transitively reachable from the
- * package's own public barrel. See ./errors.reachability.test.ts, which mirrors
- * packages/db/src/errors.reachability.test.ts and packages/fiscal/src/errors.reachability.test.ts's
- * identical mechanical check for the same property.
- */
+/** This package's codes, added to the shared registry by declaration merging (see the design note
+ * atop packages/shared/src/errors.ts). */
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
-     * The AEAT transport (`./aeat-transport.ts`, relocated here in the fiscal-none slice) throws this
-     * at the credential READ site when a decrypted `fiscal.aeat` payload's `certKind`, `pfxBase64`
-     * or `passphrase` is absent or unusable. Declared here because this package now throws the code;
-     * `apps/server/src/errors.ts` keeps its own identical declaration for the code's other throwers
-     * (`stripe-account.ts`, `webhook.ts`). Codes are never renamed once shipped, so the `server.*`
-     * string stands (design note above and CLAUDE.md §3); the two declarations carry identical params
-     * so TypeScript's declaration merging accepts both when `apps/server` compiles them together.
+     * Thrown by ./aeat-transport.ts when a decrypted `fiscal.aeat` payload's `certKind`,
+     * `pfxBase64` or `passphrase` is absent or unusable. `apps/server/src/errors.ts` declares it
+     * too. Codes are never renamed once shipped, so the `server.*` string stands. The two
+     * declarations carry identical params so TypeScript's declaration merging accepts both when
+     * `apps/server` compiles them together.
      */
     "server.credential_unusable": { purpose: string; field: string };
 
     /**
-     * The provision-time secret validator/sealer (`./provisioning-secret.ts`, relocated here in the
-     * fiscal-none slice) throws this when the opaque AEAT-cert blob's `certKind`, `pfxBase64` or
-     * `passphrase` is absent, the wrong type, or fails its shape check — naming the offending field,
-     * never its value. `./venue-fields.ts` is the package's second thrower: it refuses a venue whose
-     * operator-typed fiscal text would build a record AEAT cannot accept, naming one of
-     * `legalName`, `seriesCode`, `rectificativeSeriesCode` or `location.operationDescription` (the
-     * request body's own spellings, listed as `VENUE_FISCAL_FIELD_PATHS`). Declared here because
-     * this package now throws the code;
-     * `apps/server/src/errors.ts` keeps its own identical declaration for the setup surface's own
-     * throwers (`setup-api.ts`'s venue/adopt field screens). The two declarations carry identical
-     * params so TypeScript's declaration merging accepts both when `apps/server` compiles them
-     * together — the same dual-declaration shape `server.credential_unusable` above documents.
+     * Thrown by ./provisioning-secret.ts for a malformed AEAT-cert blob, and by ./venue-fields.ts
+     * for operator-typed fiscal text that would build a record AEAT cannot accept. Names the
+     * offending field, never its value. Declared with identical params in
+     * `apps/server/src/errors.ts`, like `server.credential_unusable` above.
      */
     "setup.request_invalid": { field: string };
 
     /**
      * A restore or standby reservation rejects a base over `MAX_BASE_CODE_LENGTH`, leaving room
      * within the 60-character `NumSerieFactura` cap for `-<installation number>/<counter>` with
-     * ten digits each. The restore hook throws inside its transaction; on rollback, nothing it
-     * wrote persists. `series.*` names the concept, never the package.
+     * ten digits each.
      */
     "series.code_too_long": { code: string };
 
     /** Thrown by `currentSif` for a node with no LIVE `registro_sif` row — never provisioned, or
-     * provisioned once and then revoked by a re-registration that has not yet completed (node-id
-     * rekey, 2026-08-03: the SIF is the node, #33). The concrete encoding of "a node cannot be
-     * provisioned offline" (spec's stated limitation): a caller that reaches here gets a structured,
-     * translatable refusal rather than a locally invented installation number. See ./registro-sif.ts. */
+     * provisioned once and then revoked by a re-registration that has not yet completed. A node
+     * cannot be provisioned offline, so the caller gets a translatable refusal rather than a
+     * locally invented installation number. See ./registro-sif.ts. */
     "sif.not_registered": { nodeId: string };
 
-    /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
-     * (`@waitron/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `assertUsableIdSistema`
-     * (./registro-sif.ts), which both LOCAL write primitives — `registerSif` and `writeReservedSif`
-     * — call before writing anything, so no caller of either can put an unusable id into
-     * `registro_sif`. The sync apply lane writes the column too and reaches neither: it copies a
-     * value the primary already validated, verbatim (./enrolment.ts's watermark-upsert).
-     *
-     * `registro_sif.id_sistema_informatico` carries no CHECK and every registro copies the value,
-     * so the bound is a code-side invariant rather than a column constraint.
-     * `FISCAL_PROVISIONING.standby.establish` applies the same `ID_SISTEMA_MAX_LENGTH` EARLIER, in
-     * `parseReservedState`, throwing `sif.reservation_invalid` instead — its value is wire input,
-     * not a local argument — so on that path the reservation code is what a bad id reports. */
+    /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap. Thrown by
+     * `assertUsableIdSistema` (./registro-sif.ts, which says where the bound is applied). */
     "sif.id_sistema_invalid": { value: string; maxLength: number };
 
     /** A standby's reserved SIF state arrived from the primary malformed (the mirror bundle is wire
-     * input) — a missing or non-string field, an installation number that is not a positive integer,
-     * or an `idSistemaInformatico` outside `ID_SISTEMA_MAX_LENGTH` (see `sif.id_sistema_invalid`
-     * above for why that bound is a code-side invariant rather than a column constraint). That last
-     * check is made HERE as well as inside `writeReservedSif`, and it runs first, so a malformed
-     * bundle is reported as a bad RESERVATION rather than as a bad local argument. `reason` is our
-     * own English description, never the payload. */
+     * input). Checked before `writeReservedSif`, so a bad `idSistemaInformatico` in a bundle
+     * reports this code rather than `sif.id_sistema_invalid`. `reason` is our own English
+     * description, never the payload. */
     "sif.reservation_invalid": { reason: string };
 
     /**
-     * Task 14's brief drafted this as `ErrorCode.FISCAL_CHAIN_APPEND_CONTENTION`, appended
-     * directly to `packages/shared/src/errors.ts`'s `ErrorCode` — the same SCREAMING_SNAKE_CASE,
-     * wrong-file, package-named form Task 13's brief drafted for `SIF_NOT_REGISTERED` and that this
-     * file's own design note above already overrides. Overridden here for the identical reasons:
-     * `packages/shared` holds only codes native to itself (see its design note), and the naming
-     * convention is domain-concept, lowercase, dot-namespaced — never the throwing package's name.
-     *
-     * Namespace choice: `chain.*`, matching `packages/shared/src/errors.ts`'s own worked example
-     * (`chain.verification_failed`, reserved there for Task 15's art. 7.i verification) and this
-     * package's established vocabulary (`cadenas`, `secuencia`, `huella`). `append_contention`,
-     * not `verification_failed` or a shared `chain.error` — a caller needs to distinguish "the
-     * chain could not be extended right now" (retry the sale) from "a stored chain link does not
-     * match its own huella" (a tamper/corruption alarm), and collapsing the two into one code
-     * would erase which failure a translator or an on-call human is looking at.
-     *
-     * Thrown by `appendToChain` (./chain.ts) only after `MAX_APPEND_ATTEMPTS` savepoint retries
-     * each lost the race on SQLSTATE 23505 — in practice, several tabs/processes racing to create
-     * the very first `cadenas` row for a node that has never sold before (the one window
-     * `readChainHead`'s row lock cannot cover, because there is no row yet to lock). Keyed by node
-     * (node-id rekey, 2026-08-03: the chain is the node's, #33). A bare `throw new Error(...)` here
-     * would reach a till screen as untranslatable prose (Global Constraint, spec §9) for exactly the
-     * failure a human most needs explained in their own language.
+     * Thrown by `appendToChain` (./chain.ts) once `MAX_APPEND_ATTEMPTS` attempts have each lost a
+     * unique-key race. Distinct from `chain.verification_failed`: "the chain could not be extended
+     * right now" (retry the sale) is not "a stored link does not match its own huella" (a tamper
+     * or corruption alarm).
      */
     "chain.append_contention": { nodeId: string; attempts: number };
 
     /**
      * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
-     * as one AEAT could not accept — a forbidden character in the invoice number, a control
-     * character in a free-text field, an out-of-range amount. Raised BEFORE the insert, so nothing
-     * is written and the chain head does not move: `registros_facturacion` is append-only and
-     * hash-chained, and a value written wrong there stays wrong (CLAUDE.md §5), so refusing a
+     * as one AEAT could not accept. Raised BEFORE the insert, so nothing is written and the chain
+     * head does not move: `registros_facturacion` is append-only and hash-chained, so refusing a
      * record is the only remedy that leaves the venue repairable.
      *
-     * `fiscal.*` and English, not `verifactu.*` and not Spanish: this names OUR local refusal, not
-     * an AEAT wire state. The sibling distinction the registry already draws is
-     * `fiscal.sale_not_recorded` (ours) beside `fiscal.registro_rechazado` (AEAT's answer).
-     *
-     * Params carry the offending FIELD NAMES and the validator's own ISSUE CODES — never the
-     * offending values. The shared error boundary writes params into `waitron.log`, which the
+     * Params carry the offending FIELD NAMES and the validator's ISSUE CODES — never the offending
+     * values. The shared error boundary writes params into `waitron.log`, which the
      * unauthenticated recovery page renders to anyone on the venue's LAN
      * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
-     * Both arrays, because one record can breach several rules at once and a human fixing the
-     * venue wants all of them, not the first.
      */
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
 
     /**
      * `attemptAppend` (./chain.ts) wrote a record whose stated totals disagree with its own VAT
-     * breakdown by more than AEAT's ±10.00 euro tolerance. NEVER thrown — AEAT treats a breach as
-     * an admissible error and accepts the record, so refusing the sale would block a record the
-     * authority would have taken. Built only to hand its `.code`/`.params` to `@waitron/core`'s
-     * `recordIncident`, exactly as `fiscal.registro_rechazado` is used from the drainer.
-     *
-     * It is raised at all because our own totals disagreeing with our own lines is a bug in the
-     * money, happening while the venue keeps selling. Params carry the field names and issue codes,
-     * never the amounts (see `fiscal.record_invalid` for why params never carry values).
+     * breakdown. NEVER thrown — AEAT accepts such a record, so refusing the sale would block a
+     * record the authority would have taken; built only to hand its `.code`/`.params` to
+     * `recordIncident`. Params never carry the amounts (see `fiscal.record_invalid`).
      */
     "fiscal.record_totals_disagree": { fields: string[]; codes: string[] };
 
     /**
-     * Task 9's drainer (`./drain.ts`, `applyOutcome`). AEAT rejected this record outright
-     * (`resolveEstadoEfectivo` returned `"rejected"`) — never constructed as a thrown `AppError`
-     * (rejection is an ordinary, expected outcome the drainer resolves and moves on from, not a
-     * control-flow exception), only built to hand its `.code`/`.params` to `@waitron/core`'s
-     * `recordIncident`, exactly as `packages/core/src/errors.ts`'s `chain.verification_failed`
-     * is used from `record-sale.ts`/`record-void.ts`. `fiscal.*`, not `verifactu.*` or
-     * `envio.*`: this is a fact about the submission LIFECYCLE any regime backend shares (a
-     * record it tried to file was refused), matching `fiscal.node_not_registered`'s own
-     * regime-neutral `fiscal.*` prefix, even though only this package constructs it today.
-     * `registroId` is included because `incidents` carries no FK back to `envios`/
-     * `registros_facturacion` at all (`packages/db/src/schema/incidents.ts`) — without it, an
-     * incident row could not be traced back to which submission produced it.
+     * `./drain.ts`'s `applyOutcome`: AEAT rejected this record outright. Constructed, never thrown —
+     * only built to hand its `.code`/`.params` to `recordIncident`. `registroId` is there because
+     * `incidents` has no foreign key back to `registros_facturacion`; it is the only traceback from
+     * an incident row to its record, and every code below that carries one uses the same name.
      */
     "fiscal.registro_rechazado": {
       registroId: string;
@@ -191,11 +88,8 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * Task 9's drainer. AEAT accepted this record but flagged it (`resolveEstadoEfectivo`
-     * returned `"accepted_with_errors"` — `EstadoRegistro="AceptadoConErrores"`, e.g. error 2004,
-     * a future-dated `FechaExpedicionFactura`). A warning, not an error: the record is stored and
-     * counts as accepted (`DrainResult.recordsAccepted`'s own doc comment), but a human should
-     * still see why AEAT flagged it.
+     * `./drain.ts`: AEAT accepted this record but flagged it (`EstadoRegistro="AceptadoConErrores"`).
+     * A warning: the record counts as accepted, but a human should still see why AEAT flagged it.
      */
     "fiscal.aceptado_con_errores": {
       registroId: string;
@@ -204,62 +98,27 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * Task 10's drainer (`./drain.ts`, `handleDuplicate` — error 3000, Route A). AEAT's own copy
-     * of this identity is itself `Anulada` (`resolveEstadoEfectivo` returned `duplicate_annulled`,
-     * @waitron/verifactu's own doc comment on the "3000 inverts" rule). Whatever produced that
-     * state, this record can never become a confirmed accept from our side under this identity —
-     * the invoice number is burned, and retrying changes nothing — so it halts visibly (and halts
-     * this chain's successors, exactly like `fiscal.registro_rechazado` above, for the identical
-     * reason: neither outcome ends with THIS record confirmed at AEAT, so a successor's
-     * `RegistroAnterior` pointer at its huella is not something AEAT has actually confirmed
-     * either). No `codigo`/`mensaje` params, unlike `fiscal.registro_rechazado`/
-     * `fiscal.aceptado_con_errores` above: error 3000 IS the code carried on the outer
-     * `RespuestaLinea` for every duplicate case, so a separate `codigo` param here would only ever
-     * repeat the constant `3000` and tell a translator nothing
-     * `RegistroDuplicado.EstadoRegistroDuplicado`'s own value (`Anulada`) doesn't already say more
-     * precisely.
+     * `./drain.ts`'s `handleDuplicate` (error 3000): AEAT's own copy of this identity is `Anulada`,
+     * so the invoice number is burned and this record can never become a confirmed accept. Halts
+     * the record and its chain's successors. No `codigo`/`mensaje` params: they would only ever
+     * repeat 3000.
      */
     "fiscal.duplicado_anulado": { registroId: string };
 
     /**
-     * Task 10's drainer (`./drain.ts`, `handleDuplicate`/`routeB` — error 3000, Route B). AEAT
-     * reported a duplicate without saying what it holds (`resolveEstadoEfectivo` returned
-     * `duplicate_unknown`); a targeted consulta (`routeB`) compared AEAT's own stored `Huella`
-     * against ours and they DIFFERED — a genuine identity collision (the same NIF+series+fecha
-     * triple, but not our own record), not a harmless resubmission of a record AEAT already
-     * holds. Halts visibly, and halts this chain's successors, for the same reason
-     * `fiscal.duplicado_anulado` above does: this record never lands as a confirmed accept under
-     * this identity either. No `codigo`/`mensaje` params, for the identical reason given there —
-     * error 3000 already IS the code, and the fact that this is the DIFFERING-huella branch (as
-     * opposed to `fiscal.duplicado_anulado`'s `Anulada` branch) is exactly what the code name
-     * itself already says.
+     * `./drain.ts`'s `routeB` (error 3000): AEAT's stored `Huella` for this identity differs from
+     * ours — a genuine identity collision, not a resubmission of our own record. Halts like
+     * `fiscal.duplicado_anulado` above, and carries no `codigo`/`mensaje` for the same reason.
      */
     "fiscal.huella_divergente": { registroId: string };
 
     /**
-     * Plan 3b's reconciliation sweep (`./reconcile.ts`, `raise`). A record this POS believes AEAT
-     * ACCEPTED (`envios.estado` = `aceptado`/`aceptado_con_errores`) that AEAT's own period
-     * consulta has NO trace of at all (`EstadoRegistroConsulta` came back `null` — the record is
-     * absent from every page of the sweep). An error, not a warning: an accepted-but-untraceable
-     * record is a genuine divergence between what we told an operator was filed and what the
-     * authority holds, exactly the art. 16.4 gap reconciliation exists to surface.
+     * `./reconcile.ts`: a record we believe AEAT accepted that AEAT's period consulta has no trace
+     * of. Constructed, never thrown.
      *
-     * Constructed, never thrown: like `fiscal.registro_rechazado` above, reconciliation classifies
-     * a disagreement and moves on rather than aborting the sweep — the `AppError` exists only to
-     * hand its `.code`/`.params` to `@waitron/core`'s `recordIncident`. `fiscal.*`, not
-     * `verifactu.*`/`reconcile.*`: this is a submission-lifecycle fact any regime backend shares (a
-     * record we reported as filed is not at the authority), matching `fiscal.registro_rechazado`'s
-     * own regime-neutral prefix even though only this package constructs it today.
-     *
-     * The `IDFactura` triple (`idEmisorFactura`/`numSerieFactura`/`fechaExpedicionFactura`, the last
-     * in AEAT's own `DD-MM-YYYY` form) rides HERE, in the incident params, rather than on the
-     * `ReconcileMismatch` the sweep returns (`@waitron/fiscal`'s `ReconcileMismatch` is a
-     * regime-neutral `{ recordId, localState, reportedState }` and carries no Veri*Factu identity):
-     * an operator chasing this incident needs the exact invoice identity to look the record up at
-     * AEAT, and `incidents` carries no FK back to `registros_facturacion` (see
-     * `fiscal.registro_rechazado` above) to recover it from otherwise. `registroId` is our own
-     * `registros_facturacion.id` — the same value the sweep sent as `RefExterna` and keyed AEAT's
-     * view by, so it also equals the `ReconcileMismatch.recordId` this incident corresponds to.
+     * The `IDFactura` triple (`fechaExpedicionFactura` in AEAT's `DD-MM-YYYY` form) rides in these
+     * params because the regime-neutral `ReconcileMismatch` carries no Veri*Factu identity, and an
+     * operator needs the exact invoice identity to look the record up at AEAT.
      */
     "fiscal.reconcile_no_trace": {
       registroId: string;
@@ -269,20 +128,9 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * Plan 3b's reconciliation sweep. A record this POS believes ACCEPTED that AEAT's consulta
-     * reports as `AceptadaConErrores` — accepted, but flagged. A WARNING, not an error, mirroring
-     * the drainer's own `fiscal.aceptado_con_errores` (above) treatment of the same AEAT state on
-     * the submission side: the record IS stored and counts as accepted, but a human should still
-     * see that the authority flagged it and ours did not record why.
-     *
-     * A DISTINCT code from `fiscal.reconcile_drift_anulada` below rather than one shared
-     * `fiscal.reconcile_drift` carrying the reported state as a param: an `AceptadaConErrores` drift
-     * (warning — still filed) and an `Anulada` drift (error — the authority annulled a record we
-     * think is live) need different severities and different operator responses, and collapsing
-     * them would erase which one an on-call human is looking at — the same "distinguish the failure
-     * a translator/human sees" reasoning `chain.append_contention` and `fiscal.duplicado_anulado`
-     * above already apply. See `fiscal.reconcile_no_trace` above for why the `IDFactura` triple
-     * rides in these params.
+     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `AceptadaConErrores`. A
+     * WARNING, and a separate code from `fiscal.reconcile_drift_anulada` rather than one code with
+     * the state as a param, because the two need different severities and operator responses.
      */
     "fiscal.reconcile_drift_errores": {
       registroId: string;
@@ -292,12 +140,8 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * Plan 3b's reconciliation sweep. A record this POS believes ACCEPTED that AEAT's consulta
-     * reports as `Anulada` — the authority holds our identity as annulled while our own books still
-     * count it live. An error, not a warning (unlike `fiscal.reconcile_drift_errores` above): a
-     * record we believe filed being annulled at AEAT is a real books-vs-authority contradiction an
-     * operator must resolve, not a benign flag. Same distinct-code and identity-param reasoning as
-     * `fiscal.reconcile_drift_errores` above.
+     * `./reconcile.ts`: a record we believe accepted that AEAT reports as `Anulada` — the authority
+     * holds as annulled a record our books count live. An error an operator must resolve.
      */
     "fiscal.reconcile_drift_anulada": {
       registroId: string;
@@ -307,25 +151,10 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * The deployment-environment plan's Task 6: `./drain.ts`'s `claimBatch`. A registro whose OWN
-     * `entorno` (stamped at generation time by `VerifactuBackendOptions.deploymentEnvironment`,
-     * `./registro-row.ts`'s `RegistroRowContext.entorno`) disagrees with the DRAINING host's own
-     * `DrainDeps.environment`. Constructed, never thrown, exactly like `fiscal.registro_rechazado`
-     * above — the drainer classifies the row and moves on rather than aborting the whole batch.
-     *
-     * Never retried with backoff: unlike a transient AEAT failure, a mismatch is a configuration
-     * fact that resubmitting cannot fix, so `claimBatch` leaves the row `pendiente` with no
-     * `proximo_intento_en` change at all, rather than scheduling `backoffMs`'s exponential wait —
-     * correcting `WAITRON_ENV` and restarting is what must release it. Submitting a
-     * pre-production record to the real AEAT is unrecoverable (chains cannot be merged or
-     * migrated, and invoice numbers are never reused), which is why this refuses rather than
-     * assumes.
-     *
-     * `registroId`, not the brief's own draft `recordId` (M2/M3 of the Task 6 fix-round review):
-     * `incidents` carries no FK back to `registros_facturacion` at all (see
-     * `fiscal.registro_rechazado`'s own doc comment above), so this param is the ONLY traceback
-     * from an incident row to the record it describes — matching this file's other seven codes
-     * that carry one, all named `registroId`, not an eighth spelling of the same concept.
+     * `./drain.ts`'s `claimBatch`: a registro's own stamped `entorno` disagrees with the draining
+     * host's `DrainDeps.environment`. Constructed, never thrown. Never retried with backoff —
+     * resubmitting cannot fix a configuration fact, and submitting a pre-production record to the
+     * real AEAT is unrecoverable, so the row stays `pendiente` until `WAITRON_ENV` is corrected.
      */
     "fiscal.environment_mismatch": {
       registroId: string;
@@ -334,112 +163,53 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * The deployment-environment plan's Task 6: `./drain.ts`'s `claimBatch`. A registro written
-     * before the `entorno` column existed (migration 0009) — nothing recorded which deployment it
-     * was destined for. A DISTINCT code from `fiscal.environment_mismatch` above, not a shared one
-     * defaulting the missing value to "assume production": guessing which deployment an
-     * un-stamped row belongs to is exactly what this whole guard exists to avoid, and collapsing
-     * the two would erase, for the human resolving the incident, whether AEAT ever saw a
-     * disagreeing value or none at all. `registroId`, not `recordId` — same M2/M3 rename and same
-     * reasoning as `fiscal.environment_mismatch` above.
+     * `./drain.ts`'s `claimBatch`: a registro with no `entorno` at all. A separate code rather than
+     * defaulting to "assume production": guessing which deployment an unstamped row belongs to is
+     * what this guard exists to avoid.
      */
     "fiscal.environment_unknown": { registroId: string; hostEnvironment: string };
 
     /**
-     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the sale it was asked to
-     * correct is a `TipoFactura` this version cannot issue a rectificativa for. v1 corrects only a
-     * simplified invoice (`F2 → R5`, findings §10.2), the only type the till issues today
-     * (`backend.ts`: `counterparty === null ? "F2" : "F1"`, and `packages/core` always passes
-     * `counterparty: null`), so an `F1`/`R*`/other original is unreachable through the real write
-     * path now and becomes reachable only once B2B `F1` issuance lands — at which point rectifying
-     * it is an `R1`, not the `R5` this method assembles. A structured, translatable refusal rather
-     * than a silently mis-typed rectificativa: filing an `R5` against an `F1` is unrepairable (§5),
-     * so this asserts rather than assumes.
-     *
-     * `fiscal.*`, matching this file's own regime-neutral-shaped codes (`fiscal.registro_rechazado`,
-     * `fiscal.environment_mismatch`, …): a fact about the record being corrected, even though
-     * `F2`/`R5` are Veri*Factu vocabulary (this package is exempt from the english-only guard).
-     * `recordCorrection` throws it beside `@waitron/fiscal`'s own `fiscal.sale_not_recorded` (the
-     * absent-original case), so both share the `saleId` param naming the sale being corrected — the
-     * same `correctsSaleId` the caller passed. `tipoFactura` carries the original's own type so the
-     * human resolving it sees WHICH invoice type was refused, not merely that one was.
+     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the sale being corrected is
+     * not an `F2`. Only `F2 → R5` is supported; rectifying an `F1` is an `R1`, and filing the wrong
+     * rectificativa is unrepairable, so this refuses rather than mis-types it. `tipoFactura` is the
+     * original's type.
      */
     "fiscal.correction_unsupported": { saleId: string; tipoFactura: string };
 
     /**
-     * Thrown by `VerifactuBackend.recordSubstitution` (./backend.ts) when a sale it was asked to
-     * substitute with an F3 canje is a `TipoFactura` this operation cannot exchange. A factura de
-     * canje (F3) substitutes SIMPLIFIED tickets only (`F2 → F3`, findings §10.2), so the guard reads
-     * each substituted ticket's alta registro and fires for ANY `tipo_factura` that is not `F2` —
-     * every non-`F2` tipo (`F1`, `F3`, `R1`–`R5`) alike. This is reachable TODAY, not deferred to a
-     * future B2B `F1`: passing an already-shipped `R5` (the rectificativa in #46) — or a sibling `F3`
-     * from this very path — as a `substitutedSaleId` reads a non-`F2` alta and hits this guard now.
-     * Substituting any of those is not a canje at all, and filing the wrong record is unrepairable
-     * (§5), so this asserts rather than silently mis-filing — the direct sibling of
-     * `fiscal.correction_unsupported` above, which makes the identical F2-only assertion on the
-     * rectificativa path.
-     *
-     * `fiscal.*`, matching this file's own regime-neutral-shaped codes: a fact about the sale being
-     * substituted, even though `F2`/`F3` are Veri*Factu vocabulary (this package is exempt from the
-     * english-only guard). `recordSubstitution` throws it beside `@waitron/fiscal`'s own
-     * `fiscal.sale_not_recorded` (the absent-original case), so both share a `saleId` param naming the
-     * substituted sale — one of the `substitutedSaleIds` the caller passed. `tipoFactura` carries the
-     * original's own type so the human resolving it sees WHICH invoice type was refused, not merely
-     * that one was.
+     * Thrown by `VerifactuBackend.recordSubstitution` (./backend.ts) when a substituted sale is not
+     * an `F2`: a factura de canje (`F3`) substitutes simplified tickets only. The direct sibling of
+     * `fiscal.correction_unsupported` above. `tipoFactura` is the original's type.
      */
     "fiscal.substitution_unsupported": { saleId: string; tipoFactura: string };
 
     /**
-     * Thrown by `buildDestinatarios` (./backend.ts) for a recipient whose country is not `ES`. AEAT
-     * names a foreign recipient through `IDOtro`, which carries an `IDType` this project has not
-     * chosen a value for: the vocabulary is enumerated by the XSD
-     * (`@waitron/verifactu`'s AEAT XSD `SuministroInformacion.xsd`, `PersonaFisicaJuridicaIDTypeType`)
-     * but which value AEAT admits for which non-resident is open with the asesor
-     * (`docs/compliance/asesor-questions.md`, Q17(a)). `registros_facturacion` is append-only and
-     * hash-chained (CLAUDE.md §5), so a guessed identifier type would be filed and could never be
-     * unfiled — the sale is refused instead.
+     * Thrown by `buildDestinatarios` (./backend.ts) for a recipient whose country is not `ES`: which
+     * `IDOtro` `IDType` AEAT admits for a non-resident is open with the asesor
+     * (`docs/compliance/asesor-questions.md`, Q17(a)), and a guessed one could never be unfiled. A
+     * PERMANENT refusal — retrying files nothing new.
      *
-     * ONE code for both recipient-naming paths, because it is one decision: the F3 canje
-     * (`recordSubstitution`) and the F1 full invoice (`recordSale`) both reach it through
-     * `buildDestinatarios`. It is a PERMANENT refusal — retrying files nothing new — so the till
-     * gives it its own message rather than the generic "try again": stop, the venue's invoice
-     * settings need fixing, call whoever set the box up, and refund any card charge already taken on
-     * the terminal (`sale.refused` / `place.refused`, `apps/till/src/i18n/strings.ts`).
-     *
-     * `countryCode` is the recipient's country, not an operator's own text, so it may ride in
-     * params: the shared error boundary writes params into `waitron.log`, which the unauthenticated
-     * recovery page renders to anyone on the venue's LAN. The recipient's name and tax identifier
-     * are operator data and never appear here (see `fiscal.record_invalid` for the full reasoning).
-     *
-     * `fiscal.*` and English, matching this file's other regime-neutral-shaped codes: a fact about
-     * the record being built, not an AEAT wire state.
+     * `countryCode` is not operator data, so it may ride in params; the recipient's name and tax
+     * identifier never do (see `fiscal.record_invalid`).
      */
     "fiscal.foreign_recipient_unsupported": { countryCode: string };
 
     /**
-     * The dashboard's ongoing fiscal-submission check (`./submission-alerts.ts`) — an alert code the
-     * source hands the dashboard, never a thrown `AppError`. Records have waited past
-     * `SUBMISSION_DELAYED_WARN_MS`/`SUBMISSION_DELAYED_ERROR_MS` to reach AEAT; `count` is how many
-     * are still waiting and `hours` is the oldest one's age. Registered here because this package
-     * owns the source, beside the codes it constructs. `fiscal.*`, matching the file's other
-     * regime-neutral-shaped codes: a fact about the submission lifecycle any regime backend shares.
+     * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records are still
+     * waiting to reach AEAT and `hours` is the oldest one's age.
      */
     "fiscal.submission_delayed": { count: number; hours: number };
 
     /**
      * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`)
-     * and need a human — a halted chain never drains itself. An alert code the source hands the
-     * dashboard, never thrown. See `fiscal.submission_delayed` above.
+     * and need a human — a halted chain never drains itself. Never thrown.
      */
     "fiscal.submission_stopped": { count: number };
 
     /**
-     * The dashboard's awaiting-certificate ongoing check (`apps/server/src/alert-sources.ts`), not
-     * this package's own source: it reads the in-memory cell the fiscal pass flips
-     * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a pass for a missing
-     * AEAT certificate. Registered here anyway, matching `fiscal.submission_delayed`'s reasoning
-     * above: the code names the fiscal domain concept, not the package that raises it. No params —
-     * the alert is a plain on/off fact, unlike the counted submission codes.
+     * An ongoing-alert code raised by `apps/server/src/alert-sources.ts`, not by this package; it
+     * lives here because it names the fiscal concept. No params: a plain on/off fact.
      */
     "fiscal.awaiting_certificate": Record<string, never>;
   }
