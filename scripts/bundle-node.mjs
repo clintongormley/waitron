@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
  * (docs/developers/ci-and-gates.md, "sharp and the server bundle"). */
 export const BUNDLE_EXTERNALS = ["sharp"];
 
+// Probe for PR #593: never merged.
 const USAGE = "Usage: node scripts/bundle-node.mjs <entry>=<outfile> [<entry>=<outfile>...]";
 
 export function esbuildArgs(entry, outfile) {
