@@ -187,6 +187,57 @@ describe("createSealedStateRefresher", () => {
     );
   });
 
+  it("logs a system error's code beside its own, and never its message or path", async () => {
+    const log = vi.fn();
+    const refresher = createSealedStateRefresher(deps({ log }));
+    // A directory where a state file should be: reading it fails with EISDIR, not ENOENT.
+    await rm(join(stateDir, "secrets.env"));
+    await mkdir(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(log).toHaveBeenCalledWith("warn", "backup.sealed_state_failed", {
+      errorCode: "unknown",
+      errno: "EISDIR",
+    });
+  });
+
+  it("logs no errno for a thrown value whose code is not a system error's", async () => {
+    const log = vi.fn();
+    const leak = Object.assign(new Error("boom"), { code: `open ${stateDir}/secrets.env` });
+    const refresher = createSealedStateRefresher(
+      deps({
+        log,
+        readRecoveryKey: () => Promise.reject(leak),
+      }),
+    );
+    expect(await refresher.refresh()).toBe("failed");
+    expect(log).toHaveBeenCalledWith("warn", "backup.sealed_state_failed", {
+      errorCode: "unknown",
+    });
+  });
+
+  it("answers failed when the logger throws, and the next refresh still runs and seals", async () => {
+    let calls = 0;
+    const log = vi.fn(() => {
+      calls += 1;
+      if (calls <= 2) throw new Error("log sink down");
+    });
+    let reads = 0;
+    const refresher = createSealedStateRefresher(
+      deps({
+        log,
+        readRecoveryKey: async () => {
+          reads += 1;
+          return reads === 1 ? KEY : OTHER_KEY;
+        },
+      }),
+    );
+    expect(await refresher.refresh()).toBe("failed");
+    expect(await refresher.refresh()).toBe("sealed");
+    // The second refresh read the second key, so the row it left opens under that key alone.
+    const sealedNow = await row();
+    expect(codeThrownBy(() => unsealNodeState(sealedNow!, OTHER_KEY))).toBe("nothing thrown");
+  });
+
   it("runs one refresh at a time, so a slow refresh cannot land after a newer one", async () => {
     // The first refresh reads the OLD key and is held there; the second reads the new one. Run side
     // by side, the second would finish first and the first would then overwrite it with a row only

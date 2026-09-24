@@ -53,6 +53,14 @@ export async function readSealedStateRow(
   return rows[0]?.sealed ?? null;
 }
 
+/** A system error's code (`EACCES`, `ENOSPC`) is a fixed symbol; its message carries the path. */
+function failureFields(err: unknown): Record<string, string> {
+  const errno = (err as { code?: unknown } | null)?.code;
+  return typeof errno === "string" && /^E[A-Z0-9]+$/.test(errno)
+    ? { errorCode: codeOf(err), errno }
+    : { errorCode: codeOf(err) };
+}
+
 export type SealedStateOutcome = "sealed" | "no_key" | "failed";
 
 export interface SealedStateDeps {
@@ -78,7 +86,7 @@ export interface SealedStateRefresher {
  * Refreshes run one at a time, in call order: run side by side, a refresh holding an older key
  * could land after a newer one, leaving a row only a superseded key opens.
  *
- * Never throws. A failure is logged with its code and the previous row is left as it was.
+ * Never rejects. A failure is logged with its code and the previous row is left as it was.
  */
 export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRefresher {
   const once = async (): Promise<SealedStateOutcome> => {
@@ -108,16 +116,17 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
       deps.log("info", "backup.sealed_state_refreshed", { entries: entries.length });
       return "sealed";
     } catch (err) {
-      deps.log("warn", "backup.sealed_state_failed", { errorCode: codeOf(err) });
+      deps.log("warn", "backup.sealed_state_failed", failureFields(err));
       return "failed";
     }
   };
-  let tail: Promise<unknown> = Promise.resolve();
+  let tail: Promise<SealedStateOutcome> = Promise.resolve("sealed");
   return {
     refresh: () => {
-      const next = tail.then(once);
-      tail = next;
-      return next;
+      // Only a throwing logger reaches this catch; without it one rejection would reject every
+      // later refresh in the chain unrun.
+      tail = tail.then(once).catch((): SealedStateOutcome => "failed");
+      return tail;
     },
   };
 }
