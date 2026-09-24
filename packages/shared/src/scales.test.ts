@@ -38,10 +38,6 @@ describe("decimalToThousandths", () => {
   });
 
   it("reads five grams as a count the money conversion does not give", () => {
-    // The whole reason this is not the money conversion — but not because the money one drops
-    // the third place. It rounds it, half away from zero, so five grams read at the money scale
-    // is 1: the shared conversion nobody wrote would have refused nothing and returned a number
-    // five times too small.
     expect(decimalToThousandths(decimal("0.005"))).toBe(5);
     expect(decimalToThousandths(decimal("0.005"))).not.toBe(0);
     expect(decimalToCents(decimal("0.005"))).toBe(1);
@@ -53,7 +49,6 @@ describe("decimalToThousandths", () => {
   });
 
   it("rounds a fourth decimal place half away from zero", () => {
-    // Half away from zero, as `toScale` rounds.
     expect(decimalToThousandths(decimal("0.0005"))).toBe(1);
     expect(decimalToThousandths(decimal("-0.0005"))).toBe(-1);
     expect(decimalToThousandths(decimal("0.0004"))).toBe(0);
@@ -117,7 +112,6 @@ describe("thousandthsToDecimal", () => {
   });
 
   it("renders zero as 0.000, never as a bare 0", () => {
-    // The scale is part of the literal a receipt prints, exactly as it is for an amount.
     expect(thousandthsToDecimal(0)).toBe("0.000");
   });
 
@@ -217,8 +211,6 @@ describe("basisPointsToDecimal", () => {
 
 describe("the two scales do not share a conversion", () => {
   it("reads the same literal as a different count in each scale", () => {
-    // Naming each function after its own scale is what stops a caller mixing them up: there is
-    // no shared "toInteger" that would take a quantity and a rate and give the same answer.
     expect(decimalToThousandths(decimal("21.00"))).toBe(21000);
     expect(decimalToBasisPoints(decimal("21.00"))).toBe(2100);
   });
@@ -231,12 +223,8 @@ describe("rawThousandthsToDecimal", () => {
   });
 
   it("refuses text carrying a decimal point, in the quantity scale's own words", () => {
-    // What a raw read that renders the count as a decimal would hand over: a plausible string a
-    // thousand times the quantity. Refusing is the only safe answer.
-    //
-    // The CODE is the scale's own, as `rawCentsToDecimal` uses money's own: a caller holding a
-    // refusal from a query that reads a quantity and a rate in one row can tell which of the two
-    // was malformed. A generic `shared.invalid_decimal` here cannot say that.
+    // The CODE is the scale's own: a caller holding a refusal from a query that reads a quantity
+    // and a rate in one row can tell which of the two was malformed.
     expect(refusalOf(() => rawThousandthsToDecimal("1.500"))).toEqual({
       code: "shared.invalid_thousandths",
       params: { value: "1.500" },
@@ -251,8 +239,6 @@ describe("rawThousandthsToDecimal", () => {
   });
 
   it("reads a minus zero as zero, which is the only value it can be", () => {
-    // The pattern admits "-0" as well as the plain integer shape; this is what the reader does
-    // with it.
     expect(rawThousandthsToDecimal("-0")).toBe("0.000");
   });
 
@@ -263,9 +249,8 @@ describe("rawThousandthsToDecimal", () => {
   });
 
   it("refuses a sum wider than a quantity's nine integer digits", () => {
-    // No column type on this engine refuses this sum; the reader is the only refusal. A MALFORMED
-    // value is refused in the scale's own words, an out-of-range one in the words every scale
-    // shares, which is what `decimalToThousandths` throws for the same condition on the typed path.
+    // A MALFORMED value is refused in the scale's own words, an out-of-range one in the words every
+    // scale shares, which is what `decimalToThousandths` throws for the same condition.
     expect(refusalOf(() => rawThousandthsToDecimal("1000000000000"))).toEqual({
       code: "shared.decimal_overflow",
       params: { value: "1000000000000", maxIntegerDigits: 9 },
@@ -301,18 +286,12 @@ describe("rawBasisPointsToDecimal", () => {
 });
 
 describe("each raw reader leaves through its own public converter", () => {
-  // Nothing a caller can pass tells the two arrangements apart today: `rawCount` builds its
-  // answer from a BigInt, so the `Number.isInteger` refusal inside each public converter is
-  // unreachable from the raw path. What is being kept is the SHAPE `rawCentsToDecimal` has —
-  // one exit, so a validation added to `thousandthsToDecimal` or `basisPointsToDecimal` is
-  // applied to a raw read as well as a typed one, rather than to the typed one alone.
+  // No caller input tells the two arrangements apart, so this pins the SHAPE: one exit, so a
+  // validation added to `thousandthsToDecimal` or `basisPointsToDecimal` also applies to a raw read.
   //
-  // Weaker than its name in the usual way: it reads the file as TEXT. A converter reached under
-  // a local alias, or through another function that happens to call it, would satisfy this
-  // without the delegation being there.
-  // `?raw` so the source is read as text and never evaluated, and `import.meta.glob` rather than
-  // `node:fs` because this package deliberately installs no `@types/node` (see its package.json).
-  // `conventions.test.ts` reads this package's sources the same way, and types `glob` the same way.
+  // Weaker than its name: it reads the file as TEXT. A converter reached under a local alias, or
+  // through another function that happens to call it, would satisfy this without the delegation.
+  // `import.meta.glob` rather than `node:fs` because this package installs no `@types/node`.
   const source = (
     import.meta.glob("./scales.ts", {
       query: "?raw",

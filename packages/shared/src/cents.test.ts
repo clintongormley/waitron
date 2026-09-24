@@ -23,8 +23,6 @@ describe("centsToDecimal", () => {
   });
 
   it("renders zero as 0.00, never as a bare 0", () => {
-    // The literal is what a receipt prints and what a fiscal record hashes, so the scale is part
-    // of the value: "0" and "0.00" are the same amount and different bytes.
     expect(centsToDecimal(0)).toBe("0.00");
   });
 
@@ -33,8 +31,8 @@ describe("centsToDecimal", () => {
   });
 
   it("refuses a value that is not a whole number of cents", () => {
-    // Half a cent cannot be stored and cannot be spent. A caller holding one has divided
-    // somewhere without deciding how to round, and rounding silently here would hide it.
+    // A caller holding half a cent has divided somewhere without deciding how to round, and
+    // rounding silently here would hide it.
     expect(refusalOf(() => centsToDecimal(12.5))).toEqual({
       code: "shared.invalid_cents",
       params: { value: "12.5" },
@@ -60,18 +58,12 @@ describe("decimalToCents", () => {
   });
 
   it("rounds a third decimal place half away from zero", () => {
-    // Half away from zero, as `toScale` rounds: this is the boundary where a fiscal amount is
-    // decided, and half to even would move a cent on exactly the values
-    // that sit on the boundary.
     expect(decimalToCents(decimal("0.005"))).toBe(1);
     expect(decimalToCents(decimal("-0.005"))).toBe(-1);
     expect(decimalToCents(decimal("0.004"))).toBe(0);
   });
 
   it("round-trips the largest amount the money scale admits", () => {
-    // 12 integer digits is the widest amount this system stores, and it is 99999999999999 cents —
-    // well inside the 9007199254740991 a JavaScript number counts exactly, so no amount in range
-    // can lose a cent to the number type.
     const widest = decimal("9".repeat(MAX_MONEY_INTEGER_DIGITS) + ".99");
     expect(decimalToCents(widest)).toBe(99999999999999);
     expect(99999999999999).toBeLessThan(Number.MAX_SAFE_INTEGER);
@@ -120,23 +112,17 @@ describe("rawCentsToDecimal", () => {
   });
 
   it("reads a count above the four-byte ceiling", () => {
-    // 2147483648 cents is one past what a four-byte integer holds, and it is a perfectly ordinary
-    // amount for a money column that stores 12 integer digits: €21,474,836.48. A count this wide
-    // converts exactly.
     expect(rawCentsToDecimal("2147483648")).toBe("21474836.48");
   });
 
   it("reads the widest amount the money bound admits", () => {
-    // 12 integer digits is the widest amount `assertMoney` lets through, and it is 99999999999999
-    // cents — inside `Number.isSafeInteger`, so no digit is lost on the way through.
     expect(rawCentsToDecimal("99999999999999")).toBe("999999999999.99");
   });
 
   it("reads a total wider than any one amount may be", () => {
     // Raw money reads are often totals — `cast(sum(...) as text)` — and amounts that each pass
     // `assertMoney` can sum past its twelve integer digits. So this reader's bound is what a
-    // number counts exactly, not the money bound, and it is deliberately not the digit bound the
-    // two readers in `scales.ts` apply.
+    // number counts exactly, not the money bound.
     expect(rawCentsToDecimal("123456789012345")).toBe("1234567890123.45");
   });
 
@@ -153,8 +139,6 @@ describe("rawCentsToDecimal", () => {
   });
 
   it("refuses a count that is not a whole number of cents", () => {
-    // A count rendered as a decimal ("7734.00") means the expression was not a count of cents at
-    // all, so converting it would be a hundredfold error reported as success.
     expect(refusalOf(() => rawCentsToDecimal("7734.00"))).toEqual({
       code: "shared.invalid_cents",
       params: { value: "7734.00" },
@@ -178,8 +162,6 @@ describe("rawCentsToDecimal", () => {
   });
 
   it("refuses a magnitude beyond what a number counts exactly", () => {
-    // Longer than the money bound admits, so no stored amount reaches this — but a digit
-    // silently dropped by the number type is the one failure this file must never produce.
     expect(refusalOf(() => rawCentsToDecimal("9007199254740993"))).toEqual({
       code: "shared.invalid_cents",
       params: { value: "9007199254740993" },

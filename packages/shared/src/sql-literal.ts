@@ -1,17 +1,7 @@
 /**
- * The standard SQL string-literal quoting rule, for a literal a utility statement must carry in its
- * own text because the engine will not bind it. ONE package quotes one today: `@waitron/db` quotes
- * the two `CREATE TRIGGER` arguments the change feed installs (`packages/db/src/change-feed.ts:45`).
- * `@waitron/provisioning` was the second until the storage switch deleted the instance path that
- * emitted `CREATE ROLE … PASSWORD '…'`; it still re-exports this function from its `identifiers.ts`
- * but no longer calls it. It lives here rather than beside its caller so the escaping argument
- * below is written once.
- *
- * `''` always doubles a single quote, so a value can never close the literal early. The `E'…'` form
- * is for a backslash: under `standard_conforming_strings = on` (the default since 9.1) a backslash in
- * a plain literal is already itself, but the setting is PER-SESSION and can be off, and `E'…'` with
- * the backslash doubled makes the meaning explicit under both. This is what `PQescapeLiteral` and
- * `pg`'s own `Client.escapeLiteral` do, for the same reason.
+ * A string as an SQL literal, for statement text the engine takes no bound value in. `''` doubles
+ * a single quote, so a value can never close the literal early. The `E'…'` form emitted for a
+ * backslash is PostgreSQL's, and SQLite does not accept it (open in `docs/backlog.md`).
  */
 export function quoteLiteral(value: string): string {
   const escaped = value.replaceAll("'", "''").replaceAll("\\", "\\\\");

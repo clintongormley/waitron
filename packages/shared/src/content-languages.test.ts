@@ -48,12 +48,8 @@ describe("content languages", () => {
 
   it("answers a repeated request from its cache instead of deriving the names again", () => {
     // Deriving the list again has to build a DisplayNames; a cached answer never touches one.
-    // Swapping in a formatter that names nothing tells the two apart: with the cache write
-    // deleted this reads "expected [] to deeply equal [ ...(546) ]", and the length assertion
-    // below is the control that stops a both-empty pass. The mock implementation must be a
-    // `function` expression — an arrow is not a constructor, so the `new Intl.DisplayNames(...)`
-    // inside contentLanguageChoices would throw "is not a constructor" instead. Vitest 4.1.11
-    // warns about that case, naming the property it mocked.
+    // The length assertion below stops a both-empty pass. The mock implementation must be a
+    // `function` expression: an arrow is not a constructor, so `new Intl.DisplayNames(...)` throws.
     const locale = "pt-PT";
     const expected = contentLanguageChoices(locale);
     expect(expected.length).toBeGreaterThan(0);

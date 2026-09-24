@@ -44,7 +44,7 @@ function blankLine(): LineDraft {
  * A well-formed NON-NEGATIVE decimal literal: `0`, or a digit string with no leading zero, each with
  * an optional fractional part. Browser-local by design — the dashboard never imports
  * `@waitron/shared` at runtime — but written to accept exactly the literals that package's
- * `decimal()` accepts (`packages/shared/src/money.ts:19`), which `purchasing-api.ts` screens every
+ * `decimal()` accepts (`packages/shared/src/money.ts:14`), which `purchasing-api.ts` screens every
  * amount through, apart from the SIGN: `decimal()` also accepts a leading minus, and this pattern
  * does not. Two consequences, both worth knowing before anyone relaxes it. A malformed shape — a
  * blank, a comma-decimal, `.5`, `01.00` — is refused on both sides, so here it only saves the round

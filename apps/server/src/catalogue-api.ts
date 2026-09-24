@@ -299,7 +299,7 @@ function requireUuidParam(id: string, kind: string): string {
  * SIGN ONLY, and the two halves of that both matter. A value `decimal()` cannot parse is swallowed
  * here and left to the write's own `decimal()` a moment later, which keeps both the error code AND
  * the order in which a request carrying two faults reports them. And `decimal()` strips the sign
- * from a zero magnitude (`packages/shared/src/money.ts:27`), so a leading `-` on what it returns
+ * from a zero magnitude (`packages/shared/src/money.ts:21`), so a leading `-` on what it returns
  * means strictly below zero: `-0.00` is not refused.
  *
  * The code is `management.request_invalid`, the body-shape code most of this file's screens use,

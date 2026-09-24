@@ -1,4 +1,4 @@
-/** The order-age escalation band for a KDS line/order/table. See the order-timing-alerts spec. */
+/** The order-age escalation band for a KDS line, order or table. */
 export type TimingBand = "fresh" | "warm" | "overdue" | "forgotten";
 
 export interface StationThresholds {

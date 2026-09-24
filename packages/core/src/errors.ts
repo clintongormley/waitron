@@ -18,7 +18,7 @@ import "@waitron/shared";
  * `ErrorCode` union. That is wrong under this repo's OWN documented, already-precedented
  * convention (see `packages/shared/src/errors.ts`'s design note, and Task 13's identical
  * correction in `packages/fiscal-verifactu/src/errors.ts`, and Task 14's in the same file): only
- * codes NATIVE to `packages/shared` itself (`ids.ts`, `money.ts`) belong in that file's own
+ * codes NATIVE to `packages/shared` itself belong in that file's own
  * registry; every dependent package — `packages/db`, `packages/fiscal`,
  * `packages/fiscal-verifactu`, and now `packages/core` — contributes its own by
  * `declare module "@waitron/shared"` from its OWN source, exactly as this file does. Overridden

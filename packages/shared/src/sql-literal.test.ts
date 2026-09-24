@@ -12,8 +12,6 @@ describe("quoteLiteral", () => {
   });
 
   it("escapes a backslash and marks the literal E", () => {
-    // Under a session where `standard_conforming_strings` is off, a lone backslash in a plain
-    // literal is an escape character; `E'…'` with the backslash doubled is unambiguous either way.
     expect(quoteLiteral("a\\b")).toBe("E'a\\\\b'");
   });
 

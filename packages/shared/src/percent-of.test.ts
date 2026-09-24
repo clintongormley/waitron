@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decimal, percentOf } from "./money.js";
 
-// These assertions are the behavioural contract hoisted out of packages/core/src/vat.test.ts when
-// `percentOf` moved into @waitron/shared. Every case that suite pinned is reproduced here (including
-// its explicit scale-0 and scale-7 cases), plus new exact-integer, sub-cent-rounding, and
-// negative-base cases the refactor brief called for, so deleting the core suite drops no case.
 describe("percentOf", () => {
   it("computes 21% of a tax-exclusive line base", () => {
     expect(percentOf(decimal("10.00"), decimal("21.00"))).toBe("2.10");
@@ -15,7 +11,6 @@ describe("percentOf", () => {
   });
 
   it("takes an exact integer amount and rate to money scale", () => {
-    // 100 * 21 / 100 = 21, rendered at the default money scale as "21.00".
     expect(percentOf(decimal("100"), decimal("21"))).toBe("21.00");
   });
 
@@ -28,12 +23,10 @@ describe("percentOf", () => {
   });
 
   it("rounds half away from zero at the exact midpoint", () => {
-    // 12.5% of 1.00 = 0.125, which sits exactly on the rounding boundary between 0.12 and 0.13.
     expect(percentOf(decimal("1.00"), decimal("12.50"))).toBe("0.13");
   });
 
   it("rounds a sub-cent result up to the nearest cent", () => {
-    // 21% of 0.03 = 0.0063, which rounds to 0.01 at money scale (the third decimal, 6, is >= 5).
     expect(percentOf(decimal("0.03"), decimal("21"))).toBe("0.01");
   });
 
@@ -42,35 +35,20 @@ describe("percentOf", () => {
   });
 
   it("carries a negative base straight through to a negative tax (a correction)", () => {
-    // A correction line's base is negative, and its tax must be the negative of the positive case.
     expect(percentOf(decimal("-100.00"), decimal("21.00"))).toBe("-21.00");
   });
 
   it("stays exact for a value that would carry floating-point error through a JS division", () => {
-    // 21% VAT on a 3.50 line base: 3.50 * 21.00 / 100 = 0.735 EXACTLY — a true half-cent midpoint
-    // between 0.73 and 0.74, so half-away-from-zero rounds it UP to 0.74. The money-domain analogue
-    // of 0.1 + 0.2 !== 0.3: floating-point representation shifts the computed value off the exact
-    // midpoint, so a naive `Number` + `.toFixed(2)` codec — `(Number("3.50") * Number("21.00") /
-    // 100).toFixed(2)` — rounds to the WRONG cent and yields "0.73". (Concretely, and deterministically
-    // per IEEE-754 + the ECMAScript `toFixed` spec — not engine-dependent: the double nearest 0.735 is
-    // 0.73499…, just below the true midpoint.) `percentOf` computes in BigInt throughout, so the
-    // representation error never has anywhere to enter and the midpoint rounds correctly.
-    //
-    // This fixture is chosen to DIVERGE under a float codec (proven by deletion against a
-    // `.toFixed(2)` shadow, which yields "0.73"). The previous fixture — 10% of 30.00 = 3.00 —
-    // used exactly float-representable inputs, so a naive `Number` implementation passed it too and
-    // it guarded nothing.
+    // 3.50 * 21.00 / 100 = 0.735 exactly, a half-cent midpoint; the double nearest 0.735 is just
+    // below it, so `(Number("3.50") * Number("21.00") / 100).toFixed(2)` yields "0.73".
     expect(percentOf(decimal("3.50"), decimal("21.00"))).toBe("0.74");
   });
 
   it("honours an explicit scale of zero", () => {
-    // 100% of 10.00 is 10.00, rendered with zero decimal places as the whole number "10".
     expect(percentOf(decimal("10.00"), decimal("100.00"), 0)).toBe("10");
   });
 
   it("honours an explicit scale wider than amount's and rate's scales combined", () => {
-    // Exercises the "shift up" branch (target scale wider than the exact product already provides)
-    // rather than leaving it an untested assumption.
     expect(percentOf(decimal("10.00"), decimal("21.00"), 7)).toBe("2.1000000");
   });
 });

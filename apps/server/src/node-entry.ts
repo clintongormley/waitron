@@ -292,7 +292,7 @@ function paramsLine(params: unknown): string {
  * the installer cannot act on; the names and messages are what name the fault.
  *
  * Its own loop, but not its own bound: `MAX_CAUSE_DEPTH` is imported from `@waitron/shared`'s
- * `cause-chain.ts`, which carries the self-reference and depth arguments for all three walks.
+ * `cause-chain.ts`.
  * `firstCodeInCauseChain` itself cannot serve here — it returns the FIRST accepted code and stops,
  * while this keeps every level.
  */

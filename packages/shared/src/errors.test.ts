@@ -8,10 +8,6 @@ describe("AppError", () => {
   });
 
   it("uses the code as the Error message so a stray log prints a key, not prose", () => {
-    // A translator can key off "shared.invalid_id". Nobody can translate
-    // "invalid id" once it has reached a screen, which is exactly the failure spec §9
-    // forbids. Making the message BE the code means even careless `console.error(e.message)`
-    // produces something a translation table can catch.
     const error = new AppError("shared.invalid_id", { kind: "SeriesId", value: "nope" });
     expect(error.message).toBe("shared.invalid_id");
   });
@@ -25,8 +21,6 @@ describe("AppError", () => {
   });
 
   it("is a real Error, so it survives throw/catch and keeps a stack", () => {
-    // A plain object with a `code` field would satisfy every other assertion here and then
-    // lose its stack the first time something rethrows it.
     let caught: unknown;
     try {
       throw new AppError("shared.invalid_decimal", { value: "1,50" });
@@ -49,8 +43,6 @@ describe("AppError", () => {
   });
 
   it("can be constructed without being thrown", () => {
-    // Load-bearing: a caller may want to attach a warning to a result without stopping
-    // execution. Nothing in this package forces a throw.
     const warning = new AppError("shared.decimal_overflow", {
       value: "1000000000000.00",
       maxIntegerDigits: 12,
@@ -71,8 +63,7 @@ describe("isAppError", () => {
   });
 
   it("rejects a plain object that merely looks like one", () => {
-    // `instanceof` alone would already reject this, but a duck-typed guard would accept it and
-    // then hand downstream code an object with no stack and no prototype.
+    // `instanceof` alone would already reject this, but a duck-typed guard would accept it.
     expect(isAppError({ code: "shared.invalid_id", params: {} })).toBe(false);
   });
 
@@ -83,13 +74,9 @@ describe("isAppError", () => {
 });
 
 describe("param-shape discrimination", () => {
-  // `ids.test.ts`'s "brand assignability" block pins branded ids the same way: the
-  // `@ts-expect-error` directive below is the real assertion, since `tsc --noEmit` fails with
+  // The `@ts-expect-error` directive below is the real assertion: `tsc --noEmit` fails with
   // "Unused '@ts-expect-error' directive" the moment `ErrorParams[C]` ever widens enough to
-  // accept an unrelated shape. That is exactly the "appears typed, actually
-  // Record<string, unknown>" regression spec §9 forbids, and neither `pnpm test` (no type
-  // checking) nor a runtime assertion would ever catch it — only this compiles-or-doesn't check
-  // does.
+  // accept an unrelated shape. Vitest does not typecheck, so no runtime assertion catches it.
   it("rejects a wrong-shaped params object for a native shared.* code", () => {
     // @ts-expect-error "shared.invalid_id" wants { kind: string; value: string }, not this shape
     const error = new AppError("shared.invalid_id", { wrongShape: true });
@@ -101,10 +88,6 @@ describe("narrowing by code", () => {
   it("does not narrow .params from a bare `.code` check — see the class doc comment", () => {
     const error: AppError = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
     if (error.code === "shared.invalid_id") {
-      // `.code` is narrowed here (the line above compiles), but `.params` is not: it is still
-      // typed as the union of every code's params, so `.kind` does not exist on it without
-      // `hasCode`. This is the papercut the class doc comment documents, pinned so nobody
-      // "fixes" it by deleting the directive rather than reading why it is there.
       // @ts-expect-error `.params` is not narrowed by a bare `.code` check; use `hasCode` instead
       expect(error.params.kind).toBe("TillId");
     } else {
@@ -115,8 +98,6 @@ describe("narrowing by code", () => {
   it("narrows .params together with .code via hasCode", () => {
     const error: AppError = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
     if (hasCode(error, "shared.invalid_id")) {
-      // No `@ts-expect-error` needed: `hasCode` narrows `error` to `AppError<"shared.invalid_id">`,
-      // so `.params` is `{ kind: string; value: string }` here, not the full union.
       expect(error.params.kind).toBe("TillId");
     } else {
       expect.unreachable("hasCode should have matched");

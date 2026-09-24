@@ -1,9 +1,7 @@
 /**
- * A permissive telephone-format check for UI hints and write validation, used by BOTH the server
- * write paths (identity) and the dashboard forms so client and server agree. Accepts an optional
- * single leading "+", then digits interspersed with spaces, dots, hyphens or parentheses, and
- * requires 6–15 digits in total (E.164 caps at 15). Returns false for "" — telephone is optional,
- * so callers decide whether an absent number is allowed and only validate a non-empty value.
+ * A permissive telephone-format check: an optional leading "+", then digits among spaces, dots,
+ * hyphens or parentheses, with 6–15 digits in all (E.164 caps at 15). False for "", so a caller
+ * with an optional number validates only a non-empty one.
  */
 export function isValidTelephone(raw: string): boolean {
   if (!/^\+?[\d ().-]+$/.test(raw)) return false;
