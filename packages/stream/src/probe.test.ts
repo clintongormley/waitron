@@ -99,6 +99,20 @@ function rewritingConditions(
   return { inner, store };
 }
 
+/** A store that applies a conditional write it is told to, and then answers it as refused. */
+function applyingThenRefusing(applies: (condition: PutCondition) => boolean) {
+  const inner = createMemoryObjectStore();
+  const store: ObjectStore = {
+    ...inner,
+    put: async (key, body, condition) => {
+      if (condition === undefined || !applies(condition)) return inner.put(key, body, condition);
+      await inner.put(key, body);
+      throw landedRefusal();
+    },
+  };
+  return { inner, store };
+}
+
 describe("probeBucket", () => {
   it("passes an honest bucket and leaves nothing behind", async () => {
     const store = createMemoryObjectStore();
@@ -137,6 +151,57 @@ describe("probeBucket", () => {
     });
     expect(inner.snapshot().has(KEY)).toBe(false);
   });
+
+  it("refuses a bucket that applies every conditional write and then answers it as refused", async () => {
+    const { inner, store } = applyingThenRefusing(() => true);
+    await expect(probeBucket(store, NONCE)).resolves.toEqual({
+      ok: false,
+      reason: "create_only_ignored",
+      detail: expect.any(String),
+    });
+    expect(inner.snapshot().has(KEY)).toBe(false);
+  });
+
+  it("refuses a bucket that applies a stale 'only if unchanged' write and then answers it as refused", async () => {
+    const { inner, store } = applyingThenRefusing((condition) => "ifMatch" in condition);
+    await expect(probeBucket(store, NONCE)).resolves.toEqual({
+      ok: false,
+      reason: "if_match_ignored",
+      detail: expect.any(String),
+    });
+    expect(inner.snapshot().has(KEY)).toBe(false);
+  });
+
+  it("passes the same wrapper when it applies nothing, reading the object back after each refusal", async () => {
+    const { inner, store } = applyingThenRefusing(() => false);
+    await expect(probeBucket(store, NONCE)).resolves.toEqual({ ok: true });
+    // The first read, one read after each deliberate refusal, and the read after the delete.
+    expect(inner.calls.filter((call) => call.operation === "get")).toHaveLength(4);
+  });
+
+  it.each([
+    [2, 500, "read_mismatch"],
+    [3, 403, "access_denied"],
+    [2, "not found", "create_only_ignored"],
+    [3, "not found", "if_match_ignored"],
+  ] as const)(
+    "names read %i, the one after a deliberate refusal, answered %s as %s",
+    async (failingGet, status, reason) => {
+      const inner = createMemoryObjectStore();
+      let gets = 0;
+      const store: ObjectStore = {
+        ...inner,
+        get: async (key) => {
+          gets += 1;
+          if (gets !== failingGet) return inner.get(key);
+          if (status !== "not found") throw failure(status, "X");
+          return null;
+        },
+      };
+      await expect(probeBucket(store, NONCE)).resolves.toMatchObject({ ok: false, reason });
+      expect(inner.snapshot().has(KEY)).toBe(false);
+    },
+  );
 
   it("refuses a bucket that refuses even a current version", async () => {
     const { store } = rewritingConditions((condition) =>

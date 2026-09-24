@@ -27,6 +27,9 @@ export type ProbeResult = { ok: true } | { ok: false; reason: ProbeFailure; deta
  * the list permission, S3 answers a read of a missing key with 403 rather than 404 (the client's own
  * GetObject documentation), so the pointer's "nothing written yet" would read as a failure.
  *
+ * A refusal counts only if the object still holds what it held before: a store that applies a write
+ * and then answers it as refused has not honoured the condition.
+ *
  * A bucket that gives no answer at all (the store's `backup.stream_request_failed` with no status)
  * is not a refusal, so it is THROWN rather than reported: callers tell "unreachable" from "refused".
  */
@@ -76,10 +79,11 @@ export async function probeBucket(
       );
     }
     if (again !== "refused") return failed(again.error, "write");
+    const createOnlyChanged = await changedSince(store, key, first, "create_only_ignored");
+    if (createOnlyChanged) return createOnlyChanged;
 
-    const fresh = await attempt(() =>
-      putOwnBytes(store, key, bytes("replace"), { ifMatch: version }),
-    );
+    const replacement = bytes("replace");
+    const fresh = await attempt(() => putOwnBytes(store, key, replacement, { ifMatch: version }));
     if (fresh === "refused") {
       return refuse(
         "fresh_version_refused",
@@ -96,6 +100,8 @@ export async function probeBucket(
       );
     }
     if (stale !== "refused") return failed(stale.error, "write");
+    const ifMatchChanged = await changedSince(store, key, replacement, "if_match_ignored");
+    if (ifMatchChanged) return ifMatchChanged;
 
     let after: StoredObject | null;
     try {
@@ -121,6 +127,24 @@ export async function probeBucket(
 
 function refuse(reason: ProbeFailure, detail: string): ProbeResult {
   return { ok: false, reason, detail };
+}
+
+async function changedSince(
+  store: ObjectStore,
+  key: string,
+  before: Uint8Array,
+  ignored: ProbeFailure,
+): Promise<ProbeResult | undefined> {
+  let current: StoredObject | null;
+  try {
+    current = await store.get(key);
+  } catch (error) {
+    return failed(error, "read");
+  }
+  if (current === null || Buffer.compare(current.body, before) !== 0) {
+    return refuse(ignored, "a write answered as refused changed the object anyway");
+  }
+  return undefined;
 }
 
 async function attempt(
