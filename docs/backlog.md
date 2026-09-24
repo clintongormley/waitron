@@ -1459,10 +1459,11 @@ Comments across many packages still cite deleted guard suites, from two deletion
 `scripts/errors-reachable.test.ts`); the outbox removal (#280) deleted
 `apps/server/src/sync-origin.test.ts` and left comments across the tree describing capture-origin
 machinery that no trigger does any more. Fix whenever a file is open anyway; the comment-pruning
-sweep (B9 → *Prune the comments*) reaches every package and takes these as it goes. Two grep hazards: searching `sync-origin.test.ts` finds only the
-comments that name the file and misses those that cite it obliquely; and searching "sync origin"
-also reaches a still-live thing — the mirror's own `origin_node_id` column
-(`packages/db/src/schema/mirror-config.ts`), which is outside this item and must not be swept with it.
+sweep (B9 → *Prune the comments*) reaches every package and takes these as it goes. Two grep
+hazards: searching `sync-origin.test.ts` finds only the comments that name the file and misses those
+that cite it obliquely; and searching "sync origin" also reaches a still-live thing — the mirror's
+own `origin_node_id` column (`packages/db/src/schema/mirror-config.ts`), which is outside this item
+and must not be swept with it.
 
 ### A1a. A foreign business customer needs an identifier-type decision
 
@@ -2403,14 +2404,15 @@ image constraints under *Detail → Box image*.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). The rule change and the checker every pruning pull request passes,
-  `scripts/comments-only.mjs <base>`, came first. The checker fails when any changed TypeScript or
-  JavaScript file parses to a different syntax tree or different token text, when one is added or
-  deleted, and when one is renamed; it lets through the trailing comma Prettier adds or drops when a
-  list is rewrapped. It reads no other file type, so a changed shell script, workflow, SQL or JSON
-  file passes it unread. The packages follow, the fiscal
-  ones under the same gates as any other fiscal change: the golden huella test and the
-  `inmutabilidad` suite pass unedited. Not reached by any package's pull request: `bench/` (about
-  2,300 comment lines) and the root `vitest.config.ts` and `eslint.config.js`.
+  `scripts/comments-only.mjs <base>`, came first. It reads the commits since the branch left
+  `<base>`, never an uncommitted edit. It fails on any changed file that is not a regular
+  TypeScript or JavaScript file; on a file added, deleted, renamed, or changed in mode or type; and
+  on a code file that parses to a different syntax tree or token text, or whose shebang or a comment
+  on its hand-written list of tool directives changed. It lets through the trailing comma Prettier
+  adds or drops when a list is rewrapped. The packages follow, the fiscal ones under the same gates
+  as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass unedited.
+  Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the root
+  `vitest.config.ts` and `eslint.config.js`.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3216,8 +3218,9 @@ Either bring the three decisions across and re-baseline, or change the sentence 
   version 7 does not ship the old JavaScript API, and typescript-eslint refuses the version outright
   in any case. typescript-eslint tracks the work in its issue 10940,
   and the message it prints today names version **7.1** as the target. When a typescript-eslint
-  release supports it, the root entry goes back to a plain `^7` range and the alias disappears. The
-  whole arrangement, with the receipts, is in
+  release supports it, the root entry goes back to a plain `^7` range and the alias disappears.
+  `scripts/comments-only.mjs` parses with the version 6 API (`ts.createSourceFile`), so it has to be
+  ported, or the alias kept for it, before that move. The whole arrangement, with the receipts, is in
   [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
   is deliberate*.
 - **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree, and the
@@ -4343,7 +4346,8 @@ Each track is its own worktree so sessions do not edit the same files. Rules, ea
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
 - **Shared files:** `apps/server/src/boot.ts`, `CLAUDE.md`, `packages/db`'s core schema and
   migrations, the dashboard printers screen, and this file (each track edits its own items).
-- **Comment thinning on touch only** (CLAUDE.md §1); no sweep in any track.
+- **Comments are cut on touch, and pruned deliberately one package per pull request** (CLAUDE.md
+  §1) — see B9 → *Prune the comments*.
 - **Update this file as items land**, in the same PR.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → till

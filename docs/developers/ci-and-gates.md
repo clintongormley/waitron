@@ -754,7 +754,8 @@ will meet:
   (`docs/backlog.md` → Track C).
 
 The root DOES therefore have a working TypeScript compiler API, at version 6, importable from the
-root Vitest project. Nothing uses it today. Two places had named its absence as the reason a guard
+root Vitest project. Its one user is `scripts/comments-only.mjs`, which parses with
+`ts.createSourceFile`. Two places had named its absence as the reason a guard
 reads text instead of parsing — the header of `scripts/dashboard-browser-purity.test.ts`, and the
 backlog note on `scripts/column-vocabulary.test.ts` — and both were corrected in the same change.
 

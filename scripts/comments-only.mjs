@@ -11,6 +11,8 @@ import ts from "typescript";
 // unseen; and a tool comment is placed by the tokens around it, not by its line. A line break
 // counts only where it changes the tree, or before `=>` or `using`.
 //
+// It needs the root's version 6 compiler API; a package's TypeScript 7 has no `createSourceFile`.
+//
 // The tree is compared rather than the scanner's token stream alone because a scanner without the
 // parser cannot tell a regular expression or the tail of a template literal from code, so a `/*` in
 // the one or a `//` in the other hides an edit after it; and because deleting a comment that holds a

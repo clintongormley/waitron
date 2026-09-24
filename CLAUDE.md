@@ -87,15 +87,17 @@ wide margin. This section stays in full deliberately: it applies to every change
   non-obvious why, that the code cannot show — never history, narrative, or a restatement of the
   code. The receipt lives in the commit message and the PR thread, with at most a one-line pointer.
   Cut on touch, and deliberate pruning sweeps are wanted (owner decision 2026-09-23). Prefer deleting
-  to rewording: a rewording is a new claim. A sweep shows it changed nothing but comments with
-  `node scripts/comments-only.mjs <base>`, which compares the syntax tree of each file COMMITTED
-  since the branch left `<base>` and fails on any file that is not TypeScript or JavaScript, and on
-  any added, deleted, retyped or re-moded file. Weaker than its name: it never reads an uncommitted
-  edit; it counts a comment as code only when it is the shebang or matches the script's own list of
-  lint, type, format, coverage, test-runner and bundler directives, so a comment an unlisted tool
-  reads is dropped unseen; and it ignores JSDoc types in `.js` files, because no tsconfig here sets
-  `checkJs` or `allowJs`. Cost: on 2026-09-24, 59,713 of the 198,596 non-blank lines in the tree's
-  non-test `.ts`, `.mjs` and `.js` files held only a comment, and every read pays for them.
+  to rewording: a rewording is a new claim. A comment another rule here requires at its site stays:
+  a guard's "weaker than its name" hedge, a decision "stated at its site", a "commented decision".
+  A sweep shows it changed nothing but comments with `node scripts/comments-only.mjs <base>`, which
+  compares the syntax tree of each file COMMITTED since the branch left `<base>` and fails on any
+  file that is not TypeScript or JavaScript, and on any added, deleted, retyped or re-moded file.
+  Weaker than its name: it never reads an uncommitted edit; it counts a comment as code only when it
+  is the shebang or matches the script's hand-written list of tool directives, so a comment an
+  unlisted tool reads is dropped unseen; and it ignores JSDoc types, which matter in a `.js` file
+  only if a tsconfig sets `checkJs` or `allowJs`, and none here does. Cost: about three in ten
+  non-blank lines of non-test code were comment-only on 2026-09-24
+  ([writing-claims.md](docs/developers/writing-claims.md)).
 
 ---
 
