@@ -4377,6 +4377,20 @@ boot-failure counter (`apps/server/src/node-entry.ts`; three failures put the bo
 page) — default: leave it. Also left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into five test files.
+Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed pointer
+`current.json` naming the live generation, generation claiming and pruning, and `probeBucket`, the
+check behind the settings screen's Test button), landed as #569. Nothing calls it yet; Tasks 6, 8a,
+9b and 10 do. Where it departs from the plan's code is recorded in a dated note in the plan's
+Task 5. Left open by #569's review, the owner's call: (1) pruning sends one delete request per file,
+where S3's `DeleteObjects` removes up to 1000 per request — using it would change the bucket
+interface the plan fixed, and not every S3-compatible store has been checked for it; (2) a listed
+file outside the venue's folder is reported as `backup.stream_request_failed` by the S3 store but as
+`backup.stream_name_invalid` by pruning's own check, which fires only for a store that breaks the
+listing rule. Also left: `@waitron/store` is missing from the English-only guard's
+`GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned — I believe this
+predates #569 (the package dates from #489); and nothing in the package has been run against a real
+bucket — the unit tests drive the real S3 client over a scripted network, and Task 10's loop test
+is the first run against a real S3-compatible server.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's

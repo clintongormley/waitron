@@ -121,8 +121,9 @@ single task is most likely to get wrong.
 - O7. Defaults the owner was told and did not change: `tenant_credentials` stays `local` with no node
   id (slice 3 replaces the per-machine key); the side-file limit is 256 MiB.
 - O8. **The image upload limit rises from 5 MiB to 20 MiB.** Stored images are the shrunk copies
-  (about 170 KB each), so the limit only guards the decode; decoding a 100-megapixel image raised
-  memory by about 29 MiB (measured by Task 0's drafter), and `MAX_INPUT_PIXELS = 100_000_000` stays.
+  (about 170 KB each), so the limit bounds the upload, not what is stored; the decode is bounded by
+  `MAX_INPUT_PIXELS = 100_000_000`, which stays (decoding a 100-megapixel image raised memory by
+  about 29 MiB, measured by Task 0's drafter).
   Task 0 changes `MAX_UPLOAD_BYTES`, the route's fallback and every test and document that states
   the limit. The configuration-transfer check (`MAX_BYTES`, 5 MiB) stays, because it checks stored
   bytes, not uploads.
@@ -1009,8 +1010,8 @@ In `apps/server/src/boot.test.ts`, replace the `describe("MAX_UPLOAD_BYTES", …
 ```ts
 describe("MAX_UPLOAD_BYTES", () => {
   it("is 20 MiB — the image-library upload ceiling", () => {
-    // What is stored is the shrunk copy (prepareImage), so this bounds only what one upload may
-    // make the server decode. Pinned so a later edit cannot move the ceiling without this failing.
+    // What is stored is the shrunk copy (prepareImage), so this bounds the upload, not what is
+    // stored. Pinned so a later edit cannot move the ceiling without this failing.
     expect(MAX_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
   });
 });
@@ -1103,8 +1104,9 @@ In `apps/server/src/boot.ts`, change `export const MAX_UPLOAD_BYTES = 5 * 1024 *
 `export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;` and replace its comment's first sentence with
 "The upper bound on a single product-image upload, 20 MiB (owner decision 2026-09-23; the image
 library design's §5e proposed 5 MiB). What is stored is the shrunk copy `prepareImage` makes, so
-this bounds only what one upload may make the server decode: a 100-megapixel PNG raised memory by
-about 29 MiB when decoded (slice-2 plan, Task 0), and `MAX_INPUT_PIXELS` refuses anything larger."
+this bounds the upload, not what is stored; the decode is bounded by `MAX_INPUT_PIXELS`, which
+refuses anything above 100 megapixels (a 100-megapixel PNG raised memory by about 29 MiB when
+decoded, slice-2 plan, Task 0)."
 The rest of the comment stays.
 
 `packages/media/src/configuration-transfer.ts`'s `MAX_BYTES` (5 MiB) stays as it is. It checks the
@@ -1660,8 +1662,9 @@ image carries it in `/app/node_modules`.
 What it leaves open:
 
 - **The upload limit is 20 MB (owner decision 2026-09-23, up from 5 MB).** It limits what may be
-  uploaded, not what is stored, and so bounds only the decode: a 100-megapixel picture raised memory
-  by about 29 MiB when decoded (measured), and `MAX_INPUT_PIXELS` refuses anything larger. What
+  uploaded, not what is stored. The decode is bounded by `MAX_INPUT_PIXELS`, which refuses anything
+  above 100 megapixels: a 100-megapixel picture raised memory by about 29 MiB when decoded
+  (measured). What
   current phones produce has not been measured.
 - **The library grid loads the full 1600-pixel copy for each tile.** A page of 40 photos is about
   7 MB on first load and is cached afterwards. A small thumbnail copy would help over slow Wi-Fi.
@@ -1771,8 +1774,8 @@ package now passes --external:sharp, the box image copies sharp into
 a grep of the built bundle in CI, and a sharp step in the image smoke job.
 
 The upload limit rises from 5 MB to 20 MB: what is stored is the shrunk
-copy, so the limit now only bounds what one upload may make the server
-decode. libvips, which sharp loads as its own LGPL library, ships with its
+copy, so the limit bounds the upload, not what is stored; the pixel limit
+bounds the decode. libvips, which sharp loads as its own LGPL library, ships with its
 licence texts, its notices and a written source offer in /app/third-party.
 Photos already stored keep their bytes; dev venues get shrunk tiles on the
 next wa-wt reset demo."
