@@ -746,7 +746,7 @@ describe("the menu publication in the catalogue's configuration transfer", () =>
 
   it("copies a publication after both parents it names, and its overrides after it", () => {
     // `importConfigurationTables` inserts in this order and deletes in its reverse
-    // (apps/server/src/configuration-transfer.ts), so each parent has to come first.
+    // (apps/server/src/configuration-transfer.ts).
     expect(transferred.indexOf("menu_items")).toBeLessThan(
       transferred.indexOf("menu_item_extra_lists"),
     );

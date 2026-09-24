@@ -8,7 +8,7 @@ import type { OptionSnapshot } from "@waitron/shared";
  * {@link staffOptionSnapshotLabels} what a SERVER reads on the till.
  *
  * A staff map holds exactly one entry, written from a plain name by whichever builder froze the
- * answer, so every reader here takes the map's VALUE and never its key.
+ * answer, so the kitchen and staff readers take the map's VALUE and never its key.
  */
 
 /**

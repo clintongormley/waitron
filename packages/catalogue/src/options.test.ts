@@ -535,7 +535,7 @@ describe("option lists in the catalogue's configuration transfer", () => {
   it("copies a list before the labels that point at it", () => {
     expect(transferred).toContain("option_lists");
     expect(transferred).toContain("option_labels");
-    // `importConfigurationTables` inserts in this order, so the parent has to come first.
+    // `importConfigurationTables` inserts in this order.
     expect(transferred.indexOf("option_lists")).toBeLessThan(transferred.indexOf("option_labels"));
   });
 

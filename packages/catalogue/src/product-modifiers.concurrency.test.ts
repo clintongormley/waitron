@@ -15,7 +15,7 @@ import { racePair } from "../test/fixtures.js";
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
-/** The domain code a transaction was refused with — or, when the failure has none, the error itself. */
+/** The domain code a transaction was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {
   const error = reason as { code?: unknown; cause?: { code?: unknown } };
   return error.code ?? error.cause?.code ?? reason;

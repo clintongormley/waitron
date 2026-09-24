@@ -251,6 +251,9 @@ export type { OptionListDependants } from "./modifier-list-types.js";
  * that holds the list, named by that product's staff name. An INACTIVE offer is listed like any
  * other. Products come back alphabetical by staff name with the id breaking a tie; menus in
  * offer-id order.
+ *
+ * ``grep -rn 'REFERENCES `option_l' --include='*.sql' packages apps`` prints two keys, both into
+ * `option_lists`: `option_labels`' and `product_modifiers`'. No foreign key references `option_labels`.
  */
 export async function optionListDependants(
   tx: Transaction,

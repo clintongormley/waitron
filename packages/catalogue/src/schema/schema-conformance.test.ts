@@ -3,10 +3,8 @@
 // each of its limits are described. What is here is what is true of the catalogue set in
 // particular.
 //
-// Two facts the factory cannot state for a set it has not seen. Every check constraint in
-// `drizzle/0000_baseline.sql` is written with a `CONSTRAINT <name>` clause, so `checksInDdl`'s
-// blindness to an anonymous check reaches nothing here. And every `unique()` in this package's
-// declarations is given a name, so the unnamed-constraint refusal reaches nothing either.
+// Every check constraint in `drizzle/*.sql` is written with a `CONSTRAINT <name>`
+// clause, so `checksInDdl`'s blindness to an anonymous check reaches nothing here.
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { CATALOGUE_MIGRATIONS } from "../migrations.js";

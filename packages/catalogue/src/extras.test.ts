@@ -624,7 +624,6 @@ describe("what the database refuses under an extras list", () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     expect(created.items.map((item) => item.productId)).toContain(breads.rye);
 
-    // Direct SQL, because no route or write path removes a product row.
     const error = await captureError(() =>
       Promise.resolve(fx.db.execute(sql`delete from products where id = ${breads.rye}`)),
     );
@@ -683,7 +682,7 @@ describe("extra lists in the catalogue's configuration transfer", () => {
     expect(transferred).toContain("extra_lists");
     expect(transferred).toContain("extra_list_items");
     // `importConfigurationTables` inserts in this order and deletes in its reverse
-    // (apps/server/src/configuration-transfer.ts), so the parent has to come first.
+    // (apps/server/src/configuration-transfer.ts).
     expect(transferred.indexOf("extra_lists")).toBeLessThan(
       transferred.indexOf("extra_list_items"),
     );

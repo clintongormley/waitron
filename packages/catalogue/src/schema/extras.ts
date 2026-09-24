@@ -5,8 +5,8 @@ import { menuItems } from "./menu.js";
 import { optionLists } from "./options.js";
 
 /** A reusable, named list of products a diner may add to a dish, with rules on how many. Its items
- * carry nothing they would duplicate from the product they name: no price, VAT, allergens or
- * dietary labels. */
+ * carry nothing they would duplicate from the product they name: no VAT, allergens or dietary
+ * labels. */
 export const extraLists = table(
   "extra_lists",
   {

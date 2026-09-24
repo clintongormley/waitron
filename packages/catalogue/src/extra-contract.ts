@@ -102,10 +102,9 @@ export interface MenuExtraPublication {
  * What one menu offer publishes, as `setMenuItemExtraLists` (extras.ts) takes it: the lists it
  * carries, in the order the editor sent, each with the overrides that narrow and reprice it.
  *
- * These checks are the only refusal there is: the `available` flag column coerces any value to a
- * boolean rather than throwing, and `listId` is a plain `text` column. Duplicates — one list
- * published twice, one product overridden twice within a list — are refused here too, so the
- * refusal names the offending position.
+ * These checks are the only refusal of a bad `available` flag: its column coerces any value to a
+ * boolean rather than throwing. Duplicates — one list published twice, one product overridden
+ * twice within a list — are refused here too, so the refusal names the offending position.
  */
 export function parseMenuExtraPublications(value: unknown): MenuExtraPublication[] {
   if (!Array.isArray(value)) invalid("lists");

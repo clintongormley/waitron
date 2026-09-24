@@ -6,13 +6,13 @@ import { createOptionList, getOptionList, updateOptionList } from "./options.js"
 import { racePair } from "../test/fixtures.js";
 
 /**
- * Two saves of different options lists, each claiming a label of the other, started together. The
- * last assertion reads both lists back unchanged, which a `writeLabels` that deleted before checking
- * which list a label belongs to would fail.
+ * Two saves of different options lists, each claiming a label of the other, started together. What
+ * catches a `writeLabels` that deletes before its ownership check is the options.test.ts case
+ * "refuses a foreign label id before deleting the list's own labels".
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
-/** The domain code a save was refused with — or, when the failure has none, the error itself. */
+/** The domain code a save was refused with, else its cause's code, else the error itself. */
 function refusalCode(reason: unknown): unknown {
   const error = reason as { code?: unknown; cause?: { code?: unknown } };
   return error.code ?? error.cause?.code ?? reason;

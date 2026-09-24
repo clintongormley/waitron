@@ -102,9 +102,9 @@ declare module "@waitron/shared" {
     /** Not thrown. Kept because a shipped code is never removed. */
     "options.item_invalid": { reason: string };
     /**
-     * An options list's authoring body, or an ORDER-time selection list, is structurally malformed.
-     * `field` is the dotted path of the offending value (`"labels.0.kitchenName"`, `"listId"`), so
-     * the editor can put the refusal beside the input that caused it.
+     * An options list's authoring body, or an ORDER-time selection list, is refused. `field` is the
+     * dotted path of the offending value (`"labels.0.kitchenName"`, `"listId"`), so the editor can
+     * put the refusal beside the input that caused it.
      */
     "options.invalid": { field: string };
     /** An options list id names no list. */
@@ -126,7 +126,7 @@ declare module "@waitron/shared" {
     "options.label_required": { optionListId: string };
     /**
      * An extras list's authoring body, an ORDER-time selection body, or a PER-MENU publication body
-     * is malformed. `field` is the dotted path of the offending value in that body (`"maxPicks"`,
+     * is refused. `field` is the dotted path of the offending value in that body (`"maxPicks"`,
      * `"items.1.maxQuantity"`, `"lists.0.listId"`), so the editor can put the refusal beside the
      * input that caused it.
      */
@@ -149,11 +149,7 @@ declare module "@waitron/shared" {
      * till never offers such a product as an extra. `field` is `items.<i>.productId` of the first.
      */
     "extras.product_has_variants": { field: string; productId: string };
-    /**
-     * Not thrown: nothing deletes a product row today. What refuses a deletion is the database —
-     * `extra_list_items.product_id` and `menu_item_extra_items.product_id` are `ON DELETE RESTRICT`
-     * (schema/extras.ts).
-     */
+    /** Not thrown. Kept because a shipped code is never removed. */
     "product.in_use": { productId: string; dependency: string };
   }
 }

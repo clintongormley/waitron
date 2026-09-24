@@ -5,6 +5,9 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    // A hook given its own timeout overrides `hookTimeout` rather than narrowing it, so this bounds
+    // only hooks written without one, such as `useVenueDb`'s reset and close; its setup carries its
+    // own budget (`packages/db/src/testing/venue-db.ts`).
     testTimeout: 30_000,
     hookTimeout: 60_000,
     coverage: {

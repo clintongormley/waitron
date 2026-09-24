@@ -259,7 +259,6 @@ describe("what deleting a parent row takes with it", () => {
     );
     expect(await attachmentCount()).toBe(2);
 
-    // Direct SQL because no route deletes a product row; the dashboard marks one Inactive instead.
     await fx.db.execute(sql`delete from products where id = ${dishes.burger}`);
 
     expect(await attachmentCount()).toBe(1);
@@ -524,7 +523,7 @@ describe("a product's attachment list in the catalogue's configuration transfer"
   const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
 
   it("copies both kinds of list before the rows that point at them", () => {
-    // `importConfigurationTables` inserts in this order, so both parents have to come first.
+    // `importConfigurationTables` inserts in this order.
     // `toContain` first, because `indexOf` answers -1 for a missing name, which would satisfy the
     // comparisons below. `products` belongs to the core set, not this list.
     for (const name of ["extra_lists", "option_lists", "product_modifiers"])
