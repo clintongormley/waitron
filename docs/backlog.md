@@ -156,8 +156,11 @@ ordered categories containing products and other shared categories, optional org
 menu price overrides, immutable menu publication, and menu-owned home layouts for handhelds and
 tills. Shared edits flag affected menus; each live menu changes only when republished, apart from
 live availability. **Do not start implementation until the PostgreSQL-to-SQLite work, dependency
-upgrades, and variants/extras-as-products changes have all landed.** Then reconcile the integration
-questions in the spec with the landed code before planning. Further specifications can be written
+upgrades, and variants/extras-as-products changes have all landed.** The variants/extras-as-products
+part of that is met: extras and options landed on 2026-09-21 (branch 1, ending #480), and variants
+with branch 2 (Task 9 on `feat/variants-cleanup`). This entry does not record the other two parts as
+done; check them before starting. Then reconcile the integration questions in the spec with the
+landed code before planning. Further specifications can be written
 during the wait.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
@@ -506,24 +509,24 @@ reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails 
   item should inherit its product's extras lists by default, or whether publication stays explicit
   and a route is built for it — and settle the grants in the same decision rather than separately.
 
-**Next in this slice: branch 2, variants as products** (spec
-`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4). It folds variants into
-`products` behind a `parent_id` and removes `product_variants` and `menu_item_variants`. The SQLite
-flip it waited for has landed. **The owner revised the design on 2026-09-23** (spec §15: a parent
-with variants is never sold itself, variants print under their own names and follow their parent
-onto every menu, prices fall back from the most specific one set, and Active and Available become two
-states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
-[the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 7 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+**Branch 2, variants as products — LANDED** (spec
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4, §15;
+[the plan](superpowers/plans/2026-09-23-variants-as-products.md)). A variant is now a `products` row
+behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
+nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
+Task 7 #545, Task 8 #551, and Task 9 on `feat/variants-cleanup`. How the model works now is in
+[products.md](developers/products.md), under _Variants_. The open items each task left are in its
+paragraph below. **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
 the menus' extras publications, their per-item extras prices and the variant price overrides, or,
 once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
 does not boot. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
 Task 3's migration drops the per-menu variant table, `menu_item_variants`
-(`packages/catalogue/drizzle/0001_drop_menu_item_variants.sql`), and nothing but the configuration
-transfer reads the old `product_variants` table any more, so variants a venue stored there no longer
-appear: a dev venue needs `wa-wt reset demo <name>` to see variants again.
+(`packages/catalogue/drizzle/0001_drop_menu_item_variants.sql`), and from Task 3 on nothing but
+the configuration transfer read the old `product_variants` table, so variants a venue stored there
+no longer appear: a dev venue needs `wa-wt reset demo <name>` to see variants again. Task 9 drops
+that table.
 
 **Task 1 LANDED as #511 (2026-09-23): every dev venue now needs `wa-wt reset demo <name>`, and no
 provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
@@ -688,10 +691,17 @@ rows: **this task needs no venue reset of its own.** What it left open:
   the line's. I believe this predates the branch: #537 leaves that check untouched. The till now
   offers only whole numbers for such a line, using the line's frozen unit precision. **Next
   action:** refuse a quantity finer than the line's `unit_precision` on the server too.
-- **On a venue with no service zones, the plain product path sells a parent with Active variants
-  as itself** — the "never sold itself" rule holds only on the menu-offer path. I believe this
-  predates Task 5. **Next action:** decide whether that path refuses such a parent with
-  `product.variant_required`, or whether a venue with variants must have a service zone.
+- **DONE (Task 9): on a venue with no service zones a parent with Active variants is refused.**
+  The owner's answer to lane B's question Q3, as the supervising watcher relayed it: _"a parent
+  product should never be for sale as itself — you should always have to pick a variant. This
+  doesn't depend on zones."_ And: _"a zone is required."_ The
+  till's three line-carrying routes price by bare `productId` on such a venue, a path that cannot
+  name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) now refuses the parent
+  with `product.variant_required`, Available variants or not; a product whose variants are all
+  Inactive still sells as itself. Pinned by `apps/server/src/till-api.zoneless-variants.test.ts`.
+  The zone-less path itself stays: removing it would reach every suite that rings up by
+  `productId`. `GET /api/products` (`listAvailableProducts`) still lists such a parent; no
+  production screen in `apps/till` calls it (the till builds its buttons from zone offers).
 - **`@waitron/fiscal-verifactu`'s tests now depend on `@waitron/catalogue`** (its VAT-per-variant
   test runs the real `selectMenuVariant`), so a catalogue change also runs fiscal-verifactu's test
   shard in CI. Kept deliberately; worth revisiting only if that shard's time becomes a problem.
@@ -791,13 +801,31 @@ Previously each variant was ranked as a separate seller and there was no product
 row's heading cell also holds the product's name as visually hidden text, so its text reads "Wine by
 the glass, Wine 175". The filed sale is unchanged: the
 report reads the two names every sale line already records. No migration: **no venue reset
-needed.** Next is Task 9 (remove the old variant table and shapes). What Task 8 leaves open:
+needed.** What Task 8 leaves open:
 - **The overview's top-sellers table can reach into its card's padding at desktop width** when a
   variant has a long one-word name and the figures run to five digits. Measured 2026-09-24 at
   1280px: with "Café con leche pequeño descafeinado" at 1000.000 / 10000.00 the table ended 12px
   inside the card's 17px padding (it stays inside the card's border); with three-digit figures, or
   with no variant rows, it ended at the padding's edge. **Next action:** decide whether a long name
   in that table may wrap mid-word.
+
+**Task 9 LANDED on `feat/variants-cleanup`: the old variant table is gone.** The catalogue
+migration `packages/catalogue/drizzle/0004_drop_product_variants.sql` drops `product_variants`, which
+since Task 3 only the configuration transfer still copied; that copy and `resolveMenuVariant`, a
+reader no product path called, went with it.
+A dev venue's old rows in that table go with the drop; the migration needs no reset of its own —
+measured 2026-09-24 through `applyMigrations` on Node v26.7.0: a venue migrated through catalogue
+`0003` and holding one product with one `product_variants` row took the new migration with no
+error, the table was gone and the product row kept. The
+till's plain product path now refuses a parent with Active variants (the Task 5 bullet above). What
+Task 9 leaves open:
+- **The header of the shipped `packages/media/drizzle/0001_image_references.sql` still describes
+  `product_variants.image`,** now a dropped table. It stays unedited, for the reason given under
+  Task 1.
+- **`packages/fiscal-verifactu/src/privileges.expected.ts` still lists `product_variants` and
+  `menu_item_variants`.** It is a frozen record of the grants before the storage switch, when both
+  tables existed, and its one reader (`scripts/write-path-tables.test.ts`) reads only its
+  read-but-never-written rows, which these two are not. Left as it is.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
@@ -1511,10 +1539,10 @@ What it left open:
 
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's own parser refuses a blank; `createProduct` writes what it is given. Its
-  siblings share the pattern: `option_lists.name`, `option_labels.name`, `extra_lists.name` and
-  `product_variants.name` are each declared `"name" text NOT NULL` in
-  `packages/catalogue/drizzle/0000_catalogue_baseline.sql`, and none of that file's check
-  constraints touches a name column. **Next action:** decide whether the columns want a check
+  siblings share the pattern: `option_lists.name`, `option_labels.name` and `extra_lists.name` are
+  each declared `` `name` text NOT NULL `` in `packages/catalogue/drizzle/0000_baseline.sql`, and
+  none of that file's check constraints touches a name column. (A variant's name is
+  `products.name` now.) **Next action:** decide whether the columns want a check
   constraint and the write paths a domain refusal.
 
 - **The legacy product-id order path loses the configured kitchen name.** `AvailableProduct` carries
@@ -1776,7 +1804,8 @@ address that answers is then asked for its paper sizes on port 631.
   sold separately ordering, future inventory rules, and the direction away from a general canvas
   editor toward source-coded screens. Fiscal Q19 remains open. This specifies intended behaviour,
   not verified features. Wait for SQLite, dependency upgrades and variants/extras-as-products to
-  land, alongside the [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md),
+  land (the variants/extras-as-products part has, with branch 2's Task 9 on `feat/variants-cleanup`;
+  the other two are not recorded here as done), alongside the [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md),
   then resolve the listed integration questions before planning.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
