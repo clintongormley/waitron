@@ -2512,8 +2512,10 @@ image constraints under *Detail → Box image*.
   (`url`/`from` with `!`) and `apps/server/src/node-identity.ts`'s `readNodeIdentityKey` (`privateKey`
   cast `as string`); both should raise `server.credential_unusable` naming the field, as
   `apps/server/src/stripe-account.ts` does, each with a failing test first. #378 (2026-09-14) removed
-  the tenant parameter that had blocked this. `rotate` still re-checks every secret against the current
-  list, so an out-of-date one stops a key rotation until it is re-entered.
+  the tenant parameter that had blocked this. `rotate` re-checks a secret against the current list
+  only when it re-seals one: it skips a secret already on the current key (`rotateCredentials`,
+  `packages/credentials/src/store.ts`), so an out-of-date one stops a key rotation only when it is
+  on an older key, until it is re-entered (measured by #577's review).
 - **`CardProviderBuildDeps.nodeId` is dead weight — nothing reads it** (2026-09-16, traced through
   both adapters). `packages/payments-sumup/src/provider.ts` declares the field and never touches it,
   and `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) requires it on its options
@@ -2720,10 +2722,12 @@ image constraints under *Detail → Box image*.
   about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
   (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080
   to about 270, tests included), `packages/printing` (#572, about 1,040 to about 350, tests
-  included) and `packages/bookings` (#574, about 1,020 to about 270, tests included). A pruning pull request cannot carry this file (the checker refuses
-  it), so each one's line lands here as a docs-only push after the merge. Found by #555, #558, #559,
-  #561, #562, #567, #568, #570, #572 and #574 and left for the package that owns each, all still OPEN:
-  - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
+  included), `packages/bookings` (#574, about 1,020 to about 270, tests included) and
+  `packages/credentials` (#577, about 990 to about 410, tests included). A pruning pull request
+  cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
+  push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574 and
+  #577 and left for the package that owns each, all still OPEN:
+  - The journal-table reason in the `drizzle.config.ts` of `scheduler` (#577 fixed credentials')
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
     the set with older timestamps would never run (measured by #555's review with the real
@@ -2780,9 +2784,11 @@ image constraints under *Detail → Box image*.
     stand a venue up in the working directory") is false there: measured 2026-09-24 on Node v26.7.0,
     `openVenueDatabase("")` fails `ENOENT: no such file or directory, mkdir ''`, and a real path as
     the control created `venue.db` and `node.db`. The same reason still stands in
-    `packages/provisioning/README.md` and in `packages/credentials/src/bin.ts` and `bin.test.ts`,
-    whose pointer at `packages/provisioning/src/cli.ts:645` now points nowhere. Credentials opens
-    through `openVenueStore`, not `openVenueDatabase`, and was not measured.
+    `packages/provisioning/README.md` and in `docs/developers/conventions-data.md` (the paragraph
+    on `resolveVenueDir`, "an empty directory is the RELATIVE `venue.db`"). #577 deleted it from
+    `packages/credentials`, whose `bin.ts` opens through `openVenueDatabase` too, after measuring
+    the same `ENOENT` there; the test title in `packages/credentials/src/bin.test.ts` that states
+    the empty-folder behaviour still does (a title is code, so a pruning PR cannot rename it).
   - `packages/provisioning/README.md` also says only `ES-common` is implemented (a `GB-vat` run
     exits 0 in `cli.test.ts`), and repeats two reasons #561 deleted from the code's comments: that
     `provisioning.venue_conflict` means a concurrent run committed between plan and apply (the apply
@@ -2879,6 +2885,25 @@ image constraints under *Detail → Box image*.
     propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
     `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
+  - `packages/credentials`, found by #577 and not changed. Nothing now checks at run time that a
+    read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
+    suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
+    that a caller other than the application cannot read or list the vault; only the encryption
+    protects it. Test titles ending "— C1" and "(M7)" are old review labels, and
+    `credentials.test.ts`'s fixtures `sk_test_rls`/`whsec_rls` carry a PostgreSQL-era name. The
+    `beforeEach` deletes in the store, cli and rotate suites may be redundant beside `useVenueDb`'s
+    per-test reset (not tried).
+  - The same false comments outside credentials, found by #577: "open database files keep the
+    process alive" in `apps/server/scripts/record-one-sale.ts`, `register-till.ts` and
+    `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
+    status 0); `packages/db/src/mirror-config.ts` says the mirror token is read at mirror boot
+    (nothing seals or reads `sync.mirror_token`); `apps/server/src/node-identity.ts` still says "ONE
+    tenant transaction" and omits `credentials.key_version_unknown` among another node's read
+    failures; pointers to a missing `errors.reachability.test.ts` in `core`, `fiscal`,
+    `workforce-es` and `reporting` (the guard is `scripts/errors-reachable.test.ts`);
+    `packages/db/src/migrate.ts`'s `MigrationOptions` journal-table reason is unchecked; and two
+    2026-07-26 specs still call the FNMT seal certificate's export unverified, which
+    `docs/compliance/getting-to-production.md` §4 closed that day.
   - `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
     table in a zone that is not a table-tab zone has no bookings test: the real `openTab` refuses
     it with `service_zone.mode_incompatible`, the fake core in `src/testing/fake-core.ts` does not,
@@ -4707,8 +4732,9 @@ it; and a correction must not decrement a count where it should drop it.
   `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
   `packages/shared/src/cause-chain.ts` and `packages/shared/src/engine-failure.ts` carry the
   sentence this branch corrected in `packages/db/src/unique-violation.ts`.
-  `packages/credentials/src/bin.ts` also says the message carries the bind
-  parameters, which `DrizzleError`'s `Failed to run the query '<sql>'` does not. The thrown text
+  (`packages/credentials/src/bin.ts`'s claim that the message carries the bind parameters went
+  with #577, which measured a refused credential write: a plain engine error reading
+  `CHECK constraint failed: …`, with no SQL and no parameter.) The thrown text
   in `packages/db/src/testing/errors.ts`'s `engineErrorMessage` names the old wrapper on purpose
   and is pinned verbatim by its test.
 - **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
