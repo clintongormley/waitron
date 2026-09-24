@@ -72,8 +72,9 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // The full TillConfig the print/join verbs are typed on. The routes read only locationId
-    // and echo nodeId on the pull; the fiscal ids are unused here, so a branded random uuid stands in —
+    // The full TillConfig the print/join verbs are typed on. The routes read locationId and
+    // nodeId (every join-request statement filters by node, so knock and accept share this one cfg);
+    // the fiscal ids are unused here, so a branded random uuid stands in —
     // and nodeId needs no `nodes` row, exactly as `print-api.test.ts` seeds none.
     cfg = {
       tillId: brandTillId(randomUUID()),
