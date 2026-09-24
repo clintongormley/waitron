@@ -329,9 +329,9 @@ export class WorkingOrderStore {
 
   /**
    * Every line edit comes through here. An edit sends each line without its not-offered picks, so the
-   * server replaces the whole order and re-prices it; the picks leave the basket now to match. Dropped
-   * silently, unlike the modifier picker's stale picks, by owner decision (2026-09-24): the retrieve
-   * banner (`held.extra_not_offered`) is the notice.
+   * server replaces the whole order and re-prices it; the picks leave the basket now to match. No
+   * prompt, unlike the modifier picker's stale picks: the retrieve banner (`held.extra_not_offered`)
+   * already told the operator that changing the order removes them.
    */
   #markDirty(): void {
     this.#dirty = true;
