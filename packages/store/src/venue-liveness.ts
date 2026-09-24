@@ -229,7 +229,7 @@ function startWatchdog(lockedAt: string): Watchdog {
   const beat = new BigInt64Array(new SharedArrayBuffer(8));
   const stamp = () => Atomics.store(beat, 0, process.hrtime.bigint());
   stamp();
-  // The thread first, so a thread that cannot start leaves no timer behind.
+  // The thread first, so a thread that cannot be created leaves no timer behind.
   const worker = createWorker(WATCHDOG_SOURCE, {
     eval: true,
     workerData: {
@@ -243,7 +243,20 @@ function startWatchdog(lockedAt: string): Watchdog {
     },
   });
   worker.unref();
-  worker.on("error", (error) => warn(error, "VenueWatchdogWarning"));
+  // A thread whose source throws is created without complaint and fails a moment later. The folders
+  // held meanwhile keep only their heartbeat files, by which a refused start then judges them; the
+  // next first take of a folder starts a fresh watchdog.
+  let failure: unknown;
+  worker.on("error", (error) => (failure = error));
+  worker.on("exit", (code) => {
+    if (watchdog?.worker !== worker) return;
+    clearInterval(watchdog.tick);
+    watchdog = undefined;
+    warn(
+      failure ?? new Error(`the watchdog thread exited with code ${code}`),
+      "VenueWatchdogWarning",
+    );
+  });
   const tick = setInterval(stamp, timings.tickMs);
   tick.unref();
   return { worker, tick };
@@ -253,9 +266,9 @@ function startWatchdog(lockedAt: string): Watchdog {
 const heartbeats = new Map<string, NodeJS.Timeout>();
 
 /**
- * Called in the synchronous section that first takes a folder's lock, and all or nothing: when the
- * holder file cannot be written or the watchdog cannot start, it throws having left no file and no
- * timer, and the caller gives the lock back. Without the file, a process refused the folder cannot
+ * Called in the synchronous section that first takes a folder's lock. When the holder file cannot
+ * be written or the watchdog thread cannot be created, it throws having left no file and no timer,
+ * and the caller gives the lock back. Without the file, a process refused the folder cannot
  * tell this live holder from a frozen one.
  */
 export function beginHolding(directory: string): void {
@@ -271,7 +284,11 @@ export function beginHolding(directory: string): void {
   try {
     watchdog ??= startWatchdog(now);
   } catch (error) {
-    removeVenueHolder(directory);
+    try {
+      removeVenueHolder(directory);
+    } catch {
+      // The thread's failure is the one the caller needs to see.
+    }
     throw error;
   }
   let failing = false;
@@ -302,8 +319,8 @@ export function endHolding(directory: string): void {
   } catch (error) {
     warn(error, "VenueHolderRemoveWarning");
   }
-  if (heartbeats.size > 0) return;
-  clearInterval(watchdog!.tick);
-  stopping = watchdog!.worker.terminate();
+  if (heartbeats.size > 0 || watchdog === undefined) return;
+  clearInterval(watchdog.tick);
+  stopping = watchdog.worker.terminate();
   watchdog = undefined;
 }

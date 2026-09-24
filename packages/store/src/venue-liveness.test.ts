@@ -11,6 +11,7 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it } from "vitest";
 import { readVenueHolder, VENUE_HOLDER_FILE, VENUE_HOLDER_STALE_MS } from "./venue-holder.js";
 import {
@@ -261,6 +262,65 @@ describe("the watchdog thread", () => {
       expect(readVenueHolder(directory)?.pid).toBe(process.pid);
     },
   );
+
+  it("reports the thread's own failure when the holder file then cannot be removed either", async () => {
+    const directory = tempDir();
+    setWatchdogWorkerFactory(() => {
+      rmSync(holderPath(directory));
+      mkdirSync(join(holderPath(directory), "occupied"), { recursive: true });
+      throw new Error("no thread for you");
+    });
+    await expect(lockVenueDirectory(directory)).rejects.toThrow("no thread for you");
+  });
+
+  for (const [failure, source, message] of [
+    ["throws on its first line", 'throw new Error("late failure");', "late failure"],
+    ["exits on its own", "process.exit(3);", "the watchdog thread exited with code 3"],
+  ] as const) {
+    it(
+      `that ${failure} after starting is replaced by the next take, and the heartbeat carries on`,
+      { timeout: IN_PROCESS_TIMEOUT_MS },
+      async () => {
+        setVenueLivenessTimings({ heartbeatMs: 20 });
+        const warnings: Error[] = [];
+        const onWarning = (warning: Error) => warnings.push(warning);
+        process.on("warning", onWarning);
+        try {
+          setWatchdogWorkerFactory((_, options) => new Worker(source, options));
+          const directory = tempDir();
+          await lock(directory);
+          const dead = runningWatchdog();
+          expect(dead).toBeDefined();
+          await until(
+            () => runningWatchdog(),
+            (running) => running === undefined,
+          );
+          await until(
+            () => warnings.length,
+            (count) => count > 0,
+          );
+          expect(warnings.map((warning) => [warning.name, warning.message])).toEqual([
+            ["VenueWatchdogWarning", message],
+          ]);
+          const beat = readVenueHolder(directory)!.heartbeatAt;
+          await until(
+            () => readVenueHolder(directory)!.heartbeatAt,
+            (heartbeatAt) => heartbeatAt > beat,
+          );
+
+          locks.pop()!.release();
+          expect(existsSync(holderPath(directory))).toBe(false);
+
+          setWatchdogWorkerFactory(null);
+          await lock(directory);
+          expect(runningWatchdog()).toBeDefined();
+          expect(runningWatchdog()).not.toBe(dead);
+        } finally {
+          process.off("warning", onWarning);
+        }
+      },
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -446,6 +506,30 @@ spinForever();`,
       expect(frozenLine(outcome.stderr)).toBeDefined();
       expect(existsSync(reports)).toBe(false);
       expect(existsSync(`${reports}.log`)).toBe(false);
+    },
+    CHILD_TIMEOUT_MS,
+  );
+});
+
+describe("a holder whose log file cannot be written", () => {
+  it(
+    "still writes its report file",
+    async () => {
+      const directory = tempDir();
+      const reports = join(tempDir(), "crash-reports");
+      mkdirSync(`${reports}.log`);
+      const outcome = await runChild(
+        `await lockVenueDirectory(directory);
+liveness.setVenueCrashReportDirectory(reports, null);
+liveness.setVenueWatchdogLogFile(reports + ".log");
+function spinForever() { for (;;) {} }
+setTimeout(spinForever, 100);`,
+        directory,
+        reports,
+      );
+      expect(outcome.signal).toBe("SIGKILL");
+      expect(frozenLine(outcome.stderr)).toBeDefined();
+      expect(readdirSync(reports)).toHaveLength(1);
     },
     CHILD_TIMEOUT_MS,
   );
