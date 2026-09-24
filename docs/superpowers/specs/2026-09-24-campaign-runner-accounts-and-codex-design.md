@@ -50,8 +50,15 @@ CODEX_ACCOUNT=/Users/clintongormley/.codex     # Codex login: the driver, or the
 ```
 
 These defaults are today's behaviour, so an unedited lane behaves as it does now. The runner exports
-`CLAUDE_CONFIG_DIR="$CLAUDE_ACCOUNT"` and `CODEX_HOME="$CODEX_ACCOUNT"` for every firing, so the
-reviewer seat inherits its login from the lane without either seat script changing.
+`CODEX_HOME="$CODEX_ACCOUNT"` and `CLAUDE_CONFIG_DIR="$CLAUDE_ACCOUNT"` for every firing, so the
+reviewer seat inherits its login from the lane without either seat script changing — **except that
+when `CLAUDE_ACCOUNT` is the default `$HOME/.claude`, `CLAUDE_CONFIG_DIR` is left unset.** Claude
+keeps one stored login per value of that variable, and "unset" and "set to `~/.claude`" are different
+values: on 2026-09-24 the Keychain held `Claude Code-credentials` (the unset case, which the lanes use
+today) beside `Claude Code-credentials-1bf14bbf`, and `1bf14bbf` is the first eight hex digits of the
+SHA-256 of `/Users/clintongormley/.claude`. Exporting the default explicitly would move every
+unedited lane onto the second login. (Found by the plan review; the first draft of this spec had the
+explicit export.)
 
 If either folder does not exist, the firing writes one line to its log saying which, and skips. It
 never falls back to the default login, because a typo would otherwise put a lane quietly on the
@@ -80,9 +87,14 @@ The stall check keeps its three signals, with two changes:
 - A Claude driver's session log is looked for under `$CLAUDE_ACCOUNT/projects`, not a hard-coded
   `~/.claude`.
 - A Codex driver's event stream (`--json`) is written straight into the lane's own log, so "the
-  lane's log grew" counts as activity. Today's Codex signal — any file under `~/.codex/sessions`
-  written while a codex process is running — cannot tell two Codex lanes apart. It stays, pointed at
-  `$CODEX_ACCOUNT/sessions`, for the Codex reviewer seat inside a Claude-driven firing.
+  lane's log grew" counts as activity, for either engine. Today's Codex signal — any file under
+  `~/.codex/sessions` written while a codex process is running — cannot tell two Codex lanes apart.
+- The reviewer-seat signal is kept for the OTHER engine only: in a Claude-driven firing, a write
+  under `$CODEX_ACCOUNT/sessions` while a `codex` process runs in the tree; in a Codex-driven
+  firing, a write under `$CLAUDE_ACCOUNT/projects` while a `claude` process runs in the tree (added
+  while planning: a Claude seat can outlast the idle limit with a quiet log). It is never applied to
+  the driver's own engine, because the driver is always in the tree, and another lane on the same
+  account would then keep a stuck firing alive.
 
 The CPU-use signal is unchanged for both engines.
 
