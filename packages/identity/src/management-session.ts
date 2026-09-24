@@ -46,9 +46,10 @@ export async function startManagementSession(
 }
 
 /**
- * Resolve a live session to its person + role, or throw. `token` is the cookie's raw value; a row
- * id or a stored hash names no session. Missing, ended, or — the table holds no foreign key to
- * `persons` — pointing at a person row that is gone →
+ * Resolve a live session to its person + role, or throw. `token` is the cookie's raw value; a
+ * session's row id or stored hash names no session, except the mirror viewer's ambient session,
+ * whose cookie is its fixed row id (`apps/server/src/mirror-session.ts`). Missing, ended, or — the
+ * table holds no foreign key to `persons` — pointing at a person row that is gone →
  * `management_session.required` (two nets refuse that last one: the inner join finds nothing, and the
  * status check below refuses a status that is not `active`);
  * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;

@@ -581,7 +581,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(await del.json()).toEqual({ ok: true });
   });
 
-  it("DELETE with a NON-UUID cookie is an idempotent 200 that clears the cookie (never a 500)", async () => {
+  it("DELETE with a NON-UUID cookie is an idempotent 200 that clears the cookie", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -930,7 +930,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("REJECTS (401 session.required) a NON-UUID cookie WITHOUT hitting the DB (not an opaque 500)", async () => {
+  it("REJECTS (401 session.required) a NON-UUID cookie", async () => {
     // A forged, non-UUID cookie is a CLIENT fault and answers 401. This case no longer pins the
     // `isUuid` screen in `requireSession`: measured 2026-09-24, with the screen deleted it still
     // passes — the value is hashed and the hash matches no row, which is also `session.required`.
@@ -1573,7 +1573,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("REJECTS (401 session.required) a NON-UUID cookie — a malformed cookie is a 401, not a 500", async () => {
+  it("REJECTS (401 session.required) a NON-UUID cookie on the catalogue route", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
