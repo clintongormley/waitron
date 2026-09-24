@@ -1,11 +1,10 @@
 import { id, label, now, table, ts } from "./columns.js";
 
 /**
- * A cloud mirror's link to the box it was adopted from (sync cloud-mirror C2b), one row per node,
- * keyed by that node's own id. Non-secret parts only; the per-peer sync token lives in the
- * credentials vault. Every read and write names the node, so a node holding another node's copy of
- * `venue.db` never reads that node's link.
- * Its accessors are exported from the package barrel (`../index.ts`, via `../mirror-config.ts`).
+ * A cloud mirror's link to the box it was adopted from, one row per node, keyed by that node's own
+ * id. Non-secret parts only; the per-peer sync token lives in the credentials vault. Every read and
+ * write names the node, so a node holding another node's copy of `venue.db` never reads that
+ * node's link.
  */
 export const mirrorConfig = table("mirror_config", {
   // No foreign key to `nodes`, for the reason on `node_roles.node_id` (`./node-roles.ts`).

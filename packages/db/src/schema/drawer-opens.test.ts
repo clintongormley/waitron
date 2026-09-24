@@ -12,19 +12,11 @@ import { printers } from "./printers.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 // What this suite proves is the column mapping, the defaults, the reason CHECK and the two foreign
-// keys.
-//
-// LOSS, from the storage swap: the three cases that ended in a rolled-back transaction did so to
-// leave the SHARED template clone untouched. There is no shared clone here — each suite gets its
-// own file — so they restore the value they changed instead, which keeps them order-independent
-// for the same reason.
+// keys. Cases that change a seeded row restore it, so the suite stays order-independent.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
-// The acting operator recorded in `person_id` — an identity person id, plain uuid, no FK (the
-// person schema is a separate slice; a raw uuid keeps this audit table independent of it).
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
-// The authorizer recorded in `authorized_by` (a supervisor who authorized the open) — same shape.
 const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
 
 describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, FKs)", () => {
@@ -55,9 +47,8 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     return withTransaction(suite.db, fn);
   }
 
-  // The Drizzle builder rather than raw SQL: `id` and `opened_at` are `$defaultFn` columns Drizzle
-  // applies CLIENT-side, so a raw `insert` is refused NOT NULL before anything under test is
-  // reached.
+  // Drizzle rather than raw SQL: `id` and `opened_at` are `$defaultFn` columns a raw insert does not
+  // fill.
   async function seedOpen(
     reason: "cash_sale" | "manual",
     saleId: string | null = null,
@@ -68,9 +59,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
   }
 
   it("writes and reads back a manual open (the column list, and the authorized_by/via_override defaults)", async () => {
-    // The positive control for the CHECK and FK rejections below: without a write that SUCCEEDS, a
-    // rejection could equally mean the row was malformed some other way. A manual open has no sale
-    // (sale_id NULL), which is the common accountability case.
+    // The positive control for the CHECK and FK rejections below.
     await seedOpen("manual");
     const [row] = await inTx((tx) =>
       tx
@@ -82,19 +71,12 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     expect(row!.personId).toBe(PERSON);
     expect(row!.reason).toBe("manual");
     expect(row!.saleId).toBeNull();
-    // `opened_at`'s value now comes from a `$defaultFn` Drizzle evaluates client-side, where
-    // PostgreSQL's `defaultNow()` put the SERVER clock in it (`packages/db/src/schema/columns.ts`).
     expect(row!.openedAt).toBeInstanceOf(Date);
-    // The new audit columns on their DEFAULT path: this insert supplied neither, so authorized_by
-    // is NULL — as the automatic `cash_sale` drawer kick leaves it — and via_override took its NOT
-    // NULL DEFAULT false.
     expect(row!.authorizedBy).toBeNull();
     expect(row!.viaOverride).toBe(false);
   });
 
   it("records authorized_by and via_override on an authorized open (new audit columns present + writable)", async () => {
-    // A gated open a supervisor (AUTHORIZER) authorized on behalf of an operator (PERSON) who lacks
-    // cash.drawer — authorized_by set, via_override true.
     await inTx((tx) =>
       tx.insert(drawerOpens).values({
         tillId: TILL_A,
@@ -115,11 +97,9 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
   });
 
   it("the reason CHECK accepts 'cash_sale' and rejects an unknown reason", async () => {
-    // 'manual' is exercised by the positive control above; this pins that 'cash_sale' is also
-    // accepted and that the closed vocabulary bites.
     await seedOpen("cash_sale");
-    // Raw SQL, because the column's TypeScript type admits only the two labels. `id` and
-    // `opened_at` are stated because both are `$defaultFn` columns.
+    // Raw SQL, because the column's TypeScript type admits only the two labels; `id` and
+    // `opened_at` are `$defaultFn` columns, so the statement supplies them.
     const e = await captureError(() =>
       inTx(async (tx) =>
         tx.run(
@@ -132,9 +112,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
   });
 
   it("the sale binding is enforced (FK to sales)", async () => {
-    // A full sale fixture is disproportionate for a schema task (a sale needs a series + node +
-    // ~15 columns); a non-existent id proves the FK is wired all the same, and NULL (the manual
-    // case) is proven to skip it by the positive control above.
+    // A nonexistent sale id proves the FK is wired without building a full sale fixture.
     const missingSale = "dddddddd-0000-4000-8000-0000000000ff";
     const e = await captureError(() => seedOpen("cash_sale", missingSale));
     expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
@@ -183,8 +161,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
   });
 
   it("locations.drawer_open_policy defaults to 'gated' (the SECURE default) and is settable", async () => {
-    // Deliberately unlike receipt_print_mode's inert 'auto': an unconfigured venue gets cash
-    // accountability, not an open drawer.
+    // An unconfigured venue gets cash accountability, not an open drawer.
     const [before] = await inTx((tx) =>
       tx
         .select({ policy: locations.drawerOpenPolicy })

@@ -1,7 +1,6 @@
-// What this suite proves: the B1 snapshot columns round-trip, and the variant-locales trigger
+// What this suite proves: the snapshot columns round-trip, and the variant-locales trigger
 // (`working_order_lines_check_variant_locales_insert` / `_update`) refuses a map that is not
-// exactly the venue's locales. Nothing here ever turned on the connecting role, so the storage
-// swap costs this suite no assertion — only its last case changes how it reads the schema (see it).
+// exactly the venue's locales.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -86,7 +85,6 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
   it("round-trips the new snapshot columns (name, text variant_name, variant_descriptions, variant_kitchen_name)", async () => {
     const [line] = await db.insert(workingOrderLines).values(lineValues()).returning();
     expect(line!.name).toBe("Café solo");
-    // variant_name is plain text, not a map.
     expect(line!.variantName).toBe("Grande");
     expect(line!.variantDescriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
     expect(line!.variantKitchenName).toBe("CAFE GR");
@@ -123,16 +121,8 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
 
   it("applied the same new columns to sale_lines with matching types", async () => {
     // sale_lines' round-trip needs a full fiscal sale (node, series, invoice number) to satisfy its
-    // parent FK; this reads the live applied schema instead.
-    //
-    // `pragma table_info` replaces `information_schema.columns`, and the answer it gives is
-    // COARSER: PostgreSQL reported `jsonb` for `variant_descriptions` and `text` for the other
-    // three, so the old assertion separated a JSON column from a plain one. Every one of the four
-    // is `text` here — `json` in `packages/db/src/schema/columns.ts` is `text(..., { mode: "json" })`,
-    // a Drizzle read/write mode with no counterpart in the stored type — so the column's JSON-ness
-    // is no longer something the catalogue can be asked about. What survives is presence,
-    // nullability and the storage type, which the catalogue reports in the case the DDL declared it
-    // (`TEXT`), not normalised.
+    // parent FK; this reads the live applied schema instead. It cannot tell a JSON column from a
+    // plain one: both report `TEXT`.
     const cols = db
       .all<{ name: string; type: string; notnull: number }>(
         sql`select name, type, "notnull" from pragma_table_info('sale_lines')

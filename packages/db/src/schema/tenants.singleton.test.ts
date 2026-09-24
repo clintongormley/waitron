@@ -1,5 +1,3 @@
-// LOSS, from the storage swap: "a row written without an id IS row 1" is gone with the column
-// default that made it true; the last case in this file carries that loss and what replaced it.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -28,9 +26,8 @@ describe("tenants is one row, keyed 1", () => {
 
   it("refuses a second row, and any id but 1", async () => {
     // `created_at` is stated on every raw insert below because it takes its value from a
-    // `$defaultFn` Drizzle applies CLIENT-side: a raw statement reaches none of them, and the row
-    // would be refused `NOT NULL constraint failed: tenants.created_at` rather than by the
-    // constraint under test.
+    // `$defaultFn` Drizzle applies CLIENT-side, and the row would otherwise be refused NOT NULL
+    // rather than by the constraint under test.
     const at = new Date().toISOString();
     const second = await captureError(() =>
       Promise.resolve(
@@ -56,36 +53,9 @@ describe("tenants is one row, keyed 1", () => {
     expect(still[0]!.n).toBe(1);
   });
 
-  // WHICH CONSTRAINT REFUSES AN ID-OMITTING INSERT HAS CHANGED, and the property this case used to
-  // hold is gone. On PostgreSQL `id` carried a column `DEFAULT 1`, so an insert omitting it took
-  // that 1 and collided with the seeded row's PRIMARY KEY — and the collision was readable as
-  // proof the default had put the 1 there. On SQLite an `INTEGER PRIMARY KEY` is an alias for the
-  // rowid, which takes the next rowid instead, so the default never applied. It has been dropped
-  // from the schema (owner decision 2026-09-22; `packages/db/src/schema/tenants.ts`) and the
-  // writers state the id.
-  //
-  // Probed 2026-09-22 on Node v26.7.0, two one-table `node:sqlite` databases differing only in the
-  // clause — `id integer primary key default 1 not null` and `id integer primary key not null`,
-  // each with the same singleton CHECK. Into an EMPTY table a statement omitting the id COLUMN
-  // stored id 1 both ways; beside a seeded row 1 both were refused errcode 275, `CHECK constraint
-  // failed`. The two readings being identical IS the finding: the clause changes nothing here.
-  //
-  // WHAT REACHES THAT PATH is narrower than "a caller that leaves the id out", and an earlier note
-  // here had it the other way round. Read off `.toSQL()` the same day, drizzle-orm 0.45.2 NAMES the
-  // id column either way: with a `.default(1)` it binds the 1 client-side, and without one it emits
-  // a literal `null`, which an `INTEGER PRIMARY KEY` then fills from the rowid. So the rowid path
-  // belongs to raw SQL that omits the COLUMN — this case — and a plain
-  // `db.insert(tenants).values({ country, taxId, legalName })` never had a default to lose.
-  //
-  // LOSS: nothing now states that a row written without an id IS row 1. It is 1 only because it is
-  // the first rowid, which is a fact about an empty table and not about this column. Expressing the
-  // old property would take `WITHOUT ROWID`, which neither drizzle-orm 0.45.2 nor drizzle-kit
-  // 0.31.10 knows (`grep -rl "WITHOUT ROWID"` over both installed packages matches no file), so it
-  // would be hand-written SQL a regenerate would drop.
-  //
-  // What survives is the invariant the case exists for: a writer that omits the id cannot add a
-  // second taxpayer. Same repair `packages/payments/src/migrations.test.ts` made for
-  // `payment_policy`, and it names the constraint where the old assertion named only the class.
+  // An `INTEGER PRIMARY KEY` is a rowid alias, so raw SQL omitting the id takes the next rowid;
+  // the singleton check is what stops that writer adding a second taxpayer. Not checked: that a row
+  // written without an id is row 1 — that holds only for an empty table.
   it("refuses a row that omits the id, by the singleton check", async () => {
     const omitted = await captureError(() =>
       Promise.resolve(

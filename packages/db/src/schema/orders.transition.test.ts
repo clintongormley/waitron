@@ -12,27 +12,19 @@ import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-// This suite asserts the `working_orders_enforce_transition` trigger's behaviour.
-//
-// The refusals are now the trigger's own `RAISE(ABORT, …)` text rather than PostgreSQL's `P0001`.
-// The text is what SQLite reports and nothing else — no table, no column, no constraint name — so
-// it is compared by EQUALITY against the literal the migration owns
+// A trigger's refusal carries its `RAISE(ABORT, …)` text and nothing else — no table, no column,
+// no constraint name — so it is compared by EQUALITY against the literal the migration owns
 // (`packages/db/src/trigger-refusals.ts`).
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
-// Café solo / Cafè sol is this package's placeholder line description (orders.test.ts,
-// sales.test.ts, park-retrieve.test.ts): both literals pass english-only.ts's SPANISH_WORDS guard,
-// and they match LOCATION_A's configured invoice_locales (es, ca) so check_locales lets the draft
-// line reach require_open_parent — the trigger this suite's composition-freeze case exercises.
+// Matches LOCATION_A's invoice_locales (es, ca), so check_locales lets the draft line reach
+// require_open_parent — the trigger this suite's composition-freeze case exercises.
 const DESCRIPTIONS_A = { es: "Café solo", ca: "Cafè sol" };
 
-// Captured at seed time — the ids the inserts below need as foreign-key targets.
 let nodeA = "";
 let productA = "";
-// working_orders carries no UNIQUE on order_number in this slice (the allocator owns distinctness),
-// but a fresh number per order keeps each fixture independent of the others.
 let nextOrderNumber = 1;
 
 /** A moment, as this schema stores one. */
@@ -45,9 +37,8 @@ describe("working_orders state machine (enforce_transition)", () => {
     return withTransaction(suite.db, fn);
   }
 
-  // The Drizzle builder rather than raw SQL throughout: `id` and `opened_at` are `$defaultFn`
-  // columns applied CLIENT-side, so a raw `insert` reaches neither and the row is refused NOT NULL
-  // before any trigger under test fires.
+  // The Drizzle builder rather than raw SQL: `id` is a `$defaultFn` column applied CLIENT-side,
+  // so a raw insert is refused NOT NULL before any trigger under test fires.
   async function open(): Promise<string> {
     const orderNumber = nextOrderNumber++;
     const [row] = await suite.db
@@ -63,7 +54,7 @@ describe("working_orders state machine (enforce_transition)", () => {
     return row!.id;
   }
 
-  /** A valid draft line while the parent is open. unit_price_gross is NOT NULL since 0030. */
+  /** A valid draft line while the parent is open. */
   function insertLine(orderId: string, lineNo: number): Promise<unknown> {
     return inTx((tx) =>
       tx.insert(workingOrderLines).values({
@@ -125,16 +116,14 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   it("permits open → placed, placed → settled, and open → open (label edit)", async () => {
     const id = await open();
-    // open → open: a label edit keeps status open. 'Table 4' rather than the design's `Mesa 4` —
-    // `mesa` is in english-only.ts's SPANISH_WORDS, which scans string literals in this file too.
+    // open → open. Not a Spanish label: english-only.ts's SPANISH_WORDS scans string literals in
+    // this file too.
     await inTx((tx) =>
       tx.update(workingOrders).set({ label: "Table 4" }).where(eq(workingOrders.id, id)),
     );
-    // open → placed: placing (composition now frozen).
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
-    // placed → settled: collect. settled_at satisfies the settled_at biconditional.
     await inTx((tx) =>
       tx
         .update(workingOrders)
@@ -149,7 +138,6 @@ describe("working_orders state machine (enforce_transition)", () => {
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
-    // placed → abandoned: cancel. settled_at stays null, so the biconditional holds.
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id)),
     );
@@ -157,8 +145,6 @@ describe("working_orders state machine (enforce_transition)", () => {
   });
 
   it("permits open → settled directly (the Mode-P walk-up, never entering placed)", async () => {
-    // The #60 cash-sale path (design §3, §5): a walk-up order settles in one instant without ever
-    // being placed. open → settled is an allowed edge in its own right.
     const id = await open();
     await inTx((tx) =>
       tx
@@ -202,9 +188,8 @@ describe("working_orders state machine (enforce_transition)", () => {
   });
 
   it("permits a collected_at NULL→non-null stamp on a settled order (the Mode-P handover marker, 0056)", async () => {
-    // A Mode-P walk-up settles BEFORE it is fired, so its order-level `collected_at` handover marker
-    // (KDS-1 §3e) can only be written by a settled → settled UPDATE — the ONE relaxation the
-    // trigger carries. Nothing else about the settled row changes.
+    // A walk-up settles BEFORE it is fired, so its `collected_at` handover marker can only be
+    // written by a settled → settled UPDATE — the ONE relaxation the trigger carries.
     const id = await open();
     await inTx((tx) =>
       tx
@@ -225,8 +210,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   });
 
   it("rejects any OTHER change to a settled order, and a re-stamp of an already-collected one (0056 keeps the settled-state freeze)", async () => {
-    // The relaxation permits the collected_at stamp and NOTHING ELSE — every other working_orders
-    // column is pinned. Each rejection below is the trigger's own raise.
+    // The relaxation permits the collected_at stamp and NOTHING ELSE.
     const id = await open();
     await inTx((tx) =>
       tx
@@ -234,10 +218,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         .set({ status: "settled", settledAt: now() })
         .where(eq(workingOrders.id, id)),
     );
-    // A settled-row change that ALSO touches another column (label) is rejected even though
-    // collected_at is going NULL→non-null — the pinned label no longer matches, so no allowed
-    // branch applies. This is the defence in depth: the fiscal-relevant identity and `settled_at`
-    // fields stay frozen.
+    // Rejected even though collected_at is going NULL→non-null: the label is pinned too.
     const eLabel = await captureError(() =>
       inTx((tx) =>
         tx
@@ -247,8 +228,7 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(eLabel)).toBe(TRANSITION_REFUSAL);
-    // A settled → settled UPDATE that is NOT a collected_at stamp (a bare settled_at edit) is
-    // rejected — the relaxation requires collected_at itself to go NULL→non-null.
+    // A bare settled_at edit: the relaxation requires collected_at itself to go NULL→non-null.
     const eSettledAt = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ settledAt: now() }).where(eq(workingOrders.id, id)),
@@ -256,13 +236,10 @@ describe("working_orders state machine (enforce_transition)", () => {
     );
     expect(engineErrorMessage(eSettledAt)).toBe(TRANSITION_REFUSAL);
 
-    // Now legitimately stamp the handover marker (NULL→non-null) — allowed.
     await inTx((tx) =>
       tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
     );
-    // A re-stamp of an already-collected order (collected_at non-null → non-null) is rejected: the
-    // branch's guard is that the old collected_at is null, so a second collect matches no allowed
-    // branch.
+    // A re-stamp of an already-collected order: the relaxation requires the old collected_at null.
     const eRecollect = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
@@ -276,15 +253,13 @@ describe("working_orders state machine (enforce_transition)", () => {
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
-    // No un-placing.
     const e1 = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
       ),
     );
     expect(engineErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
-    // A label edit on a placed row is rejected too — this IS the composition freeze at the row
-    // level, since placed → placed is not an allowed edge.
+    // placed → placed is not an allowed edge, so a label edit is refused too.
     const e2 = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ label: "late label" }).where(eq(workingOrders.id, id)),

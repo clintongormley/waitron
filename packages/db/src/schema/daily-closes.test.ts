@@ -14,30 +14,14 @@ import { locations, tenants } from "./tenants.js";
 // The headline assertion is that `daily_closes` refuses a rewrite: the append-only triggers
 // `@waitron/store` installs for every table a module declared `appendOnly()`
 // (`packages/store/src/append-only.ts`), which `useVenueDb` installs from `CORE_MIGRATIONS`'
-// own `appendOnlyTables` list.
-//
-// THREE LOSSES, from the storage swap:
-//  - the PostgreSQL version's refusal was a LAYERED proof, on the grounds that a trigger nobody
-//    has seen fire is a comment, not a backstop. There is only one layer left and the refusal
-//    below is simply the trigger's.
-//  - the TRUNCATE case is deleted. SQLite has no `TRUNCATE` statement and no trigger event for
-//    `DROP TABLE`, so the statement-level trigger that blocked a table-wide wipe has no counterpart
-//    at all (`packages/store/src/append-only.ts` says so in its own words). What a caller that can
-//    issue DDL may still do to this table is refused by nothing. The DELETE case below is what this
-//    engine offers in its place, and it is a narrower claim.
-//  - the snapshot column was `jsonb` and is now `text` in JSON mode, so the read-back below goes
-//    through Drizzle's decoding rather than a `->>` path expression the database evaluates.
+// own `appendOnlyTables` list. Not covered: a `DROP TABLE`, which SQLite has no trigger event for.
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 // The counting actor recorded in `closed_by` — an identity person id, plain uuid, no FK.
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-// Captured at seed time — the node id the inserts below need as the foreign-key target.
 let nodeA = "";
 
-// A minimal-but-real snapshot document: `close` is the VAT-exact computeDailyClose output (owned by
-// @waitron/reporting, opaque `unknown` here) and `cashReconciliation` is the per-till/per-node
-// variance block. Stored verbatim; the readback below proves the column round-trips a nested value.
 function snapshot(nodeVariance: string): DailyCloseSnapshot {
   return {
     close: { vat: { taxTotal: "12.35" }, cash: {}, counts: { sales: 3, corrections: 0, voids: 0 } },
@@ -77,9 +61,7 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
   });
 
   // The Drizzle builder rather than raw SQL: `id` and `closed_at` are `$defaultFn` columns Drizzle
-  // applies CLIENT-side, so a raw `insert` reaches neither and the row is refused NOT NULL. The
-  // column LIST the PostgreSQL version pinned by writing raw SQL is still pinned, by the builder
-  // refusing to compile a field the table does not declare.
+  // applies CLIENT-side, so a raw `insert` reaches neither and the row is refused NOT NULL.
   function insertClose(opts: { businessDay: string; sequenceNo: number; variance?: string }) {
     return withTransaction(suite.db, (tx) =>
       tx.insert(dailyCloses).values({

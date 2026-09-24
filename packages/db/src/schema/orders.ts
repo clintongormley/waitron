@@ -23,18 +23,10 @@ import { kitchenCourses } from "./kitchen-courses.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
 
-/**
- * One declaration rather than a repeated list, deliberately: unlike invoice_series.purpose
- * these four values are settled by the spec, and the single `enumType` call yields both
- * the TypeScript union and the database constraint (`working_orders_status_ck` below reads
- * its values back off the column).
- */
 export const workingOrderStatus = enumType([
   "open",
-  // placed (7c): the order is finalized — composition FROZEN (require_open_parent already rejects
-  // line writes on a non-open parent) and the fiscal issuance basis fixed. A NON-terminal state
-  // between open and settled: open → placed → settled|abandoned. Only Modes I/T ever visit it;
-  // a Mode-P walk-up goes open → settled in one instant and never enters placed (design §3, §5).
+  // placed: finalized — composition FROZEN (lines may only be written while the order is open)
+  // and the fiscal issuance basis fixed. Not terminal: it still ends settled or abandoned.
   "placed",
   "settled",
   "abandoned",
@@ -43,16 +35,14 @@ export const workingOrderStatus = enumType([
 /**
  * A working order is MUTABLE — the deliberate opposite of `sales`. Lines are
  * added, amended and removed all evening, and the order may end in nothing at
- * all. Two tables, one transition between them (architecture §6): conflating
- * them means chaining drafts and rectifying records that were never sales.
+ * all. Two tables, one transition between them: conflating them means chaining
+ * drafts and rectifying records that were never sales.
  *
  * What replaces immutability here is a state machine the database enforces
- * (`working_orders_enforce_transition`, rewritten in 0030 for 7c): `settled`
- * and `abandoned` are terminal; an `open` order may change freely or advance to
- * any next state; a `placed` order — finalized, its composition frozen — may
- * only be settled (collect) or abandoned (cancel). So open → placed →
- * settled|abandoned, with a Mode-P walk-up going open → settled directly and
- * never entering placed (design §3, §5).
+ * (`working_orders_enforce_transition`): an `open` order may change freely or
+ * advance to any next state; a `placed` order may only be settled or abandoned;
+ * `settled` and `abandoned` are terminal, save the handover stamp on a settled
+ * order.
  */
 export const workingOrders = table(
   "working_orders",
@@ -63,20 +53,12 @@ export const workingOrders = table(
       /* v8 ignore start */
       .references(() => tills.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
-    // Nullable at the schema level, and stays that way — but now WRITTEN on the till park path:
-    // `createOpenOrder` (apps/server/src/working-order.ts) always sets it to the till's node on every
-    // parked AND walk-up order, so in practice a working order carries one. It stays nullable for
-    // MATCH SIMPLE, not because nothing writes it (design §5): MATCH SIMPLE (the default) means a NULL
-    // node_id skips the FK check below, leaving room for a future non-till writer to omit
-    // it. Bare column: the FK is the (node_id) →
-    // nodes(id) declared in extraConfig below (mirroring `working_order_lines_order_fk`),
-    // `.references()` here, so nothing for v8 to track.
+    // Nullable although `createOpenOrder` always sets it: a NULL node_id skips the FK check below,
+    // leaving room for a future non-till writer to omit it.
     nodeId: id("node_id"),
-    // The human-facing order number the counter parks against (park & retrieve, sub-project 7b):
-    // allocated from working_order_counters per node, printed on the ticket, and typed back in to
-    // retrieve the order at any register. NOT NULL — every working order gets one at open. No
-    // UNIQUE here in this slice: the allocator (a later task) owns issuing distinct numbers per
-    // node; this task lays the column the counter feeds.
+    // The human-facing order number: allocated per node from working_order_counters, printed on
+    // the ticket, and typed back in to retrieve the order at any register. No UNIQUE here: the
+    // allocator (`allocateOrderNumber`) owns issuing distinct numbers per node.
     orderNumber: count("order_number").notNull(),
     // Optional operator label before issuance; filing freezes the table grouping here for receipts.
     // Walk-up orders without a label or table keep NULL.
@@ -84,11 +66,9 @@ export const workingOrders = table(
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
     settledAt: tsString("settled_at"),
-    // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
-    // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
-    // tab-membership column — only this delivery link. `dining_tables` carries the reverse key, so
-    // the two tables name each other; the `AnySQLiteColumn` annotation on the thunk is what stops
-    // TypeScript inferring each table's type from the other's (see dining-tables.ts).
+    // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab: a tab is the reverse link
+    // (`dining_tables.tab_id` points at the order). The two tables name each other, so the
+    // `AnySQLiteColumn` annotation stops TypeScript inferring each table's type from the other's.
     /* v8 ignore start */
     deliveryTableId: id("delivery_table_id").references((): AnySQLiteColumn => diningTables.id),
     /* v8 ignore stop */
@@ -112,22 +92,16 @@ export const workingOrders = table(
 );
 
 /**
- * Prices and descriptions are still snapshotted here, never read live from the catalogue
- * (architecture §6): `descriptions`, `unit_price` and `category` are frozen onto the line so a
- * later catalogue edit is a freshness problem, never a correctness one — and when the order is
- * FILED, the resulting `sale_lines` carry these snapshots and NO product reference at all, so a
- * completed record can never be reached back into.
+ * Prices and descriptions are snapshotted here, never read live from the catalogue, so a later
+ * catalogue edit is a freshness problem, never a correctness one — and the filed `sale_lines`
+ * carry these snapshots and NO product reference at all.
  *
- * The line-add snapshot IS the filed price (7c): `unit_price_gross` below locks the gross unit at
- * add time, and a retrieved order is FILED from these locked columns without a re-price
- * (priceLockedLines, @waitron/catalogue). `product_id` is therefore a pricing INPUT only for a NEW
- * or WEIGHED line being (re)priced at add time — NOT a handle for re-pricing an existing line,
- * whose price is already fixed on it. A parked draft keeps the link back to the product it was
- * built from so a fresh line can resolve one; the snapshot columns are what the till writes, reads
- * and files. The (product_id) → products FK below keeps the link referential.
+ * The line-add snapshot IS the filed price: a retrieved order is FILED from the locked columns
+ * without a re-price (priceLockedLines, @waitron/catalogue). `product_id` is a pricing INPUT only
+ * for a line being priced at add time, NOT a handle for re-pricing an existing line.
  *
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
- * locales (spec §9), checked by trigger against locations.invoice_locales.
+ * locales, checked by trigger against locations.invoice_locales.
  */
 export const workingOrderLines = table(
   "working_order_lines",
@@ -135,70 +109,44 @@ export const workingOrderLines = table(
     id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
     lineNo: count("line_no").notNull(),
-    // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
+    // Frozen staff-facing product name (products.name at add time).
     name: label("name").notNull(),
-    // The priced product this draft line was built from — the pricing input described above: on a
-    // top-level line the chosen variant when one was chosen, else the product itself. A
-    // CHILD EXTRA line (parent_line_id set) carries the PICKED product here, which is what the
-    // kitchen cooks and the diner is charged for; its price and its three names are still
-    // snapshotted onto the line by value, so deleting the list that offered it cannot rewrite the
-    // order. NULLABLE, but NOT so a line can outlive the product it names: the FK below is
-    // `ON DELETE restrict`, so a product any line names cannot be deleted while that line exists.
-    // What the nullability leaves open is a line naming NO product at all: the column permits it
-    // and no production writer does it today. The FK is declared in
-    // extraConfig below (null-permissive under MATCH SIMPLE), so this column carries no
-    // `.references()` of its own.
+    // The priced product this draft line was built from: on a top-level line the chosen variant
+    // when one was chosen, else the product itself; on a CHILD EXTRA line (parent_line_id set) the
+    // PICKED product.
     productId: id("product_id"),
-    // Frozen variant staff name — plain text; null when the line names no variant.
     variantName: label("variant_name"),
-    // Variant customer text holding EXACTLY the venue's configured invoice locales (spec §9), checked
-    // by the working_order_lines_check_variant_locales trigger against locations.invoice_locales,
-    // mirroring `descriptions`. Null = the variant has no customer name.
+    // Holds EXACTLY the venue's configured invoice locales, checked by trigger like `descriptions`.
+    // Null = the variant has no customer name.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
-    // Frozen variant kitchen name.
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),
     descriptions: json<Record<string, string>>("descriptions").notNull(),
-    // The diner's answers to this dish's OPTIONS lists, each frozen as the list's three names and
-    // the chosen label's three names — no id points back at either, so editing or deleting a list
-    // cannot rewrite a saved order (spec §2.3). EXTRAS are not here: a pick becomes its own child
-    // line, carrying its product.
+    // The diner's answers to this dish's OPTIONS lists, copied by value — no id points back at a
+    // list or a label, so editing or deleting a list cannot rewrite a saved order. EXTRAS are not
+    // here: a pick becomes its own child line.
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
-    // Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.
+    // The printed unit label (the unit's abbreviation), frozen at add-time — presentation only.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),
     unitPrice: money("unit_price").notNull(),
-    // The GROSS (VAT-inclusive) unit price LOCKED at add time (line-add snapshot, 7c). `unit_price`
-    // above is the NET unit (informational); this is the GROSS unit the line was priced from — the
-    // authoritative input the FILED sale_lines are rebuilt from without a re-price (priceLockedLines,
-    // @waitron/catalogue). Stored rather than recovered as `line_total ÷ quantity` because that
-    // division is exact for `each` lines but DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored,
-    // 3.33 ÷ 0.333 = 10.00 ≠ 9.99), and a weighed line is priced at weigh = add time (design §2,
-    // Decision 1). Keeps the gross/net draft divergence intact: net unit here, gross line total in
-    // `line_total`, gross UNIT here.
+    // The GROSS (VAT-inclusive) unit price LOCKED at add time — the authoritative input the FILED
+    // sale_lines are rebuilt from; `unit_price` above is the NET unit, informational. Stored rather
+    // than recovered as `line_total ÷ quantity`, which DRIFTS for a weighed line (9.99/kg × 0.333 →
+    // 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
     vatRate: rate("vat_rate").notNull(),
-    // GROSS (VAT-inclusive) line total = unit gross × quantity — the customer-facing number, so the
-    // held-orders list `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY
-    // DIVERGES from the FILED `sale_lines.line_total` (sales.ts), which is the NET base the fiscal
-    // record needs: a working order is a mutable counter DRAFT, not the fiscal record, so its money
-    // column carries the gross the operator reads. The FILED line of a retrieved order now derives
-    // from the locked snapshot columns above (`unit_price_gross` × `quantity`) via priceLockedLines,
-    // NOT from a re-price — the gross/net divergence stays: gross unit and gross line total here,
-    // the net base rebuilt for the filed `sale_lines`.
+    // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list
+    // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from
+    // the FILED `sale_lines.line_total`, which is the NET base.
     lineTotal: money("line_total").notNull(),
-    // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
-    // value is frozen onto the line so a stale catalogue is a freshness problem, never a
-    // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
+    // Snapshotted analytics label, NOT a category_id or a catalogue FK.
     category: label("category"),
     servedAt: tsString("served_at"),
-    // The kitchen course this line was rung under, resolved from the product's default at ring
-    // time. NULLABLE: no course means the line fires earliest (spec §2b), and a foreign key does
-    // not check a NULL.
+    // The kitchen course this line was rung under. No course means the line fires earliest.
     courseId: id("course_id"),
-    // The dish line an extras pick belongs to; a top-level line leaves it NULL. The self-key is
-    // declared in the extra-config callback below, because the table cannot name itself here.
+    // The dish line an extras pick belongs to; a top-level line leaves it NULL.
     parentLineId: id("parent_line_id"),
     note: label("note"),
   },
@@ -230,9 +178,7 @@ export const workingOrderLines = table(
     ),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
-    // 10000 basis points is 100%. `ALTER COLUMN ... SET DATA TYPE` keeps a check and casts it, so
-    // the bound had to be re-derived in the same migration that changed the type — left at 100 it
-    // would refuse every rate above one percent.
+    // 10000 basis points is 100%.
     check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 10000`),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
   ],

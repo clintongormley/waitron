@@ -14,27 +14,18 @@ import {
 import { canvases } from "./canvases.js";
 
 /**
- * The device form factor a profile targets — the sizing guardrail a canvas is authored against. The
- * values MUST equal `FORM_FACTORS` in `packages/layouts/src/canvas.ts`; @waitron/layouts owns the
- * type, this declaration is the storage. What refuses a value outside the set is the
- * `device_profiles_form_factor_ck` constraint below, built from this same array by `enumCheck`.
+ * The values MUST equal `FORM_FACTORS` in `packages/layouts/src/canvas.ts`; @waitron/layouts owns
+ * the type, this declaration is the storage.
  */
 export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-landscape", "kds"]);
 
 /**
- * A reusable DEVICE PROFILE (design 2026-09-05 §5.1): the binding bundle a device uses — a name, a
- * reference to a reusable canvas, and the capabilities set (relocated off the canvas record). MANY per
- * database, keyed by name; a device (Task 5) points at one by its `id`. NOT location-scoped (like
- * canvases).
+ * A reusable device profile: the binding bundle a device resolves against. Not location-scoped.
  *
- * `canvas_id` references `canvases(id)` with `onDelete restrict`, so a canvas a profile points at
- * cannot be deleted. NULLABLE: NULL ⇒ the resolver falls back to the form-factor default canvas
- * (design §5.3), and a foreign key does not check a NULL.
+ * `canvas_id` NULL means the form-factor default canvas.
  *
- * `capabilities` is PLAIN jsonb (a CapabilityFlag[]) carrying no @waitron/layouts type —
- * @waitron/layouts depends on @waitron/db, so importing its type here is circular; the store
- * validates on write. Same rationale as canvases.definition. DEFAULT '[]' so a profile carries no
- * capability until configured.
+ * `capabilities` is plain JSON (a CapabilityFlag[]) with no @waitron/layouts type: that package
+ * depends on @waitron/db, so importing its type here would be circular. The store validates on write.
  */
 export const deviceProfiles = table(
   "device_profiles",
@@ -46,18 +37,14 @@ export const deviceProfiles = table(
     canvasId: id("canvas_id").references(() => canvases.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     capabilities: json("capabilities").notNull().default([]),
-    // Auto-logout idle timeout in seconds; NULL = never (KDS is always NULL — it is a display, not a
-    // logged-in operator). Nullable because most profiles opt out; @waitron/layouts validates it on
-    // write. Added --custom (snapshot-less) so `db:generate` never proposes dropping the module-owned
-    // `bookings` table it still carries in the core snapshot chain.
+    // Auto-logout idle timeout in seconds; NULL = never. `validateInactivityTimeout`
+    // (@waitron/layouts) forces NULL for a kds profile on write; the database does not.
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     unique("device_profiles_tenant_name_key").on(t.name),
-    // The values are read off the column itself (`enumCheck`), so the vocabulary is declared once,
-    // in `deviceFormFactorEnum` above.
     check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
   ],
 );

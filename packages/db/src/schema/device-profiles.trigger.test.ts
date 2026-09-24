@@ -1,21 +1,8 @@
-// This suite exercises the form-factor drift-guard trigger (`device_profile_form_factor_locked`),
-// which the SQLite migration set restores in `packages/db/drizzle/0001_behavioural_triggers.sql`.
-// Each mutating case creates its OWN profile so the suite stays order-independent.
+// The `device_profile_form_factor_locked` trigger. Each mutating case creates its own profile so the
+// suite stays order-independent.
 //
-// LOSS, from the storage swap: the concurrency case is deleted. It raced a device INSERT against a
-// form_factor change on two backends and proved that the `for share` row lock the binding-rule
-// trigger took made the second transaction BLOCK rather than interleave. SQLite admits one writer
-// per file and has no row locks at all, so there is no second backend to race and no lock to
-// observe; `withTransaction` runs every write body inside the venue file's write queue
-// (`packages/store/src/write-queue.ts`), which is what serialises them now. That is a different
-// mechanism and this suite no longer says anything about it —
-// `packages/catalogue/test/fixtures.ts`'s `racePair` is the shape that asks the question on this
-// engine, and nothing here uses it.
-//
-// The binding-rule triggers that case leaned on are themselves intact: `device_binding_rule_insert`
-// and `_update`, in the same `packages/db/drizzle/0001_behavioural_triggers.sql`, covered by
-// `packages/db/src/schema/devices.trigger.test.ts`. It is the LOCK they took, and the race that
-// observed it, that this suite no longer has.
+// Not covered: a device insert racing a form-factor change. What serialises the two is the venue
+// file's write queue (`packages/store/src/write-queue.ts`), and nothing here exercises it.
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -53,9 +40,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
     stationId = await seedKitchenStation(db, { locationId });
   });
 
-  // A fresh `kds` profile per case, so a form_factor mutation in one case never leaks into another.
-  // Through the Drizzle builder, since `id`, `created_at` and `updated_at` are `$defaultFn` columns
-  // applied CLIENT-side.
   async function freshKdsProfile(): Promise<string> {
     profileSeq += 1;
     const [row] = await db
@@ -65,7 +49,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
     return row!.id;
   }
 
-  /** A kds device bound to the station. */
   async function insertKdsDevice(profileId: string, active: boolean, label: string): Promise<void> {
     await db.insert(devices).values({
       locationId,
@@ -102,7 +85,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
       .update(deviceProfiles)
       .set({ formFactor: "till" })
       .where(eq(deviceProfiles.id, profileId));
-    // Confirm the control succeeded for the reason we think: the value really changed.
     expect(await formFactorOf(profileId)).toBe("till");
   });
 
@@ -116,9 +98,7 @@ describe("device_profiles form-factor drift guard (locked while an active device
   });
 
   it("allows a no-op UPDATE that leaves form_factor unchanged, even with an active device", async () => {
-    // The guard fires only when the new form factor differs from the old. An UPDATE that re-writes
-    // the same value (touching updated_at, say) with an active device present must pass — proving
-    // the guard keys on the CHANGE, not the mere presence of an active device.
+    // The guard keys on a change of form factor, not on an active device being present.
     const profileId = await freshKdsProfile();
     await insertKdsDevice(profileId, true, "Active kds no-op");
     await db
@@ -128,13 +108,8 @@ describe("device_profiles form-factor drift guard (locked while an active device
     expect(await formFactorOf(profileId)).toBe("kds");
   });
 
-  // Prove by deletion (CLAUDE.md §1/§4): with the trigger dropped, the form_factor change the guard
-  // rejects above now SUCCEEDS — so the trigger is provably what enforces the rule.
-  //
-  // The PostgreSQL version did this inside a ROLLED-BACK transaction so neither the drop nor the
-  // mutated row outlived the case. `withTransaction` IS this file's one write transaction
-  // (`packages/db/src/tenancy.ts`), so the drop is undone by recreating the trigger from the text
-  // SQLite stored for it, and the mutated profile is a fresh one no other case reads.
+  // The drop is undone by recreating the trigger from the text SQLite stored for it; the mutated
+  // profile is one no other case reads.
   it("prove-by-deletion: dropping the trigger lets the locked change succeed", async () => {
     const profileId = await freshKdsProfile();
     await insertKdsDevice(profileId, true, "Active kds for deletion");
@@ -153,8 +128,7 @@ describe("device_profiles form-factor drift guard (locked while an active device
     } finally {
       db.run(sql.raw(stored!.sql));
     }
-    // And with the trigger back, the same change is refused again — so the restore is real and the
-    // rest of the suite is not running against a database missing its guard.
+    // With the trigger back, the change is refused again, so the rest of the suite keeps its guard.
     const again = await captureError(() =>
       db.update(deviceProfiles).set({ formFactor: "kds" }).where(eq(deviceProfiles.id, profileId)),
     );

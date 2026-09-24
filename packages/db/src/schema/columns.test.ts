@@ -33,17 +33,6 @@ import {
 } from "./columns.js";
 import * as vocabulary from "./columns.js";
 
-/**
- * `../index.js` and `./drawer-opens.js` are imported dynamically, inside the cases that need them,
- * and that is TEMPORARY. Both reach schema files that still call PostgreSQL-only builder methods
- * (`.defaultRandom()`, `.defaultNow()`, `.array()`, `pgEnum`) which the SQLite builders do not
- * have, so a static import brings the whole file down at collection rather than failing the cases
- * that depend on them. Measured 2026-09-21 with the imports still static: `vitest run
- * src/schema/columns.test.ts` printed `No test files found` and one unhandled
- * `TypeError: ts(...).notNull(...).defaultNow is not a function` at `src/schema/tenants.ts:73`.
- * The storage swap's task F1 step 12 converts those call sites; put the imports back at the top
- * when it has.
- */
 const publicSurface = () => import("../index.js");
 const drawerOpensTable = async () => (await import("./drawer-opens.js")).drawerOpens;
 
@@ -79,7 +68,6 @@ const checkedProbe = table(
 
 const render = (fragment: SQL) => new SQLiteSyncDialect().sqlToQuery(fragment).sql;
 
-/** A table's columns keyed by the name they carry in SQL, which is what every assertion here uses. */
 const columnsOf = (built: Table): Record<string, AnyColumn> =>
   Object.fromEntries(Object.values(getTableColumns(built)).map((c) => [c.name, c]));
 
@@ -106,12 +94,8 @@ describe("the column vocabulary emits SQLite's types", () => {
   });
 
   it("emits only three distinct SQL types across the whole vocabulary", () => {
-    // The case that states the LOSS rather than the mapping. On PostgreSQL the probe's columns
-    // carried ten different types, several of which refused a wrong value on their own; here they
-    // carry three, so nothing about a column's SQL type separates a count of cents from a count of
-    // thousandths, a calendar day from a time of day, or either from free text. Whatever a caller
-    // still gets right is got right by the helper's NAME and by the read mapping pinned below —
-    // see `columns.ts`'s note on what the engine no longer refuses.
+    // The case that states the LOSS: nothing about a column's SQL type separates one helper of a
+    // group from another; the helper's NAME and the read mapping pinned below do.
     const types = new Set(Object.values(columnsOf(probe)).map((c) => c.getSQLType()));
     expect([...types].sort()).toEqual(["blob", "integer", "text"]);
   });
@@ -121,9 +105,6 @@ describe("what a read hands back, which is where the helpers still differ", () =
   const c = columnsOf(probe);
 
   it("gives ts a Date and tsString the driver's own string", () => {
-    // The answer to the plan's question "do the two timestamp helpers collapse on SQLite?". They
-    // do not: both store ISO-8601 text and emit the same SQL type, and the read mapping is the
-    // whole difference — exactly the split they had on PostgreSQL.
     expect(c.at.mapFromDriverValue("2026-09-16T10:00:00.000Z")).toEqual(
       new Date("2026-09-16T10:00:00.000Z"),
     );
@@ -146,8 +127,6 @@ describe("what a read hands back, which is where the helpers still differ", () =
   });
 
   it("hands labelList a string array, as the PostgreSQL array column did", () => {
-    // `labelList` replaces `label(name).array()`, which SQLite has no type for. What a caller sees
-    // must not change, so the pin is on both directions of the mapping and on the declared type.
     expect(c.tags.mapFromDriverValue('["one","two"]')).toEqual(["one", "two"]);
     expect(c.tags.mapToDriverValue(["one", "two"])).toBe('["one","two"]');
     expectTypeOf<(typeof probe.$inferSelect)["tags"]>().toEqualTypeOf<string[] | null>();
@@ -172,9 +151,7 @@ describe("what a read hands back, which is where the helpers still differ", () =
 
   it("binary binds a Uint8Array and hands back a plain Uint8Array, never a Buffer", () => {
     // A `Buffer` IS a `Uint8Array`, so `toBeInstanceOf(Uint8Array)` passes for both and cannot tell
-    // the two apart; `Buffer.isBuffer` is what does. The bind direction matters to the driver:
-    // measured on Node v26.7.0, `node:sqlite` binds a `Uint8Array` or a `Buffer` and refuses a bare
-    // `ArrayBuffer` (receipt: `docs/handoffs/2026-09-21-f1-the-flip.md`).
+    // the two apart; `Buffer.isBuffer` is what does.
     const bound = c.bytes.mapToDriverValue(new Uint8Array([1, 2, 3]));
     expect(ArrayBuffer.isView(bound)).toBe(true);
     const read = c.bytes.mapFromDriverValue(Buffer.from([1, 2, 3]));
@@ -189,7 +166,6 @@ describe("what a read hands back, which is where the helpers still differ", () =
   });
 });
 
-/** The third spelling of the values: a separate variable, and the same variable written `as const`. */
 const VALUES_IN_A_VARIABLE = ["a", "b"];
 const VALUES_IN_A_CONST_VARIABLE = ["a", "b"] as const;
 const VALUES_IN_AN_ANNOTATED_VARIABLE: ("a" | "b")[] = ["a", "b"];
@@ -216,31 +192,21 @@ const enumSpellings = table("enum_spellings", {
 type SpellingInsert = typeof enumSpellings.$inferInsert;
 
 /**
- * What a caller may WRITE to an `enumText` column: one case per cell of the table in that helper's
- * own note, four ways of spelling the values crossed with the column's nullability, plus the
- * annotated declaration that note names as the second way out of the one spelling still wide.
- *
- * These are COMPILE-TIME cases. `expectTypeOf` puts a mismatch inside a type argument's constraint,
- * so `pnpm --filter @waitron/db typecheck` is what runs them — vitest's typecheck mode is off in
- * this repository and these do not need it, which is worth knowing before you go looking for the
- * config that would make them run in the suite. Nothing here can be checked at runtime: a `const`
- * type parameter is erased, so the single `expect` closing each case is incidental, there to keep
- * the body from being a no-op.
+ * One case per cell of the table in `enumText`'s note. These are COMPILE-TIME cases:
+ * `pnpm --filter @waitron/db typecheck` is what runs them, since vitest's typecheck mode is off in
+ * this repository. The single `expect` closing each case is incidental, there to keep the body from
+ * being a no-op.
  */
 describe("what a caller may write to an enumText column", () => {
   const c = columnsOf(enumSpellings);
 
   it("narrows an inline array literal, with no `as const` at the call site", () => {
-    // Revert the `const` type parameter on enumText and the first of these stops compiling — the
-    // only one of the ten cases in this describe that does, which is how the rest establish that
-    // the one word moved this cell and nothing else.
     expectTypeOf<SpellingInsert["bareNullable"]>().toEqualTypeOf<"a" | "b" | null | undefined>();
     expectTypeOf<SpellingInsert["bareNotNull"]>().toEqualTypeOf<"a" | "b">();
 
-    // A control on the pins themselves, because a pin that cannot fail proves nothing: this one is
-    // deliberately wrong, and it is pinned closed from both sides. Delete the directive and
-    // typecheck fails on the pin (`Type 'string' does not satisfy the constraint`); make the pin
-    // right and it fails as an unused directive. There is no spelling of it that passes quietly.
+    // A control on the pins themselves: deliberately wrong, and pinned closed from both sides.
+    // Delete the directive and typecheck fails on the pin; make the pin right and it fails as an
+    // unused directive.
     // @ts-expect-error `bareNotNull` is the union of its values, not plain `string`
     expectTypeOf<SpellingInsert["bareNotNull"]>().toEqualTypeOf<string>();
 
@@ -248,7 +214,6 @@ describe("what a caller may write to an enumText column", () => {
   });
 
   it("keeps the narrowing a caller who writes `as const` already had", () => {
-    // `as const` on an inline list is not wrong, it is just no longer the only spelling that works.
     expectTypeOf<SpellingInsert["constNullable"]>().toEqualTypeOf<"a" | "b" | null | undefined>();
     expectTypeOf<SpellingInsert["constNotNull"]>().toEqualTypeOf<"a" | "b">();
 
@@ -256,15 +221,13 @@ describe("what a caller may write to an enumText column", () => {
   });
 
   it("still widens to string when the values come from an unannotated variable", () => {
-    // The trap that survives. An unannotated `const VALUES = ["a", "b"]` is widened to `string[]`
-    // at its own declaration, before `enumText` ever sees it, so there is no literal type left for
-    // a `const` type parameter to keep.
+    // An unannotated `const VALUES = ["a", "b"]` is widened to `string[]` at its own declaration,
+    // before `enumText` ever sees it.
     expectTypeOf<SpellingInsert["variableNullable"]>().toEqualTypeOf<string | null | undefined>();
     expectTypeOf<SpellingInsert["variableNotNull"]>().toEqualTypeOf<string>();
 
-    // The two ways out, and the receipt for the sentence above: the same spelling at the call site,
-    // with the declaration written `as const` or annotated. So it is the declaration that loses the
-    // values, not the call, and UNANNOTATED is the condition rather than "a variable".
+    // The same spelling at the call site, with the declaration written `as const` or annotated: it
+    // is the declaration that loses the values, not the call.
     expectTypeOf<SpellingInsert["constVariableNullable"]>().toEqualTypeOf<
       "a" | "b" | null | undefined
     >();
@@ -278,11 +241,6 @@ describe("what a caller may write to an enumText column", () => {
   });
 });
 
-/**
- * `enumType` replaces `pgEnum`, which SQLite has no equivalent for. A `pgEnum` declaration was used
- * two ways — as a column builder, and for its `enumValues` read at runtime to validate a request
- * and at type level as `(typeof x.enumValues)[number]` — so all three uses are cases here.
- */
 const ticketState = enumType(["open", "served"]);
 
 /** The one wide row of `enumText`'s table, asked of `enumType`: an unannotated variable. */
@@ -307,29 +265,22 @@ describe("enumType stands in for a PostgreSQL enum type", () => {
   });
 
   it("exposes enumValues to a caller, the way a pgEnum declaration did", () => {
-    // The runtime use: a request validator reads the list off the declaration rather than
-    // repeating it. `pgEnum` took a SQL type name as its first argument; there is no SQL type any
-    // more, so this takes only the values.
     expect(ticketState.enumValues).toEqual(["open", "served"]);
   });
 
   it("narrows a caller's value exactly as enumText does", () => {
-    // Compile-time, like the enumText table above. The type-level use of a pgEnum declaration was
-    // `(typeof x.enumValues)[number]`, so that spelling is pinned too.
+    // Compile-time, like the enumText table above.
     expectTypeOf<(typeof ticketState.enumValues)[number]>().toEqualTypeOf<"open" | "served">();
     expectTypeOf<(typeof enumTypeProbe.$inferInsert)["state"]>().toEqualTypeOf<
       "open" | "served" | null | undefined
     >();
 
-    // And the one row of that table where the narrowing is LOST, which is the receipt for the
-    // sentence in `enumType`'s note saying the table applies here unchanged: an unannotated
-    // variable is widened to `string[]` at its own declaration, before `enumType` sees it.
+    // The one row of that table where the narrowing is LOST: an unannotated variable.
     expectTypeOf<(typeof wideStateProbe.$inferInsert)["state"]>().toEqualTypeOf<
       string | null | undefined
     >();
 
-    // The same both-sided control the enumText table carries: deliberately wrong, and it fails
-    // whether the directive is deleted or the pin is corrected.
+    // The same both-sided control the enumText table carries.
     // @ts-expect-error `state` is the union of its values, not plain `string`
     expectTypeOf<(typeof enumTypeProbe.$inferInsert)["state"]>().toEqualTypeOf<string>();
 
@@ -357,18 +308,14 @@ describe("the default generators, which replace defaultRandom and defaultNow", (
   });
 
   it("arrives on the column as the value drizzle will insert", () => {
-    // `$defaultFn` is not a SQL DEFAULT — drizzle calls it in JavaScript and binds the result — so
-    // the column is where a caller can see it. `probe.pk` is declared `id("pk").primaryKey()
-    // .$defaultFn(newId)` at the top of this file.
+    // `$defaultFn` is not a SQL DEFAULT, so the column is where a caller can see it.
     const c = columnsOf(probe);
     expect(c.pk.hasDefault).toBe(true);
     expect(c.pk.defaultFn?.()).toMatch(/^[0-9a-f]{8}-/);
   });
 
   it("refuses the generator that belongs to the other timestamp helper", () => {
-    // Compile-time, and the reason `now` and `nowIso` are two functions rather than one: `ts`
-    // takes and returns `Date` while `tsString` takes and returns `string`, so pairing a column
-    // with the wrong generator does not compile. That is the whole safety of the split.
+    // Compile-time, and the reason `now` and `nowIso` are two functions rather than one.
     ts("right").$defaultFn(now);
     tsString("right").$defaultFn(nowIso);
     id("right").$defaultFn(newId);
@@ -393,12 +340,6 @@ describe("enumCheck derives the check constraint from the column's own values", 
   });
 
   it("works from a table's extra-config callback, the only place a check is declared", () => {
-    // On PostgreSQL that callback was handed an `ExtraConfigColumn` carrying no `enumValues`, and
-    // `enumCheck` needed a fallback that re-found the column on its table. On SQLite it is handed
-    // the table's own column, values and all — measured 2026-09-21 on drizzle-orm 0.45.2, one table
-    // per dialect, reading the callback's argument after `getTableConfig`: `ExtraConfigColumn` with
-    // `enumValues: undefined` against `SQLiteText` with `enumValues: ["a", "b"]`. So the fallback
-    // is gone, and what this case now settles is that the direct read is enough.
     const [constraint] = getTableConfig(checkedProbe).checks;
     expect(render(constraint.value)).toBe("\"checked_probe\".\"kind\" in ('cash_sale', 'manual')");
   });
@@ -408,11 +349,9 @@ describe("enumCheck derives the check constraint from the column's own values", 
   });
 
   it("keeps its values inline when a caller composes a null arm around it", () => {
-    // A nullable checked column is written `<col> is null or <col> in (...)`, and enumCheck emits
-    // only the second half — so the null arm is composed AROUND it. The risk that makes this worth
-    // a case: `.inlineParams()` is set on the inner fragment, and if it did not survive being
-    // nested the values would render as bind placeholders and change the generated DDL. Prove it by
-    // deleting `.inlineParams()` from enumCheck: this case goes red on the placeholders.
+    // A nullable checked column is written `<col> is null or <col> in (...)`, so the null arm is
+    // composed AROUND enumCheck. `.inlineParams()` is set on the inner fragment, and if it did not
+    // survive being nested the values would render as bind placeholders.
     expect(render(sql`${probe.kind} is null or ${enumCheck(probe.kind)}`)).toBe(
       '"probe"."kind" is null or "probe"."kind" in (\'cash_sale\', \'manual\')',
     );
@@ -426,10 +365,8 @@ describe("enumCheck derives the check constraint from the column's own values", 
 });
 
 /**
- * The vocabulary is only worth anything if what it emits is what the migrations on disk already
- * declare. `drawer_opens` is the one table converted to it so far, so these assertions read the
- * generated DDL from disk and pin it against the live column, rather than letting Drizzle's
- * in-memory builder describe itself.
+ * These read the generated DDL from disk and pin it against the live column, rather than letting
+ * Drizzle's in-memory builder describe itself.
  */
 const drizzleDir = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
@@ -440,12 +377,7 @@ const generatedSql = () =>
     .map((f) => readFileSync(join(drizzleDir, f), "utf8"))
     .join("\n");
 
-/**
- * The body of `drawer_opens`'s own CREATE TABLE, non-greedy so a later table cannot be caught.
- * Drizzle's SQLite generator quotes an identifier with BACKTICKS where its PostgreSQL generator
- * used double quotes — measured 2026-09-21 by generating this file's own probe table through
- * `generateSQLiteMigration`, which emitted ``CREATE TABLE `probe` (``.
- */
+/** The body of a table's own CREATE TABLE, non-greedy so a later table cannot be caught. */
 const createTableBody = (tableName: string) =>
   new RegExp(`create table \`${tableName}\` \\(([\\s\\S]*?)\\n\\);`, "i").exec(generatedSql())?.[1];
 
@@ -461,16 +393,6 @@ const DRAWER_OPENS_TYPES = {
   via_override: "integer",
 } as const;
 
-/**
- * This whole describe is EXPECTED RED, for two reasons that are fixed by two different steps of
- * the storage swap's task F1. Today it fails in its `beforeAll`, because `drawer-opens.ts` still
- * calls `.defaultRandom()`, which step 12 replaces with `$defaultFn(newId)`. Once that lands it
- * will fail on the assertions instead, because the migrations on disk are still the PostgreSQL
- * ones — `"id" uuid`, double-quoted identifiers — until step 13 regenerates every set as a fresh
- * SQLite baseline. The expectations below are what drizzle-kit's SQLite generator emits, read off
- * a real generation run on 2026-09-21 rather than guessed. Do not weaken them to make the file
- * green; do the two steps.
- */
 describe("the generated migration and the converted table agree", () => {
   const body = createTableBody("drawer_opens");
   let live: Record<string, AnyColumn> = {};
@@ -505,16 +427,11 @@ describe("the generated migration and the converted table agree", () => {
 });
 
 /**
- * Everything above reads Drizzle's own builder and the migration TEXT on disk. Neither is a
- * database, and the claim this module rests on is that the helpers emit the SQLite types they say
- * they do, and that a value survives the round trip a real driver performs. So: generate this
- * file's probe tables through drizzle-kit exactly as a migration would be generated, run that DDL
- * into a real `node:sqlite` file, and ask the engine what it made.
- *
- * A real file rather than `:memory:` so the DDL goes through the same path a venue's database
- * does. `@waitron/store` is deliberately NOT imported: `packages/db` does not depend on it, and
- * the values are mapped here through the columns' own `mapToDriverValue`/`mapFromDriverValue`,
- * which is what a Drizzle insert and select would call.
+ * Everything above reads Drizzle's own builder and the migration TEXT on disk; neither is a
+ * database. So: generate the probe tables through drizzle-kit as a migration would be generated,
+ * run that DDL into a real `node:sqlite` file, and ask the engine what it made. The values are
+ * mapped through the columns' own `mapToDriverValue`/`mapFromDriverValue`, which is what a Drizzle
+ * insert and select would call.
  */
 const PRAGMA_TYPES = {
   pk: "TEXT",
@@ -619,44 +536,33 @@ describe("a real node:sqlite database reports the types the vocabulary declared"
     expect(c.small.mapFromDriverValue(row.small)).toBe(3);
     expect(c.big.mapFromDriverValue(row.big)).toBe(42);
 
-    // The trap, so nobody reads this line as proof of `binary`'s read mapping: `node:sqlite` hands
-    // a BLOB back as a plain `Uint8Array` already, so the custom type's `fromDriver` cannot be seen
-    // here at all — the same blind spot PGlite's bytea parser gave the PostgreSQL version of this
-    // file. What this pins is that the BYTES survive. The mapping itself is pinned above, in
-    // "binary binds a Uint8Array and hands back a plain Uint8Array, never a Buffer".
+    // Not proof of `binary`'s read mapping: `node:sqlite` hands a BLOB back as a plain `Uint8Array`
+    // already, so `fromDriver` cannot be seen here. What this pins is that the BYTES survive; the
+    // mapping is pinned in "binary binds a Uint8Array and hands back a plain Uint8Array, never a
+    // Buffer".
     expect(Buffer.isBuffer(row.bytes)).toBe(false);
     expect(c.bytes.mapFromDriverValue(row.bytes)).toEqual(new Uint8Array([1, 2, 3]));
     expect(c.tags.mapFromDriverValue(row.tags)).toEqual(["one", "two"]);
   });
 
   it("refuses a value outside an enumText column's vocabulary", () => {
-    // What the check constraint is FOR, asked of the engine rather than of the rendered SQL: the
-    // type is plain `text`, so this constraint is the only thing standing between the column and
-    // any string at all.
+    // Asked of the engine rather than of the rendered SQL.
     expect(() =>
       raw.prepare("insert into checked_probe (kind) values (?)").run("not_a_reason"),
     ).toThrow(/CHECK constraint failed: checked_probe_kind_ck/);
   });
 
   it("refuses a value outside an enumType column's vocabulary too", () => {
-    // The same refusal, asked of the column shape that replaced `pgEnum` — where PostgreSQL's own
-    // enum type did the refusing and here the generated check constraint must.
     expect(() =>
       raw.prepare("insert into enum_type_probe (state) values (?)").run("cancelled"),
     ).toThrow(/CHECK constraint failed: enum_type_probe_state_ck/);
   });
 });
 
-/**
- * Both cases here are EXPECTED RED for the same reason the describe above is, and it is NOT the
- * migrations: `../index.js` re-exports every schema file in this package, and those still call the
- * PostgreSQL-only builder methods F1 step 12 removes. They fail on the import, not on an assertion.
- */
 describe("the vocabulary is reachable from outside packages/db", () => {
   it("re-exports every name columns.ts provides, as the same value", async () => {
-    // Comparing identities keeps a helper added later from being reachable only in here. Weaker
-    // than its name in one way: `Object.keys` on a module namespace sees VALUES, so an exported
-    // TYPE is never checked.
+    // Weaker than its name: `Object.keys` on a module namespace sees VALUES, so an exported TYPE is
+    // never checked.
     const door = (await publicSurface()) as unknown as Record<string, unknown>;
     const inside = vocabulary as Record<string, unknown>;
     const names = Object.keys(inside);

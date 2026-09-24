@@ -63,9 +63,5 @@ export const joinRequests = table(
     decoyNumbers: labelList("decoy_numbers").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
-  (t) => [
-    // The values are read off the column itself (`enumCheck`), so the vocabulary is declared once,
-    // in `joinRequestKind` above.
-    check("join_requests_kind_ck", enumCheck(t.kind)),
-  ],
+  (t) => [check("join_requests_kind_ck", enumCheck(t.kind))],
 );

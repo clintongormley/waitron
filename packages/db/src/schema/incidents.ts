@@ -12,18 +12,13 @@ export type IncidentSeverity = "warning" | "error";
  *
  * An incident is a record of what happened, not a note anyone may rewrite: acknowledging one is the
  * sole permitted mutation. **Nothing in the database enforces that.** This engine has no roles and
- * no grants, and the table carries no trigger — an update of `code` and a `delete from incidents`
- * both succeed, measured 2026-09-23 on Node v26.7.0 against the core migration set. The rule is
- * now the code's to keep.
+ * no grants, and the table carries no trigger, so the rule is the code's to keep.
  *
  * `code` and `params` come from a structured code+params pair rather than from a message
  * string, so the dashboard can word each alert in English or Spanish
  * (`apps/dashboard/src/i18n/alert-messages.ts`). A prose column here would reach a screen
- * untranslatable, which is the constraint spec §9 places on this layer specifically.
+ * untranslatable.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as ./sales.ts.
 export const incidents = table(
   "incidents",
   {
@@ -33,19 +28,14 @@ export const incidents = table(
       /* v8 ignore start */
       .references(() => tills.id),
     /* v8 ignore stop */
-    /** Nullable: plan 3's drainer raises incidents with no sale attached. */
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
     /* v8 ignore stop */
     code: label("code").notNull(),
     params: json<Record<string, unknown>>("params").notNull().default({}),
     severity: label("severity").$type<IncidentSeverity>().notNull(),
-    // tsString, matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date takes on
-    // the host timezone as soon as something formats it in local time (`toString()` moves with
-    // `TZ`; `toISOString()` does not), and nothing formatted is ever stored. Both columns here are
-    // populated by the application (recordIncident's own detectedAt, and markIncidentHandled's
-    // acknowledgedAt when a manager marks the alert handled on the dashboard), never by
-    // defaultNow(), so the same discipline applies.
+    // tsString: a JS Date takes on the host timezone as soon as something formats it in local time
+    // (`toString()` moves with `TZ`; `toISOString()` does not), and nothing formatted is ever stored.
     detectedAt: tsString("detected_at").notNull(),
     acknowledgedAt: tsString("acknowledged_at"),
     acknowledgedBy: id("acknowledged_by"),
@@ -72,10 +62,6 @@ export const incidents = table(
     uniqueIndex("incidents_open_dedup")
       .on(t.tillId, t.code, sql`case when ${t.saleId} is null then '' else ${t.saleId} end`)
       .where(sql`${t.acknowledgedAt} is null`),
-    // A CHECK written here rather than a declared vocabulary, matching invoice_series.purpose's
-    // own precedent: `severity`
-    // is a small, closed vocabulary and a CHECK is a one-line migration to widen, where an enum
-    // needs ALTER TYPE.
     check("incidents_severity_ck", sql`${t.severity} in ('warning', 'error')`),
     check("incidents_code_ck", sql`${t.code} <> ''`),
   ],

@@ -6,16 +6,13 @@ import { nodes } from "./nodes.js";
 /**
  * Invoice numbering series.
  *
- * A **node** may own N series and has exactly ONE chain (findings §1; the
- * node-id rekey, 2026-08-03, moved this from till to node — the SIF that owns
- * the chain is the node, #33). Nothing here relates a series to a chain: no
- * chain column, and deliberately no unique constraint on (node_id),
- * which would silently reimpose one series per node.
+ * A **node** may own N series and has exactly ONE chain. Nothing here relates a
+ * series to a chain: no chain column, and deliberately no unique constraint on
+ * (node_id), which would silently reimpose one series per node.
  *
- * `next_number` is the live counter and the single source of truth: a plain
- * integer column, advanced in place by the allocating UPDATE under the row
- * lock that statement takes. There is no sequence and no second copy of the
- * value to drift out of step with it.
+ * `next_number` is the live counter and the single source of truth, advanced
+ * in place by the allocating UPDATE (`../allocate-number.ts`). There is no
+ * sequence and no second copy of the value to drift out of step with it.
  *
  * Allocation is transactional, so a rollback returns the number and no gap
  * appears. That is correct — the regulation requires strictly-increasing and
@@ -27,17 +24,13 @@ export const invoiceSeries = table(
   "invoice_series",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // The node that owns this series and its chain (node-id rekey, 2026-08-03:
-    // was `till_id`). Bare column: the (node_id) → nodes(id) FK is declared in
-    // extraConfig below (mirroring the `sales`/`working_orders`/`payments` node
-    // FKs).
     nodeId: id("node_id").notNull(),
     code: label("code").notNull(),
     purpose: label("purpose").notNull().default("standard"),
     nextNumber: count("next_number").notNull().default(1),
     // Set when the series stops numbering: a cold restore retires every live series of the node and
-    // opens fresh ones (spec 2026-09-06-module-sp3d §3.2). A retired series stays for history — sales
-    // reference it by id — and the write paths refuse to number from it.
+    // opens fresh ones. A retired series stays for history — sales reference it by id — and the
+    // write paths refuse to number from it.
     retiredAt: ts("retired_at"),
   },
   (t) => [
@@ -49,9 +42,7 @@ export const invoiceSeries = table(
     }),
     // A hand-written CHECK rather than the `enumType`/`enumCheck` pair, deliberately: the permitted
     // set depends on asesor Q5(b), which is unverified, and a set still being decided is not a
-    // vocabulary. (Until 2026-09-21 this comment justified the choice against a `pgEnum`, whose
-    // widening needed an `ALTER TYPE`; the storage swap left no enum type on either side of that
-    // comparison, and the two shapes now differ only in where the values are written.)
+    // vocabulary.
     check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'rectificative')`),
     check("invoice_series_next_number_ck", sql`${t.nextNumber} >= 1`),
     check("invoice_series_code_ck", sql`${t.code} <> ''`),

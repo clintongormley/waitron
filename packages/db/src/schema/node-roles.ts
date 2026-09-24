@@ -9,9 +9,6 @@ import { id, label, now, table, ts } from "./columns.js";
  * (`../deployment.ts`). The environment is not here: it belongs to the database and stays on
  * `deployment`.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as ./sales.ts.
 export const nodeRoles = table(
   "node_roles",
   {

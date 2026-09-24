@@ -17,22 +17,14 @@ import { printers } from "./printers.js";
 import { locations } from "./tenants.js";
 
 /**
- * The lifecycle of one outbox job (§2c). `queued` (default) → the agent atomically claims it as
- * `printing` (a locking UPDATE … RETURNING, so two agent instances never double-print) → `done` on a
- * successful push, or `failed` (retried with bounded backoff). A closed vocabulary declared once
- * (`enumType`), matching the repo precedent.
+ * `queued` → `printing` on an agent's claim → `done`, or `failed`, which is re-claimed until the
+ * attempt cap (`packages/printing/src/runtime.ts`).
  */
 export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
 /**
- * The print OUTBOX (§2c) — delivery decoupled from creation so a fire or a sale is NEVER blocked by a
- * printer (CLAUDE.md §5). `enqueuePrintJob` (a later task) is a single INSERT (`queued`) that opens no
- * socket and waits on no hardware; the agent runtime's pull→push→report loop moves the row through
- * `printing` → `done`/`failed` asynchronously. Any node (local or cloud) may enqueue; the agent that
- * pulls it delivers it.
- *
- * `payload` is OPAQUE bytes: Slice B fills it with ESC/POS, and this subsystem never inspects
- * them — it only moves bytes.
+ * The print outbox: `enqueuePrintJob` writes a row and opens no socket, so a printer never blocks a
+ * sale or a fire (CLAUDE.md §5).
  */
 export const printJobs = table(
   "print_jobs",
@@ -43,43 +35,27 @@ export const printJobs = table(
       /* v8 ignore start */
       .references(() => locations.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
-    // The target printer.
     printerId: id("printer_id")
       .notNull()
       /* v8 ignore start */
       .references(() => printers.id),
     /* v8 ignore stop */
-    // The agent currently holding this job (set on claim, overwritten by a lease reclaim).
-    // Authorises the report — only the claimer reports its own job (runtime.ts). NULL while queued
-    // and after the job leaves `printing`; a foreign key does not check a NULL.
+    // The agent holding the latest claim; only it may report the job (runtime.ts).
     /* v8 ignore start */
     claimedBy: id("claimed_by").references(() => printAgents.id),
     /* v8 ignore stop */
-    // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them). Bytes rather
-    // than base64 text, so nothing sits between the caller and the row. A read THROUGH this column
-    // hands back a `Uint8Array`, which is what `enqueuePrintJob` already passes in. The agent pull
-    // (`claimPrintJobs` in packages/printing/src/runtime.ts) reads the same row with raw SQL, where
-    // no column mapping runs at all and the driver's own value arrives instead.
+    // Opaque ESC/POS bytes. A read through this column yields a `Uint8Array`; `claimPrintJobs`
+    // (packages/printing/src/runtime.ts) reads it with raw SQL and gets the driver's value instead.
     payload: binary("payload").notNull(),
     // Drawer pulses share transport delivery but cannot be repeated through document resend.
     kind: label("kind").$type<"document" | "drawer">().notNull().default("document"),
     status: printJobStatus("status").notNull().default("queued"),
-    // Delivery attempt count, bumped by the agent's report path; drives bounded backoff.
     attempts: count("attempts").notNull().default(0),
-    // The last delivery failure message, for the dashboard's failing-printer surface. NULL until a failure.
     lastError: label("last_error"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    // The claim LEASE anchor (failover-printing design §5, Gap 1). Stamped `now()` each time the agent
-    // pull claims the row (queued/failed/lease-expired-printing → printing); NULL until first claimed
-    // and while `queued`. The pull re-selects a `printing` row whose `claimed_at` is older than
-    // PRINT_JOB_LEASE_MS (runtime.ts) — a visibility timeout that reclaims a job whose claimer died
-    // mid-service instead of stranding it in `printing` forever. It ALSO reclaims a `printing` row whose
-    // `claimed_at IS NULL` (anomalous — every real claim stamps it, so such a row is by definition not a
-    // live claim): defense-in-depth so the lease's own guarantee cannot be defeated by a NULL comparison
-    // being UNKNOWN. At-least-once by design (§5): a reclaim may reprint a job that printed but lost its
-    // `done`.
+    // The claim lease anchor, stamped on each claim. A `printing` row whose lease has expired, or
+    // whose `claimed_at` is NULL, is re-claimed, so delivery is at-least-once: a reclaim may reprint.
     claimedAt: tsString("claimed_at"),
-    // Set when the job reaches `done`. NULL while queued/printing/failed.
     deliveredAt: tsString("delivered_at"),
   },
   (t) => [

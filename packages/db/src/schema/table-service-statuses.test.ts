@@ -66,7 +66,6 @@ describe("table_service_statuses schema (the dining_tables.status_id FK)", () =>
     );
     expect(row!.statusId).toBe(statusId);
 
-    // The FK rejects a status_id that names no row at all.
     const eRandom = await captureError(() =>
       inTx((tx) =>
         tx

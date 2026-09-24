@@ -15,7 +15,6 @@ import { locations, tenants, tills } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-// Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
   await suite.db.execute(sql`delete from invoice_series`);
   await suite.db.execute(sql`delete from nodes`);
@@ -28,10 +27,8 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_A2 = "aaaaaaaa-1111-4000-8000-000000000002";
 
-// A series is keyed on its NODE since the node-id rekey (2026-08-03): invoice_series dropped
-// till_id and now carries a NOT NULL node_id. seed() creates two nodes for tenant A so the
-// per-node uniqueness tests have a second node to collide against. The tills stay seeded — sales
-// still ring on a till — but nothing in invoice_series references them.
+// seed() creates two nodes so the per-node uniqueness tests have a second node to collide
+// against.
 let nodeA1 = "";
 let nodeA2 = "";
 
@@ -82,17 +79,9 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a duplicate code on the same node", async () => {
-    // Not `.rejects.toThrow(/pattern/)`: drizzle wraps every failed query in a DrizzleQueryError
-    // whose own `.message` is `Failed query: <sql>`, and the driver's error — its result code and
-    // its text alike — is on `.cause`. `toThrow` only reads `.message`, so it would pass against
-    // any rejection at all. `refusalOn` walks the cause chain and reads both off ONE layer.
-    //
-    // It names the key rather than matching words: the refusal arrives as
-    // `UNIQUE constraint failed: invoice_series.node_id, invoice_series.code` (measured on this
-    // case), which is `invoice_series_node_code_key` — the (node_id, code) unique index in
-    // 0000_baseline.sql — and no longer carries the constraint's NAME. Column ORDER is part of the
-    // identity `refusalOn` checks. The control in the other direction is the case below: the same
-    // code on a different node is accepted, so the index keys on the pair, not on the code alone.
+    // A unique refusal names columns, not the constraint, so this names the key. Column ORDER is
+    // part of the identity `refusalOn` checks. The control in the other direction is the case
+    // below: the same code on a different node is accepted, so the index keys on the pair.
     await db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" });
     const error = await captureError(() =>
       db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" }),
@@ -106,8 +95,8 @@ describe("invoice_series schema", () => {
   });
 
   it("permits the same code on two different nodes", async () => {
-    // Series codes are a per-node numbering concern (node-id rekey, 2026-08-03). Two nodes in one
-    // venue both running series "FA" is normal, and their numbers are independent.
+    // Series codes are a per-node numbering concern. Two nodes in one venue both running series
+    // "FA" is normal, and their numbers are independent.
     await db.insert(invoiceSeries).values([
       { nodeId: nodeA1, code: "FA", purpose: "standard" },
       { nodeId: nodeA2, code: "FA", purpose: "standard" },
@@ -117,9 +106,8 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a purpose outside the permitted set", async () => {
-    // Same wrapper issue as the duplicate-code test above: read the driver's message off the
-    // cause, not the DrizzleQueryError's own. A CHECK refusal names the constraint and nothing
-    // else — no table, no column (`../constraint-target.ts`) — so the name IS the assertion here.
+    // A named CHECK's refusal carries its name and nothing else — no table, no column
+    // (`../constraint-target.ts`) — so the name IS the assertion here.
     const error = await captureError(() =>
       db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "XX", purpose: "invented" }),
     );
@@ -127,17 +115,10 @@ describe("invoice_series schema", () => {
   });
 
   it("has exactly the columns it has today — none relating a series to a chain", async () => {
-    // Findings §1: series is a numbering concern, the chain is a device concern. A column named for
-    // chain position here would be the first step towards per-series chaining, which AEAT art. 7.c)
-    // forbids outright. An exact pin is the whole check: any new column — chain-named,
-    // Spanish-named, or added by hand-written SQL in drizzle/ that no source scan sees — is a
-    // deliberate edit here. (A Spanish column NAME in this package's schema source is the tree
-    // guard's job, scripts/english-only.test.ts; fiscal's own terms are fiscal's to declare, not
-    // this package's.)
-    // `pragma_table_info` for `information_schema.columns`, which does not exist on this engine —
-    // run as written this statement died with `no such table: information_schema.columns`
-    // (measured on this suite). The pragma reports the same column NAMES, so the exact pin below
-    // is unchanged and still catches any new column.
+    // A column named for chain position here would be the first step towards per-series chaining,
+    // which AEAT art. 7.c) forbids outright. An exact pin is the whole check: any new column —
+    // including one added by hand-written SQL in drizzle/ that no source scan sees — is a
+    // deliberate edit here.
     const cols = await rows<{ name: string }>(
       db,
       sql`select name from pragma_table_info('invoice_series')`,
@@ -153,37 +134,23 @@ describe("invoice_series schema", () => {
   });
 
   it("carries a NOT NULL node_id column referencing nodes", async () => {
-    // Node-id rekey (2026-08-03): node_id is now NOT NULL — a series is OWNED by a node (its SIF).
-    // This supersedes Task 3's scaffolding assertion that the column was nullable. Raw SQL for the
-    // inserts so a mis-migrated run fails on the real cause rather than a drizzle column-object error
-    // — the same reason sales.test.ts's corrective-link tests use a raw insert.
-    //
-    // `id` is named explicitly in the raw inserts below because `invoice_series.id` is
+    // Raw SQL for the inserts so a mis-migrated run fails on the real cause rather than a drizzle
+    // column-object error. `id` is named explicitly because `invoice_series.id` is
     // `$defaultFn(newId)` — a JavaScript generator rather than a SQL DEFAULT, which a raw insert
-    // never reaches. Without it the first insert was refused
-    // `NOT NULL constraint failed: invoice_series.id` and this case never got as far as the
-    // node_id refusal it is about (measured on this case). Supplying it keeps the insert raw,
-    // which is what the paragraph above asks for.
+    // never reaches.
     const node = await seedNode(db, brandLocationId(LOCATION_A));
-    // `pragma_table_info` for `information_schema.columns`. Its `notnull` is 1 for a NOT NULL
-    // column and 0 otherwise — the exact counterpart of `is_nullable`'s 'NO'/'YES', so the
-    // assertion carries across unchanged.
     const meta = await rows<{ notnull: number }>(
       db,
       sql`select "notnull" from pragma_table_info('invoice_series') where name = 'node_id'`,
     );
     expect(meta).toEqual([{ notnull: 1 }]);
-    // Accepts a valid node id.
     const withNode = await rows<{ node_id: string | null }>(
       db,
       sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, ${node}, 'FN') returning node_id`,
     );
     expect(withNode).toEqual([{ node_id: node }]);
-    // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces. The refusal
-    // names the column it is about — `NOT NULL constraint failed: invoice_series.node_id`,
-    // measured on this case — so the assertion pins the class AND that column, where the old
-    // pattern pinned the column through PostgreSQL's wording. The class is what separates it from
-    // a unique index on the same column, which would name exactly the same table and column.
+    // The class is what separates this refusal from a unique index on the same column, which
+    // would name exactly the same table and column.
     const error = await captureError(() =>
       db.execute(sql`insert into invoice_series (id, code) values (${randomUUID()}, 'FM')`),
     );
@@ -193,15 +160,9 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
-    // The (node_id) FK guarantees referential existence too: a node id with
-    // no `nodes` row is refused. `id` is supplied for the reason the case above records — without
-    // it this insert was refused `NOT NULL constraint failed: invoice_series.id` and never reached
-    // the foreign key.
-    //
-    // Class only, and nothing narrower exists to assert: this engine's foreign-key refusal is the
-    // whole message `FOREIGN KEY constraint failed` and names neither table nor column (measured
-    // on this case). The control in the other direction is the case above, which inserts a series
-    // with a real node id and reads it back.
+    // `id` is supplied for the reason the case above records. Class only, and nothing narrower
+    // exists to assert: this engine's foreign-key refusal names neither table nor column. The
+    // control in the other direction is the case above, which inserts a series with a real node id.
     const error = await captureError(() =>
       db.execute(
         sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, '99999999-9999-4999-8999-999999999999', 'FX')`,
@@ -211,16 +172,8 @@ describe("invoice_series schema", () => {
   });
 
   it("has no unique constraint on node_id alone", async () => {
-    // The subtle coupling: a unique index on node_id would silently reimpose
-    // one series per node, which is the thing N-series-from-day-one exists to
-    // avoid (node-id rekey, 2026-08-03: the pair moved from till to node). It
-    // reads as a harmless index, so only a test catches it.
-    // `pg_indexes` does not exist on this engine — run as written this statement died with
-    // `no such table: pg_indexes`. The replacement reads the index list and then each index's own
-    // column list, rather than pattern-matching a `CREATE INDEX` string: `pragma_index_list` gives
-    // the name and a `unique` flag (1 or 0), and `pragma_index_info` gives the columns the index
-    // is on. That is what the old regex over `indexdef` was approximating, so the assertion below
-    // pins the same property and no longer depends on how the DDL happens to be spelt.
+    // A unique index on node_id would silently reimpose one series per node. It reads as a
+    // harmless index, so only a test catches it.
     const indexes = await rows<{ name: string; unique: number }>(
       db,
       sql`select name, "unique" from pragma_index_list('invoice_series')`,

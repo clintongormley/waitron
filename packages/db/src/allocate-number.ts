@@ -39,7 +39,7 @@ import { invoiceSeries } from "./schema/series.js";
  * recorded under it. The property that must hold, "no two committed sales
  * share a number", is enforced by `sales_series_invoice_number_key`, UNIQUE
  * (series_id, invoice_number) on `sales`
- * (`packages/db/src/schema/sales.ts:152`, generated at
+ * (`packages/db/src/schema/sales.ts`, generated at
  * `packages/db/drizzle/0000_baseline.sql:617`). That does not depend on this
  * function being correct, and it is engine-independent.
  *
