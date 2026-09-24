@@ -2568,10 +2568,10 @@ image constraints under *Detail → Box image*.
   same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
   unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
-  comment lines to about 750) and `payments` (#558, about 2,000 to about 750). A pruning pull
-  request cannot carry this file (the checker refuses it), so each one's line lands here as a
-  docs-only push after the merge. Found by #555 and #558 and left for the package that owns each,
-  all still OPEN:
+  comment lines to about 750) `payments` (#558, about 2,000 to about 750) and `identity` (#559, about 2,000 to
+  about 640). A pruning pull request cannot carry this file (the checker refuses it), so each one's
+  line lands here as a docs-only push after the merge. Found by #555, #558 and #559 and left for the
+  package that owns each, all still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials`, `scheduler` and
     `fiscal-verifactu` ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2600,6 +2600,31 @@ image constraints under *Detail → Box image*.
   - `apps/till/src/widgets/tender-pay.ts` points at `packages/payments/src/provider.ts:113-137` and
     lists `PaymentProvider`'s methods without `resolvePending`; both were wrong before #558. Prune
     with `apps/till`.
+  - Ten comments in `apps/server` and `packages/fiscal-verifactu` tests cite
+    `packages/identity/src/schema/persons.ts:26` and `:67`, already wrong before #559; name the
+    column instead of the line when those packages are pruned.
+  - `apps/server/src/management-api.ts` still says an unregistered credential gets
+    `passkey.not_registered` (an unknown credential id throws `passkey.verification_failed`), and
+    it and two server tests say a response "never reveals" which addresses have accounts, which
+    nobody has measured; #559 narrowed identity's own timing comments to "the same error after the
+    same password-hashing work". `management-api.accounts-and-receipt-config.test.ts` describes the
+    display-name index as `lower(trim(display_name))`, which is no longer how it is built.
+  - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
+    measured false in identity (2026-09-24: `sessions.ts`'s function of the same kind, with no
+    ignore, read 1 of 1 covered) and still stands in about 15 schema files in `packages/db` and
+    `packages/fiscal-verifactu`. Four identity schema files keep the ignore pair with no reason;
+    removing a pair is a code change, for whoever next changes identity's code.
+  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `catalogue`, `media`,
+    `venue-service`, `workforce-es` and `db` say an unnamed unique constraint reaches the factory's
+    refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
+    (`packages/db/src/testing/schema-conformance.ts`).
+  - Identity code, found by #559 and not changed: `setEmail` in `packages/identity/src/staff.ts`,
+    unlike `updatePersonDetails`, never checks the new email against other people's pending
+    emails; `totp.key_unavailable` is declared in `errors.ts` and thrown nowhere; and
+    `manager-login.ts` reports an authenticator secret it cannot decrypt as `totp.invalid`.
+    Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
+    `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554,
+    is reached by no test.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3769,12 +3794,12 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
    services, close pools, or query through a pool.
 5. **`packages/identity/src/totp.test.ts`'s "rejects a wrong token" case can fail by chance.** It
-   sends `000000` against a freshly generated secret and expects a refusal, and the comment in
-   `verifyTotp`'s catch (`packages/identity/src/totp.ts`) calls `000000` "well-formed-but-wrong".
+   sends `000000` against a freshly generated secret and expects a refusal (a comment in
+   `verifyTotp`'s catch called `000000` "well-formed-but-wrong" until #559 pruned it).
    It is not always wrong: while PR #534 was in review, Codex fixed a secret and a clock at which
    `000000` IS the valid code, and `apps/server/src/me-api.test.ts`'s authenticator test answered
    200 where it expected 401. That test now picks a code that is invalid for the enrolment's secret
-   at the current time; the identity case and the comment still carry the old assumption. Fix
+   at the current time; the identity case still carries the old assumption. Fix
    the same way: derive a code the secret does not accept, rather than a constant.
 
 **Names left behind by the tenant-column removal (LANDED #378, 2026-09-16):**
@@ -4170,7 +4195,7 @@ holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt rese
 rebuilds it. Left by #548: deny's delete is the one join-request node filter no test fails
 without (the `requirePending` read before it already refuses another node's row, as its doc
 comment says); identity's comments that still place its tables in different files are Task 1b's
-to rewrite (done by #554); and the run-it review did not reach three claims within its
+to rewrite (done by #554, bar one in `authorize.test.ts` that #559 removed); and the run-it review did not reach three claims within its
 budget — holders torn by a concurrent promotion, credential sealing, and scheduler takeover.
 Task 1b, session cookies stored only as hashes (the till's and the dashboard's cookie carry a
 random token, and `sessions` and `management_sessions` keep only its SHA-256 in a new `token_hash`
@@ -4733,7 +4758,8 @@ the next change to the wizard:
 
 ### Roles the admin can edit (A7)
 
-A person's role is a PostgreSQL enum with four values (`packages/identity/src/schema/persons.ts:21`).
+A person's role is one of four values (`personRole` in `packages/identity/src/schema/persons.ts`;
+written as a PostgreSQL enum at `:21` when this section was drafted).
 The seam is already right: no call site gates on a role string — every one asks for a PERMISSION and
 one map turns a role into its set (`packages/identity/src/permissions.ts`) — and a session reads the
 role from the database on each request, so an edited role takes effect at once. Roles and their
