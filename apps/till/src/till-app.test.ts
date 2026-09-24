@@ -6534,8 +6534,8 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("es-ES"); // guard skipped setLocale on the detached app
   });
 
-  // Multi-menu till: the switcher over the counter grid. A location may sell across several accessible
-  // menus; the grid shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
+  // Multi-menu till: the switcher over the counter grid. A zone may offer several menus; the grid
+  // shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
   // (resetting to the default menu at login), so a switcher pick re-filters the grid without touching
   // the working order — an in-flight cart line survives.
   it("switches a kitchen display's language without writing an operator preference", async () => {
@@ -6741,7 +6741,7 @@ describe("till-app", () => {
       const { el } = await mountApp({ listProducts: twoMenuProducts });
       const c = await toCounter(el);
 
-      // Login lands on the location default (Comida).
+      // Login lands on the zone's default menu (Comida).
       expect(selected(el)).toBe("cat-food");
 
       // Switch to the non-default menu and ring a line — a mid-order switch STICKS (the control: it must

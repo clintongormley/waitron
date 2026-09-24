@@ -33,8 +33,8 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
     return withTransaction(suite.db, fn);
   }
 
-  // An additional menu the location may sell, beyond its default. The Drizzle builder rather than
-  // raw SQL: `catalogues.id` and its `created_at` are `$defaultFn` columns applied CLIENT-side.
+  // An additional menu in the location's menu list, beyond its default. The Drizzle builder rather
+  // than raw SQL: `catalogues.id` and its `created_at` are `$defaultFn` columns applied CLIENT-side.
   async function seedCatalogue(name: string): Promise<string> {
     return inTx(async (tx) => {
       const [row] = await tx.insert(catalogues).values({ name }).returning({ id: catalogues.id });

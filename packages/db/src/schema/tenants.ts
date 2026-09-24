@@ -169,8 +169,8 @@ export const locations = table(
     // read logic here.
     drawerOpenPolicy: drawerOpenPolicy("drawer_open_policy").notNull().default("gated"),
     // This location's DEFAULT catalogue (menu) — nullable (a venue may exist before a menu is
-    // assigned). Not the only menu a location sells from: `location_catalogues` may add further
-    // catalogues to the accessible set, resolved by `resolveAccessibleCatalogueIds`
+    // assigned). Not the only menu in the location's menu list: `location_catalogues` may add
+    // further catalogues to it, resolved by `resolveAccessibleCatalogueIds`
     // (`packages/catalogue/src/operations.ts`). NULLABLE, and a foreign key does not check a NULL,
     // so a location with no default catalogue is accepted.
     /* v8 ignore start */

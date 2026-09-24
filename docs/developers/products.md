@@ -236,8 +236,8 @@ variants with it.
 
 Every Active, Available, top-level product on a menu gets a button, whether or not it is marked as
 sold alone (`listMenuOffers`). A variant never has a button: it is listed only nested under its
-parent's offer (`MenuOffer.variants`), and the plain product list (`listAvailableProducts`,
-`packages/catalogue/src/operations.ts`) reads top-level products alone.
+parent's offer (`MenuOffer.variants`). The till reads its offers from the zone
+(`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
 Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
 (`#pick`, `apps/till/src/widgets/product-grid.ts`). A parent sold by weight or in fractions, or

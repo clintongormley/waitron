@@ -272,7 +272,7 @@ describe("splitOffCheck", () => {
     // A check is a payment unit, NOT a seat: no dining_tables row points at it (design §2).
     expect(state.anchoring).toEqual([]);
     // The check holds the moved items. Order follows the landed move/split core (TS-4): WHOLE lines are
-    // moved first (moveTabLines appends the whole jamón at check line 1), THEN partial splits (the 1 agua
+    // moved first (moveOrderLines appends the whole jamón at check line 1), THEN partial splits (the 1 agua
     // appended at check line 2) — not the transfers-array order.
     // Read straight off the column, so each quantity is a count of whole THOUSANDTHS: 300 is the
     // 0.300 kg of jamón and 1000 is one agua.

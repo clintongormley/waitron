@@ -373,9 +373,9 @@ export interface TillProduct {
    */
   courseId?: string | null;
   /**
-   * The catalogue (menu) this product is sold from — its `catalogues.id`. A location may sell across
-   * several accessible menus (its default plus any joined ones), so each product is tagged with which
-   * one it came from; the till's client-side menu filter shows only the selected menu's products.
+   * The catalogue (menu) this product is sold from — its `catalogues.id`. A zone may offer several
+   * menus, so each product is tagged with which one it came from; the till's client-side menu filter
+   * shows only the selected menu's products.
    * Mirrors catalogue's `AvailableProduct.catalogueId`, which `GET /api/products` always sends. OPTIONAL
    * here (like {@link courseId}) purely so the many pre-multi-menu `TillProduct` fixtures need no update
    * — an absent value simply never matches a selected menu. NOT imported (the bundle rule).
@@ -447,10 +447,11 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
 }
 
 /**
- * One menu (catalogue) the till's location may sell from — the `menus[]` half of the zone-offers body.
- * The catalogue's authoritative sell-side shape ({@link AccessibleCatalogue}), imported from the
- * browser-safe leaf rather than re-declared. Ordered default-first by the server; `isDefault` flags the
- * location's own catalogue, which the switcher pre-selects.
+ * One menu (catalogue). In a zone-offers body it is one of the zone's menus, in the zone's display
+ * order, and `isDefault` flags the zone's default menu, which the till selects first. In
+ * {@link ProductCatalogue.menus} (`GET /api/products`) it is one of the location's menus, default
+ * first then by name, and `isDefault` flags the location's default. The shape is {@link AccessibleCatalogue}, imported from the browser-safe leaf rather than
+ * re-declared.
  */
 export type TillMenu = AccessibleCatalogue;
 

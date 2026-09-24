@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 
-/** One accessible menu offered to the switcher — the `menus[]` shape `GET /api/products` returns. */
+/** One of the zone's menus offered to the switcher; `isDefault` marks the zone's default menu. */
 interface SwitcherMenu {
   id: string;
   name: string;
@@ -12,7 +12,7 @@ interface SwitcherMenu {
 }
 
 /**
- * The till's MENU SWITCHER: a segmented control listing the location's accessible menus (catalogues),
+ * The till's MENU SWITCHER: a segmented control listing the service zone's menus (catalogues),
  * rendered above the product grid. Tapping one asks the parent to show that menu; the widget holds NO
  * state — the parent (`till-app`) owns `selectedCatalogueId` and re-filters the grid, then feeds the
  * new `selectedId` back down. Props in, event out, mirroring `till-language-chooser`.
@@ -51,7 +51,7 @@ export class TillMenuSwitcher extends LitElement {
     segmentedOptionStyles,
   ];
 
-  /** The location's accessible menus (default first), straight from `GET /api/products` `menus`. */
+  /** The zone's menus, in the zone's display order. */
   @property({ attribute: false }) menus: SwitcherMenu[] = [];
 
   /** The currently-shown menu's catalogue id — owned by the parent, echoed here to mark the active option. */

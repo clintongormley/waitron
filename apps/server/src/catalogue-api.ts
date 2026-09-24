@@ -920,21 +920,19 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   // ── Location menus ───────────────────────────────────────────────────────────────────────────────
   // The deployment holds one tenant per database.
-  // The dashboard's location↔menu membership screen: which catalogues a location may SELL (its
-  // default `locations.catalogue_id` plus `location_catalogues` members). GET returns EVERY
-  // tenant catalogue flagged sellable/isDefault so the screen can also offer the not-yet-sold
-  // ones; POST/DELETE add and remove a member; PUT sets the default (keep-sellable — the old
-  // default is demoted, never dropped). The two routes that WRITE a `catalogueId` reference (POST
-  // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
-  // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
-  // protection: BOTH write targets carry a by-id FK on `catalogues(id)`
-  // (`locations.catalogue_id`, `location_catalogues.catalogue_id`) that rejects an absent id
-  // at the DATA layer even if the guard is skipped; the guard is what turns that into a clean 404,
-  // and it is also the only layer that can say WHICH id was wrong — this engine's foreign-key refusal
-  // is the whole message `FOREIGN KEY constraint failed`, naming no table and no column
-  // (`packages/db/src/constraint-target.ts`).
-  // Neither layer can check more than the id, because every catalogue in the database belongs to
-  // the one taxpayer. DELETE needs no guard: removing a non-member row is a no-op.
+  // A location's menu list (its default `locations.catalogue_id` plus `location_catalogues`
+  // members). GET returns EVERY catalogue flagged sellable/isDefault; POST/DELETE add and remove a
+  // member; PUT sets the default (the old default is demoted to a member, never dropped). The two
+  // routes that WRITE a `catalogueId` reference (POST add, PUT default) guard it with
+  // `catalogueExists` FIRST — an absent id is refused `catalogue.not_found` (404). The lookup is by
+  // id. This is defense-in-depth, not the sole protection: BOTH write targets carry a by-id FK on
+  // `catalogues(id)` (`locations.catalogue_id`, `location_catalogues.catalogue_id`) that rejects an
+  // absent id at the DATA layer even if the guard is skipped; the guard is what turns that into a
+  // clean 404, and it is also the only layer that can say WHICH id was wrong — this engine's
+  // foreign-key refusal is the whole message `FOREIGN KEY constraint failed`, naming no table and
+  // no column (`packages/db/src/constraint-target.ts`). Neither layer can check more than the id,
+  // because every catalogue in the database belongs to the one taxpayer. DELETE needs no guard:
+  // removing a non-member row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

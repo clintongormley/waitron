@@ -368,8 +368,8 @@ declare module "@waitron/shared" {
     /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
      *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
      *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
-     *  to, which the two order paths read from different places (docs/backlog.md). Neither is a
-     *  secret: both are values the caller's own request resolved to.
+     *  to. Neither `productId` nor `pricingUnit` is a secret: both are values the caller's own
+     *  request resolved to.
      *
      *  `extras.*` names the DOMAIN CONCEPT — the picks the line sent — never the throwing package
      *  (`tenant.not_found`'s note above gives the rule), beside `extras.invalid`,
@@ -637,10 +637,9 @@ declare module "@waitron/shared" {
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
      * A tab named as BOTH source and destination of a line-move — `mergeTabs(intoTabId === fromTabId)`,
-     * or the shared `moveTabLines(fromTabId === toTabId)` primitive that `mergeTabs` and (later) TS-4
-     * transfer call. Refused before any line move or lock: moving a tab's lines onto itself would move
+     * or the line-move `moveOrderLines(fromTabId === toTabId)` behind `moveTabLines`. Refused before any line move or lock: moving a tab's lines onto itself would move
      * them then abandon it (`mergeTabs`), or append duplicates the trailing delete then removes wholesale,
-     * emptying the tab (`moveTabLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
+     * emptying the tab (`moveOrderLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
      * the DOMAIN CONCEPT (the running tab), never the throwing package (the rule `tenant.not_found`'s note
      * gives). A request-shape error — the two arguments are equal regardless of any tab's STATE — so it
      * is mapped to 400 (a bad request), distinct from the state-conflict `tab.not_open` (409).

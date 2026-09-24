@@ -7,7 +7,7 @@ import type { SellableUnit } from "./product-types.js";
 
 /**
  * The SELL-SIDE wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a
- * till (the menu offers a service zone sells, and the products a location can sell). Like
+ * till (the menu offers a service zone sells, and the products in a location's menu list). Like
  * `product-types.ts`, this is a LEAF: type definitions only, no running code, and every type it
  * imports is itself browser-safe (nothing here reaches `@waitron/db`, drizzle or a `node:` builtin), so
  * the till can import ONE authoritative copy instead of re-declaring them by hand. The guard is
@@ -86,7 +86,7 @@ export interface MenuOfferVariant {
 }
 
 /**
- * A product the till can sell at a location. An `AvailableProduct` is NOT a `PriceableProduct`:
+ * A product in a location's menu list. An `AvailableProduct` is NOT a `PriceableProduct`:
  * it carries `name` + `customerName`, not the snapshot `descriptions` a sale line freezes. Before
  * pricing, resolve the customer-facing text (customerName, falling back to the staff `name`, via the
  * resolvers in `product-presentation.ts`) into a `PriceableProduct`, then hand THAT to `priceBasket`.
@@ -120,9 +120,9 @@ export interface AvailableProduct {
    * picker reads it as the per-line PRE-SELECTED default. Not part of the priceable projection, so it
    * is dropped when a row is resolved into a `PriceableProduct`. */
   courseId: string | null;
-  /** The catalogue (menu) this product is sold from — its `catalogues.id`. A location may sell across
-   * several accessible catalogues (its default plus any `location_catalogues` members), so a row is
-   * tagged with which one it came from. Not part of the priceable projection, like `courseId`. */
+  /** The catalogue (menu) this row came from — its `catalogues.id`. A location's menu list may hold
+   * several catalogues (its default plus any `location_catalogues` members), so a row is tagged with
+   * which one it came from. Not part of the priceable projection, like `courseId`. */
   catalogueId: string;
   /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
    * not part of the priceable projection. */
@@ -133,12 +133,12 @@ export interface AvailableProduct {
   offeredModifiers: OfferedModifier[];
 }
 
-/** One catalogue (menu) a location may sell from — its id, display name, and whether it is the
- * location's default (`locations.catalogue_id`), which a till's menu switcher pre-selects. */
+/** One catalogue (menu) — its id, display name, and whether it is the default. From
+ * `GET /api/products` the default is the location's (`locations.catalogue_id`); in a zone-offers body
+ * it is the zone's default menu. */
 export interface AccessibleCatalogue {
   id: string;
   name: string;
-  /** True for `locations.catalogue_id` — the till's menu switcher pre-selects this one. */
   isDefault: boolean;
 }
 

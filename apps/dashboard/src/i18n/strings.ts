@@ -582,7 +582,6 @@ export const en = {
   "catalogue.empty_prompt": "Create a menu in Venue operations before adding products.",
   "catalogue.new": "New catalogue",
   "catalogue.create": "Create catalogue",
-  // Location menus screen (which catalogues a location sells + its default)
   // Receipt screen
   "receipt.title": "Receipt",
   "receipt.header_subtitle": "Header subtitle",

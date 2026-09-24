@@ -385,13 +385,13 @@ export class TillTableOrderScreen extends LitElement {
    * loaded via `getTabLines` and reloaded after each round/serve — and threads them in; the drawer,
    * total and badge render from these, never a re-price. */
   @property({ attribute: false }) lines: TabLine[] = [];
-  /** ALL sellable products across the location's accessible menus. The round grid shows only the SELECTED
+  /** ALL sellable products across the zone's menus. The round grid shows only the SELECTED
    * menu's (via {@link filterProductsByMenu}); a tab line's name is resolved against the FULL set
    * ({@link #nameFor}), because a tab may span several menus and every line must still render its name
    * whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The location's accessible menus, handed to the menu switcher above the round grid. With one menu (or
-   * none) the switcher renders nothing, so a single-menu location looks exactly as before. */
+  /** The zone's menus, handed to the menu switcher above the round grid. With one menu (or
+   * none) the switcher renders nothing. */
   @property({ attribute: false }) menus: TillMenu[] = [];
   /** The menu (catalogue) the round grid currently shows — narrows the grid via {@link filterProductsByMenu}
    * and marks the active switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected`. */
