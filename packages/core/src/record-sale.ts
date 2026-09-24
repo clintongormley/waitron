@@ -115,7 +115,8 @@ export async function recordSale(
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
   // Checked before anything is written: a supplied breakdown is filed verbatim, and one that
-  // disagrees with the total would chain a record that cannot be repaired.
+  // disagrees with the total would chain a record that cannot be repaired. This is a
+  // caller-precondition failure, not a fiscal condition.
   if (input.vatBreakdown !== undefined) {
     const breakdownTotal = sumDecimals(input.vatBreakdown.flatMap((g) => [g.base, g.tax]));
     if (compareDecimal(breakdownTotal, decimal(input.total)) !== 0) {
@@ -198,8 +199,8 @@ export async function recordSale(
   // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
   const vatBreakdown = input.vatBreakdown ?? buildVatBreakdown(input.lines);
 
-  // `total` is stored in whole cents. `vat_breakdown` keeps the decimal literals the fiscal record
-  // hashes, byte for byte.
+  // `total` is stored in whole cents. `vat_breakdown` keeps the decimal literals that were filed,
+  // unconverted.
   const [inserted] = await tx
     .insert(sales)
     .values({

@@ -57,9 +57,9 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     throw new AppError("sale.voided", { saleId: input.saleId });
   }
 
-  // Catches a sequential retry. A settlement that gets past this read is refused by the
-  // `tenders_reject_post_settlement` trigger or the `sale_settlements` unique key below, and both
-  // become `sale.already_settled`.
+  // Refuses a second settlement, whether a retry or one started at the same time (both cases are
+  // in settle-sale.test.ts). The trigger and unique-key catches below refuse a writer that gets
+  // past this read, and both become `sale.already_settled`.
   const [existing] = await tx
     .select({ saleId: saleSettlements.saleId })
     .from(saleSettlements)

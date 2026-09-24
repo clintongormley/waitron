@@ -338,7 +338,6 @@ describe("recordVoid — authorization", () => {
   });
 
   it("returns sale.not_found before the gate — a missing sale never leaks an authz error", async () => {
-    // A gate placed before the lookup would leak which sales exist.
     await expect(
       voidSale(
         new FakeFiscalBackend(suite.db),
