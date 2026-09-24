@@ -298,7 +298,7 @@ describe("waitron-rejoin rejoin", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses before reading or wiping anything while a server holds the venue folder", async () => {
+  it("refuses before reading or wiping anything while another process holds the venue folder", async () => {
     const openDb = vi.fn(async () => fakeVenue());
     const rejoin = vi.fn(async () => ({ wiped: true as const, carrierNodeId: "carrier-x" }));
     const { code, out } = await run(
@@ -350,6 +350,26 @@ describe("waitron-rejoin rejoin", () => {
       await run({}, { ...opts, lockVenue: async () => ({ release }) });
       expect(release).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("reports generically and gives the folder back when the membership read fails and closing the handle fails too", async () => {
+    const failingRead = (async () => {
+      throw new Error("read failed");
+    }) as unknown as Database["execute"];
+    const release = vi.fn();
+    const { code, out } = await run(
+      {},
+      {
+        openDb: async () => ({
+          ...fakeVenue(failingRead),
+          close: async () => Promise.reject(new Error("close failed")),
+        }),
+        lockVenue: async () => ({ release }),
+      },
+    );
+    expect(code).toBe(1);
+    expect(out).toEqual(["rejoin failed"]);
+    expect(release).toHaveBeenCalledTimes(1);
   });
 });
 

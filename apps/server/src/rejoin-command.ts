@@ -53,13 +53,12 @@ async function openVenue(directory: string): Promise<{ db: Database; close(): Pr
  *    unprovisioned box, which `rejoin` is a misuse of.
  *  - `WAITRON_ENV` — the target environment (gates `deploymentEnvironment`).
  *
- * Returns a process exit code: 0 on success, 1 on an expected failure (a missing/empty env var, an
- * unprovisioned box, an invalid `WAITRON_ENV`, or ANY error out of the
- * orchestrator — a `rejoin.*` `AppError` reported by code, anything else reported generically), 2 on a
- * usage error. The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed:
- * `bin-rejoin.ts`'s `.then(process.exit)` has no `.catch`, so a raw rejection here would reach stderr
- * as whatever words the failure happened to carry. A box operator has no terminal and no way to read
- * around such a line, so everything this command prints is text it composed itself, keyed by code.
+ * Returns a process exit code: 0 on success, 2 on a usage error, and 1 whenever the rejoin cannot go
+ * ahead or fails — bad or missing configuration, a venue folder it cannot lock, open or read, or an
+ * error out of the orchestrator. Each such failure is reported by text this command composed: a
+ * fixed sentence, a known error's code, or a bare `rejoin failed`. No error it catches is rethrown
+ * and none's `.message` is printed: a box operator has no terminal and no way to read around such a
+ * line.
  */
 export async function runRejoin(deps: {
   argv: string[];
@@ -133,68 +132,72 @@ export async function runRejoin(deps: {
     return failGeneric();
   }
 
-  const open = deps.openDb ?? openVenue;
-  const migrate =
-    deps.migrate ??
-    ((directory: string) => applyMigrations(directory, migrationOptionsFor(manifestSets(), null)));
-  const rejoin = deps.rejoin ?? rejoinAsSecondary;
-
-  // Open the venue and read the held chart ONCE — the chart `rejoinAsSecondary` runs its standing
-  // guards against. Report an open/read failure GENERICALLY: whatever the engine says about a
-  // directory it could not open is not text this command composed.
-  let opened: { db: Database; close(): Promise<void> };
-  let held: Awaited<ReturnType<typeof readNodeMembership>>;
   try {
-    opened = await open(venueDir);
-  } catch {
-    lock.release();
-    return failGeneric();
-  }
-  try {
-    held = await readNodeMembership(opened.db);
-  } catch {
-    await opened.close();
-    lock.release();
-    return failGeneric();
-  }
+    const open = deps.openDb ?? openVenue;
+    const migrate =
+      deps.migrate ??
+      ((directory: string) =>
+        applyMigrations(directory, migrationOptionsFor(manifestSets(), null)));
+    const rejoin = deps.rejoin ?? rejoinAsSecondary;
 
-  let closed = false;
-  const rejoinDeps: RejoinDeps = {
-    held,
-    nodeId: cfg.nodeId,
-    acceptLoss,
-    closePreWipe: () =>
-      opened.close().then(() => {
-        closed = true;
-      }),
-    // The whole wipe (Ruling I3): remove both database files and their write-ahead sidecars,
-    // re-migrate the directory from scratch, then clear trading.env so the next boot enters setup
-    // mode. `applyMigrations` recreates both files and takes the directory's own migration lock,
-    // which is why our handle is closed first rather than held across this.
-    wipeDatabase: async () => {
-      await wipeVenueDatabases(venueDir);
-      await migrate(venueDir);
-      await clearTradingEnv(stateDir);
-    },
-    log,
-  };
-
-  try {
-    const result = await rejoin(rejoinDeps);
-    deps.out(`wiped ${venueDir}; next boot is setup mode — re-adopt from ${result.carrierNodeId}`);
-    return 0;
-  } catch (err) {
-    if (err instanceof AppError && err.code.startsWith("rejoin.")) {
-      return reportCode(err.code);
+    // Open the venue and read the held chart ONCE — the chart `rejoinAsSecondary` runs its
+    // standing guards against. Report an open/read failure GENERICALLY: whatever the engine says
+    // about a directory it could not open is not text this command composed.
+    let opened: { db: Database; close(): Promise<void> };
+    let held: Awaited<ReturnType<typeof readNodeMembership>>;
+    try {
+      opened = await open(venueDir);
+    } catch {
+      return failGeneric();
     }
-    // Anything else — an AppError outside the namespace, or a non-AppError — NEVER propagates raw and
-    // NEVER echoes `.message`: a failed migrate arrives as whatever the driver wrote.
-    return failGeneric();
+    try {
+      held = await readNodeMembership(opened.db);
+    } catch {
+      await opened.close().catch(() => {});
+      return failGeneric();
+    }
+
+    let closed = false;
+    const rejoinDeps: RejoinDeps = {
+      held,
+      nodeId: cfg.nodeId,
+      acceptLoss,
+      closePreWipe: () =>
+        opened.close().then(() => {
+          closed = true;
+        }),
+      // The whole wipe (Ruling I3): remove both database files and their write-ahead sidecars,
+      // re-migrate the directory from scratch, then clear trading.env so the next boot enters setup
+      // mode. `applyMigrations` recreates both files and takes the directory's own migration lock,
+      // which is why our handle is closed first rather than held across this.
+      wipeDatabase: async () => {
+        await wipeVenueDatabases(venueDir);
+        await migrate(venueDir);
+        await clearTradingEnv(stateDir);
+      },
+      log,
+    };
+
+    try {
+      const result = await rejoin(rejoinDeps);
+      deps.out(
+        `wiped ${venueDir}; next boot is setup mode — re-adopt from ${result.carrierNodeId}`,
+      );
+      return 0;
+    } catch (err) {
+      if (err instanceof AppError && err.code.startsWith("rejoin.")) {
+        return reportCode(err.code);
+      }
+      // Anything else — an AppError outside the namespace, or a non-AppError — NEVER propagates
+      // raw and NEVER echoes `.message`: a failed migrate arrives as whatever the driver wrote.
+      return failGeneric();
+    } finally {
+      // On a guard refusal the orchestrator throws before `closePreWipe`, so the pre-wipe handle
+      // is still open — close it here (idempotent via `closed`, so the success/wipe path never
+      // closes twice).
+      if (!closed) await opened.close().catch(() => {});
+    }
   } finally {
-    // On a guard refusal the orchestrator throws before `closePreWipe`, so the pre-wipe handle is
-    // still open — close it here (idempotent via `closed`, so the success/wipe path never closes
-    // twice).
-    if (!closed) await opened.close().catch(() => {});
     lock.release();
   }
 }
