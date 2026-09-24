@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { isVenueHolderFresh, readVenueHolder } from "@waitron/db";
+import { isVenueHolderFresh, readVenueHolderAsync } from "@waitron/db";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
@@ -252,12 +252,15 @@ export function healthSnapshot(
 }
 
 /**
- * The holder file beside `venue.lock`, judged by the same reader and bound a refused start uses
+ * The holder file beside `venue.lock`, judged by the same parser and bound a refused start uses
  * (`node-entry.ts`), so the two agree. Its pid and host stay off this unauthenticated route. Null
  * when there is no readable file.
  */
-function venueHolderHealth(venueDir: string, now: Date): Record<string, unknown> | null {
-  const holder = readVenueHolder(venueDir);
+async function venueHolderHealth(
+  venueDir: string,
+  now: Date,
+): Promise<Record<string, unknown> | null> {
+  const holder = await readVenueHolderAsync(venueDir);
   if (holder === null) return null;
   return {
     kind: holder.kind,
@@ -276,13 +279,13 @@ export function healthApp(
   options: { venueDir?: string } = {},
 ): Hono {
   const app = new Hono();
-  app.get("/health", (c) => {
+  app.get("/health", async (c) => {
     const at = now();
     const snapshot = healthSnapshot(state, at);
     const body =
       options.venueDir === undefined
         ? snapshot.body
-        : { ...snapshot.body, venueHolder: venueHolderHealth(options.venueDir, at) };
+        : { ...snapshot.body, venueHolder: await venueHolderHealth(options.venueDir, at) };
     return c.json(body, snapshot.ok ? 200 : 503);
   });
   return app;

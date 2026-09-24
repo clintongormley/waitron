@@ -4,6 +4,7 @@ export {
   lockVenueDatabase,
   openVenueDatabase,
   readVenueHolder,
+  readVenueHolderAsync,
   setVenueCrashReportDirectory,
   setVenueHolderKind,
   setVenueWatchdogLogFile,

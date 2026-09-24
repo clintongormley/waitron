@@ -15,6 +15,7 @@ export {
   isLocked,
   isVenueHolderFresh,
   readVenueHolder,
+  readVenueHolderAsync,
   setVenueCrashReportDirectory,
   setVenueHolderKind,
   setVenueWatchdogLogFile,

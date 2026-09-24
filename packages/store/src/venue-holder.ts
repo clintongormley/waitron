@@ -1,4 +1,5 @@
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
@@ -46,12 +47,25 @@ const isIsoTime = (value: unknown): value is string =>
  * lock.
  */
 export function readVenueHolder(directory: string): VenueHolder | null {
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(join(directory, VENUE_HOLDER_FILE), "utf8"));
+    return parseVenueHolder(readFileSync(join(directory, VENUE_HOLDER_FILE), "utf8"));
   } catch {
     return null;
   }
+}
+
+/** {@link readVenueHolder} without blocking the thread on the read. */
+export async function readVenueHolderAsync(directory: string): Promise<VenueHolder | null> {
+  try {
+    return parseVenueHolder(await readFile(join(directory, VENUE_HOLDER_FILE), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Throws on bytes that are not JSON; answers null for JSON that is not a holder record. */
+function parseVenueHolder(text: string): VenueHolder | null {
+  const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== "object" || parsed === null) return null;
   const { kind, pid, host, lockedAt, heartbeatAt } = parsed as Record<string, unknown>;
   if (!(VENUE_HOLDER_KINDS as readonly unknown[]).includes(kind)) return null;

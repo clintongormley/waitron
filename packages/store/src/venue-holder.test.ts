@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   isVenueHolderFresh,
   readVenueHolder,
+  readVenueHolderAsync,
   VENUE_HOLDER_FILE,
   VENUE_HOLDER_KINDS,
   VENUE_HOLDER_STALE_MS,
@@ -45,42 +46,45 @@ describe("the holder file's fixed values", () => {
   });
 });
 
-describe("readVenueHolder", () => {
-  it("reads a well-formed record", () => {
-    expect(readVenueHolder(withFile(JSON.stringify(HOLDER)))).toEqual(HOLDER);
+// The same cases for both readers: the synchronous one a refused start uses, and the one `/health`
+// awaits.
+describe.each([
+  ["readVenueHolder", (directory: string) => Promise.resolve(readVenueHolder(directory))],
+  ["readVenueHolderAsync", readVenueHolderAsync],
+])("%s", (_name, read) => {
+  it("reads a well-formed record", async () => {
+    expect(await read(withFile(JSON.stringify(HOLDER)))).toEqual(HOLDER);
   });
 
-  it("reads every kind in the set", () => {
+  it("reads every kind in the set", async () => {
     for (const kind of VENUE_HOLDER_KINDS) {
-      expect(readVenueHolder(withFile(JSON.stringify({ ...HOLDER, kind })))?.kind).toBe(kind);
+      expect((await read(withFile(JSON.stringify({ ...HOLDER, kind }))))?.kind).toBe(kind);
     }
   });
 
-  it("answers null when there is no file", () => {
-    expect(readVenueHolder(tempDir())).toBeNull();
+  it("answers null when there is no file", async () => {
+    expect(await read(tempDir())).toBeNull();
   });
 
-  it("answers null when the folder does not exist", () => {
-    expect(readVenueHolder(join(tempDir(), "missing"))).toBeNull();
+  it("answers null when the folder does not exist", async () => {
+    expect(await read(join(tempDir(), "missing"))).toBeNull();
   });
 
-  it("answers null for bytes that are not JSON", () => {
-    expect(readVenueHolder(withFile('{"kind": "server", "pid'))).toBeNull();
+  it("answers null for bytes that are not JSON", async () => {
+    expect(await read(withFile('{"kind": "server", "pid'))).toBeNull();
   });
 
-  it("answers null for JSON that is not an object", () => {
+  it("answers null for JSON that is not an object", async () => {
     for (const content of ["null", "42", '"server"', "[]"]) {
-      expect(readVenueHolder(withFile(content))).toBeNull();
+      expect(await read(withFile(content))).toBeNull();
     }
   });
 
-  it("answers null for a kind outside the set, rather than a record with no kind", () => {
-    expect(readVenueHolder(withFile(JSON.stringify({ ...HOLDER, kind: "break-glass" })))).toBe(
-      null,
-    );
+  it("answers null for a kind outside the set, rather than a record with no kind", async () => {
+    expect(await read(withFile(JSON.stringify({ ...HOLDER, kind: "break-glass" })))).toBeNull();
   });
 
-  it("answers null when any one field is missing or of the wrong shape", () => {
+  it("answers null when any one field is missing or of the wrong shape", async () => {
     const broken: Record<string, unknown>[] = [
       { kind: undefined },
       { kind: 1 },
@@ -102,7 +106,7 @@ describe("readVenueHolder", () => {
     ];
     for (const change of broken) {
       const record = { ...HOLDER, ...change };
-      expect(readVenueHolder(withFile(JSON.stringify(record))), JSON.stringify(change)).toBeNull();
+      expect(await read(withFile(JSON.stringify(record))), JSON.stringify(change)).toBeNull();
     }
   });
 });
