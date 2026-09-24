@@ -16,9 +16,9 @@ export const managementSessions = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tokenHash: label("token_hash").notNull(),
-    // No foreign key: the caller authenticated the person it passes to `startManagementSession`,
-    // and a session whose person row is gone resolves as no session (`../management-session.ts`,
-    // the inner join).
+    // No key to `persons`: none was restored when the table became `state` (docs/backlog.md,
+    // slice-2 Task 1b). `resolveManagementSession`'s inner join refuses a session whose person is
+    // gone.
     personId: id("person_id").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     lastSeenAt: tsString("last_seen_at").notNull().$defaultFn(nowIso),
@@ -26,8 +26,7 @@ export const managementSessions = table(
   },
   (t) => [
     // Covers the equality predicate of the writes that end a person's open sessions — filtering on
-    // person_id then ended_at IS NULL (`staff.ts`, `account-action.ts`, `profile.ts`,
-    // `apps/server/src/break-glass-command.ts`). `resolveManagementSession` and
+    // person_id then ended_at IS NULL. `resolveManagementSession` and
     // `endManagementSession` key on `token_hash`. Mirrors sessions.ts's `sessions_open_idx` on
     // (till_id). Kept plain (not a partial `WHERE ended_at IS NULL` index) so drizzle-kit
     // round-trips it and db:generate stays a no-op.

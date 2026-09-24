@@ -41,8 +41,9 @@ export async function authorize(
   args: { sessionId: string; permission: Permission; override?: Override },
 ): Promise<Authorization> {
   // One round-trip, not two: the open-session lookup and the operator's role are resolved by a
-  // single innerJoin. `sessions` carries no foreign key to `persons`, so the row is absent when no
-  // session is open and, in principle, when a session's person row has been deleted. Both read as
+  // single innerJoin. `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so the
+  // row is absent when no session is open and, in principle, when a session's person row has been
+  // deleted. Both read as
   // `session.not_open`, which fails closed — pinned by a case in `authorize.test.ts` that deletes the
   // person and expects the refusal. No non-test file deletes a person today, by grep for both the
   // drizzle and the raw-SQL form over `packages` and `apps`.

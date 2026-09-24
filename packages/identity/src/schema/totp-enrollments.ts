@@ -9,7 +9,9 @@ export const totpEnrollments = table(
   "totp_enrollments",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // No foreign key: the id comes from the person row `ownPerson` read in `profile.ts`.
+    // No key to `persons`: none was restored when the table became `state` (docs/backlog.md,
+    // slice-2 Task 1b). Only `profile.ts` inserts or reads a row, and only for the person
+    // `ownPerson` found.
     personId: id("person_id").notNull(),
     encryptedSecret: label("encrypted_secret").notNull(),
     expiresAt: tsString("expires_at").notNull(),

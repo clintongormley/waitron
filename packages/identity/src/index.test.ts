@@ -38,9 +38,8 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
 
 /**
  * Same mechanism for sessions — its index block is in the lazy extraConfig callback, so this both
- * forces it to run and pins what the generated baseline holds. It declares NO foreign key: the
- * caller supplies the person and the till, and a session whose person is gone resolves as none
- * (`authorize.ts`).
+ * forces it to run and pins what the generated baseline holds. It declares NO foreign key; the
+ * column comment in `schema/sessions.ts` says why and what refuses a missing person instead.
  */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares sessions' primary key and its open-session index, and no foreign key", () => {
@@ -59,7 +58,7 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
 /**
  * Same mechanism for management_sessions — its index block is in the lazy extraConfig callback, so
  * this both forces it to run and pins what the generated baseline holds. A management session
- * belongs to a person, but declares no foreign key to one, for the same reason as sessions above.
+ * belongs to a person, but declares no foreign key to one; `schema/management-sessions.ts` says why.
  */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
@@ -99,8 +98,8 @@ describe("webauthn_credentials constraint declarations (forces the lazy extraCon
 
 /**
  * webauthn_challenges declares no constraints of its own beyond its primary key: `person_id` is
- * nullable (a discoverable-login ceremony has no known person yet) and deliberately carries NO
- * foreign key, so a login challenge can be minted before anyone is identified.
+ * nullable (a discoverable-login ceremony has no known person yet) and has no key to `persons`.
+ * Nothing refuses a row naming a missing person; only `staff.ts`'s deletes read the column.
  */
 describe("webauthn_challenges constraint declarations", () => {
   it("declares its primary key and no foreign keys or indexes", () => {

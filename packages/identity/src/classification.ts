@@ -25,30 +25,31 @@ export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("recovery_codes", "state", "single-use account recovery proofs"),
 
+  // Logins and sign-in ceremonies.
   classify(
     "sessions",
     "state",
-    "a person's shift login at a till; the cookie's token is stored only as its hash",
+    "a person's shift login at a till; the cookie's token is stored only as its hash; copied to a standby, never drained back",
   ),
   classify(
     "management_sessions",
     "state",
-    "a person's dashboard login; the cookie's token is stored only as its hash",
+    "a person's dashboard login; the cookie's token is stored only as its hash; copied to a standby, never drained back",
   ),
   classify(
     "webauthn_challenges",
     "state",
-    "a short-lived passkey ceremony; a challenge signs nobody in without the authenticator",
+    "a short-lived passkey ceremony; a challenge signs nobody in without the authenticator; copied to a standby, never drained back",
   ),
   classify(
     "totp_enrollments",
     "state",
-    "a short-lived authenticator setup; its secret is stored encrypted",
+    "a short-lived authenticator setup; its secret is stored encrypted; copied to a standby, never drained back",
   ),
   classify(
     "google_oidc_states",
     "state",
-    "a short-lived Google sign-in ceremony; its state is stored only as a hash",
+    "a short-lived Google sign-in ceremony; its state is stored only as a hash; copied to a standby, never drained back",
   ),
 ];
 

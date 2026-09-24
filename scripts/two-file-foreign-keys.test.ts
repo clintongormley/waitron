@@ -158,7 +158,7 @@ describe("negative controls", () => {
   });
 
   it("reports a key from a node's own table into the venue's", () => {
-    // `join_requests` is `local` and `locations` is `state` — the shape #426 removed six of.
+    // `join_requests` is `local` and `locations` is `state`: a key across the two classes.
     expect(violationOf(edge("join_requests", "locations"), classes)).toContain("[local -> state]");
   });
 

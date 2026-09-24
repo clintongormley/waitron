@@ -14,9 +14,10 @@ export const sessions = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tokenHash: label("token_hash").notNull(),
-    // No foreign keys. The person comes back from `verifyPersonCredential` and the till from the
-    // authenticated device's own registration (`apps/server/src/till-api.ts`, `device.tillId`); a
-    // session whose person row is gone resolves as no session (`authorize.ts`, the inner join).
+    // No key to `persons` or `tills`: none was restored when the table became `state`
+    // (docs/backlog.md, slice-2 Task 1b). `loginWithPin` inserts only a person
+    // `verifyPersonCredential` found, and `authorize`'s inner join reads a session whose person is
+    // gone as `session.not_open`; nothing checks the till.
     personId: id("person_id").notNull(),
     tillId: id("till_id").notNull(),
     openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),

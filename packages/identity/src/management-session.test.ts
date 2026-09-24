@@ -121,7 +121,7 @@ describe("management session lifecycle", () => {
   it("throws management_session.required when the session's person row has been deleted", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    // Reachable because the table holds no foreign key to `persons`. Two nets
+    // Reachable because the table declares no key to `persons`. Two nets
     // produce the refusal, so breaking it takes both: measured by mutation, the inner join alone can
     // be widened to a left join and this case still passes.
     await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));

@@ -11,8 +11,8 @@ export const googleOidcStates = table(
   "google_oidc_states",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // No foreign key: null for a login ceremony, and for a link the person `verifyOwnCredentials`
-    // returned.
+    // No key to `persons`: none was restored when the table became `state` (docs/backlog.md,
+    // slice-2 Task 1b). Null for a login; `completeGoogleLink` refuses a link whose person is gone.
     personId: id("person_id"),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair.
     // The siblings that carry this comment are held by one of the two reasons in columns.ts;

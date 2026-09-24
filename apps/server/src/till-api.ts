@@ -101,7 +101,7 @@ import {
   canonicaliseUuid,
   clearSessionCookie,
   isUuid,
-  readSessionId,
+  readSessionToken,
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
@@ -746,7 +746,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // database for a malformed cookie.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
-      const token = readSessionId(c);
+      const token = readSessionToken(c);
       if (token !== null && isUuid(token)) {
         await withTransaction(deps.db, async (tx) => {
           await endSession(tx, token);

@@ -10,7 +10,7 @@ import {
 } from "@waitron/identity";
 import {
   clearManagementCookie,
-  readManagementSessionId,
+  readManagementSessionToken,
   setManagementCookie,
 } from "@waitron/server-kit";
 
@@ -127,7 +127,7 @@ export function mirrorSession(
     if (getMode() !== "mirror") {
       // Promoted: drop the ambient admin. Only act when the request still presents the ambient token —
       // otherwise there is nothing to end, and requireManagementSession handles the no-cookie case.
-      if (readManagementSessionId(c) === token) {
+      if (readManagementSessionToken(c) === token) {
         await withTransaction(db, (tx) =>
           tx
             .update(managementSessions)
@@ -179,7 +179,7 @@ export function mirrorSession(
     // `requireManagementSession`'s shape check (or hash to no live row) and 401, breaking the
     // read-only posture. A request already carrying the token is left untouched (no redundant
     // Set-Cookie).
-    if (readManagementSessionId(c) !== token) {
+    if (readManagementSessionToken(c) !== token) {
       setManagementCookie(c, token, secure);
     }
     return next();

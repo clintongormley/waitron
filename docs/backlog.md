@@ -4088,9 +4088,10 @@ budget — holders torn by a concurrent promotion, credential sealing, and sched
 Task 1b, session cookies stored only as hashes (the till's and the dashboard's cookie carry a
 random token, and `sessions` and `management_sessions` keep only its SHA-256 in a new `token_hash`
 column; identity's logins and sign-in ceremonies are reclassified `state`), is on branch
-`feat/sqlite-slice2-hashed-sessions`, PR pending. A dev venue holding `sessions` or
-`management_sessions` rows fails its migration; `wa-wt reset demo <name>` rebuilds it, and every
-existing login signs in again.
+`feat/sqlite-slice2-hashed-sessions`, PR pending. Every seeded dev venue holds a session row
+(provisioning's `seed-device-profiles` step opens a management session and never ends it,
+`packages/provisioning/src/venue-apply.ts`), so each fails its migration until
+`wa-wt reset demo <name>` rebuilds it, and every existing login signs in again.
 Left by Task 1b's review, not fixed on its branch (items 1 and 2): (1) with the cookie now hashed, nothing
 fails when the UUID shape screens in `requireSession` and the till logout route are deleted —
 measured 2026-09-24, the three malformed-cookie cases in `apps/server/src/till-api.test.ts` still
@@ -4102,6 +4103,11 @@ used its fixed, public row id as its cookie, so a copy of the database, or a nod
 the mirror's middleware, accepted that public value as an admin login. Its cookie is now a random
 token, minted afresh each time the viewer is seeded and stored only as a hash;
 `apps/server/src/mirror-session.test.ts` has a gated route without the middleware refusing the row id.
+Also left open: now that both ends are `state`, the keys #426 dropped could be declared again —
+`sessions` to `persons` and `tills`, and `management_sessions`, `totp_enrollments` and
+`google_oidc_states` to `persons` (`sessions` and `management_sessions` are rebuilt by
+`packages/identity/drizzle/0003_session_token_hash_required.sql` anyway). Doing so would change
+what deleting a person does.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's

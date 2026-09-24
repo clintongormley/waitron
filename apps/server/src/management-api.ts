@@ -113,7 +113,7 @@ import { readJsonBody } from "@waitron/server-kit";
 import { requireBodyUuid, requireEnum } from "@waitron/server-kit";
 import {
   clearManagementCookie,
-  readManagementSessionId,
+  readManagementSessionToken,
   requireManagementSession,
   setManagementCookie,
 } from "@waitron/server-kit";
@@ -933,13 +933,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Logout: end the management session and clear the cookie. Idempotent — a request with no cookie, or
   // one whose cookie is not even UUID-shaped (so it names no session), still clears the cookie and
-  // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionId` +
+  // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionToken` +
   // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a
   // UUID-shaped token ends its session under `withTransaction`, and `endManagementSession` is a
   // no-op on an already-ended session or a token that names none.
   app.delete("/management-api/session", (c) =>
     run(c, log, async () => {
-      const token = readManagementSessionId(c);
+      const token = readManagementSessionToken(c);
       if (token !== null && isUuid(token)) {
         await withTransaction(deps.db, async (tx) => {
           await endManagementSession(tx, token);

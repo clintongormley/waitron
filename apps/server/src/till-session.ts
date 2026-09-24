@@ -73,7 +73,7 @@ export function clearSessionCookie(c: Context): void {
 }
 
 /** The token carried by the request's cookie, or null when the cookie is absent. */
-export function readSessionId(c: Context): string | null {
+export function readSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
 }
 
@@ -99,7 +99,7 @@ export async function requireSession(
   deps: { db: Database },
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
-  const token = readSessionId(c);
+  const token = readSessionToken(c);
   // Refuses a missing or non-UUID cookie as `session.required` (401) before any database lookup.
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
   const row = await withTransaction(deps.db, async (tx) => {

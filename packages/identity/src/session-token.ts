@@ -1,10 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
 /**
- * A new bearer token for a session cookie. A random v4 UUID — the same generator `newId` uses for
- * every row id (`packages/db/src/schema/columns.ts`), so a cookie carries what it carried when it
- * was the row id, and keeps the shape the `isUuid` screens check
- * (`apps/server/src/till-session.ts`, `packages/server-kit/src/management-cookie.ts`).
+ * A new bearer token for a session cookie: a random v4 UUID, the shape the cookie screens check with
+ * `isUuid` before any lookup (`apps/server/src/till-session.ts`,
+ * `packages/server-kit/src/management-cookie.ts`).
  */
 export function mintSessionToken(): string {
   return randomUUID();

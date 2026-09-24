@@ -882,6 +882,11 @@ is checked by nothing when the row is written, and its refusal moved to accept, 
 (`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
 this guard pass — that is the one wrong answer §2.1 rules out.
 
+_2026-09-24:_ five of the six keys were on identity tables that slice-2 Task 1b reclassified
+`state` (`sessions` to `persons` and `tills`; `management_sessions`, `totp_enrollments` and
+`google_oidc_states` to `persons`). Their keys were not restored; `docs/backlog.md` lists that as
+open under Task 1b.
+
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`node_roles`,
 `mirror_config`, `join_requests`), a seal only that node's key opens (`tenant_credentials`), or rows

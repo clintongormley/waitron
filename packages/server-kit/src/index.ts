@@ -25,7 +25,7 @@ export {
 export {
   clearManagementCookie,
   MANAGEMENT_COOKIE,
-  readManagementSessionId,
+  readManagementSessionToken,
   requireManagementSession,
   setManagementCookie,
 } from "./management-cookie.js";

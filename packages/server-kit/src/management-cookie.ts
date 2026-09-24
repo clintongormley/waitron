@@ -39,10 +39,10 @@ export function clearManagementCookie(c: Context): void {
 
 /**
  * The management session token carried by the request's cookie, or `null` when the cookie is
- * absent. The till's `readSessionId` parallel — the non-throwing read the idempotent logout
+ * absent. The till's `readSessionToken` parallel — the non-throwing read the idempotent logout
  * composes with `isUuid`, and the base `requireManagementSession` builds its shape check on.
  */
-export function readManagementSessionId(c: Context): string | null {
+export function readManagementSessionToken(c: Context): string | null {
   return getCookie(c, MANAGEMENT_COOKIE) ?? null;
 }
 
@@ -54,7 +54,7 @@ export function readManagementSessionId(c: Context): string | null {
  * home.
  */
 export function requireManagementSession(c: Context): string {
-  const token = readManagementSessionId(c);
+  const token = readManagementSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("management_session.required", {});
   return token;
 }
