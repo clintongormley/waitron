@@ -158,10 +158,10 @@ function isVitestProcess(command) {
 }
 
 /**
- * Is this `ps` command column one of the test binaries a checkout keeps in a `.bin` (the pinned
- * Litestream the bench probes run, and `versitygw`, which nothing installs until Task 10's loop
- * test)? The row's FIRST
- * token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
+ * Is this `ps` command column one of the test binaries a checkout keeps in a `.bin` (Litestream,
+ * which `scripts/setup-litestream.mjs` installs at the root and the bench rig under
+ * `bench/sqlite-failover/`, and `versitygw`, which nothing in the tree installs today)? The row's
+ * FIRST token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
  * `<dir>/bench/sqlite-failover/`, where `<dir>` is a directory whose name starts `waitron` — the main
  * checkout and every `waitron-<branch>` worktree. Any other `.bin` (a developer's own `~/.bin`, a
  * `node_modules/.bin`), a Litestream on PATH, and a tool that merely names the file are not matched.

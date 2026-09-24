@@ -157,7 +157,8 @@ single task is most likely to get wrong.
   `scripts/setup-litestream.mjs`, measured by that gate, see contract change 5); installs to `<repo>/.bin/litestream`
   (gitignored `/.bin/`); the server finds it through `WAITRON_LITESTREAM_BIN`. Task 6 exports, from
   `@waitron/stream`, `LITESTREAM_VERSION` and `resolveLitestreamBin(env): string`, which returns the
-  default path — never throws — when the variable is unset. Task 10 uses `.ts`, not `.mjs`.
+  default path — never throws — when the variable is unset. Task 10 uses `.ts`, not `.mjs`;
+  corrected 2026-09-24: Task 10 now names `scripts/setup-litestream.mjs`, see contract change 5.
 - N6. **One replica-location function, defined in Task 6**, used by Task 6's config writer and Task
   9b's restore. Name it `replicaUrl(bucket, venueId, generation): string`, returning the `s3://…` URL
   Litestream takes, built on Task 5's `bucketKey`/`venuePrefix` (keys are relative to the owner's
@@ -23898,7 +23899,7 @@ external fact below was read (or run, where it says so) while drafting.
    and `bucketProblem: { reason: string; since: string } | null`, which the alerts need for `since`.
    `lagMs` and `lastConfirmedUploadAt` arrive in **Task 7**, which is where they are computed. Task 7
    also exports `StreamView = StreamStatus | { state: "off" }` from `@waitron/stream`.
-5. **The dev/CI setup script is `scripts/setup-litestream.mjs`, not `.mjs`.** The root Vitest project
+5. **The dev/CI setup script is `scripts/setup-litestream.ts`, not `.mjs`.** The root Vitest project
    measures coverage over every `scripts/**/*.mjs` at 98/98/98/95 (`vitest.config.ts:116-117`), and a
    download script has nothing a unit test can assert without the network. A `.ts` under `scripts/`
    is measured by no table (the same file's comment on `scripts/dev-server-proxy.ts`), and Node 26
