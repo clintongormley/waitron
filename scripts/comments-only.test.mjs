@@ -159,6 +159,8 @@ describe("compareSources", () => {
   const TOOL_COMMENTS = [
     ["@ts-expect-error", "// @ts-expect-error a string is not a number\n", "t.ts"],
     ["@ts-ignore", "/* @ts-ignore */\n", "t.ts"],
+    // TypeScript honours it on a multi-line block comment's last line, and not on a middle one.
+    ["@ts-expect-error on a block comment's last line", "/* why\n * @ts-expect-error */\n", "t.ts"],
     ["@ts-nocheck", "// @ts-nocheck\n", "t.ts"],
     ["@ts-check", "// @ts-check\n", "t.js"],
     ["eslint-disable-next-line", "// eslint-disable-next-line no-control-regex -- why\n", "t.ts"],
@@ -171,7 +173,11 @@ describe("compareSources", () => {
     ["v8 ignore stop", "/* v8 ignore stop */\n", "t.ts"],
     ["c8 ignore", "/* c8 ignore next */\n", "t.ts"],
     ["istanbul ignore", "/* istanbul ignore next */\n", "t.ts"],
+    ["node:coverage ignore", "/* node:coverage ignore next */\n", "t.mjs"],
+    ["node:coverage disable", "/* node:coverage disable */\n", "t.mjs"],
+    ["node:coverage enable", "/* node:coverage enable */\n", "t.mjs"],
     ["Stryker disable", "// Stryker disable next-line all\n", "t.ts"],
+    ["Stryker restore", "// Stryker restore all\n", "t.ts"],
     // Split, because Vitest reads the pragma anywhere in a test file, string literals included.
     ["@vitest-environment", "/** @vitest" + "-environment jsdom */\n", "t.ts"],
     ["@jest-environment", "/**\n * @jest" + "-environment node\n */\n", "t.ts"],
@@ -183,6 +189,7 @@ describe("compareSources", () => {
     ["@preserve", "/* @preserve kept */\n", "t.ts"],
     ["legal comment", "/*! kept by bundlers */\n", "t.ts"],
     ["sourceMappingURL", "//# sourceMappingURL=t.js.map\n", "t.js"],
+    ["sourceURL in its older `@` form", "//@ sourceURL=t.js\n", "t.js"],
   ];
 
   it.each(TOOL_COMMENTS)("refuses deleting a %s comment", (_, comment, fileName) => {
@@ -238,6 +245,22 @@ describe("compareSources", () => {
     expect(compareSources(base, head, "t.ts")).toBe(null);
   });
 
+  it("refuses deleting prose that names a directive matched anywhere in a comment", () => {
+    expect(
+      compareSources("// see the @license tag in the header\nf();\n", "f();\n", "t.ts"),
+    ).toEqual({ line: 1, base: "// see the @license tag in the header", head: "f" });
+  });
+
+  it("still accepts a line-scoped ESLint directive moved to another line without crossing a token", () => {
+    const moved = ["debugger; // eslint-disable-line\n", "debugger;\n// eslint-disable-line\n"];
+    const spaced = [
+      "// eslint-disable-next-line\ndebugger;\n",
+      "// eslint-disable-next-line\n\ndebugger;\n",
+    ];
+    expect(compareSources(...moved, "t.ts")).toBe(null);
+    expect(compareSources(...spaced, "t.ts")).toBe(null);
+  });
+
   it("refuses a changed shebang, which decides what runs the file", () => {
     const base = "#!/usr/bin/env node\nmain();\n";
     const head = "#!/usr/bin/env false\nmain();\n";
@@ -271,6 +294,12 @@ describe("compareSources", () => {
       expect(compareSources(head, base, "lb.mjs")).not.toBe(null);
     },
   );
+
+  it("refuses a line break removed before a plain `using` too, though Node accepts both", () => {
+    const base = "{\n  f(); /*\n  */ using x = y;\n}\n";
+    const head = "{\n  f(); using x = y;\n}\n";
+    expect(compareSources(base, head, "lb.mjs")).not.toBe(null);
+  });
 });
 
 describe("checkCommentsOnly against a git repository", () => {

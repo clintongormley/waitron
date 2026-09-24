@@ -6,10 +6,13 @@ import ts from "typescript";
 // every file changed between where HEAD left the base and HEAD must be a TypeScript or JavaScript
 // file, present at both ends as a regular file with the same mode, that parses at both ends to the
 // same syntax tree with the same token text, give or take the trailing comma Prettier adds or
-// drops. Anything else fails. A comment counts as code only when it is the shebang or matches
-// TOOL_COMMENT, a hand-written list, so a comment read by a tool the list does not name is dropped
-// unseen; and a tool comment is placed by the tokens around it, not by its line. A line break
-// counts only where it changes the tree, or before `=>` or `using`.
+// drops, except after a spread, where the comma Prettier writes is refused (see `isRest`). Anything
+// else fails. A comment counts as code only when it is the shebang or matches TOOL_COMMENT, a
+// hand-written list, so a comment read by a tool the list does not name is dropped unseen; and a
+// tool comment is placed by the tokens around it, not by its line, so one moved to another line
+// without crossing a token passes, `eslint-disable-line` and `eslint-disable-next-line` included.
+// ESLint then reports any problem it no longer suppresses, and the stranded directive only as a
+// warning. A line break counts only where it changes the tree, or before `=>` or `using`.
 //
 // It needs the root's version 6 compiler API; a package's TypeScript 7 has no `createSourceFile`.
 //
@@ -21,12 +24,16 @@ import ts from "typescript";
 const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const REGULAR_FILE = new Set(["100644", "100755"]);
 
-// Anchored where the tool itself looks, so prose that names a directive mid-sentence stays prose.
+// All but the last two are anchored where the tool itself looks, so prose that names one of those
+// directives mid-sentence stays prose. The last two match anywhere in a comment, because some of
+// their tools read them there (TypeScript an `@jsx` on any line of a block comment, esbuild a
+// `@license` anywhere), so prose naming any of them is refused.
 const TOOL_COMMENT = [
   /^\/\/\s*eslint-/,
   /^\/\*[\s*]*(?:eslint|globals?|exported)\b/,
   /^\/[/*][\s*]*(?:prettier-ignore|Stryker\s+(?:disable|restore))/,
-  /^\/[/*][\s*]*(?:v8|c8|istanbul|node:coverage)\s+ignore/,
+  /^\/[/*][\s*]*(?:(?:v8|c8|istanbul)\s+ignore|node:coverage\s+(?:disable|enable|ignore))/,
+  // `m`: TypeScript also honours `@ts-ignore` and `@ts-expect-error` on a block comment's last line.
   /^[\s/*]*@ts-/m,
   /^\/\/\/\s*<(?:reference|amd)/,
   /^\/[/*]!/,
@@ -34,8 +41,9 @@ const TOOL_COMMENT = [
   /@license|@preserve|[#@]\s*source(?:Mapping)?URL=/,
 ];
 
-// JavaScript forbids a line break before these, and TypeScript's parser builds the same tree
-// either way.
+// JavaScript forbids a line break before `=>`, and between `await` and `using`, yet TypeScript's
+// parser builds the same tree either way. A line break before a plain `using` is legal and is
+// refused too.
 const NO_LINE_BREAK_BEFORE = new Set([
   ts.SyntaxKind.EqualsGreaterThanToken,
   ts.SyntaxKind.UsingKeyword,
