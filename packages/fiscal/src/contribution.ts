@@ -55,14 +55,16 @@ export interface FiscalContribution {
     /** Whether a provision in `environment` must carry the secret. */
     required(environment: DeploymentEnvironment): boolean;
     /** Validate the secret's SHAPE, throwing `setup.request_invalid` naming the offending field,
-     * and writing NOTHING, so it can run before anything unrepairable is minted. */
+     * and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
+     * (CLAUDE.md §5). */
     validate(raw: unknown): void;
     /** Seal the secret into the venue's vault in its own transaction, re-validating it. */
     seal(deps: { db: Database; ring: KeyRing }, raw: unknown): Promise<void>;
   };
   /** The operator-typed venue fields this regime puts on the wire verbatim, reached through this
    * seat because the host does not know the regime's rules. `validate` throws
-   * `setup.request_invalid` naming ONE offending field and writes nothing. */
+   * `setup.request_invalid` naming ONE offending field and writes nothing; it is run BEFORE
+   * `provisionVenue` mints the unrepairable SIF and hash chain (CLAUDE.md §5). */
   readonly venueFields?: {
     readonly defaults?: { readonly operationDescription: string };
     validateOperationDescription(description: string): void;

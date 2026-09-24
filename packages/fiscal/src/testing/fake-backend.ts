@@ -210,8 +210,8 @@ export class FakeFiscalBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     substitution: { substitutedSaleIds: SaleId[] },
   ): Promise<FiscalRecordRef> {
-    // Unlike the real backend, this checks only that each replaced sale exists: the fake stores no
-    // invoice type.
+    // Unlike the real backend, this does not check that each replaced sale is a simplified
+    // invoice: the fake stores no invoice type.
     if (substitution.substitutedSaleIds.length === 0) {
       throw new Error("FakeFiscalBackend.recordSubstitution: substitutedSaleIds must not be empty");
     }

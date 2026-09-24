@@ -74,10 +74,12 @@ export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
 
   /**
    * DOCUMENTED LIMITATION — a reload cannot prove a FORWARD wall-clock jump. With the monotonic
-   * reference gone, the wall clock is the only witness: reading earlier than at anchor time proves
-   * a backwards jump, but reading later is also what genuine elapsed time produces. Rather than
-   * invent a plausibility threshold, the forward delta is adopted as the elapsed estimate,
-   * confidence ages against `degradedAfterSeconds` as usual, and the next `anchor()` corrects it.
+   * reference gone, the wall clock is the only witness (`performance.timeOrigin` is itself derived
+   * from the wall clock at page-load time, so it is not an independent one): reading earlier than
+   * at anchor time proves a backwards jump, but reading later is also what genuine elapsed time
+   * produces. Rather than invent a plausibility threshold, the forward delta is adopted as the
+   * elapsed estimate, confidence ages against `degradedAfterSeconds` as usual, and the next
+   * `anchor()` corrects it.
    */
   if (options.anchor) {
     const restored = options.anchor;

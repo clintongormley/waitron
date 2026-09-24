@@ -1,4 +1,3 @@
-// Side-effect only: registers this package's error codes on the shared `ErrorParams` registry.
 import "./errors.js";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -164,7 +163,10 @@ export interface ReconcileResult {
  * outside the sale path, through `FiscalContribution`.
  */
 export interface FiscalBackend {
-  /** What `sales.fiscal_backend` records, and the `backend` field of everything it returns. */
+  /**
+   * What `sales.fiscal_backend` records, and the `backend` field of every
+   * `NodeRegistration`/`FiscalRecordRef` it returns.
+   */
   readonly id: string;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
@@ -201,7 +203,8 @@ export interface FiscalBackend {
    * full invoice's OWN data, with a positive total and a non-null `counterparty`, while
    * `substitution.substitutedSaleIds` names the sales it replaces. It is not a correction: the
    * replaced sales are neither edited nor annulled, and the record avoids double-counting by
-   * naming what it replaces.
+   * naming what it replaces. A backend that cannot issue a full substitution for one of the
+   * replaced sales refuses rather than mis-filing an unrepairable record.
    */
   recordSubstitution(
     tx: Transaction,
@@ -211,8 +214,8 @@ export interface FiscalBackend {
 
   /**
    * Whatever this backend must check about what it has already recorded, before recording
-   * anything more. A caller must NEVER branch on `ok` to abandon the sale: no fiscal condition
-   * blocks a sale.
+   * anything more. The caller records the report and surfaces it to staff; it must NEVER branch on
+   * `ok` to abandon the sale: no fiscal condition blocks a sale.
    * A backend with nothing to check answers `{ ok: true, checked: 0, issues: [] }`.
    */
   checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport>;
