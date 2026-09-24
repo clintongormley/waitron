@@ -31,14 +31,28 @@ export function levelFor(failures: number): RecoveryLevel {
   return failures >= RECOVERY_AT ? "recovery" : "normal";
 }
 
-export function afterFailure(state: RecoveryState, errorCode: string, at: Date): RecoveryState {
-  const failures = state.failures + 1;
-  return {
+/**
+ * The one builder of a failure record. The holder's kind is carried only when given: it names the
+ * program holding the folder, and a later failure of any other kind must not show that name.
+ */
+function failureRecord(
+  failures: number,
+  errorCode: string,
+  at: Date,
+  holderKind?: VenueHolderKind,
+): RecoveryState {
+  const record: RecoveryState = {
     failures,
     level: levelFor(failures),
     lastErrorCode: errorCode,
     lastFailureAt: at.toISOString(),
   };
+  if (holderKind !== undefined) record.holderKind = holderKind;
+  return record;
+}
+
+export function afterFailure(state: RecoveryState, errorCode: string, at: Date): RecoveryState {
+  return failureRecord(state.failures + 1, errorCode, at);
 }
 
 /**
@@ -89,14 +103,7 @@ export function withFailureCode(
   at: Date,
   holderKind?: VenueHolderKind,
 ): RecoveryState {
-  const next: RecoveryState = {
-    failures: current.failures,
-    level: levelFor(current.failures),
-    lastErrorCode: errorCode,
-    lastFailureAt: at.toISOString(),
-  };
-  if (holderKind !== undefined) next.holderKind = holderKind;
-  return next;
+  return failureRecord(current.failures, errorCode, at, holderKind);
 }
 
 function sameState(a: RecoveryState, b: RecoveryState): boolean {
