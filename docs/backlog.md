@@ -2969,13 +2969,12 @@ image constraints under *Detail → Box image*.
     records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
     says the descriptor is the only place bookings is named, while
     `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
-  - Found by #581 (`packages/scheduler`). CLAUDE.md §3 says the nested `tx.transaction(...)` in
-    `enqueueSuccessor` confines a losing attempt's own writes; its body is one insert, which SQLite
-    backs out by itself, so there it changes nothing today — #581's review replaced the nested call
-    with a bare insert and `store.test.ts` and `store.concurrency.test.ts` still passed (24 tests).
-    `store.ts` now says so; CLAUDE.md §3 needs the same narrowing through a pull request (lane C
-    item C3.12c). `insertClose` in `packages/reporting/src/record-daily-close.ts` may be the same
-    single-insert case (read, not run). The reason "v8 reports phantom uncovered branches" given
+  - Found by #581 (`packages/scheduler`). The nested `tx.transaction(...)` in `enqueueSuccessor`
+    wraps one insert, which SQLite backs out by itself, so it changes nothing today — #581's review
+    replaced it with a bare insert and `store.test.ts` and `store.concurrency.test.ts` still passed
+    (24 tests). `insertClose` in `packages/reporting/src/record-daily-close.ts` is the same case,
+    run 2026-09-24 (`docs/developers/conventions-data.md` has the probe); CLAUDE.md §3 and both
+    sites now say so (`docs/claude-md-savepoint-narrowing`). The reason "v8 reports phantom uncovered branches" given
     for excluding barrel `index.ts` files from coverage did not hold in scheduler: with the
     exclusion removed, both barrels reported 0 branches at 100% and the totals did not move. So
     scheduler's two barrel excludes in `vitest.config.ts` can go (a config change, not made), and

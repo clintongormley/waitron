@@ -1107,7 +1107,7 @@ whichever connection serves it, so it is a smoke test over the read path rather 
 where a statement lands. Re-run that mutation before treating any single case in these files as a
 control; what the other cases in the set catch is not what this one catches.
 
-## A refused statement does NOT abort the transaction here, and the savepoints that remain confine a losing attempt's own writes
+## A refused statement does NOT abort the transaction here, and a savepoint is there only to confine a losing attempt's own writes
 
 **The direction reversed with the engine, and this is the sentence in the file most worth getting
 right.** PostgreSQL would not let a transaction continue once it had refused a statement: everything
@@ -1126,10 +1126,14 @@ two-column `UNIQUE`.
 `tx.transaction(...)`, which the adapter emits as `savepoint` / `release` / `rollback to` whenever a
 transaction is already open (`packages/store/src/node-sqlite-adapter.ts` — SQLite refuses a `begin`
 inside a `begin`). What that buys is CONFINEMENT: a losing attempt's own partial writes are backed
-out with it rather than left for the enclosing transaction to commit. In `enqueueSuccessor` the
-nested body is one insert, which SQLite backs out by itself, so there it confines nothing today:
-with the nested call replaced by a bare insert, `store.test.ts` and `store.concurrency.test.ts`
-still passed, 24 tests (#581's review, 2026-09-24).
+out with it rather than left for the enclosing transaction to commit. In `enqueueSuccessor` and
+`insertClose` the nested body is one insert, which SQLite backs out by itself, so there it confines
+nothing today. With the nested call replaced by a bare insert, `store.test.ts` and
+`store.concurrency.test.ts` still passed, 24 tests (#581's review, 2026-09-24); and for
+`insertClose`, `@waitron/reporting`'s whole suite passed (220 tests), and a probe that refused a
+second close of the same day inside a transaction that then committed left the row count of every
+table unchanged, where the control, a close for a new day, moved `daily_closes` from 1 to 2 — the
+table's only triggers are its append-only pair, on update and delete (2026-09-24).
 
 HISTORICAL, PostgreSQL, and the cost that put the savepoints there in the first place. Measured on
 PostgreSQL 18.6 (`postgres:18-alpine`, 2026-09-21): in one transaction, an insert into a second table

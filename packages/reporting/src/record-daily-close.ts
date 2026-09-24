@@ -81,10 +81,8 @@ export async function recordDailyClose(
     prevEntryHash,
   );
 
-  // 6. Append the immutable row inside a savepoint. A second close of the same day trips
-  //    daily_closes_business_day_key → close.already_closed; the savepoint confines that attempt's
-  //    writes to the attempt. What it no longer has to do is keep the enclosing transaction usable
-  //    — insertClose says why.
+  // 6. Append the immutable row. A second close of the same day trips
+  //    daily_closes_business_day_key → close.already_closed.
   const id = await insertClose(tx, {
     nodeId: input.nodeId,
     businessDay: input.businessDay,
@@ -317,13 +315,9 @@ interface CloseRow {
 }
 
 /**
- * Appends the immutable row in a savepoint (`tx.transaction`, which the adapter emits as SAVEPOINT /
- * RELEASE / ROLLBACK TO whenever a transaction is already open —
- * `packages/store/src/node-sqlite-adapter.ts`). On PostgreSQL the savepoint was what let a caller
- * translate the failure and carry on at all, because a unique violation aborted the WHOLE enclosing
- * transaction; SQLite backs out the refused statement and leaves the transaction open
- * (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need"), so
- * here it confines this attempt's own writes rather than rescuing the transaction. Only a
+ * Appends the immutable row in a savepoint (the adapter's nested `tx.transaction`). Its body is one
+ * insert, which SQLite backs out by itself when refused, leaving the transaction usable, so today
+ * it changes nothing (`bench/sqlite-failover/README.md`). Only a
  * `daily_closes_business_day_key` collision — a second close of the same day — is
  * translated to `close.already_closed`; anything else (a `daily_closes_sequence_key` collision,
  * which the write queue's one-writer-at-a-time should make unreachable, or an FK violation)
