@@ -7794,7 +7794,9 @@ refused writes it reads the object back and reports `create_only_ignored` or `if
 the object changed; the in-memory bucket's version tag is the MD5 of the bytes, as
 S3's is for a PUT stored unencrypted or with SSE-S3; and pruning deletes every old generation's files
 through one bounded pool of concurrent deletes, then their markers, so no marker is deleted until
-every file delete has succeeded.
+every file delete has succeeded. (vi) Since 2026-09-24, the S3 store reports a listed key outside
+the requested folder as `backup.stream_name_invalid` (`field: "listedKey"`), not
+`backup.stream_request_failed`.
 
 **Branch:** `feat/sqlite-slice2-stream-package` (one pull request)
 

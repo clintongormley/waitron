@@ -175,7 +175,12 @@ export function createS3ObjectStore(
         for (const object of page.Contents ?? []) {
           if (object.Key === undefined || object.LastModified === undefined)
             throw refuse("IncompleteListing");
-          if (!object.Key.startsWith(wanted)) throw refuse("KeyOutsidePrefix");
+          if (!object.Key.startsWith(wanted)) {
+            throw new AppError("backup.stream_name_invalid", {
+              field: "listedKey",
+              value: object.Key,
+            });
+          }
           found.push({ key: object.Key.slice(root.length), lastModified: object.LastModified });
         }
         token = undefined;

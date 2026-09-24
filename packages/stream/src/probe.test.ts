@@ -305,6 +305,19 @@ describe("probeBucket", () => {
       reason: "list_failed",
       detail: "AccessDenied (403)",
     });
+    const stray = createMemoryObjectStore();
+    stray.failNext({
+      operation: "list",
+      error: new AppError("backup.stream_name_invalid", {
+        field: "listedKey",
+        value: "elsewhere/a",
+      }),
+    });
+    await expect(probeBucket(stray, NONCE)).resolves.toEqual({
+      ok: false,
+      reason: "list_failed",
+      detail: "backup.stream_name_invalid",
+    });
   });
 
   it("refuses a bucket where a delete does not delete, or fails", async () => {
