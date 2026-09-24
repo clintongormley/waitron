@@ -12,22 +12,19 @@ import { encryptTotpSecret } from "./mfa.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { hashSessionToken } from "./session-token.js";
 
-// Spy on verifyPassword while delegating to the real KDF, so the timing-equalization mitigation is
-// observable: the person-not-found branch must run one verifyPassword (against the dummy hash) before
-// throwing, or it becomes a fast/slow user-enumeration oracle. The real implementation is preserved
-// (`vi.fn(actual.verifyPassword)`), so every other case's password check behaves exactly as before.
+// Spy on verifyPassword while delegating to the real KDF, so the timing-equalization KDF runs are
+// observable.
 vi.mock("./verify-password.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./verify-password.js")>();
   return { ...actual, verifyPassword: vi.fn(actual.verifyPassword) };
 });
 
-// This suite tests the verifier LOGIC — the password/TOTP/suspended branches and the role gate.
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
-// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
-// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+// `Promise<T> | T`: `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter
+// refuses it.
 const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
   withTransaction(suite.db, fn);
 
@@ -47,8 +44,6 @@ describe("loginManager", () => {
     expect(session.personId).toBe(personId);
   });
   it("throws password.invalid for an unknown email (no enumeration)", async () => {
-    // Unknown email must be indistinguishable from a wrong password on the public login form — a
-    // distinct code would leak which addresses have accounts.
     await seedManager(suite.db, { email: "owner-known@x.com" });
     const code = await run((tx) =>
       codeOf(() => loginManager(tx, { email: "ghost@x.com", password: "correct horse" })),
@@ -56,9 +51,6 @@ describe("loginManager", () => {
     expect(code).toBe("password.invalid");
   });
   it("runs the password KDF on an unknown email (timing equalization, no oracle)", async () => {
-    // Proof-by-deletion for the enumeration-timing mitigation: an unknown email must still pay for one
-    // verifyPassword, exactly as a wrong-password attempt does, so the two are indistinguishable by
-    // latency. Delete the dummy-verify call in loginManager's not-found branch and this goes red.
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
     await seedManager(suite.db, { email: "owner-timing@x.com" });
@@ -77,8 +69,7 @@ describe("loginManager", () => {
     expect(code).toBe("password.invalid");
   });
   it("rejects password.invalid when no password is set, and still runs one KDF", async () => {
-    // A till-only person with an email but a null password_hash: still cannot sign in on the
-    // dashboard, and the code must not distinguish them from a wrong password.
+    // A till-only person with an email but a null password_hash.
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
       tx.execute(sql`update persons set email = 'owner-nopw@x.com' where id = ${personId}`),
@@ -89,10 +80,6 @@ describe("loginManager", () => {
       codeOf(() => loginManager(tx, { email: "owner-nopw@x.com", password: "anything" })),
     );
     expect(code).toBe("password.invalid");
-    // Timing equalization: the null-password branch still pays for one KDF (against the dummy hash),
-    // so an account awaiting password setup isn't distinguishable by latency from a wrong password.
-    // Proof-by-deletion:
-    // remove the dummy verifyPassword in completeManagerLogin's null branch and this goes red.
     expect(spy).toHaveBeenCalledTimes(1);
   });
   it("makes a pending account pay for one KDF and return the generic password failure", async () => {
@@ -156,11 +143,8 @@ describe("loginManager", () => {
   });
 });
 
-// The by-id entry point the C2b mirror-bundle route uses to authenticate the primary's admin — a
-// server-to-server flow carrying an id, so it resolves by id rather than treating the id as an email.
-// An UNKNOWN id is `person.not_found` because this trusted path has no public enumeration surface.
-// The shared credential checks retain the by-id flow's established suspension and missing-factor
-// errors, while the public email path deliberately folds those account-state distinctions away.
+// A trusted server-to-server path: it keeps the suspension and missing-factor errors that the public
+// email path folds away.
 describe("loginManagerById", () => {
   it("logs in a low-level fixture by id + password without depending on email", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");
@@ -188,8 +172,6 @@ describe("loginManagerById", () => {
     expect(code).toBe("password.invalid");
   });
   it("rejects a suspended person with person.suspended", async () => {
-    // Seed a low-level person WITH a password, then suspend. This trusted by-id path retains the
-    // explicit suspension result that the public email path deliberately hides.
     const personId = await seedPersonWithPassword(suite.db, "admin");
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),

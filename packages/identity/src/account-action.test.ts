@@ -601,8 +601,8 @@ describe("completing an account action whose person changed after it was issued"
   });
 
   it("refuses when the person's credential write touches no row", async () => {
-    // Nothing between the status read and the write can remove the row inside one transaction, so
-    // a trigger that silently skips the write stands in for it. Dropped in the `finally`.
+    // A trigger that silently skips the write stands in for a row removed between the status read
+    // and the write. Dropped in the `finally`.
     const personId = await seedManager(suite.db, { email: "complete-no-write@x.com" });
     const issued = await run((tx) =>
       issueAccountAction(tx, { personId, purpose: "password_reset" }),
@@ -655,9 +655,8 @@ describe("confirming an email change by code when the account moved on", () => {
   }
 
   it("returns null and changes nothing when the claim on the proof writes no row", async () => {
-    // One write transaction runs at a time, so no other writer can consume the proof between the
-    // read and the claim; a trigger that silently skips the claim stands in for one. Dropped in the
-    // `finally`.
+    // A trigger that silently skips the claim stands in for another writer consuming the proof
+    // between the read and the claim. Dropped in the `finally`.
     const { personId, issued } = await requestChange("claim-lost@x.com", "claim-lost-next@x.com");
     await suite.db.execute(
       sql.raw(`create trigger tmp_skip_claim before update of used_at on management_account_actions

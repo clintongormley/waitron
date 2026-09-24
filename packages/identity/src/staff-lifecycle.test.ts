@@ -26,9 +26,8 @@ import {
   seedTill,
 } from "../test/fixtures.js";
 
-// Reset per test (the default), deliberately. The last-admin guard counts every admin in the
-// database, so admins created by earlier tests would be counted too and the "only active admin"
-// test could never see a single admin.
+// Reset per test (the default), deliberately: the last-admin guard counts every admin in the
+// database, so admins created by earlier tests would be counted too.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
@@ -295,8 +294,7 @@ describe("invited person lifecycle", () => {
       deactivatePerson(tx, { managementSessionId: token, personId: target.personId }),
     );
 
-    // The COLUMN, not `ended_at is not null` — a raw select of a boolean expression answers 0 or 1
-    // on this engine, so reading the stamp itself is what survives the storage swap.
+    // The COLUMN, not `ended_at is not null`, which answers 0 or 1 on this engine.
     const rows = await suite.db.execute<{ ended_at: string | null }>(
       sql`select ended_at from sessions where id = ${tillSession.id}`,
     );
@@ -412,7 +410,6 @@ async function statusOf(personId: string): Promise<string> {
   return rows.rows[0]!.status;
 }
 
-/** An active staff member with a login email and an open till session. */
 async function seedStaffWithSession(
   email: string,
 ): Promise<{ personId: string; tillSessionId: string }> {
@@ -653,14 +650,10 @@ describe("invitePerson required text", () => {
 });
 
 /**
- * A row that lands between a write path's availability pre-check and its write.
- *
- * Writes are serialised one transaction at a time per venue file, so no second writer can land in
- * that gap for real; a `before` trigger on `persons` is how these cases put a colliding row there
- * and get the engine's own refusal back from the write under test. The planted row is `Racer`,
- * `racer@example.com`, active. The trigger text is constant: SQLite binds no value inside a trigger
- * body. It is dropped in `finally` because the per-test reset recreates only the triggers the
- * migrations installed and leaves any other in place.
+ * A row that lands between a write path's availability pre-check and its write. No second writer
+ * can land in that gap for real, so a `before` trigger on `persons` plants it. The trigger text is
+ * constant: SQLite binds no value inside a trigger body. It is dropped in `finally` because the
+ * per-test reset recreates only the triggers the migrations installed.
  */
 const PLANT_RACER = {
   insert: "before insert",

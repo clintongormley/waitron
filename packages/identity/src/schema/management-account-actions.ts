@@ -4,9 +4,8 @@ import { count, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
- * A short-lived, single-use proof delivered to a person's email address. This is mutable
- * account state: a newer action invalidates an older one and completion stamps `used_at`.
- * `token_hash` is SHA-256 of the random URL token; the bearer token itself is never stored.
+ * A short-lived, single-use proof delivered to a person's email address. `token_hash` is SHA-256 of
+ * the random URL token; the bearer token itself is never stored.
  */
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
@@ -17,9 +16,7 @@ export const managementAccountActions = table(
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
-    // for the same reason as google_oidc_states.mode: measured 2026-09-18, substituting leaves the
-    // generated schema identical and no caller breaks today, while the narrowing itself still
-    // happens, so scope is what keeps it. See enumText in packages/db/src/schema/columns.ts.
+    // for the same reason as google_oidc_states.mode.
     purpose: label("purpose").notNull(),
     /** The replacement login address for an email-change proof. Null for invitations and resets. */
     targetEmail: label("target_email"),

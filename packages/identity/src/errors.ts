@@ -1,37 +1,30 @@
 // A bare side-effect import so TypeScript augments the real "@waitron/shared" module rather than
-// declaring a fresh ambient one — the idiom packages/core, packages/credentials use.
+// declaring a fresh ambient one.
 import "@waitron/shared";
 
 /**
- * packages/identity's contribution to the shared error registry, by declaration merging — the
- * DOMAIN-CONCEPT, lowercase, dot-namespaced convention, never the package name. NO PARAM HERE EVER
- * CARRIES A PIN OR A HASH: a credential must not reach a log line, a stack trace, or a test name.
+ * NO PARAM HERE EVER CARRIES A PIN OR A HASH: a credential must not reach a log line, a stack
+ * trace, or a test name.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
     "profile.invalid": { field: string };
     /** No open session for this id — unknown or already ended. */
     "session.not_open": { sessionId: string };
-    /**
-     * No live management session for this token — unknown or already ended. The browser must sign
-     * in again.
-     */
+    /** No live management session for this token — unknown or already ended. */
     "management_session.required": Record<string, never>;
-    /** The management session idled past the timeout and is no longer live. Sign in again. */
+    /** The management session idled past the timeout. */
     "management_session.expired": Record<string, never>;
-    /** The PIN did not verify against the stored hash (login or override). */
     "pin.invalid": Record<string, never>;
-    /** A PIN below the minimum length was supplied to create/reset. `min` is the policy, never the
-     * PIN. */
+    /** `min` is the policy, never the PIN. */
     "pin.too_short": { min: number };
-    /** Too many wrong PINs for this (device, person): the login is in a back-off window. `retryAfterSeconds`
-     * is the whole seconds the operator must wait before another attempt — a timing value, never the PIN. */
+    /** Too many wrong PINs for this (device, person). `retryAfterSeconds` is the whole seconds to wait
+     * before another attempt. */
     "pin.throttled": { retryAfterSeconds: number };
-    /** A password below the minimum length was supplied. `min` is the policy, never the password. */
+    /** `min` is the policy, never the password. */
     "password.too_short": { min: number };
-    /** The password did not verify against the stored hash. */
     "password.invalid": Record<string, never>;
-    /** The TOTP token did not verify against the stored secret (or was malformed — fail-closed). */
+    /** Also thrown for a malformed token. */
     "totp.invalid": Record<string, never>;
     /** The password verified, but this account requires its enrolled authenticator or a recovery code. */
     "totp.required": Record<string, never>;
@@ -40,20 +33,14 @@ declare module "@waitron/shared" {
     "google.invalid": Record<string, never>;
     "google.already_linked": Record<string, never>;
     "google.second_factor_required": Record<string, never>;
-    /** No person matched the supplied id. */
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */
     "person.suspended": { personId: string };
     "person.self_deactivation": Record<string, never>;
-    /** The supplied email address failed the screening check (see isValidEmail) at a write boundary
-     * — malformed, no domain dot, or contained whitespace. The address itself is not a credential and
-     * carries no param. */
+    /** Failed `isValidEmail` at a write boundary. */
     "person.email_invalid": Record<string, never>;
-    /** The supplied telephone number failed the screening check (see isValidTelephone) at a write
-     * boundary — not 6–15 digits, or contained a disallowed character. Telephone is optional, so an
-     * absent/empty value is not rejected; only a non-empty malformed one carries this code. */
+    /** Failed `isValidTelephone` at a write boundary. */
     "person.telephone_invalid": Record<string, never>;
-    /** Another person already holds this normalised email. */
     "person.email_taken": { email: string };
     /** Another active or pending person already uses this display name. */
     "person.display_name_taken": { displayName: string };
@@ -61,29 +48,20 @@ declare module "@waitron/shared" {
     "person.last_admin": Record<string, never>;
     /** The requested direct status change is not part of the account lifecycle. */
     "person.transition_invalid": Record<string, never>;
-    /** The account invitation or password-reset token is unknown, expired, or already used. */
+    /** The invitation or password-reset token is unknown, expired, or already used. */
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
-    /** No passkey is registered for this person (or no credential matched the returned id) — they
-     * must enroll one, or sign in another way. */
+    /** No passkey is registered for this person, or no credential matched the returned id. */
     "passkey.not_registered": Record<string, never>;
-    /** The WebAuthn ceremony did not verify: the authenticator's response failed the library's
-     * checks, or the challenge handle matched no live row — never issued, or already consumed by an
-     * earlier finish (the single-use consume-DELETE, including a concurrent finish that won the race).
-     * Nothing is registered or signed in. */
+    /** The authenticator's response failed the library's checks, or the challenge handle matched no
+     * live row — never issued, or already consumed by an earlier finish. */
     "passkey.verification_failed": Record<string, never>;
-    /** The challenge issued at the start of the ceremony was not returned within `CHALLENGE_TTL_MS`, so
-     * it is no longer honoured — the browser must begin the ceremony again. (The stored row is NOT kept
-     * deleted on this path: finish consumes it with a DELETE, then the TTL check throws and the
-     * transaction rolls back, restoring the row to lapse by its TTL rather than being swept.) */
+    /** The challenge was not returned within `CHALLENGE_TTL_MS`. */
     "passkey.challenge_expired": Record<string, never>;
-    /** This credential is already enrolled — `finishPasskeyRegistration`'s insert hit the
-     * `credential_id` unique constraint (`isUniqueViolation`). The domain concept is
-     * "already registered", not the column that collided (§3). Near-unreachable in practice — the
-     * register route is session-gated and `beginPasskeyRegistration` feeds `excludeCredentials` so a
-     * compliant authenticator refuses a duplicate — but a non-compliant client can still POST one, and
-     * a raw 23505 would surface as an opaque `server.internal` 500; this maps it to a clean 409. */
+    /** `beginPasskeyRegistration` sends `excludeCredentials`, so a compliant authenticator refuses a
+     * duplicate; a non-compliant client can still send one, which the `credential_id` unique
+     * constraint refuses. */
     "passkey.already_registered": Record<string, never>;
   }
 }

@@ -13,31 +13,16 @@ import {
 import { codeOf, seedPerson } from "../test/fixtures.js";
 import { hashSessionToken } from "./session-token.js";
 
-// This suite tests the lifecycle LOGIC — start/resolve/end, the idle timeout, and the mid-session
-// status re-check.
-
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 
-// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
-// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+// `Promise<T> | T`: `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter
+// refuses it.
 const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
   withTransaction(suite.db, fn);
 
-/**
- * An instant `minutes` before now, as the exact string the column stores.
- *
- * The two ageing updates below used to read `now() - interval '10 minutes'`. Both halves are gone
- * from this engine, each run on its own against a `node:sqlite` in-memory database (node v26.7.0):
- * `update t set c = now()` answers `no such function: now`, and any statement carrying the interval
- * literal answers `near "'10 minutes'": syntax error` — there is no interval type, and the parse
- * stops there before the missing function is ever reached. So the subtraction happens on a
- * JavaScript `Date` and the result binds as an ordinary parameter. `last_seen_at` is a
- * `tsString` column (`packages/identity/src/schema/management-sessions.ts`), which holds exactly
- * what `toISOString` produced, so a bound ISO string is the same shape the writer wrote.
- */
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
 const agedTo = (at: string, token: string) =>
@@ -81,8 +66,6 @@ describe("management session lifecycle", () => {
         sql`select id from management_sessions where person_id = ${personId}`,
       )
     ).rows;
-    // `locale` is null for a seedPerson with no preference set; expiry is issued by the server.
-    // `sessionRowId` is the row's id, never the token, so a caller can name the row directly.
     expect(resolved).toEqual({
       sessionRowId: row!.id,
       personId,
@@ -94,8 +77,6 @@ describe("management session lifecycle", () => {
   });
 
   it("returns the person's set locale, not just the null default", async () => {
-    // Proves `locale` is the LOOKED-UP persons.locale from the join, not a hardcoded null — a mutant
-    // dropping the field (or returning null) fails here.
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
     const session = await run((tx) => startManagementSession(tx, { personId }));
@@ -121,9 +102,8 @@ describe("management session lifecycle", () => {
   it("throws management_session.required when the session's person row has been deleted", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    // Reachable because the table declares no key to `persons`. Two nets
-    // produce the refusal, so breaking it takes both: measured by mutation, the inner join alone can
-    // be widened to a left join and this case still passes.
+    // Reachable because the table declares no key to `persons`. Two nets produce the refusal, so
+    // breaking it takes both: the inner join alone can be widened to a left join and this still passes.
     await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));
 
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
@@ -133,7 +113,6 @@ describe("management session lifecycle", () => {
   it("throws management_session.expired past the idle timeout", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    // Age last_seen_at beyond the timeout via a raw SQL update — deterministic, no clock injection.
     await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.token)));
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.expired");
@@ -150,10 +129,8 @@ describe("management session lifecycle", () => {
   });
 
   it("throws management_session.required when the person is put back to pending mid-session", async () => {
-    // `pending` is the third status — an account that exists but has not been taken up yet. It is
-    // neither active nor suspended, so it falls past both checks above, and the session must be
-    // refused rather than resolved: only an ACTIVE person holds a management session. Refused as
-    // "required" (sign in again), not "suspended", because nothing has been withdrawn from them.
+    // Refused as "required" (sign in again), not "suspended": only an ACTIVE person holds a
+    // management session, and nothing has been withdrawn from a pending one.
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     await run((tx) =>
@@ -191,7 +168,6 @@ describe("what the table holds, as anyone reading a copy of the database sees it
     expect(await run((tx) => codeOf(() => resolveManagementSession(tx, row!.token_hash)))).toBe(
       "management_session.required",
     );
-    // The other direction: the cookie's own token still signs the person in.
     expect((await run((tx) => resolveManagementSession(tx, session.token))).personId).toBe(
       personId,
     );

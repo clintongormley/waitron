@@ -25,42 +25,18 @@ import {
 export { MIN_PIN_LENGTH } from "./verify-pin.js";
 
 /**
- * A person id may arrive in either case, and settling it is this file's job rather than the
- * column's.
- *
- * It USED to be the column's: `persons.id` was a PostgreSQL `uuid`, which compares either case in
- * SQL. It is a plain `text` column now (`packages/db/src/schema/columns.ts`) and text compares byte
- * for byte, so an id a caller sent in upper case finds no row. Measured against the migrated
- * identity database on 2026-09-22 with a control in the other direction: one seeded row, the id
- * bound upper-case returns `[]` and the id bound as stored returns that row, with the emitted SQL
- * (`.toSQL()`) a plain `select "id" from "persons" where "persons"."id" = ?` either way — so it is
- * the comparison, not the statement, that changed.
- *
- * The shape that made this worth fixing rather than leaving to fail loudly: three functions here
- * ALREADY folded the id for their `authorizedBy` comparison and left the query unfolded. Given an
- * upper-case id, {@link suspendPerson} refused a self-suspension correctly and updated NOTHING for
- * anybody else — no rows, no error. One value now serves both uses.
- *
- * `packages/catalogue/src/product-modifiers.ts` settles its caller's ids at the same kind of
- * boundary, for the same reason and with the same one-line body. A refusal still echoes the
- * caller's own bytes rather than the folded value, which is the rule `normaliseUuid`
- * (`packages/shared/src/ids.ts`) states: the message exists to show them what they sent.
+ * A person id may arrive in either case, and `persons.id` is a `text` column compared byte for
+ * byte, so an id a caller sent in upper case would find no row. A refusal still echoes the caller's
+ * own bytes rather than the folded value, the rule `normaliseUuid` (`packages/shared/src/ids.ts`)
+ * states.
  */
 const settleId = (value: string) => value.toLowerCase();
 
 /**
- * Translate the ONE driver error the email write paths care about — a collision on the login-email
- * index — into the domain `person.email_taken`, and re-throw anything else untouched.
- *
- * `indexViolated` asks which INDEX refused, by name, which is what keeps a unique violation on a
- * different `persons` key — the `id` PK, the google-subject index, the pending-email index, or any
- * index added later — re-thrown untouched rather than mislabelled `person.email_taken` (which would
- * also break the `{ email }` param contract when `email` is null). The name is the only thing the
- * engine reports for an index over an expression; `person-constraints.ts` says why, and the
- * google-subject case in `person-constraints.db.test.ts` is the control that this question
- * discriminates rather than matching every unique violation on the table. `email` is normalized
- * before it reaches here, so the error carries the value that actually collided. Exported for the
- * crafted-error unit test in staff.test.ts, NOT from the package barrel.
+ * Translate a collision on the login-email index into `person.email_taken`, and re-throw anything
+ * else untouched, a unique violation on another `persons` key included. The index is asked for by
+ * name because that is all the engine reports for an index over an expression
+ * (`person-constraints.ts`). Exported for staff.test.ts, not from the package barrel.
  */
 export function asEmailTaken(err: unknown, email: string): never {
   if (indexViolated(err, PERSONS_EMAIL)) {
@@ -70,9 +46,8 @@ export function asEmailTaken(err: unknown, email: string): never {
 }
 
 /**
- * Translate a collision on one of the three `persons` indexes a person edit carries a domain code
- * for — the live display name, the login email, the pending email — and re-throw every other
- * refusal untouched, a collision on any other key included. The email code is thrown only when the
+ * Translate a collision on the live display name, login email or pending email index into its
+ * domain code, and re-throw every other refusal untouched. The email code is thrown only when the
  * caller supplied an email, so `{ email }` never carries undefined.
  */
 export function asPersonUniqueViolation(
@@ -91,9 +66,6 @@ export function asPersonUniqueViolation(
   throw err;
 }
 
-/** Normalize a required email and validate it, throwing `person.email_invalid` on a malformed value
- * before any write. This is the single email write-boundary rule used by account creation, editing,
- * and setup onboarding. */
 export function normalizeAndValidateEmail(raw: string): string {
   if (typeof raw !== "string") throw new AppError("person.email_invalid", {});
   const email = normalizeEmail(raw);
@@ -107,17 +79,9 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-/** The predicate reads `liveDisplayNameKey()`, which is the SAME expression
- * `persons_tenant_live_display_name_uq` is declared over — one function builds both
- * (`./schema/persons.ts`) — so this pre-check and the index cannot disagree about which names
- * collide. They used to be written out separately, and this one folded the caller's name in
- * JavaScript while the index folded the stored name in SQL; the two agreed on `Ana` and disagreed
- * on `José`.
- *
- * The caller's name is folded by `foldForUniqueness`, which trims as well as lower-cases, matching
- * the `trim` inside that expression. SQLite has no `btrim`: `select btrim('  Ada  ')` throws
- * `no such function: btrim` where `trim('  Ada  ')` returns `Ada`, driven on node:sqlite
- * (Node v26.7.0). */
+/** The predicate reads `liveDisplayNameKey()`, the expression `persons_tenant_live_display_name_uq`
+ * is declared over (`./schema/persons.ts`), so this pre-check and the index cannot disagree about
+ * which names collide. */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,
@@ -146,9 +110,8 @@ export async function assertEmailAvailable(
     .from(persons)
     .where(
       and(
-        // Both expressions are the ones their indexes are declared over, for the reason
-        // {@link assertDisplayNameAvailable} states. `email` arrives normalized; folding it again
-        // is what settles how its accents are encoded.
+        // The expressions the two email indexes are declared over, as in
+        // {@link assertDisplayNameAvailable}.
         or(
           eq(loginEmailKey(), foldForUniqueness(email)),
           eq(pendingEmailKey(), foldForUniqueness(email)),
@@ -177,15 +140,9 @@ async function revokePersonAccess(tx: Transaction, personId: string): Promise<vo
 }
 
 /**
- * Saves one complete administrative edit.
- *
- * The last-admin refusal below counts the active admins and then writes, and on PostgreSQL both
- * reads took `for update` so that a second edit could not land between the count and the write and
- * leave the venue with no admin at all. One write transaction runs on the venue file at a time, so
- * the count is still true when the update runs — the pattern is stated once, with its measurement
- * and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The same
- * applies to {@link deactivatePerson}, {@link resetPersonLogin} and
- * {@link reactivatePersonForInvitation}, which each dropped the same clauses.
+ * The last-admin refusal counts the active admins and then writes. The count still holds at the
+ * write only because a caller inside `withTransaction` holds the venue's write lock; the same goes
+ * for {@link deactivatePerson} and {@link resetPersonLogin}.
  */
 export async function updatePersonDetails(
   tx: Transaction,
@@ -267,7 +224,6 @@ export async function updatePersonDetails(
     await revokePersonAccess(tx, person.id);
 }
 
-/** Marks a person inactive without rewriting their identity fields. */
 export async function deactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
@@ -297,7 +253,6 @@ export async function deactivatePerson(
   await revokePersonAccess(tx, person.id);
 }
 
-/** Invalidates a person's device PIN so only that person can choose its replacement. */
 export async function clearPersonPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
@@ -318,7 +273,6 @@ export async function clearPersonPin(
     .where(and(eq(sessions.personId, settleId(input.personId)), isNull(sessions.endedAt)));
 }
 
-/** Clears every login method and returns an account to Pending before issuing a new invitation. */
 export async function resetPersonLogin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
@@ -364,7 +318,6 @@ export async function resetPersonLogin(
   await revokePersonAccess(tx, person.id);
 }
 
-/** Moves an inactive account to Pending and clears credentials before a fresh invitation is issued. */
 export async function reactivatePersonForInvitation(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
@@ -402,7 +355,6 @@ export async function reactivatePersonForInvitation(
   await revokePersonAccess(tx, person.id);
 }
 
-/** Creates the pending account an administrator has invited. Credentials are chosen by its owner. */
 export async function invitePerson(
   tx: Transaction,
   input: {
@@ -447,8 +399,7 @@ export async function invitePerson(
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (error) {
-    // The NEGATION, which `indexViolated` cannot express, so this stays on the primitives. A unique
-    // violation this cannot identify takes this branch deliberately: the insert leaves
+    // Any unique violation off the email index is read as the display name: the insert leaves
     // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
     // index is the only other key it can collide on.
     if (isUniqueViolation(error) && !indexViolated(error, PERSONS_EMAIL)) {
@@ -458,11 +409,7 @@ export async function invitePerson(
   }
 }
 
-/**
- * Creates a staff member. Gated on `person.manage`: `authorizeManager` runs FIRST, so a caller
- * without the permission is rejected before any write. The PIN is length-checked, then stored
- * hashed — never plaintext. Bootstrapping the FIRST admin is provisioning's job, not this gated path.
- */
+/** Bootstrapping the FIRST admin is provisioning's job, not this gated path. */
 export async function createPerson(
   tx: Transaction,
   input: {
@@ -496,8 +443,7 @@ export async function createPerson(
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (err) {
-    // The NEGATION, which `indexViolated` cannot express, so this stays on the primitives. A unique
-    // violation this cannot identify takes this branch deliberately: the insert leaves
+    // Any unique violation off the email index is read as the display name: the insert leaves
     // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
     // index is the only other key it can collide on.
     if (isUniqueViolation(err) && !indexViolated(err, PERSONS_EMAIL)) {
@@ -507,8 +453,8 @@ export async function createPerson(
   }
 }
 
-/** Changes a person's role. Gated on `person.manage`. authorizeManager reads a role live (via
- * resolveManagementSession), so an open management session sees the change on its next call. */
+/** authorizeManager reads a role live (via resolveManagementSession), so an open management
+ * session sees the change on its next call. */
 export async function setRole(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; role: PersonRoleValue },
@@ -523,8 +469,6 @@ export async function setRole(
     .where(eq(persons.id, settleId(input.personId)));
 }
 
-/** Resets a person's PIN. Gated on `person.manage`; the new PIN is length-checked, then stored
- * hashed. */
 export async function resetPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; pin: string },
@@ -540,10 +484,6 @@ export async function resetPin(
     .where(eq(persons.id, settleId(input.personId)));
 }
 
-/** Grants (or replaces) a person's dashboard password. Gated on `person.manage`:
- * `authorizeManager` runs FIRST, so a caller without the permission is rejected before any write.
- * The password is length-checked, then stored hashed — never plaintext. This is the general
- * admin-sets-password path; bootstrapping the FIRST admin's password is provisioning's job. */
 export async function setPassword(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; password: string },
@@ -559,14 +499,7 @@ export async function setPassword(
     .where(eq(persons.id, settleId(input.personId)));
 }
 
-/** Sets (or replaces) a person's login email — the identifier for dashboard sign-in. Gated on
- * `person.manage`, mirroring `setPassword`: `authorizeManager` runs FIRST, so a caller without the
- * permission is rejected before any write. The email is normalized then screened (malformed →
- * `person.email_invalid`) before the UPDATE; a collision with any other person's email surfaces as
- * `person.email_taken` — `persons_tenant_email_uq` holds one address across the whole database,
- * case-insensitively and whichever way its accents are encoded, among the people who have one.
- * This path writes `email_folded` beside `email`, which is what the index reads. (The index NAME
- * still reads `tenant`; renaming it is its own slice, `docs/backlog.md`.) */
+/** `email_folded` is written beside `email` because it is what `persons_tenant_email_uq` reads. */
 export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },
@@ -587,10 +520,8 @@ export async function setEmail(
 }
 
 /**
- * Sets a person's preferred UI language. Validates against the supported set (throws
- * `locale.unsupported`) so a bad code never reaches the row. Unlike every other mutator in this file
- * there is NO `authorizeManager` gate: a person sets their OWN locale, so the server routes pass the
- * SESSION's `personId` (never a body value). The UPDATE matches the person's id.
+ * Unlike every other mutator in this file there is NO `authorizeManager` gate: a person sets their
+ * OWN locale, so the server routes pass the SESSION's `personId` (never a body value).
  */
 export async function setPersonLocale(
   tx: Transaction,
@@ -603,8 +534,6 @@ export async function setPersonLocale(
     .where(eq(persons.id, settleId(input.personId)));
 }
 
-/** Suspends a person: keeps the row (and its history) while refusing login. Gated on
- * `person.manage`. */
 export async function suspendPerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
@@ -620,7 +549,6 @@ export async function suspendPerson(
     .where(eq(persons.id, settleId(input.personId)));
 }
 
-/** Reactivates a suspended person, restoring login. Gated on `person.manage`. */
 export async function reactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
@@ -635,19 +563,14 @@ export async function reactivatePerson(
     .where(eq(persons.id, settleId(input.personId)));
 }
 
-/** One entry in the pre-login roster: the id the lock screen logs in with, and the name it shows. */
 export interface StaffListEntry {
   personId: string;
   displayName: string;
 }
 
 /**
- * Pre-login roster for the till lock screen. Unlike the rest of this file it is NOT gated on
- * `authorize` — it
- * runs before any session exists — and returns only `{ personId, displayName }` for `active`
- * persons. No PIN material, no role, no status: nothing that is unsafe to show before anyone has
- * logged in. Suspended persons are excluded — a `status = 'active'` filter, which the suite
- * checks.
+ * Pre-login roster for the till lock screen. It runs before any session exists, so it is NOT gated
+ * and returns only `{ personId, displayName }`: nothing unsafe to show before anyone has logged in.
  */
 export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]> {
   const rows = await tx
@@ -659,17 +582,9 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
 }
 
 /**
- * The active persons whose ROLE holds `permission`, in the same `{ personId, displayName }` shape
- * `listActiveStaff` returns. This is the roster a till surfaces when an operator must pick an
- * authorizing supervisor for a privileged action under a gated policy (the cash-drawer override —
- * cash-drawer-authorization §5): the eligible authorizers are exactly the active persons whose
- * role holds the action's permission.
- *
- * Like `listActiveStaff` it returns ONLY `{ personId, displayName }` — no PIN material, role or status: the
- * caller shows the picker before the authorizing supervisor has entered a credential, so nothing
- * unsafe to show may travel. The role→permission map stays authoritative in permissions.ts: this
- * fetches every active person + their role and keeps those `roleHasPermission(role, permission)`
- * accepts, so which roles hold a permission is decided in one place, never hardcoded here.
+ * The authorizing-supervisor picker a till shows (cash-drawer-authorization §5). The picker is shown
+ * before the supervisor has entered a credential, so like `listActiveStaff` it returns ONLY
+ * `{ personId, displayName }`.
  */
 export async function listActivePersonsWithPermission(
   tx: Transaction,
@@ -685,8 +600,7 @@ export async function listActivePersonsWithPermission(
     .map((r) => ({ personId: r.personId, displayName: r.displayName }));
 }
 
-/** One row of the admin roster (Task 10). Carries the person's role and status plus credential
- * BOOLEANS — never the hash or secret behind them. */
+/** Carries credential BOOLEANS, never the hash or secret behind them. */
 export interface PersonSummary {
   personId: string;
   displayName: string;
@@ -701,15 +615,7 @@ export interface PersonSummary {
   hasTotp: boolean;
 }
 
-/**
- * Admin roster for the dashboard staff screen. Gated on `person.manage`: `authorizeManager` runs
- * FIRST, so a caller without the permission is rejected before anything is selected. Returns EVERY
- * person (suspended included, unlike the pre-login `listActiveStaff`), ordered by name.
- *
- * `password_hash`/`totp_secret` are selected only to derive `hasPassword`/`hasTotp`; the returned
- * `PersonSummary` carries the booleans and never the hash, the secret, or the PIN — a leak the suite
- * pins by asserting `JSON.stringify` of the roster contains no `scrypt$` (the credential-hash prefix).
- */
+/** `password_hash`/`totp_secret` are selected only to derive `hasPassword`/`hasTotp`. */
 export async function listPersons(
   tx: Transaction,
   args: { managementSessionId: string },

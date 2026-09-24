@@ -7,13 +7,9 @@ import { verifyPin } from "./verify-pin.js";
 import type { PersonRoleValue } from "./permissions.js";
 
 /**
- * The shared credential gate: look up a person by id, then run the fixed
- * not_found → suspended → pin.invalid sequence and return their role plus their stored UI `locale`
- * (`persons.locale`, `null` when they have set no preference). Both `loginWithPin` (which carries the
- * locale onto the till session and ignores the role) and `authorize`'s OVERRIDE branch (which checks
- * the role against the requested permission and ignores the locale) call this, so the guard ORDER and
- * its error codes are declared in exactly one place — a security gate that must behave identically for
- * both. Throws `person.not_found`, `person.suspended`, `pin.invalid`.
+ * Both `loginWithPin` and `authorize`'s OVERRIDE branch call this, so the guard ORDER and its error
+ * codes are declared in exactly one place. Throws `person.not_found`, `person.suspended`,
+ * `pin.invalid`.
  */
 export async function verifyPersonCredential(
   tx: Transaction,

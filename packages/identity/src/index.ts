@@ -1,11 +1,6 @@
-// The entire public surface of @waitron/identity. Re-exports only — no logic here.
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { authorize } from "./authorize.js";
-// Exported for the writers OUTSIDE this package that create a person: the venue plan's
-// admin (`packages/provisioning/src/venue-apply.ts`) and the mirror viewer
-// (`apps/server/src/mirror-session.ts`). Both compare against the same key at login, so
-// both must fold the same way; `./schema/persons.ts` carries what happens to a row that
-// does not.
+// Exported for the writers OUTSIDE this package that create a person, which must fold the same way.
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endSession, loginWithPin } from "./login.js";
@@ -113,8 +108,8 @@ export type { GoogleOidcClaim } from "./google-oidc.js";
 export { IDENTITY_CLASSIFICATION } from "./classification.js";
 export { IDENTITY_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
-// Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
-// from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
+// Side-effect only: keeps errors.ts's augmentation reachable from the public barrel
+// (scripts/errors-reachable.test.ts).
 import "./errors.js";
 export { withPassiveManagementRead } from "./management-session.js";
 export { IDENTITY_CHANGE_SOURCES } from "./classification.js";

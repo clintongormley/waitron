@@ -27,9 +27,6 @@ import {
   removeOwnPasskey,
 } from "./profile.js";
 
-// The own-profile behaviour: reads, detail saves with a credential re-check on an email change,
-// password and PIN changes with the sessions they end, passkey listing and removal, authenticator
-// enrolment, recovery codes and disable, and the Google unlink.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 async function fixture() {
   await seedTenant(suite.db);
@@ -155,9 +152,6 @@ describe("your profile", () => {
   });
 
   it("refuses a profile read whose management session does not exist", async () => {
-    // Every profile call resolves the caller from the session row. A session id that matches
-    // nothing is not an empty profile — it is no caller at all, and the refusal is the same one a
-    // signed-out person gets, so the dashboard sends them to log in rather than showing a blank form.
     await fixture();
     await expect(
       withTransaction(suite.db, (tx) => readOwnProfile(tx, { managementSessionId: randomUUID() })),
@@ -165,9 +159,7 @@ describe("your profile", () => {
   });
 
   it("names the field in a refusal for each name that was supplied but blank", async () => {
-    // Three separate guards, one per name, and each refusal must name ITS OWN field: the profile
-    // screen puts the message beside the input the person emptied, so a refusal that named the
-    // wrong field (or no field) would point at the wrong box.
+    // The profile screen puts the message beside the field the refusal names.
     const f = await fixture();
     const details = {
       ...f,
@@ -242,8 +234,7 @@ describe("your profile", () => {
         changeOwnPassword(tx, { ...f, currentPassword: "wrong", password: "new password" }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
-    // Omitting the current password entirely is refused the same way a wrong one is. A caller that
-    // simply leaves the field out must not reach the check with something that could match.
+    // Omitting the current password entirely is refused the same way a wrong one is.
     await expect(
       withTransaction(suite.db, (tx) => changeOwnPassword(tx, { ...f, password: "new password" })),
     ).rejects.toMatchObject({ code: "password.invalid" });
@@ -271,10 +262,7 @@ describe("your profile", () => {
   it("changes the PIN and ends open till sessions", async () => {
     const f = await fixture();
     const tillId = await seedTill(suite.db);
-    // `id` and `opened_at` are `$defaultFn` generators in JavaScript, not column DEFAULTs
-    // (`packages/db/src/schema/columns.ts`), so a raw insert that does not name them is refused
-    // `NOT NULL constraint failed`. They are named here for that reason, where PostgreSQL supplied
-    // both server-side.
+    // `id` and `opened_at` are `$defaultFn` generators, not column DEFAULTs, so a raw insert names them.
     const till = await suite.db.execute<{ id: string }>(
       sql`insert into sessions (id, token_hash, person_id, till_id, opened_at) values (${randomUUID()}, ${hashSessionToken(randomUUID())}, ${f.personId}, ${tillId}, ${new Date().toISOString()}) returning id`,
     );
@@ -297,9 +285,7 @@ describe("your profile", () => {
     const colleague = await seedManager(suite.db, { email: "colleague@example.com" });
     const credentialId = randomUUID();
     const otherId = randomUUID();
-    // `created_at` is a `$defaultFn` generator in JavaScript, not a column DEFAULT
-    // (`packages/db/src/schema/columns.ts`), so a raw insert that does not name it is refused
-    // `NOT NULL constraint failed`; PostgreSQL supplied it server-side.
+    // `created_at` is a `$defaultFn` generator, not a column DEFAULT, so a raw insert names it.
     const stamp = new Date().toISOString();
     await suite.db.execute(
       sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name,created_at) values (${credentialId},${f.personId},'own','public','Work laptop',${stamp}),(${otherId},${colleague},'other','public','Colleague laptop',${stamp})`,
@@ -489,9 +475,8 @@ describe("your profile", () => {
   });
 
   it("reports an address claimed between the availability check and the write as person.email_taken", async () => {
-    // One write transaction runs at a time, so no other request can claim the address in that gap;
-    // a trigger that gives it to another person just before this person's write stands in for one.
-    // Dropped in the `finally`.
+    // No other request can run in that gap, so a trigger that gives the address to another person
+    // just before this person's write stands in for one.
     const f = await fixture();
     const otherId = await seedManager(suite.db, { email: `${randomUUID()}@example.com` });
     const contested = `${randomUUID()}@example.com`;

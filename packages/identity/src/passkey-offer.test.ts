@@ -7,11 +7,6 @@ import { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 import { webauthnCredentials } from "./schema/webauthn.js";
 import { seedPerson } from "../test/fixtures.js";
 
-// Both verbs are a SELECT and an UPDATE over two tables, and every case below asserts what they DO
-// — which row is read, which row is stamped — never what a privilege permits. There is no role to
-// assert against: `useVenueDb` opens a SQLite file (`packages/db/src/testing/venue-db.ts`) and
-// SQLite has no roles or grants at all.
-
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -21,9 +16,6 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
-/** Registers a passkey for a person, the same row shape `finishPasskeyRegistration` writes
- * (packages/identity/src/passkey.ts). The credential id is unique per call so two seeded passkeys do
- * not collide on `webauthn_credentials_credential_id_uq`. */
 async function seedPasskey(input: { personId: string }): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     tx.insert(webauthnCredentials).values({

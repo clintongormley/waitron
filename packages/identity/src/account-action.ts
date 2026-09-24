@@ -294,18 +294,7 @@ async function finishClaimedAction(
   };
 }
 
-/**
- * Resolve the account before replacing its setup or reset action; unavailable accounts remain
- * silent.
- *
- * The read took `for update`, so that two recovery requests for one account could not each issue an
- * action and leave two live tokens. One write transaction runs on the venue file at a time, so the
- * second request cannot start until the first has committed and superseded the earlier action —
- * the pattern is stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The two
- * other reads in this file that dropped the same clause are `confirmEmailChangeByCode`'s (which
- * read the live action before bumping its attempt counter) and `finishClaimedAction`'s (which read
- * the person's status before writing it).
- */
+/** Returns null for an unknown or unavailable account, so the caller's response stays silent. */
 export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { email: string; now?: Date },
@@ -330,7 +319,6 @@ export async function requestAccountRecoveryAction(
   });
 }
 
-/** Consume a valid bearer token, replace the password, end old sessions, and open a fresh session. */
 export async function completeAccountAction(
   tx: Transaction,
   input: CompletionInput & {

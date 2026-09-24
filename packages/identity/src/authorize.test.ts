@@ -8,9 +8,6 @@ import { authorize } from "./authorize.js";
 import { endSession, loginWithPin } from "./login.js";
 import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
 
-// authorize() is LOGIC — the operator-holds path, the override path's not-found / suspended /
-// bad-PIN / lacks-permission gates, and the open-session guard.
-
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -28,8 +25,7 @@ describe("authorize", () => {
 
     const result = await run((tx) => authorize(tx, { sessionId, permission: "sale.void" }));
 
-    // toEqual, not toMatchObject: all three fields are pinned, so an unlisted extra key fails rather
-    // than being silently ignored (CLAUDE.md §4). authorizedBy is the operator; no override was used.
+    // toEqual, not toMatchObject: an unlisted extra key fails rather than being silently ignored.
     expect(result).toEqual({
       authorizedBy: managerId,
       permission: "sale.void",
@@ -51,7 +47,6 @@ describe("authorize", () => {
       }),
     );
 
-    // Authorized by the OVERRIDE person, flagged viaOverride so the caller records who approved it.
     expect(result).toEqual({
       authorizedBy: supervisorId,
       permission: "sale.void",
@@ -93,8 +88,6 @@ describe("authorize", () => {
     const staffId = await seedPerson(suite.db, "staff");
     const sessionId = await openSession(suite.db, tillId, staffId);
 
-    // The override names a personId that resolves to no row — the override lookup
-    // returns nothing before status/PIN/permission are ever consulted.
     const code = await codeOf(() =>
       run((tx) =>
         authorize(tx, {
@@ -135,8 +128,7 @@ describe("authorize", () => {
     const sessionId = session.id;
     await run((tx) => endSession(tx, session.token));
 
-    // The manager holds sale.void, so only the ended-session guard — checked first, before any role
-    // lookup — can be the cause here.
+    // The manager holds sale.void, so only the ended-session guard can be the cause here.
     const code = await codeOf(() =>
       run((tx) => authorize(tx, { sessionId, permission: "sale.void" })),
     );
@@ -147,8 +139,7 @@ describe("authorize", () => {
     const tillId = await seedTill(suite.db);
     const managerId = await seedPerson(suite.db, "manager");
     const sessionId = await openSession(suite.db, tillId, managerId);
-    // Reachable only since the storage switch dropped `sessions`' foreign key to `persons` (they end
-    // up in different database files). Before that, this delete was refused by the constraint.
+    // Reachable because `sessions` declares no key to `persons`.
     await suite.db.execute(sql`delete from persons where id = ${managerId}`);
 
     // The session is still open, so what refuses here is the inner join finding no person row.
