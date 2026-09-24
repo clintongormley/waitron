@@ -96,7 +96,7 @@ export interface PaymentReconcileResult {
   remediated: number;
   /**
    * Orphans this sweep claimed and then could not reverse, with each reason. No later sweep
-   * re-examines a claimed orphan (its marker is permanent), and the
+   * retries a claimed orphan's reversal (its marker is permanent), and the
    * `payment.reconcile_remediation_failed` incident can be swallowed by an earlier still-open one on
    * the same `(till, code, sale_id)` key — so a failure not recorded here can be lost for good.
    */

@@ -390,7 +390,7 @@ export async function claimAcceptedOffline(
 
 /** The same statement as `claimAcceptedOffline`, for a real adapter whose network call must not
  * run inside the transaction. Two passes listing the same rows are harmless: the advances each
- * match only a row still `accepted_offline`. */
+ * match only a row still `accepted_offline`, plus the race-safe incident dedup. */
 export async function listAcceptedOffline(
   tx: Transaction,
   provider: string,
@@ -410,7 +410,8 @@ export interface AttemptingPayment {
 }
 
 /** Not a claim, like `listAcceptedOffline`: `captureAttempting`/`failAttempting` each match only a
- * row still `attempting`, so two concurrent passes are harmless. */
+ * row still `attempting`, so two concurrent passes cannot resolve a row twice; the loser throws
+ * `payment.not_found`. */
 export async function listAttempting(
   tx: Transaction,
   provider: string,
@@ -608,9 +609,10 @@ export interface ReconcilableRow {
 
 /**
  * Auditable: money we believe we hold (`captured`/`settled`, by `settled_at`) or believe is pending
- * (`initiated`, by `created_at`). `accepted_offline` belongs to `forward()`. The other states are
- * absent because nothing is expected to settle for them, and `existingReferences` still sees them,
- * so their settlements never read as missingLocal.
+ * (`initiated`, by `created_at`). `accepted_offline` belongs to `forward()`.
+ * `failed`/`voided`/`refunded`/`partially_refunded` are absent too: nothing is expected to settle
+ * for them, and `existingReferences` still sees them, so their settlements never read as
+ * missingLocal.
  */
 export async function listReconcilable(
   tx: Transaction,
@@ -732,9 +734,9 @@ export async function tillsForWorkingOrders(
 }
 
 /**
- * The read `recordVoid` and `recordRefund` decide on. It takes no lock: a caller's `withTransaction`
- * holds the venue file's write lock, so the read is still true when they write — the pattern is
- * stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * The read `recordVoid` and `recordRefund` decide on. It takes no lock: inside `withTransaction`,
+ * which holds the venue file's write lock, the read is still true when the caller writes — the
+ * pattern is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  */
 async function requireRow(tx: Transaction, params: Key): Promise<PaymentRow> {
   const [row] = await tx.select(PAYMENT_COLUMNS).from(payments).where(keyWhere(params));

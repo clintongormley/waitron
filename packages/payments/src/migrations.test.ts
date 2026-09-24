@@ -79,8 +79,8 @@ describe("payments migrations", () => {
     expect(rows.rows.map((r) => r.name)).toEqual(["payments"]);
   });
 
-  // Nothing here catches a set applied before core; the product's order comes from each module's
-  // declared `requires` (`packages/migrations/src/apply.ts`).
+  // Nothing here catches a set applied before core; `applyMigrations`
+  // (`packages/migrations/src/apply.ts`) applies sets in the order its caller passes.
   it("no longer fails when run before core — SQLite resolves an FK target at DML time", async () => {
     const directory = await mkdtemp(join(tmpdir(), "waitron-payments-order-"));
     const store = await openVenueDatabase(directory);

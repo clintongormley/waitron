@@ -12,8 +12,8 @@ export type {
   PaymentState,
   ProviderCapabilities,
 } from "./provider.js";
-// The test doubles under ./testing/ are NOT re-exported, so a production import of the package
-// cannot reach one.
+// The test doubles under ./testing/ are NOT re-exported, so importing the package root cannot
+// reach one.
 export {
   assertReversible,
   associatePaymentWithSale,

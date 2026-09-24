@@ -28,8 +28,8 @@ export default defineConfig({
         // schema-ownership.test.ts.
         "src/index.ts",
         "src/schema/index.ts",
-        // Branchless, yet CI's Linux V8 reports phantom uncovered branches on it. Remove this line
-        // if manual.ts ever grows genuine branching logic.
+        // Branchless, yet CI's Linux V8 has reported phantom uncovered branches on it. Remove this
+        // line if manual.ts ever grows genuine branching logic.
         "src/manual.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
