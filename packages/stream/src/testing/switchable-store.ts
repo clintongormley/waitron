@@ -5,20 +5,27 @@ import type { ListedObject, ObjectStore, PutCondition, StoredObject } from "../o
 import { createMemoryObjectStore, type Fault, type MemoryObjectStore } from "./memory-store.js";
 
 /**
- * `createMemoryObjectStore` behind a switch that fails every call at once, where the memory store
- * faults one call at a time. It stamps `lastModified` from the clock it is given, and records this
- * package's answered writes and Litestream's uploads in one event log a `FakeLitestream` can share,
- * so a test can assert the order of bucket writes and child starts. A failed call throws the S3
- * store's error code with the status it reports: none for no answer, 403 for a refusal.
+ * `createMemoryObjectStore` behind a switch that fails every `ObjectStore` call that would reach
+ * the bucket, where the memory store faults one call at a time. It stamps `lastModified` from the
+ * clock it is given, and records this package's answered writes and Litestream's uploads in one
+ * event log a `FakeLitestream` can share, so a test can assert the order of bucket writes and child
+ * starts. A failed call throws the S3 store's error code with the status it reports: none for no
+ * answer, 403 for a refusal.
  */
 export class SwitchableStore implements ObjectStore {
   /** `put <key>` for each of this package's writes answered as stored, `upload <key>` for Litestream's, in order. */
   readonly events: string[];
-  /** Every call waits forever: a bucket that never answers. */
+  /** Every call that reaches the bucket waits forever: a bucket that never answers. */
   hang = false;
-  /** Every call fails with no answer (a refused connection): unreachable, not unusable. */
+  /**
+   * Every call that reaches the bucket fails with no answer (a refused connection): unreachable,
+   * not unusable.
+   */
   down = false;
-  /** Every call is refused 403: the bucket's key was revoked, or the bucket deleted. */
+  /**
+   * Every call that reaches the bucket is refused 403: the bucket's key was revoked, or the bucket
+   * deleted.
+   */
   denied = false;
   /** False makes a conditional write succeed anyway, as a store without conditional writes would. */
   honoursConditions = true;

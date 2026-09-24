@@ -4735,7 +4735,9 @@ Task 5. #569's review left pruning sending one delete request per file; on the o
 store sends S3's multi-object delete, 1000 keys a request, falling back to one request per file only
 when the store answers the batch 501. Which real providers lack the multi-object delete, and what
 each answers, is not established; a provider that refuses it with any other status fails the day's
-prune, which is logged as `stream.prune_failed`. The other
+prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream/src/probe.ts`),
+which the supervisor runs before opening a generation and the settings screen's Test button is to
+run, deletes one object at a time, so neither can reveal such a provider. The other
 choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
 now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
 pruning's own check uses (owner, 2026-09-24; landed as #576). Its value is the key as the bucket
