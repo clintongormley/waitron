@@ -2994,6 +2994,24 @@ image constraints under *Detail → Box image*.
     records a deleted setup, which it no longer does; and `packages/composition/src/modules.ts`
     says the descriptor is the only place bookings is named, while
     `packages/dashboard-modules/src/index.ts` imports `@waitron/bookings/dashboard` too.
+  - Found by #588 (`packages/layouts`), not fixable in a comments-only change. Two test titles in
+    `packages/layouts/src/canvas-store.db.test.ts` (lines 144 and 249) still quote PostgreSQL's
+    error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
+    it" comment #588 removed from layouts (it was written about the deleted `tenantId` field and
+    left on the next field down) is also at `packages/core/src/incidents.ts:16`,
+    `packages/core/src/settle-sale.ts:27` and `packages/db/src/append-order-amendment.ts:26`, not
+    re-checked there. Comments quoting the PostgreSQL numbers for these two stores remain at
+    `apps/server/src/management-api.ts:299` and `:358`,
+    `apps/server/src/management-api.canvases.test.ts:277` and
+    `apps/dashboard/src/i18n/codes.test.ts:92`. `packages/printing/src/errors.test.ts:5` says the
+    error construction typechecks "ONLY because" of one import — #588's review measured the same
+    claim false for printing and layouts; `apps/server/src/errors.test.ts:8` makes it too, not
+    measured. `packages/media/src/image-references.test.ts:123` says `canvas-store.ts` tells 787
+    from 1811; it reads only 1811 (`device-profile-store.ts` reads both), and the same wording is
+    in the shipped `packages/media/drizzle/0001_image_references.sql`. Both layouts database
+    suites create a manager session in `beforeAll`, while `useVenueDb` empties every table after
+    each test by default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a
+    suite's first test can use that session; they pass today because only the first does.
   - Found by #581 (`packages/scheduler`). The nested `tx.transaction(...)` in `enqueueSuccessor`
     wraps one insert, which SQLite backs out by itself when refused, so it changes nothing today —
     #581's review replaced it with a bare insert and reported `store.test.ts` and
