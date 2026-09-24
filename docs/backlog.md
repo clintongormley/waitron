@@ -4188,7 +4188,8 @@ Task 2a, a recovery key that does not need an archive destination (`loadRecovery
 key alone, `writeRecoveryKey` sets it in `backup.env` keeping the other settings, `rotate` changes
 the key of a box that holds a key and has no destination loaded, and `apply` reuses a key the box already holds,
 refusing a different one with `backup.recovery_key_exists`; every status answer carries
-`recoveryKeySet`), is on branch `feat/sqlite-slice2-recovery-key`. The dashboard words
+`recoveryKeySet`; apply and rotate take turns, so a concurrent pair cannot put the old key
+back), landed as #557. The dashboard words
 `backup.recovery_key_exists` (a stopgap wording Task 8b replaces) but does not yet read
 `recoveryKeySet`. The gap that leaves: the Backups screen's setup form
 (`apps/dashboard/src/screens/backup-screen.ts`, shown on a writable box whose backups are not
@@ -4202,6 +4203,10 @@ key. Making the setup form reuse the held key through `recoveryKeySet` is Task 8
 "key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always
 passes `keyRotatedAt: undefined` — this predates Task 2a (a settings re-apply already dropped it),
 and the value is what the Backups screen shows as the date the key was rotated.
+Also left by #557's review, the owner's call: `rotate` with a destination loaded still rebuilds
+`backup.env` from the running settings rather than keeping the file's other lines, so a
+destination added to the file by hand and not yet loaded is dropped; keeping the file's lines
+instead would change that behaviour.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
