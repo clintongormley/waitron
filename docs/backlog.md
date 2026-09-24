@@ -4083,8 +4083,14 @@ holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt rese
 rebuilds it. Left by #548: deny's delete is the one join-request node filter no test fails
 without (the `requirePending` read before it already refuses another node's row, as its doc
 comment says); identity's comments that still place its tables in different files are Task 1b's
-to rewrite; and the run-it review did not reach three claims within its budget — holders torn by
-a concurrent promotion, credential sealing, and scheduler takeover.
+to rewrite (done on its branch); and the run-it review did not reach three claims within its
+budget — holders torn by a concurrent promotion, credential sealing, and scheduler takeover.
+Task 1b, session cookies stored only as hashes (the till's and the dashboard's cookie carry a
+random token, and `sessions` and `management_sessions` keep only its SHA-256 in a new `token_hash`
+column; identity's logins and sign-in ceremonies are reclassified `state`), is on branch
+`feat/sqlite-slice2-hashed-sessions`, PR pending. A dev venue holding `sessions` or
+`management_sessions` rows fails its migration; `wa-wt reset demo <name>` rebuilds it, and every
+existing login signs in again.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
