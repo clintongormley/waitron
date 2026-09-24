@@ -87,7 +87,7 @@ describe("computeVatSummary", () => {
     expect(vat.byRate).toEqual([{ rate: "21.00", base: "95.00", tax: "19.95" }]);
   });
 
-  it("excludes a voided sale", async () => {
+  it("excludes a sale voided on its own business day", async () => {
     const s = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
@@ -96,6 +96,77 @@ describe("computeVatSummary", () => {
     });
     await seedVoid(suite.db, { saleId: s }, noonUtc);
     expect((await run()).byRate).toEqual([]);
+  });
+
+  it("counts a sale on its issue day and a later void as its reversal on the void's day", async () => {
+    const s = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedVoid(suite.db, { saleId: s }, new Date("2026-08-05T10:00:00Z").toISOString());
+    const issueDay = await run();
+    expect(issueDay.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
+    expect(issueDay.grossTotal).toBe("121.00");
+    const voidDay = await run({ businessDay: "2026-08-05" });
+    expect(voidDay.byRate).toEqual([{ rate: "21.00", base: "-100.00", tax: "-21.00" }]);
+    expect(voidDay).toMatchObject({
+      baseTotal: "-100.00",
+      taxTotal: "-21.00",
+      grossTotal: "-121.00",
+    });
+  });
+
+  it("puts a void made before the cutover on the previous business day", async () => {
+    // 2026-08-05 04:00 Madrid is before the 05:00 cutover, so still business day 2026-08-04: the
+    // sale and its void share a day and cancel there.
+    const s = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedVoid(suite.db, { saleId: s }, new Date("2026-08-05T02:00:00Z").toISOString());
+    expect((await run()).byRate).toEqual([]);
+    expect((await run({ businessDay: "2026-08-05" })).byRate).toEqual([]);
+  });
+
+  it("does not reverse a voided F3-canje substitute, which was never counted", async () => {
+    const ticket = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    const f3 = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedSubstitution(suite.db, { substitutionSaleId: f3, substitutedSaleId: ticket });
+    await seedVoid(suite.db, { saleId: f3 }, new Date("2026-08-05T10:00:00Z").toISOString());
+    expect((await run({ businessDay: "2026-08-05" })).byRate).toEqual([]);
+  });
+
+  it("reverses a later void only at the voided sale's own node", async () => {
+    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const s = await seedSale(
+      suite.db,
+      { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
+      {
+        invoiceNumber: 1,
+        issuedAt: noonUtc,
+        total: "121.00",
+        lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      },
+    );
+    await seedVoid(suite.db, { saleId: s }, new Date("2026-08-05T10:00:00Z").toISOString());
+    expect((await run({ businessDay: "2026-08-05" })).byRate).toEqual([]);
+    expect((await run({ businessDay: "2026-08-05", nodeId: nodeB.nodeId })).byRate).toEqual([
+      { rate: "21.00", base: "-100.00", tax: "-21.00" },
+    ]);
   });
 
   it("excludes an F3-canje substitute but keeps the substituted ticket", async () => {

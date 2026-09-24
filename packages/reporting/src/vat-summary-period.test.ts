@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNodeAndSeries, seedSale, seedVenue } from "../test/fixtures.js";
+import { seedNodeAndSeries, seedSale, seedVenue, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatSummaryForPeriod } from "./vat-summary.js";
 import type { PeriodVatInput, VatSummary } from "./types.js";
@@ -52,6 +52,23 @@ describe("computeVatSummaryForPeriod", () => {
     const vat = await run(); // [08-04, 08-05]
     expect(vat.byRate).toEqual([{ rate: "21.00", base: "200.00", tax: "42.00" }]);
     expect(vat).toMatchObject({ baseTotal: "200.00", taxTotal: "42.00", grossTotal: "242.00" });
+  });
+
+  it("counts a later void as a reversal on its own day, cancelling the sale when both are in range", async () => {
+    const s = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noon("2026-08-04"),
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedVoid(suite.db, { saleId: s }, noon("2026-08-05"));
+    expect((await run()).byRate).toEqual([]); // [08-04, 08-05]
+    expect((await run({ toBusinessDay: "2026-08-04" })).byRate).toEqual([
+      { rate: "21.00", base: "100.00", tax: "21.00" },
+    ]);
+    expect((await run({ fromBusinessDay: "2026-08-05" })).byRate).toEqual([
+      { rate: "21.00", base: "-100.00", tax: "-21.00" },
+    ]);
   });
 
   it("excludes a sale on a day outside the range", async () => {

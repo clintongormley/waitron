@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   businessDayClause,
   businessDayOf,
-  businessDayRangeClause,
+  businessDayRangeWindow,
   currentBusinessDay,
   validateBusinessDay,
   validateCutover,
@@ -51,7 +51,7 @@ describe("validateBusinessDay", () => {
   );
 });
 
-describe("businessDayRangeClause", () => {
+describe("businessDayRangeWindow", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
   const TZ = "Europe/Madrid";
@@ -77,7 +77,7 @@ describe("businessDayRangeClause", () => {
       } as PeriodVatInput;
       // A RAW select reaches no column mapping, so a predicate comes back as the engine's 1/0.
       const { rows } = await suite.db.execute<{ eq: 0 | 1; range: 0 | 1 }>(
-        sql`select ${businessDayClause(column, dayInput)} as eq, ${businessDayRangeClause(column, rangeInput)} as range`,
+        sql`select ${businessDayClause(column, dayInput)} as eq, ${businessDayRangeWindow(rangeInput)(column)} as range`,
       );
       expect(rows[0]!.range).toBe(rows[0]!.eq);
       expect(rows[0]!.range).toBe(expected ? 1 : 0);

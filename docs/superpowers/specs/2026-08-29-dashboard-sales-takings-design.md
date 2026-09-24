@@ -67,6 +67,13 @@ computeTopSellers(tx, input: TopSellersInput): Promise<TopSeller[]>
   `businessDayRangeClause(sql\`s.issued_at\`, input)`, and `activeSalesClause` (excludes voids +
   F3-canje substitutes — same exclusion set as VAT, so top sellers and takings agree on which sales
   count).
+
+> **2026-09-24:** superseded for the daily and period VAT summaries and top sellers: a sale voided
+> on a LATER business day now counts on its issue day and is subtracted on the void's day; a
+> same-day void still cancels. The close counts keep such a sale on its issue day and count the
+> void under `voids` on its own day; they subtract nothing. The quarterly modelo 303 keeps the
+> exclusion. See `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`
+> ("Determinism").
 - `group by sl.descriptions`; `sum(quantity)::numeric(12,3)`, `sum(line_total)::numeric(12,2)`;
   `order by sum(quantity) desc, <stable tiebreak>` `limit ${limit}`.
 - Returns `TopSeller[]`: `{ descriptions: Record<string,string>; quantity: Decimal; total: Decimal }`

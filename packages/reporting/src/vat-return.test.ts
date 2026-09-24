@@ -113,6 +113,21 @@ describe("computeVatReturn", () => {
     expect((await run({ year: 2026, month: 8 })).byRate).toEqual([]);
   });
 
+  it("leaves a sale voided in a LATER month out of its own month and out of the void's", async () => {
+    // Held until the asesor answers docs/compliance/asesor-questions.md Q25; the day-scoped reports
+    // count such a void on its own day instead.
+    const s = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: augNoonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedVoid(suite.db, { saleId: s }, new Date("2026-09-10T10:00:00Z").toISOString());
+    expect((await run({ year: 2026, month: 8 })).byRate).toEqual([]);
+    expect((await run({ year: 2026, month: 9 })).byRate).toEqual([]);
+    expect((await runPeriod({ kind: "quarter", quarter: 3 })).byRate).toEqual([]);
+  });
+
   it("excludes an F3-canje substitute but keeps the substituted ticket", async () => {
     const ticket = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

@@ -172,6 +172,13 @@ not something this design asserts.
     `listOutstandingSales` already makes (`sale_substitutions.substitution_sale_id`).
 - **Included:** ordinary altas (F2) and rectificativas (net-negative contributions).
 
+> **2026-09-24:** superseded for the daily and period VAT summaries and top sellers: a sale voided
+> on a LATER business day now counts on its issue day and is subtracted on the void's day; a
+> same-day void still cancels. The close counts keep such a sale on its issue day and count the
+> void under `voids` on its own day; they subtract nothing. The quarterly modelo 303 keeps the
+> exclusion. See `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`
+> ("Determinism").
+
 The F3 exclusion is a fiscal judgement (it decides whether a canje adds to declared VAT or restates
 it). It matches the existing read-model, and is **confirmed on primary source** — AEAT's developer FAQ
 excludes F3 from *modelo 303* while counting rectificativas R1–R5 (§10).

@@ -2870,7 +2870,11 @@ image constraints under *Detail → Box image*.
     re-deriving a closed day and comparing it to its snapshot is a valid audit does not hold as
     written (a dated pointer there says so). **Owner decision 2026-09-24: a void counts on the day it is
     made, not the day of the sale**, so a later void no longer changes a closed day's re-derived
-    figures — queued as lane B's B10. The quarterly *modelo 303* keeps today's behaviour until the
+    figures — DONE in #605: the daily close's VAT, the period VAT
+    summary and top sellers count a sale on its issue day and subtract it on the void's business
+    day; the close counts keep the sale in `sales` on its issue day and count the void under
+    `voids` on its own day; the cash-up is unchanged (a void writes no tender). The quarterly
+    *modelo 303* keeps its old behaviour, pinned by a test in `vat-return.test.ts`, until the
     asesor answers `docs/compliance/asesor-questions.md` Q25 (which VAT period a later annulment
     lands in). No till screen or server route calls `recordVoid` yet. `stableStringify`
     (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined` hashes
@@ -2879,9 +2883,9 @@ image constraints under *Detail → Box image*.
     change: the SQL comment inside `src/cash-up.ts`'s `sql` string (~36) still explains the
     ordering by a `::text` cast on "a PostgreSQL ENUM"; test titles still say "jsonb"
     (`verify-daily-close-chain.test.ts:70`), "tenant" (`top-sellers.test.ts:501`,
-    `overdue-orders.test.ts:252`, `vat-summary.test.ts:162`, `vat-summary-period.test.ts:111`),
+    `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`, `vat-summary-period.test.ts:128`),
     "design §3" (`overdue-orders.test.ts:194`), "spec §12" (`top-sellers.test.ts:307`) and
-    "DrizzleQueryError-style" (`record-daily-close.test.ts:326`, not checked). `toDr303Record`
+    "DrizzleQueryError-style" (`record-daily-close.test.ts:342`, not checked). `toDr303Record`
     (`src/dr303.ts`) does not cross-check a monthly total against a quarterly period code such as
     "4T"; a test pins that and the one route that builds the file takes both from the same code,
     so it looks deliberate — worth the owner's eye because it is a tax file. The top-sellers
@@ -3804,6 +3808,17 @@ the same shape. **What can and cannot go back to SQL:** the relevance ranking ge
 `labels` is a JSON text column and this SQLite has `json_each`, and a page with no search term needs
 no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
 path is a separate decision.
+
+**`sale_voids` has no index on `voided_at` — OPEN (found 2026-09-24 by #605).**
+Besides its primary key's, its only index is the unique one on `sale_id`
+(`packages/db/src/schema/sale-voids.ts`). Four reads select voids by `voided_at` range: the void
+count in `packages/reporting/src/counts.ts` and, since #605, the reversal half of the daily
+VAT summary, the period VAT summary and top sellers.
+An `EXPLAIN QUERY PLAN` of the count's shape on node v26.7.0, over empty stand-in `sales` and
+`sale_voids` tables carrying only these keys, printed `SCAN s` then a `sale_id` lookup per sale;
+with an index on `voided_at` added it printed a range search on that index. The real schema and
+real row counts were not measured. Adding the index needs a migration, which #605 was
+specified without. **Next action:** add the index and re-read the plan on the real schema.
 
 **Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
 2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body

@@ -2,9 +2,10 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { rawCentsToDecimal, rawThousandthsToDecimal } from "@waitron/shared";
 import {
-  activeSalesClause,
-  businessDayRangeClause,
+  businessDayRangeWindow,
+  issuedSalesClause,
   nodeScopeClause,
+  reversedSalesClause,
   validateBusinessDayRange,
   validateCutover,
   validateTimeZone,
@@ -18,8 +19,8 @@ import type { TopSeller, TopSellersInput } from "./types.js";
  * including lines sold as the product itself, with no variant — and a nested row is one non-blank
  * `variant_name` within it. `limit` counts parent rows. The customer-facing text is never read.
  *
- * Same predicates as the VAT roll-up: voided sales and F3-canje substitutes are dropped, and
- * corrections are NOT excluded — their negative lines net quantity and total down.
+ * Same predicates as the VAT roll-up (`issuedSalesClause`, `reversedSalesClause`); corrections are
+ * NOT excluded — their negative lines net quantity and total down.
  *
  * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */
@@ -36,6 +37,7 @@ export async function computeTopSellers(
     );
   }
   const nodeClause = nodeScopeClause(input.nodeId);
+  const window = businessDayRangeWindow(input);
   // Every sum is taken by the engine over integer counts (cents, thousandths) and handed over as
   // TEXT, so a parent's figures are exact and never re-added here. One row per (parent, variant
   // group); the group with no variant name carries the parent's own sales and is not a nested row.
@@ -51,9 +53,15 @@ export async function computeTopSellers(
       select sl.name, sl.variant_name, sl.quantity, sl.line_total
       from sale_lines sl
       join sales s on s.id = sl.sale_id
-      where ${businessDayRangeClause(sql`s.issued_at`, input)}
+      where ${issuedSalesClause(window)}
         ${nodeClause}
-        and ${activeSalesClause()}
+      union all
+      select sl.name, sl.variant_name, -sl.quantity, -sl.line_total
+      from sale_voids sv
+      join sales s on s.id = sv.sale_id
+      join sale_lines sl on sl.sale_id = s.id
+      where ${reversedSalesClause(window)}
+        ${nodeClause}
     ),
     ranked as (
       select name, sum(quantity) as quantity, sum(line_total) as total

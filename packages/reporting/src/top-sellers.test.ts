@@ -426,7 +426,7 @@ describe("computeTopSellers", () => {
       ]);
     });
 
-    it("leaves a variant line of a voided sale out of both its row and its parent's", async () => {
+    it("leaves a variant line of a sale voided the same day out of both its row and its parent's", async () => {
       const voided = await seedSale(suite.db, venue, {
         invoiceNumber: 2,
         issuedAt: noonUtc,
@@ -575,7 +575,7 @@ describe("computeTopSellers", () => {
     expect(rows).toEqual([{ name: coffeeName, quantity: "13.000", total: "130.00", variants: [] }]);
   });
 
-  it("excludes a voided sale", async () => {
+  it("excludes a sale voided on its own business day", async () => {
     const voided = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
@@ -605,9 +605,62 @@ describe("computeTopSellers", () => {
         },
       ],
     });
-    // The voided Coffee is gone; only the live Toast remains.
+    // The Coffee voided the same day is gone; only the live Toast remains.
     const rows = await run();
     expect(rows).toEqual([{ name: toastName, quantity: "1.000", total: "10.00", variants: [] }]);
+  });
+
+  it("counts a sale on its issue day and a later void as negative lines on the void's day", async () => {
+    const voided = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "50.00",
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "50.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "5.000",
+        },
+      ],
+    });
+    await seedVoid(suite.db, { saleId: voided }, new Date("2026-08-05T10:00:00Z").toISOString());
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "5.000", total: "50.00", variants: [] },
+    ]);
+    expect(await run({ fromBusinessDay: "2026-08-05", toBusinessDay: "2026-08-05" })).toEqual([
+      { name: coffeeName, quantity: "-5.000", total: "-50.00", variants: [] },
+    ]);
+    expect(await run({ toBusinessDay: "2026-08-05" })).toEqual([]);
+  });
+
+  it("reverses a later void only at the voided sale's own node", async () => {
+    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const voided = await seedSale(
+      suite.db,
+      { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
+      {
+        invoiceNumber: 1,
+        issuedAt: noonUtc,
+        total: "50.00",
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: "50.00",
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "5.000",
+          },
+        ],
+      },
+    );
+    await seedVoid(suite.db, { saleId: voided }, new Date("2026-08-05T10:00:00Z").toISOString());
+    const voidDay = { fromBusinessDay: "2026-08-05", toBusinessDay: "2026-08-05" };
+    expect(await run(voidDay)).toEqual([]);
+    expect(await run({ ...voidDay, nodeId: nodeB.nodeId })).toEqual([
+      { name: coffeeName, quantity: "-5.000", total: "-50.00", variants: [] },
+    ]);
   });
 
   it("excludes an F3-canje substitute but keeps the substituted ticket", async () => {

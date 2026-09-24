@@ -681,7 +681,9 @@ async function main(): Promise<void> {
       `modelo-303-demo: a month of trade over ${venue.nodes.length} nodes, two VAT rates\n`,
     );
 
-    console.log("computeVatSummaryForPeriod — VAT roll-up over business days (issuance-anchored)");
+    console.log(
+      "computeVatSummaryForPeriod — VAT roll-up over business days (sales on their issue day, voids on their own day)",
+    );
     printPeriodSummary(
       `Nodo 1 only, ${period.fromBusinessDay} … ${period.toBusinessDay}`,
       periodNode1,
