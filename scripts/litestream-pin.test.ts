@@ -1,14 +1,15 @@
-// Reads TEXT from three files, which makes it weaker than its name: it proves the three copies of
-// the pin agree, not that any of them downloads or runs. What runs the binary is the image build's
-// own `litestream version` check (deploy/Dockerfile, the `litestream` stage) and the setup script's.
+// Reads the Dockerfile and the package's pin as TEXT, which makes it weaker than its name: it proves
+// the three copies of the pin agree, not that any of them downloads or runs. What runs the binary is
+// the image build's own `litestream version` check (deploy/Dockerfile, the `litestream` stage), the
+// image-smoke step that runs it in the shipped image, and the setup script's.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SHA256, VERSION } from "./setup-litestream.mjs";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const DOCKERFILE = read("deploy/Dockerfile");
-const SETUP = read("scripts/setup-litestream.ts");
 const PACKAGE = read("packages/stream/src/litestream.ts");
 
 /** The one capture of the one match of `pattern`; throws on none or several. */
@@ -22,7 +23,7 @@ describe("the pinned Litestream", () => {
   const version = one(PACKAGE, /export const LITESTREAM_VERSION = "([0-9.]+)";/g, "package pin");
 
   it("names one version in the package, the setup script and the box image", () => {
-    expect(one(SETUP, /const VERSION = "([0-9.]+)";/g, "setup-script pin")).toBe(version);
+    expect(VERSION).toBe(version);
     expect(one(DOCKERFILE, /version=([0-9.]+);/g, "Dockerfile pin")).toBe(version);
   });
 
@@ -40,12 +41,7 @@ describe("the pinned Litestream", () => {
         ),
         `${arch} → ${platform} sum in the Dockerfile`,
       );
-      const inScript = one(
-        SETUP,
-        new RegExp(`"${platform}": "([0-9a-f]{64})"`, "g"),
-        `${platform} sum in the setup script`,
-      );
-      expect(inImage).toBe(inScript);
+      expect(inImage).toBe(SHA256[platform]);
     }
   });
 });

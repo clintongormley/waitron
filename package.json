@@ -24,7 +24,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "reap": "node scripts/reap-testcontainers.mjs",
-    "setup:litestream": "node scripts/setup-litestream.ts"
+    "setup:litestream": "node scripts/setup-litestream.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -159,7 +159,7 @@ function isVitestProcess(command) {
 
 /**
  * Is this `ps` command column one of the test binaries a checkout keeps in its `.bin` (the pinned
- * Litestream from `scripts/setup-litestream.ts`, and the loop test's S3 server)? The row's FIRST
+ * Litestream from `scripts/setup-litestream.mjs`, and the loop test's S3 server)? The row's FIRST
  * token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
  * `<dir>/bench/sqlite-failover/`, where `<dir>` is a directory whose name starts `waitron` — the main
  * checkout and every `waitron-<branch>` worktree. Any other `.bin` (a developer's own `~/.bin`, a

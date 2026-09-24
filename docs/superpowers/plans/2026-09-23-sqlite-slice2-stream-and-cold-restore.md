@@ -153,7 +153,8 @@ single task is most likely to get wrong.
 - N4. **The lock's error is `provisioning.database_in_use` with `{ database }`** (Task 3a). Replace
   `store.venue_in_use` everywhere (Task 10 has two).
 - N5. **The Litestream binary:** setup script `scripts/setup-litestream.ts` (TypeScript — Task 6's
-  reason: the root coverage gate measures every `scripts/**/*.mjs`); installs to `<repo>/.bin/litestream`
+  reason: the root coverage gate measures every `scripts/**/*.mjs`; corrected 2026-09-24: it is now
+  `scripts/setup-litestream.mjs`, measured by that gate, see contract change 5); installs to `<repo>/.bin/litestream`
   (gitignored `/.bin/`); the server finds it through `WAITRON_LITESTREAM_BIN`. Task 6 exports, from
   `@waitron/stream`, `LITESTREAM_VERSION` and `resolveLitestreamBin(env): string`, which returns the
   default path — never throws — when the variable is unset. Task 10 uses `.ts`, not `.mjs`.
@@ -12648,6 +12649,9 @@ Expected: FAIL — `ENOENT: no such file or directory, open '…/scripts/setup-l
 
 - [ ] **Step 28: Add the setup script, the image stage, and the ignore line**
 
+Corrected 2026-09-24: the script below is now `scripts/setup-litestream.mjs`, with a root suite;
+see contract change 5.
+
 Create `scripts/setup-litestream.ts` (run by Node directly, which strips the types; contract change 5
 says why it is not `.mjs`):
 
@@ -21571,7 +21575,7 @@ given an IP address, must be pointed at the new address."
     called as `argv: ["restore", "--from-bucket", <kit-file>, "--confirm-old-box-gone", "--confirm-venue", "74000001K"]` (the fixture tenant's tax id, Reconciliation N26), 0 on success
     (Reconciliation N11)
   - From `@waitron/db` and `apps/server/src/sealed-state.ts` (Task 2b): `nodeSealedState`, `unsealNodeState`
-  - Setup script (Task 6): `scripts/setup-litestream.ts`, installing `<repo>/.bin/litestream`
+  - Setup script (Task 6): `scripts/setup-litestream.mjs`, installing `<repo>/.bin/litestream`
     (Reconciliation N5; `.bin/` is already gitignored by Task 6)
   - Existing names:
     - `startServer` and `StartedServer` (`apps/server/src/boot.ts`)
@@ -22121,7 +22125,7 @@ Create `apps/server/src/stream-loop.e2e.test.ts`:
 //   - a restore of B's generation holds exactly what B's database holds.
 //
 // The server is versitygw, run as a plain child process (`./testing/s3-test-server.ts`). Install both
-// binaries with `node scripts/setup-litestream.ts && node scripts/setup-s3-test-server.mjs`. Without
+// binaries with `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. Without
 // them this case is reported SKIPPED, with the reason in its note. With CI=true (GitHub sets it on
 // every job) or WAITRON_REQUIRE_STREAM_BINARIES=1, a missing binary FAILS the case instead.
 import { execFile } from "node:child_process";
@@ -22179,7 +22183,7 @@ import {
 } from "./testing/s3-test-server.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const INSTALL = "node scripts/setup-litestream.ts && node scripts/setup-s3-test-server.mjs";
+const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED =
   process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
 
@@ -22729,13 +22733,13 @@ The message names versitygw too if it is also missing.
 
 Run: `env -u CI pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts`
 Expected: the file reports `1 skipped`, and the console shows `stream loop test SKIPPED: … Install
-with: node scripts/setup-litestream.ts && node scripts/setup-s3-test-server.mjs`. Whether Vitest's
+with: node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. Whether Vitest's
 default reporter also prints `ctx.skip`'s note has not been established, which is why the
 `console.warn` exists.
 
 - [ ] **Step 7: Install both binaries, then run the loop test and watch it pass**
 
-Run: `node scripts/setup-litestream.ts && node scripts/setup-s3-test-server.mjs`
+Run: `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`
 Expected: two `installed at …/.bin/…` lines.
 
 Run: `pnpm vitest run scripts/setup-s3-test-server.test.mjs`
@@ -22788,7 +22792,7 @@ after `it("gives every browser package its own shard and installs Chromium there
     // The loop test (apps/server/src/stream-loop.e2e.test.ts) FAILS in CI when a binary is missing,
     // so this is the cheaper place to learn the install step went. It reads ci.yml as text.
     const body = job("test-server").body.join("\n");
-    const litestream = body.indexOf("node scripts/setup-litestream.ts");
+    const litestream = body.indexOf("node scripts/setup-litestream.mjs");
     const versitygw = body.indexOf("node scripts/setup-s3-test-server.mjs");
     const run = body.indexOf('pnpm --filter "@waitron/server" test:shard');
     expect(run).toBeGreaterThan(-1);
@@ -22817,7 +22821,7 @@ In `.github/workflows/ci.yml`'s `test-server` job, insert between `- run: pnpm i
       - name: Install the stream loop test's pinned binaries
         run: |
           set -euo pipefail
-          node scripts/setup-litestream.ts
+          node scripts/setup-litestream.mjs
           node scripts/setup-s3-test-server.mjs
 ```
 
@@ -22904,7 +22908,7 @@ leave it alone. Every added line is a rule plus its guard, and never narrative. 
    > - **The stream loop test (`apps/server/src/stream-loop.e2e.test.ts`) needs two pinned binaries:
    >   without them it is SKIPPED locally and FAILS in CI.** It runs the real Litestream against
    >   versitygw started as a plain child process. Install both with
-   >   `node scripts/setup-litestream.ts && node scripts/setup-s3-test-server.mjs`; with `CI=true`
+   >   `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`; with `CI=true`
    >   (set on every GitHub Actions job) or `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the
    >   case. That CI installs them is guarded by `scripts/ci-workflow.test.mjs`, which reads `ci.yml`
    >   as TEXT. Why versitygw: [testing-guide.md](docs/developers/testing-guide.md).
@@ -23092,7 +23096,7 @@ historical record, so add dated pointers and rewrite nothing:
   > container): stream, rebuild from the bucket, sell under a fresh chain, stream into the rebuilt
   > box's own generation, and compare a restore of that generation with the box's database.
   >
-  > **Binaries.** `node scripts/setup-litestream.ts && node scripts/setup-s3-test-server.mjs`
+  > **Binaries.** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`
   > installs both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and
   > `WAITRON_VERSITYGW_BIN` point elsewhere. A missing or wrong-version binary SKIPS the case locally,
   > with the reason in a console warning, and FAILS it when `CI=true` or
@@ -23122,7 +23126,7 @@ historical record, so add dated pointers and rewrite nothing:
 **`docs/developers/ci-and-gates.md`**, a new subsection at the end of *CI job layout and scheduling*:
 > ### `test-server`'s shards download two binaries for the stream loop test
 >
-> Each of the three `test-server` shards runs `node scripts/setup-litestream.ts` and
+> Each of the three `test-server` shards runs `node scripts/setup-litestream.mjs` and
 > `node scripts/setup-s3-test-server.mjs` before its tests, because file sharding decides which shard
 > gets `apps/server/src/stream-loop.e2e.test.ts`. That is 13,540,484 bytes of Litestream and
 > 27,542,985 bytes of versitygw per shard, from GitHub's release downloads, each checked against a
@@ -23885,11 +23889,14 @@ external fact below was read (or run, where it says so) while drafting.
    and `bucketProblem: { reason: string; since: string } | null`, which the alerts need for `since`.
    `lagMs` and `lastConfirmedUploadAt` arrive in **Task 7**, which is where they are computed. Task 7
    also exports `StreamView = StreamStatus | { state: "off" }` from `@waitron/stream`.
-5. **The dev/CI setup script is `scripts/setup-litestream.ts`, not `.mjs`.** The root Vitest project
+5. **The dev/CI setup script is `scripts/setup-litestream.mjs`, not `.mjs`.** The root Vitest project
    measures coverage over every `scripts/**/*.mjs` at 98/98/98/95 (`vitest.config.ts:116-117`), and a
    download script has nothing a unit test can assert without the network. A `.ts` under `scripts/`
    is measured by no table (the same file's comment on `scripts/dev-server-proxy.ts`), and Node 26
    runs it directly, as the bench rig runs `node src/setup-litestream.ts`.
+   — corrected 2026-09-24: review found the `.ts` script untested and unmeasured, so it became
+   `scripts/setup-litestream.mjs` with a root suite, `scripts/setup-litestream.test.mjs`, that injects
+   the download and the platform and so needs no network. Later tasks name the `.mjs`.
 6. **The credentials purpose `backup.stream` is defined in Task 6, not Task 8**, because Task 6's boot
    wiring has to read it; Task 8 writes it. It carries a **`venueId`** field the contract did not list
    (the kit and every key need one, and nothing else in the tree names a venue id — `grep -rn venueId

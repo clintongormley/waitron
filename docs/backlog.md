@@ -4752,9 +4752,9 @@ note §1b: the restore after the restart held every sale, and Litestream uploade
 database at level 0). Left for later tasks: `/health` must treat the supervisor's
 `supervisor_failed` stop as a problem, not as streaming switched off (Task 7); the settings route
 must reload the stream only after its save commits, and word the refusal of a bucket name holding
-capitals or `_` (Task 8a). `scripts/setup-litestream.ts` is outside every coverage table and every
-typecheck, like the other root `.ts` scripts; the full box image was not built locally, only its
-`litestream` stage.
+capitals or `_` (Task 8a). `scripts/setup-litestream.mjs` is measured by the root project's coverage
+table through `scripts/setup-litestream.test.mjs`, which injects the download and the platform; the
+full box image was not built locally, only its `litestream` stage.
 
 **The SQLite slice-1 preparation tasks are all landed.** Column vocabulary (P1 — #390, #393, #394,
 #396–#404, #408, #413, #414, #416); the `useVenueDb` test-helper conversion (P2 — every package

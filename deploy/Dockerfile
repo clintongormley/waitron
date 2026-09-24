@@ -87,7 +87,7 @@ CMD ["node", "/app/print-agent.js"]
 # its layer depends on nothing but this RUN and survives every source change
 # the build stage's `COPY . .` sees. The sums are the release's own
 # checksums.txt for the tag; scripts/litestream-pin.test.ts holds them and the
-# version equal to scripts/setup-litestream.ts and packages/stream. BuildKit
+# version equal to scripts/setup-litestream.mjs and packages/stream. BuildKit
 # sets TARGETARCH; the classic builder leaves it empty, which `*)` refuses.
 # ---------------------------------------------------------------------------
 FROM node:26 AS litestream
