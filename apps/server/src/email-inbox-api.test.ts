@@ -71,8 +71,8 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
     return { manager: await start("manager"), staff: await start("staff") };
   });
   return {
-    manager: `${MANAGEMENT_COOKIE}=${sessions.manager.id}`,
-    staff: `${MANAGEMENT_COOKIE}=${sessions.staff.id}`,
+    manager: `${MANAGEMENT_COOKIE}=${sessions.manager.token}`,
+    staff: `${MANAGEMENT_COOKIE}=${sessions.staff.token}`,
   };
 }
 

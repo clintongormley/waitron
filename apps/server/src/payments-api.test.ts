@@ -124,7 +124,7 @@ async function seedVenue(): Promise<Venue> {
       personId: mgr!.id,
     });
     const staffSession = await startManagementSession(tx, { personId: stf!.id });
-    return { managerSid: managerSession.id, staffSid: staffSession.id };
+    return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
   return {
     locationId,

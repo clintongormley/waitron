@@ -469,7 +469,7 @@ describe("passkey authentication", () => {
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     // The verifier seam: a passkey resolves to its owner's management session, like loginManager.
     expect(session.personId).toBe(personId);
-    expect(session.id).toBeTruthy();
+    expect(session.token).toBeTruthy();
 
     // The stored counter advanced to the verifier's newCounter (replay defence).
     const [cred] = await run((tx) =>

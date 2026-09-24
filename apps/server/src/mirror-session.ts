@@ -1,7 +1,12 @@
 import type { MiddlewareHandler } from "hono";
 import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { nowIso, withTransaction, type Database, type DeploymentMode } from "@waitron/db";
-import { foldForUniqueness, managementSessions, persons } from "@waitron/identity";
+import {
+  foldForUniqueness,
+  hashSessionToken,
+  managementSessions,
+  persons,
+} from "@waitron/identity";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -56,9 +61,15 @@ export async function ensureMirrorViewer(db: Database): Promise<void> {
         status: "active",
       })
       .onConflictDoNothing({ target: persons.id });
+    // The ambient session's cookie is its own fixed id (`MIRROR_VIEWER_SESSION_ID`), so the stored
+    // hash is that id's. The mirror is unauthenticated by design (§5) and the value is public here.
     await tx
       .insert(managementSessions)
-      .values({ id: MIRROR_VIEWER_SESSION_ID, personId: MIRROR_VIEWER_PERSON_ID })
+      .values({
+        id: MIRROR_VIEWER_SESSION_ID,
+        personId: MIRROR_VIEWER_PERSON_ID,
+        tokenHash: hashSessionToken(MIRROR_VIEWER_SESSION_ID),
+      })
       .onConflictDoUpdate({
         target: managementSessions.id,
         // The revive: the clock is read in JavaScript and bound, because `now()` is a PostgreSQL

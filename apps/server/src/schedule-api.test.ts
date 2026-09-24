@@ -78,7 +78,7 @@ async function cookieFor(personId: string, pin: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return loginWithPin(tx, { tillId, personId, pin });
   });
-  return `${SESSION_COOKIE}=${session.id}`;
+  return `${SESSION_COOKIE}=${session.token}`;
 }
 
 async function send(

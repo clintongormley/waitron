@@ -17,6 +17,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
+  hashSessionToken,
   managementSessions,
   persons,
   startManagementSession,
@@ -45,7 +46,7 @@ async function fixture() {
   const app = new Hono();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers", "print_jobs"] }, () => {});
   const path = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: "p1" }]))}`;
-  const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
+  const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   return { app, bus, path, cookie, session };
 }
 
@@ -83,22 +84,22 @@ describe("management live events", () => {
     // `now()` that two statements had to share.
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await suite.db.execute(
-      sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where id = ${session.id}`,
+      sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where token_hash = ${hashSessionToken(session.token)}`,
     );
     const before = await withTransaction(suite.db, (tx) =>
-      resolveManagementSession(tx, session.id, { touch: false }),
+      resolveManagementSession(tx, session.token, { touch: false }),
     );
     const response = await app.request(path, { headers: { cookie } });
     const reader = response.body!.getReader();
     try {
       await reader.read();
       const after = await withTransaction(suite.db, (tx) =>
-        resolveManagementSession(tx, session.id, { touch: false }),
+        resolveManagementSession(tx, session.token, { touch: false }),
       );
       expect(after.expiresAt).toBe(before.expiresAt);
       const anHourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
       await suite.db.execute(
-        sql`update management_sessions set last_seen_at = ${anHourAgo} where id = ${session.id}`,
+        sql`update management_sessions set last_seen_at = ${anHourAgo} where token_hash = ${hashSessionToken(session.token)}`,
       );
       bus.publish({ resources: [{ type: "printers", id: "p1" }] });
       expect(new TextDecoder().decode((await reader.read()).value)).toContain(
@@ -179,7 +180,7 @@ it("revalidates idle streams on the heartbeat without extending their session", 
     // still the real clock and this instant really is an hour in the session's past.
     const anHourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
     await suite.db.execute(
-      sql`update management_sessions set last_seen_at = ${anHourAgo} where id = ${session.id}`,
+      sql`update management_sessions set last_seen_at = ${anHourAgo} where token_hash = ${hashSessionToken(session.token)}`,
     );
     await vi.advanceTimersByTimeAsync(15_000);
     expect(new TextDecoder().decode((await reader.read()).value)).toContain(
@@ -201,7 +202,7 @@ it("closes the stream with session-invalid when the person is suspended while it
     const [row] = await suite.db
       .select({ personId: managementSessions.personId })
       .from(managementSessions)
-      .where(eq(managementSessions.id, session.id));
+      .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)));
     await suite.db
       .update(persons)
       .set({ status: "suspended" })

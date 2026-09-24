@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { endSession, loginWithPin } from "./login.js";
 import { codeOf, seedPerson, seedTill } from "../test/fixtures.js";
+import { hashSessionToken } from "./session-token.js";
 
 // loginWithPin/endSession are LOGIC — the not-found / suspended / bad-PIN gates and the open→closed
 // transition, which is what the cases below assert.
@@ -35,6 +36,7 @@ describe("loginWithPin", () => {
     // is the person's preferred UI language, null for a seedPerson with no preference set.
     expect(session).toEqual({
       id: expect.any(String),
+      token: expect.any(String),
       personId,
       tillId,
       role: "staff",
@@ -118,7 +120,7 @@ describe("endSession", () => {
     const personId = await seedPerson(suite.db);
     const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
 
-    const first = await run((tx) => endSession(tx, session.id));
+    const first = await run((tx) => endSession(tx, session.token));
     expect(first).toBe(true);
 
     // The COLUMN, not `ended_at is not null` — a raw select of a boolean expression answers 0 or 1
@@ -131,7 +133,22 @@ describe("endSession", () => {
 
     // The row is already closed, so the WHERE ... AND ended_at IS NULL matches nothing: no second
     // close, and the caller learns it changed nothing.
-    const second = await run((tx) => endSession(tx, session.id));
+    const second = await run((tx) => endSession(tx, session.token));
     expect(second).toBe(false);
+  });
+});
+
+describe("the stored shift session", () => {
+  it("stores the token's hash, and ending by the row id ends nothing", async () => {
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db);
+    const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
+    const rows = await suite.db.execute<{ token_hash: string }>(
+      sql`select token_hash from sessions where id = ${session.id}`,
+    );
+    expect(rows.rows).toEqual([{ token_hash: hashSessionToken(session.token) }]);
+    expect(session.token).not.toBe(session.id);
+    expect(await run((tx) => endSession(tx, session.id))).toBe(false);
+    expect(await run((tx) => endSession(tx, session.token))).toBe(true);
   });
 });

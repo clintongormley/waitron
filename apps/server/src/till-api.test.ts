@@ -18,7 +18,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { departments, preparationRoutes } from "@waitron/venue-service";
-import { createPinThrottle, endSession, hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  createPinThrottle,
+  endSession,
+  hashPin,
+  hashSessionToken,
+  loginWithPin,
+  persons,
+} from "@waitron/identity";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
@@ -351,8 +358,8 @@ function deps(db: Database): TillApiDeps {
 }
 
 /** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- * route runs — and returns its id, so a test can hand `requireSession` or the logout route a cookie
- * that names a genuine row. */
+ * route runs — and returns its cookie token, so a test can hand `requireSession` or the logout
+ * route a cookie that names a genuine row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -361,13 +368,13 @@ async function openSession(db: Database): Promise<string> {
       pin: "5555",
     });
   });
-  return session.id;
+  return session.token;
 }
 
 /** Ends a session out of band, so a cookie can be made to name a CLOSED row. */
-async function closeSession(db: Database, id: string): Promise<void> {
+async function closeSession(db: Database, token: string): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await endSession(tx, id);
+    await endSession(tx, token);
   });
 }
 
@@ -461,9 +468,9 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // (`packages/db/src/schema/columns.ts`) belongs to a declared COLUMN, not to a predicate written
     // in raw SQL. An unstamped row would come back 0, so the case still fails if DELETE wrote
     // nothing.
-    const sessionId = /waitron_till_session=([^;]+)/.exec(cookie)![1];
+    const token = /waitron_till_session=([^;]+)/.exec(cookie)![1]!;
     const rows = await suite.db.execute<{ ended: number }>(
-      sql`select ended_at is not null as ended from sessions where id = ${sessionId}`,
+      sql`select ended_at is not null as ended from sessions where token_hash = ${hashSessionToken(token)}`,
     );
     expect(rows.rows).toEqual([{ ended: 1 }]);
   });
@@ -649,16 +656,16 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       body: JSON.stringify({ personId: ana.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-    const sessionId = /waitron_till_session=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]!;
+    const token = /waitron_till_session=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]!;
     const sess = await suite.db.execute<{ till_id: string }>(
-      sql`select till_id from sessions where id = ${sessionId}`,
+      sql`select till_id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
     // The session records the DEVICE's register (B), never the env `cfg.tillId` (A). A mutant that kept
     // `tillId: deps.cfg.tillId` fails here.
     expect(sess.rows[0]!.till_id).toBe(deviceTillId);
     expect(sess.rows[0]!.till_id).not.toBe(cfg.tillId);
 
-    await suite.db.execute(sql`delete from sessions where id = ${sessionId}`);
+    await suite.db.execute(sql`delete from sessions where token_hash = ${hashSessionToken(token)}`);
   });
 
   it("throttles a (device, person) after the free failures: a further attempt is 429 pin.throttled and loginWithPin never runs", async () => {
@@ -875,12 +882,36 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   }
 
   it("ACCEPTS an open session and returns the operator's personId + sessionId", async () => {
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
+    );
     const res = await guardApp(suite.db).request("/whoami", {
-      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: ana.id, sessionId: id });
+    expect(await res.json()).toEqual({ personId: ana.id, sessionId: rows[0]!.id });
+  });
+
+  // Only the row id is presented here. The stored hash is 64 hex characters, which the guard's
+  // UUID shape check refuses before any lookup, so a case presenting it would pass whatever the
+  // lookup did, and it is left out.
+  it("REJECTS (401 session.required) the row's own id — what a copy of the database holds", async () => {
+    const token = await openSession(suite.db);
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
+    );
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${rows[0]!.id}` },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+    // The other direction: the cookie's own token is accepted, and the guard hands back the row id.
+    const ok = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ personId: ana.id, sessionId: rows[0]!.id });
   });
 
   it("REJECTS (401 session.required) when no cookie is present", async () => {
@@ -911,8 +942,8 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("REJECTS (401 session.required) an ENDED session — logging out invalidates the cookie", async () => {
-    // Open a real session, then end it. Its id still names a row, but `ended_at IS NOT NULL`, so the
-    // `IS NULL` filter excludes it: a logged-out cookie is as good as no cookie.
+    // Open a real session, then end it. Its token still names a row, but `ended_at IS NOT NULL`, so
+    // the `IS NULL` filter excludes it: a logged-out cookie is as good as no cookie.
     const id = await openSession(suite.db);
     await closeSession(suite.db, id);
 
@@ -937,7 +968,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     const session = await withTransaction(suite.db, async (tx) => {
       return loginWithPin(tx, { tillId: cfg.tillId, personId, pin });
     });
-    return { personId, sessionId: session.id };
+    return { personId, sessionId: session.token };
   }
   async function cleanup(personId: string): Promise<void> {
     await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
@@ -2949,7 +2980,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
         pin: "9999",
       });
     });
-    managerCookie = `${SESSION_COOKIE}=${managerSession.id}`;
+    managerCookie = `${SESSION_COOKIE}=${managerSession.token}`;
     // Ana (role `staff`) is the STAFF operator — no `venue.configure`. Reusing the setup fixture keeps
     // the roster's `[abel, ana]` invariant untouched (no extra staff person seeded).
     staffCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;

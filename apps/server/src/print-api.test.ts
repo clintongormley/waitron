@@ -13,7 +13,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  hashPin,
+  hashSessionToken,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { NetworkProbe } from "@waitron/print-agent";
 import {
@@ -119,7 +125,7 @@ const suite = useVenueDb({
       const staffSession = await startManagementSession(tx, {
         personId: stf!.id,
       });
-      return { managerSid: managerSession.id, staffSid: staffSession.id };
+      return { managerSid: managerSession.token, staffSid: staffSession.token };
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
     staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
@@ -1347,7 +1353,7 @@ describe("mountPrintApi — management: test-print", () => {
         suite.db.execute(sql`
       update persons set locale = ${locale}
       where id = (
-        select person_id from management_sessions where id = ${sessionId}
+        select person_id from management_sessions where token_hash = ${hashSessionToken(sessionId)}
       )`);
       await setLocale(personLocale);
       try {

@@ -167,13 +167,13 @@ export function mountMirrorBundleApi(
           totp,
         });
         await authorizeManager(tx, {
-          managementSessionId: session.id,
+          managementSessionId: session.token,
           permission: "mirror.create",
         });
         // The session existed only to authorize this one credential — no cookie is set and the mirror
         // never reuses it, so end it in the same transaction rather than leave a permanently-dead
         // `management_sessions` row behind on every mint.
-        await endManagementSession(tx, session.id);
+        await endManagementSession(tx, session.token);
       });
 
       // A mirror with no relay to dial is unusable, so refuse BEFORE assembling the bundle (design §4).

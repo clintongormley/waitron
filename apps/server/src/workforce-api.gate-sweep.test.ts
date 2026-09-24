@@ -110,7 +110,7 @@ async function setupVenue(): Promise<Venue> {
     const sSes = await startManagementSession(tx, {
       personId: stf!.id,
     });
-    return { locationId: loc.rows[0]!.id, personId: mgr!.id, mSid: mSes.id, sSid: sSes.id };
+    return { locationId: loc.rows[0]!.id, personId: mgr!.id, mSid: mSes.token, sSid: sSes.token };
   });
   return {
     locationId: seeded.locationId,

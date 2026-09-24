@@ -161,7 +161,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
     const session = await run((tx) => startManagementSession(tx, { personId }));
     await run((tx) =>
       saveOwnProfile(tx, {
-        managementSessionId: session.id,
+        managementSessionId: session.token,
         displayName: `Owner ${randomUUID()}`,
         email: requested,
         locale: "en-GB",

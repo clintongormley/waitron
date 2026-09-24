@@ -1,5 +1,6 @@
-import { index } from "drizzle-orm/sqlite-core";
-import { id, newId, nowIso, table, tsString } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * A browser "management session": a person signed into the management dashboard from a browser,
@@ -7,14 +8,17 @@ import { id, newId, nowIso, table, tsString } from "@waitron/db";
  * with no append-only trigger: `last_seen_at` is refreshed on activity and `ended_at` is stamped on
  * sign-out. A session is ENDED by stamping `ended_at` rather than deleted, but that is now the
  * callers' rule alone — the grant that withheld DELETE went with PostgreSQL and nothing replaced it.
+ * The dashboard cookie carries a random token; this row stores only its hash
+ * (`../session-token.ts`).
  */
 export const managementSessions = table(
   "management_sessions",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
-    // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The caller has
-    // already authenticated the person it passes to `startManagementSession`.
+    tokenHash: label("token_hash").notNull(),
+    // No foreign key: the caller authenticated the person it passes to `startManagementSession`,
+    // and a session whose person row is gone resolves as no session (`../management-session.ts`,
+    // the inner join).
     personId: id("person_id").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     lastSeenAt: tsString("last_seen_at").notNull().$defaultFn(nowIso),
@@ -24,8 +28,11 @@ export const managementSessions = table(
     // Forward-looking for slice 1b's "open management session for a person" lookup — filtering on
     // person_id then ended_at IS NULL — whose equality predicate this index would cover. No consumer
     // does that lookup in this slice: `resolveManagementSession` and `endManagementSession` key on
-    // the PK `id`. Mirrors sessions.ts's `sessions_open_idx` on (till_id). Kept plain (not a partial
-    // `WHERE ended_at IS NULL` index) so drizzle-kit round-trips it and db:generate stays a no-op.
+    // `token_hash`. Mirrors sessions.ts's `sessions_open_idx` on (till_id). Kept plain (not a
+    // partial `WHERE ended_at IS NULL` index) so drizzle-kit round-trips it and db:generate stays a
+    // no-op.
     index("management_sessions_open_idx").on(t.personId),
+    uniqueIndex("management_sessions_token_hash_uq").on(t.tokenHash),
+    check("management_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
   ],
 );

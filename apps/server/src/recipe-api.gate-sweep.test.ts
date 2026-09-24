@@ -113,7 +113,11 @@ async function setupVenue(): Promise<Venue> {
       unitPrice: "1.00",
       vatClass: "general",
     });
-    return { managerSid: managerSession.id, staffSid: staffSession.id, productId: product.id };
+    return {
+      managerSid: managerSession.token,
+      staffSid: staffSession.token,
+      productId: product.id,
+    };
   });
 
   return {

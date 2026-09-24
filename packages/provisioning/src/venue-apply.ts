@@ -438,7 +438,7 @@ async function seedDeviceProfiles(
   const session = await startManagementSession(tx, { personId });
   for (const profile of toCreate) {
     await createDeviceProfile(tx, {
-      managementSessionId: session.id,
+      managementSessionId: session.token,
       name: profile.name,
       formFactor: profile.formFactor,
       canvasId: null,

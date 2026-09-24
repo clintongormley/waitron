@@ -38,7 +38,7 @@ async function seedSession(role: PersonRoleValue): Promise<string> {
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
-  return session.id;
+  return session.token;
 }
 
 async function codeOf(fn: () => Promise<unknown>): Promise<string> {

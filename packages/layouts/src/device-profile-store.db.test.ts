@@ -54,7 +54,7 @@ async function seedSession(role: PersonRoleValue): Promise<string> {
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
-  return session.id;
+  return session.token;
 }
 
 /** The AppError a rejected store call threw, or a describing string when it was not an AppError (so a

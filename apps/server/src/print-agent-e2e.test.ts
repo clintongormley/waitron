@@ -94,7 +94,7 @@ const suite = useVenueDb({
       // A `manager` role carries `printer.manage`, the permission the shared list, the challenge and
       // the print-agent accept are gated on.
       const session = await startManagementSession(tx, { personId: mgr!.id });
-      return session.id;
+      return session.token;
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
   },

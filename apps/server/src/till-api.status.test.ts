@@ -149,7 +149,7 @@ function deps(db: Database): TillApiDeps {
 }
 
 /** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- *  route runs — and returns its id. */
+ *  route runs — and returns its cookie token. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -158,7 +158,7 @@ async function openSession(db: Database): Promise<string> {
       pin: "5555",
     });
   });
-  return session.id;
+  return session.token;
 }
 
 let app: Hono;

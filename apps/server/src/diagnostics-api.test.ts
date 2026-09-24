@@ -96,7 +96,7 @@ async function setupVenue(): Promise<Venue> {
         .values({ displayName: `The ${role}`, pinHash: hashPin("1234"), role })
         .returning({ id: persons.id });
       const session = await startManagementSession(tx, { personId: p!.id });
-      return session.id;
+      return session.token;
     };
     return {
       managerSid: await seedPerson("manager"),

@@ -59,7 +59,7 @@ const suite = useVenueDb({
       const session = await startManagementSession(tx, {
         personId: admin.rows[0]!.id,
       });
-      return `${MANAGEMENT_COOKIE}=${session.id}`;
+      return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
   },
 });

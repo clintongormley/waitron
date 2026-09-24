@@ -97,7 +97,7 @@ async function setupVenue(): Promise<Venue> {
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: p!.id });
-    return session.id;
+    return session.token;
   });
   const ctx: ModuleRouteContext = {
     db,

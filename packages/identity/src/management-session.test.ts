@@ -11,6 +11,7 @@ import {
   withPassiveManagementRead,
 } from "./management-session.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
+import { hashSessionToken } from "./session-token.js";
 
 // This suite tests the lifecycle LOGIC — start/resolve/end, the idle timeout, and the mid-session
 // status re-check.
@@ -39,20 +40,20 @@ const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
  */
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
-const agedTo = (at: string, sessionId: string) =>
-  sql`update management_sessions set last_seen_at = ${at} where id = ${sessionId}`;
+const agedTo = (at: string, token: string) =>
+  sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(token)}`;
 
 describe("management session lifecycle", () => {
   it("does not extend a passive refresh's session, while an ordinary read still extends it", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    await run((tx) => tx.execute(agedTo(minutesAgo(10), session.id)));
-    const before = await run((tx) => resolveManagementSession(tx, session.id, { touch: false }));
+    await run((tx) => tx.execute(agedTo(minutesAgo(10), session.token)));
+    const before = await run((tx) => resolveManagementSession(tx, session.token, { touch: false }));
     const passive = await withPassiveManagementRead(() =>
-      run((tx) => resolveManagementSession(tx, session.id)),
+      run((tx) => resolveManagementSession(tx, session.token)),
     );
     expect(passive.expiresAt).toBe(before.expiresAt);
-    const ordinary = await run((tx) => resolveManagementSession(tx, session.id));
+    const ordinary = await run((tx) => resolveManagementSession(tx, session.token));
     expect(Date.parse(ordinary.expiresAt)).toBeGreaterThan(
       Date.parse(before.expiresAt) + 9 * 60_000,
     );
@@ -60,7 +61,7 @@ describe("management session lifecycle", () => {
   it("starts and resolves a session, returning the person's role and locale", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    const resolved = await run((tx) => resolveManagementSession(tx, session.id));
+    const resolved = await run((tx) => resolveManagementSession(tx, session.token));
     // `locale` is null for a seedPerson with no preference set; expiry is issued by the server.
     expect(resolved).toEqual({
       personId,
@@ -77,7 +78,7 @@ describe("management session lifecycle", () => {
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    const resolved = await run((tx) => resolveManagementSession(tx, session.id));
+    const resolved = await run((tx) => resolveManagementSession(tx, session.token));
     expect(resolved.locale).toBe("es-ES");
   });
 
@@ -91,21 +92,20 @@ describe("management session lifecycle", () => {
   it("throws management_session.required after endManagementSession", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    expect(await run((tx) => endManagementSession(tx, session.id))).toBe(true);
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    expect(await run((tx) => endManagementSession(tx, session.token))).toBe(true);
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.required");
   });
 
   it("throws management_session.required when the session's person row has been deleted", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    // Reachable only since the storage switch dropped this table's foreign key to `persons` (they
-    // end up in different database files). Before that, the constraint refused this delete. Two nets
+    // Reachable because the table holds no foreign key to `persons`. Two nets
     // produce the refusal, so breaking it takes both: measured by mutation, the inner join alone can
     // be widened to a left join and this case still passes.
     await run((tx) => tx.execute(sql`delete from persons where id = ${personId}`));
 
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.required");
   });
 
@@ -113,8 +113,8 @@ describe("management session lifecycle", () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     // Age last_seen_at beyond the timeout via a raw SQL update — deterministic, no clock injection.
-    await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.id)));
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.token)));
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.expired");
   });
 
@@ -124,7 +124,7 @@ describe("management session lifecycle", () => {
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
     );
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("person.suspended");
   });
 
@@ -138,7 +138,41 @@ describe("management session lifecycle", () => {
     await run((tx) =>
       tx.execute(sql`update persons set status = 'pending' where id = ${personId}`),
     );
-    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
+    const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.token)));
     expect(code).toBe("management_session.required");
+  });
+});
+
+describe("what the table holds, as anyone reading a copy of the database sees it", () => {
+  it("stores the token's hash and never the token", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const rows = await suite.db.execute<{ id: string; token_hash: string }>(
+      sql`select id, token_hash from management_sessions where person_id = ${personId}`,
+    );
+    expect(rows.rows).toEqual([
+      { id: expect.any(String), token_hash: hashSessionToken(session.token) },
+    ]);
+    expect(rows.rows[0]!.id).not.toBe(session.token);
+  });
+
+  it("refuses the row's own id and its stored hash as a token, and accepts the token", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const [row] = (
+      await suite.db.execute<{ id: string; token_hash: string }>(
+        sql`select id, token_hash from management_sessions where person_id = ${personId}`,
+      )
+    ).rows;
+    expect(await run((tx) => codeOf(() => resolveManagementSession(tx, row!.id)))).toBe(
+      "management_session.required",
+    );
+    expect(await run((tx) => codeOf(() => resolveManagementSession(tx, row!.token_hash)))).toBe(
+      "management_session.required",
+    );
+    // The other direction: the cookie's own token still signs the person in.
+    expect((await run((tx) => resolveManagementSession(tx, session.token))).personId).toBe(
+      personId,
+    );
   });
 });

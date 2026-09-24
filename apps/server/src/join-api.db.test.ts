@@ -24,7 +24,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
-import { resolveManagementSession } from "@waitron/identity";
+import { hashSessionToken, resolveManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountJoinApi } from "./join-api.js";
@@ -197,7 +197,7 @@ describe("the pairing-mode control", () => {
       const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
       await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
-      where id = ${sessionId}`);
+      where token_hash = ${hashSessionToken(sessionId)}`);
       const session = () =>
         withTransaction(suite.db, (tx) =>
           resolveManagementSession(tx, sessionId, { touch: false }),
@@ -228,7 +228,7 @@ describe("the pairing-mode control", () => {
     const sessionSeenAt = new Date(Date.now() - 60 * 60_000).toISOString();
     await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
-      where id = ${sessionId}`);
+      where token_hash = ${hashSessionToken(sessionId)}`);
     const response = await send(app, "POST", "/management-api/pairing-mode/renew", {
       cookie: venue.managerCookie,
     });

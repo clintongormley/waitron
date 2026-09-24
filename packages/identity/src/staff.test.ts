@@ -100,6 +100,7 @@ describe("createPerson", () => {
     const session = await run((tx) => loginWithPin(tx, { tillId, personId: id, pin: "5678" }));
     expect(session).toEqual({
       id: expect.any(String),
+      token: expect.any(String),
       personId: id,
       tillId,
       role: "supervisor",
@@ -390,6 +391,7 @@ describe("resetPin", () => {
     );
     expect(session).toEqual({
       id: expect.any(String),
+      token: expect.any(String),
       personId: targetId,
       tillId,
       role: "staff",
@@ -551,6 +553,7 @@ describe("suspendPerson / reactivatePerson", () => {
     );
     expect(session).toEqual({
       id: expect.any(String),
+      token: expect.any(String),
       personId: targetId,
       tillId,
       role: "staff",

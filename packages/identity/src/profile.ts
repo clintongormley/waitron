@@ -26,6 +26,7 @@ import { assertPinLength, hashPin } from "./verify-pin.js";
 import { verifyTotp } from "./totp.js";
 import { generateTotpSecret, totpAuthUri } from "./totp.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
+import { hashSessionToken } from "./session-token.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import {
   decryptTotpSecret,
@@ -38,6 +39,7 @@ import {
  * issue an emailed proof also take the taxpayer id `hashCode` mixes into that proof, declared on
  * their own inputs rather than here, because nothing else in this file reads one. */
 interface Owner {
+  /** The dashboard cookie's value — the session's token, which this package hashes. */
   managementSessionId: string;
 }
 interface Credentials {
@@ -50,7 +52,7 @@ async function ownPerson(tx: Transaction, input: Owner) {
   const [session] = await tx
     .select({ personId: managementSessions.personId })
     .from(managementSessions)
-    .where(eq(managementSessions.id, input.managementSessionId));
+    .where(eq(managementSessions.tokenHash, hashSessionToken(input.managementSessionId)));
   if (session === undefined) throw new AppError("management_session.required", {});
   // A plain read of the signed-in person. It took `for update`, so that two profile changes for
   // one person could not interleave — a password change also ends that person's other sessions.
@@ -318,7 +320,7 @@ export async function changeOwnPassword(
     .where(
       and(
         eq(managementSessions.personId, person.id),
-        ne(managementSessions.id, input.managementSessionId),
+        ne(managementSessions.tokenHash, hashSessionToken(input.managementSessionId)),
         isNull(managementSessions.endedAt),
       ),
     );

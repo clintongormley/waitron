@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 // Side-effect only: keeps this host's `session.required` code (errors.ts) reachable from the file
 // that throws it — the reachability convention `till-config.ts`/`webhook.ts` follow (a bare import,
 // no value used here). See the note atop `errors.ts`.
@@ -49,13 +49,14 @@ export function canonicaliseUuid(value: unknown): string | null {
 }
 
 /**
- * Writes the session id into the shift cookie. `httpOnly` so no browser script can read it (the id is
- * a bearer credential); `sameSite: "Strict"` so it never rides a cross-site request; `path: "/"` so
- * it covers the whole till app. `secure` is caller-supplied — TRUE on a production HTTPS host, FALSE
- * on loopback dev where there is no TLS to attach it to (`TillApiDeps.secureCookies`).
+ * Writes the session's token into the shift cookie. `httpOnly` so no browser script can read it
+ * (the token is a bearer credential); `sameSite: "Strict"` so it never rides a cross-site request;
+ * `path: "/"` so it covers the whole till app. `secure` is caller-supplied — TRUE on a production
+ * HTTPS host, FALSE on loopback dev where there is no TLS to attach it to
+ * (`TillApiDeps.secureCookies`).
  */
-export function setSessionCookie(c: Context, sessionId: string, secure: boolean): void {
-  setCookie(c, SESSION_COOKIE, sessionId, {
+export function setSessionCookie(c: Context, token: string, secure: boolean): void {
+  setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure,
     sameSite: "Strict",
@@ -71,22 +72,24 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
 }
 
-/** The session id carried by the request's cookie, or null when the cookie is absent. */
+/** The token carried by the request's cookie, or null when the cookie is absent. */
 export function readSessionId(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
 }
 
 /**
  * The deployment holds one tenant per database. Resolves the request's cookie to an OPEN shift
- * session, or throws `session.required`. The lookup is by id only. This is validation against the
- * database, not a presence check: the cookie's id is looked up with `ended_at IS NULL`, so an
- * absent id and an already-logged-out session both fail exactly as a missing cookie does — the
- * cookie merely NAMES a session, it does not prove one is open.
+ * session, or throws `session.required`. The cookie carries a token and the lookup is by its hash,
+ * so a row id or a stored hash read from a copy of the database names no session. This is
+ * validation against the database, not a presence check: the token's hash is looked up with
+ * `ended_at IS NULL`, so an unknown token and an already-logged-out session both fail exactly as a
+ * missing cookie does — the cookie merely NAMES a session, it does not prove one is open.
  *
- * Returns the operator's `personId` (for sale attribution) and the `sessionId`. The operator-scoped
- * routes Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) call this before doing any work; the
- * login/logout routes in `till-api.ts` deliberately do NOT (logging in has no prior session, and
- * logout tolerates a missing or already-closed one).
+ * Returns the operator's `personId` (for sale attribution) and the session's ROW id, which
+ * `authorize` takes. The operator-scoped routes Tasks 5/6 add (`GET /api/staff`,
+ * `POST /api/sales`) call this before doing any work; the login/logout routes in `till-api.ts`
+ * deliberately do NOT (logging in has no prior session, and logout tolerates a missing or
+ * already-closed one).
  *
  * `deps` is typed to the ONE thing this reads — the database — rather than the full `TillConfig`, so
  * both the till API (`TillApiDeps`) and the staff schedule API (`ScheduleApiDeps`) can gate their
@@ -96,19 +99,19 @@ export async function requireSession(
   deps: { db: Database },
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
-  const id = readSessionId(c);
-  // Screen the cookie's SHAPE before the DB: a missing OR non-UUID cookie is `session.required` (401)
-  // without a round-trip. Nothing below objects to a non-UUID — `sessions.id` is plain `text`, so the
-  // lookup would just match no row — so this shape check is the only thing that reads the cookie's
+  const token = readSessionId(c);
+  // Screen the cookie's SHAPE before the DB: a missing OR non-UUID cookie is `session.required`
+  // (401) without a round-trip. Nothing below objects to a non-UUID — the token is hashed and the
+  // hash simply matches no row — so this shape check is the only thing that reads the cookie's
   // shape, and what keeps a forged cookie a clean 401 (`till-api.ts`'s note on `shared.invalid_id`).
-  if (id === null || !isUuid(id)) throw new AppError("session.required", {});
-  const personId = await withTransaction(deps.db, async (tx) => {
-    const [row] = await tx
-      .select({ personId: sessions.personId })
+  if (token === null || !isUuid(token)) throw new AppError("session.required", {});
+  const row = await withTransaction(deps.db, async (tx) => {
+    const [found] = await tx
+      .select({ id: sessions.id, personId: sessions.personId })
       .from(sessions)
-      .where(and(eq(sessions.id, id), isNull(sessions.endedAt)));
-    return row?.personId ?? null;
+      .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
+    return found ?? null;
   });
-  if (personId === null) throw new AppError("session.required", {});
-  return { personId, sessionId: id };
+  if (row === null) throw new AppError("session.required", {});
+  return { personId: row.personId, sessionId: row.id };
 }

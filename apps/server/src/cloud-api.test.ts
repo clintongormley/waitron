@@ -4,7 +4,13 @@ import { expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, managementSessions, startManagementSession, hashPin } from "@waitron/identity";
+import {
+  persons,
+  managementSessions,
+  startManagementSession,
+  hashPin,
+  hashSessionToken,
+} from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createCloudConnection } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
@@ -20,7 +26,7 @@ async function person(role: "manager" | "staff") {
       .values({ displayName: role, pinHash: hashPin("1234"), role })
       .returning();
     const session = await startManagementSession(tx, { personId: p!.id });
-    return { id: p!.id, session: session.id, cookie: `${MANAGEMENT_COOKIE}=${session.id}` };
+    return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
 it("requires a live manager, correct Origin and serving primary; status reads are passive", async () => {
@@ -52,14 +58,14 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     await suite.db
       .update(managementSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.id, manager.session));
+      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
     expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
     expect(
       (
         await suite.db
           .select()
           .from(managementSessions)
-          .where(eq(managementSessions.id, manager.session))
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).toBe(oldActivity);
     primary = false;
@@ -69,7 +75,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
       await suite.db
         .select()
         .from(managementSessions)
-        .where(eq(managementSessions.id, manager.session))
+        .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
     )[0]!.lastSeenAt;
     expect(
       (await app.request("/management-api/cloud/status", { headers: { cookie: manager.cookie } }))
@@ -80,7 +86,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
         await suite.db
           .select()
           .from(managementSessions)
-          .where(eq(managementSessions.id, manager.session))
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).toBe(before);
     expect(f.requests).toHaveLength(0);
@@ -92,7 +98,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     await suite.db
       .update(managementSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.id, manager.session));
+      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
     expect(
       (
         await app.request("/management-api/cloud/check", {
@@ -111,7 +117,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
         await suite.db
           .select()
           .from(managementSessions)
-          .where(eq(managementSessions.id, manager.session))
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
       )[0]!.lastSeenAt,
     ).not.toBe(oldActivity);
     await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
@@ -120,7 +126,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     await suite.db
       .update(managementSessions)
       .set({ lastSeenAt: new Date(Date.now() - 3600000).toISOString() })
-      .where(eq(managementSessions.id, manager.session));
+      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
     expect((await send(manager.cookie)).status).toBe(401);
   } finally {
     await f.close();
@@ -273,14 +279,14 @@ it("refresh and revoke require a live manager and exact Origin; revoke rechecks 
     await suite.db
       .update(managementSessions)
       .set({ lastSeenAt: oldActivity })
-      .where(eq(managementSessions.id, manager.session));
+      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
     const revoking = send("revoke");
     try {
       await vi.waitFor(async () => {
         const [row] = await suite.db
           .select()
           .from(managementSessions)
-          .where(eq(managementSessions.id, manager.session));
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
         expect(row!.lastSeenAt).not.toBe(oldActivity);
       });
     } finally {

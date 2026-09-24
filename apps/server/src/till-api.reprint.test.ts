@@ -155,7 +155,7 @@ async function openSession(db: Database): Promise<string> {
       pin: "5555",
     });
   });
-  return session.id;
+  return session.token;
 }
 
 let app: Hono;

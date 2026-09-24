@@ -38,9 +38,9 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
 
 /**
  * Same mechanism for sessions — its index block is in the lazy extraConfig callback, so this both
- * forces it to run and pins what the generated baseline holds. It declares NO foreign key: sessions
- * is `local` while persons and tills are `state`, so the storage switch puts them in separate files
- * (topology design §2.1) and a key across the two would stop either being restored on its own.
+ * forces it to run and pins what the generated baseline holds. It declares NO foreign key: the
+ * caller supplies the person and the till, and a session whose person is gone resolves as none
+ * (`authorize.ts`).
  */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares sessions' primary key and its open-session index, and no foreign key", () => {
@@ -51,14 +51,15 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
 
     const indexNames = config.indexes.map((i) => i.config.name);
     expect(indexNames).toContain("sessions_open_idx");
+    expect(indexNames).toContain("sessions_token_hash_uq");
+    expect(config.checks.map((c) => c.name)).toContain("sessions_token_hash_ck");
   });
 });
 
 /**
  * Same mechanism for management_sessions — its index block is in the lazy extraConfig callback, so
  * this both forces it to run and pins what the generated baseline holds. A management session
- * belongs to a person, but declares no foreign key to one, for the same file-split reason as
- * sessions above.
+ * belongs to a person, but declares no foreign key to one, for the same reason as sessions above.
  */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
@@ -69,6 +70,8 @@ describe("management_sessions constraint declarations (forces the lazy extraConf
 
     const indexNames = config.indexes.map((i) => i.config.name);
     expect(indexNames).toContain("management_sessions_open_idx");
+    expect(indexNames).toContain("management_sessions_token_hash_uq");
+    expect(config.checks.map((c) => c.name)).toContain("management_sessions_token_hash_ck");
   });
 });
 

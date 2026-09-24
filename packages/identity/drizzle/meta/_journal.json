@@ -15,6 +15,20 @@
       "when": 1790121046847,
       "tag": "0001_person_case_fold",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790212282793,
+      "tag": "0002_session_token_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790212295174,
+      "tag": "0003_session_token_hash_required",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,7 @@ import {
   startManagementSession,
   encryptTotpSecret,
   hashPassword,
+  hashSessionToken,
   persons,
   verifyPin,
 } from "@waitron/identity";
@@ -138,7 +139,7 @@ async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return startManagementSession(tx, { personId });
   });
-  return `${MANAGEMENT_COOKIE}=${session.id}`;
+  return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 
 async function send(
@@ -255,7 +256,7 @@ describe("mountMeApi — whoami", () => {
     await suite.db.execute(sql`
       update management_sessions
       set last_seen_at = ${tenSecondsFromNow}
-      where id = ${sessionId}`);
+      where token_hash = ${hashSessionToken(sessionId)}`);
 
     const res = await send(mountApp(), "GET", "/management-api/session/me", { cookie });
 
@@ -263,6 +264,21 @@ describe("mountMeApi — whoami", () => {
     expect(
       ((await res.json()) as { sessionExpiresInSeconds: number }).sessionExpiresInSeconds,
     ).toBe(IDLE_TIMEOUT_MS / 1000);
+  });
+
+  it("refuses the session row's own id as a dashboard cookie — what a copy of the database holds", async () => {
+    const cookie = await cookieFor(me);
+    const token = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from management_sessions where token_hash = ${hashSessionToken(token)}`,
+    );
+    const refused = await send(mountApp(), "GET", "/management-api/session/me", {
+      cookie: `${MANAGEMENT_COOKIE}=${rows[0]!.id}`,
+    });
+    expect(refused.status).toBe(401);
+    // The other direction: the cookie's own token still signs in.
+    const accepted = await send(mountApp(), "GET", "/management-api/session/me", { cookie });
+    expect(accepted.status).toBe(200);
   });
 
   it("surfaces the SESSION person's own locale preference, distinct from the venue default", async () => {

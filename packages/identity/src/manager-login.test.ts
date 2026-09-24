@@ -10,6 +10,7 @@ import { authorizeManager, loginManager, loginManagerById } from "./manager-logi
 import { verifyPassword } from "./verify-password.js";
 import { encryptTotpSecret } from "./mfa.js";
 import { managementSessions } from "./schema/management-sessions.js";
+import { hashSessionToken } from "./session-token.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization mitigation is
 // observable: the person-not-found branch must run one verifyPassword (against the dummy hash) before
@@ -210,7 +211,7 @@ describe("authorizeManager", () => {
       loginManager(tx, { email: "manager@x.com", password: "correct horse" }),
     );
     const auth = await run((tx) =>
-      authorizeManager(tx, { managementSessionId: session.id, permission: "person.manage" }),
+      authorizeManager(tx, { managementSessionId: session.token, permission: "person.manage" }),
     );
     expect(auth.authorizedBy).toBe(personId);
   });
@@ -221,7 +222,7 @@ describe("authorizeManager", () => {
     );
     const code = await run((tx) =>
       codeOf(() =>
-        authorizeManager(tx, { managementSessionId: session.id, permission: "person.manage" }),
+        authorizeManager(tx, { managementSessionId: session.token, permission: "person.manage" }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
@@ -234,7 +235,7 @@ describe("authorizeManager", () => {
     const aged = new Date(Date.now() - 10 * 60_000).toISOString();
     await run((tx) =>
       tx.execute(
-        sql`update management_sessions set last_seen_at = ${aged} where id = ${session.id}`,
+        sql`update management_sessions set last_seen_at = ${aged} where token_hash = ${hashSessionToken(session.token)}`,
       ),
     );
     const lastSeen = () =>
@@ -242,19 +243,19 @@ describe("authorizeManager", () => {
         const [row] = await tx
           .select({ lastSeenAt: managementSessions.lastSeenAt })
           .from(managementSessions)
-          .where(eq(managementSessions.id, session.id));
+          .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)));
         return row!.lastSeenAt;
       });
     await run((tx) =>
       authorizeManager(tx, {
-        managementSessionId: session.id,
+        managementSessionId: session.token,
         permission: "person.manage",
         touch: false,
       }),
     );
     expect(await lastSeen()).toBe(aged);
     await run((tx) =>
-      authorizeManager(tx, { managementSessionId: session.id, permission: "person.manage" }),
+      authorizeManager(tx, { managementSessionId: session.token, permission: "person.manage" }),
     );
     expect(await lastSeen()).not.toBe(aged);
   });

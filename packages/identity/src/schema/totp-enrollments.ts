@@ -9,9 +9,7 @@ export const totpEnrollments = table(
   "totp_enrollments",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
-    // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The id comes
-    // from the person row `ownPerson` read in `profile.ts`.
+    // No foreign key: the id comes from the person row `ownPerson` read in `profile.ts`.
     personId: id("person_id").notNull(),
     encryptedSecret: label("encrypted_secret").notNull(),
     expiresAt: tsString("expires_at").notNull(),

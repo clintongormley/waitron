@@ -115,7 +115,7 @@ export async function openManagementSession(
   const session = await withTransaction(db, (tx) =>
     loginManager(tx, { email, password: "correct horse" }),
   );
-  return { personId, sessionId: session.id };
+  return { personId, sessionId: session.token };
 }
 
 /** The AppError code a rejected call threw, or a describing string when it was not an AppError. */

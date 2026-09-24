@@ -49,8 +49,8 @@ const suite = useVenueDb({
       return {
         locationId: loc!.id,
         personId: mgr!.id,
-        mSid: mSes.id,
-        sSid: sSes.id,
+        mSid: mSes.token,
+        sSid: sSes.token,
       };
     });
     locationId = seeded.locationId;

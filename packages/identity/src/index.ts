@@ -17,6 +17,7 @@ export {
   endManagementSession,
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
+export { hashSessionToken } from "./session-token.js";
 export { encryptTotpSecret } from "./mfa.js";
 export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export { loginManager, loginManagerById, authorizeManager } from "./manager-login.js";

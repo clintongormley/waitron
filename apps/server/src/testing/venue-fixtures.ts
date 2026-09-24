@@ -152,8 +152,8 @@ export async function setupVenue(db: Database): Promise<Venue> {
     return {
       cafeId: cafe.id,
       aguaId: agua.id,
-      managerSid: managerSession.id,
-      staffSid: staffSession.id,
+      managerSid: managerSession.token,
+      staffSid: staffSession.token,
     };
   });
 

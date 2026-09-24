@@ -252,7 +252,7 @@ const suite = useVenueDb({
           .values({ displayName: name, pinHash: hashPin("1234"), role })
           .returning({ id: persons.id });
         const session = await startManagementSession(tx, { personId: p!.id });
-        return session.id;
+        return session.token;
       };
       return {
         managerSid: await mkPerson("The Manager", "manager"),

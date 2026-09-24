@@ -77,7 +77,7 @@ describe("the media module descriptor", () => {
         startManagementSession(tx, { personId: person!.id }),
       );
       const response = await app.request("/management-api/images", {
-        headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.id}` },
+        headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
       });
       return response.status;
     };

@@ -14,13 +14,14 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 export const MANAGEMENT_COOKIE = "waitron_management_session";
 
 /**
- * Writes the session id into the management cookie. `httpOnly` so no browser script can read it (the
- * id is a bearer credential); `sameSite: "Strict"` so it never rides a cross-site request; `path: "/"`
- * so it covers the whole dashboard. `secure` is caller-supplied — TRUE on a production HTTPS host,
+ * Writes the session's token into the management cookie. `httpOnly` so no browser script can read
+ * it (the token is a bearer credential; the session row stores only its hash —
+ * `@waitron/identity`'s `session-token.ts`); `sameSite: "Strict"` so it never rides a cross-site
+ * request; `path: "/"` so it covers the whole dashboard. `secure` is caller-supplied — TRUE on a production HTTPS host,
  * FALSE on loopback dev where there is no TLS to attach it to.
  */
-export function setManagementCookie(c: Context, sessionId: string, secure: boolean): void {
-  setCookie(c, MANAGEMENT_COOKIE, sessionId, {
+export function setManagementCookie(c: Context, token: string, secure: boolean): void {
+  setCookie(c, MANAGEMENT_COOKIE, token, {
     httpOnly: true,
     secure,
     sameSite: "Strict",
@@ -37,20 +38,20 @@ export function clearManagementCookie(c: Context): void {
 }
 
 /**
- * The management session id carried by the request's cookie, or `null` when the cookie is absent. The
- * till's `readSessionId` parallel — the non-throwing read the idempotent logout composes with `isUuid`,
- * and the base `requireManagementSession` builds its shape check on.
+ * The management session token carried by the request's cookie, or `null` when the cookie is
+ * absent. The till's `readSessionId` parallel — the non-throwing read the idempotent logout
+ * composes with `isUuid`, and the base `requireManagementSession` builds its shape check on.
  */
 export function readManagementSessionId(c: Context): string | null {
   return getCookie(c, MANAGEMENT_COOKIE) ?? null;
 }
 
 /**
- * Reads the request's management cookie and returns its id, or throws `management_session.required`
- * when the cookie is absent OR not a UUID. This screens the cookie's SHAPE only — a real
- * live-session lookup happens in the route layer (Task 3/4). Reuses `isUuid` from `@waitron/shared`
- * so the anchored-UUID regex has one home: a non-UUID id looked up against a Postgres `uuid` column
- * raises `22P02` → an opaque 500, so the shape check keeps a forged cookie a clean fault instead.
+ * Reads the request's management cookie and returns its token, or throws
+ * `management_session.required` when the cookie is absent OR not a UUID. This screens the cookie's
+ * SHAPE only — the live-session lookup, by the token's hash, happens in `resolveManagementSession`
+ * (`@waitron/identity`). Reuses `isUuid` from `@waitron/shared` so the anchored-UUID regex has one
+ * home.
  */
 export function requireManagementSession(c: Context): string {
   const id = readManagementSessionId(c);

@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize } from "./authorize.js";
-import { endSession } from "./login.js";
+import { endSession, loginWithPin } from "./login.js";
 import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
 
 // authorize() is LOGIC — the operator-holds path, the override path's not-found / suspended /
@@ -128,8 +128,12 @@ describe("authorize", () => {
   it("throws session.not_open for a session that has been ended", async () => {
     const tillId = await seedTill(suite.db);
     const managerId = await seedPerson(suite.db, "manager");
-    const sessionId = await openSession(suite.db, tillId, managerId);
-    await run((tx) => endSession(tx, sessionId));
+    // The row id feeds `authorize` and the token feeds `endSession`, so this case holds both.
+    const session = await run((tx) =>
+      loginWithPin(tx, { tillId, personId: managerId, pin: "1234" }),
+    );
+    const sessionId = session.id;
+    await run((tx) => endSession(tx, session.token));
 
     // The manager holds sale.void, so only the ended-session guard — checked first, before any role
     // lookup — can be the cause here.
