@@ -231,7 +231,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     deps.supervisor.current().recoveryKey ?? (await deps.readRecoveryKey());
 
   // Presence, not validity: a key under the length floor still counts as held, so the status answers
-  // rather than refusing. The write routes keep refusing such a key.
+  // and `rotate` can replace it. `apply` and `GET recovery-key` keep refusing such a key.
   const keyPresent = async (): Promise<boolean> => {
     try {
       return (await heldKey()) !== undefined;
@@ -325,7 +325,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       assertStorableKey(recoveryKey);
       const keyRotatedAt = new Date().toISOString();
       const cur = deps.supervisor.current();
-      if (cur.destinations.length === 0 && (await deps.readRecoveryKey()) !== undefined) {
+      if (cur.destinations.length === 0 && (await keyPresent())) {
         loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
         await writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt });
         if ((await deps.readRecoveryKey()) !== recoveryKey) {

@@ -646,10 +646,32 @@ describe("backup admin routes", () => {
     const st = await app.request("/api/backup/status", { headers: { cookie } });
     expect(st.status).toBe(200);
     expect(await st.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
-    // A key no archive or lock would accept is not handed out to be recorded.
+    // A key no archive would accept is not handed out to be recorded.
     const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
     expect(rk.status).toBe(400);
     expect(await rk.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
+  }, 60_000);
+
+  it("rotate replaces a too-short key held with no destination", async () => {
+    const stateDir = await makeStateDir();
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ recoveryKey: KEY_2 }),
+    });
+    expect(rot.status).toBe(200);
+    expect(await rot.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
+    const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
+    expect(file.WAITRON_BACKUP_DIR).toBeUndefined();
+    const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
+    expect((await rk.json()).key).toBe(KEY_2);
   }, 60_000);
 
   it("reports a too-short key from the process env as set, and still answers status, with no destination", async () => {
@@ -670,6 +692,15 @@ describe("backup admin routes", () => {
       managedByEnvironment: true,
       recoveryKeySet: true,
     });
+    // The environment owns this key, so rotate refuses before writing anything.
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ recoveryKey: KEY_2 }),
+    });
+    expect(rot.status).toBe(409);
+    expect(await rot.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
+    await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
   }, 60_000);
 
   it("refuses a different key when the held key comes from the supervisor's own loaded settings (archives already on)", async () => {
