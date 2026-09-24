@@ -7,13 +7,10 @@ import { id, json, newId, table } from "./columns.js";
  *
  * Two columns and no more — which holds while every writer reaches this table through
  * `withTransaction`. On that path a row is inserted, delivered and deleted inside one transaction,
- * so nothing needs a sequence, a written-at time or a copy of the resource name: the dashboard's
- * live API collects a batch's identities into a Map keyed by the identity itself before flushing
- * them together (`apps/server/src/live-api.ts`, the `pending` map), so two changes arriving in
- * either order reach the client the same way. Off that path a row a direct writer left behind
- * sits until some later transaction sweeps it, and with no timestamp an orphan looks exactly like
- * a row written a second ago. Accepted rather than fixed: the sweep makes an orphan short-lived,
- * and a timestamp column would be read by nothing.
+ * so nothing needs a sequence, a written-at time or a copy of the resource name. Off that path a
+ * row a direct writer left behind sits until some later transaction sweeps it, and with no
+ * timestamp an orphan looks exactly like a row written a second ago. Accepted rather than fixed:
+ * the sweep makes an orphan short-lived, and a timestamp column would be read by nothing.
  *
  * `local`: one node's signal to its own dashboard. A row a direct writer left behind is delivered
  * by the next `withTransaction` on whichever node then holds the file, where it is a notice to

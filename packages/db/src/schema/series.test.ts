@@ -106,7 +106,7 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a purpose outside the permitted set", async () => {
-    // A CHECK refusal names the constraint and nothing else — no table, no column
+    // A named CHECK's refusal carries its name and nothing else — no table, no column
     // (`../constraint-target.ts`) — so the name IS the assertion here.
     const error = await captureError(() =>
       db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "XX", purpose: "invented" }),
