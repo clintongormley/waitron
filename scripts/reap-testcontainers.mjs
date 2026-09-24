@@ -132,7 +132,8 @@ export function reap({ exec, now = () => Date.now() }) {
 /**
  * Kill orphaned vitest worker processes — the CPU-side counterpart to `reap()`'s container cleanup. A
  * pure data-in/data-out function over an injected `psExec` and `kill`, testable without touching a real
- * process; the CLI block below wires in the real `ps` and `process.kill`.
+ * process; the CLI block below wires in the real `ps` and `process.kill`. It also kills parentless
+ * `.bin/litestream` and `.bin/versitygw` processes the loop test leaves behind.
  *
  * @param {{ psExec: (args: string[]) => string, kill: (pid: number, signal: string) => void }} deps
  *   `psExec(args)` runs `ps <args>` and returns stdout (throwing when `ps` is absent). `kill(pid, sig)`
@@ -156,6 +157,19 @@ function isVitestProcess(command) {
   );
 }
 
+/**
+ * Is this `ps` command column one of the test binaries the repository installs under `.bin/` (the
+ * pinned Litestream from `scripts/setup-litestream.ts`, and the loop test's S3 server)? The row's
+ * FIRST token must be that path — never the bare name anywhere in the row — so a box's own Litestream
+ * (on PATH, outside the repository) and a tool that merely names the file are never matched.
+ *
+ * @param {string} command the command column of one `ps` row
+ * @returns {boolean}
+ */
+function isTestBinaryProcess(command) {
+  return /^\S*\/\.bin\/(?:litestream|versitygw)(?:\s|$)/.test(command);
+}
+
 export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   let table;
   try {
@@ -172,7 +186,9 @@ export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   const orphans = table
     .split("\n")
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
-    .filter((m) => m !== null && m[2] === "1" && isVitestProcess(m[3]))
+    .filter(
+      (m) => m !== null && m[2] === "1" && (isVitestProcess(m[3]) || isTestBinaryProcess(m[3])),
+    )
     .map((m) => Number(m[1]));
 
   let killed = 0;
@@ -206,7 +222,7 @@ if (process.argv[1] && process.argv[1].endsWith("reap-testcontainers.mjs")) {
   });
   const result = reap({ exec: dockerExec });
   const workerPart = workers.psAvailable
-    ? `killed ${workers.workersKilled} orphaned vitest worker(s)`
+    ? `killed ${workers.workersKilled} orphaned vitest worker(s) or test binaries`
     : "ps unavailable — no worker sweep";
   const containerPart = result.dockerAvailable
     ? `reaped ${result.containersRemoved} stale waitron testcontainers container(s)`

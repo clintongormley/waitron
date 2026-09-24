@@ -275,6 +275,42 @@ describe("reap-testcontainers", () => {
       });
       expect(kills.map((k) => k.pid)).toEqual([89860, 89862, 89864, 89865]);
     });
+
+    it("SIGKILLs a parentless Litestream or versitygw started from the repository's .bin", () => {
+      const { psExec, kill, kills } = fakeProcs({
+        ps: [
+          "5101     1 /repo/.bin/litestream replicate -config /tmp/waitron-loop-a/stream/litestream.yml",
+          "5102     1 /repo/.bin/versitygw --port 127.0.0.1:7070 posix /tmp/waitron-s3-x",
+        ].join("\n"),
+      });
+      expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
+        psAvailable: true,
+        workersKilled: 2,
+      });
+      expect(kills).toEqual([
+        { pid: 5101, signal: "SIGKILL" },
+        { pid: 5102, signal: "SIGKILL" },
+      ]);
+    });
+
+    it("spares a Litestream with a live parent, one installed elsewhere, and a mere mention of the name", () => {
+      const { psExec, kill, kills } = fakeProcs({
+        ps: [
+          // A running loop test's child: its parent is alive.
+          "5201  5200 /repo/.bin/litestream replicate -config /tmp/waitron-loop-b/stream/litestream.yml",
+          // A box's own Litestream is on PATH, never under the repository's .bin.
+          "5202     1 /usr/local/bin/litestream replicate -config /var/lib/waitron/stream/litestream.yml",
+          // A tool that only names the binary in an argument.
+          "5203     1 tail -f /repo/.bin/litestream.log",
+          "5204     1 grep versitygw /tmp/notes.txt",
+        ].join("\n"),
+      });
+      expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
+        psAvailable: true,
+        workersKilled: 0,
+      });
+      expect(kills).toEqual([]);
+    });
   });
 
   // The v8-ignored CLI entry: run the script for real against a FAKE `docker` on PATH, so the shell-out
