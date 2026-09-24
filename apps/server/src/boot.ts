@@ -1357,9 +1357,10 @@ export async function startServer(
   // is already open, so this read is free.
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
-  // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this
-  // holder: after writing singleton_role='primary' it refreshes both holders, so the fiscal pass starts on
-  // the next tick with no restart (promotion runbook design §3b/§3c).
+  // duties; only a 'primary' drains/reconciles. Read PER PASS below, and each promote action DOES flip
+  // this holder: after writing singleton_role='primary' it refreshes both holders. After a local-secondary
+  // promote the fiscal pass starts on the next tick with no restart (promotion runbook design §3b/§3c);
+  // a mirror promote restarts the process into `mode=primary` (`promoteMirrorRun`, below).
   // Both axes from ONE read of the one row, so the initial holder pair is never torn — the same thing
   // `refreshDeploymentHolders` relies on: two separate reads could straddle a concurrent promotion and
   // yield an impossible `(mirror, primary)` pair.

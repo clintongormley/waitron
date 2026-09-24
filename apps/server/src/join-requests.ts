@@ -428,7 +428,7 @@ export async function acceptPrintAgentJoinRequest(
  * — the id is carried through accept, so one selector answers both questions. Denied, lapsed and
  * never-existed all fold into `not_approved`; the agent's recovery (restart → re-join) is identical in
  * every case. The pending read is filtered to this node's rows; the approved fallback reads
- * `print_agents` by id alone.
+ * `print_agents` by id and `active`, with no node filter.
  */
 export async function readAgentJoinStatus(
   tx: Transaction,

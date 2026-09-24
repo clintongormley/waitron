@@ -1309,8 +1309,8 @@ declare module "@waitron/shared" {
     "promotion.fence_not_attested": Record<string, never>;
     /**
      * A local-secondary promote (promotion runbook design §5a) was called on a node that is a
-     * read-only MIRROR (its `node_roles.mode` is `'mirror'`). A mirror holds no SIF and cannot
-     * become the submitter by a bare `singleton_role` flip — it needs the mirror→primary path
+     * read-only MIRROR (its `node_roles.mode` is `'mirror'`). A mirror is not the submitter and
+     * cannot become it by a bare `singleton_role` flip — it needs the mirror→primary path
      * (`promoteMirrorToPrimary`, promote.ts; §5b). Refused with THIS code
      * BEFORE the write, giving a clean domain error rather than the raw `node_roles_role_valid_ck`
      * CHECK violation the `(mirror, primary)` write would otherwise raise (the CHECK is the

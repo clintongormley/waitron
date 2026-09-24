@@ -8,15 +8,15 @@
  *    **Nothing now checks that the deployment role cannot UPDATE a join request.**
  *
  * 2. **FOUR cases staged an interleave on two PostgreSQL backends, and none of them can any
- *    longer.** They are the two in `createJoinRequest — per-tenant serialization…` and the two
- *    `two concurrent accepts…` cases. Each called `suite.pg.connect()` twice; there is one handle
- *    now, and `withTransaction` runs its body inside `db.withWriteLock`, which issues
- *    `begin immediate` and does not let the next caller's `begin` run until the first `commit` has
- *    returned (`packages/store/src/write-queue.ts`). The two allocation cases went further and
- *    forced the interleave deterministically — a waiter holding its transaction open until the
- *    other creator's injected `numbers()` callback fired a signal from INSIDE its own reads. That
- *    machinery is deleted rather than translated: the signal can never fire while the first
- *    transaction is open, so leaving it would be scaffolding that proves nothing.
+ *    longer.** They are the two in `createJoinRequest — serialization of number allocation and the
+ *    cap on the file` and the two `two concurrent accepts…` cases. Each called `suite.pg.connect()`
+ *    twice; there is one handle now, and `withTransaction` runs its body inside `db.withWriteLock`,
+ *    which issues `begin immediate` and does not let the next caller's `begin` run until the first
+ *    `commit` has returned (`packages/store/src/write-queue.ts`). The two allocation cases went
+ *    further and forced the interleave deterministically — a waiter holding its transaction open
+ *    until the other creator's injected `numbers()` callback fired a signal from INSIDE its own
+ *    reads. That machinery is deleted rather than translated: the signal can never fire while the
+ *    first transaction is open, so leaving it would be scaffolding that proves nothing.
  *
  *    **LOST: the proof that overlapping creators are serialised at all**, in either direction.
  *    Each of the four cases keeps its assertions unchanged and they still hold — the cap is never
@@ -27,9 +27,10 @@
  *    `cd2838e4a`, whose SUBJECT is about the dev stack but whose body names this among its four
  *    conversions; `apps/server/src/join-requests.ts:66-72` states what replaced it.
  *
- *    The KEY-SCOPE half — that numbers and the cap are allocated per node rather than per
- *    location, while the write queue still serialises every creator on the file — went with
- *    `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered by nothing.
+ *    The KEY-SCOPE half is split. That numbers and the cap are counted per node is pinned by
+ *    "counts neither the cap nor the spoken-for numbers across nodes". That two locations on one
+ *    node share them went with `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered
+ *    by nothing.
  *
  * ## One correction to this file's own previous header
  *
@@ -400,7 +401,7 @@ describe("createJoinRequest", () => {
   });
 });
 
-describe("createJoinRequest — per-tenant serialization of number allocation and the cap", () => {
+describe("createJoinRequest — serialization of number allocation and the cap on the file", () => {
   // Both creators are started together on the one handle and the write queue decides the order:
   // `withTransaction` runs its body inside `db.withWriteLock`, which issues `begin immediate` and
   // does not let the next caller's `begin` run until the first `commit` has returned

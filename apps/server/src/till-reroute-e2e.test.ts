@@ -291,8 +291,8 @@ beforeAll(async () => {
   await seedVenue(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
-  // `mirror_config` row a mirror boot requires. A keeps the 'primary'/'primary' column defaults; a
-  // stamp is all it needs.
+  // `mirror_config` row a mirror boot requires. A gets no `node_roles` row, so it reads
+  // 'primary'/'primary' through `readDeploymentAxes`'s missing-row fallback; a stamp is all it needs.
   await stampDeployment(a, "preproduction");
   await stampDeployment(b, "preproduction");
   await setDeploymentMode(b, NODE_B, "mirror");

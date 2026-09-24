@@ -95,8 +95,8 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
 /**
  * Local secondary → primary (promotion runbook design §5a). The node already sells (`mode='primary'`); this
  * claims the singleton duties only. Idempotent and checkpointed (§3e): a fence-attestation refusal aborts
- * with no effect; an already-primary node is a no-op; a mirror is refused (it needs the SIF-mint path, §5b,
- * a later slice); and a node its OWN held document marks FENCED (`sell-only`/`evicted`) is refused
+ * with no effect; an already-primary node is a no-op; a mirror is refused (it needs `promoteMirrorToPrimary`,
+ * below, §5b); and a node its OWN held document marks FENCED (`sell-only`/`evicted`) is refused
  * (`assertNotFenced`) — it was superseded, so promoting it in place would resume submitter duties on a
  * superseded chain (two submitters under one NIF, §5); it returns via wipe-and-restore, not promotion.
  * The point-of-no-return (§7) is one transaction that flips `singleton_role` to primary AND

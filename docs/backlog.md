@@ -3933,10 +3933,11 @@ singleton role and break-glass verifier off `deployment`; `mirror_config` and `j
 `node_id`), is on branch `feat/sqlite-slice2-node-keyed-rows` (PR number added at land). A dev venue
 holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt reset demo <name>`
 rebuilds it.
-`apps/server/src/rejoin-command.test.ts`'s check that every database file and sidecar is gone does
-not test the wipe. The check predates this branch (aabdde6a8, #489): with `db-wipe.ts`'s `SIDECARS`
-cut to `[""]` it still passes 18 of 18, because closing the handles removes the sidecars. It needs a
-case that leaves sidecars on disk.
+`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
+closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
+`[""]` it still passes 18 of 18 (the assertions predate this branch: aabdde6a8, #489). The wipe's
+sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing is only a
+rejoin-level case with sidecars on disk.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
 **Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
@@ -4102,7 +4103,7 @@ it; and a correction must not decrement a count where it should drop it.
 What the preparation tasks left, with F1's own answers where it found them:
 
 - **How the drain crosses the two database files, given `change_log`'s `local` classification —
-  ANSWERED by F1 and still open as a decision.** The triggers writing it sit on `venue.db` tables,
+  SETTLED by slice-2 spec §2: every table stays in `venue.db`.** The triggers writing it sit on `venue.db` tables,
   and the thing to check first was checked: SQLite REFUSES a trigger
   body that writes another attached database, both ways round. Measured on Node v26.7.0 against
   `node:sqlite`, 2026-09-22, with `node.db` attached to the venue connection: a qualified
@@ -4111,9 +4112,10 @@ What the preparation tasks left, with F1's own answers where it found them:
   written unqualified is refused with `no such table: main.change_log`, because an unqualified name
   inside a trigger resolves to the trigger's OWN database. Nothing is broken today, also measured:
   `applyMigrations` puts every set on the venue handle, so after a real migrate `venue.db` holds 121
-  tables including `change_log` and `node.db` holds none. So whoever wires the `local` class to
-  `node.db` decides this — either `change_log` is reclassified to the file its writers live on, or
-  the triggers stop writing it directly and something above them does (P3). Settled by the slice-2
+  tables including `change_log` and `node.db` holds none. If a later slice moves `local` tables into
+  `node.db` (spec §2 reserves it for slice 5), that slice decides this again — either `change_log`
+  is reclassified to the file its writers live on, or the triggers stop writing it directly and
+  something above them does (P3). Settled by the slice-2
   spec §2: every table stays in `venue.db`, so `change_log` and the triggers writing it share a
   file.
 - **The three claim helpers were stripped, and two of them had become identity functions — CLOSED by

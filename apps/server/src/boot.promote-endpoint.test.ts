@@ -302,8 +302,9 @@ beforeAll(async () => {
   [appVenueDir, appDb] = await migratedVenue();
   [mirrorVenueDir, mirrorDb] = await migratedVenue();
   await seedTillIdentity(appDb);
-  // Stamp production (matching WAITRON_ENV so the boot guard passes); singleton_role keeps its column
-  // default 'primary'. => (mode=primary, singleton_role=primary), the primary starting point.
+  // Stamp production (matching WAITRON_ENV so the boot guard passes). No `node_roles` row is
+  // written, so `readDeploymentAxes`'s missing-row fallback reads (mode=primary,
+  // singleton_role=primary), the primary starting point.
   await stampDeployment(appDb, "production");
 }, 180_000);
 
