@@ -2964,7 +2964,7 @@ image constraints under *Detail → Box image*.
     backs out by itself, so there it changes nothing today — #581's review replaced the nested call
     with a bare insert and `store.test.ts` and `store.concurrency.test.ts` still passed (24 tests).
     `store.ts` now says so; CLAUDE.md §3 needs the same narrowing through a pull request (lane C
-    item C3.12b). `insertClose` in `packages/reporting/src/record-daily-close.ts` may be the same
+    item C3.12c). `insertClose` in `packages/reporting/src/record-daily-close.ts` may be the same
     single-insert case (read, not run). The reason "v8 reports phantom uncovered branches" given
     for excluding barrel `index.ts` files from coverage did not hold in scheduler: with the
     exclusion removed, both barrels reported 0 branches at 100% and the totals did not move. So
