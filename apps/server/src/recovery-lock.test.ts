@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -107,6 +107,24 @@ describe("withRecoveryLock", () => {
     ).rejects.toMatchObject({ errcode: 5 });
     expect(ran).toBe(false);
     await holder.released;
+  });
+
+  it("rejects at once, without waiting, when the lock file is not one the engine can lock", async () => {
+    const dir = await stateDir();
+    await writeFile(
+      join(dir, RECOVERY_LOCK_FILE),
+      "not a database file, just enough text to fill the header the engine reads first",
+    );
+    let ran = false;
+    const started = performance.now();
+    await expect(
+      withRecoveryLock(dir, () => {
+        ran = true;
+        return Promise.resolve();
+      }),
+    ).rejects.toMatchObject({ errcode: 26 });
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(ran).toBe(false);
   });
 
   it("lets go when the body throws", async () => {
