@@ -357,9 +357,9 @@ What it left open:
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
   trap is unchanged: **a populated development database still has to be reset by hand.**
 - **Category authoring serialises across the whole database, and nobody has measured what that
-  costs.** Hierarchy edits, membership replacement and category deletion all take the same single
-  advisory lock, keyed on the constant `"categories"` (`packages/catalogue/src/categories.ts`), which is
-  the design's deliberate choice and is what makes the races safe. The review confirmed the specific
+  costs.** Hierarchy edits, membership replacement and category deletion take no lock of their own
+  since the storage switch: `withTransaction` admits one write transaction per venue file, which is
+  what makes the races safe (`packages/catalogue/src/categories.ts`, above `listCategories`). The review confirmed the specific
   races are handled but reported no throughput measurement, so there is no evidence either way about
   how this behaves with several managers editing the catalogue at once. **Next action:** measure it
   before anyone widens category authoring to more concurrent editors, rather than assuming it is fine.
@@ -2796,11 +2796,36 @@ image constraints under *Detail → Box image*.
   `ui-core` and `dashboard-kit`) and `packages/reporting` (#601, about 1,885 to about 1,265, tests
   included; the generated `src/dr303-layout.ts`, 185 of those lines, is untouched) and `scripts/`
   (#602, every `.ts` and `.mjs` file, about 4,870 to about 2,770 counted with the same `grep -cE`;
-  the `.sh` files and `write-path-tables.json` are outside the checker and were left). A pruning pull request
+  the `.sh` files and `write-path-tables.json` are outside the checker and were left) and
+  `packages/catalogue` (#603, about 3,560 to about 2,200 counted with a parse-tree walk over every
+  `.ts` file, tests included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601 and #602 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602 and #603 and left for the package that owns each, all
   still OPEN:
+  - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
+    source twice and order sources differently from run to run**: `recomputeProductDerivations`
+    (`packages/recipes/src/recipes.ts`) feeds it ingredient rows in no fixed order, and #603's
+    review measured, with three or more sources, barley/rye/wheat folded in two orders giving
+    "barley, rye, wheat" and "barley, wheat, rye", and barley/rye/barley giving "barley, barley,
+    rye". The comment now says so; the code is unchanged. Read only, not run: `writeItems`
+    (`src/extras.ts`) and `writeLabels` (`src/options.ts`) each keep a refusal after their insert
+    that looks unreachable now (duplicate and foreign ids are refused earlier and one write runs at
+    a time). `MAX_MODIFIER_INTEGER` (`src/modifier-limits.ts`, 2147483647) and the extras
+    contract's `whole` bound were PostgreSQL's integer maximum and have no stated reason on this
+    engine; the test names "refuses a pick bound above what the column can hold" and "refuses a
+    maxQuantity above what the column can hold" (`src/extra-contract.test.ts`) assume a column
+    limit. `assertRefsExist` (`src/product-modifiers.ts`) still reads lists in sorted key order,
+    which served PostgreSQL's lock ordering only. Four configuration-transfer cases (in
+    `options.test.ts`, `product-modifiers.test.ts`, `extras.test.ts` and
+    `extra-projection.test.ts`) pin an insert order that the importer's
+    `pragma defer_foreign_keys` makes unnecessary for foreign keys — whether to keep pinning it is
+    the owner's call. Test titles a comments-only change cannot touch: `describe("validateContainsTag
+    (Task 4)")` and `describe("validateDietOverride (Task 4)")` (`src/dietary.test.ts`), "settles
+    a product id sent in upper case in the database" (`src/product-modifiers.test.ts`, the code
+    settles it now), "rebuilds every lookup index without the tenant" (`src/migrations.test.ts`).
+    Outside the package: `apps/server/src/catalogue-api.ts` (about line 263) still names only two
+    foreign keys as what blocks deleting a product, for the `apps/server` pruning.
   - Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
     `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
     `.husky/pre-push` beside the same loop; it is not there. `CLAUDE.md` §2 and the entry "The
@@ -2814,9 +2839,8 @@ image constraints under *Detail → Box image*.
     `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
     file's comment to what testing-guide itself measured (the per-test timer does not fire during
     a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
-    matches. `packages/catalogue/src/options.ts` (about lines 116-117) and the "Checking one
-    product's translations takes a lock" entry below still say an advisory lock is taken, while
-    `packages/catalogue/src/content-languages.ts` says the write queue replaced it.
+    matches. (The advisory-lock sentence in `packages/catalogue/src/options.ts` went with #603, and
+    the "Checking one product's translations" entry below no longer says a lock is taken.)
     `packages/media/drizzle/0001_image_references.sql` (about lines 22-24) says `workspace-cycles`
     refuses an "import"; that guard reads `package.json` files (a shipped migration, likely left).
     Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
@@ -2943,7 +2967,7 @@ image constraints under *Detail → Box image*.
     nothing); the ignore pairs there stay. Four
     identity schema files and six in `packages/fiscal-verifactu/src/schema` keep the ignore pairs
     with no reason; removing a pair is a code change, for whoever next changes that package's code.
-  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `catalogue`, `media`,
+  - The `schema-conformance.test.ts` headers of `payments`, `workforce`, `media`,
     `venue-service` and `workforce-es` say an unnamed unique constraint reaches the factory's
     refusal; drizzle-orm 0.45.2 names an unnamed `unique()` itself, so nothing reaches it
     (`packages/db/src/testing/schema-conformance.ts`).
@@ -3179,8 +3203,8 @@ image constraints under *Detail → Box image*.
     to measure" paragraph) has only the PostgreSQL raw-read table, not the
     SQLite one #579's commit message now carries. Comments saying drizzle wraps a failed query
     remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps every failed" -- ':!docs'` listed
-    files in `apps/server`, `packages/catalogue`, `db`, `identity`, `media`, `migrations`,
-    `printing` and `store` on 2026-09-24, not each checked (see the `DrizzleQueryError` entry below).
+    files in `apps/server`, `packages/catalogue` (none left after #603), `db`, `identity`, `media`,
+    `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the `DrizzleQueryError` entry below).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3245,7 +3269,8 @@ image constraints under *Detail → Box image*.
   table: tenants`, then `locations`), and `fiscal-none`'s says its case passes without core; the
   `schema-conformance.test.ts` comments of `workforce`, `payments`, `catalogue` and `bookings` say
   their prerequisites are the database the set's keys resolve in, not something the migration
-  needs (each suite passes with an empty list); the worked example in
+  needs (each suite passes with an empty list — except, by #603's review, `catalogue`'s, which
+  fails `no such table: main.products` without core; not re-run here); the worked example in
   `docs/developers/testing-guide.md` now points at workforce's conformance call site; and
   `packages/migrations/src/apply.ts`'s loop comment says sets apply in the order the caller passes,
   which boot derives from each module's declared `requires` (`orderedMigrationSets`), and gives
@@ -4550,9 +4575,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   selects the image row, then calls `listImageUsages` only to take the `.length` of what comes back,
   and that function opens by re-reading the same row by id just to get its filename. Handing it the
   filename `readImage` already holds would turn five queries into four.
-- **Checking one product's translations takes a lock and re-reads the language configuration once
-  per value** (`packages/catalogue/src/content-languages.ts:13-27`). `validateContentTranslations`
-  takes the `content-languages` advisory lock and reads the one-row configuration on every call, and
+- **Checking one product's translations re-reads the language configuration once per value**
+  (`packages/catalogue/src/content-languages.ts`). `validateContentTranslations` reads the one-row
+  configuration on every call (the advisory lock it also took went with the storage switch), and
   callers call it inside loops: once per variant (`packages/catalogue/src/variants.ts`, inside the
   normalisation loop) and twice for a single unit create (`packages/catalogue/src/units.ts`). There
   used to be a third, once per modifier choice, and it went with the old model in Task 13 — the

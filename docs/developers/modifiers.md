@@ -83,9 +83,10 @@ a concurrent delete of one of those lists could not slip between the two. There 
 delete to slip in. `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside the venue
 file's write queue, and that queue admits one write transaction on the file at a time
 (`packages/store/src/write-queue.ts`), so the existence read `listExists` makes is still true when
-the insert a few statements later runs. The file says so at `listExists` and again at
-`assertRefsExist`, and both point at `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`),
-which carries the mechanism and the receipt for the whole package.
+the insert a few statements later runs. `writeProductModifiers`'s header says two writers are
+serialised by `withTransaction`, and `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`)
+carries the mechanism for the whole package and points at its receipt, `racePair` in
+`packages/catalogue/test/fixtures.ts`.
 
 ### Publishing an extras list on a menu
 
@@ -448,7 +449,7 @@ The advisory lock was reached, not taken. `createOptionList` and `updateOptionLi
 (`packages/catalogue/src/extras.ts`) each call their own file's `validateNames`, which calls
 `findContentTranslationGap` (`packages/catalogue/src/content-languages.ts`). That function used to
 open with `select pg_advisory_xact_lock(...)`; today its first database statement is the plain
-configuration read, and its header says what the lock used to arrange and what arranges it instead —
+configuration read, and its header says what arranges a consistent read —
 `withTransaction` opening the body inside the venue file's write queue, which admits one write
 transaction at a time. `grep -rn pg_advisory packages/catalogue` on 2026-09-23 matched three lines,
 all of them comments in test files saying what was dropped. Both `validateNames` still return before
@@ -461,9 +462,9 @@ The row locks are gone the same way, and `packages/catalogue` now contains no `f
 saying what the clause used to do. The two functions this paragraph used to name no longer exist
 under those names: `lockExtraList` is now `assertExtraListForWrite`, which does the 404 it always
 also did and nothing more, and `lockList` in `product-modifiers.ts` is now `listExists`.
-`setMenuItemExtraLists` no longer opens by locking the menu offer's `menu_items` row; its header
-records that the offer's `for update` arranged two saves of the same offer running one after the
-other, and that the write queue arranges that now. `options.ts` took no lock of its own before and
+`setMenuItemExtraLists` no longer opens by locking the menu offer's `menu_items` row: two saves of
+the same offer run one after the other because the write queue admits one write transaction at a
+time. `options.ts` took no lock of its own before and
 takes none now.
 
 `scripts/catalogue-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
