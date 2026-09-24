@@ -516,8 +516,8 @@ documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, 
 the changed packages and their dependents.
 
 `lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
-project, which is the suite that does read the machinery — so a regression in a skipped path is
-still caught there.
+project — so a regression in a skipped path is caught there only as far as the root suites
+exercise it.
 
 A merge to `main` runs the unfiltered suite whenever anything outside those two sets changed; that
 run verifies the narrowing, and a root-only or docs-only merge does not get one. Read the
@@ -651,10 +651,11 @@ them before adding the export.
 ### sharp and the server bundle
 
 sharp, which shrinks uploaded photos (`packages/media/src/prepare.ts`), is a native addon that loads
-libvips as a separate shared library, and esbuild does not refuse to bundle it. So every esbuild
-command whose bundle can reach `@waitron/media` names `--external:sharp`, and the box image carries
-sharp beside the bundle in `/app/node_modules`. Measured 2026-09-23 with the repository's esbuild
-0.28.2:
+libvips as a separate shared library, and esbuild does not refuse to bundle it. So every Node
+bundle in the workspace is built by `scripts/bundle-node.mjs`, which passes `--external:sharp` to
+every esbuild command it runs, and the box image carries sharp beside the bundle in
+`/app/node_modules`. Measured 2026-09-23 with the repository's esbuild 0.28.2, when each package's
+`build` script still spelled out its own esbuild commands:
 
 - With `--external:sharp` removed from the `src/bin.ts` command, `pnpm --filter @waitron/server
   build` exited 0. The resulting `dist/server.js` held no `import("sharp")` and 24 lines naming
@@ -684,14 +685,19 @@ stage deletes them. A linux/amd64 build of the same Dockerfile (`docker buildx b
 linux/amd64`, emulated on an arm64 Mac) carried `@img/sharp-linux-x64` and
 `@img/sharp-libvips-linux-x64`, also 23 MB, and passed the same shrink script.
 
-What the guards leave open. `scripts/deploy-image-env.test.ts` finds the bundles to check by
-following `dependencies` through each workspace member's `package.json`, and compares the number of
-`--external:sharp` flags in a package's `build` script with the number of `esbuild ` commands in it.
-Measured 2026-09-24: with the flag taken off the `dist/record-one-sale.js` command in
-`apps/server/package.json` and a second copy added to the `dist/server.js` command, its flag case
-still passed. bundle-smoke's `grep -q 'import("sharp")'` step reads the server bundle (`dist/server.js` in
-`apps/server`) only, so the other bundles the server's `build` makes, and `waitron-provision`
-(`dist/bin.js` in `packages/provisioning`), are not read by it.
+What the guards leave open. `scripts/deploy-image-env.test.ts` takes the flag from the shared
+script's own argument builder, which it imports, so every command that script runs is covered. It
+cannot see a bundle built some other way: it finds a direct `esbuild` call by reading each
+workspace member's `package.json` scripts as TEXT, so a package script that runs a file of its own
+which calls esbuild, or esbuild's JavaScript API, passes. `packages/ui-core`'s browser build is
+built exactly that way (`packages/ui-core/scripts/build.mjs`) and reaches no sharp. The bundles
+that can reach `@waitron/media` are named in the test rather than found: it pins that
+`@waitron/server`'s and `@waitron/provisioning`'s `build` scripts name the shared script, so a NEW
+member that reaches `@waitron/media` and bundles through something the first case cannot see — a
+file of its own, another bundler, or esbuild reached by path — is not flagged. bundle-smoke's
+`grep -q 'import("sharp")'` step reads the server bundle (`dist/server.js` in `apps/server`) only,
+so the other bundles the server's `build` makes, and `waitron-provision` (`dist/bin.js` in
+`packages/provisioning`), are not read by it.
 
 ## Two TypeScript compilers are installed, and that is deliberate
 

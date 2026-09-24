@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, normalize, relative } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parsePairs } from "./bundle-node.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
@@ -19,16 +20,18 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * commands are declared under `waitron.commands` instead, which pnpm ignores; restoring a `bin`
  * entry is only correct alongside something that puts the file there before the link.
  *
- * A `waitron.commands` target must be NAMED by an `--outfile=` in its own member's `build` script.
+ * A `waitron.commands` target must be NAMED as the outfile of an `<entry>=<outfile>` pair its own
+ * member's `build` script hands to `scripts/bundle-node.mjs`, which builds every Node bundle.
  * Only `apps/server`'s copy is read anywhere (`scripts/deploy-image-env.test.ts`), so the rest would
  * otherwise be a hardcoded list nothing checks (CLAUDE.md §2). One-directional: a build may write
  * files that are no command.
  *
- * LIMITATION, stated because this half reads TEXT: it matches `--outfile=` against the build
- * script's STRING and never observes what a build writes. A build that put the file there another
- * way — `--outdir=`, a wrapper script, a quoted value — is reported unbuilt, and a build script that
- * merely MENTIONS the path passes. Same shape, and same reason, as the disclosures in
- * scripts/dashboard-browser-purity.test.ts and scripts/module-graph-honesty.test.ts.
+ * LIMITATION, stated because this half reads TEXT: it reads those pairs from the build script's
+ * STRING and never observes what a build writes. A build that put the file there another way — an
+ * esbuild call of its own, a different wrapper, a quoted value — is reported unbuilt, and a build
+ * script that merely MENTIONS a pair after the shared script's name passes. Same shape, and same
+ * reason, as the disclosures in scripts/dashboard-browser-purity.test.ts and
+ * scripts/module-graph-honesty.test.ts.
  *
  * Lives in the ROOT project (CLAUDE.md §4): it reads every member's manifest, and a
  * package-resident guard only runs when its own package is in scope.
@@ -136,14 +139,18 @@ function phantomBins(
     .map(([command, target]) => `${packageName}: ${command} -> ${target}`);
 }
 
-/** esbuild's `--outfile=` targets in a member's `build` script — the files that build writes. */
-const OUTFILE = /--outfile=(\S+)/g;
+/** The outfiles a `build` script hands to scripts/bundle-node.mjs — the files that build writes. */
+function builtFiles(build: string): string[] {
+  return build.split("&&").flatMap((command) => {
+    const words = command.trim().split(/\s+/);
+    const at = words.findIndex((word) => word.endsWith("scripts/bundle-node.mjs"));
+    return at === -1 ? [] : parsePairs(words.slice(at + 1)).map(({ outfile }) => outfile);
+  });
+}
 
 /** The operator commands whose target this member's own `build` script never writes. */
 function unbuiltCommands(manifest: Manifest, packageName: string): string[] {
-  const built = new Set(
-    [...(manifest.scripts?.build ?? "").matchAll(OUTFILE)].map(([, out]) => normalize(out!)),
-  );
+  const built = new Set(builtFiles(manifest.scripts?.build ?? "").map((out) => normalize(out)));
   return Object.entries(manifest.waitron?.commands ?? {})
     .filter(([, target]) => !built.has(normalize(target)))
     .map(([command, target]) => `${packageName}: ${command} -> ${target}`);
@@ -224,7 +231,7 @@ describe("every command a workspace manifest declares under bin", () => {
 
 describe("every operator command a manifest declares under waitron.commands", () => {
   it(
-    "is named by an --outfile= in that package's own build script",
+    "is an outfile that package's own build hands to the shared bundle script",
     () => {
       const read = manifests();
       const declared = read.flatMap(({ manifest }) =>
@@ -277,7 +284,7 @@ describe("the detector itself", () => {
 
   it("flags an operator command no build step writes", () => {
     const manifest = {
-      scripts: { build: "esbuild src/bin.ts --bundle --outfile=dist/other.js" },
+      scripts: { build: "node ../../scripts/bundle-node.mjs src/bin.ts=dist/other.js" },
       waitron: { commands: { "waitron-thing": "./dist/thing.js" } },
     };
     expect(unbuiltCommands(manifest, "@waitron/thing")).toEqual([
@@ -285,9 +292,11 @@ describe("the detector itself", () => {
     ]);
   });
 
-  it("matches a declared target against an --outfile= written without the leading ./", () => {
+  it("matches a declared target against an outfile written without the leading ./", () => {
     const manifest = {
-      scripts: { build: 'esbuild src/bin.ts --outfile=dist/thing.js --banner:js="x"' },
+      scripts: {
+        build: "node copy.mjs && node ../../scripts/bundle-node.mjs src/bin.ts=dist/thing.js",
+      },
       waitron: { commands: { "waitron-thing": "./dist/thing.js" } },
     };
     expect(unbuiltCommands(manifest, "@waitron/thing")).toEqual([]);
@@ -295,7 +304,7 @@ describe("the detector itself", () => {
 
   it("lets a build write files that are no command, and flags a package that builds nothing", () => {
     const built = {
-      scripts: { build: "esbuild a.ts --outfile=dist/a.js && esbuild b.ts --outfile=dist/b.js" },
+      scripts: { build: "node ../../scripts/bundle-node.mjs a.ts=dist/a.js b.ts=dist/b.js" },
       waitron: { commands: { "waitron-a": "./dist/a.js" } },
     };
     expect(unbuiltCommands(built, "@waitron/thing")).toEqual([]);

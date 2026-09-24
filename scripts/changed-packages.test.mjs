@@ -164,10 +164,9 @@ describe("scopeForPaths", () => {
     expect(scopeForPaths([path], workspace()).kind).toBe("global");
   });
 
-  // The repository's own machinery is ROOT scope, not global: no `pnpm -r` job reads it, so it
-  // gives the repo-level Vitest project work and gives no package any. It used to fall through to
-  // `global`, which ran the whole workspace's typecheck and coverage — ten minutes for a change to
-  // the classifier that decides what runs.
+  // The repository's own machinery is ROOT scope, not global, so it gives the repo-level Vitest
+  // project work and gives no package any — including the two files members do read, which
+  // changed-scope.mjs names above ROOT_SCOPE_PREFIXES.
   it.each([
     ".github/workflows/ci.yml",
     "scripts/changed-scope.mjs",

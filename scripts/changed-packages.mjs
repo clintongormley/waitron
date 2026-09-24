@@ -255,7 +255,8 @@ export function scopeForPaths(changedPaths, loadPackages) {
     // `pnpm-workspace.yaml`, `tsconfig.base.json`, the root manifest, the lockfile and the lint and
     // format config all land here. Those can affect anything. The two other kinds of root path are
     // already gone: `isInertPath` filtered out the config no `code`-gated job reads, and
-    // `isRootScopePath` the machinery no package reads.
+    // `isRootScopePath` the machinery that gives no package any CI work (the two files members do
+    // read are named in `scripts/changed-scope.mjs` above ROOT_SCOPE_PREFIXES).
     if (owner === undefined) {
       return {
         kind: "global",

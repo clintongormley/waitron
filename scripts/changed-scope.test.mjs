@@ -71,8 +71,9 @@ describe("isInertPath", () => {
 });
 
 describe("isRootScopePath", () => {
-  // The repository's own machinery. It is CODE — isInertPath says so — but no `pnpm -r` job reads
-  // it, so it gives the ROOT Vitest project work and gives no package any.
+  // The repository's own machinery. It is CODE — isInertPath says so — but it gives the ROOT Vitest
+  // project work and gives no package any CI work; the two files members do read are named in
+  // changed-scope.mjs above ROOT_SCOPE_PREFIXES.
   it.each([
     "scripts/changed-scope.mjs",
     "scripts/english-only.test.ts",

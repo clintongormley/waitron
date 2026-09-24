@@ -184,13 +184,15 @@ hook, or how tests are scheduled:
   renders nothing passes anyway. Cost: the vite 6 → 8 bundler replacement had to take its build
   evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
-  esbuild command whose bundle can reach `@waitron/media` names `--external:sharp`, and the box
-  image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts`, weaker
-  than its name (it reads package.json TEXT, follows `dependencies` only, and counts the flag per
-  `build` script, not per command); the bundle-smoke grep in `.github/workflows/ci.yml`, which reads
+  Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
+  box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts`,
+  weaker than its name (it finds a direct `esbuild` call by reading package.json TEXT, so a package
+  script that runs its own file calling esbuild is invisible, and it pins only server and
+  provisioning to the shared script, so a new package reaching `@waitron/media` that bundles
+  through something that TEXT match cannot see — a file of its own, another bundler, or esbuild
+  reached by path — passes); the bundle-smoke grep in `.github/workflows/ci.yml`, which reads
   `dist/server.js` alone, not the other server bundles or `waitron-provision`; and image-smoke's
-  sharp step. Receipt:
-  [ci-and-gates.md](docs/developers/ci-and-gates.md).
+  sharp step. Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Two pushes to `main` must never share a CI concurrency group.** GitHub keeps only one PENDING
   run per group and a newer push cancels the waiting one, which `cancel-in-progress` never reaches.
   Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and

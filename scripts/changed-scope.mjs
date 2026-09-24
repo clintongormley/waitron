@@ -44,14 +44,15 @@ const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
 /**
  * The repository's own machinery: the two classifiers and the guards under `scripts/`, the pre-push
  * hook, and the workflows. Code — `isInertPath` says so, and a wrong classifier breaks every gating
- * decision — but code NO WORKSPACE MEMBER READS, so it gives the root Vitest project work and gives
- * no package any.
+ * decision — but it gives the root Vitest project work and gives no package any.
  *
- * Verified in this worktree on 2026-09-06: `rg -n "scripts/" packages apps --glob '!node_modules'`
- * matches only each package's OWN `scripts/` directory (`apps/server/scripts/dev-setup.ts`,
- * `packages/provisioning/scripts/copy-migrations.mjs`) plus two comments naming
- * `scripts/reap-testcontainers.mjs` — no import, config reference or fixture path reaches the root
- * `scripts/`. `.husky/` is run by git alone; `.github/` is read by `scripts/ci-workflow.test.mjs`
+ * Two files under `scripts/` ARE read by members, and a change to either still gets root scope:
+ * `scripts/bundle-node.mjs`, which the `build` scripts of `apps/server`, `apps/print-agent`,
+ * `packages/credentials` and `packages/provisioning` run, and `scripts/dev-server-proxy.ts`, which
+ * the `vite.config.ts` of `apps/dashboard`, `apps/till` and `apps/setup` import. Root scope emits
+ * `code=false`, so a change to either alone runs, in ci.yml, neither `bundle-smoke` nor any
+ * member's build or tests; what covers a change to either is the root project's suites that
+ * import it. `.husky/` is run by git alone; `.github/` is read by `scripts/ci-workflow.test.mjs`
  * and `scripts/check-signoff.test.mjs`, which are themselves in the root project.
  *
  * ROOT-ONLY, the same rule INERT_ROOT_PREFIXES carries: `packages/db/scripts/x.ts` is that
