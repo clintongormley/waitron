@@ -5,7 +5,7 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // Margin, not a need.
+    // Margin, not a need: measured in #520.
     testTimeout: 30_000,
     coverage: {
       provider: "v8",

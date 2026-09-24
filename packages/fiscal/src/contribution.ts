@@ -63,8 +63,8 @@ export interface FiscalContribution {
   };
   /** The operator-typed venue fields this regime puts on the wire verbatim, reached through this
    * seat because the host does not know the regime's rules. `validate` throws
-   * `setup.request_invalid` naming ONE offending field and writes nothing; it is run BEFORE
-   * `provisionVenue` mints the unrepairable SIF and hash chain (CLAUDE.md §5). */
+   * `setup.request_invalid` naming ONE offending field and writes nothing. Run it BEFORE
+   * provisioning mints the unrepairable SIF and hash chain (CLAUDE.md §5). */
   readonly venueFields?: {
     readonly defaults?: { readonly operationDescription: string };
     validateOperationDescription(description: string): void;
