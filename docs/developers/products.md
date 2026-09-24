@@ -267,12 +267,13 @@ A held order keeps a line whose product, or one of whose extras, has since gaine
 variant, and lowering or keeping its quantity is allowed; raising it is refused
 `product.variant_required`, as a raise of a line whose product has become Inactive or Unavailable
 is refused (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
-re-check them (`priceStoredOrder`, same file). On the till, retrieving the order drops such an extra
-from the basket with the `held.product_gone` notice, as it drops a sold-out one, because the extras
-lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
-`apps/till/src/state/held-extras.ts`); any edit then re-prices the order without it, but paying with
-no edit still bills it, since an unedited retrieved basket sends no update (`#syncIfDirty`,
-`apps/till/src/till-app.ts`).
+re-check them (`priceStoredOrder`, same file). On the till, retrieving the order keeps such an extra
+in the basket, marked "Not offered now" and counted in the total, as it keeps a sold-out one,
+because the extras lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
+`apps/till/src/state/held-extras.ts`) and paying with no edit still bills it: an unedited retrieved
+basket sends no update (`#syncIfDirty`, `apps/till/src/till-app.ts`). The till never sends such a
+pick, so the first edit takes it off the basket, and the server re-prices the edited order without
+it.
 
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own

@@ -831,16 +831,17 @@ error, the table was gone and the product row kept. A
 product with Active variants is now refused on the till's plain product path, as an extras pick on
 either path, and on a raised held line (the Task 5 bullet above). (2026-09-24: B4 has since removed
 the plain product path; see "A sale needs a zone" below.) What Task 9 leaves open:
-- **Paying a held order does not re-check its lines.** A line, or an extras pick, whose product
-  gained an Active variant after the order was parked is billed as parked: the cash and card pays
-  price a retrieved order from its stored lines (`priceStoredOrder`,
-  `apps/server/src/working-order.ts`). That follows the 2026-09-20 service spec §10 (existing work
-  is not cancelled), and only a raised quantity is refused. On the till, retrieving the order drops
-  such an extra from the basket with the `held.product_gone` notice, as it drops a sold-out one
-  (`deriveExtraSelections`, `apps/till/src/state/held-extras.ts`); any edit then re-prices without
-  it, but paying with no edit still bills it, since an unedited retrieved basket sends no update
-  (`#syncIfDirty`, `apps/till/src/till-app.ts`). **Next action:** confirm with the owner
-  that paying parked work is meant to go through unchanged.
+- **Settled (owner, Q5.2, 2026-09-24): paying a held order bills its lines as parked, and the till
+  shows what it bills.** A line, or an extras pick, whose product gained an Active variant after
+  the order was parked is billed as parked: the cash and card pays price a retrieved order from its
+  stored lines (`priceStoredOrder`, `apps/server/src/working-order.ts`), following the 2026-09-20
+  service spec §10 (existing work is not cancelled); only a raised quantity is refused. On the till
+  (`fix/till-show-billed-extras`), retrieving the order keeps an extra that no list offers any
+  more in the basket, marked "Not offered now" and counted in the total, and the banner says it is
+  still charged (`held.extra_not_offered`); a retrieved line whose offer the till no longer lists
+  carries the same mark. The first edit takes the extra off the basket, because the till cannot
+  send it and the server re-prices an edited order without it — pinned by "bills a parked extra
+  that gained an Active variant until an edit omits it" (`apps/server/src/till-sale.test.ts`).
 - **An extras list whose items all have Active variants reaches the till with no items**
   (`readExtraProducts` leaves each one out), so a list that requires a pick cannot be answered from
   the till. **Next action:** decide whether
@@ -948,6 +949,13 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
   reaches it.
   **Next action:** delete both branches, since no backwards-compatibility code is owed before
   production (CLAUDE.md §3), or say what keeps them.
+- **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
+  parked in.** `#onRetrieveOrder` (`apps/till/src/till-app.ts`) matches each line against the
+  till's live product list, which holds the offers of the zone the counter is showing, and a
+  retrieved order carries no zone. An order parked in one zone and retrieved while the counter
+  shows another can therefore mark its lines and extras "Not offered now" when its own zone still
+  offers them. **Next action:** send the
+  order's zone with the retrieved order and read that zone's offer on retrieve.
 - **`sale.unknown_product` is no longer raised.** A line naming an item the zone does not offer is
   refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
   `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
