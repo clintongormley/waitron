@@ -30,5 +30,9 @@ declare module "@waitron/shared" {
      * listed key outside the prefix asked for (`field: "listedKey"`, `value` the key as the listing
      * named it). */
     "backup.stream_name_invalid": { field: string; value: string };
+    /** A value bound for Litestream's configuration held a `$`, which Litestream would expand as a
+     * variable reference. `field` is our name for the value (`dbPath` or `replicaUrl`), never the
+     * value. */
+    "backup.stream_config_unsafe": { field: string };
   }
 }

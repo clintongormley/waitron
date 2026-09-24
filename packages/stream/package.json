@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./litestream.js": "./src/litestream.ts",
     "./testing/memory-store.js": "./src/testing/memory-store.ts"
   },
   "scripts": {

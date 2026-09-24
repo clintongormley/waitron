@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { CONFLICT_ATTEMPTS, bucketKey, createS3ObjectStore, normalisePrefix } from "./s3-store.js";
+import { CONFLICT_ATTEMPTS, createS3ObjectStore } from "./s3-store.js";
 import type { BucketConfig } from "./s3-store.js";
 
 type SentRequest = {
@@ -432,22 +432,5 @@ describe("addressing", () => {
     expect(sent[0]!.hostname).toBe("s3.example.test");
     expect(sent[0]!.port).toBe(9000);
     expect(sent[0]!.path).toBe("/owner-bucket/waitron/k");
-  });
-});
-
-describe("the configured prefix", () => {
-  it.each([
-    ["", ""],
-    ["/", ""],
-    ["waitron", "waitron/"],
-    ["/waitron/", "waitron/"],
-    ["//a/b//", "a/b/"],
-  ])("normalises %j to %j", (prefix, expected) => {
-    expect(normalisePrefix(prefix)).toBe(expected);
-  });
-
-  it("joins the normalised prefix and a key into the key the bucket holds", () => {
-    expect(bucketKey({ prefix: "/waitron" }, "venues/v1/gen-1")).toBe("waitron/venues/v1/gen-1");
-    expect(bucketKey({ prefix: "" }, "venues/v1/gen-1")).toBe("venues/v1/gen-1");
   });
 });

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { GENERATION_NAME, generationName, parseGenerationName, venuePrefix } from "./names.js";
+import {
+  GENERATION_NAME,
+  bucketKey,
+  generationName,
+  normalisePrefix,
+  parseGenerationName,
+  venuePrefix,
+} from "./names.js";
 
 const NODE = "3f1c2b9e-8d7a-4e21-9b0c-5a6d7e8f9012";
 
@@ -107,5 +114,22 @@ describe("parseGenerationName", () => {
     "gen-1--20260923T101112Z",
   ])("reads %j as not a generation", (name) => {
     expect(parseGenerationName(name)).toBeNull();
+  });
+});
+
+describe("the configured prefix", () => {
+  it.each([
+    ["", ""],
+    ["/", ""],
+    ["waitron", "waitron/"],
+    ["/waitron/", "waitron/"],
+    ["//a/b//", "a/b/"],
+  ])("normalises %j to %j", (prefix, expected) => {
+    expect(normalisePrefix(prefix)).toBe(expected);
+  });
+
+  it("joins the normalised prefix and a key into the key the bucket holds", () => {
+    expect(bucketKey({ prefix: "/waitron" }, "venues/v1/gen-1")).toBe("waitron/venues/v1/gen-1");
+    expect(bucketKey({ prefix: "" }, "venues/v1/gen-1")).toBe("venues/v1/gen-1");
   });
 });

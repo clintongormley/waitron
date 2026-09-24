@@ -58,3 +58,16 @@ export function parseGenerationName(
   if (Number.isNaN(openedAt.getTime()) || openedAt.toISOString() !== iso) return null;
   return { term, nodeId, openedAt };
 }
+
+export function normalisePrefix(prefix: string): string {
+  const trimmed = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimmed === "" ? "" : `${trimmed}/`;
+}
+
+/**
+ * The key as the bucket holds it. Litestream's replica path must start with the same normalised
+ * prefix, or Litestream and this package will look for a generation in different places.
+ */
+export function bucketKey(config: { readonly prefix: string }, key: string): string {
+  return `${normalisePrefix(config.prefix)}${key}`;
+}
