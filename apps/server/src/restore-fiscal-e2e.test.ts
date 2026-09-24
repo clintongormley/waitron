@@ -465,9 +465,8 @@ describe("fiscal restore, end to end", () => {
     const controlDirs = await arrangeDirs();
     // The refusal arrives with `errcode` and `message` on the error itself and no `.cause` — the
     // same place `execute()`'s refusals land in the case above. `errcode: 1` is SQLite's catch-all
-    // `SQL logic error`, shared with a syntax error and a missing table
-    // (stated on `appliedSchemaVersion` in `packages/migrations/src/schema-version.ts`; measured in
-    // #489), so the column NAME in the message is what discriminates.
+    // `SQL logic error`, shared with a syntax error and a missing table (measured in #489), so the
+    // column NAME in the message is what discriminates.
     await expect(
       restoreFromArtifact({
         ...(await restoreDepsFor(controlDirs, olderArtifactPath)),
