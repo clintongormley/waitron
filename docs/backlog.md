@@ -853,7 +853,7 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   tables existed, and its one reader (`scripts/write-path-tables.test.ts`) reads only its
   read-but-never-written rows, which these two are not. Left as it is.
 
-**A sale needs a zone — DONE (B4, 2026-09-24; lane B's queue item B4, not Track B's B4 below).**
+**A sale needs a zone — DONE (B4, #571, main 342d69fd4, 2026-09-24; lane B's queue item B4, not Track B's B4 below).**
 The owner said _"a zone is required"_ (the Task 5 bullets above), so every sale line is now priced
 from the menu offers of its order's service zone, and the path that priced a line by bare
 `productId` is gone:
