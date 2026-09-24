@@ -9,7 +9,8 @@ import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 import type { CashCountInput, DailyCloseRecord, DailyCloseSnapshot } from "./close-types.js";
 
 // The break cases are staged with INSERTs, which the append-only triggers (on update and delete)
-// do not refuse. Mutations of a committed chain are in verify-daily-close-chain.tampered.test.ts.
+// do not refuse, and with UPDATEs of `daily_close_chain`, which has no append-only trigger.
+// Mutations of committed close rows are in verify-daily-close-chain.tampered.test.ts.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 

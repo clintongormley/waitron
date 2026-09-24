@@ -7,6 +7,8 @@ import "@waitron/shared";
  * so the prefix is `close.*`. Thrown by `recordDailyClose`.
  *
  * Codes are never renamed once shipped: a wrong one is deprecated and a new one added beside it.
+ * `scripts/errors-reachable.test.ts` checks that this file stays reachable from the package's
+ * `index.ts`.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

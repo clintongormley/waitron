@@ -42,10 +42,13 @@ function toEpochSeconds(when: Date | string): number {
 }
 
 /**
- * A deterministic serialization of a JSON-shaped value: object keys sorted recursively, so the
- * digest does not depend on key order; array order preserved (the caller normalises the one array
- * whose order is not intrinsic, {@link canonicalSnapshot}). Money is `Decimal` strings, so no float
- * representation reaches the digest.
+ * A deterministic serialization: object keys sorted recursively, so the digest does not depend on
+ * key order; array order preserved (the caller normalises the one array whose order is not
+ * intrinsic, {@link canonicalSnapshot}). Money is `Decimal` strings, so no float representation
+ * reaches the digest. The value must contain no `null` and no `undefined`: `null` reaches
+ * `Object.keys`, which throws, and a key holding `undefined` is written here as the text
+ * `undefined` while the `json` column the snapshot is stored in drops that key, so a hash
+ * recomputed from the stored row would differ.
  */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {

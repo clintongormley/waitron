@@ -2,6 +2,10 @@
  * Closes started together leave one row per business day, on one contiguous chain. Every case here
  * starts more than one `recordDailyClose` without awaiting the first; what serialises them is the
  * venue file's write queue (`withTransaction`, `packages/db/src/tenancy.ts`).
+ *
+ * Weaker than its name: no case holds one closer inside its transaction and checks that a second is
+ * kept out, and nothing confirms the closers are separate callers beyond their being separate
+ * `withTransaction` calls started without awaiting each other.
  */
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";

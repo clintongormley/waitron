@@ -32,7 +32,8 @@ export async function aggregateVatByRate(
   // with the invoice, not integer cents, and this engine has no exact decimal type, so the sum is
   // taken here in Decimal arithmetic, one JSON element per row. Each element is rounded to cents
   // (half away from zero) before it is added, and the rate is normalised the same way, so "21" and
-  // "21.00" cannot split into two lines.
+  // "21.00" cannot split into two lines. Nothing in this path bounds an element's width: an amount
+  // or a rate with any number of integer digits is summed rather than refused.
   const { rows } = await tx.execute<{ rate: string; base: string; tax: string }>(sql`
     select
       b.value ->> 'rate' as rate,
