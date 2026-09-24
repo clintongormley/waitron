@@ -357,9 +357,10 @@ export class CatalogueScreen extends LitElement {
     } catch (error) {
       const fieldErrors = this.#rejectedField(error, event.detail.value);
       this.editorFieldErrors = fieldErrors;
-      // A refusal that names a field is reported INSIDE the editor, beside that field — which is
-      // also what opens the section the field is folded into. Only a refusal with nothing to point
-      // at falls back to this screen's own banner, so the same problem is never said twice.
+      // A refusal that names a field is reported INSIDE the editor — beside that field when it has
+      // one, which also opens the section the field is folded into, else in the editor's summary.
+      // Only a refusal with nothing to point at falls back to this screen's own banner, so the same
+      // problem is never said twice.
       this.errorKey = Object.keys(fieldErrors).length ? null : codeOf(error);
       this.refusedLists = extraListNames(error);
     } finally {

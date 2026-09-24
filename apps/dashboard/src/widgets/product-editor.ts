@@ -86,10 +86,10 @@ type SectionName = keyof typeof SECTION_FIELDS;
 
 /**
  * The field names the SERVER uses when it rejects a product body
- * (`packages/catalogue/src/product-editor-input.ts`), mapped onto this editor's own field names. A
- * value ending in "-" names a translated field: the server names such a field once for all of its
- * languages, so there is no single language to point at and the default content language's input is
- * used.
+ * (`packages/catalogue/src/product-editor-input.ts`), mapped onto this editor's field names, or a
+ * key only the error summary shows. A value ending in "-" names a translated field: the server
+ * names such a field once for all of its languages, so there is no single language to point at and
+ * the default content language's input is used.
  */
 const SERVER_FIELDS: Record<string, string> = {
   name: "name",
@@ -102,12 +102,14 @@ const SERVER_FIELDS: Record<string, string> = {
   vatClass: "tax",
   categoryIds: "primary",
   primaryCategoryId: "primary",
+  active: "active",
 };
 
 /**
- * The editor field a rejected product write's `field` belongs to, or null when nothing on this
- * screen holds it. The composing screen uses it to put the server's refusal beside the field it
- * names, which is also what opens the section that field is folded into.
+ * The editor field a rejected product write's `field` belongs to, or null when this editor cannot
+ * show it. A key with no input of its own (`active`) is shown in the editor's error summary alone.
+ * The composing screen uses it to put the server's refusal beside the field it names, which is also
+ * what opens the section that field is folded into.
  */
 export function productEditorField(field: string, defaultLanguage: string): string | null {
   const variant = /^variants\.(\d+)\.(name|unitPrice|active)$/.exec(field);

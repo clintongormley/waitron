@@ -440,9 +440,6 @@ describe("catalogue-screen", () => {
     ]);
   });
 
-  // One dismissal produces TWO `wt-cancel`s: the form's own, then the `<dialog>`'s native `close` a
-  // task later. Found by running — the second one arrived while the options form was open and
-  // closed it, taking the refusal it was showing with it.
   it("gives a refusal to offer a product with Active variants back to the nested extras form, by item", async () => {
     const api = stubApi({
       createExtraList: vi.fn().mockRejectedValue({
@@ -467,6 +464,9 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
+  // One dismissal produces TWO `wt-cancel`s: the form's own, then the `<dialog>`'s native `close` a
+  // task later. Found by running — the second one arrived while the options form was open and
+  // closed it, taking the refusal it was showing with it.
   it("ignores a closed form's second cancel, which by then belongs to another form", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
@@ -1013,6 +1013,38 @@ describe("catalogue-screen", () => {
       const banner = el.shadowRoot!.querySelector("[role=alert]")?.textContent ?? "";
       expect(banner).toContain(codeMessage("product.offered_as_extra"));
       expect(banner).toContain("Salsas");
+    });
+
+    it("names the extras lists that refuse a restore inside the variant's own editor", async () => {
+      history.replaceState(null, "", "/manage/catalogue/product/v1");
+      const api = variantApi();
+      vi.mocked(api.getProductEditor).mockResolvedValue({ ...variantValue, active: false });
+      vi.mocked(api.updateProductEditor).mockRejectedValue({
+        code: "product.offered_as_extra",
+        params: {
+          field: "active",
+          extraLists: [
+            { id: "ex-1", name: "Salsas" },
+            { id: "ex-2", name: "Toppings" },
+          ],
+        },
+        status: 409,
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      editor(el).shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledWith(
+        "v1",
+        expect.objectContaining({ active: true }),
+      );
+      expect(editor(el).open).toBe(true);
+      await editor(el).updateComplete;
+      const summary = editor(el).shadowRoot!.querySelector("wt-form-error-summary")!;
+      expect(summary.errors).toEqual([
+        `${codeMessage("product.offered_as_extra")} Salsas, Toppings`,
+      ]);
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     });
 
     it("reports a refused restore on the screen", async () => {

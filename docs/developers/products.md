@@ -253,7 +253,7 @@ that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered
 since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
 putting one there: an extras list naming such a product (`extras.product_has_variants`), and an
 Active variant on a product an extras list offers (`product.offered_as_extra`, which names the
-lists; the product editor shows them beside the variant's row). A variant itself may be an extra.
+lists). A variant itself may be an extra.
 
 ### The sale line
 
