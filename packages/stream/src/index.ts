@@ -13,3 +13,10 @@ export {
   writePointer,
 } from "./pointer.js";
 export type { SignedPointer, StreamPointer } from "./pointer.js";
+export {
+  PRUNE_CONCURRENCY,
+  claimGeneration,
+  generationPrefix,
+  markerKey,
+  pruneGenerations,
+} from "./generations.js";
