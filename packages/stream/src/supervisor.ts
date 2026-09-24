@@ -1,6 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { hasCode, isAppError } from "@waitron/shared";
+import { isPreconditionFailure } from "./conditional.js";
 import "./errors.js";
 import { claimGeneration, generationPrefix, pruneGenerations } from "./generations.js";
 import {
@@ -78,7 +80,10 @@ export interface SupervisorDeps {
 
 /** How often, while streaming, the side file is measured. */
 export const TICK_MS = 60_000;
-/** How often, while opening, the bucket is asked whether the first full copy has landed. */
+/**
+ * How often, while opening, the bucket is asked whether the first full copy has landed, and the side
+ * file is measured.
+ */
 export const OPEN_POLL_MS = 2_000;
 /** How long an opening that failed waits before trying again. */
 export const OPEN_RETRY_MS = 30_000;
@@ -142,25 +147,17 @@ const sendSignal = (pid: number, signal: NodeJS.Signals | 0): boolean => {
  */
 const FULL_COPY = /^[0-9a-f]{4}\/0{15}1-[0-9a-f]{16}\.ltx$/;
 
+const replicateArgs = (configPath: string): string[] => ["replicate", "-config", configPath];
+
 const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "unknown");
-const isPreconditionFailed = (error: unknown): boolean =>
-  isAppError(error) && error.code === "backup.stream_precondition_failed";
 
 /** A sleep that ends early, and quietly, when `signal` aborts. */
-export function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-    const done = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    };
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done, { once: true });
-  });
+export async function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  try {
+    await delay(ms, undefined, { signal });
+  } catch (error) {
+    if (!signal.aborted) throw error;
+  }
 }
 
 interface Keeper {
@@ -176,9 +173,11 @@ interface Keeper {
  * supervisor stops and reads `refused`. Nothing on the sale path waits for any of it: `start()`
  * returns once the work is scheduled.
  *
- * While streaming it restarts an exited Litestream with a backoff, and when the side file reaches
- * the limit it stops Litestream, folds the file back, waits for the bucket (spec §4.5), and resumes
- * the SAME generation from Litestream's kept local state.
+ * It restarts an exited Litestream with a backoff. From the moment Litestream starts, the side file
+ * is measured on a timer whatever the bucket is doing; at the limit Litestream is stopped, the file
+ * folded back and the bucket waited for (spec §4.5). The SAME generation then resumes from
+ * Litestream's kept local state, unless its first full copy had not landed, when the next attempt
+ * opens a new one.
  *
  * The run checks its signal after every wait and throws once stopped, so a bucket call that answers
  * after `stop()` gave up on it starts nothing.
@@ -192,6 +191,9 @@ export class StreamSupervisor {
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
   #keeper: Keeper | undefined;
+  /** Settles once every Litestream a pause, a failure or stop() began stopping has exited. */
+  #retiring: Promise<void> = Promise.resolve();
+  #versionExit: Promise<unknown> = Promise.resolve();
   #env: Readonly<Record<string, string>> = {};
   #lastPruneAt = Number.NEGATIVE_INFINITY;
   #pruning = false;
@@ -241,13 +243,9 @@ export class StreamSupervisor {
     if (controller === undefined) return;
     controller.abort();
     await this.#stopChild();
-    await Promise.race([
-      this.#run,
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, STOP_WAIT_MS).unref();
-      }),
-    ]);
+    await Promise.race([this.#run, delay(STOP_WAIT_MS, undefined, { ref: false })]);
     await this.#stopChild();
+    await this.#versionExit;
     this.#set("off", "stopped");
   }
 
@@ -289,6 +287,7 @@ export class StreamSupervisor {
 
   async #binaryIsPinned(signal: AbortSignal): Promise<boolean> {
     const probe = this.#spawn(this.#deps.litestreamBin, ["version"], {});
+    this.#versionExit = probe.exited;
     const timeout = new AbortController();
     const code = await Promise.race([
       probe.exited,
@@ -335,15 +334,16 @@ export class StreamSupervisor {
         try {
           await claimGeneration(this.#store, venueId, generation);
         } catch (error) {
-          if (!isPreconditionFailed(error)) throw error;
+          if (!isPreconditionFailure(error)) throw error;
           await this.#sleep(1_000, signal);
           continue;
         }
         await this.#startChild(generation, true, signal);
         this.#set("opening", null, generation);
-        if ((await this.#waitForFullCopy(generation, signal)) === "over_limit") {
+        const overLimit = await this.#fullCopyOrLimit(generation, signal);
+        if (overLimit !== null) {
           // No full copy and the pointer never moved: the next attempt opens a new generation.
-          await this.#pause(generation, signal);
+          await this.#pause(generation, overLimit, signal);
           continue;
         }
         const body: StreamPointer = {
@@ -355,7 +355,16 @@ export class StreamSupervisor {
         };
         const signature = await this.#unlessStopped(signal, this.#deps.sign(pointerMessage(body)));
         const pointer: SignedPointer = { body, signature };
-        if (!(await this.#movePointer(pointer, previous?.etag ?? null, signal))) return null;
+        const moved = await this.#watchingLimit(
+          generation,
+          (within) => this.#movePointer(pointer, previous?.etag ?? null, within),
+          signal,
+        );
+        if (!moved) {
+          await this.#stopChild();
+          this.#refuse("pointer_changed");
+          return null;
+        }
         signal.throwIfAborted();
         this.#set("streaming", null, generation);
         this.#deps.log("info", "stream.streaming", { generation });
@@ -369,10 +378,24 @@ export class StreamSupervisor {
     }
   }
 
-  async #waitForFullCopy(
-    generation: string,
-    signal: AbortSignal,
-  ): Promise<"landed" | "over_limit"> {
+  /**
+   * Null once the first full copy is in the bucket; the side file's size if it reached the limit
+   * first. The wait on the bucket is left behind at the limit: it only reads.
+   */
+  async #fullCopyOrLimit(generation: string, signal: AbortSignal): Promise<number | null> {
+    const attempt = new AbortController();
+    const within = AbortSignal.any([signal, attempt.signal]);
+    try {
+      return await Promise.race([
+        this.#waitForFullCopy(generation, within).then(() => null),
+        this.#untilOverLimit(OPEN_POLL_MS, within),
+      ]);
+    } finally {
+      attempt.abort();
+    }
+  }
+
+  async #waitForFullCopy(generation: string, signal: AbortSignal): Promise<void> {
     const prefix = generationPrefix(this.#deps.venueId, generation);
     for (;;) {
       let listed: ListedObject[] = [];
@@ -382,18 +405,15 @@ export class StreamSupervisor {
         this.#deps.log("warn", "stream.list_failed", { errorCode: codeOf(error) });
       }
       signal.throwIfAborted();
-      if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) {
-        return "landed";
-      }
-      if (await this.#overLimit(signal)) return "over_limit";
+      if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) return;
       await this.#unlessStopped(signal, this.#sleep(OPEN_POLL_MS, signal));
     }
   }
 
   /**
-   * Replaces `current.json` only if it is unchanged since `previousEtag` was read. `writePointer`
-   * already counts a refusal of this box's own landed write as success, so a refusal here is another
-   * box.
+   * Replaces `current.json` only if it is unchanged since `previousEtag` was read; false when
+   * refused. `writePointer` already counts a refusal of this box's own landed write as success, so a
+   * refusal here is another box.
    */
   async #movePointer(
     pointer: SignedPointer,
@@ -406,28 +426,76 @@ export class StreamSupervisor {
         await writePointer(this.#store, this.#deps.venueId, pointer, previousEtag);
         return true;
       } catch (error) {
-        if (isPreconditionFailed(error)) {
-          await this.#stopChild();
-          this.#refuse("pointer_changed");
-          return false;
-        }
+        signal.throwIfAborted();
+        if (isPreconditionFailure(error)) return false;
         this.#deps.log("warn", "stream.pointer_write_failed", { errorCode: codeOf(error) });
       }
       await this.#sleep(OPEN_RETRY_MS, signal);
     }
   }
 
+  /**
+   * `work`'s answer. `work` must not start or stop Litestream: at the limit, this pauses and resumes
+   * the generation while `work` carries on. `work` is aborted if this throws.
+   */
+  async #watchingLimit<T>(
+    generation: string,
+    work: (signal: AbortSignal) => Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T> {
+    const attempt = new AbortController();
+    const within = AbortSignal.any([signal, attempt.signal]);
+    const done = work(within).then((value) => ({ value }));
+    try {
+      for (;;) {
+        const watch = new AbortController();
+        const outcome = await Promise.race([
+          done,
+          this.#untilOverLimit(OPEN_POLL_MS, AbortSignal.any([within, watch.signal])),
+        ]).finally(() => watch.abort());
+        signal.throwIfAborted();
+        if (typeof outcome !== "number") return outcome.value;
+        await this.#pauseAndResume(generation, outcome, signal);
+      }
+    } finally {
+      attempt.abort();
+    }
+  }
+
   async #stream(generation: string, signal: AbortSignal): Promise<void> {
     for (;;) {
-      await this.#sleep(TICK_MS, signal);
-      signal.throwIfAborted();
-      this.#pruneDaily(generation);
-      if (!(await this.#overLimit(signal))) continue;
-      await this.#pause(generation, signal);
-      await this.#startChild(generation, false, signal);
-      this.#set("streaming", null, generation);
-      this.#deps.log("info", "stream.resumed", { generation });
+      const walBytes = await this.#untilOverLimit(TICK_MS, signal, () =>
+        this.#pruneDaily(generation),
+      );
+      await this.#pauseAndResume(generation, walBytes, signal);
     }
+  }
+
+  /**
+   * Measures the side file every `everyMs` until it reaches the limit, whatever the bucket is doing,
+   * and answers the size measured.
+   */
+  async #untilOverLimit(
+    everyMs: number,
+    signal: AbortSignal,
+    eachTick: () => void = () => {},
+  ): Promise<number> {
+    for (;;) {
+      await this.#sleep(everyMs, signal);
+      signal.throwIfAborted();
+      eachTick();
+      const walBytes = await this.#sideFileBytes(signal);
+      if (walBytes >= this.#deps.walLimitBytes) return walBytes;
+    }
+  }
+
+  /** Restarts Litestream into the same generation, from its kept local state, after the pause. */
+  async #pauseAndResume(generation: string, walBytes: number, signal: AbortSignal): Promise<void> {
+    const state = this.#status.state;
+    await this.#pause(generation, walBytes, signal);
+    await this.#startChild(generation, false, signal);
+    this.#set(state, null, generation);
+    this.#deps.log("info", "stream.resumed", { generation });
   }
 
   /**
@@ -435,33 +503,31 @@ export class StreamSupervisor {
    * limit, then waits for the bucket. Restarting Litestream over a side file a reader still holds
    * would only grow it again. Each kind of fold-back trouble is logged once per pause.
    */
-  async #pause(generation: string, signal: AbortSignal): Promise<void> {
-    const walBytes = await this.#unlessStopped(signal, this.#deps.walBytes());
-    this.#deps.log("warn", "stream.paused", {
-      generation,
-      walBytes,
-      limitBytes: this.#deps.walLimitBytes,
-    });
+  async #pause(generation: string, walBytes: number, signal: AbortSignal): Promise<void> {
+    const limitBytes = this.#deps.walLimitBytes;
+    this.#deps.log("warn", "stream.paused", { generation, walBytes, limitBytes });
     this.#set("paused", "side_file_limit", generation);
     await this.#stopChild();
     const noted = new Set<string>();
+    let bytes = walBytes;
     for (;;) {
-      if (await this.#overLimit(signal)) {
+      if (bytes >= limitBytes) {
         await this.#unlessStopped(signal, this.#foldBack(noted));
+        bytes = await this.#sideFileBytes(signal);
       }
       if (
-        !(await this.#overLimit(signal)) &&
+        bytes < limitBytes &&
         (await this.#unlessStopped(signal, this.#bucketAnswers(generation)))
       ) {
         return;
       }
       await this.#unlessStopped(signal, this.#sleep(TICK_MS, signal));
+      bytes = await this.#sideFileBytes(signal);
     }
   }
 
-  async #overLimit(signal: AbortSignal): Promise<boolean> {
-    const bytes = await this.#unlessStopped(signal, this.#deps.walBytes());
-    return bytes >= this.#deps.walLimitBytes;
+  #sideFileBytes(signal: AbortSignal): Promise<number> {
+    return this.#unlessStopped(signal, this.#deps.walBytes());
   }
 
   /** `work`'s answer, unless the run was stopped while it was awaited. */
@@ -497,8 +563,8 @@ export class StreamSupervisor {
 
   /**
    * Stops a Litestream a server that died left running: the PID recorded beside the configuration,
-   * and only when that PID's command line is `replicate -config` on THIS configuration file — never
-   * a match on the name alone, since the PID may since belong to anything.
+   * and only when that PID's command line is exactly the one this supervisor starts Litestream with,
+   * since the PID may since belong to anything.
    */
   async #stopLeftover(): Promise<void> {
     const pidPath = join(this.#deps.configDir, PID_FILE);
@@ -510,16 +576,22 @@ export class StreamSupervisor {
     }
     await rm(pidPath, { force: true });
     if (!Number.isSafeInteger(pid) || pid <= 1) return;
-    const ours = `replicate -config ${join(this.#deps.configDir, CONFIG_FILE)}`;
-    const isOurs = async () => {
-      const commandLine = await (this.#deps.readCommandLine ?? readCommandLine)(pid);
-      return commandLine !== null && commandLine.includes(ours);
-    };
+    // Compared as the text `readCommandLine` gives, the arguments joined by spaces, against the
+    // binary as configured: an argument holding a space cannot be told from two arguments, and the
+    // same binary started by another path does not match.
+    const ours = [
+      this.#deps.litestreamBin,
+      ...replicateArgs(join(this.#deps.configDir, CONFIG_FILE)),
+    ].join(" ");
+    const isOurs = async () =>
+      (await (this.#deps.readCommandLine ?? readCommandLine)(pid)) === ours;
     if (!(await isOurs())) return;
     if (!sendSignal(pid, "SIGTERM")) return;
     this.#deps.log("warn", "stream.leftover_stopped", { pid });
+    // Not cut short by stop(): the PID record is already removed, so no later start would find it.
+    const grace = new AbortController().signal;
     for (let waited = 0; waited < LEFTOVER_GRACE_MS && sendSignal(pid, 0); waited += 100) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await this.#sleep(100, grace);
     }
     // The PID may have been reused during the grace: signal it only if it is still ours.
     if (await isOurs()) sendSignal(pid, "SIGKILL");
@@ -577,11 +649,7 @@ export class StreamSupervisor {
       let attempt = 0;
       while (!wake.signal.aborted) {
         const startedAt = this.#deps.now().getTime();
-        current = this.#spawn(
-          this.#deps.litestreamBin,
-          ["replicate", "-config", configPath],
-          this.#env,
-        );
+        current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), this.#env);
         if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
         const code = await current.exited;
         if (wake.signal.aborted) return;
@@ -624,8 +692,10 @@ export class StreamSupervisor {
   async #stopChild(): Promise<void> {
     const keeper = this.#keeper;
     this.#keeper = undefined;
-    if (keeper === undefined) return;
-    await keeper.stop();
+    if (keeper !== undefined) {
+      this.#retiring = Promise.all([this.#retiring, keeper.stop()]).then(() => undefined);
+    }
+    await this.#retiring;
   }
 
   #set(state: StreamState, reason: string | null, generation = this.#status.generation): void {

@@ -1,3 +1,4 @@
+import { LITESTREAM_VERSION } from "../litestream.js";
 import type { ChildHandle, SpawnFn } from "../litestream-process.js";
 
 /** A Litestream that runs until told to exit or killed. */
@@ -50,7 +51,7 @@ export class FakeChild implements ChildHandle {
 /** Stands in for the binary: answers `version`, and keeps every `replicate` it was asked to start. */
 export class FakeLitestream {
   readonly children: FakeChild[] = [];
-  version = "0.5.17";
+  version = LITESTREAM_VERSION;
   /** How `version` exits; null is a binary that could not be started at all. */
   versionExitCode: number | null = 0;
   /** A binary that never answers `version`. */

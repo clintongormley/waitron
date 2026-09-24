@@ -2,23 +2,17 @@ import { AppError } from "@waitron/shared";
 import "../errors.js";
 import type { BucketOperation } from "../errors.js";
 import type { ListedObject, ObjectStore, PutCondition, StoredObject } from "../object-store.js";
-
-interface Stored {
-  body: Uint8Array;
-  etag: string;
-  lastModified: Date;
-}
+import { createMemoryObjectStore, type Fault, type MemoryObjectStore } from "./memory-store.js";
 
 /**
- * An in-memory bucket switched whole, where `createMemoryObjectStore` faults one call at a time. It
- * honours both conditional writes, stamps `lastModified` from the clock it is given, and records
- * this package's writes and Litestream's uploads in one event log a `FakeLitestream` can share, so a
- * test can assert the order of bucket writes and child starts. The errors are the shapes the S3
- * store throws, so `probeBucket` reads them as it reads the real ones.
+ * `createMemoryObjectStore` behind a switch that fails every call at once, where the memory store
+ * faults one call at a time. It stamps `lastModified` from the clock it is given, and records this
+ * package's answered writes and Litestream's uploads in one event log a `FakeLitestream` can share,
+ * so a test can assert the order of bucket writes and child starts. A failed call throws the S3
+ * store's error code with the status it reports: none for no answer, 403 for a refusal.
  */
 export class SwitchableStore implements ObjectStore {
-  readonly objects = new Map<string, Stored>();
-  /** `put <key>` for this package's writes, `upload <key>` for Litestream's, in order. */
+  /** `put <key>` for each of this package's writes answered as stored, `upload <key>` for Litestream's, in order. */
   readonly events: string[];
   /** Every call waits forever: a bucket that never answers. */
   hang = false;
@@ -28,61 +22,52 @@ export class SwitchableStore implements ObjectStore {
   denied = false;
   /** False makes a conditional write succeed anyway, as a store without conditional writes would. */
   honoursConditions = true;
-  /** A put whose key this matches is STORED, and then its answer is lost (it throws). Cleared after one use. */
-  loseAnswerTo: ((key: string) => boolean) | undefined;
-  readonly #clock: () => Date;
-  #version = 0;
+  readonly #inner: MemoryObjectStore;
+  #uploadedAt: Date | undefined;
 
   constructor(clock: () => Date, events: string[] = []) {
-    this.#clock = clock;
+    this.#inner = createMemoryObjectStore({ now: () => this.#uploadedAt ?? clock() });
     this.events = events;
   }
 
   async get(key: string): Promise<StoredObject | null> {
     await this.#gate("get", key);
-    const stored = this.objects.get(key);
-    return stored === undefined ? null : { body: stored.body, etag: stored.etag };
+    return this.#inner.get(key);
   }
 
   async put(key: string, body: Uint8Array, cond?: PutCondition): Promise<{ etag: string }> {
     await this.#gate("put", key);
-    const existing = this.objects.get(key);
-    if (this.honoursConditions && cond !== undefined) {
-      const refused =
-        "ifNoneMatch" in cond ? existing !== undefined : existing?.etag !== cond.ifMatch;
-      if (refused) throw new AppError("backup.stream_precondition_failed", { key });
-    }
-    const etag = this.#write(key, body, "put");
-    if (this.loseAnswerTo?.(key) === true) {
-      this.loseAnswerTo = undefined;
-      throw new Error("connection reset after the write");
-    }
-    return { etag };
+    const answer = await this.#inner.put(key, body, this.honoursConditions ? cond : undefined);
+    this.events.push(`put ${key}`);
+    return answer;
   }
 
   async list(prefix: string): Promise<ListedObject[]> {
     await this.#gate("list", prefix);
-    return [...this.objects]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, stored]) => ({ key, lastModified: stored.lastModified }));
+    return this.#inner.list(prefix);
   }
 
   async delete(key: string): Promise<void> {
     await this.#gate("delete", key);
-    this.objects.delete(key);
+    await this.#inner.delete(key);
   }
 
-  /** Litestream's side of the bucket: a file written with no condition. */
-  upload(key: string): void {
-    this.#write(key, new Uint8Array(), "upload");
+  /** Litestream's side of the bucket: a file written with no condition, last modified at `at`. */
+  upload(key: string, at?: Date): void {
+    this.#uploadedAt = at;
+    // The memory store's put stores before its first await, so the object is there on return.
+    void this.#inner.put(key, new Uint8Array());
+    this.#uploadedAt = undefined;
+    this.events.push(`upload ${key}`);
   }
 
-  #write(key: string, body: Uint8Array, kind: "put" | "upload"): string {
-    this.#version += 1;
-    const etag = `"${this.#version}"`;
-    this.objects.set(key, { body, etag, lastModified: this.#clock() });
-    this.events.push(`${kind} ${key}`);
-    return etag;
+  has(key: string): boolean {
+    return this.#inner.snapshot().has(key);
+  }
+
+  /** The memory store's one-call fault, behind the switch. Name the key: an upload is a put too. */
+  failNext(fault: Fault): void {
+    this.#inner.failNext(fault);
   }
 
   async #gate(operation: BucketOperation, key: string): Promise<void> {

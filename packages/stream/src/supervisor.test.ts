@@ -1,12 +1,13 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
 import { generationName } from "./names.js";
-import { readPointer, writePointer, type SignedPointer } from "./pointer.js";
+import { pointerKey, readPointer, writePointer, type SignedPointer } from "./pointer.js";
 import type { BucketConfig } from "./s3-store.js";
 import { FakeLitestream } from "./testing/fake-litestream.js";
 import { SwitchableStore } from "./testing/switchable-store.js";
@@ -78,14 +79,10 @@ class ManualClock {
     );
   }
 
-  async next(): Promise<number> {
-    await this.asleep();
-    this.#sleeping.sort((a, b) => a.at - b.at);
-    const entry = this.#sleeping.shift()!;
-    this.#t = Math.max(this.#t, entry.at);
-    this.slept.push(entry.ms);
-    entry.wake();
-    return entry.ms;
+  async next(): Promise<void> {
+    while (!(await this.#wakeEarliest())) {
+      // The sleeper `asleep()` saw was aborted before this resumed.
+    }
   }
 
   /** Wakes sleepers one at a time until `done()` holds. */
@@ -93,9 +90,21 @@ class ManualClock {
     for (let i = 0; i <= limit; i += 1) {
       await this.asleep(300).catch(() => undefined);
       if (done()) return;
-      if (i < limit) await this.next();
+      if (i < limit) await this.#wakeEarliest();
     }
     throw new Error(`not reached after ${limit} wakes`);
+  }
+
+  /** False when the sleeper `asleep()` saw was aborted before this resumed. */
+  async #wakeEarliest(): Promise<boolean> {
+    await this.asleep();
+    this.#sleeping.sort((a, b) => a.at - b.at);
+    const entry = this.#sleeping.shift();
+    if (entry === undefined) return false;
+    this.#t = Math.max(this.#t, entry.at);
+    this.slept.push(entry.ms);
+    entry.wake();
+    return true;
   }
 }
 
@@ -124,6 +133,7 @@ interface HarnessOptions {
   readCommandLine?: SupervisorDeps["readCommandLine"];
   /** A `replicate` start that throws at once, as `spawn` does for arguments it cannot use. */
   replicateThrows?: boolean;
+  litestreamBin?: string;
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -145,7 +155,7 @@ async function harness(options: HarnessOptions = {}) {
   let walWaiting = false;
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const deps: SupervisorDeps = {
-    litestreamBin: "litestream",
+    litestreamBin: options.litestreamBin ?? "litestream",
     venueDbPath,
     configDir: join(directory, "stream"),
     bucket: options.bucket ?? BUCKET,
@@ -420,7 +430,12 @@ describe("opening a generation", () => {
 
   it("treats its own pointer write as done when only the answer was lost", async () => {
     const h = await harness();
-    h.store.loseAnswerTo = (key) => key.endsWith("current.json");
+    h.store.failNext({
+      operation: "put",
+      key: pointerKey(VENUE),
+      error: new Error("connection reset after the write"),
+      landed: true,
+    });
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
     const generation = h.supervisor.status().generation!;
@@ -515,8 +530,7 @@ describe("opening a generation", () => {
       return list(prefix);
     };
     h.store.upload(fullCopyOf(generation));
-    await h.clock.next(); // the opening poll
-    await vi.waitFor(() => expect(listing).toBe(true));
+    await h.clock.until(() => listing); // the opening poll
     await h.supervisor.stop();
     release();
     await expect(
@@ -584,6 +598,26 @@ describe("opening a generation", () => {
     expect(h.logs.some((line) => line.event === "stream.litestream_unavailable")).toBe(false);
   });
 
+  it("waits, on stop, for a `litestream version` that is slow to exit once killed", async () => {
+    const h = await harness({ versionHangs: true });
+    await h.supervisor.start();
+    await vi.waitFor(() => expect(h.litestream.children).toHaveLength(1));
+    const probe = h.litestream.children[0]!;
+    probe.kill = () => {
+      probe.killed = true;
+    };
+    let stopped = false;
+    const stopping = h.supervisor.stop().then(() => {
+      stopped = true;
+    });
+    await vi.waitFor(() => expect(probe.killed).toBe(true));
+    // Longer than stop()'s one-second wait for a run blocked on the bucket.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(stopped).toBe(false);
+    probe.exit(null);
+    await stopping;
+  });
+
   it("refuses to run a Litestream that is not the pinned version, and touches no bucket", async () => {
     const h = await harness({ version: "0.5.18" });
     await h.supervisor.start();
@@ -619,7 +653,12 @@ describe("opening a generation", () => {
 
   it("retries opening after a bucket error, under a new generation", async () => {
     const h = await harness();
-    h.store.loseAnswerTo = (key) => key.endsWith("opened.json");
+    h.store.failNext({
+      operation: "put",
+      key: markerOf(generationName(2, NODE, new Date(START))),
+      error: new Error("connection reset after the write"),
+      landed: true,
+    });
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
     expect(h.logs.some((line) => line.event === "stream.open_failed")).toBe(true);
@@ -639,6 +678,81 @@ describe("opening a generation", () => {
     await h.clock.until(() => h.litestream.running() !== undefined);
     expect(h.supervisor.status().generation).not.toBe(first);
     expect(await readPointer(h.store, VENUE)).toBeNull();
+  });
+
+  it("logs a listing that fails while waiting for the full copy, and keeps waiting", async () => {
+    const h = await harness();
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.down = true;
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.list_failed"));
+    expect(h.logs.find((line) => line.event === "stream.list_failed")?.fields).toEqual({
+      errorCode: "backup.stream_request_failed",
+    });
+    h.store.down = false;
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+  });
+
+  it("pauses at the limit while waiting on a bucket that never answers whether the full copy landed", async () => {
+    const h = await harness();
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.hang = true;
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.events.includes("fold"));
+    expect(h.litestream.replicas()[0]!.killed).toBe(true);
+    expect(h.events.indexOf("kill replicate")).toBeLessThan(h.events.indexOf("fold"));
+    expect(h.supervisor.status()).toMatchObject({ state: "paused", reason: "side_file_limit" });
+  });
+
+  it.each([
+    ["keeps failing", () => Promise.reject(new Error("offline"))],
+    ["never answers", () => new Promise<never>(() => {})],
+  ])(
+    "pauses at the limit while the pointer write %s, then resumes the same generation",
+    async (_, pointerWrite) => {
+      const h = await harness();
+      const put = h.store.put.bind(h.store);
+      let pointerWrites = 0;
+      h.store.put = async (key, body, cond) => {
+        if (!key.endsWith("current.json")) return put(key, body, cond);
+        pointerWrites += 1;
+        return pointerWrite();
+      };
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      const generation = h.supervisor.status().generation!;
+      h.store.upload(fullCopyOf(generation));
+      await h.clock.until(() => pointerWrites > 0);
+      h.setWal(LIMIT);
+      await h.clock.until(() => h.events.includes("fold"));
+      expect(h.events.indexOf("kill replicate")).toBeLessThan(h.events.indexOf("fold"));
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      expect(h.supervisor.status()).toMatchObject({ state: "opening", generation });
+      expect(h.litestream.running()!.args).toEqual(h.litestream.replicas()[0]!.args);
+      expect(h.events.filter((event) => event.endsWith("opened.json"))).toHaveLength(1);
+    },
+  );
+
+  it("stops writing the pointer once the side file cannot be measured while it is being written", async () => {
+    const h = await harness();
+    const put = h.store.put.bind(h.store);
+    let pointerWrites = 0;
+    h.store.put = async (key, body, cond) => {
+      if (!key.endsWith("current.json")) return put(key, body, cond);
+      pointerWrites += 1;
+      throw new Error("offline");
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => pointerWrites > 0);
+    h.failWal();
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.open_failed"));
+    const writes = pointerWrites;
+    for (let wake = 0; wake < 10; wake += 1) await h.clock.next();
+    expect(pointerWrites).toBe(writes);
   });
 
   it("does nothing more when started twice, and nothing at all when stopped before it started", async () => {
@@ -883,6 +997,26 @@ describe("while streaming", () => {
     }
   });
 
+  it("waits, on stop, for a Litestream a pause is still stopping", async () => {
+    const h = await streaming();
+    const child = h.litestream.running()!;
+    child.kill = () => {
+      child.killed = true;
+    };
+    h.setWal(LIMIT);
+    await h.clock.next(); // the streaming tick
+    await vi.waitFor(() => expect(child.killed).toBe(true));
+    let stopped = false;
+    const stopping = h.supervisor.stop().then(() => {
+      stopped = true;
+    });
+    // Longer than stop()'s one-second wait for a run blocked on the bucket.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(stopped).toBe(false);
+    child.exit(null);
+    await stopping;
+  });
+
   it("stop kills Litestream and reads off", async () => {
     const h = await streaming();
     const child = h.litestream.running()!;
@@ -900,11 +1034,7 @@ const DAY = 24 * 60 * 60_000;
 describe("generation housekeeping", () => {
   /** A generation of this venue whose one object was last written at `at`, on the bucket's clock. */
   const oldGeneration = (h: { store: SwitchableStore }, name: string, at: number) =>
-    h.store.objects.set(fullCopyOf(name), {
-      body: new Uint8Array(),
-      etag: `"${name}"`,
-      lastModified: new Date(at),
-    });
+    h.store.upload(fullCopyOf(name), new Date(at));
 
   it("prunes an old generation from the streaming tick, at most once a day, and never the live one", async () => {
     const h = await streaming();
@@ -913,9 +1043,9 @@ describe("generation housekeeping", () => {
     // Eight days on, the live generation's own objects are as old as the window too.
     h.clock.advance(8 * DAY);
     await h.clock.next(); // the streaming tick
-    await vi.waitFor(() => expect(h.store.objects.has(fullCopyOf(old))).toBe(false));
-    expect(h.store.objects.has(fullCopyOf(h.generation))).toBe(true);
-    expect(h.store.objects.has(markerOf(h.generation))).toBe(true);
+    await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
+    expect(h.store.has(fullCopyOf(h.generation))).toBe(true);
+    expect(h.store.has(markerOf(h.generation))).toBe(true);
     expect(h.logs).toContainEqual({
       level: "info",
       event: "stream.generations_pruned",
@@ -927,11 +1057,11 @@ describe("generation housekeeping", () => {
     oldGeneration(h, older, Date.parse(START) - 10 * DAY);
     await h.clock.next();
     await h.clock.asleep();
-    expect(h.store.objects.has(fullCopyOf(older))).toBe(true);
+    expect(h.store.has(fullCopyOf(older))).toBe(true);
     h.clock.advance(PRUNE_EVERY_MS);
     await h.clock.next();
-    await vi.waitFor(() => expect(h.store.objects.has(fullCopyOf(older))).toBe(false));
-    expect(h.store.objects.has(fullCopyOf(h.generation))).toBe(true);
+    await vi.waitFor(() => expect(h.store.has(fullCopyOf(older))).toBe(false));
+    expect(h.store.has(fullCopyOf(h.generation))).toBe(true);
   });
 
   it("logs a prune the bucket refuses, and streams on", async () => {
@@ -993,6 +1123,57 @@ describe("what the supervisor logs about Litestream", () => {
 // Esc, a killed parent) leaves one running. The next start stops it — only when the recorded PID's
 // command line is this box's own `replicate -config <its configuration>`.
 describe("a Litestream left running by a server that died", () => {
+  /**
+   * A process whose command line reads `<binDir>/<name> replicate -config <config>`: `<name>` is a
+   * link to node, which runs the file `replicate` in `binDir`. Resolves once it has started.
+   */
+  async function processNamed(
+    binDir: string,
+    name: string,
+    config: string,
+    { ignoresTerm = false } = {},
+  ) {
+    const bin = join(binDir, name);
+    if (!existsSync(bin)) symlinkSync(process.execPath, bin);
+    writeFileSync(
+      join(binDir, "replicate"),
+      `${ignoresTerm ? 'process.on("SIGTERM", () => {});' : ""}console.log("ready");setInterval(() => {}, 1000);`,
+    );
+    const child = spawn(bin, ["replicate", "-config", config], {
+      cwd: binDir,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    cleanups.push(async () => {
+      child.kill("SIGKILL");
+    });
+    await once(child.stdout, "data");
+    return child;
+  }
+
+  async function binDirectory(): Promise<string> {
+    const directory = await mkdtemp(join(tmpdir(), "waitron-stream-bin-"));
+    cleanups.push(() => rm(directory, { recursive: true, force: true }));
+    return directory;
+  }
+
+  it.each([
+    ["another configuration file", "litestream", (config: string) => `${config}.other`],
+    ["another executable", "not-litestream", (config: string) => config],
+  ])("leaves alone a recorded PID whose command line names %s", async (_, name, configOf) => {
+    const binDir = await binDirectory();
+    const h = await harness({ litestreamBin: join(binDir, "litestream") });
+    const configDir = join(h.directory, "stream");
+    mkdirSync(configDir, { recursive: true });
+    const stranger = await processNamed(binDir, name, configOf(join(configDir, "litestream.yml")));
+    writeFileSync(join(configDir, "litestream.pid"), `${stranger.pid}\n`);
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(stranger.signalCode).toBeNull();
+    expect(stranger.exitCode).toBeNull();
+    expect(h.logs.some((line) => line.event === "stream.leftover_stopped")).toBe(false);
+  });
+
   it("records its child's PID beside the configuration, and removes the record when stopped", async () => {
     const h = await streaming({ pid: 424_242 });
     expect(await readFile(join(h.directory, "stream", "litestream.pid"), "utf8")).toBe("424242\n");
@@ -1001,56 +1182,35 @@ describe("a Litestream left running by a server that died", () => {
   });
 
   it("stops a leftover whose PID and command line are this box's Litestream, before starting its own", async () => {
-    const h = await harness();
+    const binDir = await binDirectory();
+    const h = await harness({ litestreamBin: join(binDir, "litestream") });
     const configDir = join(h.directory, "stream");
     mkdirSync(configDir, { recursive: true });
-    // `sleep 30; :` keeps the shell from replacing itself with sleep, so its argv stays readable.
-    const leftover = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        "sleep 30; :",
-        "litestream",
-        "replicate",
-        "-config",
-        join(configDir, "litestream.yml"),
-      ],
-      { stdio: "ignore" },
-    );
-    const gone = new Promise((resolve) => leftover.on("exit", resolve));
+    const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"));
+    const gone = once(leftover, "exit");
     writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
     await h.supervisor.start();
-    await gone;
+    expect((await gone)[1]).toBe("SIGTERM");
     await h.clock.until(() => h.litestream.running() !== undefined);
     expect(h.logs.some((line) => line.event === "stream.leftover_stopped")).toBe(true);
-  }, 15_000);
+  });
 
   it("kills a leftover that ignores the polite signal, after the grace", async () => {
-    const h = await harness();
+    const binDir = await binDirectory();
+    const h = await harness({ litestreamBin: join(binDir, "litestream") });
     const configDir = join(h.directory, "stream");
     mkdirSync(configDir, { recursive: true });
-    const leftover = spawn(
-      "/bin/sh",
-      [
-        "-c",
-        "trap '' TERM; echo ready; sleep 10; :",
-        "litestream",
-        "replicate",
-        "-config",
-        join(configDir, "litestream.yml"),
-      ],
-      { stdio: ["ignore", "pipe", "ignore"] },
-    );
-    // Signalled before its trap is set, the shell would die of the polite signal.
-    await new Promise((resolve) => leftover.stdout.once("data", resolve));
-    const gone = new Promise<NodeJS.Signals | null>((resolve) =>
-      leftover.on("exit", (_code, signal) => resolve(signal)),
-    );
+    const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"), {
+      ignoresTerm: true,
+    });
+    let signal: string | null | undefined;
+    leftover.on("exit", (_code, received) => (signal = received));
     writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
     await h.supervisor.start();
-    expect(await gone).toBe("SIGKILL");
+    await h.clock.until(() => signal !== undefined);
+    expect(signal).toBe("SIGKILL");
     await h.clock.until(() => h.litestream.running() !== undefined);
-  }, 15_000);
+  });
 
   it("does not SIGKILL a PID whose command line changed during the grace", async () => {
     const stubborn = spawn("/bin/sh", ["-c", "trap '' TERM; echo ready; sleep 30; :"], {
@@ -1072,17 +1232,14 @@ describe("a Litestream left running by a server that died", () => {
       writeFileSync(join(configDir, "litestream.pid"), `${stubborn.pid}\n`);
       await h.supervisor.start();
       // The version check starts once the sweep, grace included, is over.
-      await vi.waitFor(() => expect(h.litestream.children).not.toHaveLength(0), {
-        timeout: 10_000,
-        interval: 100,
-      });
+      await h.clock.until(() => h.litestream.children.length > 0);
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(stubborn.signalCode).toBeNull();
       expect(stubborn.exitCode).toBeNull();
     } finally {
       stubborn.kill("SIGKILL");
     }
-  }, 15_000);
+  });
 
   it("leaves alone a process whose command line is not this box's Litestream", async () => {
     const h = await harness();
