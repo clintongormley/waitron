@@ -120,6 +120,17 @@ describe("unknown images and other refusals", () => {
     }
   });
 
+  it("reports an edit to an unknown id as not found, ahead of any fault in the edit itself", async () => {
+    const imageId = crypto.randomUUID();
+    for (const names of [{ en: "Bread" }, { fr: "Pain" }] as Record<string, string>[]) {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          updateImage(tx, imageId, { names, altText: {}, labels: [] }, "en"),
+        ),
+      ).rejects.toMatchObject({ code: "image.not_found", params: { imageId } });
+    }
+  });
+
   it("passes a database failure during the translation check through unchanged", async () => {
     // Every malformed map is refused before the translation check, so a database failure is what
     // reaches its re-throw. The table is dropped inside the transaction, which rolls it back.
@@ -716,5 +727,102 @@ it("protects an image used only by a category and releases it after clearing the
     await updateCategory(tx, category.id, { image: null });
     await tx.update(products).set({ image: null }).where(eq(products.id, product!.id));
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
+describe("relevance scores and tie-breaks", () => {
+  const add = async (
+    tx: Transaction,
+    width: number,
+    names: Record<string, string>,
+    labels: string[],
+    altText: Record<string, string> = { en: "Photo" },
+  ) => uploadImage(tx, { image: await prepare(width), names, altText, labels }, {});
+  const ids = async (tx: Transaction, options: Parameters<typeof listImages>[1]) =>
+    (await listImages(tx, options)).images.map((image) => image.id);
+
+  it("scores a term found in several fields at its best field's weight, not its last", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      // 1 (name) + 0.2 (alt text) = 1.2; scored at the alt text's weight it would be 0.4.
+      const nameAndAlt = await add(tx, 200, { en: "Crust" }, [], { en: "crust with seed" });
+      // 0.4 + 0.4 = 0.8.
+      const labels = await add(tx, 201, { en: "Loaf" }, ["crust", "seed"]);
+      expect(await ids(tx, { query: "crust seed" })).toEqual([
+        nameAndAlt.image.id,
+        labels.image.id,
+      ]);
+    });
+  });
+
+  it("scores an image by its best-matching OR group, not its first or last", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      // Groups score 0.4, 2 and 0.4.
+      const best = await add(tx, 200, { en: "Rye bread" }, ["crust", "seed"]);
+      // Only the first group matches, at 1.
+      const single = await add(tx, 201, { en: "Crust" }, []);
+      expect(await ids(tx, { query: "crust OR rye bread OR seed" })).toEqual([
+        best.image.id,
+        single.image.id,
+      ]);
+    });
+  });
+
+  it("ranks a name match above a higher-scoring match elsewhere, whichever was stored first", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      // Three labels at 0.4 score 1.2, more than the other image's one name word at 1.
+      const labels = await add(tx, 200, { en: "Loaf" }, ["rye", "seed", "crust"]);
+      const name = await add(tx, 201, { en: "Bread" }, []);
+      expect(await ids(tx, { query: "bread OR rye seed crust" })).toEqual([
+        name.image.id,
+        labels.image.id,
+      ]);
+    });
+  });
+
+  it("breaks a name or date tie by ascending id in both directions", async () => {
+    const low = "00000000-0000-4000-8000-000000000001";
+    const high = "00000000-0000-4000-8000-000000000002";
+    const createdAt = new Date(2026, 0, 1);
+    await withTransaction(suite.db, async (tx) => {
+      // The higher id is stored first, so storage order alone would list it first.
+      for (const [id, filename] of [
+        [high, `${"b".repeat(64)}.webp`],
+        [low, `${"c".repeat(64)}.webp`],
+      ] as const) {
+        await tx
+          .insert(mediaImages)
+          .values({ id, filename, names: { en: "Bread" }, altText: {}, labels: [], createdAt });
+      }
+      for (const sort of ["name", "date"] as const) {
+        for (const direction of ["asc", "desc"] as const) {
+          expect(await ids(tx, { sort, direction })).toEqual([low, high]);
+        }
+      }
+    });
+  });
+
+  it("sorts an image with no name in the listing's default language as an empty name", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      // No stored language settings, so each call's fallback is the default it validates against.
+      const english = await uploadImage(
+        tx,
+        { image: await prepare(200), names: { en: "Bread" }, altText: {}, labels: [] },
+        { fallbackLanguage: "en" },
+      );
+      const french = await uploadImage(
+        tx,
+        { image: await prepare(201), names: { fr: "Abricot" }, altText: {}, labels: [] },
+        { fallbackLanguage: "fr" },
+      );
+      const options = { sort: "name", fallbackLanguage: "fr" } as const;
+      expect(await ids(tx, { ...options, direction: "asc" })).toEqual([
+        english.image.id,
+        french.image.id,
+      ]);
+      expect(await ids(tx, { ...options, direction: "desc" })).toEqual([
+        french.image.id,
+        english.image.id,
+      ]);
+    });
   });
 });

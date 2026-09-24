@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
@@ -653,4 +654,288 @@ it("links category-only image usage to its category without an inactive-product 
     el.shadowRoot!.querySelector('a[href="/manage/categories?category=food"]')!.textContent,
   ).toBe("Comida");
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});
+
+function openDialog(): HTMLDialogElement {
+  return el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+function chooseFile(files: File[]) {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change"));
+}
+
+it("cancelling the editor discards the draft without saving it", async () => {
+  const client = await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  field("name-es", "Pan descartado");
+  await el.updateComplete;
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull();
+  expect(client.updateImage).not.toHaveBeenCalled();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  expect(
+    (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
+      .value,
+  ).toBe("Pan");
+});
+
+it("keeps the editor open through a close requested mid-save, so a refusal is still shown", async () => {
+  const client = await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  const save = deferred<never>();
+  client.updateImage.mockReturnValueOnce(save.promise);
+  click("[data-test=save]");
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=save]")).not.toBeNull();
+  save.reject({ code: "image.translation_required" });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-modal [role=alert]")!.textContent).toContain(
+      "could not be saved",
+    ),
+  );
+});
+
+it("ignores Escape while a save is in flight and honours it once the save has settled", async () => {
+  const client = await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  const save = deferred<never>();
+  client.updateImage.mockReturnValueOnce(save.promise);
+  click("[data-test=save]");
+  await el.updateComplete;
+  (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement).focus();
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(openDialog().open).toBe(true);
+  save.reject({ code: "image.translation_required" });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("could not be saved"));
+  (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement).focus();
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
+  expect(client.updateImage).toHaveBeenCalledOnce();
+});
+
+it("saves the image when Enter is pressed in a name field", async () => {
+  const client = await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  const name = el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement;
+  name.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(client.updateImage).toHaveBeenCalledWith("one", {
+      names: image.names,
+      altText: image.altText,
+      labels: image.labels,
+    }),
+  );
+});
+
+it("drops the preview and asks for a photo again when the chosen file is cleared", async () => {
+  const client = await mount();
+  click("[data-test=upload]");
+  await el.updateComplete;
+  chooseFile([new File(["photo"], "bread.jpg", { type: "image/jpeg" })]);
+  field("name-es", "Pan");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=preview]")).not.toBeNull();
+  chooseFile([]);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+  click("[data-test=save]");
+  await el.updateComplete;
+  expect(client.uploadImage).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("#file-error")!.textContent).toBe(
+    "Choose a photo to upload.",
+  );
+});
+
+it("offers a retry after the library fails to load, and shows the images it then gets", async () => {
+  const client = api();
+  client.listImages.mockRejectedValueOnce(new Error("offline"));
+  el = document.createElement("dashboard-image-library");
+  el.api = client as unknown as ImageApi;
+  document.body.append(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      "The image library could not be loaded.",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("[data-image=one]")).toBeNull();
+  click("[role=alert] wt-button");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=one]")).not.toBeNull());
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});
+
+it("steps back to the previous page of results", async () => {
+  const client = api();
+  client.listImages.mockResolvedValue({ images: [image], total: 25 });
+  await mount(client);
+  const [previous, next] = [...el.shadowRoot!.querySelectorAll<HTMLElement>("nav wt-button")];
+  next!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("nav span")!.textContent!.replace(/\s+/g, " ")).toBe(
+      "25–25 / 25",
+    ),
+  );
+  previous!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("nav span")!.textContent!.replace(/\s+/g, " ")).toBe(
+      "1–24 / 25",
+    ),
+  );
+  expect(client.listImages).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
+});
+
+it("dismisses the delete confirmation without deleting when Close is pressed", async () => {
+  const client = await mount();
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(client.deleteImage).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("[data-image=one]")).not.toBeNull();
+});
+
+it("sends one delete however often confirm is pressed while it is in flight", async () => {
+  const client = await mount();
+  const deletion = deferred<{ deleted: boolean; uses: [] }>();
+  client.deleteImage.mockReturnValueOnce(deletion.promise);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  click("[data-test=confirm-delete]");
+  click("[data-test=confirm-delete]");
+  expect(client.deleteImage).toHaveBeenCalledOnce();
+  deletion.resolve({ deleted: true, uses: [] });
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+});
+
+it("ignores Escape while a delete is in flight and closes once it completes", async () => {
+  const client = await mount();
+  const deletion = deferred<{ deleted: boolean; uses: [] }>();
+  client.deleteImage.mockReturnValueOnce(deletion.promise);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  click("[data-test=confirm-delete]");
+  await el.updateComplete;
+  (el.shadowRoot!.querySelector("wt-modal wt-button[slot=cancel]") as HTMLElement).focus();
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(openDialog().open).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull();
+  deletion.resolve({ deleted: true, uses: [] });
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+});
+
+it("reports a failed usage lookup instead of opening the delete confirmation", async () => {
+  const client = api();
+  client.getImage.mockRejectedValueOnce(new Error("offline"));
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+      "The image could not be deleted.",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(client.deleteImage).not.toHaveBeenCalled();
+});
+
+it("confirms the image asked about last when an earlier usage lookup fails late", async () => {
+  const client = api();
+  const two = { ...image, id: "two", names: { es: "Tostada" } };
+  client.listImages.mockResolvedValue({ images: [image, two], total: 2 });
+  const first = deferred<never>();
+  client.getImage
+    .mockReturnValueOnce(first.promise)
+    .mockResolvedValueOnce({ image: two, uses: [] });
+  await mount(client);
+  click("[data-test=delete-one]");
+  click("[data-test=delete-two]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  first.reject(new Error("slow failure"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal")!.textContent).toContain("Tostada");
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull();
+});
+
+it("marks an inactive product among an image's blocking uses", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image: { ...image, usageCount: 2 },
+    uses: [
+      { kind: "product", id: "toast", catalogueId: "menu", name: "Toast", active: true },
+      { kind: "product", id: "old", catalogueId: "menu", name: "Old toast", active: false },
+    ],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(2));
+  expect(
+    [...el.shadowRoot!.querySelectorAll("wt-modal li a")].map((link) => link.textContent),
+  ).toEqual(["Toast", "Old toast (Inactive product)"]);
+});
+
+it("confirms the image asked about last when an earlier usage lookup answers late", async () => {
+  const client = api();
+  const two = { ...image, id: "two", names: { es: "Tostada" } };
+  client.listImages.mockResolvedValue({ images: [image, two], total: 2 });
+  const first = deferred<{ image: LibraryImage; uses: [] }>();
+  client.getImage
+    .mockReturnValueOnce(first.promise)
+    .mockResolvedValueOnce({ image: two, uses: [] });
+  await mount(client);
+  click("[data-test=delete-one]");
+  click("[data-test=delete-two]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-modal")!.textContent).toContain("Tostada"),
+  );
+  first.resolve({ image, uses: [] });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal")!.textContent).toContain("Tostada");
+  client.listImages.mockResolvedValue({ images: [image], total: 1 });
+  click("[data-test=confirm-delete]");
+  await vi.waitFor(() => expect(client.deleteImage).toHaveBeenCalledOnce());
+  expect(client.deleteImage).toHaveBeenCalledWith("two");
+});
+
+it("dismisses an idle delete confirmation with Escape, without deleting", async () => {
+  const client = await mount();
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  (el.shadowRoot!.querySelector("wt-modal wt-button[slot=cancel]") as HTMLElement).focus();
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+  expect(client.deleteImage).not.toHaveBeenCalled();
 });

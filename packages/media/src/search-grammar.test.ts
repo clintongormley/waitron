@@ -92,6 +92,18 @@ describe("exclusions, phrases and or", () => {
       expect(result.total).toBe(expected.length);
     });
   });
+
+  // An `or` with nothing before it must not leave an empty group behind: an empty group has no
+  // term to fail, so it would match every image.
+  it.each<[string, string[]]>([
+    ["OR fish", ["Fish plate"]],
+    ["loaf OR OR fish", ["Bread loaf", "Fish plate"]],
+  ])("does not let a leading or doubled OR match everything: %s", async (query, expected) => {
+    await withTransaction(suite.db, async (tx) => {
+      const result = await listImages(tx, { query, fallbackLanguage: "en" });
+      expect(result.images.map((image) => image.names.en).sort()).toEqual(expected);
+    });
+  });
 });
 
 describe("punctuation and degenerate queries", () => {

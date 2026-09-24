@@ -79,3 +79,53 @@ it.each([
   if (kind === "labels") input.media_images[0]!.labels = ["Food", "food"];
   expect(() => validateMediaConfiguration(wire(input))).toThrow();
 });
+
+const otherBytes = Buffer.from([0xff, 0xd8, 0xff, 2]);
+/** `tables()` plus a second, equally valid image, so a refusal can come from two rows together. */
+function twoImages(secondLabels: string[] = ["Drink"]) {
+  const input = tables();
+  input.media_images.push({
+    id: "image-b",
+    filename: `${createHash("sha256").update(otherBytes).digest("hex")}.jpg`,
+    names: { en: "Juice" },
+    alt_text: { en: "A glass" },
+    labels: secondLabels,
+  });
+  input.media_image_data.push({ image_id: "image-b", bytes: `\\x${otherBytes.toString("hex")}` });
+  return input;
+}
+const refused = expect.objectContaining({ code: "image.invalid_metadata" });
+
+it("accepts two valid images whose labels differ", () => {
+  expect(() => validateMediaConfiguration(wire(twoImages()))).not.toThrow();
+});
+
+it("refuses a data row whose image_id is not a string", () => {
+  const input = wire(tables());
+  (input.media_image_data[0] as Record<string, unknown>).image_id = 42;
+  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+});
+
+it("refuses two data rows for one image even when the row counts agree", () => {
+  const input = wire(twoImages());
+  input.media_image_data[1]!.image_id = "image-a";
+  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+});
+
+it.each(["id", "filename"])("refuses an image whose %s is not a string", (column) => {
+  const input = wire(tables());
+  (input.media_images[0] as Record<string, unknown>)[column] = 42;
+  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+});
+
+it("refuses two images spelling one label with different case", () => {
+  expect(() => validateMediaConfiguration(wire(twoImages(["food"])))).toThrow(refused);
+});
+
+it.each([
+  ["no content-language row", []],
+  ["a default language that is not a string", [{ default_language: 42, languages: ["en"] }]],
+])("refuses a bundle with images and %s", (_case, rows) => {
+  const input = { ...wire(tables()), content_languages: rows };
+  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+});
