@@ -2,7 +2,7 @@
 
 **Status:** design approved by the owner in the brainstorm of 2026-09-18; branch 2 revised by the owner on 2026-09-23 (§15). Branch 1 landed (its
 thirteen tasks, ending #480). Branch 2 landed (its nine tasks: Tasks 1 to 8 as #511, #517, #528,
-#532, #537, #539, #545 and #551, and Task 9 on `feat/variants-cleanup`); its plan is
+#532, #537, #539, #545 and #551, and Task 9 as #556); its plan is
 `docs/superpowers/plans/2026-09-23-variants-as-products.md` (2026-09-23), which records where the
 code has moved since this spec was written and the decisions it takes where this spec is silent.
 How variants work now is in `docs/developers/products.md`, under _Variants_.

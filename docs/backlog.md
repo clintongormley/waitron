@@ -158,7 +158,7 @@ tills. Shared edits flag affected menus; each live menu changes only when republ
 live availability. **Do not start implementation until the PostgreSQL-to-SQLite work, dependency
 upgrades, and variants/extras-as-products changes have all landed.** The variants/extras-as-products
 part of that is met: extras and options landed on 2026-09-21 (branch 1, ending #480), and variants
-with branch 2 (Task 9 on `feat/variants-cleanup`). This entry does not record the other two parts as
+with branch 2 (Task 9, #556). This entry does not record the other two parts as
 done; check them before starting. Then reconcile the integration questions in the spec with the
 landed code before planning. Further specifications can be written
 during the wait.
@@ -514,7 +514,7 @@ reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails 
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md)). A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
-Task 7 #545, Task 8 #551, and Task 9 on `feat/variants-cleanup`. How the model works now is in
+Task 7 #545, Task 8 #551, and Task 9 #556. How the model works now is in
 [products.md](developers/products.md), under _Variants_. The open items each task left are in its
 paragraph below. **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
@@ -820,7 +820,7 @@ needed.** What Task 8 leaves open:
   with no variant rows, it ended at the padding's edge. **Next action:** decide whether a long name
   in that table may wrap mid-word.
 
-**Task 9 LANDED on `feat/variants-cleanup`: the old variant table is gone.** The catalogue
+**Task 9 LANDED as #556 (2026-09-24): the old variant table is gone.** The catalogue
 migration `packages/catalogue/drizzle/0004_drop_product_variants.sql` drops `product_variants`, which
 since Task 3 only the configuration transfer still copied; that copy and `resolveMenuVariant`, a
 reader no product path called, went with it.
@@ -1829,7 +1829,7 @@ address that answers is then asked for its paper sizes on port 631.
   sold separately ordering, future inventory rules, and the direction away from a general canvas
   editor toward source-coded screens. Fiscal Q19 remains open. This specifies intended behaviour,
   not verified features. Wait for SQLite, dependency upgrades and variants/extras-as-products to
-  land (the variants/extras-as-products part has, with branch 2's Task 9 on `feat/variants-cleanup`;
+  land (the variants/extras-as-products part has, with branch 2's Task 9, #556;
   the other two are not recorded here as done), alongside the [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md),
   then resolve the listed integration questions before planning.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
