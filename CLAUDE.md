@@ -467,7 +467,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   it proves the lock, not that each caller takes it, so a caller passing `exclusive: false` wrongly
   is seen by nothing. Every change to `recovery.json` goes through `updateRecoveryState` under
   `recovery.lock`; never unlink `recovery.lock` either. Guard:
-  `apps/server/src/recovery-race.test.ts`. Receipt:
+  `apps/server/src/recovery-race.test.ts`, weaker than its name — it proves the lock, not that every
+  writer of the file takes it. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
