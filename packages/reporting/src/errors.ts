@@ -8,7 +8,8 @@ import "@waitron/shared";
  *
  * Codes are never renamed once shipped: a wrong one is deprecated and a new one added beside it.
  * `scripts/errors-reachable.test.ts` checks that this file stays reachable from the package's
- * `index.ts`.
+ * `index.ts`, weaker than its name: it reads import TEXT, so an import of this file written in a
+ * comment or string of another file the barrel reaches fakes an edge.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

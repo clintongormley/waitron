@@ -1,9 +1,9 @@
 /**
  * `verifyDailyCloseChain` catches a committed chain that was tampered with after it was frozen.
- * Every break here mutates rows `recordDailyClose` itself wrote, with `daily_closes`' append-only
- * triggers dropped ({@link bypassingImmutability}); the sibling `verify-daily-close-chain.test.ts`
- * stages its breaks with INSERTs and with UPDATEs of `daily_close_chain` (which has no append-only
- * trigger), so it drops none.
+ * Every break here mutates rows `recordDailyClose` itself wrote: `daily_closes` rows with that
+ * table's append-only triggers dropped ({@link bypassingImmutability}), and the `daily_close_chain`
+ * head directly, since it has no such trigger. The sibling `verify-daily-close-chain.test.ts` stages
+ * its breaks with INSERTs and with UPDATEs of `daily_close_chain`, so it drops no trigger.
  */
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
