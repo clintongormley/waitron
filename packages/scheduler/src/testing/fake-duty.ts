@@ -7,7 +7,7 @@ export interface FakeDutyCall {
 
 /**
  * A programmable `PeriodDuty`. `behaviour` is consulted per call, so one instance can succeed, then
- * fail, then succeed again — which is what the retry and park paths need.
+ * fail, then succeed again.
  */
 export class FakeDuty implements PeriodDuty {
   readonly cadence = "daily" as const;
@@ -26,7 +26,6 @@ export class FakeDuty implements PeriodDuty {
   }
 }
 
-/** A duty that always throws the given error — the failure/park path's subject. */
 export function throwingDuty(name: string, error: unknown): PeriodDuty {
   return {
     name,

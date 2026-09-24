@@ -31,9 +31,8 @@ describe("dayPeriod", () => {
     });
   });
 
-  // A UTC day is always 86_400_000ms — no DST to shorten or lengthen it. This is the whole reason
-  // the cadence is UTC-tiled rather than tenant-local: a local day is not a fixed width, and no
-  // timezone column exists on tenants or locations to derive one from.
+  // A UTC day is always 86_400_000ms; a local day is not a fixed width, which is why the cadence
+  // is UTC-tiled rather than tenant-local.
   it("spans a constant width across a European DST boundary", () => {
     const period = dayPeriod(new Date("2026-10-25T00:00:00Z"));
     expect(period.to.getTime() - period.from.getTime()).toBe(DAY_MS);
@@ -199,12 +198,8 @@ describe("derive: claimable rows", () => {
     expect(result.due).toContainEqual({ kind: "claimable", row: pending });
   });
 
-  // `TERMINAL.includes(r.state) ||` could be deleted outright with this suite staying green: every
-  // terminal row in every other fixture also has `nextAttemptAt: null`, so the SECOND disjunct
-  // covered for the first and the state guard was never the thing doing the work. A terminal row
-  // with a live `next_attempt_at` is not hypothetical — `completeRun` writes null on success and
-  // on park, but the column is nullable, nothing in the schema ties it to the state, and a future
-  // writer that left one behind must not resurrect a finished run.
+  // Every other terminal fixture has `nextAttemptAt: null`, which derive would skip even without
+  // the state check. Nothing in the schema ties `next_attempt_at` to the state.
   it("never returns a terminal row, however claimable its next_attempt_at looks", () => {
     const result = derive(
       snapshot([

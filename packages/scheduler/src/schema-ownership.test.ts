@@ -15,9 +15,7 @@ const CORE = ["tenants"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
-/** How drizzle-kit writes a table name in this package's generated SQL. SQLite quotes an
- * identifier with backticks where PostgreSQL used double quotes, measured by reading this
- * package's own `drizzle/*.sql` on 2026-09-22. */
+/** How drizzle-kit writes a table name in this package's generated SQL, backticks and all. */
 function createTable(table: string): string {
   return `create table \`${table}\``;
 }
@@ -32,13 +30,8 @@ function generatedSql(): string {
 
 describe("the scheduler schema entrypoint owns exactly its own tables", () => {
   it("exports no table this package does not own", () => {
-    // Not `(v): v is SQLiteTable => is(v, SQLiteTable)`: this barrel also exports `runState`, a
-    // plain readonly string tuple, alongside `scheduledRuns` — a specific
-    // `SQLiteTableWithColumns<...>` union member that carries more properties than the general
-    // `SQLiteTable` class, so an explicit
-    // predicate fails "type predicate's type must be assignable to its parameter's type" at
-    // compile time. Same pattern as packages/payments/src/schema-ownership.test.ts, which exports
-    // `paymentState`/`paymentRefundState` alongside its tables for the same reason.
+    // Not `(v): v is SQLiteTable => is(v, SQLiteTable)`: against this barrel's union of `runState`
+    // and `scheduledRuns`, that predicate fails to compile (TS2677).
     const exported = Object.values(schema)
       .filter((v) => is(v, SQLiteTable))
       .map((t) => getTableName(t))

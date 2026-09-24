@@ -6,10 +6,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { CORE_MIGRATIONS, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
-// Side-effect only: this test constructs a real `AppError<"payment.reconcile_unsettled">`, and
-// that code exists only via @waitron/payments's own `declare module "@waitron/shared"`
-// augmentation (its src/errors.ts). This package's runtime code never imports @waitron/payments —
-// this import is test-only, exactly the reason it is a devDependency here.
+// Side-effect only: `payment.reconcile_unsettled`, thrown below, is declared by @waitron/payments's
+// `declare module "@waitron/shared"` augmentation.
 import "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { scheduledRuns } from "./schema/scheduled-runs.js";
@@ -45,9 +43,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Force ONE duty's snapshot read to throw, leaving every other duty's read untouched. A skip is any
-// duty whose processing throws in runDue's outer try, and the snapshot read is the
-// earliest such point — precisely the infrastructure read failure that `skipped` documents.
+// Force ONE duty's snapshot read to throw, the earliest point at which a duty lands in `skipped`.
 function failSnapshotFor(dutyName: string): void {
   const real = store.readSnapshot;
   vi.spyOn(store, "readSnapshot").mockImplementation((tx, params) =>
@@ -79,16 +75,8 @@ describe("runDue", () => {
     );
     await runDue(deps([duty]), NOW);
 
-    // Read the column directly: readSnapshot deliberately omits `summary`, since derivation never
-    // needs it and a large one would be read on every tick for nothing.
-    //
-    // Through the TABLE OBJECT rather than raw `sql`select summary …``, which is what this read was
-    // on PostgreSQL. `summary` is `json()`, and that helper is `text(name, { mode: "json" })`
-    // (`packages/db/src/schema/columns.ts`) — a text column with a codec on the drizzle column, not
-    // a type the engine knows. A raw `execute` bypasses the codec and hands back the stored STRING:
-    // measured on this tree, the same assertion against a raw select failed with
-    // `expected '{"remediationFailures":[…]}' to deeply equal { remediationFailures: [ … ] }`.
-    // PostgreSQL's driver parsed `jsonb` itself, which is why the raw form used to work.
+    // Read the column directly: readSnapshot deliberately omits `summary`. Through the table object,
+    // because a raw select bypasses the column's JSON codec and returns the stored string.
     const stored = await withTransaction(db, (tx) =>
       tx
         .select({ summary: scheduledRuns.summary })
@@ -125,16 +113,12 @@ describe("runDue", () => {
     const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
-    // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1. Parse-then-compare rather than a
-    // string equality, as packages/payments/src/store.test.ts's convention already does: the
-    // rendering of a stored timestamp belongs to the store, and this case is about the interval.
+    // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1.
     expect(new Date(snapshot.rows[0]!.nextAttemptAt!).toISOString()).toBe(
       "2026-07-25T04:15:00.000Z",
     );
-    // …and the tick REPORTS that backoff. Derivation answers from a snapshot taken before any duty
-    // ran, so on its own it would say "the next day boundary" — 2026-07-26T00:00:00Z, 19h45m after
-    // the row this very call made claimable. A host that sleeps on `nextDueAt` would never reach
-    // the documented "15m then 30m" retry, and `drain`'s hourly retry is a LEGAL obligation.
+    // Derivation answers from a snapshot taken before the duty ran, so on its own it would report
+    // the next day boundary, and a host sleeping on `nextDueAt` would miss the retry.
     expect(result.nextDueAt).toEqual(new Date("2026-07-25T04:15:00.000Z"));
   });
 
@@ -156,8 +140,6 @@ describe("runDue", () => {
     const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
-    // A parked row is non-terminal in neither sense: it stays visible in the snapshot, but it is
-    // never claimed again, so the fourth tick finds nothing.
     expect(snapshot.rows[0]).toMatchObject({ state: "parked", attempts: 3, nextAttemptAt: null });
     expect(after.ran).toEqual([]);
   });
@@ -195,7 +177,7 @@ describe("runDue", () => {
   });
 
   // An infrastructure failure has no ledger row to carry it — the claim is what would have created
-  // one. Reporting it is the difference between "nothing was due" and "we never found out".
+  // one.
   it("reports a duty whose claim failed, rather than swallowing it", async () => {
     const duty = new FakeDuty();
     // The snapshot read succeeds and derives a gap; only the claim that would record it throws.
@@ -206,25 +188,16 @@ describe("runDue", () => {
     expect(result.ran).toEqual([]);
     expect(result.skipped).toEqual([{ duty: "test.duty", errorCode: "unknown" }]);
     expect(duty.calls).toEqual([]);
-    // Skipped work is due on the skip-retry interval, NOT at the next day boundary the derivation
-    // computed before the claim threw — a host sleeping on that would leave the failure untouched
-    // for 20 hours. It is also not `now`: a duty that fails for a reason only a human can fix
-    // answers the same way every pass, and reporting `now` pins the host's loop at its MIN_TICK
-    // floor forever.
+    // Not the next day boundary, which would leave the failure untouched for 20 hours, and not
+    // `now`, which pins the host's loop at its floor for a failure only a human can fix.
     expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
   });
 
-  // The sharper half of the same defect. Here the SNAPSHOT READ fails, before derivation runs at
-  // all, so nothing ever moves `earliestFuture` — the state in which `nextDueAt` used to be
-  // `null`, i.e. "no work will ever be due", from one transient database blip. A long-running host
-  // reading that stops polling permanently. `Math.min(Infinity, retryAt)` is `retryAt`, which is
-  // why this case needs no branch of its own in `runDue`.
+  // The snapshot read fails before derivation runs, so nothing else sets `nextDueAt`; `null` would
+  // tell a host that no work will ever be due.
   it("reports the skip-retry interval, never `null`, when the snapshot read itself fails", async () => {
-    // A real driver failure rather than a stub: a CLOSED venue file is exactly what a database that
-    // has gone away looks like at this seam, and it costs no cast. It is a database of this case's
-    // own rather than the suite's, because `useVenueDb` owns that one's lifecycle and every other
-    // case in the file reads it. Named `dead` rather than `store` so it does not shadow this
-    // module's `import * as store from "./store.js"`.
+    // A closed venue file is what a database that has gone away looks like at this seam. Its own,
+    // not the suite's, because `useVenueDb` owns that one's lifecycle.
     const directory = await mkdtemp(join(tmpdir(), "waitron-scheduler-dead-"));
     const dead = await openVenueDatabase(directory);
     await dead.close();
@@ -242,17 +215,9 @@ describe("runDue", () => {
     }
   });
 
-  // THE FOLD, and the reason it is a fold rather than an assignment. Before this, a skip
-  // overwrote `nextDueAt` unconditionally, which was safe only because the value written was
-  // `now` — always earlier than any real future answer. A value in the FUTURE can mask a
-  // successful pair's genuinely earlier one, so the skip time is folded as a MINIMUM.
-  //
-  // One tenant, two duties: one runs and fails (writing a backoff), the other's snapshot read is
-  // forced to throw so its pair lands in `skipped`.
+  // The skip time is folded in as a minimum, so it cannot mask a successful pair's earlier answer.
   it("prefers a successful pair's earlier backoff over the skip-retry interval", async () => {
-    // 1s, so the backoff this failing duty writes lands well inside the 5-minute skip interval.
-    // The DEFAULT backoff (15 minutes) is longer than the skip interval, so this test cannot be
-    // written without the override — and without it the assertion would pass for the wrong reason.
+    // 1s, so the backoff this failing duty writes lands inside the 5-minute skip interval.
     const failing = throwingDuty("duty.fail", new Error("boom"));
     const skipper = new FakeDuty("duty.skip");
     failSnapshotFor("duty.skip");
@@ -265,8 +230,6 @@ describe("runDue", () => {
 
   it("prefers the skip-retry interval over a successful pair's later answer", async () => {
     // The default 15-minute backoff is LATER than the 5-minute skip interval, so the skip wins.
-    // Same shape as the test above with one knob changed — that is the point: the fold is a min,
-    // not a preference for either side.
     const failing = throwingDuty("duty.fail", new Error("boom"));
     const skipper = new FakeDuty("duty.skip");
     failSnapshotFor("duty.skip");
@@ -281,10 +244,8 @@ describe("runDue", () => {
   it("still reports `now` when work was deferred, even with a skip present", async () => {
     const duty = new FakeDuty();
     const skipper = new FakeDuty("duty.skip");
-    // A duty that has never run has only ONE day due — the most recent complete period, per
-    // "runs the most recent complete period for a duty that has never run" — so `maxPeriodsPerTick:
-    // 1` alone could not defer anything. Sweeping once at 2026-07-23 records 2026-07-22 as the
-    // floor, so at NOW there are two gaps (07-23, 07-24) for the cap to actually bite on.
+    // A never-run duty has only one day due, so the cap alone defers nothing. Sweeping at 07-23
+    // records 07-22 as the floor, leaving two gaps (07-23, 07-24) at NOW.
     await runDue(deps([duty]), new Date("2026-07-23T04:00:00Z"));
     failSnapshotFor("duty.skip");
     const result = await runDue(deps([duty, skipper], { maxPeriodsPerTick: 1 }), NOW);
@@ -294,9 +255,6 @@ describe("runDue", () => {
     expect(result.nextDueAt).toEqual(NOW);
   });
 
-  // The ONLY state in which `nextDueAt` may be null, and now the only test that reaches it: any
-  // duty at all produces at least a next period boundary, and a duty that throws reports the
-  // skip-retry interval. "No duty at all" is what null means, and nothing else.
   it("reports null only when there is no duty at all", async () => {
     const duty = new FakeDuty();
     expect((await runDue(deps([]), NOW)).nextDueAt).toBeNull();
@@ -313,14 +271,9 @@ describe("runDue", () => {
     expect(two.calls).toHaveLength(1);
   });
 
-  // Pins the interface-change resolution for Task 5: `completeRun` now reports (via its boolean
-  // return) when a reclaim has superseded the attempt calling it, and `runOne` treats that exactly
-  // like a lost claim — return null, absent from `ran`. Staged without two real connections: the
-  // fake duty's `run()` — which executes OUTSIDE every transaction, exactly where a real duty's
-  // network call would hang — reaches back into the store with `reclaimStale` and a `now` pushed
-  // past `staleAfterMs`, simulating a second runner reclaiming this same row while the first
-  // attempt is still "in flight". When the first attempt's `duty.run()` resolves and `runOne` calls
-  // `completeRun` with ITS OWN (now-superseded) `startedAt`, the ownership fence rejects it.
+  // The fake duty's `run()`, which executes outside every transaction, plays a second runner:
+  // it reclaims this row past `staleAfterMs`, so the first attempt then completes with a
+  // superseded `startedAt` and the ownership fence rejects it.
   it("treats a completion lost to a mid-flight reclaim as 'this attempt owns nothing' — absent from ran", async () => {
     const duty = new FakeDuty("test.duty", async (call) => {
       const snapshot = await withTransaction(db, (tx) =>
@@ -333,8 +286,7 @@ describe("runDue", () => {
       const reclaimed = await withTransaction(db, (tx) =>
         reclaimStale(tx, { id: row!.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
-      // Confirms the reclaim actually won — otherwise the rest of this test would be asserting
-      // nothing.
+      // Confirms the reclaim actually won, or the rest of this test asserts nothing.
       expect(reclaimed).not.toBeNull();
       return { summary: { ok: true } };
     });
@@ -344,24 +296,17 @@ describe("runDue", () => {
     expect(duty.calls).toHaveLength(1);
     expect(result.ran).toEqual([]);
 
-    // The row itself must still read exactly as the reclaim left it — running, at the reclaim's
-    // attempt count — never overwritten by the lost attempt's (rejected) completion.
     const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     expect(snapshot.rows[0]).toMatchObject({ state: "running", attempts: 2 });
   });
 
-  // Review finding 1: `beyondHorizon` appeared only in `run.ts`, never asserted at the `runDue`
-  // level — `result.beyondHorizon += derivation.beyondHorizon` could be silently weakened to `=`
-  // and every existing test would stay green. Two duties, not one, so the mutation is actually
-  // distinguishable: with `=`, the second duty processed would silently overwrite the first's
-  // contribution instead of adding to it.
+  // Two duties, so an overwrite would leave only the second duty's count.
   it("accumulates beyondHorizon across duties onto TickResult, rather than overwriting it", async () => {
     const one = new FakeDuty("duty.one");
     const two = new FakeDuty("duty.two");
-    // Each duty's OWN earliest-recorded period, far enough in the past that a later, narrower
-    // horizon drops most of the days between it and the horizon permanently.
+    // Each duty's own earliest-recorded period, far below the narrower horizon used next.
     await runDue(deps([one]), new Date("2026-07-11T04:00:00Z")); // records 2026-07-10
     await runDue(deps([two]), new Date("2026-07-15T04:00:00Z")); // records 2026-07-14
 
@@ -374,12 +319,6 @@ describe("runDue", () => {
     expect(result.beyondHorizon).toBe(14);
   });
 
-  // Review finding 2: no test ever let a claimed row go stale and then ran a FRESH tick over it,
-  // so `derive()` never actually classified anything as `{ kind: "stale" }` and `runOne`'s
-  // `reclaimStale` dispatch branch (run.ts's third arm) never executed. A wrong function there —
-  // e.g. `claimGap`, which would collide with the stranded row's own unique key and silently
-  // return null — locks the period forever, which is the exact failure this mechanism exists to
-  // prevent, and nothing above catches it.
   it("reclaims a stale running row through a fresh tick, rather than leaving the period stuck", async () => {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     // Simulate a crashed process: claim the period directly (bypassing `runDue`, which always
@@ -393,9 +332,8 @@ describe("runDue", () => {
     const later = new Date(NOW.getTime() + DEFAULTS.staleAfterMs + 1);
     const result = await runDue(deps([duty]), later);
 
-    // The duty ran again for the SAME period. If `runOne` mistakenly claimed via `claimGap`
-    // instead of `reclaimStale`, this insert would collide with the stranded row's own
-    // generation-0 key, `onConflictDoNothing` would return null, and the duty would never run.
+    // Claimed through `claimGap` instead of `reclaimStale`, the stranded row's key would absorb the
+    // insert and the duty would never run.
     expect(duty.calls).toHaveLength(1);
     expect(duty.calls[0]!.period.from).toEqual(period.from);
     expect(result.ran).toHaveLength(1);
@@ -404,8 +342,6 @@ describe("runDue", () => {
     const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
-    // Exactly one row for the period — a RECLAIM of the stranded row, not a second row inserted
-    // alongside it.
     expect(snapshot.rows).toHaveLength(1);
     expect(snapshot.rows[0]).toMatchObject({
       id: stranded!.id,

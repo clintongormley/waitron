@@ -15,18 +15,6 @@ export interface ClaimedRun {
   startedAt: string;
 }
 
-/**
- * The columns a claim hands back.
- *
- * Every timestamp here is read by selecting the column and nothing else. The columns are
- * `tsString` — `text`, handed back as the string the driver returned — and every writer in this
- * file binds `toISOString()` or `nowIso()`, so what is stored IS the ISO-8601 string
- * `ClaimedRun` and `LedgerRow` promise. Measured 2026-09-22, through `useVenueDb` on the real
- * engine: after an insert carrying `claimGap`'s own values, `select period_from,
- * typeof(period_from) from scheduled_runs` gave `2026-07-24T00:00:00.000Z` and `text`, and a
- * plain drizzle selection of the same column gave that same string. No rendering step is needed
- * to make the type true.
- */
 const CLAIMED = {
   id: scheduledRuns.id,
   periodFrom: scheduledRuns.periodFrom,
@@ -34,21 +22,12 @@ const CLAIMED = {
   generation: scheduledRuns.generation,
   attempts: scheduledRuns.attempts,
   // Never null here: every statement that selects via CLAIMED sets started_at in the same
-  // statement (claimGap on insert, claimRow/reclaimStale on update). The COLUMN is nullable, so
-  // selecting it plainly would infer `string | null` and refuse to satisfy `ClaimedRun.startedAt`;
-  // this template emits the same column reference and is where that invariant is asserted.
+  // statement. The COLUMN is nullable, so selecting it plainly would infer `string | null`.
   startedAt: sql<string>`${scheduledRuns.startedAt}`,
 } as const;
 
-/**
- * Everything derivation needs about one duty.
- *
- * The row read spans two ranges deliberately (see `LedgerSnapshot`): at-or-above the horizon start,
- * OR non-terminal at any age, so a re-sweep chain older than the horizon stays claimable. The
- * below-horizon MISSING-day count would be an unbounded read, so it is aggregated in SQL instead.
- *
- * The read scopes to the duty alone; the database holds one taxpayer, so every row is its own.
- */
+/** Everything derivation needs about one duty; `LedgerSnapshot` says why the row read spans two
+ * ranges and the below-horizon count is aggregated in SQL. */
 export async function readSnapshot(
   tx: Transaction,
   params: { duty: string; horizonStart: Date },
@@ -71,10 +50,7 @@ export async function readSnapshot(
     .where(
       and(
         scope,
-        // `notInArray`'s column overload takes a mutable array, unlike `inArray`'s — no
-        // `ReadonlyArray` overload exists for it in drizzle-orm 0.45. `TERMINAL` stays `readonly`
-        // (it is derivation's own invariant list, shared rather than duplicated per Resolution 3),
-        // so it is copied here rather than widened at its declaration.
+        // Copied: `notInArray`'s column overload refuses a readonly array, unlike `inArray`'s.
         or(gte(scheduledRuns.periodFrom, horizon), notInArray(scheduledRuns.state, [...TERMINAL])),
       ),
     )
@@ -82,11 +58,7 @@ export async function readSnapshot(
 
   const [bounds] = await tx
     .select({
-      // `min()` over zero rows is SQL NULL — the "duty has never run" case — so `?? null` below is
-      // a real fallback, not dead code papering over a lie. Measured 2026-09-22 on the real engine:
-      // `select min(period_from), count(*) from scheduled_runs where duty = 'no.such.duty'`
-      // returned one row reading `{"earliest":null,"n":0}`, so the driver hands back JS `null`, not
-      // a string and not a missing row.
+      // NULL when the duty has never run.
       earliest: sql<string | null>`min(${scheduledRuns.periodFrom})`,
       below: sql<number>`count(distinct ${scheduledRuns.periodFrom}) filter (where ${scheduledRuns.periodFrom} < ${horizon})`,
     })
@@ -94,10 +66,7 @@ export async function readSnapshot(
     .where(scope);
 
   return {
-    // No cast: the `select({...})` above already produces exactly `LedgerRow`, and a cast at this
-    // boundary would silently absorb a dropped or renamed column — the one place derivation's
-    // purity depends on the read being complete. If this ever stops compiling, that is the read
-    // and the type having parted company, which is information worth failing on.
+    // No cast: a cast here would silently absorb a dropped or renamed column.
     rows,
     earliestPeriodFrom: bounds?.earliest ?? null,
     recordedBelowHorizon: Number(bounds?.below ?? 0),
@@ -130,8 +99,7 @@ export async function claimGap(
 }
 
 /**
- * Claim an existing `pending` or `failed` row. Retry and re-sweep differ only in which state the
- * row arrived in, so they share ONE statement rather than one being a widening of the other.
+ * Claim an existing `pending` or `failed` row: retry and re-sweep share ONE statement.
  * Single-statement conditional UPDATE, returning-checked: exactly one concurrent runner wins.
  */
 export async function claimRow(
@@ -146,19 +114,8 @@ export async function claimRow(
       attempts: sql`${scheduledRuns.attempts} + 1`,
       startedAt: now,
       // Cleared, not carried: the column means "when this row becomes claimable", and a running
-      // row is not. Leaving the claimed row's old backoff in place would falsify the invariant its
-      // own schema comment states ("Null unless `pending` or `failed`") and hand a stale time to
-      // anything reading the column directly — an operational query today, and a `nextDueAt`-shaped
-      // duty kind's derivation tomorrow. `derive` is unaffected either way: it dispatches on
-      // `running` before it ever reads `next_attempt_at`. `claimGap` inserts null, and
-      // `reclaimStale` only ever touches rows that are already `running`, so this is the one write
-      // that could leave a stale value.
+      // row is not.
       nextAttemptAt: null,
-      // Every `updated_at` stamp in this file reads this process's clock, which is also what the
-      // column's own `$defaultFn(nowIso)` writes on the insert, and what `started_at`/`finished_at`
-      // already took from the caller's `params.now`. The PostgreSQL `now()` this replaced read the
-      // DATABASE's clock, once per transaction; this engine has no such function and the statement
-      // failed outright with `no such function: now`.
       updatedAt: nowIso(),
     })
     .where(
@@ -176,9 +133,8 @@ export async function claimRow(
 }
 
 /**
- * Reclaim a `running` row stranded by a crashed process. Its own statement, NOT `claimRow`'s:
- * that one matches `pending`/`failed`, and a stranded row is `running`. Without this a crash locks
- * that period for ever, and no gap reveals it because the row exists.
+ * Reclaim a `running` row stranded by a crashed process. Without this a crash locks that period
+ * for ever, and no gap reveals it because the row exists.
  */
 export async function reclaimStale(
   tx: Transaction,
@@ -206,18 +162,12 @@ export async function reclaimStale(
 
 /**
  * Record the outcome of a claimed run — but only for the SAME attempt that claimed it. Fenced on
- * `state = 'running' AND started_at = <the claim's own startedAt>`, not just `id`: `reclaimStale`
- * exists precisely because a `running` row can be stranded, and a reclaim cannot tell a dead
- * process from a merely hung one apart. Sequence this guards against: A claims (`started_at` =
- * T1); A hangs past `staleAfterMs`; B reclaims (bumps `attempts`, sets `started_at` = T2, `state`
- * stays `running`); A wakes up and calls `completeRun` with its own (now stale) T1. Without the
- * fence, A's outcome would land on the row B is still executing, and `summary` — the duty's own
- * durable result, e.g. payments reconcile's `remediationFailures` — would belong to the wrong
- * attempt.
+ * `state = 'running' AND started_at = <the claim's own startedAt>`, not just `id`: a reclaim cannot
+ * tell a dead process from a merely hung one. A claims (`started_at` = T1) and hangs past
+ * `staleAfterMs`; B reclaims (`started_at` = T2); A wakes and completes with T1. Without the fence,
+ * A's outcome would land on the row B is still executing.
  *
- * Returns whether THIS call's outcome actually won the fence, so a losing completion is
- * observable — matching the returning-checked contract every other write in this file uses —
- * rather than silently discarded.
+ * Returns whether THIS call's outcome won the fence.
  */
 export async function completeRun(
   tx: Transaction,
@@ -259,10 +209,8 @@ export async function completeRun(
  * NO row at any generation in a non-terminal state — anything outside derivation's own `TERMINAL`
  * list, so a `failed` row awaiting its own retry blocks it too. The caller runs this in the SAME
  * transaction as `completeRun`, so the guard sees the run that is finishing as already terminal.
- *
- * Two racing enqueues collide on `scheduled_runs_key`; the loser treats the violation as "already
- * enqueued". The chain stays LINEAR — one unresolved finding cannot fan out into an exponential
- * number of rows.
+ * The chain stays LINEAR — one unresolved finding cannot fan out into an exponential number of
+ * rows. A unique violation on `scheduled_runs_key` is read as "already enqueued".
  *
  * Returns whether it inserted.
  */
@@ -275,11 +223,8 @@ export async function enqueueSuccessor(
 
   const [state] = await tx
     .select({
-      // The SAME `TERMINAL` list `readSnapshot` and `derive` key on, embedded as a drizzle
-      // predicate rather than restated as literal SQL. Add a terminal state one day and a
-      // hardcoded `not in ('succeeded', 'parked')` here would still read a live row as finished
-      // and insert a successor alongside it, breaking the linear-chain invariant the whole
-      // re-sweep design turns on — with derivation and the snapshot read having already moved on.
+      // The SAME `TERMINAL` list `readSnapshot` and `derive` key on, not restated as literal SQL
+      // that a new terminal state would leave behind.
       unfinished: sql<number>`count(*) filter (where ${notInArray(scheduledRuns.state, [...TERMINAL])})`,
       highest: sql<number>`coalesce(max(${scheduledRuns.generation}), -1)`,
     })
@@ -289,20 +234,10 @@ export async function enqueueSuccessor(
   if (state === undefined || Number(state.unfinished) > 0) return false;
 
   try {
-    // A SAVEPOINT around the insert, not a bare insert. The adapter emits a nested
-    // `tx.transaction` as SAVEPOINT / ROLLBACK TO whenever a transaction is already open
-    // (`packages/store/src/node-sqlite-adapter.ts`), which inside `withTransaction` it always is.
-    //
-    // The danger this was written against was PostgreSQL's: a rejected statement aborted the whole
-    // transaction, so catching the violation without a savepoint left every LATER statement failing
-    // with 25P02 — and cost `completeRun` (the caller completes first and enqueues second,
-    // `run.ts`) its own already-executed write when the aborted transaction ended as a ROLLBACK,
-    // leaving the run to be reclaimed as stale. SQLite does not abort the transaction; it backs out
-    // the refused statement alone (receipt, with a control: `bench/sqlite-failover/README.md` →
-    // "What S5 measures, and the savepoint it does not need"). The savepoint stays because it still
-    // confines a losing attempt's own writes to that attempt. Same shape as `appendToChain` in
-    // `packages/fiscal-verifactu/src/chain.ts` and `insertClose` in
-    // `packages/reporting/src/record-daily-close.ts`.
+    // A savepoint (the adapter's nested `tx.transaction`), so a losing attempt's own writes are
+    // backed out with it. Its body is one insert, which SQLite backs out by itself when refused,
+    // leaving the transaction usable, so today it changes nothing
+    // (`bench/sqlite-failover/README.md`).
     await tx.transaction(async (attempt) => {
       await attempt.insert(scheduledRuns).values({
         duty: params.duty,
@@ -316,8 +251,6 @@ export async function enqueueSuccessor(
     });
     return true;
   } catch (error) {
-    // A concurrent enqueue computed the same generation and got there first. Same fact, not an
-    // error: the successor exists.
     if (isUniqueViolation(error)) return false;
     throw error;
   }
