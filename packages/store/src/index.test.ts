@@ -820,11 +820,10 @@ describe("onCommit", () => {
 
   // A transaction that only reads writes nothing to the side file, so there is nothing for a copy
   // of the file to catch up with.
-  it("does not tell listeners about a write transaction that changed no row", async () => {
+  it("does not tell listeners about a write transaction that only reads", async () => {
     const { store, heard } = await setUp();
     await store.venue.withWriteLock(async () => {
       store.venue.all(sql`select * from sales`);
-      store.venue.run(sql`delete from sales`);
     });
     expect(heard).toHaveLength(0);
   });

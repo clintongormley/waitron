@@ -46,9 +46,10 @@ export function adaptNodeSqlite(connections: Connections) {
      *
      * **A statement the read connection refuses because it is read-only is re-run on the write
      * connection.** That case is a write issued from an asynchronous context outside a transaction
-     * while some other transaction is open; re-run there, it joins that transaction and commits or
-     * rolls back with it, rather than meeting a refusal no caller in this tree is written to
-     * expect. It is safe to re-run because the refusal arrives before any work — see
+     * while some other transaction body is running. Re-run there, it joins that transaction if it
+     * is still open, and commits or rolls back with it; in the moment after the queue's `commit`
+     * and before the body has ended, none is open and the write commits by itself. Either way it
+     * does not meet a refusal no caller in this tree is written to expect. It is safe to re-run because the refusal arrives before any work — see
      * `SQLITE_READONLY` in `./connections.ts`. Nothing else is retried.
      */
     prepare(query: string) {
