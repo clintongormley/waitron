@@ -43,8 +43,8 @@ export function normalisePrefix(prefix: string): string {
 }
 
 /**
- * The key as the bucket holds it. Litestream's replica path must be built with this function, or
- * Litestream and this package will look for a generation in different places.
+ * The key as the bucket holds it. Litestream's replica path must start with the same normalised
+ * prefix, or Litestream and this package will look for a generation in different places.
  */
 export function bucketKey(config: Pick<BucketConfig, "prefix">, key: string): string {
   return `${normalisePrefix(config.prefix)}${key}`;
@@ -112,7 +112,7 @@ export function createS3ObjectStore(
       try {
         return { body: await out.Body.transformToByteArray(), etag: out.ETag };
       } catch (error) {
-        // The answer began but never completed, so there is no status to report.
+        // Reported with no status, so callers treat a body that broke off as no answer, not a refusal.
         throw requestFailed("get", key, null, nameOf(error));
       }
     },

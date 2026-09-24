@@ -92,7 +92,8 @@ export async function pruneGenerations(
     .map(([name]) => name)
     .sort();
   for (const name of doomed) {
-    // The marker goes last: while any file of the generation remains, its name stays claimed.
+    // The marker goes last, so a prune interrupted partway leaves a generation that had a marker still
+    // claimed.
     const marker = markerKey(venueId, name);
     const all = keys.get(name)!;
     await deleteAll(
