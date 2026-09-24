@@ -32,6 +32,7 @@ import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
+import { assertNotOfferedAsExtra } from "./variants.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -996,6 +997,13 @@ export async function updateProduct(
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
+  if (patch.active === true) {
+    const [row] = await tx
+      .select({ parentId: products.parentId })
+      .from(products)
+      .where(eq(products.id, id));
+    if (row?.parentId != null) await assertNotOfferedAsExtra(tx, row.parentId, "active");
+  }
   // `allergens` is the MANUAL overlay now, not the published column: split it out of the generic
   // patch and write it to `manual_allergens`, then republish. A supplied map is validated before the
   // write; `null` (clear) and `undefined` (leave unchanged) both skip validation, and only `null`

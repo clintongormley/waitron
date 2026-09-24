@@ -4,6 +4,7 @@ import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { menuItems } from "./schema/menu.js";
+import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
@@ -130,6 +131,25 @@ export async function parentsWithActiveVariants(
 }
 
 /**
+ * Refuses leaving `parentId` with an Active variant while an extras list offers it: the till never
+ * offers such a product as an extra, so every list naming it would lose that item.
+ */
+export async function assertNotOfferedAsExtra(
+  tx: Transaction,
+  parentId: string,
+  field: string,
+): Promise<void> {
+  const offering = await tx
+    .selectDistinct({ id: extraLists.id, name: extraLists.name })
+    .from(extraListItems)
+    .innerJoin(extraLists, eq(extraLists.id, extraListItems.listId))
+    .where(eq(extraListItems.productId, parentId))
+    .orderBy(asc(extraLists.name), asc(extraLists.id));
+  if (offering.length > 0)
+    throw new AppError("product.offered_as_extra", { field, extraLists: offering });
+}
+
+/**
  * Save a product's variants: each one in the input is written Active or Inactive as its `active`
  * says — with `active` absent, a new variant is created Active and one sent by `id` keeps its
  * current state — in the input's order; each current variant the input leaves out is made Inactive and kept
@@ -174,6 +194,9 @@ export async function setProductVariants(
   for (const id of seen) {
     if (!currentIds.has(id)) throw new AppError("product.variant_not_found", { variantId: id });
   }
+  const firstActive = normalized.findIndex((input) => input.active);
+  if (firstActive !== -1)
+    await assertNotOfferedAsExtra(tx, productId, `variants.${firstActive}.active`);
   for (const [index, input] of normalized.entries()) {
     const values = {
       name: input.name,

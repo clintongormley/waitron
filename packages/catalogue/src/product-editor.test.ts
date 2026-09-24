@@ -734,3 +734,113 @@ describe("a variant's own page", () => {
     };
   }
 });
+
+describe("a product an extras list offers", () => {
+  const save = (productId: string | null, body: unknown) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, catalogueId, body, "en"));
+  const read = (productId: string) =>
+    withTransaction(fx.db, (tx) => readProductEditor(tx, productId));
+  const small = () => ({ ...input.variants[0]!, active: false });
+  const large = () => ({ ...input.variants[1]!, active: true });
+
+  let coffeeId: string;
+  let offering: { id: string; name: string }[];
+  beforeEach(async () => {
+    const coffee = await save(null, { ...input, variants: [] });
+    const tea = await save(null, { ...input, name: "Tea", customerName: null, variants: [] });
+    coffeeId = coffee.id;
+    // Created in the reverse of name order, beside a list that offers only another product, so
+    // the refusal's list has to be the offering lists by name.
+    offering = await withTransaction(fx.db, async (tx) => {
+      const toppings = await createExtraList(
+        tx,
+        { name: "Toppings", items: [{ productId: tea.id }, { productId: coffee.id }] },
+        "en",
+      );
+      await createExtraList(tx, { name: "Sides", items: [{ productId: tea.id }] }, "en");
+      const addOns = await createExtraList(
+        tx,
+        { name: "Add-ons", items: [{ productId: coffee.id }] },
+        "en",
+      );
+      return [
+        { id: addOns.id, name: "Add-ons" },
+        { id: toppings.id, name: "Toppings" },
+      ];
+    });
+  });
+
+  it("refuses a parent's save that adds an Active variant, naming every list that offers it", async () => {
+    const saved = await read(coffeeId);
+
+    await expect(save(coffeeId, { ...saved, variants: [small(), large()] })).rejects.toMatchObject({
+      code: "product.offered_as_extra",
+      params: { field: "variants.1.active", extraLists: offering },
+    });
+    expect((await read(coffeeId)).variants).toEqual([]);
+  });
+
+  it("refuses a parent's save that makes an Inactive variant Active again", async () => {
+    const withInactive = await save(coffeeId, { ...(await read(coffeeId)), variants: [small()] });
+
+    await expect(
+      save(coffeeId, {
+        ...withInactive,
+        variants: [{ ...withInactive.variants[0]!, active: true }],
+      }),
+    ).rejects.toMatchObject({
+      code: "product.offered_as_extra",
+      params: { field: "variants.0.active", extraLists: offering },
+    });
+    expect((await read(coffeeId)).variants.map((variant) => variant.active)).toEqual([false]);
+  });
+
+  it("refuses a variant's own save that makes it Active", async () => {
+    const withInactive = await save(coffeeId, { ...(await read(coffeeId)), variants: [small()] });
+    const variantId = withInactive.variants[0]!.id;
+    const own = await read(variantId);
+
+    await expect(save(variantId, { ...own, active: true })).rejects.toMatchObject({
+      code: "product.offered_as_extra",
+      params: { field: "active", extraLists: offering },
+    });
+    expect(await read(variantId)).toMatchObject({ active: false });
+  });
+
+  it("saves variants that all stay Inactive, from the parent and from the variant's own page", async () => {
+    const saved = await save(coffeeId, {
+      ...(await read(coffeeId)),
+      variants: [small(), { ...large(), active: false }],
+    });
+    expect(saved.variants.map((variant) => variant.active)).toEqual([false, false]);
+
+    const variantId = saved.variants[0]!.id;
+    const own = await read(variantId);
+    expect(await save(variantId, { ...own, name: "Small cup", active: false })).toMatchObject({
+      name: "Small cup",
+      active: false,
+    });
+    // The offered product itself is saved Active: only a VARIANT's own save is checked.
+    expect(await save(coffeeId, { ...(await read(coffeeId)), active: true })).toMatchObject({
+      active: true,
+    });
+  });
+
+  it("adds, re-activates and restores variants of a product no list offers", async () => {
+    const juice = await save(null, { ...input, name: "Juice", customerName: null, variants: [] });
+
+    const added = await save(juice.id, { ...juice, variants: [small(), large()] });
+    expect(added.variants.map((variant) => variant.active)).toEqual([false, true]);
+    const reactivated = await save(juice.id, {
+      ...added,
+      variants: [{ ...added.variants[0]!, active: true }, added.variants[1]!],
+    });
+    expect(reactivated.variants.map((variant) => variant.active)).toEqual([true, true]);
+
+    const variantId = reactivated.variants[0]!.id;
+    await save(variantId, { ...(await read(variantId)), active: false });
+    expect(await save(variantId, { ...(await read(variantId)), active: true })).toMatchObject({
+      active: true,
+    });
+  });
+});

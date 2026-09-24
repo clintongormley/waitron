@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { CORE_MIGRATIONS, products as productRows, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -448,7 +448,15 @@ describe("an extra that is a parent with Active variants", () => {
         available,
         active,
       });
-      await setProductVariants(tx, ids.bacon, [variant("Thick bacon", false, true)], "en");
+      // The catalogue refuses an Active variant on a product an extras list offers
+      // (`product.offered_as_extra`), so the Active one is made by writing its row.
+      const [thick] = await setProductVariants(
+        tx,
+        ids.bacon,
+        [variant("Thick bacon", false, false)],
+        "en",
+      );
+      await tx.update(productRows).set({ active: true }).where(eq(productRows.id, thick!.id));
       await setProductVariants(tx, ids.cheese, [variant("Mature cheese", true, false)], "en");
       return attached;
     });
