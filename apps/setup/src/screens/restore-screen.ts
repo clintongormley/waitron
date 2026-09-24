@@ -9,11 +9,9 @@ import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
 
 /**
- * Collects the encrypted backup and recovery key for a cold restore on a fresh box. The warning and
- * the confirmation below ask about any server that is still RUNNING, never about "a primary or a
- * mirror": a mirror holds none of the venue's rows, and an adopted one cannot even finish joining
- * (`apps/server/src/finish-adoption.ts`'s `PendingAdoption` header), so naming a mirror as a place
- * newer data might live would send the operator looking somewhere it cannot be.
+ * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
+ * does not finish joining (`PendingAdoption`, `apps/server/src/finish-adoption.ts`), so naming one as
+ * a place newer data might live would send the operator looking in the wrong place.
  */
 @customElement("setup-restore-screen")
 export class SetupRestoreScreen extends LitElement {

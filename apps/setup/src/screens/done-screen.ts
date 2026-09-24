@@ -5,33 +5,12 @@ import "@waitron/ui/src/components/wt-button.js";
 import { actionsStyles, statusStyles } from "../form-styles.js";
 import type { SetupApi } from "../api/client.js";
 
-/** The dashboard's backup screen (`apps/dashboard/src/dashboard-app.ts`'s `backup` face), reached at
- * its path-based route (`UrlStateController` + `dashboardPath`, `apps/dashboard/src/navigation.ts`:
- * `basePath: "/manage"`, `primary: "dashboard"`). Same origin as the box's trading server, which is
- * what this screen is waiting to come back up as. */
 export const BACKUP_SETUP_URL = "/manage/backup";
 
 /**
- * The wizard's final screen, shared by three outcomes that are NOT the same. A successful provision or
- * restore returns `{ restarting: true }` and the box then SIGTERMs and comes back in TRADING mode,
- * where the origin root serves the till and the `/setup-api/*` routes no longer exist
- * (`apps/server/src/setup-api.ts`). So this screen cannot get a further success response — it
- * announces the restart and RECONNECTS by polling `GET /setup-api/status` until the setup route stops
- * answering, then offers a reload into the till.
- *
- * A successful ADOPT restarts the same way and comes back somewhere else entirely, so it gets its own
- * copy rather than a reworded version of the trading one — see {@link SetupDoneScreen.mirrorJoin}.
- *
- * The restart window produces EXPECTED fetch failures that must never be surfaced as errors, and the
- * distinction is the whole job of {@link SetupDoneScreen.#pollOnce}:
- *
- * - A `getStatus()` that RESOLVES means the setup API still answered — the box has not restarted yet.
- *   Keep waiting.
- * - A rejection that is a network/connection failure (`fetch` throws a `TypeError` while the box is
- *   down mid-restart) is the EXPECTED restart-window failure. Keep waiting; never show it.
- * - Any OTHER rejection — a non-2xx from the client's `#request` (a plain `{ code }`, e.g. the `404`
- *   once `/setup-api/*` is gone) or a body that no longer parses as the status JSON — means trading
- *   mode is up and the setup route no longer answers. Stop, and offer the reload.
+ * The wizard's final screen. The box restarts after provision, restore or adopt, and this screen
+ * polls `GET /setup-api/status` until the setup route stops answering — see
+ * {@link SetupDoneScreen.#pollOnce} for which failures mean "still restarting".
  */
 @customElement("setup-done-screen")
 export class SetupDoneScreen extends LitElement {
@@ -101,49 +80,30 @@ export class SetupDoneScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the box, injected by the shell. Used only to poll `getStatus` for the reconnect. */
   @property({ attribute: false }) api!: SetupApi;
 
-  /**
-   * The break-glass secret the adopt path minted (mirror path only), passed by the shell from the
-   * adopt 200. Shown ONCE here — the adopt response carries it a single time and the server never logs
-   * or re-issues it (spec §4.2), so this screen is the operator's only chance to record it.
-   * `undefined` on the primary provision path, which mints no secret and shows no panel.
-   */
+  /** The server keeps only a verifier of this secret (`mintBreakGlassSecret`), so this screen is the
+   * operator's only chance to record it. */
   @property({ attribute: false }) breakGlassSecret?: string;
 
   /**
-   * True when this screen was reached by the MIRROR path (a successful `POST /setup-api/adopt`), set
-   * by the shell. Everything the trading copy below promises is false on that path: the box restarts
-   * and fails to establish its own node identity, on that boot and on every boot after it, so it never
-   * reaches the branch of `apps/server/src/boot.ts` that mounts the till and dashboard front-ends, the
-   * promote route the break-glass secret is for, or this wizard.
-   * `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header is the one place that says why.
-   *
-   * A separate flag rather than a `breakGlassSecret !== undefined` test: the secret is mirror-only too
-   * today, but it is a value to display, not a statement about which path ran, and a mirror path that
-   * stopped minting one would silently flip this screen back to promising a till.
+   * True after a successful adopt, where the box does not come back trading (why:
+   * `PendingAdoption` in `apps/server/src/finish-adoption.ts`). A separate flag rather than a
+   * `breakGlassSecret` test: the secret is a value to display, not a statement of which path ran.
    */
   @property({ type: Boolean }) mirrorJoin = false;
 
-  /** The selected setup journey. Its label stays visible here, and Demo suppresses the backup nudge. */
   @property() onboardingIntent?: "demo" | "prepare" | "live";
 
-  /** How to reload into the till once trading mode is up. Injectable so a test can assert it without
-   * navigating the runner; the default is the real page reload (a bound native, not authored code). */
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
-  /** The box's own hostname, used only for the print-agent link (a different port, so an absolute
-   * URL). Injectable so a test does not depend on the runner's location. */
   @property() hostname: string = location.hostname;
 
-  /** Milliseconds before the first status poll — a short pause so the box has begun its restart. */
+  /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
 
-  /** Milliseconds between status polls during the restart window. */
   @property({ type: Number }) pollIntervalMs = 1500;
 
-  /** True once the setup route has stopped answering — the box is trading and the reload is offered. */
   @state() private ready = false;
 
   #timer?: ReturnType<typeof setTimeout>;
@@ -157,7 +117,6 @@ export class SetupDoneScreen extends LitElement {
     if (this.#timer !== undefined) clearTimeout(this.#timer);
   }
 
-  /** One poll, then reschedule the next unless the box is already trading or this element is gone. */
   async #tick(): Promise<void> {
     if (!this.isConnected || this.ready) return;
     await this.#pollOnce();
@@ -166,16 +125,15 @@ export class SetupDoneScreen extends LitElement {
   }
 
   /**
-   * Probe the setup API once. The `TypeError` branch is the expected restart-window connection
-   * failure (swallowed, never rendered); any other rejection means the box is back up in trading mode.
+   * A resolved `getStatus` means the box has not restarted yet. A `TypeError` is `fetch` failing while
+   * the box is down mid-restart: expected, never shown. Any other rejection (a non-2xx, or a body that
+   * is not JSON) is taken to mean the setup route is gone and the box is trading.
    */
   async #pollOnce(): Promise<void> {
     try {
       await this.api.getStatus();
-      // The setup API answered — the box has not yet restarted into trading mode. Keep waiting.
     } catch (error) {
       if (error instanceof TypeError) {
-        // A connection failure: the box is mid-restart and briefly unreachable. Expected — keep waiting.
         return;
       }
       if (!this.isConnected) return;
@@ -187,11 +145,6 @@ export class SetupDoneScreen extends LitElement {
     return this.mirrorJoin ? this.#renderJoinStalled() : this.#renderTrading();
   }
 
-  /**
-   * The break-glass panel, rendered on whichever path supplied a secret. Its own copy is path-aware
-   * because what the secret is FOR differs: on a box that trades it is the offline promote fallback;
-   * on an adopted box the promote route is never mounted, so there is nothing to use it on.
-   */
   #breakGlass(): TemplateResult | null {
     if (this.breakGlassSecret === undefined) return null;
     return html`<div class="break-glass" data-test="break-glass">
@@ -212,7 +165,6 @@ export class SetupDoneScreen extends LitElement {
     </div>`;
   }
 
-  /** The provision and restore outcome: the box really does come back trading. */
   #renderTrading(): TemplateResult {
     return html`
       <h1>Setup complete</h1>
@@ -259,12 +211,6 @@ export class SetupDoneScreen extends LitElement {
     `;
   }
 
-  /**
-   * The mirror outcome. No links, no backup nudge and no reload: the box this wizard is talking to
-   * comes back serving none of those, so every one of them would send the operator somewhere that is
-   * not there. The poll still runs — it is how this screen knows the restart has happened — it just
-   * reports it instead of offering a way in.
-   */
   #renderJoinStalled(): TemplateResult {
     return html`
       <h1>This server did not join</h1>

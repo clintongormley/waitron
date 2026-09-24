@@ -8,7 +8,6 @@ import type { ProvisionBody } from "../api/client.js";
 const q = (el: SetupReviewScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 const text = (el: SetupReviewScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
-/** A fully-populated draft carrying the four secret values the review must NEVER render. */
 const SAMPLE_PIN = "9137";
 const SAMPLE_PASSWORD = "s3cr3t-operator-pw";
 const SAMPLE_PASSPHRASE = "pfx-unlock-2026";
@@ -66,7 +65,6 @@ describe("setup-review-screen", () => {
       draft: fullDraft(),
     });
     expect(text(el, "[data-test=summary-cert]")).toBe("attached");
-    // The whole rendered surface must not leak the PIN, password, passphrase or PFX bytes.
     const rendered = el.shadowRoot!.textContent ?? "";
     expect(rendered).not.toContain(SAMPLE_PIN);
     expect(rendered).not.toContain(SAMPLE_PASSWORD);

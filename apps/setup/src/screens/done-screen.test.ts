@@ -6,12 +6,10 @@ import type { SetupApi } from "../api/client.js";
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** A minimal {@link SetupApi} exposing only `getStatus`, the sole method the done screen polls. */
 function apiWith(getStatus: () => Promise<unknown>): SetupApi {
   return { getStatus } as unknown as SetupApi;
 }
 
-/** Mounts the done screen with fast polling so the restart reconnect is testable in real time. */
 async function mountDone(
   getStatus: () => Promise<unknown>,
   extra: Partial<SetupDoneScreen> = {},
@@ -29,7 +27,7 @@ afterEach(cleanupWidgets);
 
 describe("setup-done-screen", () => {
   it("announces the restart into trading on the provision/restore path", async () => {
-    const el = await mountDone(() => new Promise(() => {})); // never settles
+    const el = await mountDone(() => new Promise(() => {}));
     expect(el.shadowRoot!.textContent).toContain("restarting into trading mode");
   });
 
@@ -42,8 +40,6 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=mode-indicator]")?.textContent?.trim()).toBe(label);
   });
 
-  // A connection failure mid-restart is EXPECTED — it must never surface as an error, and the screen
-  // must keep waiting rather than offer the reload.
   it("keeps waiting (no reload) while getStatus fails with a network TypeError", async () => {
     const getStatus = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await mountDone(getStatus);
@@ -54,8 +50,6 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=status]")).not.toBeNull();
   });
 
-  // Once the setup route stops answering as setup (a non-2xx / a body that no longer parses), trading
-  // mode is up — offer the reload.
   it("offers the reload once getStatus rejects with a non-2xx code", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus);
@@ -63,8 +57,6 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=status]")).toBeNull();
   });
 
-  // The transient-vs-done distinction end to end: network failures keep waiting, then a non-2xx flips
-  // to the reload.
   it("waits through network failures, then offers the reload on the first non-2xx", async () => {
     const getStatus = vi
       .fn()
@@ -75,7 +67,6 @@ describe("setup-done-screen", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
   });
 
-  // A getStatus that still RESOLVES means the box has not restarted yet — keep waiting.
   it("keeps waiting while getStatus still resolves, then reloads once it 404s", async () => {
     const getStatus = vi
       .fn()
@@ -150,9 +141,6 @@ describe("setup-done-screen", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  // First-run nudge (Task 8): a freshly-provisioned box has no backups yet, so the done screen points
-  // the operator at the dashboard's backup setup — unless the box is a disposable demo, where a
-  // missing backup is not worth interrupting the operator over.
   it("shows a 'no backups yet' nudge with a link to backup setup", async () => {
     const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });
     const nudge = q(el, "[data-test=backup-nudge]");
@@ -179,10 +167,6 @@ describe("setup-done-screen", () => {
     expect(hrefs).toContain("http://waitron.local:9110");
   });
 
-  // The MIRROR path (a successful adopt). The box restarts and never comes back serving a till, a
-  // dashboard or this wizard (`apps/server/src/finish-adoption.ts`'s `PendingAdoption` header), so
-  // every way in this screen offers on the trading path would send the operator nowhere.
-  // Prove-by-deletion: drop the `mirrorJoin` branch in `render()` and all four of these flip red.
   it("does not promise trading mode on the mirror path", async () => {
     const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
     const text = el.shadowRoot!.textContent!;
@@ -196,8 +180,6 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
 
-  // The restart really does happen, so the poll still flips — it just must not end in a control that
-  // reloads the operator onto a 404.
   it("reports the restart instead of offering a reload on the mirror path", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus, { mirrorJoin: true });
@@ -215,9 +197,6 @@ describe("setup-done-screen", () => {
     expect(warning).not.toContain("cannot do that in this version");
   });
 
-  // The break-glass secret is still shown once — it is the adopt response's only appearance — but the
-  // promote it was minted for is on a route this box never mounts (`mountPromoteApi` sits below boot's
-  // adoption-pending return), so the panel must not tell the operator it will work.
   it("shows the break-glass secret on the mirror path without promising a promote", async () => {
     const el = await mountDone(() => new Promise(() => {}), {
       mirrorJoin: true,

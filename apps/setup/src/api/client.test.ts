@@ -6,16 +6,10 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-/**
- * An empty 200 — `text()` → "" — exercising `#request`'s empty-body branch, which resolves
- * `undefined` instead of `JSON.parse`-ing nothing. Neither setup route answers empty today (both send
- * a body), so this stands in for the defensive branch the client shares with till/dashboard.
- */
 function emptyResponse(): Response {
   return { ok: true, status: 200, json: async () => undefined, text: async () => "" } as Response;
 }
 
-/** A failure with NO body at all — `res.json()` throws on nothing, exactly as it does on text. */
 function emptyErrorResponse(status: number): Response {
   return {
     ok: false,
@@ -27,7 +21,6 @@ function emptyErrorResponse(status: number): Response {
   } as Response;
 }
 
-/** A non-JSON failure — what a provisioned box really sends for an unmounted setup route. */
 function textResponse(body: string, status: number): Response {
   return {
     ok: false,
@@ -39,7 +32,6 @@ function textResponse(body: string, status: number): Response {
   } as Response;
 }
 
-/** A complete, valid provision body — the shape the wizard assembles and POSTs. */
 const provisionBody: ProvisionBody = {
   mode: "live",
   venue: {
@@ -150,26 +142,12 @@ describe("SetupApi", () => {
     await expect(api.provision(provisionBody)).rejects.toMatchObject({ code: "server.internal" });
   });
 
-  /**
-   * A provisioned box does not mount the setup routes, so `GET /setup-api/status` comes back as
-   * Hono's own `404 Not Found` with `content-type: text/plain` — verified against a running dev box
-   * on 2026-09-13. Parsing that as JSON throws, and the throw used to escape as if the network had
-   * failed, so a server that plainly ANSWERED was reported to the operator as unreachable.
-   */
   it("keeps the status when a failed response carries no JSON body", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(textResponse("404 Not Found", 404));
     const api = new SetupApi("", fetchImpl);
     await expect(api.getStatus()).rejects.toMatchObject({ status: 404, code: "server.internal" });
   });
 
-  /**
-   * A failed response's body is whatever the thing that answered chose to send, and only ONE shape
-   * of it is our error envelope. These cases are the ones a plain `JSON.parse` survives but a naive
-   * `envelope.error?.code` does not: `null` is VALID JSON, so the parse succeeds and reading `.error`
-   * off it throws a `TypeError` that escapes the client — losing the HTTP status, which is the one
-   * fact the wizard uses to tell an answering box from an unreachable one. An array, a number or a
-   * string parse fine and simply have no `error` to read. Each must still reject with the status.
-   */
   it.each([
     ["a literal null body", null],
     ["an array body", []],
@@ -182,8 +160,6 @@ describe("SetupApi", () => {
     await expect(api.getStatus()).rejects.toMatchObject({ code: "server.internal", status: 404 });
   });
 
-  /** A non-string `code` is not a domain error code, and passing it through would let a caller's
-   * `code.startsWith(...)` throw on a number. It falls back like a missing code, status intact. */
   it("ignores a non-string code in the envelope", async () => {
     const fetchImpl = vi
       .fn()
@@ -195,14 +171,12 @@ describe("SetupApi", () => {
     expect(rejection).toMatchObject({ code: "server.internal", status: 400 });
   });
 
-  /** An empty failure body: `res.json()` throws on nothing at all, and the status must survive. */
   it("keeps the status when a failed response has an empty body", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyErrorResponse(503));
     const api = new SetupApi("", fetchImpl);
     await expect(api.getStatus()).rejects.toMatchObject({ code: "server.internal", status: 503 });
   });
 
-  /** The control in the other direction: a real envelope still yields its code, params and status. */
   it("reads code, params and status from a valid error envelope", async () => {
     const fetchImpl = vi
       .fn()
@@ -240,8 +214,6 @@ describe("SetupApi", () => {
     await expect(api.provision(provisionBody)).resolves.toBeUndefined();
   });
 
-  // The mirror-side sibling of `provision` (C2b Task 13). The credential is the STRUCTURED OBJECT
-  // { personId, password, totp? } — sent DIRECTLY, never JSON-stringified into a string field.
   const adoptBody: AdoptBody = {
     primaryUrl: "https://waitron.local",
     credential: { personId: "op-1", password: "correct horse", totp: "123456" },

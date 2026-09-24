@@ -14,7 +14,6 @@ describe("setup-provisioning-screen", () => {
     expect(q(el, "[data-test=status]")).not.toBeNull();
     const provision = q(el, "[data-test=provision]")!;
     expect(provision.hasAttribute("disabled")).toBe(true);
-    // In flight: no error banner, no retry.
     expect(q(el, "[data-test=error]")).toBeNull();
     expect(q(el, "[data-test=retry]")).toBeNull();
   });
@@ -28,7 +27,6 @@ describe("setup-provisioning-screen", () => {
     expect(error.getAttribute("role")).toBe("alert");
     expect(error.textContent).toContain("Provisioning failed");
     expect(q(el, "[data-test=retry]")).not.toBeNull();
-    // The in-flight surface is gone once a message is shown.
     expect(q(el, "[data-test=status]")).toBeNull();
     expect(q(el, "[data-test=provision]")).toBeNull();
   });
@@ -45,7 +43,6 @@ describe("setup-provisioning-screen", () => {
     expect(await requested).toBe(true);
   });
 
-  // The two fiscal 409 refusals must NOT offer a re-POST.
   it("shows the message but NO retry control when canRetry is false", async () => {
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
       message: "This server is already set up.",
@@ -55,8 +52,6 @@ describe("setup-provisioning-screen", () => {
     expect(q(el, "[data-test=retry]")).toBeNull();
   });
 
-  // Fix (k): a TERMINAL failure (canRetry false + a reloadLabel) renders its guidance message plus a
-  // RELOAD action instead of a retry — the two double-provision 409s, each with the shell's label.
   it.each([
     [
       "This server is already set up.",
@@ -77,7 +72,6 @@ describe("setup-provisioning-screen", () => {
       const reload = q(el, "[data-test=reload]")!;
       expect(reload).not.toBeNull();
       expect(reload.textContent).toContain(labelFragment);
-      // A terminal state offers a reload, never a retry, and is no longer in flight.
       expect(q(el, "[data-test=retry]")).toBeNull();
       expect(q(el, "[data-test=status]")).toBeNull();
     },
@@ -95,8 +89,6 @@ describe("setup-provisioning-screen", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  // A retryable failure keeps its retry and offers NO reload, even if a reloadLabel were somehow set —
-  // canRetry wins. Guards against a terminal reload leaking onto a retryable state.
   it("offers retry (not reload) for a retryable failure", async () => {
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
       message: "Provisioning failed. You can try again.",

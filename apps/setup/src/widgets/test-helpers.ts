@@ -2,31 +2,19 @@ import axe from "axe-core";
 import { expect } from "vitest";
 import { applyTokens } from "@waitron/ui";
 
-/**
- * Test support for the setup wizard's Lit screens. It mirrors `apps/dashboard/src/widgets/
- * test-helpers.ts` (and, upstream, `packages/ui/src/test-helpers.ts` / `a11y-helpers.ts`), but mounts
- * by ASSIGNING PROPERTIES rather than parsing an HTML string: every wizard screen takes its data as
- * `@property({ attribute: false })`/property objects, which cannot travel through markup. So it creates
- * the element, assigns the props, then connects it.
- */
-
 export type Theme = "light" | "dark";
 
 const mounted: HTMLElement[] = [];
 
-/** The element under test plus the themed host it was mounted into (pass the host to axe). */
 export interface Mounted<T extends HTMLElement> {
   el: T;
   host: HTMLElement;
 }
 
 /**
- * Mounts a custom element `tag` with `props` assigned before connection, inside a fresh themed
- * host, and waits for its first render. The host is always painted `--wt-color-surface-raised`,
- * matching the `<wt-modal>` every wizard screen now renders inside (`SetupApp`'s render in `setup-app.ts`) rather than
- * the page background behind it, so a color-contrast a11y check means what it means in the app. Pass
- * `theme` to additionally pin `data-theme`; omit it to render in whatever theme the environment
- * resolves to.
+ * Assigns `props` before connecting, because the wizard screens take object properties that cannot
+ * travel through markup. The host is painted `--wt-color-surface-raised`, the background of the
+ * `<wt-modal>` the screens render inside (`setup-app.ts`), so a contrast check sees the app's colours.
  */
 export async function mountWidget<T extends HTMLElement>(
   tag: string,
@@ -49,14 +37,9 @@ export async function mountWidget<T extends HTMLElement>(
 }
 
 /**
- * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background. The harness
- * themes only the nested `host` `<div>`, which leaves the page's default WHITE canvas behind it — and
- * axe-core composites the background of any element it cannot trace back to `host` (e.g. one pushed
- * off-viewport by a wide header, where `elementsFromPoint` returns nothing) against that canvas. On
- * white that reads as a false color-contrast failure for the dark theme's light text (`#eceef2` on
- * `#ffffff` → 1.16:1) even though the element renders correctly on the dark canvas in the app.
- * `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off `host` rather than
- * passing the `var()`. Reset in {@link cleanupWidgets}.
+ * Paints `<body>` and `<html>` with `host`'s background, so nothing axe composites against the page
+ * canvas meets the default white. `<body>` and `<html>` are not theme roots, so the concrete colour
+ * is read off `host` rather than passed as a `var()`.
  */
 function paintCanvas(host: HTMLElement): void {
   const bg = getComputedStyle(host).backgroundColor;
@@ -71,7 +54,6 @@ export function cleanupWidgets(): void {
   document.documentElement.style.background = "";
 }
 
-/** Formats axe violations into a readable message: rule id, impact, help text, and node targets. */
 export function formatViolations(violations: axe.Result[]): string {
   return violations
     .map((violation) => {

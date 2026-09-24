@@ -8,7 +8,6 @@ import type { ProvisionBody } from "../api/client.js";
 
 type Emitted = { kind: "patch" | "goto"; detail: unknown };
 
-/** Collects the two composed events the screen emits UP; both bubble+compose, so the host hears them. */
 function collect(host: HTMLElement): Emitted[] {
   const events: Emitted[] = [];
   host.addEventListener("setup-patch", (e) =>
@@ -22,7 +21,6 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupCertScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** Types `value` into the passphrase wt-input by firing its composed `wt-change`. */
 async function typePassphrase(el: SetupCertScreen, value: string): Promise<void> {
   q(el, "[data-test=passphrase]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -30,7 +28,6 @@ async function typePassphrase(el: SetupCertScreen, value: string): Promise<void>
   await el.updateComplete;
 }
 
-/** Picks `value` in the certKind `<select>` and fires its `change`. */
 async function pickKind(el: SetupCertScreen, value: string): Promise<void> {
   const select = q(el, "[data-test=certKind]") as HTMLSelectElement;
   select.value = value;
@@ -38,7 +35,6 @@ async function pickKind(el: SetupCertScreen, value: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** Waits for the async FileReader + the re-render it triggers, by polling for the loaded status. */
 async function waitForFileLoaded(el: SetupCertScreen): Promise<void> {
   for (let i = 0; i < 100; i++) {
     await el.updateComplete;
@@ -48,7 +44,6 @@ async function waitForFileLoaded(el: SetupCertScreen): Promise<void> {
   throw new Error("file-status never appeared");
 }
 
-/** Selects `source` (raw byte values) as the certificate file via a DataTransfer, then awaits the read. */
 async function chooseFile(el: SetupCertScreen, source: number[], name = "cert.pfx"): Promise<void> {
   const bytes = new Uint8Array(new ArrayBuffer(source.length));
   bytes.set(source);
@@ -61,17 +56,12 @@ async function chooseFile(el: SetupCertScreen, source: number[], name = "cert.pf
   await waitForFileLoaded(el);
 }
 
-/** Raw PFX bytes (values that exercise the high half of the byte range too). */
+/** Includes bytes from the high half of the range. */
 const PFX_SOURCE = [1, 2, 3, 4, 250, 200, 0, 255];
-/** The canonical base64 the browser must produce — with NO `data:…;base64,` prefix. */
 const EXPECTED_BASE64 = btoa(String.fromCharCode(...PFX_SOURCE));
 
-/**
- * A stand-in `FileReader` whose `readAsDataURL` fails via `onerror`, so a test can drive the
- * read-failure path deterministically (a real Chromium reader does not error on a valid Blob). The SUT
- * looks up the global `FileReader` at call time, so swapping `globalThis.FileReader` for this is picked
- * up by `readFileAsBase64`.
- */
+/** Fails every read via `onerror`. `readFileAsBase64` looks up the global `FileReader` at call time,
+ * so swapping `globalThis.FileReader` reaches it. */
 class FailingFileReader {
   error: unknown = new Error("file read failed");
   onload: (() => void) | null = null;
@@ -132,7 +122,6 @@ describe("setup-cert-screen", () => {
       },
       { kind: "goto", detail: { screen: "fiscal-test" } },
     ]);
-    // The emitted base64 is the canonical payload only — the data-URL prefix and its comma are gone.
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
     const pfx = patch.aeatCert?.pfxBase64 ?? "";
     expect(pfx.startsWith("data:")).toBe(false);
@@ -164,13 +153,12 @@ describe("setup-cert-screen", () => {
     expect(q(el, "[data-test=file-status]")).not.toBeNull();
 
     const input = q(el, "[data-test=pfx]") as HTMLInputElement;
-    input.files = new DataTransfer().files; // an empty selection
+    input.files = new DataTransfer().files;
     input.dispatchEvent(new Event("change"));
     await el.updateComplete;
     expect(q(el, "[data-test=file-status]")).toBeNull();
   });
 
-  // The file guard, proven by deletion: drop the `pfxBase64 === ""` check and a no-file Next would emit.
   it("blocks Next when no file is chosen, marking the file field invalid", async () => {
     const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const events = collect(host);
@@ -207,7 +195,7 @@ describe("setup-cert-screen", () => {
   it("clears the banner once a file and passphrase are supplied and Next succeeds", async () => {
     const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const events = collect(host);
-    q(el, "[data-test=next]")!.click(); // empty → banner
+    q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(q(el, "[data-test=error]")).not.toBeNull();
     await chooseFile(el, PFX_SOURCE);
@@ -231,8 +219,6 @@ describe("setup-cert-screen", () => {
       "seeded-pass",
     );
     expect((q(el, "[data-test=certKind]") as HTMLSelectElement).value).toBe("representante");
-    // A cert already in the draft counts as loaded (the file input cannot be re-populated, but the
-    // base64 survives), so the loaded status shows without re-choosing the file.
     expect(q(el, "[data-test=file-status]")).not.toBeNull();
   });
 
@@ -284,7 +270,6 @@ describe("setup-cert-screen", () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", { draft });
     expect((q(el, "[data-test=certKind]") as HTMLSelectElement).value).toBe("representante");
     expect((q(el, "[data-test=passphrase]") as unknown as { value: string }).value).toBe("");
-    // No pfxBase64 in the draft → nothing loaded yet.
     expect(q(el, "[data-test=file-status]")).toBeNull();
   });
 
@@ -295,10 +280,6 @@ describe("setup-cert-screen", () => {
     expect(events).toEqual([{ kind: "goto", detail: { screen: "venue" } }]);
   });
 
-  // Fix 4: the `@change` binding void-discards `#onFileChange`, so a `readFileAsBase64` rejection
-  // (`reader.onerror`) would escape as an unhandled rejection and strand the operator with no feedback.
-  // Prove by deletion: drop the try/catch in `#onFileChange` and this flips red — no banner shows and
-  // the rejection escapes.
   it("shows a read-error banner and stays blocked when the FileReader fails, without an unhandled rejection", async () => {
     const rejections: PromiseRejectionEvent[] = [];
     const onReject = (e: PromiseRejectionEvent) => rejections.push(e);
@@ -308,7 +289,6 @@ describe("setup-cert-screen", () => {
     try {
       const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
       const events = collect(host);
-      // Choose a file → the (faked) reader fails via onerror.
       const input = q(el, "[data-test=pfx]") as HTMLInputElement;
       const file = new File([new Uint8Array([1, 2, 3])], "cert.pfx", {
         type: "application/x-pkcs12",
@@ -321,14 +301,12 @@ describe("setup-cert-screen", () => {
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
 
-      // A clean read-error banner shows; nothing counts as loaded.
       const banner = q(el, "[data-test=error]");
       expect(banner).not.toBeNull();
       await (banner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
       expect(banner!.shadowRoot!.textContent).toContain("couldn't read that file");
       expect(q(el, "[data-test=file-status]")).toBeNull();
 
-      // Next stays blocked (pfxBase64 empty) — nothing is emitted.
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
       expect(events).toEqual([]);
@@ -336,15 +314,12 @@ describe("setup-cert-screen", () => {
       globalThis.FileReader = RealFileReader;
       window.removeEventListener("unhandledrejection", onReject);
     }
-    expect(rejections).toEqual([]); // the catch handled it — nothing escaped
+    expect(rejections).toEqual([]);
   });
 });
 
-/**
- * Pre-opening one entry inside a list of every entry does not read as detection: the owner reported
- * seeing "a list of all available combos" on a Mac, where the guess was open but sat below Windows
- * (2026-09-13). So the guess is promoted OUT of the list, and the rest fold behind one disclosure.
- */
+/** The guessed guide is promoted out of the list: one entry pre-opened inside a list of every entry
+ * did not read as detection. */
 it.each([
   ["Mozilla/5.0 (Windows NT 10.0) Chrome/130", "Windows (Chrome)"],
   ["Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605", "macOS (Keychain Access)"],
@@ -354,11 +329,9 @@ it.each([
   try {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const help = q(el, "[data-test=certificate-export-help]")!;
-    // The guess is a heading with its steps already on the page, not a row to be noticed.
     const promoted = help.querySelector("[data-test=export-guide] h3")!;
     expect(promoted.textContent).toContain(expected);
     expect(help.querySelector("[data-test=export-guide] ol")!.children.length).toBeGreaterThan(0);
-    // Nothing else is loose on the page: the other two sit inside one closed disclosure.
     const others = help.querySelector<HTMLDetailsElement>("[data-test=other-guides]")!;
     expect(others.open).toBe(false);
     expect(others.querySelectorAll("details")).toHaveLength(2);

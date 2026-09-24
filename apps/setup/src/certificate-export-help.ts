@@ -33,7 +33,6 @@ const GUIDES = [
   },
 ];
 
-/** One guide's content: the steps, then the FNMT page they came from. */
 function guideBody(guide: (typeof GUIDES)[number]) {
   return html`<ol>
       ${guide.steps.map((step) => html`<li>${step}</li>`)}
@@ -52,12 +51,8 @@ const TRANSFER =
   "If your certificate is on another computer, export it there and transfer the file to this device.";
 
 /**
- * Export help for the computer the operator is on, guessed from the user-agent.
- *
- * The guess is promoted OUT of the list rather than pre-opened inside it. Pre-opening was the first
- * shape, and the owner read it as "a list of all available combos" on a Mac (2026-09-13): the open
- * entry sat below Windows, so the first heading a Mac reader met was the wrong computer's. When the
- * user-agent names nothing we recognise, the plain list is still the right answer and comes back.
+ * The guide for the computer guessed from the user-agent is shown above the list, not opened inside
+ * it, so the first guide a reader meets is their own computer's.
  */
 export function certificateExportHelp(userAgent: string) {
   const mobile = /Android|iPhone|iPad|Mobile/i.test(userAgent);

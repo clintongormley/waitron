@@ -1,31 +1,8 @@
-/**
- * The browser-side face of the setup box's HTTP API — one thin `fetch` wrapper per `/setup-api`
- * route (`apps/server/src/setup-api.ts`). The wizard views built on top of it never touch `fetch`,
- * URLs, or error-envelope shapes directly: they call a typed method and get back a typed payload, or
- * a rejected {@link ApiError}.
- *
- * The interfaces below are LOCAL copies of the server's JSON shapes, deliberately NOT imported from
- * `@waitron/provisioning` (which carries `VenueRequest`) or any server barrel. A runtime import from
- * those packages would drag their barrels — and through them `@waitron/db` and Node builtins — into
- * the browser bundle. The duplicated field lists are the price of keeping the wizard bundle free of
- * server code, exactly as `apps/till/src/api/client.ts` and `apps/dashboard/src/api/client.ts` do it.
- *
- * The one deliberate DIVERGENCE from those two clients is in {@link SetupApi} `#request`: it surfaces
- * the error envelope's `params` alongside `code`, because the wizard drives per-field inline
- * validation off `setup.request_invalid`'s `params.field` (`apps/server/src/setup-api.ts` —
- * `invalidRequest`). The till/dashboard clients drop `params` because nothing there reads it.
- */
+// Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
+// its barrel, and `@waitron/db` through it, into the browser bundle.
 
-/** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
 
-/**
- * `GET /setup-api/status` — the unprovisioned box's boot info (`apps/server/src/setup-api.ts`, the
- * `/setup-api/status` handler). `provisioned` is always `false` here (a provisioned box never mounts
- * these routes); `environment` is the box's stamped deployment environment, which the wizard reads to
- * warn loudly before provisioning a real `production` venue; `needs` lists the outstanding setup
- * steps (today only `"venue"`).
- */
 export type VenueDefaults = Readonly<Record<string, { readonly operationDescription: string }>>;
 
 export interface SetupStatus {
@@ -36,17 +13,7 @@ export interface SetupStatus {
   operationBlocked?: boolean;
 }
 
-/**
- * The first operator's name and credentials, collected on the admin step. Sent PLAINTEXT — the server hashes
- * `pin`/`password` with `hashPin`/`hashPassword` at the request boundary
- * (`apps/server/src/setup-api.ts`) into the stored `pinHash`/`passwordHash`; the browser never hashes.
- * `email` is the admin's dashboard-login credential — REQUIRED, validated/normalised server-side.
- * `firstNames`/`lastNames` are the person's real name, required here as they are everywhere else a
- * person is created: `POST /management-api/staff` rejects a body missing either
- * (`apps/server/src/management-api.ts`) and `invitePerson` requires both
- * (`packages/identity/src/staff.ts`). `displayName` is what colleagues see and defaults to
- * "First Last".
- */
+/** Sent in plain text: the server hashes `pin` and `password` (`apps/server/src/setup-api.ts`). */
 export interface AdminDraft {
   firstNames: string;
   lastNames: string;
@@ -56,14 +23,6 @@ export interface AdminDraft {
   password: string;
 }
 
-/**
- * The venue's location + fiscal-point details. Field names match the server's `parseVenue` /
- * `VenueRequest` exactly (`apps/server/src/setup-api.ts`,
- * `packages/provisioning/src/venue-plan.ts`). `fiscalTerritory` is the country pack's derived,
- * persisted jurisdiction ID. `invoiceLocales` is a non-empty `string[]` (`planVenue` rejects 0 or
- * more than 2). `addressLine2` is the one NULLABLE field (`asNullableString`); the rest are required
- * strings. `dayCutover` is `"HH:MM"` or `"HH:MM:SS"`.
- */
 export interface LocationDraft {
   name: string;
   fiscalTerritory: string;
@@ -78,25 +37,12 @@ export interface LocationDraft {
   dayCutover: string;
 }
 
-/**
- * The AEAT certificate, collected only for a live ES-common venue. `pfxBase64` is the PFX bundle as
- * canonical base64 (the browser reads the uploaded file to base64); `certKind` is the credential type
- * (`isCertKind`-checked server-side, `packages/fiscal-verifactu/src/aeat-transport.ts`). OPTIONAL on the request — the
- * key is OMITTED entirely (never sent as `null`) when no certificate is supplied.
- */
 export interface AeatCertDraft {
   pfxBase64: string;
   passphrase: string;
   certKind: "sello" | "representante";
 }
 
-/**
- * The `POST /setup-api/provision` request body (`apps/server/src/setup-api.ts` — the provision
- * handler; verified against `parseVenue`/`parseCert`). `mode` records the onboarding intent: demo
- * and prepare stamp preproduction, while live stamps production. `seriesCode` must differ from
- * `rectificativeSeriesCode` (`planVenue`).
- * `aeatCert` is present only for a live ES-common venue and is OMITTED otherwise.
- */
 export interface ProvisionBody {
   mode: "demo" | "prepare" | "live";
   configurationImport?: boolean;
@@ -110,47 +56,25 @@ export interface ProvisionBody {
     rectificativeSeriesCode: string;
     admin: AdminDraft;
   };
+  /** Omitted, not `null`, when no certificate is expected: the server refuses any value it is sent. */
   aeatCert?: AeatCertDraft;
 }
 
-/**
- * `POST /setup-api/provision` success (`apps/server/src/setup-api.ts` — the 200 the handler flushes
- * before restarting). The box SIGTERMs on the next tick and comes back in trading mode, so this is the
- * last response the wizard ever gets from the setup API.
- */
 export interface ProvisionResult {
   provisioned: true;
   restarting: true;
 }
 
-/**
- * The `POST /setup-api/adopt` request body — the MIRROR-side sibling of {@link ProvisionBody} (C2b).
- * A LOCAL copy of the server's shape (`apps/server/src/setup-api.ts` — the adopt handler's per-field
- * validation, and `AdoptCredential`/`AdoptRequest` in `apps/server/src/adopt.ts`), deliberately NOT
- * imported for the same bundle-hygiene reason as the shapes above.
- *
- * `credential` is a STRUCTURED OBJECT, not a string — Task 9 widened it so the mirror collects the
- * primary's login (`personId` + `password`, optional `totp`) as fields and sends the object directly.
- * The server validates each field at its own boundary and forwards them to the primary's management
- * login; the `password`/`totp` are never logged. `totp` is OMITTED when the operator leaves it blank.
- */
 export interface AdoptBody {
   primaryUrl: string;
+  /** `totp` is omitted, not `""`, when blank: the server refuses an empty string. */
   credential: { personId: string; password: string; totp?: string };
 }
 
-/**
- * `POST /setup-api/adopt` success (`apps/server/src/setup-api.ts` — the 200 the adopt handler flushes
- * before restarting into mirror mode). Like {@link ProvisionResult}, this is the last response the
- * wizard gets: the box SIGTERMs on the next tick and comes back serving the read-only dashboard.
- */
 export interface AdoptOutcome {
   adopted: true;
-  /**
-   * The freshly minted break-glass secret — the offline promote fallback (spec §4.2). Returned in
-   * this response ONCE and never again (the server never logs it and never re-issues it), so the
-   * wizard must SHOW it to the operator before the box restarts. `apps/server/src/setup-api.ts`.
-   */
+  /** The offline promote fallback. The server returns it once, so the wizard must show it before
+   * the box restarts. */
   breakGlassSecret: string;
   restarting: true;
 }
@@ -172,44 +96,24 @@ export type FiscalReadinessResult =
   | { status: "accepted" | "rejected" | "uncertain"; testedAt?: string }
   | { status: "not-applicable" };
 
-/**
- * A rejected `#request`. `code` is the server's stable domain code from the `{ error: { code } }`
- * envelope (`apps/server/src/error-boundary.ts`); `params` carries its per-code detail — for
- * `setup.request_invalid` the `{ field }` the wizard marks invalid inline. Present because the wizard
- * needs `params.field`; the till/dashboard clients throw `{ code }` only.
- */
 export interface ApiError {
   code: string;
+  /** `setup.request_invalid` names the refused field in `params.field`. */
   params?: Record<string, unknown>;
   /**
-   * The HTTP status of the failed response. Its presence is itself the signal that the server
-   * ANSWERED: `fetch` REJECTS when nothing is reachable, so a caller that catches an error with a
-   * status knows the box is alive. The wizard uses that to tell a box whose setup routes are gone
-   * (404 — it is already set up) from a box that is off or unreachable.
+   * Set only when the server answered: `fetch` rejects when nothing is reachable. The wizard uses
+   * it to tell a box that answered from one it could not reach.
    */
   status?: number;
 }
 
-/** A plain (non-array, non-null) object — the only parsed body shape an envelope can be read from. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
- * The rejection for any non-2xx. Whatever the body turns out to be, the HTTP `status` always
- * survives onto the {@link ApiError}: its presence is how the wizard tells a box that ANSWERED from
- * one nothing could reach, and an exception thrown in here would throw that distinction away.
- *
- * Everything about the body is therefore treated as untrusted. A failed response need not carry our
- * `{ error: { code } }` envelope: a provisioned box does not mount the setup routes, so
- * `GET /setup-api/status` returns Hono's own `404 Not Found` as `content-type: text/plain` — run
- * against a dev box on 2026-09-13 — which makes `res.json()` throw.
- *
- * Catching that throw is NOT enough on its own, and that is the non-obvious part: `null` is VALID
- * JSON, so a body of literal `null` parses successfully and the `catch` never runs, leaving
- * `null.error` to throw a `TypeError` instead. The parsed value is checked for being an object
- * before anything is read off it, and `code` is used only when it is a STRING — a non-string code is
- * not a domain error code, and passing one through would let a caller's `code.startsWith(...)` throw.
+ * The body is untrusted: a failed response need not carry our envelope, may not be JSON, or may be
+ * a literal `null`, which parses. Nothing about it may throw here, or the `status` is lost.
  */
 async function apiError(res: Response): Promise<ApiError> {
   const parsed: unknown = await res.json().catch(() => undefined);
@@ -227,11 +131,6 @@ export class SetupApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
 
-  /**
-   * @param baseUrl prefixed to every path (default `""`: same-origin, so the browser fetches
-   *   `/setup-api/...` from the origin serving the wizard).
-   * @param fetchImpl the `fetch` to use (default the global; a test injects a stub).
-   */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
     this.#fetchImpl = fetchImpl;
@@ -245,35 +144,18 @@ export class SetupApi {
     return this.#request<VenueDefaults>("/setup-api/venue-defaults", "GET");
   }
 
-  /** `GET /setup-api/status` — the box's environment + outstanding steps, read on boot. */
   getStatus(): Promise<SetupStatus> {
     return this.#request<SetupStatus>("/setup-api/status", "GET");
   }
 
-  /**
-   * `POST /setup-api/provision` — file the whole venue in one shot. On success the box restarts into
-   * trading mode; any validation/state failure rejects with an {@link ApiError} the review step
-   * surfaces (its `params.field` marks the offending field on `setup.request_invalid`) — except the
-   * four venue fields the fiscal regime refuses, which go back to the venue form with the field
-   * itself marked (`apps/setup/src/server-fields.ts`).
-   */
   provision(body: ProvisionBody): Promise<ProvisionResult> {
     return this.#request<ProvisionResult>("/setup-api/provision", "POST", body);
   }
 
-  /**
-   * `POST /setup-api/adopt` — the MIRROR-side sibling of {@link SetupApi.provision} (C2b Task 13). The
-   * mirror fetches the primary's bundle server-side using the supplied admin `credential` (a nested
-   * object, sent verbatim), adopts the venue into its own database, then restarts into mirror mode. On
-   * success the box restarts (see {@link AdoptOutcome}); a failure rejects with an {@link ApiError} the
-   * connect screen surfaces (`mirror.bundle_fetch_failed` when the primary is unreachable or the login
-   * is refused, `setup.*` for the shared latch/deps/validation guards).
-   */
   adopt(body: AdoptBody): Promise<AdoptOutcome> {
     return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
   }
 
-  /** Stage an encrypted backup; the entrypoint restores it before opening application pools. */
   async restore(
     artifact: Blob,
     recoveryKey: string,
@@ -312,22 +194,8 @@ export class SetupApi {
   }
 
   /**
-   * The one request path both methods funnel through. `credentials: "include"` on every call — the
-   * setup routes are unauthenticated (`apps/server/src/setup-api.ts`), so the cookie is irrelevant,
-   * but keeping it is harmless and consistent with the till/dashboard clients. A `body` is
-   * JSON-encoded and its `content-type` header set only when one is present, so a GET carries neither.
-   *
-   * A non-2xx becomes a rejected {@link ApiError} read from the server's `{ error: { code, params } }`
-   * envelope — falling back to `server.internal` when the body names no code. Unlike the
-   * till/dashboard clients this SURFACES `params`, so the wizard can drive per-field validation off
-   * `setup.request_invalid`'s `{ field }`.
-   *
-   * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed (avoids
-   * `res.json()` throwing on an empty 200); both current routes send a body, so that branch is
-   * defensive, mirroring the till/dashboard clients.
-   *
-   * `fetchImpl` is read into a local before the call so it is invoked as a free function, not as a
-   * method of `this` (which would rebind a native `fetch`).
+   * `fetchImpl` is read into a local so it is called as a free function: called as a method of
+   * `this`, the browser's native `fetch` throws "Illegal invocation".
    */
   async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
     const fetchImpl = this.#fetchImpl;

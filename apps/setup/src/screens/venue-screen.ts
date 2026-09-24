@@ -21,8 +21,6 @@ import type { DeepPartial } from "../setup-app.js";
 import type { VenueDefaults, ProvisionBody } from "../api/client.js";
 import { SERVER_FIELDS } from "../server-fields.js";
 
-// Local edits survive re-renders; the shell draft restores them when a screen is remounted.
-/** The text fields, each a `wt-input`. Everything here is required except `addressLine2`. */
 type TextField =
   | "country"
   | "taxId"
@@ -40,16 +38,8 @@ type TextField =
   | "rectificativeSeriesCode";
 
 /**
- * The browser autofill purpose for each field, beside the semantic `name` the shared form contract
- * asks for (`docs/developers/design-system.md` → Forms; `admin-screen.ts` renders the same pair from
- * its own map). Every value here is `"off"`, and that is the decision, not an omission: each field
- * on this screen describes the VENUE, while the browser's stored values describe the PERSON filling
- * the form in. `address-line1` on `addressLine1` would invite the operator's own home address into
- * the shop's registered address, and `organization` on `legalName` the company they work for rather
- * than the one being registered — and these values are what the fiscal record puts on the wire
- * verbatim. Without an explicit `"off"` a browser guesses a purpose from the field's name, which is
- * exactly the guess this turns off. Kept per-field rather than one blanket attribute so a field that
- * later does have a correct purpose is a one-line change with a visible reason.
+ * Every value is `"off"` on purpose: these fields describe the VENUE, while a browser's stored values
+ * describe the PERSON filling the form in — their home address, the company they work for.
  */
 const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   country: "off",
@@ -68,7 +58,6 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   rectificativeSeriesCode: "off",
 };
 
-/** Everything a complete venue must carry — `addressLine2` alone may be blank (it becomes `null`). */
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "country",
   "taxId",
@@ -134,16 +123,9 @@ const LOCALE_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The receipt languages a location starts with. A province with its own language gets that language
- * AND the country's, country first, because a Spanish business issuing in Catalonia issues in both.
- * A province with no language of its own gets the country's alone. Both are only defaults: the
- * operator can untick either. Two is the most this ever returns, which keeps a fresh form inside the
- * one-or-two every layer below insists on: `#next` refuses a selection outside 1–2, the server
- * refuses it in the pure planner before any admin connection is spent
- * (`planVenue` in `packages/provisioning/src/venue-plan.ts`), and the stored list is bounded by the
- * `locations_invoice_locales_len` check constraint (`packages/db/src/schema/tenants.ts:183`). The
- * setup boundary also refuses a locale the country pack does not offer
- * (`parseVenue` in `apps/server/src/setup-api.ts`).
+ * A province with a language of its own gets that language AND the country's, country first. Never
+ * more than two, which `#next` and `planVenue` (`packages/provisioning/src/venue-plan.ts`) both
+ * refuse.
  */
 function defaultInvoiceLocales(
   pack: CountryPack | undefined,
@@ -208,7 +190,6 @@ export class SetupVenueScreen extends LitElement {
     `,
   ];
 
-  /** The accumulated draft, passed down from the shell. Read ONCE on mount to seed the local fields. */
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ attribute: false }) defaults: VenueDefaults = {};
   #descriptionEdited = false;
@@ -224,18 +205,13 @@ export class SetupVenueScreen extends LitElement {
     return filing === undefined ? "" : (this.defaults[filing]?.operationDescription ?? "");
   }
 
-  /** A server-side venue-validation error the shell routed back here, shown as a banner so the
-   * operator can correct the offending detail and re-submit. `undefined` normally. */
+  /** A server-side venue error the shell routed back here, shown as a banner. */
   @property() errorMessage?: string;
 
-  /**
-   * One venue field the SERVER refused, named by `setup.request_invalid`'s `params.field` and routed
-   * back here by the shell. Marked invalid on arrival, with a sentence beside it, so an operator
-   * returning from a refused provision lands on the form with the offending field already flagged.
-   */
+  /** A field path the server refused (`setup.request_invalid`'s `params.field`), routed back by the
+   * shell. */
   @property() invalidField?: string;
 
-  /** Local defaults are used only for fields the accumulated draft does not already contain. */
   @state() private values: Record<TextField, string> = {
     country: "ES",
     taxId: "",
@@ -255,18 +231,14 @@ export class SetupVenueScreen extends LitElement {
 
   @state() private invoiceLocales: string[] = ["es-ES"];
 
-  /** The fields a `Next` rejected — drives each field's `invalid` reflection. */
   @state() private invalid = new Set<TextField | "invoiceLocales">();
 
-  /** True once a `Next` was rejected — drives the `role="alert"` banner. */
   @state() private showError = false;
 
   // Keep server refusals separate: local validation rebuilds its own set on every submission.
   @state() private serverInvalid?: { readonly key: TextField; readonly message: string };
 
-  /** Guards {@link SetupVenueScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
-  /** True until the operator changes the invoice-language selection themselves. */
   #invoiceLocalesFollowAreaDefault = true;
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -294,37 +266,24 @@ export class SetupVenueScreen extends LitElement {
   }
 
   /**
-   * Move the keyboard focus to the field the server refused, once, when the shell hands it down. The
-   * form is roughly sixteen controls long and both series codes sit at the bottom of it, so without
-   * this the operator is dropped on a freshly-mounted form scrolled to the top with the marked field
-   * off-screen and nothing said about it — and a screen reader announces nothing at all, because no
-   * focus moves and this screen deliberately renders no banner for a marked field. `wt-input`
-   * delegates focus, so this lands on the native input and the browser scrolls it into view.
+   * Focus the refused field when the shell hands it down: the screen renders no banner for it, and
+   * the field may be off-screen, so moving focus is what tells the operator where they landed.
    */
   override updated(changed: PropertyValues<this>): void {
     if (!changed.has("invalidField") || this.serverInvalid === undefined) return;
-    // Selected by the field's semantic `name`, not by its `data-test` hook: a test hook is not an
-    // identity a production code path may depend on (CLAUDE.md §3 → Forms), and the repo's other
-    // focus-the-refused-field does the same (`apps/dashboard/src/screens/login-screen.ts`).
+    // By its `name`, not its `data-test` hook, which is for tests.
     const field = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete?: Promise<unknown> }
     >(`wt-input[name=${this.serverInvalid.key}]`);
     if (field === null) return;
-    // Awaiting the `wt-input`'s OWN first render, not just this screen's: a Lit child renders in a
-    // later microtask, so at this point the host exists but the native input focus is delegated to
-    // does not, and focusing the host would do nothing at all (measured — the first version of this
-    // left `shadowRoot.activeElement` null). The `isConnected` guard is the same sibling's: the
-    // screen can be torn down between the microtask being queued and it running.
+    // Wait for the `wt-input`'s own render: until then the native input its focus is delegated to
+    // does not exist, and focusing the host does nothing. The screen may be gone by then.
     void Promise.resolve(field.updateComplete).then(() => {
       if (this.isConnected) field.focus();
     });
   }
 
-  /**
-   * Overlay whatever the shell's draft already holds onto the local field state, so Back-then-forward
-   * restores every value the operator entered. `??` keeps the local default when a field is absent (or,
-   * for `addressLine2`, `null`); an array/select value is taken whole.
-   */
+  /** So Back-then-forward restores every value the operator entered. */
   #seedFromDraft(): void {
     const venue = this.draft.venue ?? {};
     const loc = venue.location ?? {};
@@ -349,10 +308,9 @@ export class SetupVenueScreen extends LitElement {
     const defaults = defaultInvoiceLocales(pack, area);
     this.invoiceLocales = loc.invoiceLocales ?? (defaults.length > 0 ? defaults : ["es-ES"]);
     if (loc.invoiceLocales !== undefined) {
-      // Order-sensitive ON PURPOSE, unlike the compare-by-value rule for saved selections
-      // (CLAUDE.md §3): `locales[0]` is the venue's PRIMARY invoice locale
-      // (`planVenue` in `packages/provisioning/src/venue-plan.ts`), so a reordered list is a different choice
-      // and must stop the province from overwriting it.
+      // Compared in order on purpose, unlike CLAUDE.md §3's compare-by-value rule: `planVenue`
+      // treats `locales[0]` apart from the rest, so a reordered list is a different choice and must
+      // stop the province from overwriting it.
       this.#invoiceLocalesFollowAreaDefault =
         pack !== undefined && JSON.stringify(loc.invoiceLocales) === JSON.stringify(defaults);
     }
@@ -419,7 +377,6 @@ export class SetupVenueScreen extends LitElement {
     return pack === undefined ? undefined : resolveFiscalJurisdiction(pack, area?.code);
   }
 
-  /** A locale checkbox toggled: add it to (or drop it from) the selected set, preserving the order. */
   #onLocaleToggle(locale: string, event: Event): void {
     event.stopPropagation();
     this.#invoiceLocalesFollowAreaDefault = false;
@@ -429,11 +386,6 @@ export class SetupVenueScreen extends LitElement {
       : this.invoiceLocales.filter((l) => l !== locale);
   }
 
-  /**
-   * Validate, then emit. A required blank, a duplicate series code, or a locale count outside 1–2
-   * blocks the emit, shows the banner, and marks the offending fields. The series-equality guard is
-   * proven by deletion: drop the equality block and the "same series code blocks Next" test flips red.
-   */
   #next(): void {
     if (this.#demo && this.values.operationDescription === "") {
       this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
@@ -497,7 +449,7 @@ export class SetupVenueScreen extends LitElement {
     }
     this.showError = false;
 
-    // All conditions which could leave these values absent added an invalid field and returned above.
+    // Every path that leaves these undefined added an invalid field and returned above.
     const selectedPack = pack!;
     const selectedJurisdiction = jurisdiction!;
     const normalizedTaxId =
@@ -530,9 +482,7 @@ export class SetupVenueScreen extends LitElement {
     };
     dispatchSetupPatch(this, patch);
 
-    // A screen-agnostic advance: the shell owns the venue→cert/review decision (it holds the merged
-    // draft, so it — not this screen — knows `mode` and the location's fiscal territory). Mirrors
-    // `apps/dashboard/src/dashboard-app.ts`, where the shell owns conditional routing.
+    // The shell decides the next screen: it holds the merged draft.
     dispatchSetupAdvance(this);
   }
 

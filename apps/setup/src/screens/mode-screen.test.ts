@@ -5,7 +5,6 @@ import type { SetupModeScreen } from "./mode-screen.js";
 
 type Emitted = { kind: "patch" | "goto"; detail: unknown };
 
-/** Collects the two composed events the screen emits UP; both bubble+compose, so the host hears them. */
 function collect(host: HTMLElement): Emitted[] {
   const events: Emitted[] = [];
   host.addEventListener("setup-patch", (e) =>
@@ -57,8 +56,6 @@ describe("setup-mode-screen", () => {
     ]);
   });
 
-  // The live gate. Prove-by-deletion: rewire the LIVE button to `#advance("live")` and this flips red
-  // — a single click would then emit `mode:live`. Today it only reveals the permanence warning.
   it("does NOT provision live on a single click — it shows the permanence warning instead", async () => {
     const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
     const events = collect(host);
@@ -66,7 +63,6 @@ describe("setup-mode-screen", () => {
     await el.updateComplete;
     expect(events).toEqual([]);
     expect(q(el, "[data-test=live-warning]")).not.toBeNull();
-    // The two choices are gone; the confirm gate has replaced them.
     expect(q(el, "[data-test=choose-demo]")).toBeNull();
   });
 
@@ -101,7 +97,6 @@ describe("setup-mode-screen", () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
     q(el, "[data-test=choose-live]")!.click();
     await el.updateComplete;
-    // Turn the switch on, then cancel — cancelling must also reset the switch for the next attempt.
     q(el, "[data-test=understand]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
     );
@@ -110,7 +105,6 @@ describe("setup-mode-screen", () => {
     await el.updateComplete;
     expect(q(el, "[data-test=choose-demo]")).not.toBeNull();
     expect(q(el, "[data-test=live-warning]")).toBeNull();
-    // Re-opening the gate: the switch is back off, so confirm is blocked again.
     q(el, "[data-test=choose-live]")!.click();
     await el.updateComplete;
     expect((el as unknown as { understood: boolean }).understood).toBe(false);

@@ -8,7 +8,6 @@ afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)("setup-admin-screen a11y (%s theme)", (theme) => {
   it("has no violations on the empty form (every field labelled)", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {}, theme);
-    // The email field carries an accessible name via its wt-input label.
     expect(
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=email]")!.getAttribute("label"),
     ).toBe("Email");

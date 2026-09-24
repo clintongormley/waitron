@@ -5,7 +5,6 @@ import type { SetupRoleScreen } from "./role-screen.js";
 
 type Emitted = { kind: "goto"; detail: unknown };
 
-/** Collects the composed navigation event the screen emits UP; it bubbles+composes to the host. */
 function collect(host: HTMLElement): Emitted[] {
   const events: Emitted[] = [];
   host.addEventListener("setup-goto", (e) =>
