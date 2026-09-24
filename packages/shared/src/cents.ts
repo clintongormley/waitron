@@ -1,22 +1,22 @@
 import { AppError } from "./errors.js";
-import { assertMoney, decimal, MONEY_SCALE, toScale } from "./money.js";
+import { decimal, MAX_MONEY_INTEGER_DIGITS, MONEY_SCALE } from "./money.js";
 import type { Decimal } from "./money.js";
-import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
+import { RAW_COUNT_PATTERN, scaledCount, scaledLiteral } from "./scales.js";
 
 // The crossing between a money column's stored count of whole cents and a `Decimal`. A file of its
-// own because `conventions.test.ts` fails `./money.ts` on any `Number(`. Exact: `assertMoney` bounds
-// the integer part at twelve digits, so a count stays inside `Number.MAX_SAFE_INTEGER`, and the only
-// rounding is `toScale`'s, in BigInt.
+// own because `conventions.test.ts` fails `./money.ts` on any `Number(`. Exact: `decimalToCents`
+// bounds the ROUNDED amount at twelve integer digits, so its count stays inside
+// `Number.MAX_SAFE_INTEGER`, and the only rounding is `toScale`'s, in BigInt.
 
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
-  return Number(BigInt(toScale(assertMoney(value), MONEY_SCALE).replace(".", "")));
+  return scaledCount(value, MONEY_SCALE, MAX_MONEY_INTEGER_DIGITS);
 }
 
 /**
  * The count of whole cents in a decimal string: "12.34" is 1234. Refuses a malformed
- * string with `shared.invalid_decimal`, and one whose integer part is wider than the money
- * scale admits with `shared.decimal_overflow`.
+ * string with `shared.invalid_decimal`, and one whose integer part, once rounded to cents, is
+ * wider than the money scale admits with `shared.decimal_overflow`.
  */
 export function stringToCents(value: string): number {
   return decimalToCents(decimal(value));

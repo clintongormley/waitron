@@ -497,7 +497,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   quantity, it misreads one — `decimalToCents` rounds the third place rather than dropping it, so
   0.005 kg is the count 5 at the quantity scale and the count 1 at the money scale. The converters
   hold the bound — nine integer digits for a quantity, three for a rate — because an integer column
-  does not enforce them. The
+  does not enforce them; the raw quantity reader reads totals, so like the money one it bounds only
+  at what a number counts exactly. The
   money rule's two guards and both its hedges apply unchanged, and `quantity`, `money` and
   `bigCount` are all `integer(name)`, so only the caller separates them. A rate's CHECK constraint
   is written against 10000: one written as `rate <= 100` refuses every rate above one percent. Guard: the shared schema-conformance suite,

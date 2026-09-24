@@ -152,7 +152,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `refuseNegativePrice` below calls `decimal()` too, and is NOT a second source of this code: it
   // swallows the throw so the refusal still comes from the write, in the write's own order.
   "shared.invalid_decimal": 400,
-  // A price too wide for the money scale's twelve integer digits, thrown by `assertMoney` inside the
+  // A price too wide for the money scale's twelve integer digits, thrown inside the
   // `decimalToCents` each of those four `stringToCents` calls makes — raised by the op, not by this
   // file's screens. A CLIENT request fault -> 400. Listed explicitly as the house style requires; the
   // `?? 400` default already covers it — measured 2026-09-21 with this entry absent, a `unitPrice` or

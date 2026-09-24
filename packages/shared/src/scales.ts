@@ -3,9 +3,10 @@ import { decimal, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 
 // The crossings between a scaled-integer column and a `Decimal` for the two scales that are not
-// money: a quantity counts whole thousandths, a rate whole basis points. Kept apart from
-// `./cents.ts` because one conversion for every scale would misread a quantity: 0.005 kg is 5
-// thousandths, but 1 at the money scale. The only rounding is `toScale`'s, in BigInt.
+// money: a quantity counts whole thousandths, a rate whole basis points. `scaledCount`, which takes
+// the scale as a parameter, also serves `./cents.ts`. A conversion fixed to one scale would misread
+// a quantity: 0.005 kg is 5 thousandths, but 1 at the money scale. The only rounding is
+// `toScale`'s, in BigInt.
 
 /** Three decimal places, so five grams is a quantity and not a rounding error. */
 export const QUANTITY_SCALE = 3;
@@ -22,7 +23,8 @@ export const RATE_SCALE = 2;
 /** Three integer digits: 999.99 is 99999 basis points. */
 export const MAX_RATE_INTEGER_DIGITS = 3;
 
-function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
+/** Package-internal — not re-exported from `index.ts`. */
+export function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
   return boundedCount(
     BigInt(toScale(value, scale).replace(".", "")),
     value,
@@ -31,6 +33,10 @@ function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): n
   );
 }
 
+/**
+ * `count` when it fits `maxIntegerDigits` integer digits at `scale`, refused otherwise in the
+ * caller's own `value`.
+ */
 function boundedCount(
   count: bigint,
   value: string,
@@ -113,34 +119,35 @@ export function basisPointsToDecimal(count: number): Decimal {
 export const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
- * `malformed` is the caller's own scale code, so a row holding a quantity and a rate says which was
- * malformed. Overflow is `shared.decimal_overflow` for every scale, as the typed converters throw.
+ * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
+ *
+ * Not the quantity bound: a raw read can be a total, `cast(sum(...) as text)`, and quantities that
+ * each fit nine integer digits can sum past them. A count past what a number holds exactly would
+ * drop digits without saying so, so that is refused, in the scale's own code.
  */
-function rawCount(
-  value: string,
-  scale: number,
-  maxIntegerDigits: number,
-  malformed: "shared.invalid_thousandths" | "shared.invalid_basis_points",
-): number {
+export function rawThousandthsToDecimal(value: string): Decimal {
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
-    throw new AppError(malformed, { value: String(value) });
+    throw new AppError("shared.invalid_thousandths", { value: String(value) });
   }
-  return boundedCount(BigInt(value), value, scale, maxIntegerDigits);
+  const count = Number(value);
+  if (!Number.isSafeInteger(count)) {
+    throw new AppError("shared.invalid_thousandths", { value });
+  }
+  return thousandthsToDecimal(count);
 }
 
 /**
- * The quantity for a count of thousandths read by RAW SQL, where the count arrives as TEXT.
- * A sum past nine integer digits is refused here, since no column type below refuses it.
+ * The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT.
+ *
+ * Unlike the quantity reader, it keeps the rate's three-integer-digit bound, refused past it with
+ * `shared.decimal_overflow`: its caller, `packages/reporting/src/input-vat.ts`, reads a grouped rate
+ * column, never a sum.
  */
-export function rawThousandthsToDecimal(value: string): Decimal {
-  return thousandthsToDecimal(
-    rawCount(value, QUANTITY_SCALE, MAX_QUANTITY_INTEGER_DIGITS, "shared.invalid_thousandths"),
-  );
-}
-
-/** The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT. */
 export function rawBasisPointsToDecimal(value: string): Decimal {
+  if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
+    throw new AppError("shared.invalid_basis_points", { value: String(value) });
+  }
   return basisPointsToDecimal(
-    rawCount(value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS, "shared.invalid_basis_points"),
+    boundedCount(BigInt(value), value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS),
   );
 }

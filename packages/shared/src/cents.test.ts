@@ -77,6 +77,23 @@ describe("decimalToCents", () => {
       params: { value: tooWide, maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
     });
   });
+
+  it("refuses an amount that rounds past the money scale, naming the amount it was given", () => {
+    // The bound is checked on the rounded count: "999999999999.995" rounds to 1000000000000.00,
+    // thirteen integer digits. The refusal names the caller's own literal, as the quantity and
+    // rate converters do.
+    for (const value of ["999999999999.995", "-999999999999.995"]) {
+      expect(refusalOf(() => decimalToCents(decimal(value)))).toEqual({
+        code: "shared.decimal_overflow",
+        params: { value, maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
+      });
+    }
+  });
+
+  it("accepts an amount with a third place that rounds to the widest two-place amount", () => {
+    expect(decimalToCents(decimal("999999999999.994"))).toBe(99999999999999);
+    expect(decimalToCents(decimal("-999999999999.994"))).toBe(-99999999999999);
+  });
 });
 
 describe("stringToCents", () => {
@@ -104,6 +121,14 @@ describe("stringToCents", () => {
       params: { value: tooWide, maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
     });
   });
+
+  it("refuses a string that rounds past the money scale", () => {
+    expect(refusalOf(() => stringToCents("999999999999.995"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "999999999999.995", maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
+    });
+    expect(stringToCents("999999999999.994")).toBe(99999999999999);
+  });
 });
 
 describe("rawCentsToDecimal", () => {
@@ -120,8 +145,8 @@ describe("rawCentsToDecimal", () => {
   });
 
   it("reads a total wider than any one amount may be", () => {
-    // Raw money reads are often totals — `cast(sum(...) as text)` — and amounts that each pass
-    // `assertMoney` can sum past its twelve integer digits. So this reader's bound is what a
+    // Raw money reads are often totals — `cast(sum(...) as text)` — and amounts that each fit
+    // the money bound can sum past its twelve integer digits. So this reader's bound is what a
     // number counts exactly, not the money bound.
     expect(rawCentsToDecimal("123456789012345")).toBe("1234567890123.45");
   });

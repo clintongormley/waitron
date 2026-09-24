@@ -248,14 +248,33 @@ describe("rawThousandthsToDecimal", () => {
     expect(rawThousandthsToDecimal("-1500")).toBe("-1.500");
   });
 
-  it("refuses a sum wider than a quantity's nine integer digits", () => {
-    // A MALFORMED value is refused in the scale's own words, an out-of-range one in the words every
-    // scale shares, which is what `decimalToThousandths` throws for the same condition.
-    expect(refusalOf(() => rawThousandthsToDecimal("1000000000000"))).toEqual({
-      code: "shared.decimal_overflow",
-      params: { value: "1000000000000", maxIntegerDigits: 9 },
-    });
+  it("reads a total wider than any one quantity may be", () => {
+    // Raw quantity reads are totals — `cast(sum(...) as text)` — and quantities that each fit nine
+    // integer digits can sum past them, so this reader's bound is what a number counts exactly.
     expect(rawThousandthsToDecimal("999999999999")).toBe("999999999.999");
+    expect(rawThousandthsToDecimal("1200000000000")).toBe("1200000000.000");
+    expect(rawThousandthsToDecimal("-1200000000000")).toBe("-1200000000.000");
+    expect(rawThousandthsToDecimal("9007199254740991")).toBe("9007199254740.991");
+  });
+
+  it("refuses a magnitude beyond what a number counts exactly, in the quantity scale's own words", () => {
+    expect(refusalOf(() => rawThousandthsToDecimal("9007199254740993"))).toEqual({
+      code: "shared.invalid_thousandths",
+      params: { value: "9007199254740993" },
+    });
+    expect(refusalOf(() => rawThousandthsToDecimal("-9007199254740993"))).toEqual({
+      code: "shared.invalid_thousandths",
+      params: { value: "-9007199254740993" },
+    });
+  });
+
+  it("refuses anything that is not a plain integer string", () => {
+    for (const bad of ["", " 12", "12 ", "1e3", "0x10", "+12", "12.", "abc", "NaN", "Infinity"]) {
+      expect(refusalOf(() => rawThousandthsToDecimal(bad))).toEqual({
+        code: "shared.invalid_thousandths",
+        params: { value: bad },
+      });
+    }
   });
 });
 
@@ -269,6 +288,14 @@ describe("rawBasisPointsToDecimal", () => {
     expect(refusalOf(() => rawBasisPointsToDecimal("21.00"))).toEqual({
       code: "shared.invalid_basis_points",
       params: { value: "21.00" },
+    });
+  });
+
+  it("refuses a value that is not text at all", () => {
+    // An uncast integer column reaches a raw read as a number, and its text would read as a rate.
+    expect(refusalOf(() => rawBasisPointsToDecimal(2100 as unknown as string))).toEqual({
+      code: "shared.invalid_basis_points",
+      params: { value: "2100" },
     });
   });
 

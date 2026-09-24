@@ -78,8 +78,8 @@ describe("cents.ts crosses into the number type without rounding one", () => {
     expect(source).not.toContain(token);
   });
 
-  it("rounds only by calling money.ts", () => {
-    expect(source).toContain("toScale(");
+  it("rounds only through scales.ts's scaledCount, which calls money.ts", () => {
+    expect(source).toContain("scaledCount(");
   });
 });
 

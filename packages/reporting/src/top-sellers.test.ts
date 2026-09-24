@@ -190,6 +190,37 @@ describe("computeTopSellers", () => {
     expect(rows[0]).toEqual({ name: coffeeName, quantity: "4.000", total: "40.00", variants: [] });
   });
 
+  it("totals quantities whose sum is wider than any one line's nine integer digits", async () => {
+    // Each line fits a quantity's nine integer digits; their sum does not, and the report reads
+    // it exactly rather than refusing it. Both lines are one variant, so the parent row and the
+    // nested row each read the wide sum.
+    const line = {
+      vatRate: "10.00",
+      lineTotal: "1.00",
+      name: coffeeName,
+      descriptions: coffeeText,
+      kitchenName: "CAF",
+      variantName: doubleName,
+      variantDescriptions: doubleText,
+      variantKitchenName: "DBL",
+      quantity: "600000000.000",
+    };
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "2.00",
+      lines: [line, line],
+    });
+    expect(await run()).toEqual([
+      {
+        name: coffeeName,
+        quantity: "1200000000.000",
+        total: "2.00",
+        variants: [{ name: doubleName, quantity: "1200000000.000", total: "2.00" }],
+      },
+    ]);
+  });
+
   it("nests a product's variants under it, each labelled with its own STAFF variant name", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

@@ -75,7 +75,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A malformed amount, refused by `decimal()` in the three screens below — `screenHeaderCreate`,
   // `screenHeaderPatch` and `screenLines`, which is every screen that reads an amount.
   "shared.invalid_decimal": 400,
-  // An amount past the money scale's twelve integer digits, thrown by `assertMoney` inside the op's
+  // An amount past the money scale's twelve integer digits, thrown inside the op's
   // `decimalToCents` (`packages/purchasing/src/operations.ts`, for the header `total` and each line's
   // `base` and `tax`, on create and update alike) — raised AFTER these screens, not by them. The op's
   // basis-point conversion raises the same code on its own narrower bound, but nothing reaches it from
