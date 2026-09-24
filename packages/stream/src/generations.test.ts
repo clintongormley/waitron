@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import {
-  PRUNE_CONCURRENCY,
-  claimGeneration,
-  generationPrefix,
-  markerKey,
-  pruneGenerations,
-} from "./generations.js";
+import { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 import { generationName } from "./names.js";
 import type { ObjectStore } from "./object-store.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
@@ -227,94 +221,48 @@ describe("pruneGenerations", () => {
     expect(inner.calls.filter((call) => call.operation === "delete")).toEqual([]);
   });
 
-  it(`deletes a large generation with at most ${PRUNE_CONCURRENCY} deletes in flight`, async () => {
+  it("hands every old generation's files to one batch delete, then every marker to a second", async () => {
     const inner = createMemoryObjectStore({ now: () => T0 });
-    for (let i = 0; i < 50; i += 1)
-      await inner.put(`venues/${VENUE}/${gen(1)}/0000/${i}.ltx`, new Uint8Array([1]));
-    let inFlight = 0;
-    let most = 0;
-    const store: ObjectStore = {
-      ...inner,
-      async delete(key) {
-        inFlight += 1;
-        most = Math.max(most, inFlight);
-        await new Promise((resolve) => setImmediate(resolve));
-        inFlight -= 1;
-        await inner.delete(key);
-      },
-    };
-    await pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW);
-    expect(inner.snapshot().size).toBe(0);
-    expect(most).toBe(PRUNE_CONCURRENCY);
-  });
-
-  // A generation whose marker is gone could be claimed again, and would then be streamed into
-  // on top of its own old files.
-  it("deletes a generation's marker last, and keeps it when a delete before it fails", async () => {
-    const root = `venues/${VENUE}/${gen(1)}/`;
-    const files = ["0000/a.ltx", "0000/b.ltx", "opened.json", "zz/after-the-marker.ltx"];
-    const fill = async () => {
-      const inner = createMemoryObjectStore({ now: () => T0 });
-      for (const file of files) await inner.put(`${root}${file}`, new Uint8Array([1]));
-      return inner;
-    };
-    const now = new Date(T0.getTime() + 2 * WINDOW);
-
-    const whole = await fill();
-    const order: string[] = [];
-    const recording: ObjectStore = {
-      ...whole,
-      async delete(key) {
-        order.push(key);
-        await whole.delete(key);
-      },
-    };
-    await pruneGenerations(recording, VENUE, gen(2), now, WINDOW);
-    expect(order).toHaveLength(files.length);
-    expect(order.at(-1)).toBe(markerKey(VENUE, gen(1)));
-
-    const inner = await fill();
-    const failing: ObjectStore = {
-      ...inner,
-      async delete(key) {
-        await new Promise((resolve) => setImmediate(resolve));
-        if (key === `${root}0000/a.ltx`) throw new Error("delete refused");
-        await inner.delete(key);
-      },
-    };
-    await expect(pruneGenerations(failing, VENUE, gen(2), now, WINDOW)).rejects.toThrow(
-      "delete refused",
-    );
-    expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
-  });
-
-  it(`deletes several old generations through one pool of ${PRUNE_CONCURRENCY}, every marker after every file`, async () => {
-    const inner = createMemoryObjectStore({ now: () => T0 });
+    const files = (term: number) =>
+      Array.from({ length: 5 }, (_, i) => `venues/${VENUE}/${gen(term)}/0000/${i}.ltx`);
     for (const term of [1, 3]) {
       await inner.put(markerKey(VENUE, gen(term)), new Uint8Array([1]));
-      for (let i = 0; i < 5; i += 1)
-        await inner.put(`venues/${VENUE}/${gen(term)}/0000/${i}.ltx`, new Uint8Array([1]));
+      for (const key of files(term)) await inner.put(key, new Uint8Array([1]));
     }
-    const order: string[] = [];
-    let inFlight = 0;
-    let most = 0;
+    const batches: string[][] = [];
     const store: ObjectStore = {
       ...inner,
-      async delete(key) {
-        order.push(key);
-        inFlight += 1;
-        most = Math.max(most, inFlight);
-        await new Promise((resolve) => setImmediate(resolve));
-        inFlight -= 1;
-        await inner.delete(key);
+      async deleteMany(keys) {
+        batches.push([...keys]);
+        await inner.deleteMany(keys);
       },
     };
     await expect(
       pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
     ).resolves.toEqual([gen(1), gen(3)]);
+    expect(batches).toEqual([
+      [...files(1), ...files(3)],
+      [markerKey(VENUE, gen(1)), markerKey(VENUE, gen(3))],
+    ]);
+    expect(inner.calls.filter((call) => call.operation === "delete")).toHaveLength(12);
     expect(inner.snapshot().size).toBe(0);
-    expect(most).toBe(PRUNE_CONCURRENCY);
-    expect(order.slice(-2).sort()).toEqual([markerKey(VENUE, gen(1)), markerKey(VENUE, gen(3))]);
+  });
+
+  // A generation whose marker is gone could be claimed again, and would then be streamed into
+  // on top of its own old files.
+  it("keeps a generation's marker when a delete before it fails", async () => {
+    const root = `venues/${VENUE}/${gen(1)}/`;
+    const inner = createMemoryObjectStore({ now: () => T0 });
+    for (const file of ["0000/a.ltx", "0000/b.ltx", "opened.json", "zz/after-the-marker.ltx"])
+      await inner.put(`${root}${file}`, new Uint8Array([1]));
+    inner.failNext({ operation: "delete", key: `${root}0000/b.ltx`, error: new Error("refused") });
+    await expect(
+      pruneGenerations(inner, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+    ).rejects.toThrow("refused");
+    expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
+    expect(
+      inner.calls.filter((call) => call.operation === "delete").map((call) => call.key),
+    ).not.toContain(markerKey(VENUE, gen(1)));
   });
 
   it("keeps every old generation's marker when a file delete in any of them fails", async () => {
@@ -323,44 +271,15 @@ describe("pruneGenerations", () => {
       await inner.put(markerKey(VENUE, gen(term)), new Uint8Array([1]));
       await inner.put(`venues/${VENUE}/${gen(term)}/0000/a.ltx`, new Uint8Array([1]));
     }
-    const store: ObjectStore = {
-      ...inner,
-      async delete(key) {
-        if (key === `venues/${VENUE}/${gen(3)}/0000/a.ltx`) throw new Error("delete refused");
-        await inner.delete(key);
-      },
-    };
+    inner.failNext({
+      operation: "delete",
+      key: `venues/${VENUE}/${gen(3)}/0000/a.ltx`,
+      error: new Error("delete refused"),
+    });
     await expect(
-      pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
+      pruneGenerations(inner, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
     ).rejects.toThrow("delete refused");
     expect(inner.snapshot().has(markerKey(VENUE, gen(1)))).toBe(true);
     expect(inner.snapshot().has(markerKey(VENUE, gen(3)))).toBe(true);
-  });
-
-  it("starts no further deletes once one has failed, and none after it has answered", async () => {
-    const inner = createMemoryObjectStore({ now: () => T0 });
-    for (let i = 0; i < 50; i += 1)
-      await inner.put(`venues/${VENUE}/${gen(1)}/0000/${i}.ltx`, new Uint8Array([1]));
-    let attempts = 0;
-    let finished = 0;
-    const store: ObjectStore = {
-      ...inner,
-      async delete(key) {
-        attempts += 1;
-        const first = attempts === 1;
-        await new Promise((resolve) => setImmediate(resolve));
-        if (first) throw new Error("delete refused");
-        await new Promise((resolve) => setImmediate(resolve));
-        await inner.delete(key);
-        finished += 1;
-      },
-    };
-    await expect(
-      pruneGenerations(store, VENUE, gen(2), new Date(T0.getTime() + 2 * WINDOW), WINDOW),
-    ).rejects.toThrow("delete refused");
-    const atAnswer = { attempts, finished };
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect({ attempts, finished }).toEqual(atAnswer);
-    expect(attempts).toBeLessThanOrEqual(PRUNE_CONCURRENCY);
   });
 });

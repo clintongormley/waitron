@@ -52,6 +52,12 @@ export class SwitchableStore implements ObjectStore {
     await this.#inner.delete(key);
   }
 
+  async deleteMany(keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+    await this.#gate("delete", keys[0]!);
+    await this.#inner.deleteMany(keys);
+  }
+
   /** Litestream's side of the bucket: a file written with no condition, last modified at `at`. */
   upload(key: string, at?: Date): void {
     this.#uploadedAt = at;

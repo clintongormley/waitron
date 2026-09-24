@@ -1,11 +1,13 @@
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import type {
+  DeleteObjectsCommandOutput,
   GetObjectCommandOutput,
   ListObjectsV2CommandOutput,
   PutObjectCommandOutput,
@@ -35,6 +37,11 @@ export interface S3ObjectStoreOptions {
   /** Replaces the wait between conflict retries. Tests only. */
   sleep?: (ms: number) => Promise<void>;
 }
+
+/** S3's own limit: "The request can contain a list of up to 1,000 keys" (API_DeleteObjects). */
+const DELETE_BATCH_KEYS = 1000;
+/** How many single deletes are in flight at once where the store has no multi-object delete. */
+export const DELETE_CONCURRENCY = 8;
 
 /** How many times a write answered "conflict" is sent in all before it is reported as failed. */
 export const CONFLICT_ATTEMPTS = 5;
@@ -69,6 +76,32 @@ function conditionHeaders(condition: PutCondition | undefined): {
     : { IfNoneMatch: condition.ifNoneMatch };
 }
 
+/** Stops starting work at the first failure, and answers only once the work in flight has settled. */
+async function eachUntilFailure<T>(
+  items: T[],
+  concurrency: number,
+  work: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const item = items[next]!;
+      next += 1;
+      try {
+        await work(item);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
+  const outcomes = await Promise.allSettled(workers);
+  const refusal = outcomes.find((outcome) => outcome.status === "rejected");
+  if (refusal !== undefined) throw refusal.reason;
+}
+
 export function createS3ObjectStore(
   config: BucketConfig,
   options: S3ObjectStoreOptions = {},
@@ -86,6 +119,14 @@ export function createS3ObjectStore(
   const bucket = config.bucket;
   const root = normalisePrefix(config.prefix);
   const at = (key: string) => root + key;
+
+  async function deleteOne(key: string): Promise<void> {
+    try {
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }));
+    } catch (error) {
+      throw requestFailed("delete", key, statusOf(error), nameOf(error));
+    }
+  }
 
   return {
     async get(key) {
@@ -182,11 +223,41 @@ export function createS3ObjectStore(
       return found;
     },
 
-    async delete(key) {
-      try {
-        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: at(key) }));
-      } catch (error) {
-        throw requestFailed("delete", key, statusOf(error), nameOf(error));
+    delete: deleteOne,
+
+    // Batches go one at a time, so a failed one stops the rest with nothing else in flight.
+    async deleteMany(keys) {
+      for (let start = 0; start < keys.length; start += DELETE_BATCH_KEYS) {
+        const batch = keys.slice(start, start + DELETE_BATCH_KEYS);
+        let out: DeleteObjectsCommandOutput;
+        try {
+          out = await client.send(
+            new DeleteObjectsCommand({
+              Bucket: bucket,
+              Delete: { Objects: batch.map((key) => ({ Key: at(key) })), Quiet: true },
+            }),
+          );
+        } catch (error) {
+          // 501 is HTTP's "does not support the functionality required" (RFC 9110 §15.6.2). Any other
+          // refusal of the batch fails the delete; which providers answer what is not established here.
+          if (statusOf(error) === 501) {
+            await eachUntilFailure(batch, DELETE_CONCURRENCY, deleteOne);
+            continue;
+          }
+          throw requestFailed("delete", batch[0]!, statusOf(error), nameOf(error));
+        }
+        // A quiet answer lists only the keys it did not delete, inside a request that succeeded.
+        const refused = out.Errors?.[0];
+        if (refused !== undefined) {
+          const named = refused.Key ?? at(batch[0]!);
+          const key = named.startsWith(root) ? named.slice(root.length) : named;
+          throw requestFailed(
+            "delete",
+            key,
+            out.$metadata.httpStatusCode ?? null,
+            refused.Code ?? "Unknown",
+          );
+        }
       }
     },
   };

@@ -99,6 +99,26 @@ describe("createMemoryObjectStore", () => {
     expect(await store.get("a")).toBeNull();
   });
 
+  it("deletes many one key at a time, recording each, and stops at the first failure", async () => {
+    const store = createMemoryObjectStore();
+    for (const key of ["a", "b", "c"]) await store.put(key, bytes(key));
+    const refused = new AppError("backup.stream_request_failed", {
+      operation: "delete",
+      key: "b",
+      status: 403,
+      name: "AccessDenied",
+    });
+    store.failNext({ operation: "delete", key: "b", error: refused });
+    await expect(store.deleteMany(["a", "b", "c", "missing"])).rejects.toBe(refused);
+    expect([...store.snapshot().keys()]).toEqual(["b", "c"]);
+    expect(store.calls.filter((call) => call.operation === "delete")).toEqual([
+      { operation: "delete", key: "a" },
+      { operation: "delete", key: "b" },
+    ]);
+    await store.deleteMany(["b", "c", "missing"]);
+    expect(store.snapshot().size).toBe(0);
+  });
+
   it("fails the next matching call on request, before or after storing", async () => {
     const store = createMemoryObjectStore();
     const refused = new AppError("backup.stream_request_failed", {

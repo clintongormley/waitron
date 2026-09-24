@@ -41,6 +41,13 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
     return index === -1 ? undefined : faults.splice(index, 1)[0];
   }
 
+  async function deleteOne(key: string): Promise<void> {
+    calls.push({ operation: "delete", key });
+    const fault = takeFault("delete", key);
+    if (fault) throw fault.error;
+    objects.delete(key);
+  }
+
   return {
     calls,
     snapshot: () =>
@@ -86,11 +93,9 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([key, entry]) => ({ key, lastModified: new Date(entry.lastModified) }));
     },
-    async delete(key) {
-      calls.push({ operation: "delete", key });
-      const fault = takeFault("delete", key);
-      if (fault) throw fault.error;
-      objects.delete(key);
+    delete: deleteOne,
+    async deleteMany(keys) {
+      for (const key of keys) await deleteOne(key);
     },
   };
 }
