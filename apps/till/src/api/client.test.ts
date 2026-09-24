@@ -38,7 +38,7 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
 
     const result = await api.recordSale(
-      [{ productId: "p", quantity: "2" }],
+      [{ menuItemId: "mi-p", quantity: "2" }],
       { method: "cash", amount: "5.00" },
       "wo1",
     );
@@ -52,7 +52,7 @@ describe("TillApi", () => {
         // `workingOrderId` is the idempotency key: keyed on the same order, a lost-response retry
         // replays rather than filing a second chained fiscal record.
         body: JSON.stringify({
-          lines: [{ productId: "p", quantity: "2" }],
+          lines: [{ menuItemId: "mi-p", quantity: "2" }],
           tender: { method: "cash", amount: "5.00" },
           workingOrderId: "wo1",
         }),
@@ -79,7 +79,7 @@ describe("TillApi", () => {
 
     const out = await api.pay({
       id: "wo1",
-      lines: [{ productId: "cafe", quantity: "2" }],
+      lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
       tip: "0.50",
       allowOffline: true,
     });
@@ -92,7 +92,7 @@ describe("TillApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id: "wo1",
-          lines: [{ productId: "cafe", quantity: "2" }],
+          lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
           tip: "0.50",
           allowOffline: true,
         }),
@@ -508,7 +508,7 @@ describe("TillApi", () => {
 
     const r = await api.parkOrder({
       id: "wo1",
-      lines: [{ productId: "cafe", quantity: "2" }],
+      lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
       label: "Mesa 4",
     });
 
@@ -520,7 +520,7 @@ describe("TillApi", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id: "wo1",
-          lines: [{ productId: "cafe", quantity: "2" }],
+          lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
           label: "Mesa 4",
         }),
       }),
@@ -578,7 +578,7 @@ describe("TillApi", () => {
 
     await expect(
       api.updateWorkingOrder("wo1", {
-        lines: [{ productId: "cafe", quantity: "3" }],
+        lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
         label: "Mesa 5",
       }),
     ).resolves.toBeUndefined();
@@ -590,7 +590,7 @@ describe("TillApi", () => {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          lines: [{ productId: "cafe", quantity: "3" }],
+          lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
           label: "Mesa 5",
         }),
       }),
@@ -1338,7 +1338,7 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "wo9", orderNumber: 12 }));
     const api = new TillApi("", fetchStub);
 
-    const r = await api.openTab("tbl-1", [{ productId: "cafe", quantity: "2" }]);
+    const r = await api.openTab("tbl-1", [{ menuItemId: "mi-cafe", quantity: "2" }]);
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/tables/tbl-1/tab",
@@ -1346,7 +1346,7 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lines: [{ productId: "cafe", quantity: "2" }] }),
+        body: JSON.stringify({ lines: [{ menuItemId: "mi-cafe", quantity: "2" }] }),
       }),
     );
     expect(r).toEqual({ tabId: "wo9", orderNumber: 12 });
@@ -1376,7 +1376,7 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
 
     await expect(
-      api.addTabRound("ord-1", [{ productId: "agua", quantity: "1" }]),
+      api.addTabRound("ord-1", [{ menuItemId: "mi-agua", quantity: "1" }]),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -1385,7 +1385,7 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lines: [{ productId: "agua", quantity: "1" }] }),
+        body: JSON.stringify({ lines: [{ menuItemId: "mi-agua", quantity: "1" }] }),
       }),
     );
   });
@@ -1398,7 +1398,7 @@ describe("TillApi", () => {
       );
 
     await expect(
-      new TillApi("", fetchStub).addTabRound("ord-1", [{ productId: "agua", quantity: "1" }]),
+      new TillApi("", fetchStub).addTabRound("ord-1", [{ menuItemId: "mi-agua", quantity: "1" }]),
     ).rejects.toMatchObject({ code: "tab.not_open" });
   });
 

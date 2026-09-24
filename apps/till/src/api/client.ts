@@ -561,7 +561,6 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
 export interface SaleLine {
   /** Stable server line identity on a retrieved order; omitted for a newly selected line. */
   workingOrderLineId?: string;
-  productId?: string;
   menuItemId?: string;
   variantId?: string;
   quantity: string;
@@ -709,6 +708,7 @@ export interface HeldOrder {
   orderNumber: number;
   label: string | null;
   lines: (Omit<SaleLine, "extras" | "options"> & {
+    productId?: string;
     /**
      * What each CHILD line of this dish froze: the picked product, its three names, the price it
      * was sold at, and how many of it this dish takes (the child's stored quantity divided by the

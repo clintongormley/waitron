@@ -83,8 +83,8 @@ class TabPayStore extends WorkingOrderStore {
  *
  *  - a full-width **product grid** (reused `till-product-grid`) whose taps accumulate the CURRENT
  *    round into a round-scoped `WorkingOrderStore`, shown by a reused `till-basket` in a bottom bar;
- *    **Enviar ronda** emits `send-round` with the picked `{ productId, quantity }` lines and clears the
- *    round (the round bar is the current round ONLY, never the whole tab);
+ *    **Enviar ronda** emits `send-round` with the picked lines and clears the round (the round bar is
+ *    the current round ONLY, never the whole tab);
  *  - a right-edge **drawer**, its handle badged with the count of lines still to serve, listing
  *    **Pendiente de servir** (each a `Servido` tick → `serve-line`), **Servido**, the tab **total**
  *    (summed from the LOCKED add-time prices — never a catalogue recompute), **Cobrar** (the reused

@@ -9,6 +9,7 @@ import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 const cafe: TillProduct = {
   id: "cafe",
+  menuItemId: "menu-item-cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
@@ -23,6 +24,7 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   ...cafe,
   id: "jamon",
+  menuItemId: "menu-item-jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
@@ -113,6 +115,7 @@ describe("till-table-order-screen", () => {
     const veganDish: TillProduct = {
       ...cafe,
       id: "vegan",
+      menuItemId: "menu-item-vegan",
       name: "Ensalada",
       customerName: { es: "Ensalada para el cliente" },
       diet: { vegan: "yes", vegetarian: "yes", contains: [] },
@@ -120,6 +123,7 @@ describe("till-table-order-screen", () => {
     const meatDish: TillProduct = {
       ...cafe,
       id: "meat",
+      menuItemId: "menu-item-meat",
       name: "Chuleta",
       customerName: { es: "Chuleta para el cliente" },
       diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
@@ -150,7 +154,7 @@ describe("till-table-order-screen", () => {
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
     // The round bar is the CURRENT round only — it clears once sent, ready for the next round.
     expect(grid(el).store.lineCount).toBe(0);
   });
@@ -394,9 +398,9 @@ describe("till-table-order-screen", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    // No override picked ⇒ the line carries only productId + quantity; the server resolves the product's
+    // No override picked ⇒ the line carries only menuItemId + quantity; the server resolves the product's
     // default course from `<override> ?? product.course_id`.
-    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
   it("send-round threads the picked course OVERRIDE for a line the waiter re-pointed", async () => {
@@ -410,7 +414,7 @@ describe("till-table-order-screen", () => {
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
     expect(captured!.detail.lines).toEqual([
-      { productId: "cafe", quantity: "1", courseId: "entrantes" },
+      { menuItemId: "menu-item-cafe", quantity: "1", courseId: "entrantes" },
     ]);
   });
 
@@ -435,7 +439,7 @@ describe("till-table-order-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
     expect(captured!.detail.lines).toEqual([
       {
-        productId: "cafe",
+        menuItemId: "menu-item-cafe",
         quantity: "1",
         extras: [{ listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] }],
       },
@@ -469,7 +473,7 @@ describe("till-table-order-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
     expect(captured!.detail.lines).toEqual([
       {
-        productId: "cafe",
+        menuItemId: "menu-item-cafe",
         quantity: "1",
         extras: [
           { listId: "list-extras", picks: [{ productId: "p-shot", quantity: 2 }] },
@@ -504,7 +508,7 @@ describe("till-table-order-screen", () => {
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
     expect(captured!.detail.lines).toEqual([
-      { productId: "cafe", quantity: "1", note: "table 4 — no ice" },
+      { menuItemId: "menu-item-cafe", quantity: "1", note: "table 4 — no ice" },
     ]);
   });
 
@@ -521,7 +525,7 @@ describe("till-table-order-screen", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
   // ── Coursing editing (A3): the round bar's per-line HOLD toggle ─────────────────────────────────────
@@ -558,7 +562,7 @@ describe("till-table-order-screen", () => {
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
     // Hold off ⇒ the line carries no `hold` (never `hold: false`); the server fires it by its course rule.
-    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
   it("send-round threads hold: true for a line the waiter held", async () => {
@@ -569,8 +573,10 @@ describe("till-table-order-screen", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    // The course is untouched (no override), so only `hold: true` rides alongside productId + quantity.
-    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1", hold: true }]);
+    // The course is untouched (no override), so only `hold: true` rides alongside menuItemId + quantity.
+    expect(captured!.detail.lines).toEqual([
+      { menuItemId: "menu-item-cafe", quantity: "1", hold: true },
+    ]);
   });
 
   it("toggling hold off again clears it back to firing on send (omitted)", async () => {
@@ -582,7 +588,7 @@ describe("till-table-order-screen", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
     el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.lines).toEqual([{ productId: "cafe", quantity: "1" }]);
+    expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
   // A held (fired_at null) line of a named course — the tab's food waiting for the waiter to fire it.
@@ -1321,6 +1327,7 @@ describe("till-table-order-screen", () => {
     const bocadillo: TillProduct = {
       ...cafe,
       id: "bocadillo",
+      menuItemId: "menu-item-bocadillo",
       name: "Bocadillo",
       customerName: { es: "Bocadillo para el cliente" },
       courseId: null,
@@ -1330,6 +1337,7 @@ describe("till-table-order-screen", () => {
     const cerveza: TillProduct = {
       ...cafe,
       id: "cerveza",
+      menuItemId: "menu-item-cerveza",
       name: "Cerveza",
       customerName: { es: "Cerveza para el cliente" },
       courseId: null,

@@ -126,18 +126,19 @@ export function toWireLineExtras(line: { note?: string }): { note?: string } {
   return extras;
 }
 
-/** Serialize the selected menu identity, retaining product-only support for stored legacy fixtures. */
+/** Serialize the selected menu identity; the server refuses a line that names no menu item. */
 export function toWireProductIdentity(product: {
   id: string;
   menuItemId?: string;
   variantId?: string;
-}): Pick<SaleLine, "menuItemId" | "productId" | "variantId"> {
-  return product.menuItemId === undefined
-    ? { productId: product.id }
-    : {
-        menuItemId: product.menuItemId,
-        ...(product.variantId === undefined ? {} : { variantId: product.variantId }),
-      };
+}): Pick<SaleLine, "menuItemId" | "variantId"> {
+  if (product.menuItemId === undefined) {
+    throw new Error(`product ${product.id} has no menu item to sell it by`);
+  }
+  return {
+    menuItemId: product.menuItemId,
+    ...(product.variantId === undefined ? {} : { variantId: product.variantId }),
+  };
 }
 
 /**

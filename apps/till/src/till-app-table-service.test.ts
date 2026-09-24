@@ -422,7 +422,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
   }
 
   it.each([
-    ["send-round", { lines: [{ productId: "cafe", quantity: "1" }] }, "addTabRound"],
+    ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }, "addTabRound"],
     ["fire-course", { courseId: "c1" }, "fireCourse"],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
@@ -520,7 +520,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.lines).toEqual([tabLine]);
 
-    emit(screen, "send-round", { lines: [{ productId: "cafe", quantity: "1" }] });
+    emit(screen, "send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] });
     await flush(el);
 
     expect(api.addTabRound).toHaveBeenCalledOnce();
