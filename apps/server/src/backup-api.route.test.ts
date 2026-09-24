@@ -72,18 +72,7 @@ async function makeStateDir(): Promise<string> {
   for (const rel of RECOVERY_FILES) await writeFile(join(dir, rel), `dummy ${rel}`);
   return dir;
 }
-/** The recovery key `<stateDir>/backup.env` holds right now, or undefined with no file. */
-async function keyOnDisk(stateDir: string): Promise<string | undefined> {
-  try {
-    return parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))
-      .WAITRON_BACKUP_RECOVERY_KEY;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw err;
-  }
-}
-
-/** A refresher that records the key on disk each time it runs. */
+/** A refresher that records, each time it runs, the recovery key the state folder's env files hold. */
 function recordingRefresher(stateDir: string): {
   refresh: () => Promise<"sealed">;
   seen: (string | undefined)[];
@@ -92,7 +81,7 @@ function recordingRefresher(stateDir: string): {
   return {
     seen,
     refresh: async () => {
-      seen.push(await keyOnDisk(stateDir));
+      seen.push(loadRecoveryKey(await loadBoxEnv({}, stateDir)));
       return "sealed";
     },
   };
