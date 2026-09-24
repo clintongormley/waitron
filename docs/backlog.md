@@ -790,6 +790,19 @@ What Task 11 left open:
   width, where the strip scrolls; a wider screen was not tried. A keyboard or screen-reader user
   then starts from the strip. **Next action:** decide whether (1) should show the id or a
   "missing menu" label, and whether (2) should focus the selected tab.
+- **Two things in the image library that #547's review raised and left for the owner**
+  (`packages/media/src/dashboard/image-library.ts` and `image-picker.ts`; found 2026-09-24, not
+  fixed because #547 changed tests only). (1) When the image
+  picker is handed a new live-data source, the library keeps listening to the first one until its
+  next load: the review removed the search that the picker test runs after the swap, and an
+  invalidation on the new source then triggered no reload (`expected 2 to be greater than 2`).
+  (2) The delete confirmation's Close button has no in-flight check of its own and relies on being
+  drawn disabled. Measured: a real pointer click on Close straight after confirming leaves the
+  dialog open (by reading, because the redraw that disables it lands first); two clicks dispatched
+  by script in one task, confirm then Close, do close it while the delete runs. **Next action:**
+  decide whether (1) should re-subscribe as soon as the source is replaced, and whether (2) is
+  worth a `busy` check in the Close button's click handler, like the one in the modal's `wt-close`
+  listener (`image-library.ts`, the delete confirmation).
 - **The two list forms still share about a hundred lines of chrome.** Task 11 lifted what moved
   cleanly — `translations()`, the placeholder-carrying translated-name fields, the visually-hidden
   rule and the table chrome all live in `form-fields.ts` and `reorder-table.ts` now. What is still
@@ -2366,7 +2379,26 @@ image constraints under *Detail → Box image*.
   return; no source file changed; seven guards in `operations.ts` and four branches in the
   operations screen left uncovered because no current caller reaches them — by reading, except the
   missing-department refusal in `recordWorkingLineContexts`, which a foreign key was measured to
-  block; each is listed with its reason in the pull request; 99.4/99.34/100/97.61).
+  block; each is listed with its reason in the pull request; 99.4/99.34/100/97.61); `media`
+  (**PR #547**, 2026-09-24 — tests for the configuration-transfer refusals of a
+  label spelled in two cases and a bundle with no usable default language, search's leading or
+  doubled OR, a term scored at its best field and an image at its best OR group, name and date
+  ties broken by id, an edit to an unknown id reported as not found first, the upload fallback
+  language when the venue sets none, the module descriptor's permission, transfer check and
+  translation-gap entry, and the image library's cancel, Enter-to-save, Escape and Close paths,
+  retry after a failed load, the previous page, single-flight delete and late usage lookups, plus
+  the image picker waiting for a request and following a replaced live-data source once the
+  library loads again; one redundant check deleted — `updateImage`'s "no row updated" refusal,
+  because the function ends by calling `readImage` again, which throws the same `image.not_found`
+  for a row that is gone, so no caller can see a difference (by reading; the review restored the
+  check with an error of its own and the package's node images suite, 38 tests, passed without it
+  firing); six branches left uncovered, by reading, because no operator action or database state
+  reaches them — except the image picker's first draw with neither a request nor a live-data source,
+  which does reach one but draws nothing whichever way it goes, so no test could tell the two apart;
+  each is listed with its reason in the pull request; 99.82/100/100/98.46). With `media`, no
+  package is left at the floor: every `vitest.config.ts` in the workspace now states
+  `98/98/98/95`, so what is left of this entry is retiring the floor from
+  `scripts/coverage-thresholds.test.ts` and from the prose that states it (lane C's item C2).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -4332,8 +4364,11 @@ conflict.
   venue's liability, so lockdown and a certificate install are available again. Buy a cheap Android
   with an autofocus camera, plus a spare; NFC is optional and Android-only. Decisions and receipts:
   [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
-- **Comments carry invariants, not history** (CLAUDE.md §1). The coverage bar is negotiable with a
-  reason.
+- **Comments carry invariants, not history** (CLAUDE.md §1).
+- **The coverage bar is negotiable only where the rest of a package's gap could be closed solely by
+  tests that assert nothing useful** (owner, 2026-09-23, narrowing the 2026-09-05 "negotiable with a
+  reason"): "we never want to add junk tests just to meet a coverage bar. the tests added must
+  actually test something useful."
 - **Every package is to hold the high coverage bar, `98/98/98/95`** (owner, 2026-09-23),
   superseding the 2026-09-05 split that reserved it for the fiscal core and the data layer.
   Progress: B9.

@@ -24,8 +24,13 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 const photo = await sampleImage({ width: 8, height: 6, format: "jpeg" });
-/** `maxUploadBytes: null` names no limit, leaving the route to its own fallback. */
-async function fixture(role = "manager", maxUploadBytes: number | null = 1000) {
+/** `maxUploadBytes: null` names no limit, and `contentDefaultLanguage: null` no default language,
+ * leaving the route to its own fallback for each. */
+async function fixture(
+  role = "manager",
+  maxUploadBytes: number | null = 1000,
+  contentDefaultLanguage: string | null = "fr",
+) {
   const id = await seedTenant(suite.db);
   // Through the table definition, not raw SQL: `id` and the timestamps are JavaScript generators
   // now (`$defaultFn`), never column DEFAULTs, so a raw insert naming none of them is refused with
@@ -51,7 +56,7 @@ async function fixture(role = "manager", maxUploadBytes: number | null = 1000) {
       db: suite.db,
       cfg: {
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
-        contentDefaultLanguage: "fr",
+        ...(contentDefaultLanguage === null ? {} : { contentDefaultLanguage }),
       },
       ...(maxUploadBytes === null ? {} : { maxUploadBytes }),
       core: {
@@ -327,4 +332,26 @@ it("reads labels and a limited page, and refuses an unknown id and malformed bod
   });
   expect(edit.status).toBe(400);
   expect(await edit.json()).toEqual(invalid);
+});
+
+it("requires a name in the shared fallback language when the venue configures no default", async () => {
+  // No stored language settings either (`seedTenant` writes none), so nothing else names one.
+  const { app, headers } = await fixture("manager", 1000, null);
+  const french = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: body(),
+  });
+  expect(french.status).toBe(400);
+  expect(await french.json()).toEqual({
+    error: { code: "image.translation_required", params: { field: "names", language: "en" } },
+  });
+  const english = body();
+  english.set("names", JSON.stringify({ en: "Bread" }));
+  const created = await app.request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: english,
+  });
+  expect(created.status).toBe(201);
 });

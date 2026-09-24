@@ -256,12 +256,10 @@ export async function updateImage(
 ): Promise<ImageRecord> {
   await readImage(tx, imageId);
   const values = await metadata(tx, input, fallbackLanguage);
-  const updated = await tx
+  await tx
     .update(mediaImages)
     .set({ ...values, updatedAt: new Date() })
-    .where(eq(mediaImages.id, imageId))
-    .returning({ id: mediaImages.id });
-  if (updated.length === 0) throw new AppError("image.not_found", { imageId });
+    .where(eq(mediaImages.id, imageId));
   return readImage(tx, imageId);
 }
 

@@ -60,6 +60,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/fiscal-none",
   "@waitron/identity",
   "@waitron/layouts",
+  "@waitron/media",
   "@waitron/membership",
   "@waitron/migrations",
   "@waitron/module",
