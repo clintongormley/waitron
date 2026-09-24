@@ -1,3 +1,7 @@
+import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
+import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
+import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
+import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
@@ -2503,6 +2507,34 @@ export async function startServer(
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
       })
     : undefined;
+  const cloudSnapshots = cloudConnection
+    ? runCloudSnapshotLoop({
+        signal: cloudController.signal,
+        onError: (error) => log("error", "cloud.snapshot_failed", { errorCode: codeOf(error) }),
+        worker: createCloudSnapshotWorker({
+          stateDir: config.stateDir,
+          connection: cloudConnection,
+          sourceNodeId: till.nodeId,
+          isPrimary: cloudPrimary,
+          readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, till.nodeId)),
+          createArchive: (grant, at, signal) =>
+            createCloudSnapshotArchive(
+              {
+                db,
+                modules: ALL_MODULES,
+                environment: config.environment,
+                stateDir: config.stateDir,
+              },
+              grant.recoveryKey,
+              at,
+              signal,
+            ),
+          upload: async (grant, file, metadata, signal) => {
+            await uploadCloudCaptureFile(grant, file, metadata, { signal });
+          },
+        }),
+      })
+    : undefined;
   return makeStartedServer(
     server,
     health,
@@ -2512,6 +2544,7 @@ export async function startServer(
         controller.abort();
         cloudController.abort();
         await cloudWorker;
+        await cloudSnapshots;
         unsubscribeFromChanges();
         liveEvents.close();
         // Stop the outbound tunnel client — its own controller, aborted here so close() never leaves it
