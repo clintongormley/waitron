@@ -15,8 +15,10 @@ import {
 // Real processes, each running this package's own `updateRecoveryState` and `withRecoveryLock`
 // through tsx. Every race is forced rather than hoped for: the first process holds its read open
 // for `HOLD_MS` and drops a marker file, and the second starts its write when it sees the marker.
-// Each case runs twice: with the lock the write survives, and with the lock swapped for a plain
-// call (`NO_LOCK=1`) the same schedule loses it — which is what shows the schedule races at all.
+// Each case runs twice: with the lock the write survives, and with the lock held around the write
+// alone (`NO_LOCK=1`: the read-to-write span unlocked) the same schedule loses a count — which is
+// what shows the schedule races at all. The control still locks the write itself, so two writers
+// never share `recovery.json.tmp` (`fs-atomic.ts`), whose clash is a crash rather than a lost write.
 
 const HOLD_MS = 1_000;
 /** Each child's own bound. Import (~1 s), the barrier and one `HOLD_MS` fit well inside it. */
@@ -34,8 +36,14 @@ const [dir, role, id] = process.argv.slice(1);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const mark = (name) => writeFileSync(join(dir, name), "");
 const waitFor = async (name) => { while (!existsSync(join(dir, name))) await sleep(5); };
-const lock = process.env.NO_LOCK === "1" ? (_dir, body) => body() : withRecoveryLock;
-const store = { lock, read: state.readRecoveryState, write: state.writeRecoveryState };
+const writeOnly = process.env.NO_LOCK === "1";
+const store = {
+  lock: writeOnly ? (_dir, body) => body() : withRecoveryLock,
+  read: state.readRecoveryState,
+  write: writeOnly
+    ? (d, s) => withRecoveryLock(d, () => state.writeRecoveryState(d, s))
+    : state.writeRecoveryState,
+};
 const holdingRead = (marker) => ({
   ...store,
   read: async (d) => { const s = await state.readRecoveryState(d); mark(marker); await sleep(${HOLD_MS}); return s; },
@@ -67,7 +75,9 @@ switch (role) {
     break;
   }
   case "many": {
-    for (let i = 0; i < 25; i += 1) await state.updateRecoveryState(store, dir, count);
+    // A short hold between read and write, so the four processes' reads overlap when unlocked.
+    const briefly = { ...store, read: async (d) => { const s = await state.readRecoveryState(d); await sleep(10); return s; } };
+    for (let i = 0; i < 25; i += 1) await state.updateRecoveryState(briefly, dir, count);
     break;
   }
 }
@@ -197,9 +207,18 @@ describe("two starts racing on recovery.json", () => {
   it(
     "four starts counting 25 failures each lose none of the hundred",
     async () => {
-      const { final, outcomes } = await race(FRESH, ["many", "many", "many", "many"], false);
-      expect(outcomes.map((outcome) => outcome.stderr)).toEqual(["", "", "", ""]);
-      expect(final.failures).toBe(100);
+      const four = ["many", "many", "many", "many"];
+      const locked = await race(FRESH, four, false);
+      expect(locked.outcomes.map((outcome) => outcome.stderr)).toEqual(["", "", "", ""]);
+      expect(locked.final.failures).toBe(100);
+
+      // Every process finishes cleanly and the count still falls short: counts were lost, not
+      // processes.
+      const unlocked = await race(FRESH, four, true);
+      expect(finishedCleanly(unlocked.outcomes)).toEqual(
+        four.map(() => ({ code: 0, stdout: "done" })),
+      );
+      expect(unlocked.final.failures).toBeLessThan(100);
     },
     TEST_TIMEOUT_MS,
   );

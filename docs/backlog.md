@@ -5577,7 +5577,7 @@ series; the dashboard wizard. The image ships with backups OFF, deliberately.
 Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
 `modules.json`; the replacement's private `cloud-recovery.json` is outside that named capture set.
 The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
-`logs/`, the per-hardware `instance.env`, `recovery.json` and its lock file `recovery.lock`. Touches BR-2, BR-3 and the recovery
+`logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
 bundle. Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend` key path-traversal
 guard landed with BR-3's manifest-driven `get(key)`; a working-backup boot success-path integration
 test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a

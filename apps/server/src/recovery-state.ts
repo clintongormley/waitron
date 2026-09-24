@@ -113,6 +113,9 @@ function sameState(a: RecoveryState, b: RecoveryState): boolean {
  * If the file still holds exactly `wrote`, nothing else changed it since and `before` goes back
  * whole. Otherwise another process changed it — a clear by the running server, a failure another
  * start recorded — and only the one failure comes off.
+ *
+ * Taking one off can take off another start's: A counts, the server clears, C counts, A undoes
+ * (removing C's), and C's failure is then recorded with a count of 0 where 1 is right.
  */
 export function withoutAttempt(
   current: RecoveryState,

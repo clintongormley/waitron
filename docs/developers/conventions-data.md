@@ -1324,8 +1324,11 @@ retry) is one read and one write while holding `recovery.lock` in the state fold
 (`apps/server/src/recovery-lock.ts`). It is the same `begin immediate` technique, but it polls
 instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
 connection in one process with `busy_timeout = 1500` blocked for 4093 ms with a 50 ms timer firing 0
-times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`, whose
-real child processes lose a write in every case once the lock is removed.
+times. Never unlink `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`. Its three
+races run real child processes twice: with the lock, where no count is lost, and with the lock held
+around the write alone, where the test requires that a count IS lost. That second run is what shows
+each schedule races at all. The lock around the write stays in it because two writers without one
+clash on `recovery.json.tmp` and crash, which is not the failure being tested.
 
 **What the guard does not see.** `packages/store/src/venue-lock.test.ts` proves the lock itself. It
 does not prove that every caller that should take the lock does: a new caller passing `exclusive:

@@ -262,9 +262,9 @@ const DEFAULT_EXIT = (code: number): void => process.exit(code);
 /* v8 ignore stop */
 
 /**
- * One change to `recovery.json`, read and written under the recovery lock, so a clear the running
- * server makes and a failure another start records are never overwritten by a count read before
- * them.
+ * One change to `recovery.json`, read and written under the recovery lock, so no change is computed
+ * from a count read before another process wrote. The lock orders the writes; it does not make
+ * every sequence count right (`withoutAttempt` states the case it gets wrong).
  */
 function changeState(
   deps: EntryDeps,
@@ -560,8 +560,10 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
  * missing or unreadable file counts, so a folder held by something stuck reaches the page.
  *
  * Missing counts because the holder writes its file in the same synchronous step that takes the
- * lock (`packages/store/src/venue-lock.ts`): a live holder without one is a start refused within
- * that instant, or a process of an image from before the file existed.
+ * lock, and removes it just before letting the lock go (`packages/store/src/venue-lock.ts`). A live
+ * holder without one is therefore a start refused within the instant of the take, a start refused
+ * within the instant of the release (which counts once), or a process of an image from before the
+ * file existed.
  *
  * Stale here is `VENUE_HOLDER_STALE_MS`, 30 s, while the holder's own watchdog kills it only after
  * `WATCHDOG_KILL_MS`, 120 s (`packages/store/src/venue-liveness.ts`). The gap is deliberate: a long
