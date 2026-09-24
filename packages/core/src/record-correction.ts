@@ -41,7 +41,7 @@ export interface RecordCorrectionInput {
   correctsSaleId: SaleId;
   /**
    * The corrective invoice's own, already-signed total: negative for a reversal, which
-   * `sales_total_ck` allows only because `corrects_sale_id` is set. Filed verbatim.
+   * `sales_total_ck` allows only because `corrects_sale_id` is set.
    */
   total: string;
   /** The already-signed delta lines (negative for a reversal). Same shape as an ordinary sale's. */
