@@ -394,7 +394,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `UNIQUE constraint failed: <table>.<column>`, errcode 2067. Replacing the set — delete then
   insert — needs the `REFERENCES` grep first: nothing outside the table may hold a key into it. The
   writers are already serialised: one write transaction at a time per file, because
-  `withTransaction` IS `withWriteLock` (`packages/db/src/tenancy.ts:44`). See
+  `withTransaction` IS `withWriteLock` (`packages/db/src/tenancy.ts`). See
   [conventions-data.md](docs/developers/conventions-data.md).
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
