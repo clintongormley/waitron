@@ -5,12 +5,8 @@ import { FISCAL_CLASSIFICATION } from "./classification.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
-// The generated DDL quotes table names with BACKTICKS, not double quotes: drizzle-kit's sqlite
-// dialect emits ``CREATE TABLE `acks` (`` (drizzle/0000_baseline.sql:1). The double-quote-only
-// pattern this replaced matched zero tables there, which made the "created minus classified"
-// assertion below pass against an empty set — hence the explicit non-empty assertion.
-// Both quoting characters are accepted here so the extraction does not go silently empty again
-// if the emitted spelling changes.
+// drizzle-kit's sqlite dialect quotes table names with backticks; both quote characters are
+// accepted so the extraction does not go silently empty if the emitted spelling changes.
 function tablesInDrizzle(): string[] {
   const names: string[] = [];
   for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {

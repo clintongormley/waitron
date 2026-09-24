@@ -14,29 +14,10 @@ import { currentSif, esPrimerRegistro, registerSif, writeReservedSif } from "./r
 import { registroSif } from "./schema/sif.js";
 import { TENANT_A, TENANT_B, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
 
-// ONE database for the suite, emptied by the helper after every test.
-//
-// The requirement is the one this suite always had and is unchanged: the counter under test is
+// ONE database for the suite, emptied by the helper after every test. The counter under test is
 // monotonic and never resets, so a case that shares another case's counter makes every assertion
-// about "strictly greater" depend on execution order. Until the storage switch this suite met it by
-// opening a database per test and said in this comment that it therefore could not use
-// `useVenueDb`. That is no longer true, and the reason is the helper's body rather than an opinion
-// about it: `useVenueDb`'s per-test reset deletes every data table
-// (packages/db/src/testing/venue-db.ts's `buildResetPlan`), and the counter is an ordinary data
-// table — `contadores_instalacion`, ./schema/sif.ts.
-//
-// Two control runs, both `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-// src/registro-sif.test.ts`. With the reset on: 16 passed. With `resetPerTest: false` added below:
-// 15 failed | 1 passed, first error `UNIQUE constraint failed: locations.id` — the per-test
-// `seedTenants` re-inserting rows the reset would have taken away. Then the same run with that one
-// collision swallowed, so accumulated ROWS are the only difference left: 6 failed | 10 passed,
-// among them `revokes the previous registration rather than updating it` reading nine
-// `registro_sif` rows where it asserts two.
-//
-// What neither control shows, stated so nobody reads more into them: the first case's
-// `numeroInstalacion` 1 passes in all three runs, because it runs first and nothing has used the
-// counter yet. Order-independence is what the reset buys, and an order-dependent pass is exactly
-// what would not announce itself.
+// about "strictly greater" depend on execution order; the per-test reset empties
+// `contadores_instalacion` with every other data table.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
@@ -47,18 +28,9 @@ const SIF_PARAMS = {
 } as const;
 
 /**
- * The key `registro_sif_instalacion_uq` declares, in its own column order (./schema/sif.ts).
- *
- * SQLite reports no SQLSTATE — every failure carries `code: "ERR_SQLITE_ERROR"` and the
- * discriminating value is a numeric `errcode` (packages/db/src/sql-state.ts) — so the two cases
- * below ask `refusalOn`, which matches the class AND the table and columns the engine's own
- * message named, on one layer of the cause chain.
- *
- * Matching the columns is narrower than the class alone, which says only "some unique index or
+ * The key `registro_sif_instalacion_uq` declares, in its own column order (./schema/sif.ts). The
+ * two cases below match it with `refusalOn`: the class alone says only "some unique index or
  * primary key".
- * Control: with the key's `numero_instalacion` entry removed, the same run reports
- * `2 failed | 14 passed` and the two failures are exactly the two cases below, so the columns are
- * being matched rather than ignored.
  */
 const INSTALACION_KEY = {
   table: "registro_sif",
@@ -183,9 +155,7 @@ describe("writeReservedSif", () => {
   it("refuses an IdSistemaInformatico longer than two characters, before writing anything", async () => {
     // The bound is applied by the PRIMITIVE, not only by its callers: `registro_sif` carries no
     // CHECK on the column, so a caller reaching writeReservedSif directly with an unusable id must
-    // still be refused. Negative control run: with `assertUsableIdSistema` deleted from
-    // writeReservedSif the call returns an inserted `{ id }` instead of throwing, and this fails at
-    // the `toBeInstanceOf(AppError)` line.
+    // still be refused.
     const err = await withTransaction(db, (tx) =>
       writeReservedSif(tx, {
         ...SIF_PARAMS,
@@ -206,7 +176,7 @@ describe("writeReservedSif", () => {
 
 describe("re-registration begins a new chain", () => {
   it("does not continue the old chain", async () => {
-    // A new NúmeroInstalación is a NEW SIF IDENTITY, therefore a new chain (findings §1). Chains
+    // A new NúmeroInstalación is a NEW SIF IDENTITY, therefore a new chain. Chains
     // cannot be merged or migrated: the old one ends, a new one begins.
     const first = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
@@ -316,12 +286,8 @@ describe("the database, not the application, is what forbids a duplicate", () =>
     // one layer of the error, and compares the columns as a key rather than as message text
     // (packages/db/src/constraint-target.ts).
     //
-    // Written through the table definition rather than as raw SQL. It still bypasses the allocator,
-    // which is the point of the case, and it reaches the client-side column defaults a raw
-    // statement does not. Both halves measured, by putting the raw statement back and reading the
-    // error: unchanged, it fails with `no such function: now`; with `now()` replaced by an ISO
-    // string it fails with `NOT NULL constraint failed: registro_sif.id`. The inserted VALUES are
-    // the original ones, `revocado_en` included — a stamped `Date` in place of `now()`.
+    // Written through the table definition rather than as raw SQL: it still bypasses the
+    // allocator, and it reaches the client-side column defaults a raw statement does not.
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
@@ -339,8 +305,7 @@ describe("the database, not the application, is what forbids a duplicate", () =>
 
   it("rejects a duplicate installation identity raised under a different NIF's node", async () => {
     // The unique installation identity is (NIF, IdSIF, number) and nothing else. Through the table
-    // definition for the reason the case above measured; every inserted value is unchanged,
-    // `revocado_en` still left unset.
+    // definition, as above.
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );

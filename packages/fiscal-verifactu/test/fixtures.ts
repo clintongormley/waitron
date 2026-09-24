@@ -22,20 +22,7 @@ import type { Entorno } from "../src/registro-row.js";
 
 /**
  * Every row here is written through its TABLE DEFINITION rather than as raw SQL, so each column's
- * own generator runs: `tenants.created_at`, `tills.created_at`, `nodes.created_at`,
- * `registro_sif.registrado_en` and `registros_facturacion.creado_en` are `$defaultFn` values on
- * this engine, and `locations.id` / `tills.id` / `nodes.id` / `invoice_series.id` / `sales.id` /
- * `registros_facturacion.id` likewise. A raw statement reaches none of them — measured here as
- * `NOT NULL constraint failed: tenants.created_at`. The table definition is also what encodes the
- * JSON and list columns, whose `::jsonb` casts and `array[...]` constructors were PostgreSQL
- * syntax this engine refuses. Same change, and the same reason, as
- * `apps/server/src/testing/fiscal-fixtures.ts`.
- *
- * Every seeded VALUE is unchanged by that rewrite, with one spelling exception stated where it
- * happens: `registros_facturacion.fecha_hora_huso_gen_registro` is a `ts` column, so the instant
- * goes in as a `Date` and is stored in its UTC `toISOString()` form instead of the `+01:00`
- * literal — the same instant, and the same one PostgreSQL's `timestamptz` stored. The offset
- * itself is carried by `offset_minutos`, which is untouched.
+ * own `$defaultFn` generator runs and the JSON and list columns are encoded.
  */
 
 /** The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. */
@@ -43,20 +30,10 @@ const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
 /**
  * Fixed ids for one venue's till/SIF-identity/sale, reused across `inmutabilidad.test.ts`'s
- * separate `it` blocks. Literal UUIDs, matching this repo's convention elsewhere (e.g.
- * `packages/db/src/immutability.test.ts`), so a failing assertion's id is recognisable rather
- * than a freshly-random one printed once and never seen again. The `A`/`B` namespaces are kept as
- * two NIFs, two nodes and two tills of one taxpayer — the counter tests need distinct SIF
- * identities, never distinct tenants.
- *
- * `tillId`/`tillId2` are branded via `tillId()` (Task 13's addition) rather than left as plain
- * string literals: `registerSif`/`currentSif`/`esPrimerRegistro` (../src/registro-sif.ts) take
- * `TillId`, and a plain `string` — even a `const`-literal one — is not assignable to a branded type
- * (see packages/shared/src/ids.ts's own design note on why: a string-keyed brand is forgeable, so
- * the brand is a `unique symbol` no literal can produce). `locationId`/`seriesId`/`saleId`/`sifId`
- * stay plain strings: nothing in this package takes a branded
- * `LocationId`/`SeriesId`/`SaleId`/`FiscalRecordId`, so branding them would be decoration with no
- * consumer.
+ * separate `it` blocks. Literal UUIDs, so a failing assertion's id is recognisable rather than a
+ * freshly-random one printed once and never seen again. The `A`/`B` namespaces are kept as two
+ * NIFs, two nodes and two tills of one taxpayer — the counter tests need distinct SIF identities,
+ * never distinct tenants.
  */
 export const TENANT_A = {
   locationId: "a0000000-0000-4000-8000-000000000002",
@@ -64,21 +41,17 @@ export const TENANT_A = {
   seriesId: "a0000000-0000-4000-8000-000000000004",
   saleId: "a0000000-0000-4000-8000-000000000005",
   sifId: "a0000000-0000-4000-8000-000000000006",
-  // A second till of the SAME obligado, added for registro-sif.test.ts (Task 13): proving the
-  // installation-number counter is scoped to (NIF, IdSIF) rather than to a single till needs two
-  // tills sharing one NIF, and every other fixture in this file predates that requirement.
+  // A second till of the SAME obligado.
   tillId2: brandTillId("a0000000-0000-4000-8000-000000000007"),
-  // The SIF/chain/series owner (node-id rekey, 2026-08-03: #33). `nodeId2` is a second node of the
-  // SAME obligado, the node-keyed counterpart of `tillId2` — proving the installation-number counter
-  // is per (NIF, IdSIF), not per node.
+  // The SIF/chain/series owner. `nodeId2` is a second node of the SAME obligado — proving the
+  // installation-number counter is per (NIF, IdSIF), not per node.
   nodeId: brandNodeId("a0000000-0000-4000-8000-000000000008"),
   nodeId2: brandNodeId("a0000000-0000-4000-8000-000000000009"),
 };
 
 /**
- * A second NIF — added for registro-sif.test.ts (Task 13), which needs to prove
- * `contadores_instalacion`'s counter is keyed by (NIF, IdSIF) rather than shared across every
- * identity. Distinct id namespace (`b0000000...`) purely so a failing assertion's id is
+ * A second NIF, to prove `contadores_instalacion`'s counter is keyed by (NIF, IdSIF) rather than
+ * shared across every identity. Distinct id namespace (`b0000000...`) purely so a failing assertion's id is
  * recognisably "the other NIF's node" rather than a misprinted TENANT_A id.
  */
 export const TENANT_B = {
@@ -89,8 +62,7 @@ export const TENANT_B = {
 
 /**
  * Seed the foreign-key parents needed by insertRegistro: the taxpayer row, location, till, node,
- * invoice series, sale and SIF identity. Use the fixture owner's table privileges.
- * The zero-total sale remains unsettled; settlement coverage is checked on settlement.
+ * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement coverage is checked on settlement.
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
   await db
@@ -137,7 +109,7 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
 }
 
 /**
- * Seeds the parents registro-sif.test.ts (Task 13) needs: the taxpayer row, and three nodes across
+ * Seeds the parents registro-sif.test.ts needs: the taxpayer row, and three nodes across
  * two locations — `TENANT_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
  * installation-number counter is per (NIF, IdSIF), not per node) and `TENANT_B.nodeId` (a node
  * registering under a DIFFERENT NIF, proving the counter is not shared across identities either).
@@ -145,8 +117,7 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  * Deliberately narrower than `seedTenantTillSif` above: no invoice series, no sale, no
  * pre-existing `registro_sif` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
- * even runs. The SIF is the node (node-id rekey, 2026-08-03), so `registerSif` keys on these nodes.
- * The tills are kept so the sale-ringing snapshot has a real till to reference.
+ * even runs. The SIF is the node, so `registerSif` keys on these nodes. The tills are kept so the sale-ringing snapshot has a real till to reference.
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db
@@ -179,10 +150,10 @@ export async function seedTenants(db: Database): Promise<void> {
  *
  * Not a bare `update cadenas set ultima_huella = ...`, even though that would be enough to make
  * `esPrimerRegistro` observe a non-empty chain. `cadenas_puntero_ck`
- * (packages/fiscal-verifactu/src/schema/cadenas.ts, Task 12) requires `ultimo_registro_id` and
+ * (packages/fiscal-verifactu/src/schema/cadenas.ts) requires `ultimo_registro_id` and
  * `ultima_huella` to be BOTH null or BOTH set, so giving the chain head a huella without a real
- * row for `ultimo_registro_id`'s foreign key to point at is rejected by the database outright —
- * confirmed live in this task's red phase. The fabricated `invoice_series` and `sales` rows exist
+ * row for `ultimo_registro_id`'s foreign key to point at is rejected by the database outright. The
+ * fabricated `invoice_series` and `sales` rows exist
  * only to satisfy `registros_facturacion`'s own foreign keys; nothing about their content is
  * asserted on anywhere.
  */
@@ -195,14 +166,7 @@ export async function seedSoldRegistro(
     nif: string;
     secuencia: number;
     huella: string;
-    /**
-     * Deployment-environment plan, Task 6: defaults to `"production"` so `registro-sif.test.ts`'s
-     * existing calls (neither of which mentions this field) keep stamping a non-null, agreeing
-     * `entorno` now that `drain.ts` refuses a NULL/mismatched one — mirroring
-     * `test/drain-fixtures.ts`'s identical `seedPendingEnvios`/`DEFAULT_ENTORNO` precedent.
-     * Neither existing caller ever runs `drain()` over a row this fixture seeds, so the default
-     * is inert for them today; it exists so a FUTURE caller that does isn't silently refused.
-     */
+    /** Defaults to `"production"`: `drain.ts` refuses a row whose `entorno` is NULL or disagrees. */
     entorno?: Entorno | null;
   },
 ): Promise<void> {
@@ -267,8 +231,7 @@ export interface SeededTillWithSif {
 
 // Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
 // counter across its whole run, which is what keeps each call's SIF identity collision-free in
-// `registro_sif_instalacion_uq` — the identical convention `../src/testing/seed.ts`'s own `freshNif`
-// and `packages/core/test/fixtures.ts`'s `freshNif` already use.
+// `registro_sif_instalacion_uq`.
 let nifSequence = 0;
 
 function freshNif(): string {
@@ -306,36 +269,24 @@ async function insertLocationTillSeries(
 
 /**
  * Seeds location -> till -> invoice series, makes sure the one taxpayer row exists, and registers a
- * LIVE Veri*Factu SIF identity for that till (via `registerSif`, Task 13) — everything
- * `write-path.e2e.test.ts` needs for `VerifactuBackend.recordSale`'s own `currentSif` lookup to
+ * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for `VerifactuBackend.recordSale`'s own `currentSif` lookup to
  * succeed. `seedTenantTillSif` above is deliberately not reused for this: it seeds a
  * ready-made SALE too (for `inmutabilidad.test.ts`'s own fixed ids), which would collide with
  * `write-path.e2e.test.ts`'s own first allocated invoice number.
  *
- * Each call mints its OWN fresh NIF and its own node so the write-path suite's `beforeEach` can
- * reseed on every test without ever truncating `registros_facturacion`'s append-only,
- * TRUNCATE-blocking table — the identical reasoning `../src/testing/seed.ts`'s `seedTill` doc
- * comment already gives for the same shape.
- *
- * `options.nif` overrides that minting. The minted NIF comes from a module-level counter
+ * Each call mints its OWN fresh NIF and its own node; `options.nif` overrides that minting. The minted NIF comes from a module-level counter
  * (`freshNif` above), so which one a test gets is decided by how many `seedTenantWithSif` calls ran
  * before it in the same file. The NIF is a HASHED field (`IDEmisorFactura`,
  * hashed by `@waitron/verifactu`), so a test that asserts a recorded huella literal would
- * otherwise break whenever a test is added or removed ABOVE it. Measured: the same basket filed
- * 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K` and to `A1AF497F…`
- * standalone under `20000001K`; pinning the NIF made both positions agree. Pass a value no other
- * test in the same file will mint — the counter starts at `20000001K` and climbs.
+ * otherwise break whenever a test is added or removed ABOVE it. Pass a value no other test in the
+ * same file will mint — the counter starts at `20000001K` and climbs.
  *
- * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below is `where not exists`, so in a file
- * whose earlier tests have already seeded, the override reaches `registerSif` alone and the
- * `tenants` row keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella
- * because the hashed `IDEmisorFactura` is read from the SIF registration, not from `tenants`:
- * `VerifactuBackend.recordSale` sets it from `currentSif(tx, nodeId).nif`
- * (`../src/backend.ts`, `../src/registro-sif.ts`). The only tenant value that reaches a record at all
- * is the legal name — `taxpayer` in `../src/backend.ts` hands its callers nothing else — and the
- * legal name is not among the eight fields `buildCadenaAlta` hashes
- * (in `@waitron/verifactu`). A test that needs `tenants.tax_id` itself to match must
- * seed before anything else does.
+ * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below does nothing when the row already
+ * exists, so after an earlier seed the override reaches `registerSif` alone and the `tenants` row
+ * keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella because the
+ * hashed `IDEmisorFactura` is read from the SIF registration (`currentSif(tx, nodeId).nif`), not
+ * from `tenants`. A test that needs `tenants.tax_id` itself to match must seed before anything
+ * else does.
  */
 export async function seedTenantWithSif(
   db: Database,
@@ -343,21 +294,17 @@ export async function seedTenantWithSif(
 ): Promise<SeededTillWithSif> {
   const nif = options.nif ?? freshNif();
   return db.transaction(async (tx) => {
-    // `onConflictDoNothing` on the primary key, where this statement used to be
-    // `... where not exists (select 1 from tenants)`. The two select the same rows here: `id` is
-    // pinned to 1 by `tenants_singleton_ck` (`packages/db/src/schema/tenants.ts`), so "the table
-    // is empty" and "no row holds id 1" cannot disagree. The target is named rather than left
-    // bare so a `tenants_country_tax_id_key` collision — a DIFFERENT cause — still raises.
+    // The target is named rather than left bare so a `tenants_country_tax_id_key` collision — a
+    // DIFFERENT cause — still raises.
     await tx
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
       .onConflictDoNothing({ target: tenants.id });
     const { tillId, nodeId, seriesId } = await insertLocationTillSeries(tx);
     await registerSif(tx, { nodeId, nif, idSistemaInformatico: "WT" });
-    // No `working_orders` row and no `workingOrderId`: `recordSale` now WRITES
-    // `input.workingOrderId` to `sales.working_order_id`, a real FK onto `working_orders`
-    // (sub-project 7b). A fabricated id would FK-violate on the insert, so this fixture mints none —
-    // the write-path suites here record walk-up sales that omit it, and the column inserts NULL.
+    // No `working_orders` row and no `workingOrderId`: `recordSale` writes `input.workingOrderId`
+    // to `sales.working_order_id`, a real FK onto `working_orders`, so the write-path suites here
+    // record walk-up sales that omit it.
     return { tillId, nodeId, seriesId };
   });
 }

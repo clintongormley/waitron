@@ -1,7 +1,4 @@
-// Side-effect import registering this package's own `fiscal.correction_unsupported` code (thrown
-// by `recordCorrection` below) on the shared registry — the convention every file that throws a
-// local code follows (./chain.ts, ./registro-sif.ts). `fiscal.sale_not_recorded`, also thrown
-// here, is `@waitron/fiscal`'s and arrives with its types.
+// Registers this package's own error codes on the shared registry.
 import "./errors.js";
 import { sql } from "drizzle-orm";
 import { readTenant, withTransaction } from "@waitron/db";
@@ -52,14 +49,10 @@ const BACKEND_ID = "verifactu";
  * are per-(NIF, node) facts already minted by `registerSif` and read back from `registro_sif` via
  * `currentSif`, never configuration.
  *
- * **Unverified, matching this repo's own convention for a claim with no cited primary source**
- * (see `packages/db/src/schema/series.ts`'s identical `invoice_series.purpose` caveat, "asesor
- * Q5(b)"): `tipoUsoPosibleSoloVerifactu`/`tipoUsoPosibleMultiOT`/`indicadorMultiplesOT` describe
- * how this specific product may be used under Veri*Factu — whether it is Veri*Factu-only capable,
- * whether it can serve multiple obligados, and whether it currently does. The defaults below are
- * a plausible starting point for a one-taxpayer-per-installation POS, not a value taken from a
- * primary source, and are overridable via `VerifactuBackendOptions.systemInfo` for exactly that
- * reason.
+ * **Unverified**: `tipoUsoPosibleSoloVerifactu`/`tipoUsoPosibleMultiOT`/`indicadorMultiplesOT`
+ * describe how this product may be used under Veri*Factu. The defaults below are a plausible
+ * starting point for a one-taxpayer-per-installation POS, not a value taken from a primary source,
+ * and are overridable via `VerifactuBackendOptions.systemInfo` for exactly that reason.
  */
 interface SystemInfoDefaults {
   nombreSistemaInformatico: string;
@@ -79,64 +72,37 @@ const DEFAULT_SYSTEM_INFO: SystemInfoDefaults = {
 
 export interface VerifactuBackendOptions {
   /**
-   * Used ONLY by `pendingCount` and `recordVoid` — never by `recordSale`, which is handed
-   * `issuedAt`/`offsetMinutes` by its caller instead and must not read the clock a second time
-   * (see `record-sale.ts`'s own "one clock reading for the whole transaction" note in
-   * `packages/core`). `recordVoid` has no caller-supplied timestamp on its signature at all
-   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(
-   * nodeId)` takes no transaction at all, so it needs its OWN `db` handle below rather than one a
-   * caller passes in.
+   * Used ONLY by `pendingCount` and `recordVoid`. `recordSale` is handed its caller's instant and
+   * must not read the clock a second time.
    */
   clock: TrustedClock;
   /** The connection `pendingCount` queries against — the one `FiscalBackend` method with no `tx`
    * parameter at all, so it cannot participate in a caller's transaction. */
   db: Database;
   /**
-   * The AEAT transport. Accepted so the composition root's construction shape is stable,
-   * but NOT consumed by this class: nothing on the sale path contacts AEAT (spec §4). The submission
-   * pass and the reconciliation sweep are the standalone `drain`/`reconcile` functions
-   * (`./drain.ts`/`./reconcile.ts`), reached through the `FISCAL_SLOT` seats, each taking its own
-   * `DrainDeps`/`ReconcileDeps` resolver — see `DrainDeps.resolveClient`.
+   * Accepted but NOT consumed by this class: nothing on the sale path contacts AEAT. Submission is
+   * the standalone `drain` (`./drain.ts`).
    */
   resolveClient: () => Promise<VerifactuClient>;
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
   /**
-   * Which DEPLOYMENT this backend is generating registros for — `Entorno` (`./registro-row.ts`),
-   * not this option's namesake above and not `apps/server`'s `DeploymentEnvironment` type: this
-   * package never imports from `apps/server`, and the two options answer unrelated questions that
-   * only coincidentally share a value space (`"production"` | `"preproduction"`). `environment`
-   * above picks a QR validation HOST; this one is stamped onto every registro's own `entorno`
-   * column (`./registro-row.ts`'s `RegistroRowContext.entorno`) so `drain` (Task 6) can refuse to
-   * submit a record generated for the other deployment. REQUIRED, unlike `environment`: defaulting
-   * a value that gates fiscal submission would silently mis-stamp every registro from a host that
-   * forgot to set it, rather than failing the build. Typed as the union rather than a bare
-   * `string` so an unrepresentable value (`""`, `"staging"`, a stray `process.env.NODE_ENV`) is a
-   * `tsc` error here, not a `registros_entorno_ck` violation discovered only once `recordSale` has
-   * already opened the sale's own transaction — spec §4 forbids blocking a sale on anything but
-   * the sale itself.
+   * Which DEPLOYMENT this backend is generating registros for, stamped onto every registro's own
+   * `entorno` so `drain` can refuse to submit a record generated for the other deployment. Not the
+   * `environment` above, which picks a QR validation host. REQUIRED: a default would silently
+   * mis-stamp every registro from a host that forgot to set it.
    */
   deploymentEnvironment: Entorno;
   /** Overrides for this installation's software-identity claims. See `SystemInfoDefaults`'s own
    * doc comment for why these are configuration rather than hardcoded constants. */
   systemInfo?: Partial<SystemInfoDefaults>;
-  /**
-   * Accepted for construction-shape stability but NOT consumed by this class: the skip-retry cadence
-   * belongs to the standalone `drain` (`DrainDeps.skipRetryMs`, required there), which the
-   * `FISCAL_SLOT.drain` seat calls directly. This class no longer runs `drain`.
-   */
+  /** Accepted but NOT consumed by this class: the skip-retry cadence belongs to the standalone
+   * `drain` (`DrainDeps.skipRetryMs`). */
   skipRetryMs?: number;
 }
 
-/**
- * `NumSerieFactura`-shaped predecessor pointer, in reverse: the columns of the alta this task's
- * `recordVoid` is voiding — read via a raw `select *` (this file's own convention, mirrored from
- * `./chain.ts`/`./verify.ts`) rather than Drizzle's typed `.select()`, because `RegistroRow`'s
- * snake_case shape is what every OTHER raw-execute call site in this package already produces and
- * consumes, and mixing the two shapes for one table would invite exactly the drift `./registro-row.ts`'s
- * own doc comment on `RegistroRow` warns about.
- */
+/** The columns `recordVoid` reads off the alta it voids. */
 type OriginalAlta = Pick<
   RegistroRow,
   "till_id" | "node_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
@@ -155,20 +121,9 @@ type OriginalAltaForCorrection = Pick<
 >;
 
 /**
- * The real Veri*Factu `FiscalBackend`. Wires the pieces Tasks 12-15 already built —
- * `registerSif`/`currentSif`, `appendToChain` (which itself calls `readChainHead`/`verifyChain`'s
- * own row lock), `toRegistroRow`'s hashing via `@waitron/verifactu`'s `buildAltaRecord`, and the
- * `envios` sidecar — into the interface `packages/core`'s `recordSale` (spec §4 steps 1-7) calls
- * through.
- *
- * `recordSale` is this task's own graded surface: it builds the registro, computes the huella
- * (inside `appendToChain` → `buildAltaRecord`), inserts it, advances the chain head, and inserts
- * the `envios` sidecar row as `pendiente` — proven end to end against real tables by
- * `./write-path.e2e.test.ts`, which is the one thing a fake cannot demonstrate at all.
- * `registerNode`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the interface (TypeScript
- * requires every one of them) but are secondary to that deliverable; see each method's own doc
- * comment for what it does and does not cover, and this task's report for what remains unverified
- * about them.
+ * The real Veri*Factu `FiscalBackend`. Every record method builds its registro through
+ * `appendToChain`, which computes the huella and advances the chain head, then inserts a
+ * `pendiente` `envios` row — all on the caller's transaction. Nothing here contacts AEAT.
  */
 export class VerifactuBackend implements FiscalBackend {
   readonly id = BACKEND_ID;
@@ -188,17 +143,10 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Confirms — rather than performs — a node's Veri*Factu provisioning (node-id rekey, 2026-08-03:
-   * the SIF is the node, #33).
-   *
-   * The generic `FiscalBackend.registerNode(tx, nodeId)` signature carries no NIF and no
-   * `IdSistemaInformatico`, so it cannot mint a NEW SIF identity: `registerSif`
-   * (`./registro-sif.ts`) genuinely needs both, and both are regime-specific provisioning
-   * inputs the generic interface has no room for. `registerSif`'s own doc comment already frames
-   * first-time (and re-)registration as a rare, sequential, admin-only action performed once,
-   * outside the ordinary sale flow — so this method reads back whatever `registerSif` already
-   * established via `currentSif`, and reports `sif.not_registered` (thrown by `currentSif`
-   * itself) exactly like any other caller that reaches a node with no live SIF identity.
+   * Confirms — rather than performs — a node's Veri*Factu provisioning. The generic signature
+   * carries no NIF and no `IdSistemaInformatico`, so it cannot mint a SIF identity; it reads back
+   * what `registerSif` (`./registro-sif.ts`) established, and `currentSif` throws
+   * `sif.not_registered` when there is none.
    */
   async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     const sif = await currentSif(tx, nodeId);
@@ -211,15 +159,12 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Spec §4 steps 5-6: builds the registro via `appendToChain` (which calls
-   * `@waitron/verifactu`'s `buildAltaRecord`/`computeHuella` under the chain-head lock), inserts
-   * it, advances the chain head, and inserts the `envios` sidecar row as `pendiente`. All on the
-   * caller's own transaction — this is the atomicity `packages/core`'s `recordSale` depends on.
+   * Builds the registro via `appendToChain`, inserts it, advances the chain head, and inserts the
+   * `envios` row as `pendiente`, all on the caller's own transaction — the atomicity
+   * `packages/core`'s `recordSale` depends on.
    *
-   * Reads NO clock of its own: `sale.issuedAt`/`sale.offsetMinutes` are the SAME reading the
-   * caller already took for the sale row, and reusing them here (rather than calling
-   * `this.clock.now()` again) is what keeps the sale and its fiscal record stamped with one
-   * instant for one event.
+   * Reads NO clock of its own: `sale.issuedAt`/`sale.offsetMinutes` are the reading the caller
+   * took for the sale row, so the sale and its fiscal record carry one instant.
    */
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
     const sif = await currentSif(tx, sale.nodeId);
@@ -230,23 +175,14 @@ export class VerifactuBackend implements FiscalBackend {
       TipoImpositivo: line.rate,
       CuotaRepercutida: line.tax,
       // "S1" — sujeta y no exenta, sin inversión del sujeto pasivo: the ordinary domestic retail
-      // sale. `VatBreakdownLine`'s `surchargeRate`/`surcharge` (recargo de equivalencia) are not
-      // populated by `packages/core` in this task, so every entry takes the same, most common
-      // qualification. A future task billing an exempt or reverse-charge operation supplies a
-      // real `CalificacionOperacion`/`OperacionExenta` here instead.
+      // sale. No exempt, reverse-charge or recargo de equivalencia line is filed today.
       CalificacionOperacion: "S1",
     }));
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
-    // An F1 (factura completa) must name its recipient, and an F2 must NOT carry one — so this
-    // block is filled in when `TipoFactura` below resolves to "F1" AND the recipient is Spanish,
-    // named by NIF. A foreign recipient is the deliberate exception, and `buildDestinatarios` is
-    // where that one decision lives: it refuses with `fiscal.foreign_recipient_unsupported` rather
-    // than guessing which AEAT identifier type a non-resident takes. Called with no country test of
-    // its own here on purpose — refusing by leaving the block unset would encode the same decision
-    // a second time, and would make "we do not support foreign customers yet" indistinguishable
-    // from "we built an F1 with no recipient at all". The chain's own record validation stays
-    // behind it as the backstop.
+    // An F1 must name its recipient and an F2 must NOT carry one. `buildDestinatarios` is the one
+    // place that refuses a foreign recipient; no country test is repeated here, so "foreign
+    // customers are not supported yet" never reads as "an F1 with no recipient".
     const destinatarios =
       sale.counterparty !== null ? this.buildDestinatarios(sale.counterparty) : undefined;
 
@@ -256,10 +192,8 @@ export class VerifactuBackend implements FiscalBackend {
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: tenant.legalName,
       // "F2" (factura simplificada) when no recipient is named, "F1" (factura completa) when one
-      // is. `packages/core` is the only production caller of this method and hardcodes
-      // `counterparty: null` (`record-sale.ts`, in its own comment on that field), so every sale
-      // filed through it today is an F2; the F1 arm is live, tested code awaiting the B2B caller
-      // that supplies a recipient.
+      // is. `packages/core`'s `record-sale.ts` passes `counterparty: null`, so every sale it files
+      // today is an F2.
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
       Destinatarios: destinatarios,
       DescripcionOperacion: sale.descriptionOfOperation,
@@ -284,9 +218,7 @@ export class VerifactuBackend implements FiscalBackend {
       sif,
     );
 
-    // Step 6. `pendiente`, `intentos: 0`, `csv: null` are every one of this column's own
-    // defaults (`./schema/envios.ts`) — nothing here has been sent anywhere, which is the whole
-    // point of a write path that must never contact AEAT.
+    // Every column's default: `pendiente`, nothing sent.
     await tx.insert(envios).values({ registroId: appended.id });
 
     return {
@@ -300,14 +232,8 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Rebuilds the just-inserted registro from its OWN stored columns and derives the QR payload
-   * from it — never from the in-memory values this method already had lying around. Rendering the
-   * receipt is out of scope; the point proved here (and by
-   * `write-path.e2e.test.ts`'s identical "makes the QR payload derivable from the stored record")
-   * is that the payload is reachable from what was PERSISTED, which is what survives a reprint
-   * after this call's own stack frame is long gone. `appendToChain` returns only `{ id, secuencia,
-   * huella }`, not the full built record, so this is a second, small round trip rather than a
-   * change to that shared return shape.
+   * Derives the QR payload from the registro's own STORED columns, never from in-memory values, so
+   * a reprint derives the same payload from what was persisted.
    */
   private async qrPayloadFor(tx: Transaction, registroId: string): Promise<string> {
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
@@ -321,8 +247,7 @@ export class VerifactuBackend implements FiscalBackend {
       throw new Error(`VerifactuBackend: no registro found for ${registroId}`);
     }
     /* v8 ignore stop */
-    // Safe cast: this method is only ever called with the id of a record THIS class just
-    // inserted via the "alta" arm of `appendToChain`, never an anulación.
+    // Only ever called with the id of an alta this class just inserted.
     return buildQrPayload(
       fromRegistroRow(decodeRegistroRow<RegistroRow>(row)) as RegistroAlta,
       this.environment,
@@ -344,22 +269,11 @@ export class VerifactuBackend implements FiscalBackend {
     }
     const row = decodeRegistroRow<RegistroRow>(raw);
 
-    // Rebuild the alta from its OWN stored columns and derive the QR from it — the identical derivation
-    // `qrPayloadFor` performs (and `recordSale` used at filing time). The `as RegistroAlta` cast is
-    // safe for the same reason `qrPayloadFor`'s is: the `tipo_registro = 'alta'` filter selects only
-    // altas, never an anulación.
     const verificationUrl = buildQrPayload(fromRegistroRow(row) as RegistroAlta, this.environment);
 
-    // Invert `recordSale`'s own `sale.vatBreakdown` → `Desglose` mapping (backend.ts, the `desglose`
-    // built in `recordSale`/`recordCorrection`/`recordSubstitution`): `BaseImponibleOimporteNoSujeto`
-    // ← base, `TipoImpositivo` ← rate, `CuotaRepercutida` ← tax. Every alta this POS files is a taxed
-    // S1 line with all three populated (never an `OperacionExenta` line, which would omit
-    // rate/cuota) and carries no recargo de equivalencia, so the three fields are read back with a
-    // cast — the same `Desglose`/`TipoFactura` cast convention `fromRegistroRow` uses for values a
-    // real write-path invariant guarantees present — and no surcharge fields are inverted because
-    // none is ever filed. `row.desglose` is non-null on any alta (`tipo_registro = 'alta'` excludes
-    // the anulación NULL case), cast the same way `fromRegistroRow` casts it. A future task that files
-    // an exempt or recargo line extends this inversion beside the write side that produces it.
+    // Inverts the `vatBreakdown` → `Desglose` mapping the record methods write. Every alta filed
+    // today is an S1 line with base, rate and cuota present and no recargo, hence the casts; a
+    // future exempt or recargo line extends this beside the write side that produces it.
     const desglose = row.desglose as RegistroAlta["Desglose"];
     const vatBreakdown: VatBreakdownLine[] = desglose.map((detalle) => ({
       rate: decimal(detalle.TipoImpositivo as string),
@@ -374,20 +288,9 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  /**
-   * Voids a previously recorded sale by appending an anulación referencing its identity.
-   *
-   * Task 16 shipped this genuinely functional (never a stub — `FiscalBackend` requires it, and a
-   * stub would be a silent lie about what this class implements) but flagged one caveat on
-   * `FechaExpedicionFacturaAnulada`'s reconstruction below, resolved by Task 17 — see that field's
-   * own comment for the fix. Task 17 also drives this method from `packages/core`'s `recordVoid`
-   * and proves the interleaved-chain property end to end (`./void-path.e2e.test.ts`), so it now
-   * carries real test coverage of its own, in `backend.test.ts`'s `describe("recordVoid", ...)`.
-   */
+  /** Voids a previously recorded sale by appending an anulación referencing its identity. */
   async recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef> {
-    // `reason` is part of `FiscalBackend`'s public contract (a real backend may keep it as its
-    // own audit trail) but AEAT's `RegistroAnulacion` has no field for free text at all — kept as
-    // a parameter, unused, exactly like `FakeFiscalBackend.recordVoid`'s identical `_reason`.
+    // AEAT's `RegistroAnulacion` has no free-text field, so `reason` is not filed.
     void reason;
 
     const { rows } = await tx.execute<OriginalAlta>(sql`
@@ -401,8 +304,7 @@ export class VerifactuBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
 
-    // The anulación extends the ORIGINAL's chain, keyed by its node (node-id rekey, 2026-08-03),
-    // and inherits the original's `till_id` as its own informational snapshot.
+    // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its `till_id`.
     const tillId = original.till_id as TillId;
     const nodeId = original.node_id as NodeId;
     const sif = await currentSif(tx, nodeId);
@@ -412,31 +314,10 @@ export class VerifactuBackend implements FiscalBackend {
     const input: Omit<AnulacionInput, "Encadenamiento"> = {
       IDEmisorFacturaAnulada: original.id_emisor_factura,
       NumSerieFacturaAnulada: original.num_serie_factura,
-      // Task 16 review, Minor: reconstructs the ORIGINAL alta's calendar day EXACTLY, for any
-      // `now.offsetMinutes` — not merely "safe within a margin" (Task 16's own noon-UTC anchor,
-      // correct only up to ±12h; exercised only at +60 there). `fecha_expedicion_factura` is
-      // stored as a plain `date` (no time-of-day, no offset — the offset that produced it is gone
-      // the moment it is stored, the same fact `./registro-row.ts`'s own note on
-      // `RegistroRowContext.offsetMinutes` makes for the full timestamp columns), and
-      // `buildAnulacionRecord` re-renders whatever Date this field carries via
-      // `formatDate(date, offsetMinutes)`, which SHIFTS by `input.offsetMinutes` before reading
-      // the UTC calendar day back off.
-      //
-      // Carrying the ORIGINAL alta's own stored `offset_minutos` through instead (Task 16's own
-      // suggested fix) is not available here: `AnulacionInput.offsetMinutes`
-      // (`RecordInputBase` in `@waitron/verifactu`) is a SINGLE field shared with
-      // `FechaHoraHusoGenRegistro`'s own generation instant a few lines down, and it must be
-      // `now.offsetMinutes` for THAT field to be correct — a `@waitron/verifactu` type change
-      // this task does not make would be needed to carry a second, independent offset through.
-      //
-      // The fix instead cancels the shift algebraically, which needs no second offset at all:
-      // `shift(anchor, o).getTime() === anchor.getTime() + o * 60_000` (`@waitron/verifactu`), so anchoring
-      // at midnight UTC on the stored day MINUS that same product makes the shift land EXACTLY on
-      // midnight of that day again, regardless of `o`'s sign or magnitude (within `formatDate`'s
-      // own ±14:00 domain). This replaces "safe within ±12h" with "exact for any offset
-      // `formatDate` accepts" — proven at +13:00 and -13:00 in backend.test.ts, both of which
-      // roll the calendar day under Task 16's noon anchor (noon ± 13h crosses midnight) and do
-      // not under this one.
+      // The original's stored calendar day, reconstructed EXACTLY for any offset `formatDate`
+      // accepts. The `date` column dropped the offset that produced it, and the record builder
+      // renders this Date shifted by `offsetMinutes` — which must be `now.offsetMinutes` for
+      // `FechaHoraHusoGenRegistro`. Anchoring at midnight UTC minus that same shift cancels it.
       FechaExpedicionFacturaAnulada: new Date(
         Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) - now.offsetMinutes * 60_000,
       ),
@@ -469,20 +350,16 @@ export class VerifactuBackend implements FiscalBackend {
    * breakdown) and `recordVoid` (it reads the ORIGINAL alta registro to point at). A rectificativa
    * is an alta, NOT an anulación: it takes the next `secuencia`, hashes its own huella over the same
    * eight fields (`TipoFactura = R5` and the negative `ImporteTotal`/`CuotaTotal` flow in), and gets
-   * its own `pendiente` sidecar — everything `recordSale`'s own path does. `chain.ts` needs no
-   * change; the R5 record flows through it unaltered.
+   * its own `pendiente` sidecar.
    *
-   * The `entorno` invariant (§5) is preserved exactly as `recordSale`: it travels BESIDE `input` in
-   * the `PendingRegistro`, never inside it, so our own metadata never reaches `computeHuella`.
+   * `entorno` travels BESIDE `input` in the `PendingRegistro`, never inside it, so our own metadata
+   * never reaches `computeHuella`.
    */
   async recordCorrection(
     tx: Transaction,
     sale: SaleForFiscalRecord,
     correction: { correctsSaleId: SaleId },
   ): Promise<FiscalRecordRef> {
-    // The original alta being corrected. Read exactly as `recordVoid` reads the alta it voids
-    // (same `sale_id` + `tipo_registro = 'alta'` filter); its own three identity columns become the
-    // `FacturasRectificadas` pointer with no NIF/number reconstruction — the same shortcut.
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
       select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
       from registros_facturacion
@@ -493,17 +370,12 @@ export class VerifactuBackend implements FiscalBackend {
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
-    // Derive the R-type from the original's own TipoFactura. v1 corrects only a simplified F2
-    // (→ R5, findings §10.2), the only type the till issues today. Rectifying an F1 is an R1, not
-    // this R5 — deferred until B2B `F1` issuance lands (open decision #1) — so assert rather than
-    // silently mis-type a filing that cannot be repaired (§5).
+    // Only a simplified F2 is corrected (→ R5). Rectifying an F1 is an R1, deferred until B2B F1
+    // issuance lands, so refuse rather than file a mis-typed record that cannot be repaired.
     if (original.tipo_factura !== "F2") {
       throw new AppError("fiscal.correction_unsupported", {
         saleId: correction.correctsSaleId,
-        // An alta always carries a non-null `tipo_factura` (`toRegistroRow` sets it for altas; only
-        // an anulación is NULL, and the `tipo_registro = 'alta'` filter above excludes those) — a
-        // cast, like `fromRegistroRow`'s own `tipo_factura` read, not a `?? ""` branch no alta row
-        // can take.
+        // Non-null on every alta; only an anulación stores NULL.
         tipoFactura: original.tipo_factura as string,
       });
     }
@@ -523,35 +395,25 @@ export class VerifactuBackend implements FiscalBackend {
 
     const input: Omit<AltaInput, "Encadenamiento"> = {
       IDEmisorFactura: sif.nif,
-      // The corrective's OWN new number/date, like `recordSale` — a rectificativa is a new invoice
-      // from its own series (§5), not a copy of the one it corrects.
+      // The corrective's OWN new number and date: a rectificativa is a new invoice.
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: tenant.legalName,
       TipoFactura: "R5",
-      // "I" (por diferencias) — the only TipoRectificativa v1 issues (findings §10.2), hardcoded
-      // like "R5"/"S1". "S" (sustitución), which additionally requires ImporteRectificacion (rule
-      // 1118), is the future option (open decision #2).
+      // "I" (por diferencias). "S" (sustitución) would additionally require ImporteRectificacion
+      // (AEAT rule 1118).
       TipoRectificativa: "I",
       FacturasRectificadas: [
         {
           IDEmisorFactura: original.id_emisor_factura,
           NumSerieFactura: original.num_serie_factura,
-          // The original's stored calendar day, reconstructed EXACTLY for any offset: its `date`
-          // column dropped the offset that produced it (./registro-row.ts), and
-          // `buildAltaRecord`/`formatIDFacturaAR` re-renders whatever Date this carries with THIS
-          // corrective's own `offsetMinutes`. Anchoring at midnight-UTC minus that offset makes the
-          // render land back on the exact stored day regardless of the offset's sign or magnitude —
-          // the same algebraic cancellation `recordVoid`'s `FechaExpedicionFacturaAnulada` documents
-          // and proves above, not the noon anchor that comment supersedes.
+          // The same offset cancellation as `recordVoid`'s `FechaExpedicionFacturaAnulada`.
           FechaExpedicionFactura: new Date(
             Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) -
               sale.offsetMinutes * 60_000,
           ),
         },
       ],
-      // No FacturasSustituidas, no ImporteRectificacion: those belong to S (sustitución) mode; rule
-      // 1118 requires ImporteRectificacion only there, not for I.
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
@@ -588,25 +450,15 @@ export class VerifactuBackend implements FiscalBackend {
 
   /**
    * Records an F3 canje — a full invoice issued in substitution of one or more prior SIMPLIFIED
-   * tickets (F2), at a customer's later request for a proper invoice. Structurally a hybrid of
-   * `recordSale` (it assembles an `AltaInput` from the F3's OWN `sale`: its new number, its POSITIVE
-   * total and breakdown, and its recipient) and `recordCorrection` (it reads each ORIGINAL alta by
-   * `saleId` to point at) — but LOOPED over N tickets, and emitting `FacturasSustituidas` instead of
-   * `FacturasRectificadas`. An F3 is an alta, NOT a rectificativa and NOT an anulación: it takes the
-   * next `secuencia`, hashes its own huella over the same eight fields (`TipoFactura = F3` and the
-   * POSITIVE `ImporteTotal`/`CuotaTotal` flow in), and gets its own `pendiente` sidecar — everything
-   * `recordSale`'s path does. `chain.ts` needs no change.
+   * tickets (F2), at a customer's later request. An F3 is an alta, NOT a rectificativa and NOT an
+   * anulación: it takes the next `secuencia`, hashes its own huella, and gets its own `pendiente`
+   * sidecar.
    *
-   * **How it guarantees the substituted tickets are not re-declared (findings §10.2, the crux):** the
-   * substituted tickets' own alta registros are ONLY READ — never rewritten, never annulled. The F3
-   * is a NEW alta whose `TipoFactura=F3` + `FacturasSustituidas` block is what tells AEAT this amount
-   * was already declared when the tickets were issued, so AEAT does not re-count it. We do not
-   * suppress or negate anything; there is no anulación in this flow at all. There is NO
-   * `TipoRectificativa`, NO `FacturasRectificadas`, NO `ImporteRectificacion` — those are the
-   * rectificativa path's, a different operation.
+   * The substituted tickets' own altas are ONLY READ — never rewritten, never annulled. The F3's
+   * `FacturasSustituidas` block is what tells AEAT the amount was already declared when the tickets
+   * were issued, so it is not counted twice.
    *
-   * The `entorno` invariant (§5) is preserved exactly as `recordSale`/`recordCorrection`: it travels
-   * BESIDE `input` in the `PendingRegistro`, never inside it, so our own metadata never reaches
+   * `entorno` travels BESIDE `input`, never inside it, so our own metadata never reaches
    * `computeHuella`.
    */
   async recordSubstitution(
@@ -614,42 +466,28 @@ export class VerifactuBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     substitution: { substitutedSaleIds: SaleId[] },
   ): Promise<FiscalRecordRef> {
-    // An F3 substitutes at least one ticket; an empty list would file a full invoice naming nothing
-    // it replaces. Refused before any read — a caller precondition `packages/core` (Slice 4)
-    // enforces, defended here too since a wrong filing is unrepairable (§5).
+    // Checked here as well as by the caller: a wrong filing is unrepairable.
     if (substitution.substitutedSaleIds.length === 0) {
       throw new Error(
         "VerifactuBackend.recordSubstitution: substitutedSaleIds must not be empty — an F3 must name at least one ticket it substitutes",
       );
     }
-    // A ticket may appear at most once: a repeated id would emit a DOUBLED FacturasSustituidas entry
-    // into an unrepairable AEAT filing (§5), naming the same ticket twice. "The caller passes distinct
-    // ids" is a property of the caller, not this code (CLAUDE.md §3) — rejected here at the last layer
-    // before AEAT, a plain Error like the other preconditions above (core/Slice 4 owns the friendlier
-    // dedup/validation).
     if (new Set(substitution.substitutedSaleIds).size !== substitution.substitutedSaleIds.length) {
       throw new Error(
         "VerifactuBackend.recordSubstitution: substitutedSaleIds must not contain duplicates — a ticket may be substituted at most once per F3",
       );
     }
-    // A full invoice must ALWAYS name its recipient (findings §10.2: "siempre debe llevar el
-    // destinatario"). `SaleForFiscalRecord.counterparty` is nullable for the ordinary simplified
-    // sale; an F3 is the one path that requires it. Captured into a const so the narrowing survives
-    // the awaits below (a mutable property re-widens to `Counterparty | null` after an await).
+    // A full invoice must ALWAYS name its recipient. Destructured so the narrowing survives the
+    // awaits below.
     const { counterparty } = sale;
     if (counterparty === null) {
       throw new Error(
         "VerifactuBackend.recordSubstitution: an F3 must name its recipient, but the sale carried no counterparty",
       );
     }
-    // Built before the ledger reads so a recipient shape this operation cannot yet express is refused
-    // up front (see `buildDestinatarios`).
+    // Built before the ledger reads, so an unsupported recipient is refused up front.
     const destinatarios = this.buildDestinatarios(counterparty);
 
-    // Each substituted ticket's alta, read exactly as `recordCorrection` reads the alta it corrects
-    // (same `sale_id` + `tipo_registro = 'alta'` filter, same four columns) — its identity triple
-    // becomes one `FacturasSustituidas` entry, and its `tipo_factura` gates that only an F2 may be
-    // exchanged. Looped: one F3 may substitute many tickets (the N:1 fan-out, findings §10.2).
     const substituidas: IDFacturaARInput[] = [];
     for (const substitutedSaleId of substitution.substitutedSaleIds) {
       const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
@@ -662,25 +500,18 @@ export class VerifactuBackend implements FiscalBackend {
       if (original === undefined) {
         throw new AppError("fiscal.sale_not_recorded", { saleId: substitutedSaleId });
       }
-      // A canje exchanges simplified tickets only (F2 → F3). Substituting a full invoice (F1) is not
-      // a canje; asserting rather than mis-filing an unrepairable F3 (§5), the same shape
-      // `recordCorrection`'s F2-only gate uses.
+      // A canje exchanges simplified tickets only (F2 → F3).
       if (original.tipo_factura !== "F2") {
         throw new AppError("fiscal.substitution_unsupported", {
           saleId: substitutedSaleId,
-          // An alta always carries a non-null `tipo_factura` (the `tipo_registro = 'alta'` filter
-          // excludes anulaciones, the only NULL case) — a cast, like `recordCorrection`'s own read.
+          // Non-null on every alta; only an anulación stores NULL.
           tipoFactura: original.tipo_factura as string,
         });
       }
       substituidas.push({
         IDEmisorFactura: original.id_emisor_factura,
         NumSerieFactura: original.num_serie_factura,
-        // The ticket's stored calendar day, reconstructed EXACTLY for any offset — the same algebraic
-        // offset-cancellation `recordCorrection`/`recordVoid` document and prove: the `date` column
-        // dropped the offset that produced it, and `buildAltaRecord`/`formatIDFacturaAR` re-renders
-        // this Date with THIS F3's own `offsetMinutes`, so anchoring at midnight-UTC minus that offset
-        // lands the render back on the exact stored day regardless of the offset's sign or magnitude.
+        // The same offset cancellation as `recordVoid`'s `FechaExpedicionFacturaAnulada`.
         FechaExpedicionFactura: new Date(
           Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) -
             sale.offsetMinutes * 60_000,
@@ -695,24 +526,19 @@ export class VerifactuBackend implements FiscalBackend {
       BaseImponibleOimporteNoSujeto: line.base,
       TipoImpositivo: line.rate,
       CuotaRepercutida: line.tax,
-      // Same S1 (sujeta y no exenta) qualification `recordSale`/`recordCorrection` apply — an F3
-      // restates the substituted operations' own breakdown, positive.
       CalificacionOperacion: "S1",
     }));
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
     const input: Omit<AltaInput, "Encadenamiento"> = {
       IDEmisorFactura: sif.nif,
-      // The F3's OWN new number/date, like `recordSale` — a canje is a new full invoice from its own
-      // series (§5), not a copy of a ticket it replaces.
+      // The F3's OWN new number and date: a canje is a new full invoice.
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: tenant.legalName,
       TipoFactura: "F3",
       FacturasSustituidas: substituidas,
       Destinatarios: destinatarios,
-      // No TipoRectificativa / FacturasRectificadas / ImporteRectificacion: those belong to the
-      // rectificativa (R5) path, a different operation — an F3 is not a rectificativa (§10.2).
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
@@ -753,21 +579,8 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count
-   * (node-id rekey, 2026-08-03: the chain is per-node, so the unsent count is per-node too).
-   *
-   * Opens its OWN `withTransaction` because it takes no caller
-   * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
-   *
-   * The count comes back as a plain JavaScript number, so nothing converts it. This used to read
-   * `count(*)::text` and wrap the result in `Number(...)`, because the PostgreSQL driver handed a
-   * `count` over as a BigInt. SQLite parses no `::` cast — it reads the first colon as the start of
-   * a bind parameter and refuses the whole statement at prepare time with `unrecognized token:
-   * ":"`. Measured 2026-09-22 on Node v26.7.0 against `node:sqlite`, with the identical statement
-   * minus the cast as the control: the cast threw, the control returned `[{ count: 3 }]`, and
-   * `typeof` on that value read `number`. Measured again on an empty selection, where the row is
-   * `{ count: 0 }` and `typeof` still reads `number` — so a zero count is a row carrying 0, never a
-   * missing row, and `rows[0]!` is sound.
+   * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count. Opens
+   * its OWN transaction because it takes no caller transaction.
    */
   async pendingCount(nodeId: NodeId): Promise<number> {
     return withTransaction(this.db, async (tx) => {
@@ -782,27 +595,15 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Maps the generic `Counterparty` onto an AEAT `Destinatario` (sf:PersonaFisicaJuridicaType) for
-   * the mandatory recipient block of every record that names one — an F1 full invoice from
-   * `recordSale` and an F3 canje from `recordSubstitution` alike. A domestic recipient is named by
-   * NIF.
+   * Maps the generic `Counterparty` onto an AEAT `Destinatario` for every record that names a
+   * recipient — an F1 from `recordSale` and an F3 from `recordSubstitution` alike. A domestic
+   * recipient is named by NIF.
    *
-   * A FOREIGN recipient must instead be named via `IDOtro` (CodigoPais + IDType + ID), and which
-   * IDType a given non-resident takes is a fiscal decision nobody here has made. This is the ONE
-   * place that decision is encoded, for both callers: a non-`ES` recipient is refused with
-   * `fiscal.foreign_recipient_unsupported`, a DELIBERATE refusal rather than a dead branch, because
-   * `registros_facturacion` is append-only and hash-chained (CLAUDE.md §5) — a guessed IDType would
-   * be filed and could never be unfiled. The vocabulary itself is not restated here: the XSD
-   * enumerates it (`PersonaFisicaJuridicaIDTypeType` in `@waitron/verifactu`'s AEAT XSD,
-   * `SuministroInformacion.xsd`) and which values AEAT admits,
-   * and when it demands a specific one, is an open question with the asesor
-   * (`docs/compliance/asesor-questions.md`, Q17(a), which quotes it in the source's own words).
-   *
-   * Reachable through `packages/core` today: `record-substitution.ts` types `counterparty` as a
-   * REQUIRED, non-null field with no `countryCode` gating of its own. `recordSale` reaches it the
-   * same way for any recipient-identified sale a future B2B caller supplies. Pinned at THIS layer
-   * by `backend.test.ts` on both paths; core adds no gate of its own, so there is nothing extra to
-   * test at the core layer.
+   * A FOREIGN recipient would need `IDOtro` (CodigoPais + IDType + ID), and which IDType a given
+   * non-resident takes is a fiscal decision nobody here has made. This is the ONE place that
+   * decision is encoded: a non-`ES` recipient is refused, deliberately, because a guessed IDType
+   * would be filed into an append-only, hash-chained record and could never be unfiled. Open with
+   * the asesor: `docs/compliance/asesor-questions.md`, Q17(a).
    */
   private buildDestinatarios(counterparty: Counterparty): { IDDestinatario: Destinatario[] } {
     if (counterparty.countryCode !== "ES") {
@@ -833,15 +634,12 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * The one taxpayer row, for the `NombreRazonEmisor` every record carries. Read from the table on
-   * each filing rather than cached: a legal-name correction must reach the next record.
+   * The one taxpayer row, for the `NombreRazonEmisor` every record carries. Read on each filing
+   * rather than cached: a legal-name correction must reach the next record.
    *
-   * An empty `tenants` table is a database that files sales for nobody. Provisioning writes that row
-   * before anything can sell, and no foreign key enforces it any more (they went with the tenant
-   * columns), so this is reachable only by a corrupt or half-provisioned database — a plain `Error`
-   * naming that state, not a domain code, for the same reason `readStandardSeriesIdTx`
-   * (`@waitron/db`) uses one. It must fail LOUDLY: filing a record under a blank or guessed issuer
-   * name is unrepairable (CLAUDE.md §5).
+   * An empty `tenants` table means a corrupt or half-provisioned database, so a plain `Error`
+   * rather than a domain code. It must fail LOUDLY: filing under a blank or guessed issuer name is
+   * unrepairable.
    */
   private async taxpayer(tx: Transaction): Promise<{ legalName: string }> {
     const row = await readTenant(tx);

@@ -14,13 +14,8 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
- * `node_id` is the NOT NULL chain key on `registro_sif`, `cadenas` and `registros_facturacion`
- * (node-id rekey, 2026-08-03: the SIF is the compute node, #33). These tests pin the finished
- * contract: node_id is present, NOT NULL, and FK-checked against core's `nodes` on all three
- * tables.
- *
- * These are column-nullability and FK-round-trip assertions, none of which needs contention or a
- * second connection, so they run on the venue database `useVenueDb` opens (CLAUDE.md §4).
+ * `node_id` is the NOT NULL chain key on `registro_sif`, `cadenas` and `registros_facturacion`.
+ * Only `registros_facturacion`'s foreign key onto `nodes` is exercised here.
  */
 const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
@@ -43,17 +38,6 @@ async function seedNodeForA(): Promise<string> {
   return seedNode(pg.db, brandLocationId(TENANT_A.locationId));
 }
 
-/**
- * The `is_nullable` rows for a table's node_id column — `[{ is_nullable: "NO" }]` after the rekey.
- *
- * `information_schema.columns` reached this engine as `no such table: information_schema.columns`;
- * `pragma_table_info` is what answers the same question here, the way
- * `packages/db/src/schema/sales.test.ts`'s own `columnsOf` helper reads it. Its `notnull` is 1 or
- * 0, translated back to the two words the assertions below already spoke so the expected values
- * are unchanged. The table name is BOUND rather than pasted in: measured on node v26.7.0 against
- * `node:sqlite`, `pragma_table_info(?)` accepts a bind parameter and returns the same rows as the
- * literal form.
- */
 async function nodeIdNullability(table: string): Promise<{ is_nullable: string }[]> {
   const { rows } = await pg.db.execute<{ notnull: number }>(
     sql`select "notnull" from pragma_table_info(${table}) where name = 'node_id'`,
@@ -64,7 +48,6 @@ async function nodeIdNullability(table: string): Promise<{ is_nullable: string }
 describe("registro_sif.node_id", () => {
   it("is NOT NULL, populated on the seeded row with a real node", async () => {
     expect(await nodeIdNullability("registro_sif")).toEqual([{ is_nullable: "NO" }]);
-    // seedTenantTillSif now registers the SIF against TENANT_A's node (node-keyed).
     const row = await pg.db.execute<{ node_id: string | null }>(
       sql`select node_id from registro_sif where id = ${TENANT_A.sifId}`,
     );
@@ -76,9 +59,7 @@ describe("cadenas.node_id", () => {
   it("is NOT NULL and is the chain key", async () => {
     expect(await nodeIdNullability("cadenas")).toEqual([{ is_nullable: "NO" }]);
     const node = await seedNodeForA();
-    // A fresh chain head for this node (seedTenantTillSif seeds no cadenas row). ultimo_registro_id
-    // and ultima_huella stay null — both-null satisfies cadenas_puntero_ck. `actualizado_en` is
-    // stated because it is a `$defaultFn` column only the insert BUILDER fills.
+    // `actualizado_en` is stated because only the insert BUILDER fills its default.
     const inserted = await pg.db.execute<{ node_id: string | null }>(
       sql`insert into cadenas (node_id, actualizado_en)
            values (${node}, '2026-07-20T18:20:30.000Z') returning node_id`,
@@ -97,11 +78,8 @@ describe("cadenas.node_id", () => {
 });
 
 describe("registros_facturacion.node_id", () => {
-  /** A minimal alta registro carrying `nodeId` (or null). Keeps the `till_id` snapshot too, since the
-   * rekey preserved it; `primer_registro = true` keeps every anterior_* null (encadenamiento_ck).
-   * `id` and `creado_en` are stated for the reason `cadenas.actualizado_en` is above: omitting one
-   * is refused NOT NULL on the WRONG column, which would let the null-node_id case below pass for
-   * a reason that has nothing to do with node_id. */
+  /** A minimal alta carrying `nodeId` (or null). `id` and `creado_en` are stated: omitting one is
+   * refused NOT NULL on the WRONG column, so the null-node_id case would pass for the wrong reason. */
   async function insertRegistro(nodeId: string | null): Promise<{ node_id: string | null }[]> {
     const secuencia = nextSecuencia();
     const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`

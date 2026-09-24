@@ -36,10 +36,8 @@ const suite = useVenueDb({
 const ring = loadKeyRing(KEY_ENV);
 const material: MtlsMaterial = mintMtlsMaterial();
 
-// The local TLS listener is this suite's own; only the database is `useVenueDb`'s. The teardown is
-// guarded because a `startMtlsServer` that threw would otherwise be reported twice — once really,
-// once as a spurious `Cannot read properties of undefined (reading 'close')`. See
-// `scripts/guarded-teardowns.test.ts`'s header for the experiment that measured that.
+// The teardown is guarded because a `startMtlsServer` that threw would otherwise be reported
+// twice (see `scripts/guarded-teardowns.test.ts`).
 let server: MtlsServer;
 
 beforeAll(async () => {
@@ -101,14 +99,9 @@ describe("readCertMaterial", () => {
 describe("certMaterialFrom", () => {
   const REF = { purpose: "fiscal.aeat" };
 
-  // Driven directly rather than through a forged database row. `putCredential` validates, so a
-  // two-field payload cannot be written through the vault's own API — and re-sealing one by hand
-  // would need `seal`, which the credentials package deliberately does not export. The pure
-  // function IS the read-side guard, so testing it directly tests the thing.
+  // Driven directly: `putCredential` validates, so a two-field payload cannot be written through
+  // the vault's own API.
   it("fails loudly on a payload sealed before certKind existed, rather than guessing a host", () => {
-    // Spec §5.1: reads validate nothing, so a row sealed under the old two-field list decrypts to a
-    // payload whose certKind is undefined. Defaulting would send a sello certificate to the
-    // non-sello host and fail every submission with nothing explaining why.
     expect(() => certMaterialFrom({ pfxBase64: "AAA=", passphrase: "p" }, REF)).toThrow(
       /server.credential_unusable/,
     );
@@ -121,22 +114,14 @@ describe("certMaterialFrom", () => {
       certKind: "sello",
     };
     delete full[field];
-    // `captureError` catches a synchronous throw inside the thunk too — the throw happens before
-    // `Promise.resolve` is ever reached, so it propagates out of the callback into its try.
     const error = await captureError(() => Promise.resolve(certMaterialFrom(full, REF)));
-    // Pins `.code` too, not just `.params` — otherwise a different `AppError` that happened to
-    // carry a `field` param would satisfy this assertion just as well. Same pattern as the
-    // `certKind` case above.
     expect(isAppError(error) && error.code).toBe("server.credential_unusable");
     expect(isAppError(error) && error.params).toMatchObject({ field });
   });
 
   it("fails loudly when pfxBase64 decodes to no usable bytes (not real base64)", async () => {
-    // "!!!!" contains zero characters from the base64 alphabet, so it decodes to a zero-length
-    // buffer — unlike, say, a string that merely mixes in some invalid characters among real
-    // base64 letters, which Node's decoder tolerates by skipping them. This is the case the
-    // decode-then-check ordering in `certMaterialFrom` exists to catch: a `pfxBase64` that is
-    // PRESENT and non-empty but unusable.
+    // "!!!!" has no base64-alphabet characters, so it decodes to zero bytes: PRESENT and non-empty,
+    // but unusable.
     const error = await captureError(() =>
       Promise.resolve(
         certMaterialFrom({ pfxBase64: "!!!!", passphrase: "p", certKind: "sello" }, REF),
@@ -158,12 +143,7 @@ describe("certMaterialFrom", () => {
 describe("the resolved client over a real client-certificate handshake", () => {
   it("presents the vaulted certificate to a server that requires one", async () => {
     await provision("representante");
-    // Captured rather than discarded: `aeatClientResolver` reads `certKind` off the venue's own
-    // vaulted material and is supposed to hand it to `endpointFor` unchanged. A zero-argument
-    // `() => server.origin` stub would still make every other assertion in this test pass even if
-    // the implementation hardcoded a kind or forwarded the wrong field — the seam between "the
-    // provisioned certKind" and "the endpoint it selects" is what decides which AEAT host every
-    // submission reaches, so it is the one thing this test must not let through unobserved.
+    // Captured: the kind handed to `endpointFor` decides which AEAT host every submission reaches.
     let seenCertKind: CertKind | undefined;
     const resolver = aeatClientResolver({
       db: suite.db,
@@ -176,31 +156,19 @@ describe("the resolved client over a real client-certificate handshake", () => {
     });
     const client = await resolver.resolve();
 
-    // `submit` posts, and the local server answers with a body `parseRespuestaSuministro` will
-    // reject. The assertion is the HANDSHAKE: the server only answers at all if the client
-    // presented a certificate its CA signed.
-    //
-    // `[anyRegistro()]`, not `[]`: `serializeEnvio` refuses an empty registros array before
-    // `submit` ever calls `fetch` ("An envio must contain at least one registro"), which would
-    // make this test pass for the wrong reason — no request sent, `sawClientCn()` never set, and
-    // the assertion below would just as reliably fail whether or not the handshake worked.
+    // The assertion is the HANDSHAKE: the server answers only if the client presented a
+    // certificate its CA signed. `[anyRegistro()]`, not `[]`: `serializeEnvio` refuses an empty
+    // array before any request is sent.
     await captureError(() => client.submit(anyCabecera(), [anyRegistro()]));
     expect(server.sawClientCn()).toBe(material.clientCn);
     expect(seenCertKind).toBe("representante");
   });
 
   it("still reaches the server when ca is omitted, because the vaulted PFX bundles its own issuing CA", async () => {
-    // `boot.ts` calls `mtlsFetch(material)` with no second argument — the production default, and
-    // the branch `ca === undefined ? {} : { ca }` exists to cover. `mintMtlsMaterial`'s PKCS#12
-    // bundles BOTH the client leaf certificate and the CA that signed it
-    // (`forge.pkcs12.toPkcs12Asn1(clientKeys.privateKey, [clientCert, caCert], ...)`), mirroring how
-    // a real FNMT export commonly ships a chain rather than a bare leaf. Node's PKCS#12 loader adds
-    // every non-leaf certificate in a `pfx` as an extra trust anchor for verifying the PEER, not only
-    // as the client's own presented identity — confirmed directly: the identical handshake against a
-    // LEAF-ONLY PFX (no bundled CA, everything else unchanged) fails with `SELF_SIGNED_CERT_IN_CHAIN`
-    // (see the task report). So the omitted `ca` argument does not leave this connection unverified;
-    // it relies on what the vaulted material itself already carries, which is this suite's own
-    // fixture and a realistic PFX shape, not a gap in the test.
+    // Production (`./slot.ts`) passes no `ca`. `mintMtlsMaterial`'s PKCS#12 bundles the CA beside
+    // the leaf, as a real FNMT export commonly does, and Node treats a bundled certificate as a
+    // trust anchor for the PEER; a leaf-only PFX fails this handshake with
+    // `SELF_SIGNED_CERT_IN_CHAIN`.
     await provision("representante");
     const resolver = aeatClientResolver({
       db: suite.db,
@@ -214,43 +182,25 @@ describe("the resolved client over a real client-certificate handshake", () => {
   });
 
   it("is refused when no client certificate is presented", async () => {
-    // A bare Agent carrying the CA but no pfx/cert/key at all — deliberately NOT
-    // `mtlsFetch({ pfx: Buffer.alloc(0), ... })`. An empty Buffer is not a parseable PKCS#12, so
-    // that route fails LOCALLY inside Node's `configSecureContext` ("not enough data") before any
-    // socket is even opened — it would throw an Error whether or not this server's
-    // `rejectUnauthorized` guarantee actually works, which is not a test of the server refusing
-    // anything. This dispatcher completes a TCP connection and a TLS ClientHello with no
-    // certificate attached, so the failure verified below is the SERVER tearing the connection
-    // down mid-handshake — not a local parse error.
+    // A bare Agent with the CA but no client certificate, NOT an empty `pfx`: an empty PKCS#12
+    // fails locally before any socket opens, which would not test the server refusing anything.
     const requestsBefore = server.requests();
     const dispatcher = new Agent({ connect: { ca: material.caPem } });
     const error = await captureError(() =>
       undiciFetch(`${server.origin}/`, { method: "POST", body: "x", dispatcher }),
     );
     expect(error).toBeInstanceOf(Error);
-    // `fetch`'s own error is a generic `TypeError: fetch failed` — the SPECIFIC failure lives on
-    // `.cause`. Checked empirically against two other ways this same fetch can fail, so this isn't
-    // presumed: a wrong CA produces a raw TLS `Error` with `code: "CERT_SIGNATURE_FAILURE"`, and a
-    // bad origin fails before any connection with `code: undefined, message: "bad port"` — NEITHER
-    // is `instanceof SocketError`. Only the server tearing the connection down mid-handshake (this
-    // case) produces undici's `SocketError` (`code: "UND_ERR_SOCKET"`). Asserting on the class
-    // rather than a message string keeps this pinned to that specific failure shape.
+    // The specific failure is on `.cause`: only the server tearing the connection down
+    // mid-handshake produces undici's `SocketError`; a wrong CA or a bad origin do not.
     expect((error as Error).cause).toBeInstanceOf(undiciErrors.SocketError);
-    // A second, independent, SERVER-side signal: the request HANDLER — which only runs once a full
-    // HTTP request has arrived — did not run. This alone does not distinguish "no cert presented"
-    // from a wrong CA or a bad origin (checked: all three leave the count equally unchanged), so it
-    // is not a substitute for the `SocketError` check above — but it directly disproves the one
-    // thing this test's name asserts and an error TYPE never can: that the server actually accepted
-    // and answered the request. (Flipping `rejectUnauthorized` to `false` in
-    // `packages/server-kit/src/testing/mtls.ts` makes the request succeed and turns this test red.)
+    // Server-side: the request handler never ran. This alone does not tell "no certificate" from a
+    // wrong CA or a bad origin, so it complements the `SocketError` check rather than replacing it.
     expect(server.requests()).toBe(requestsBefore);
   });
 });
 
 describe("aeatClientResolver lifetime", () => {
-  // `resolve` appends a transport to the close list on EVERY call and dedups on nothing, so the
-  // count of transports to release tracks resolve CALLS. Two transports are built by resolving
-  // twice against the one vaulted `fiscal.aeat` credential this database holds.
+  // `resolve` appends a transport on EVERY call, so the transports to release track resolve calls.
   it("closes one transport per client it resolved", async () => {
     await provision("sello");
     const closed: string[] = [];
@@ -274,10 +224,7 @@ describe("aeatClientResolver lifetime", () => {
     expect(closed).toHaveLength(2);
   });
 
-  // The constraint that is invisible until it is violated: `closeAll` runs in boot's `finally`, so
-  // a throw there would REPLACE drain's return value or its error — a cleanup path eating the
-  // finding it was cleaning up after. Every transport is still attempted, and the failure is
-  // logged rather than silently dropped.
+  // Every transport is still attempted, and a close failure is logged rather than dropped.
   it("does not throw when a transport's close fails, and still closes the rest", async () => {
     // Two transports, built by resolving twice (see the count test above).
     await provision("sello");
@@ -307,17 +254,13 @@ describe("aeatClientResolver lifetime", () => {
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     expect(closed).toEqual(["ok"]);
-    // The one call attributable to the failing transport, not the one that closed cleanly (the one
-    // resolved first, whose close() is the one `n === 1` catches), carrying a message that survives
-    // `codeOf`'s "unknown" flattening of a plain socket-layer `Error`.
+    // One call, for the failing transport, with a message that survives `codeOf`'s "unknown".
     expect(logged).toEqual([
       ["warn", "transport.close_failed", { errorCode: "unknown", message: "socket already gone" }],
     ]);
   });
 
-  // A rejected promise can reject with ANY value, not only an `Error` — `close()`'s own type
-  // (`Promise<void>`) makes no promise about what it rejects with, so `message: error instanceof
-  // Error ? error.message : String(error)` above has a real, not merely defensive, second branch.
+  // A promise can reject with any value, not only an `Error`.
   it("stringifies a close failure that rejects with something other than an Error", async () => {
     await provision("sello");
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
@@ -346,15 +289,8 @@ describe("aeatClientResolver lifetime", () => {
     ]);
   });
 
-  // F2 of the 2026-07-27 pre-merge review: every case above rejects a *returned* Promise —
-  // `.catch` alone. `TenantTransport.close` is typed `() => Promise<void>`, but an injected
-  // `fetchFor` is free to violate that and throw BEFORE ever returning a promise (undici's real
-  // `Agent.close()` cannot, but the seam here is `fetchFor`, not undici). A synchronous throw
-  // inside the `.map` callback used to propagate straight out of `closeAll` before
-  // `Promise.allSettled` was ever reached — rejecting into `boot.ts`'s `finally` and replacing
-  // `drain`'s own return value or error, and abandoning every transport queued after the throwing
-  // one even though `open.splice(0)` had already emptied the list. `Promise.resolve().then(...)`
-  // wraps the call so a throw becomes a rejection like any other, caught by the same `.catch`.
+  // `close` is typed to return a promise, but an injected `fetchFor` can throw synchronously
+  // instead; the deferral in `closeAll` turns that into a rejection like any other.
   it("does not throw when a transport's close throws SYNCHRONOUSLY, and still closes the one after it", async () => {
     // Two transports, built by resolving twice (see the count test above).
     await provision("sello");
@@ -386,8 +322,7 @@ describe("aeatClientResolver lifetime", () => {
     await resolver.resolve();
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
-    // The transport queued AFTER the one whose close() threw synchronously still closed — proof
-    // the throw did not abort the whole `.map`/`Promise.allSettled` sweep.
+    // The transport queued after the throwing one still closed.
     expect(closed).toEqual(["ok"]);
     expect(logged).toEqual([
       [
@@ -398,11 +333,7 @@ describe("aeatClientResolver lifetime", () => {
     ]);
   });
 
-  // The second half of the same guarantee, and the reason the log call is guarded in turn while
-  // `loop.ts`'s and `pass.ts`'s equivalents are not: those sit in ordinary catch blocks, where a
-  // throwing `Logger` surfaces as itself. This one runs inside `boot.ts`'s `finally`, where a throw
-  // does not surface at all — it REPLACES the sweep's own result or error. Without the inner guard
-  // this test throws "logger is down" out of `closeAll`, and the second transport is never closed.
+  // A logger that throws while reporting a close failure must not make `closeAll` throw.
   it("does not throw when the LOGGER fails while reporting a close failure", async () => {
     // Two transports, built by resolving twice (see the count test above).
     await provision("sello");
@@ -461,10 +392,8 @@ function anyCabecera(): Cabecera {
 }
 
 /**
- * A minimal, well-typed `RegistroAnulacion` — present only so `serializeEnvio` has a non-empty
- * array to serialise (see the comment at its call site). Its huella/chain fields are never
- * verified by anything this suite exercises: `serializeEnvio` only stringifies them, and neither
- * `huella.ts` nor `validate.ts` sits between `submit` and the wire. Its CONTENT is not the subject.
+ * A minimal, well-typed `RegistroAnulacion`, present only so `serializeEnvio` has a non-empty
+ * array to serialise. Its CONTENT is not the subject.
  */
 function anyRegistro(): EnvioRegistro {
   return {

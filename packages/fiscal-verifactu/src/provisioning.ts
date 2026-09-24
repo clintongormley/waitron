@@ -18,13 +18,8 @@ import { deriveReservedSeriesCodes, liveSeriesBases } from "./reserved-series.js
 export const WAITRON_ID_SISTEMA = "W1";
 
 /** The obligado's NIF: the `tax_id` of the one taxpayer row. Read here, never an argument — an
- * operator-supplied NIF would file a real venue's sales under someone else's.
- *
- * An empty `tenants` table is a database with no taxpayer at all. Provisioning writes that row
- * before it seeds any module, and no foreign key enforces it any more (they went with the tenant
- * columns), so this is reachable only by a corrupt or half-provisioned database: a plain `Error`
- * naming that state, not a domain code, for the same reason `readStandardSeriesIdTx`
- * (`@waitron/db`) uses one. */
+ * operator-supplied NIF would file a real venue's sales under someone else's. An empty `tenants`
+ * table means a corrupt or half-provisioned database, so a plain `Error`, not a domain code. */
 async function obligadoNif(tx: Transaction): Promise<string> {
   const row = await readTenant(tx);
   if (row === null) {

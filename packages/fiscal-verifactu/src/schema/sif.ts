@@ -3,21 +3,16 @@ import { check, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, id, label, newId, nodes, now, table, ts } from "@waitron/db";
 
 /**
- * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación (findings §1). Append-mostly —
- * a node that re-registers gets a NEW row, and the old one is marked revoked rather than updated,
- * because the old identity's registros are immutable and must keep pointing at the identity that
- * actually generated them. (Node-id rekey, 2026-08-03: the SIF is the node — #33 — so this moved
- * from till to node.)
+ * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación. Append-mostly — a node that
+ * re-registers gets a NEW row, and the old one is marked revoked rather than updated, because the
+ * old identity's registros are immutable and must keep pointing at the identity that actually
+ * generated them.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as packages/db/src/schema/sales.ts.
+// The `v8 ignore` pairs: see ./registros.ts.
 export const registroSif = table(
   "registro_sif",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // The node this SIF identity belongs to (node-id rekey, 2026-08-03: was `till_id`; the SIF IS
-    // the node — #33). Plain one-argument FK.
     nodeId: id("node_id")
       .notNull()
       /* v8 ignore start */
@@ -29,14 +24,8 @@ export const registroSif = table(
     registradoEn: ts("registrado_en").notNull().$defaultFn(now),
     revocadoEn: ts("revocado_en"),
   },
-  // See cadenas.ts's identical comment: this extraConfig callback is invoked lazily, only by
-  // `drizzle-kit generate` (in its own process) or a `drizzle(client, { schema })` wired to this
-  // package's own schema — neither happens during this package's `vitest run`. The ignore markers
-  // bracket the whole arrow function, not just its returned array, because leaving the function's
-  // own closing bracket outside the range left it separately reported as uncovered.
   /* v8 ignore start */
   (t) => [
-    // Installation identity is unique by NIF, system id and installation number.
     uniqueIndex("registro_sif_instalacion_uq").on(
       t.nif,
       t.idSistemaInformatico,

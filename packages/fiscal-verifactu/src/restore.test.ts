@@ -14,9 +14,6 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
-// ONE database for the suite, emptied by the helper after each test, with `seedTenants` back in
-// `beforeEach` — the same per-test blank slate the fresh-instance-per-test setup this replaces
-// gave, since the helper's reset deletes the rows `seedTenants` writes.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
@@ -38,10 +35,6 @@ async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
     registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
   );
-  // Through the table definition, not the raw insert this replaces: `invoice_series.id` is a
-  // `$defaultFn(newId)` generator that only the insert BUILDER runs. Measured here — the raw
-  // statement is refused `NOT NULL constraint failed: invoice_series.id`. Same change, and the
-  // same reason, as `test/fixtures.ts`'s own header records. Every seeded value is unchanged.
   await db.insert(invoiceSeries).values([
     { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard", nextNumber: 5 },
     { nodeId: TENANT_A.nodeId, code: "RE", purpose: "rectificative", nextNumber: 1 },
@@ -57,10 +50,6 @@ async function liveSeriesCodes(): Promise<string[]> {
   return rows.map((r) => r.code);
 }
 
-// Synchronous: `execute` on this engine is declared to return its rows rather than a promise of
-// them — `): RawResult<TRow>;`, `packages/store/src/node-sqlite-adapter.ts:190` — so the `.then`
-// this used to chain has nothing to attach to. Not measured at runtime: the signature is what the
-// two call sites below now compile against, and `tsc --noEmit` over this package is clean.
 function counterOf(): number | undefined {
   const { rows } = db.execute<{ proximo_numero: number }>(
     sql`select proximo_numero from contadores_instalacion where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
@@ -120,12 +109,12 @@ describe("restoreFiscal", () => {
       { code: `S7-${n}`, purpose: "standard" },
     ]);
     expect(outcome.report).toContain(`installation ${n}`);
-    // The hook writes NO series itself — the orchestrator does (spec §3.4).
+    // The hook writes NO series itself — the orchestrator does.
     expect(await liveSeriesCodes()).toEqual(["FA", "RE", "S7"]);
   });
 
   it("THE REUSE EXPERIMENT: restoring an older artifact cannot re-mint a number a later restore used", async () => {
-    // Spec §3.5. State A = the backup (installation 1 live, counter 2). A previous restore of A
+    // State A = the backup (installation 1 live, counter 2). A previous restore of A
     // minted 2 (revoking 1). Now rebuild state A EXACTLY — no row for 2, 1 live again, counter back —
     // which is what restoring the older artifact does, and run the hook: it must not mint 2 again.
     await seedLiveNode();
@@ -144,7 +133,6 @@ describe("restoreFiscal", () => {
     await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
     const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
-    // Control (run it once): delete `raiseInstallationFloor` from restoreFiscal → this mints 2 → red.
     expect(fresh.numeroInstalacion).not.toBe(later.numeroInstalacion);
     expect(fresh.numeroInstalacion).toBeGreaterThan(later.numeroInstalacion);
   });
@@ -173,7 +161,6 @@ describe("restoreFiscal", () => {
   });
 
   it("does nothing for a node with no live SIF: no mint, no series", async () => {
-    // Through the builder for `invoice_series.id`'s generator — see `seedLiveNode` above.
     await db.insert(invoiceSeries).values({ nodeId: TENANT_A.nodeId, code: "FA" });
     const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
     expect(outcome.series).toBeUndefined();
@@ -186,10 +173,6 @@ describe("restoreFiscal", () => {
 
   it("derives from live series only, stripping our own suffixes, and ignores retired ones", async () => {
     const first = await seedLiveNode();
-    // Through the builder, not `set retired_at = now()`: this engine has no `now()` — measured
-    // here, `no such function: now` — and `retired_at` is an ISO-string column whose encoder only
-    // the builder runs. What the case turns on is the column being NON-NULL, not which instant it
-    // holds.
     await db
       .update(invoiceSeries)
       .set({ retiredAt: new Date() })
@@ -243,10 +226,7 @@ describe("restoreFiscal", () => {
     const after = await db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, sale2, 2, 2)),
     );
-    // Through the table definition, not raw SQL: `primer_registro` is a flag, which this engine
-    // stores as 0 or 1, and only the builder maps it back to a boolean — the same change, and the
-    // same reason, as `chain.test.ts`'s `records()` helper records. The keys are aliased to the
-    // column names so the `toEqual` below is unchanged, matcher included.
+    // Through the builder: only it maps the stored 0/1 `primer_registro` back to a boolean.
     const rec = await db
       .select({
         primer_registro: registrosFacturacion.primerRegistro,

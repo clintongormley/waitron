@@ -20,7 +20,7 @@ let backend: VerifactuBackend;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-// recordVoid now requires `sale.void`; this is a manager shift session that authorizes every void
+// recordVoid requires `sale.void`; this is a manager shift session that authorizes every void
 // in this suite (only the void's authorization matters here, not who rang the sale).
 let voidSessionId: string;
 
@@ -36,21 +36,16 @@ let voidSessionId: string;
  * own huella recomputable from its own stored columns, its own pending sidecar row, and it advances
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
-// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
-// `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
+// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid calls
+// `authorize`, which reads identity's persons/sessions.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
-  // Seed a manager (holds `sale.void`) and open its session — the void path under test now needs an
-  // authorizer, mirroring packages/core/src/record-correction.test.ts.
+  // Seed a manager (holds `sale.void`) and open its session.
   const { rows } = await pg.db.execute<{ id: string }>(
-    // `id` and `created_at` are supplied here rather than left to the table: both come from a
-    // `$defaultFn` generator (packages/identity/src/schema/persons.ts:27,67), which drizzle runs for
-    // a builder insert and never for raw SQL, and the generated DDL declares neither with a SQL
-    // DEFAULT (packages/identity/drizzle/0000_baseline.sql:46,62) — omitting them is refused
-    // `NOT NULL constraint failed: persons.id`. Same idiom as
-    // packages/workforce/src/migrations.test.ts:43-50.
+    // `id` and `created_at` are supplied here: both come from a `$defaultFn` generator, which
+    // drizzle runs for a builder insert and never for raw SQL.
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
@@ -79,11 +74,9 @@ async function voidSale(saleId: SaleId, reason = "staff error") {
 }
 
 /** Raw, untyped `execute` — the snake_case `RegistroRow` shape `fromRegistroRow`/`computeHuella`
- * need, never Drizzle's own camelCase `.select()` shape (`./registro-row.ts`'s own doc comment;
- * `./write-path.e2e.test.ts`'s identical `rawRegistro`). Scoped to `tipo_registro = 'anulacion'`
- * because a voided sale has TWO rows sharing the same `sale_id` — the alta AND the anulación that
- * annuls it both carry it, per `packages/fiscal-verifactu/src/chain.ts`'s own `PendingRegistro`
- * shape (the anulación's `saleId` is the sale it annuls, not an identity of its own). */
+ * need, never Drizzle's own camelCase `.select()` shape. Scoped to `tipo_registro = 'anulacion'`
+ * because a voided sale has TWO rows sharing the same `sale_id`: the anulación's `saleId` is the
+ * sale it annuls, not an identity of its own. */
 async function rawAnulacion(saleId: string): Promise<RegistroRow> {
   const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId} and tipo_registro = 'anulacion'`,
@@ -95,7 +88,7 @@ async function rawAnulacion(saleId: string): Promise<RegistroRow> {
 
 describe("alta and anulación interleave in one chain", () => {
   it("chains the anulación onto the chronologically previous record, not the one it annuls", async () => {
-    // THE assertion of this task. Sell A, sell B, then void A. The anulación's predecessor is B —
+    // Sell A, sell B, then void A. The anulación's predecessor is B —
     // the record generated immediately before it — even though the record it annuls is A. Chaining
     // it onto A instead produces a chain that verifies against itself locally and is rejected
     // wholesale by AEAT, and no core-level test (against a fake with no chain at all) can tell the
@@ -113,14 +106,8 @@ describe("alta and anulación interleave in one chain", () => {
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3]);
 
     const anulacion = rows[2]!;
-    // **Deviation from the brief.** The brief's illustrative snippet asserted
-    // `anulacion.encadenamientoHuella` and `anulacion.numSerieFacturaAnulada` — neither column
-    // exists. The predecessor pointer's stored column is `anteriorHuella` (`./schema/registros.ts`),
-    // and the ANNULLED invoice's own identity lives in the SAME `numSerieFactura`/`idEmisorFactura`
-    // columns an alta uses for its own identity (`./registro-row.ts`'s `toRegistroRow`: "one set of
-    // columns serves both directions") — confirmed by `backend.test.ts`'s own already-passing
-    // "appends an anulación referencing the original alta's own identity" test, which asserts on
-    // `.numSerieFactura` for exactly this reason.
+    // The ANNULLED invoice's identity lives in the SAME `numSerieFactura`/`idEmisorFactura`
+    // columns an alta uses for its own identity (`./registro-row.ts`'s `toRegistroRow`).
     expect(anulacion.anteriorHuella).toBe(rows[1]!.huella);
     expect(anulacion.anteriorHuella).not.toBe(rows[0]!.huella);
     expect(anulacion.numSerieFactura).toBe("A/1");
@@ -130,11 +117,6 @@ describe("alta and anulación interleave in one chain", () => {
   it("gives the anulación its own huella, recomputable from its own columns", async () => {
     const a = await sell();
     await voidSale(a.saleId);
-    // **Deviation from the brief.** The brief read the row via Drizzle's typed `.select()` and
-    // passed it through an undefined `toRegistro` helper. `computeHuella` needs `fromRegistroRow`'s
-    // reconstruction from the RAW snake_case row (`./registro-row.ts`'s own doc comment on why a
-    // `timestamptz` column renders differently through each path) — the same convention
-    // `./write-path.e2e.test.ts`'s identical assertion for an alta already uses.
     const row = await rawAnulacion(a.saleId);
     expect(computeHuella(fromRegistroRow(row))).toBe(row.huella);
   });

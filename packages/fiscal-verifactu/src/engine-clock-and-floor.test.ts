@@ -8,20 +8,6 @@ import { markDelivered } from "./acks.js";
 import { registerSif } from "./registro-sif.js";
 import { raiseInstallationFloor } from "./restore.js";
 
-/**
- * The four places this package asked PostgreSQL for a scalar function the storage engine does not
- * have: `greatest` in `raiseInstallationFloor`, and `now()` in `registerSif`'s revocation, in the
- * chain-head reset it calls, and in `markDelivered`.
- *
- * The cases live here rather than in `restore.test.ts`, `registro-sif.test.ts` and `acks.test.ts`
- * because all three of those suites died in their own setup before reaching any of it. Two of the
- * three no longer do. Measured one file at a time, `pnpm --filter @waitron/fiscal-verifactu exec
- * vitest run src/<file> --reporter=dot` (2026-09-22): `restore.test.ts` reports 10 passed and
- * `registro-sif.test.ts` 16 passed, while `acks.test.ts` still reports 10 failed, every one of them
- * `near "truncate": syntax error`. Moving these cases back beside the code they cover is not this
- * change — but for the first two it is no longer blocked.
- */
-
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
@@ -126,9 +112,8 @@ describe("registerSif stamps the clock", () => {
 
 describe("markDelivered", () => {
   /**
-   * Seeded through raw SQL with the foreign key off: `acks.registro_id` references
-   * `registros_facturacion`, whose own four keys and eleven NOT NULL columns are the whole sale
-   * write path. `markDelivered` updates `delivered_at`, which no key reads.
+   * Seeded through raw SQL with the foreign key off, so no `registros_facturacion` row is needed:
+   * `markDelivered` updates `delivered_at`, which no key reads.
    */
   beforeEach(() => {
     venue.db.run(sql`pragma foreign_keys = off`);

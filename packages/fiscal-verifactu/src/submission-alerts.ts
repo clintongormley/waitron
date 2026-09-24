@@ -45,9 +45,7 @@ export const fiscalSubmissionSource: AlertSource = {
       .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
       .where(eq(envios.estado, "detenido"));
     if (stopped && Number(stopped.n) > 0) {
-      // count > 0 means the innerJoin matched a registro, and fechaHoraHusoGenRegistro is notNull,
-      // so `oldest` is always present here — no `: null` arm (it would be an uncovered branch, and
-      // fiscal-verifactu holds the 98% branch bar).
+      // count > 0 means the join matched a registro, whose `fechaHoraHusoGenRegistro` is not null.
       alerts.push({
         key: "fiscal.submission_stopped",
         code: "fiscal.submission_stopped",

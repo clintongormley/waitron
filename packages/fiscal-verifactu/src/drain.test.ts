@@ -26,14 +26,9 @@ import {
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid now calls
-// `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
+// The full manifest: `recordVoid` authorizes through identity's persons and sessions.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-// The `DrainDeps` a `VerifactuBackend` used to assemble internally, built here directly now that the
-// submission pass lives on the standalone `drain` function. `pg.db` is this file's one handle;
-// the resolver is per-test. Tests that need a custom cap (`maxRegistrosPorEnvio`) build their own
-// `DrainDeps` inline instead.
 const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
   db: pg.db,
   resolveClient,
@@ -41,35 +36,18 @@ const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
   environment: "production",
 });
 
-/**
- * The `envios` rows of ONE seeded fixture's own chain, by that fixture's node. This file shares one
- * database across every describe block, and `seedPendingEnvios` mints a fresh NODE per call, so
- * scoping a read or a cleanup to the seeded node is what keeps a test's assertions about its own
- * fixture's rows. (It scoped by tenant until the tenant column went; the node is the chain's owner
- * and gives the same scope.) A query that already joins `registros_facturacion` filters on
- * `r.node_id` directly instead.
- */
+/** The `envios` rows of ONE seeded fixture's own chain, by that fixture's node. */
 const ownChain = (seeded: { nodeId: string }) =>
   sql`registro_id in (select id from registros_facturacion where node_id = ${seeded.nodeId})`;
 
-/**
- * Puts `incidencia` back into the boolean the column means. A raw read skips drizzle's decoding and
- * this engine stores a flag as 0 or 1, so the reads below hand back the integer; mapping it here
- * keeps every assertion in this file saying `toBe(true)` / `toBe(false)` about the flag itself,
- * rather than each expectation being loosened to whatever number came out.
- */
+/** A raw read returns the flag as 0 or 1; this puts `incidencia` back into a boolean. */
 const decodeFlags = <Row extends { incidencia: number }>(result: {
   rows: Row[];
 }): { rows: (Omit<Row, "incidencia"> & { incidencia: boolean })[] } => ({
   rows: result.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 })),
 });
 
-/**
- * The same treatment for an incident's `params`, a `json` column. Drizzle decodes one read through
- * the table definition; a raw read hands back the stored text, which every `toEqual`/`toMatchObject`
- * below is written against as an object. `packages/payments/src/reconcile.test.ts` carries the same
- * wrapper for the same column on the same engine.
- */
+/** The same for an incident's `params`, a `json` column a raw read returns as text. */
 const parseParams = <Row extends { params: string }>(result: {
   rows: Row[];
 }): { rows: (Omit<Row, "params"> & { params: Record<string, unknown> })[] } => ({
@@ -118,28 +96,20 @@ describe("drain — happy path", () => {
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ csv: string | null }>(sql`select csv from envios`),
     );
-    // If a future change drops `csv = ${csv}` from persistResponse, this assertion fails.
     expect(rows.rows.every((r) => r.csv !== null)).toBe(true);
   });
 });
 
 /**
- * `toEnvioRegistro`'s `tipo_registro === "anulacion"` branch is not speculative future scope: a
- * void today (`VerifactuBackend.recordVoid`, already shipped) inserts a `pendiente` `envios` row
- * for the anulación it appends (`void-path.e2e.test.ts`'s own "gives the anulación its own
- * pending sidecar row"), so a real `drain()` pass can and does claim one right now. Proven
- * end to end here — through `@waitron/core`'s `recordSale`/`recordVoid`, not `seedPendingEnvios`
- * (which, per its own doc comment, seeds altas only) — rather than left as an untested branch.
+ * `toEnvioRegistro`'s anulación branch, end to end through `@waitron/core`'s `recordSale`/
+ * `recordVoid`: `seedPendingEnvios` seeds altas only.
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
     const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
-    // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
-    // `id` and `created_at` are supplied here because `persons` declares both with a drizzle
-    // `$defaultFn` (`packages/identity/src/schema/persons.ts:27,67`), which runs for a BUILDER
-    // insert and never for raw SQL, and the generated DDL gives neither a SQL DEFAULT — omitting
-    // them is refused `NOT NULL constraint failed: persons.id`. Same fix, same reason, as
-    // `packages/workforce/src/migrations.test.ts`'s `rowIdentity`.
+    // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
+    // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
+    // never runs.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
@@ -162,8 +132,7 @@ describe("drain — happy path, an anulación row", () => {
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
 
-    // Both envíos (the alta's and the anulación's) were inserted with the column's own
-    // `defaultNow()` — comfortably before a `now` a minute past actual wall-clock time.
+    // Both envíos default to the wall-clock insert time, so a minute past it has them due.
     const result = await drain(
       drainDeps(staticResolver(aeat.client())),
       new Date(Date.now() + 60_000),
@@ -172,7 +141,6 @@ describe("drain — happy path, an anulación row", () => {
     expect(result.recordsSubmitted).toBe(2);
     expect(result.recordsAccepted).toBe(2);
 
-    // Restrict the read to this case's own chain because the database is shared across cases.
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(sql`
         select estado, csv from envios where ${ownChain({ nodeId })}
@@ -184,32 +152,7 @@ describe("drain — happy path, an anulación row", () => {
   });
 });
 
-/**
- * Its own describe, with a beforeEach that seeds NOTHING beyond `aeat`: `drain()` claims every due
- * row in the WHOLE shared `pg.db`, not just the ones the caller seeded — so if this describe's
- * beforeEach seeded its own always-pending backlog (the "happy path" describe's convention), a
- * self-built batching backlog here would have its `result.batchesSent` count polluted by that other
- * backlog's envío too.
- * Every other describe in this file either fully drains whatever it seeds before its `it` returns,
- * OR deletes the `envios` rows it seeded (the "deployment-environment guard" describe below, whose
- * whole point is rows no backend in this file can ever fully drain, in a `finally`; the "flow
- * control" describe, whose "defers behind a still-open gate" test intentionally leaves 3 rows
- * `pendiente`, in an `afterEach`), so nothing is left pending for this sweep to pick up.
- *
- * That no-leak invariant is STRICT now, where it was slack before: while the drain cap was
- * hardcoded at 1000, a leaked backlog behind a CLOSED gate (the "defers" test's 3 rows) was `< cap`
- * and the sweep deferred it, so the leak was invisible. Under the small INJECTED cap below those
- * same 3 rows are `>= cap`, the sweep sends them, and the starvation test's global counters read 4
- * submitted instead of 1 — which is why the "flow control" describe now cleans up after itself.
- *
- * The batch cap is INJECTED small (`maxRegistrosPorEnvio: 3`) so the split is proven against a
- * 4-row backlog rather than the 1001 rows the production cap (1000) would demand. Seeding 1000+
- * rows through `seedPendingEnvios`'s per-row insert loop (~4 round trips each) timed this test out
- * at 30s under CI Docker contention (~32s in CI vs ~1s locally) — the flake the cap seam fixes. The
- * semantics are identical to the production default: a full chunk of `maxRegistrosPorEnvio` sent
- * now, the sub-cap tail deferred to the next gated pass. See `DrainDeps.maxRegistrosPorEnvio`
- * (./drain.ts) for why the cap is injectable and why production never sets it.
- */
+/** The cap is injected at 3 so the split is proven against a 4-row backlog rather than 1001 rows. */
 describe("drain — batching (the >cap split)", () => {
   let aeat: ReturnType<typeof createFakeAeat>;
 
@@ -219,11 +162,6 @@ describe("drain — batching (the >cap split)", () => {
 
   it("splits a >cap backlog at the injected cap: a full 3-row chunk now, the <cap tail deferred until t", async () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 4 });
-    // Call the drainer directly rather than through `VerifactuBackend`, so the injected cap reaches
-    // `DrainDeps` (the backend exposes no batch-cap option — production always takes the default).
-    // `VerifactuBackend.drain` is nothing but `runDrain({ db, resolveClient, skipRetryMs,
-    // environment }, now)` — every other describe here exercises that wrapper — so the only
-    // behavioural difference is the small cap this seam exists to inject.
     const deps: DrainDeps = {
       db: pg.db,
       resolveClient: staticResolver(aeat.client()),
@@ -232,9 +170,7 @@ describe("drain — batching (the >cap split)", () => {
       maxRegistrosPorEnvio: 3,
     };
 
-    // First pass: 4 due rows, gate open (no `envio_flujo` row yet) — sends a FULL chunk of 3, sees
-    // 1 row left (< cap) and defers that tail to `nextDueAt`, exactly as a 1001-row backlog sends
-    // 1000 and defers 1 at the production cap.
+    // First pass: 4 due rows, gate open — a full chunk of 3, the 1-row tail deferred.
     const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.batchesSent).toBe(1);
     expect(first.recordsSubmitted).toBe(3);
@@ -265,21 +201,6 @@ describe("drain — flow control (envio_flujo)", () => {
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
-  // Delete this describe's own seeded rows after every test — the same "deletes what it seeded in a
-  // finally" hygiene the "deployment-environment guard" describe below applies, and the invariant
-  // the "batching (the >cap split)" describe's header depends on: no test may leave `envios` rows
-  // the file-global `drain()` sweep would pick up. The "defers the pass behind a still-open gate"
-  // test below LEAVES 3 rows `pendiente` behind a CLOSED gate — harmless while the drain cap was
-  // hardcoded at 1000 (a 3-row backlog is `< 1000`, so the sweep defers it), but the ">cap split"
-  // and starvation tests now inject a small cap (`maxRegistrosPorEnvio: 3`), under which those same
-  // 3 leaked rows are `>= cap` and the global sweep SENDS them — inflating those tests' global
-  // result counters. Cleaning up here removes the leak at its source rather than tuning each cap
-  // around it. Deleting `envios` (not the registro) mirrors the env-guard describe's own
-  // `delete from envios where …` pattern; the two draining tests above leave nothing pending, so
-  // this is a no-op for them.
-  //
-  // `envio_flujo` goes too, and must: it holds ONE row for the whole database, so a case that
-  // leaves a closed gate behind would defer the NEXT case's drain before it claimed anything.
   afterEach(async () => {
     await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     await pg.db.execute(sql`delete from envio_flujo`);
@@ -288,7 +209,6 @@ describe("drain — flow control (envio_flujo)", () => {
   it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the NEXT envío waits t.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    // One flow-control row per database; this describe clears it between cases (afterEach).
     const flujo = await withTransaction(pg.db, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
         sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
@@ -313,14 +233,8 @@ describe("drain — flow control (envio_flujo)", () => {
   });
 
   /**
-   * The "otherwise" half of the race (spec §7.2, art. 16.4): fewer than 1000 due AND the gate has
-   * not yet elapsed defers the WHOLE pass — nothing is claimed, nothing is sent, and the
-   * existing `envio_flujo` row (simulating an earlier pass this test does not itself drive) is
-   * read back rather than treated as absent. Proven by pre-seeding `envio_flujo` directly:
-   * building this scenario by actually draining once and then racing a second `drain()` call
-   * before the gate opens would need a SECOND, distinct pending backlog, which none of this file's
-   * fixtures produce without duplicating `insertPendingAlta`'s own chain-consistent insert —
-   * pre-seeding the flow row is the direct, minimal way to reach "just sent, gate still closed".
+   * Fewer than a full envío due AND the gate not yet elapsed defers the WHOLE pass: nothing is
+   * claimed, nothing is sent. The flow row is pre-seeded to stand for an earlier pass.
    */
   it("defers the pass behind a still-open gate, claiming nothing and leaving its backlog pending", async () => {
     const proximoEnvioEn = new Date("2026-07-21T00:05:00Z"); // still in the future relative to `now` below
@@ -347,22 +261,13 @@ describe("drain — flow control (envio_flujo)", () => {
 
 /**
  * A row left `enviando` past `RECUPERACION_ENVIANDO_MS` is a claim abandoned while this process
- * stays up: T1 (claim) committed and no T2 (persist) followed, so a LATER drain() finds a real,
- * committed row. A restart's claims are requeued by `resetInFlightClaims` instead.
- *
- * Every update/select below filters explicitly by the seeded fixture's own chain (`ownChain`),
- * unlike the brief's own inline sample — this file's shared `pg.db` accumulates rows from every
- * earlier describe block (the established convention throughout this file, e.g. the "flow control"
- * describe's own comments), and an unscoped `update envios set ...` with no WHERE at all would
- * silently rewrite every row any other test in this file has ever left behind.
+ * stays up. A restart's claims are requeued by `resetInFlightClaims` instead.
  */
 describe("drain — stale claim recovery", () => {
   it("recovers a stale enviando row back to pendiente with incidencia set, then resubmits it this same pass", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    // Simulate an abandoned claim: T1 committed (estado -> 'enviando') and no T2 persisted a
-    // response. enviado_en is stamped well over RECUPERACION_ENVIANDO_MS (5 min) in the past, so
-    // THIS drain() pass must recover it rather than leave it stuck forever.
+    // An abandoned claim, stamped well over RECUPERACION_ENVIANDO_MS ago.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
@@ -379,9 +284,7 @@ describe("drain — stale claim recovery", () => {
       `),
       ),
     );
-    // Recovered (-> pendiente) then re-claimed and resubmitted in this SAME pass, since nothing
-    // else gates it — aceptado, but incidencia (raised by the recovery) is never cleared by the
-    // happy path (Task 9's rejection/incident handling is out of this task's scope).
+    // Recovered, then resubmitted in this same pass; the recovery's `incidencia` stays raised.
     expect(rows.rows[0]?.estado).toBe("aceptado");
     expect(rows.rows[0]?.incidencia).toBe(true);
   });
@@ -390,9 +293,8 @@ describe("drain — stale claim recovery", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const now = new Date("2026-07-21T00:01:00Z");
-    // enviado_en 1 minute ago — well within RECUPERACION_ENVIANDO_MS (5 min). Models a slow
-    // submission in this process still waiting on AEAT, not an abandoned claim: recovering this
-    // would resubmit a record its own T2 may still be about to persist a CSV for.
+    // A slow submission still waiting on AEAT, not an abandoned claim: recovering it would resubmit
+    // a record its own persist step may still be about to write a CSV for.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}
@@ -504,31 +406,24 @@ describe("drain — retry backoff on a transient submit failure", () => {
       `),
       ),
     );
-    // Claimed (intentos incremented to 1 at claim), then the submit threw — backed off to
-    // pendiente rather than left stuck `enviando`, with incidencia raised.
     expect(rows.rows[0]?.estado).toBe("pendiente");
     expect(rows.rows[0]?.intentos).toBe(1);
     expect(rows.rows[0]?.incidencia).toBe(true);
     expect(new Date(rows.rows[0]!.proximo_intento_en).getTime()).toBe(
       new Date("2026-07-21T00:01:00Z").getTime() + 60_000,
     );
-    // A retry is scheduled, not lost — the scheduler has something to wake up for.
     expect(result.nextDueAt).not.toBeNull();
   });
 });
 
 /**
- * `nextDueAt` is a MINIMUM over every instant a pass computes, which `packages/fiscal`'s own
- * `DrainResult` doc states as "FOLD, never assign … so an abandoned batch's retry can never delay
- * an earlier gate the pass had already computed". Losing that quietly defers a submission past the
- * hour art. 16.4 requires, so it is pinned here rather than left to the prose.
+ * `nextDueAt` is a MINIMUM over every instant a pass computes: an assigned value could defer a
+ * submission past art. 16.4's hour.
  *
- * ONE node, ONE pass, TWO instants — no second taxpayer needed: `backoffBatch` (./drain.ts) folds
- * `now + backoffMs(intentos)` when the submit throws, and the tail fold after the loop folds `now + t * 1000`, where `t` is the
- * flow-control row's own `tiempo_espera_seg`. The backoff is folded FIRST, so the two cases below
- * catch the two ways a fold degrades: an implementation that keeps whichever instant arrived first
- * fails "the gate is earlier", and one that assigns whatever arrives last fails "the gate is
- * later". Each case is the other's control.
+ * One pass, two instants: `backoffBatch` folds `now + backoffMs(intentos)` when the submit throws,
+ * then the tail fold adds `now + t * 1000`. The backoff comes FIRST, so a fold that keeps the first
+ * instant fails "the gate is earlier", and one that assigns the last fails "the gate is later".
+ * Each case is the other's control.
  */
 describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
   const NOW = new Date("2026-07-21T00:01:00Z");
@@ -555,26 +450,22 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
   }
 
   it("reports the flow-control gate when it is earlier than the failed batch's backoff", async () => {
-    // 10s gate against a 60s backoff (`backoffMs(1)`): the gate wins, so a fold that kept the
-    // first instant it was handed — the backoff — reports 60s here and fails.
+    // 10s gate against a 60s backoff (`backoffMs(1)`): the gate wins.
     const result = await passWithGate(10);
     expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + 10_000));
   });
 
   it("reports the failed batch's backoff when the flow-control gate is later", async () => {
-    // 600s gate against the same 60s backoff: the backoff wins, so a fold that assigned whatever
-    // arrived last — the gate — reports 600s here and fails. `backoffMs(1)`, not a bare 60_000, so
-    // the assertion follows the constant rather than restating it.
+    // 600s gate against the same 60s backoff: the backoff wins.
     const result = await passWithGate(600);
     expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + backoffMs(1)));
   });
 });
 
 /**
- * Task 9: replaces the "everything accepted" happy path with real per-record resolution via
- * `resolveEstadoEfectivo` — rejection halts the chain and raises a structured incident,
- * AceptadoConErrores is still an accept but raises a warning, and a record that lands on an
- * already-halted chain is stopped without ever reaching AEAT.
+ * Per-record resolution: a rejection halts the chain and raises a structured incident,
+ * AceptadoConErrores is still an accept with a warning, and a record landing on an already-halted
+ * chain is stopped without reaching AEAT.
  */
 describe("drain — per-record resolution: rejection, halting, incidents", () => {
   it("halts a chain on a genuine rejection: the record is rechazado, its successors detenido, an error incident is raised", async () => {
@@ -610,7 +501,6 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(
       inc.rows.some((i) => i.severity === "error" && i.code === "fiscal.registro_rechazado"),
     ).toBe(true);
-    // Structured, never prose: the message text lives in a param, not baked into `code`.
     const rejected = inc.rows.find((i) => i.code === "fiscal.registro_rechazado");
     expect(rejected?.params).toMatchObject({ codigo: 1100, mensaje: "Campo obligatorio ausente" });
   });
@@ -640,18 +530,6 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
   });
 
   it("sets Incidencia on a record enqueued while its chain has an open detenido incident, and never submits it", async () => {
-    // `tiempoEsperaInicial: 5`, not this suite's usual default (60s): `drain()`'s own
-    // claim is global across the WHOLE shared `pg.db` (this file's own repeated note, e.g. the
-    // "batching" describe above) — confirmed live while implementing this task: the "retry backoff
-    // on a transient submit failure" describe (above) deliberately leaves its OWN rows
-    // `pendiente`, due again at exactly `2026-07-21T00:02:00Z` (its one row's
-    // `proximo_intento_en`, backed off by `backoffMs(1)` = 60s past that test's own `now` of
-    // `00:01:00Z`). The default 60s gate would put THIS test's second drain at that exact instant
-    // too, and the OTHER test's leftover row — gate-less (no envio_flujo row of its own), so
-    // immediately claimable — would be silently swept up and submitted by THIS test's own
-    // `backend.drain()` call, inflating `second.recordsSubmitted`/`recordsAccepted` by one record
-    // that has nothing to do with this test. A short, test-local `tiempoEsperaInicial` opens this
-    // test's OWN gate well before that shared instant, decoupling the two.
     const aeat = createFakeAeat({
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
@@ -659,17 +537,13 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const deps = drainDeps(staticResolver(aeat.client()));
-    // First pass: secuencia 2 rechazado, secuencia 3 halted to detenido (the previous test's own
-    // scenario) — the chain is left with an OPEN halt.
+    // First pass: secuencia 2 rechazado, secuencia 3 detenido — the chain is left with an OPEN halt.
     const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.recordsHalted).toBe(2);
 
-    // A NEW record lands on the SAME chain (sif) while the halt is still open — e.g. staff kept
-    // selling at the till, oblivious to the AEAT-side rejection.
+    // A NEW record lands on the same chain while the halt is still open.
     await appendPendingAlta(pg.db, seeded, 4);
 
-    // Gate opens at 00:01:05Z (tiempoEsperaInicial: 5 above); 00:01:30Z is comfortably past that
-    // and comfortably short of the 00:02:00Z shared-`pg.db` hazard this test's own comment explains.
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const row4 = decodeFlags(
@@ -682,24 +556,17 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     );
     expect(row4.rows[0]?.estado).toBe("detenido");
     expect(row4.rows[0]?.incidencia).toBe(true);
-    // Never reached AEAT: submitting a record over an unresolved gap in the chain would be
-    // submitting out of order.
     expect(second.recordsSubmitted).toBe(0);
     expect(second.recordsHalted).toBe(1);
 
-    // Confirms "never submits" concretely, not just via the counter: AEAT's own store has no
-    // record under secuencia 4's identity at all.
+    // AEAT's own store has no record under secuencia 4's identity.
     const stored = aeat.stored();
     expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|S4/`))).toBe(false);
   });
 
   /**
-   * `haltOpenChainClaims` (./drain.ts) must halt ONLY the chain that actually has an open
-   * `rechazado`/`detenido` row — a tenant with a SECOND, entirely healthy chain (a different
-   * till, its own SIF, e.g. a shop's second till) must still have that chain's due work claimed
-   * and submitted normally in the SAME batch/drain pass, even while the first chain sits halted.
-   * `seedSecondChain`'s own doc comment explains why `seedPendingEnvios`'s single-chain shape
-   * cannot exercise this on its own.
+   * `haltOpenChainClaims` must halt ONLY the chain that has an open `rechazado`/`detenido` row; a
+   * second, healthy chain claimed in the same batch is still submitted.
    */
   it("does not halt an unrelated healthy chain claimed in the same batch as a halted one", async () => {
     const aeat = createFakeAeat({
@@ -712,16 +579,12 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.recordsHalted).toBe(2); // chain A: secuencia 2 rechazado + secuencia 3 detenido
 
-    // A new record lands on the halted chain (A) AND an entirely separate, healthy chain (B) on
-    // the SAME tenant both become due together — claimed in the SAME batch on the next pass.
+    // Chain A (halted) and chain B (healthy) both fall due together, claimed in one batch.
     const chainA4 = await appendPendingAlta(pg.db, seeded, 4);
-    // secuencia 5, not 1: `insertPendingAlta` derives `NumSerieFactura` from `secuencia`
-    // (`S{secuencia}/1`), and invoice numbers are unique per (nif, series, fecha) REGARDLESS of
-    // which chain/SIF they belong to (`registros_identidad_uq`) — chain A already used 1-4.
+    // secuencia 5, not 1: `NumSerieFactura` derives from `secuencia`, and invoice identities are
+    // unique across chains (`registros_identidad_uq`); chain A already used 1-4.
     const chainB1 = await seedSecondChain(pg.db, seeded, 5);
 
-    // Gate opens at 00:01:05Z (tiempoEsperaInicial: 5); 00:01:30Z avoids this file's own shared-`pg.db`
-    // hazards (see the previous test's own comment: 00:02:00Z and 00:05:00Z).
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const rowA = decodeFlags(
@@ -753,27 +616,8 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 });
 
 /**
- * Task 10: replaces Task 9's `handleDuplicate` STUB with the real error-3000 resolution
- * `resolveEstadoEfectivo` (`@waitron/verifactu`) hands back for the two duplicate cases — see
- * ./drain.ts's own doc comment on `handleDuplicate`/`routeB` for the full reasoning. The outer
- * `EstadoRegistro` on every one of these lines reads `Incorrecto` (error 3000 is an "Incorrecto"
- * line at the envío level); what tells the four scenarios below apart is never that outer status,
- * always `RegistroDuplicado`'s own inner detail (or, for Route B, a follow-up consulta).
- *
- * `tiempoEsperaInicial: 5`, and every two-drain test's second call at `00:01:30Z` rather than the
- * suite's usual 60s-later pattern: `drain()` claims every due row in the WHOLE shared `pg.db`
- * (this file's own repeated note — e.g. the "per-record resolution" describe above). Confirmed
- * live while implementing this task: this file's "retry backoff on a transient submit failure"
- * describe deliberately leaves its OWN row `pendiente`, due again at exactly
- * `2026-07-21T00:02:00Z`, and gate-less (its `envio_flujo` row also lands at exactly that instant —
- * see that describe's own scenario). A second drain at the suite's usual `:03:00Z` is AT OR PAST
- * that shared instant, and the very first test below to reach it silently sweeps that OTHER test's
- * leftover row up too, inflating `recordsAccepted` by one record that has nothing to do with this
- * describe (caught by the TEETH test's own `toBe(1)` failing as `2`). A short, per-test
- * `tiempoEsperaInicial` opens THIS tenant's own gate well before either that hazard or the
- * `defers a tenant behind a still-open gate` test's `00:05:00Z` gate (that tenant stays due-but-
- * gated forever in the same shared `pg.db`, since its own `it` never submits it), matching the
- * "sets Incidencia..." test's identical precedent a few describes above.
+ * Error 3000 resolution. Every one of these lines reads `Incorrecto` at the envío level; what tells
+ * the scenarios apart is `RegistroDuplicado`'s own detail, or for Route B a follow-up consulta.
  */
 describe("drain — error 3000: Route A + Route B resolution", () => {
   let aeat: ReturnType<typeof createFakeAeat>;
@@ -787,11 +631,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores it — AEAT now genuinely holds "Correcta"
 
-    // Resubmit the SAME identity without changing anything AEAT's store holds: a genuine
-    // resubmission of our own already-accepted record — e.g. a lost response after a real T1/T2
-    // crash. The fake reports this as error 3000 with RegistroDuplicado.EstadoRegistroDuplicado =
-    // "Correcta" (its own `handleEnvio` doc comment) — the inversion `resolveEstadoEfectivo`
-    // exists to read correctly instead of taking the outer Incorrecto at face value.
+    // Resubmit our own already-accepted record, as a lost response would: the fake answers error
+    // 3000 with `EstadoRegistroDuplicado` "Correcta", which must read as an accept.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
@@ -807,8 +648,6 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
 
-    // No fresh incident from a genuine re-acceptance — mirrors the plain "accepted" branch, which
-    // raises none either.
     const inc = await withTransaction(pg.db, (tx) =>
       tx.execute<{ code: string }>(sql`select code from incidents`),
     );
@@ -816,15 +655,9 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   });
 
   /**
-   * Two records on one chain (secuencia 1, 2), not one: proves Route A ALSO halts a successor
-   * claimed in the SAME batch, mirroring `applyOutcome`'s `"rejected"` branch — see
-   * `handleDuplicate`'s own doc comment on why. Both rows are resubmitted together here (both
-   * already AEAT-stored from the first drain, so both come back as error-3000 duplicate lines in
-   * ONE envío — secuencia 1 `Anulada`, secuencia 2 still genuinely `Correcta`); without the
-   * `haltSuccessors` call inside Route A, secuencia 2's OWN "Correcta"-detail line (independently
-   * resolving to a plain `accepted`, since the fake AEAT has no chain awareness — this file's own
-   * established precedent, e.g. the "halts a chain on a genuine rejection" test above) would
-   * overwrite the halt this test asserts and leave it wrongly `aceptado`.
+   * Two records on one chain, resubmitted together: secuencia 1 comes back `Anulada`, secuencia 2
+   * `Correcta`. Without `haltSuccessors` in Route A, secuencia 2's chain-blind "Correcta" line
+   * would leave it `aceptado`.
    */
   it("Route A: duplicate_annulled halts detenido, and halts a same-batch successor too, raising a fiscal.duplicado_anulado incident", async () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 2 });
@@ -856,9 +689,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const inc = await withTransaction(pg.db, (tx) =>
       tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
-    // Exactly ONE incident: haltSuccessors flags the successor but never raises a second incident
-    // for it — this package's established "flag, don't duplicate" precedent (haltOpenChainClaims's
-    // own doc comment, ./drain.ts).
+    // Exactly ONE incident: the halted successor is flagged, never given one of its own.
     expect(inc.rows).toHaveLength(1);
     expect(inc.rows[0]?.code).toBe("fiscal.duplicado_anulado");
     expect(inc.rows[0]?.severity).toBe("error");
@@ -869,10 +700,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // AEAT now genuinely stores OUR real huella
 
-    // Force the NEXT response for this identity to omit RegistroDuplicado.EstadoRegistroDuplicado
-    // entirely — exactly what `resolveEstadoEfectivo` reads as `duplicate_unknown` rather than a
-    // genuine accept (`dropRegistroDuplicadoDetail`'s own doc comment) — so the resubmit below
-    // must go through `routeB`'s consulta rather than the TEETH test's direct "Correcta" path.
+    // The next response omits `EstadoRegistroDuplicado`, which reads as `duplicate_unknown`, so
+    // the resubmit goes through `routeB`'s consulta.
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
@@ -901,20 +730,10 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   });
 
   /**
-   * `registros_facturacion` is append-only (immutable triggers) — our OWN stored huella cannot be
-   * mutated to force a mismatch. AEAT's copy is made to diverge instead: a direct, separate submit
-   * under the IDENTICAL invoice identity (same NIF/NumSerieFactura/FechaExpedicionFactura secuencia
-   * 1 will itself use), carrying a different `Huella`, lands in the fake's store FIRST — a genuine
-   * collision, not a resubmission of our own record. `dropRegistroDuplicadoDetail` then forces the
-   * drainer's own (later) real submission of secuencia 1 down the `duplicate_unknown` path, so
-   * `routeB`'s consulta reads back the divergent huella this direct submit planted, not ours.
-   *
-   * Two records (secuencia 1, 2), not one: secuencia 2 is left completely untouched — a genuinely
-   * fresh registration the fake AEAT will happily accept ("Correcto") on its own per-line merits,
-   * with no chain awareness of secuencia 1's mismatch. Proves Route B's mismatch branch ALSO halts
-   * a same-batch successor (mirroring `applyOutcome`'s `"rejected"` branch and Route A above — see
-   * `handleDuplicate`'s own doc comment): without that halt, secuencia 2's own accept would
-   * overwrite the halt this test asserts.
+   * Our own stored huella cannot be changed (`registros_facturacion` is append-only), so AEAT's copy
+   * is made to diverge: a separate submit under secuencia 1's identity, with a different `Huella`,
+   * lands in the fake's store FIRST. Secuencia 2 is fresh and accepted on its own merits, which
+   * proves Route B's mismatch also halts a same-batch successor.
    */
   it("Route B: duplicate_unknown with a differing huella halts the chain (and a same-batch successor), raising a fiscal.huella_divergente incident", async () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 2 });
@@ -978,16 +797,12 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const inc = await withTransaction(pg.db, (tx) =>
       tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
-    // Exactly ONE incident — same "flag, don't duplicate" reasoning as the Route A test above.
     expect(inc.rows).toHaveLength(1);
     expect(inc.rows[0]?.code).toBe("fiscal.huella_divergente");
     expect(inc.rows[0]?.severity).toBe("error");
 
-    // AEAT's own store genuinely still holds the COLLIDING huella under secuencia 1's identity,
-    // not ours — confirms the mismatch was real, not merely asserted via our own side's state. And
-    // secuencia 2 genuinely WAS accepted at AEAT (it really did submit "Correcto" on its own
-    // merits) even though our own bookkeeping halts it locally pending reconciliation — the fake
-    // has no chain awareness, exactly like the real AEAT's per-record processing.
+    // AEAT still holds the COLLIDING huella under secuencia 1's identity, and secuencia 2 WAS
+    // accepted there even though it is halted locally: the fake, like AEAT, is chain-blind.
     const stored = aeat.stored();
     expect(stored.find((s) => s.key === seeded.facturaKeys[0])?.huella).toBe("D".repeat(64));
     expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcta");
@@ -995,17 +810,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 });
 
 /**
- * Plan 3b §7.2: a halted record stays counted AND flagged, and the flag rides its `acks` row. The
- * two BULK chain-halt paths in ./drain.ts (`haltOpenChainClaims` in T1, `haltSuccessors` in T2)
- * bypass `setEstado`'s per-row `writeAck` choke point, so before their own additive ack writes a
- * halted successor got its `detenido` estado but NO ack — the record would silently drop off the
- * ack stream. This drives `haltSuccessors`: a rejection on a chain with a still-`pendiente`
- * successor must leave BOTH a `rejected` ack for the rejected record AND a `halted` ack for the
- * successor, with the ack↔estado invariant holding for every acked row.
- *
- * Scoped to its own freshly-seeded chain (`seedPendingEnvios` mints a node per call) and asserted
- * strictly through `ownChain`, so the shared-`pg.db`/global-sweep convention this file otherwise
- * carries cannot pollute these acks assertions.
+ * A halted record stays counted AND flagged, and the flag rides its `acks` row. The bulk
+ * chain-halt paths bypass `setEstado`'s `writeAck`, so they must write their own `halted` acks.
  */
 describe("drain — halted records get a halted ack (the bulk chain-halt paths)", () => {
   it("writes a rejected ack for the rejection and a halted ack for its still-pending successor", async () => {
@@ -1033,17 +839,13 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
     );
     const ackState = new Map(acks.rows.map((a) => [a.registro_id, a.state]));
 
-    // The rejected record's ack (this one already flowed through setEstado's writeAck).
     const rejected = envios.rows.find((r) => r.secuencia === 2)!;
     expect(ackState.get(rejected.registro_id)).toBe("rejected");
 
-    // The halted successor's ack — the bug: haltSuccessors bypassed writeAck, so before the fix
-    // this record had a `detenido` estado but NO acks row at all (this assertion is the RED→GREEN).
     const halted = envios.rows.find((r) => r.secuencia === 3)!;
     expect(ackState.get(halted.registro_id)).toBe("halted");
 
-    // The ack↔estado invariant: every acked row's ack agrees with its committed estado — and every
-    // terminal row (all three here) is acked, so none silently drops off the ack stream.
+    // Every terminal row is acked, and every ack agrees with its committed estado.
     for (const env of envios.rows) {
       const state = ackState.get(env.registro_id);
       expect(state).toBeDefined();
@@ -1053,28 +855,9 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
 });
 
 /**
- * Deployment-environment plan, Task 6: `drain` must never submit a registro generated for the
- * OTHER deployment — submitting a pre-production record to the real AEAT is unrecoverable, since
- * chains cannot be merged or migrated and invoice numbers are never reused. `claimBatch`
- * (./drain.ts) checks each claimed row's OWN `entorno` (`seedPendingEnvios`'s new `entorno`
- * option, defaulting to `"production"` so every OTHER describe in this file keeps submitting
- * unaffected) against `DrainDeps.environment` — threaded here via
- * `VerifactuBackendOptions.deploymentEnvironment` — BEFORE ever flipping a row to `enviando`, so a
- * mismatched or unrecorded row is reported and left `pendiente` rather than submitted or backed
- * off with `backoffMs` like a transient failure.
- *
- * Adapted from the brief's own illustrative snippet to this file's established shape (a real
- * `VerifactuBackend.drain(now)` call, `withTransaction`-scoped assertions against the real `envios`/
- * `incidents` tables) rather than the bare `drain(db, {...deps, environment})` sketch, which does
- * not match `drain`'s actual `(deps, now)` signature or this suite's `deps`-free convention.
- *
- * **Fix round after review** added two more properties `claimBatch`'s own doc comment covers in
- * full (chain-order: a refused row's successors must not submit either; starvation: a large
- * backlog of refused rows must not block sendable work behind it) — see the two new tests below —
- * and a `finally` per test deleting what it seeded: unlike every OTHER describe in this file, a
- * refused row is NEVER drained to completion by any backend this file constructs, so leaving it
- * behind would violate the "batching (the >cap split)" describe's own documented assumption (its
- * header comment, corrected below) that nothing else in this file leaves `envios` rows pending.
+ * `drain` must never submit a registro generated for the OTHER deployment: submitting a
+ * pre-production record to the real AEAT is unrecoverable. A mismatched or unrecorded row is
+ * reported and left `pendiente`, never submitted and never backed off.
  */
 describe("drain — the deployment-environment guard", () => {
   it("refuses to submit a registro generated for another environment, leaving it pendiente", async () => {
@@ -1103,23 +886,13 @@ describe("drain — the deployment-environment guard", () => {
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_mismatch");
       expect(inc.rows[0]?.severity).toBe("error");
-      // Pinned exactly, not just `toMatchObject` on the environment fields (M3 of the fix-round
-      // review): `registroId` is the ONLY traceback from this incident row to the record it
-      // describes (`incidents` carries no FK onto `registros_facturacion` — `errors.ts`'s own doc
-      // comment) — a wrong value here is the one param failure that makes the incident useless to
-      // whoever is resolving it, and nothing before this asserted it at all.
+      // Pinned exactly: `registroId` is the incident's only traceback to the record.
       expect(inc.rows[0]?.params).toEqual({
         registroId: seeded.registroIds[0],
         recordEnvironment: "preproduction",
         hostEnvironment: "production",
       });
     } finally {
-      // This tenant's row is refused, never drained, by every backend this file constructs — left
-      // in place it would sit `pendiente` forever in this file's SHARED `pg.db`, violating the
-      // "batching (the >cap split)" describe's own documented assumption that nothing else here
-      // leaves work behind (its header comment, corrected in this same fix round). Deleting the
-      // `envios` row (not the registro — `workIsDue` reads only this table)
-      // is `boot.test.ts`'s own established pattern for the identical need.
       await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
@@ -1144,11 +917,8 @@ describe("drain — the deployment-environment guard", () => {
         ),
       );
       expect(inc.rows).toHaveLength(1);
-      // Distinct code from the mismatch test above — a NULL entorno is refused rather than assumed
-      // to be ours, never silently treated as agreeing with the host.
+      // A NULL entorno is refused under its own code, never treated as agreeing with the host.
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
-      // Same M3 pinning as the mismatch test above — `registroId` is this incident's only
-      // traceback to the record it describes.
       expect(inc.rows[0]?.params).toEqual({
         registroId: seeded.registroIds[0],
         hostEnvironment: "production",
@@ -1168,39 +938,20 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.recordsSubmitted).toBeGreaterThan(0);
       expect(result.recordsAccepted).toBeGreaterThan(0);
     } finally {
-      // This one DOES fully drain (it's the agreeing-environments case) — deleted anyway, for the
-      // same reason `seedPendingEnvios`-seeding describes elsewhere in this file scope their own
-      // tenant: harmless once accepted, but consistent, and immune to a future edit changing what
-      // this test seeds without remembering to add cleanup.
       await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
   /**
-   * I1 of the fix-round review: a refused row's successors on the SAME chain must not submit
-   * either. Before the fix, `haltOpenChainClaims` — which only recognises an OPEN `rechazado`/
-   * `detenido` envío — is blind to a `pendiente` refusal, so secuencia 2 and 3 here would have
-   * gone to AEAT carrying `Encadenamiento.RegistroAnterior` pointing at secuencia 1's huella, a
-   * record AEAT never received. Reachable on the ordinary upgrade path (`deployment-guard.ts` lets
-   * an unstamped database boot, and migration 0009 backfills nothing), not merely hypothetical.
+   * A refused row's successors on the SAME chain must not submit either: they would reach AEAT
+   * pointing at a huella AEAT never received. `haltOpenChainClaims` only sees an OPEN
+   * `rechazado`/`detenido` envío, not a `pendiente` refusal.
    */
   it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    // Seeding lives INSIDE the try (I3's own fix-round-2 correction): a throw partway through
-    // seeding — `seedPendingEnvios` succeeding but `appendPendingAlta` failing, say — would
-    // otherwise leave a permanently-`pendiente` row in this shared `pg.db` with no `finally` covering
-    // it at all, the exact hazard I3 was raised to close in the first place. Only the node id
-    // (not the whole `seeded` object) escapes into `finally` — TypeScript does not narrow a `let`
-    // across the closures `withTransaction`'s own callbacks below create, so keeping `seeded` itself
-    // `const` and scoped to the try body sidesteps that rather than sprinkling `!` assertions.
     let cleanupNodeId: string | undefined;
     try {
-      // secuencia 1 is refused (no entorno). `registros_facturacion` is append-only (immutable
-      // triggers block ANY update — this file's own Route B tests rely on the identical fact), so
-      // secuencia 2 and 3 — individually fine, correctly stamped `"production"` from the START —
-      // are added via `appendPendingAlta` (which always stamps `DEFAULT_ENTORNO`) rather than by
-      // mutating rows `seedPendingEnvios` already inserted. Same chain either way:
-      // `appendPendingAlta` extends `seeded`'s own `sif_id`.
+      // secuencia 1 is refused (no entorno); 2 and 3, on the same chain, carry `"production"`.
       const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: null });
       cleanupNodeId = seeded.nodeId;
       await appendPendingAlta(pg.db, seeded, 2);
@@ -1210,9 +961,7 @@ describe("drain — the deployment-environment guard", () => {
       const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
       expect(result.recordsSubmitted).toBe(0);
-      // Exactly ONE incident for the whole chain — the first refusal, not one per row — mirroring
-      // `haltOpenChainClaims`'s own "flag once, don't duplicate" precedent for the identical shape
-      // of problem (a chain-wide condition, not a per-row fact).
+      // One incident for the whole chain, not one per row.
       expect(result.incidentsRaised).toBe(1);
 
       const rows = await withTransaction(pg.db, (tx) =>
@@ -1223,14 +972,7 @@ describe("drain — the deployment-environment guard", () => {
           order by r.secuencia
         `),
       );
-      // ALL THREE stay pendiente — including secuencia 2 and 3, whose own entorno was fine — and
-      // NONE of them were ever claimed (intentos untouched at 0): the chain halts entirely behind
-      // the refusal. Unlike a MISMATCHED entorno, no value of WAITRON_ENV releases this chain —
-      // secuencia 1 was seeded with entorno: null (`fiscal.environment_unknown`, not
-      // `fiscal.environment_mismatch`), and no host configuration ever makes NULL agree. The only
-      // way out is re-registering this till as a SIF (a fresh chain, leaving this one permanently
-      // unfiled): the stored registro's own entorno cannot be corrected in place, because
-      // registros_facturacion is append-only (CLAUDE.md §5).
+      // All three stay pendiente and were never claimed (intentos still 0).
       expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
       expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
 
@@ -1241,17 +983,12 @@ describe("drain — the deployment-environment guard", () => {
       );
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
-      // The incident names the ACTUAL refused row (secuencia 1), not one of the blocked
-      // successors it dragged down with it.
+      // The incident names the refused row, not a blocked successor.
       expect(inc.rows[0]?.params).toMatchObject({ registroId: seeded.registroIds[0] });
 
-      // Confirms "never submits" concretely, not just via the counters: AEAT's own store holds
-      // none of this chain's identities at all.
       const stored = aeat.stored();
       expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
     } finally {
-      // Guarded: `cleanupNodeId` is still `undefined` if `seedPendingEnvios` itself threw before
-      // ever assigning it.
       if (cleanupNodeId !== undefined) {
         await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`);
       }
@@ -1259,31 +996,15 @@ describe("drain — the deployment-environment guard", () => {
   }, 20_000);
 
   /**
-   * I2/property 3 of the fix-round review: a backlog of refused rows cannot starve sendable work
-   * behind it. A cap-filling backlog of refused rows on one chain fills `claimBatch`'s ENTIRE first
-   * claim window (`maxRegistrosPorEnvio: 3` is injected here, so 3 refused rows fill a limit-3
-   * window — the same shape the production cap of 1000 would need 1000 refused rows to reproduce); a
-   * `seedIndependentChain` row on a second, UNRELATED chain is forced to sort strictly LAST
-   * (`sifId: "ffffffff-..."`, a near-maximal literal `registerSif`'s own `defaultRandom()` id could
-   * never produce) — so only `drainDue`'s retry loop, excluding the now-blocked chain from a
-   * SECOND `claimBatch` call, can ever reach it. Before the fix this healthy row was unreachable,
-   * this pass and every later one, since nothing about a refused row changes its own due-ness.
-   *
-   * The small injected cap is a TEST SEAM (see the ">cap split" describe above and
-   * `DrainDeps.maxRegistrosPorEnvio`): seeding 1000 refused rows to fill the production window timed
-   * this test out under CI Docker contention, and 3 rows reproduce the identical starvation.
+   * A backlog of refused rows cannot starve sendable work behind it. 3 refused rows fill the
+   * injected limit-3 claim window, and a healthy row on an unrelated chain is forced to sort LAST
+   * (`sifId: "ffffffff-..."`), so only `drainDue`'s retry loop, excluding the blocked chain from a
+   * second claim, can reach it.
    */
   it("does not starve a sendable row sorting behind a cap-filling backlog of refused rows on another chain", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    // Seeding lives INSIDE the try (I3's own fix-round-2 correction — same reasoning as the
-    // chain-halt test above): a throw between the two seed calls would otherwise leak
-    // permanently-`pendiente` rows into this shared `pg.db` with no `finally` covering them. Only the
-    // node id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
-    // chain-halt test above.
     let cleanupNodeId: string | undefined;
     try {
-      // 3 refused rows (entorno null → `fiscal.environment_unknown`) exactly fill the injected
-      // limit-3 claim window, so the healthy row below sorts strictly beyond it.
       const seeded = await seedPendingEnvios(pg.db, { count: 3, entorno: null });
       cleanupNodeId = seeded.nodeId;
       const healthy = await seedIndependentChain(pg.db, seeded, {
@@ -1292,8 +1013,6 @@ describe("drain — the deployment-environment guard", () => {
         entorno: "production",
       });
 
-      // Direct `drain()` call (not `VerifactuBackend`) so the small cap reaches `DrainDeps`; see the
-      // ">cap split" test above for why the wrapper is bypassed only where a cap must be injected.
       const deps: DrainDeps = {
         db: pg.db,
         resolveClient: staticResolver(aeat.client()),
@@ -1303,12 +1022,9 @@ describe("drain — the deployment-environment guard", () => {
       };
       const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      // The healthy row got through despite sorting behind the cap-filling refused backlog.
       expect(result.recordsSubmitted).toBe(1);
       expect(result.recordsAccepted).toBe(1);
-      // Exactly one incident for the whole blocked chain (property 3: `incidentsRaised` must not
-      // disagree with what was actually written within this ONE pass) — not one per row, and not
-      // re-raised across however many `claimBatch` calls the retry needed.
+      // One incident for the blocked chain, not re-raised by each retried claim.
       expect(result.incidentsRaised).toBe(1);
 
       const healthyRow = await withTransaction(pg.db, (tx) =>
@@ -1332,9 +1048,6 @@ describe("drain — the deployment-environment guard", () => {
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
     } finally {
-      // Guarded: `cleanupNodeId` is still `undefined` if `seedPendingEnvios` itself threw before
-      // `seedIndependentChain` (which adds a chain beside it) ever ran. That second chain's rows
-      // are deleted with the unscoped sweep below, which this describe's own cap injection needs.
       if (cleanupNodeId !== undefined) {
         await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`);
         await pg.db.execute(sql`delete from envios where estado = 'aceptado'`);
@@ -1355,13 +1068,8 @@ describe("backoffMs", () => {
 });
 
 /**
- * `maxRegistrosPorEnvio` is a public, plain-`number` input into `drain()`, and each out-of-range
- * value fails a fiscal invariant if it reaches the SQL rather than being caught at the input: `0`
- * claims nothing (due work stuck `pendiente`), a negative becomes Postgres `LIMIT -1` (NO limit → a
- * claim of >1000 rows → an envío `serializeEnvio` rejects for exceeding the XSD cap), a non-integer
- * is nonsense, and a value above `MAX_REGISTROS_POR_ENVIO` (1000) could likewise build an
- * XSD-oversized envío. `drain()` validates the moment the field is PROVIDED and throws fast; the
- * omitted-default path (→ 1000) stays unguarded, which every OTHER test in this file exercises.
+ * An out-of-range `maxRegistrosPorEnvio` is refused before it reaches the SQL: `0` would claim
+ * nothing, and a negative `limit` means no limit on this engine.
  */
 describe("drain — maxRegistrosPorEnvio validation", () => {
   const NOW = new Date("2026-07-21T00:01:00Z");
@@ -1384,9 +1092,6 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
   );
 
   it("accepts a valid small cap (3) and the omitted default (→1000) without throwing", async () => {
-    // Both a valid cap and the omitted default pass the guard and return a well-formed DrainResult
-    // that drains this test's own seeded row. End-to-end cap SEMANTICS are proven by the batching
-    // and starvation tests above; here the point is only that the guard lets valid inputs through.
     let capNode: string | undefined;
     let defaultNode: string | undefined;
     try {
@@ -1394,9 +1099,7 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
       const withCap = await drain(depsWith(3), NOW);
       expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
-      // The first drain wrote the flow-control gate, and the gate row is the database's one row, so
-      // the second drain would wait out that gate. Clear it so the omitted default is exercised on
-      // an ungated pass.
+      // The first drain closed the flow-control gate; clear it so the second pass is ungated.
       await pg.db.execute(sql`delete from envio_flujo`);
       defaultNode = (await seedPendingEnvios(pg.db, { count: 1 })).nodeId;
       const omitted = await drain(depsWith(), NOW);
@@ -1413,9 +1116,6 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
 });
 
 /**
- * What keeps a second drain off these rows is that one writer holds the file at a time and the
- * claim commits with its stamps inside one `withTransaction`; that is
- * `packages/store/src/write-queue.ts`'s subject, and its own cases hold it. There is no
- * `FOR UPDATE` and no clause of any kind doing this: `claimBatch`'s selection is a plain SELECT —
- * see its own paragraph in `./drain.ts`.
+ * No concurrent-drain case here: one writer at a time is `packages/store/src/write-queue.ts`'s
+ * subject, and its own cases hold it.
  */

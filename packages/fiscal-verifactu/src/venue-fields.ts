@@ -1,7 +1,5 @@
-// Side-effect only: registers this package's codes on the shared registry. `setup.request_invalid`,
-// the code thrown below, is declared in ./errors.ts — this package's own contribution, beside
-// ./provisioning-secret.ts's use of the same code. Reachability from the package barrel is guarded
-// once, in the root project's scripts/errors-reachable.test.ts (CLAUDE.md §4).
+// Side-effect only: registers this package's codes, `setup.request_invalid` among them.
+// See ./errors.ts.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { MAX_BASE_CODE_LENGTH } from "./reserved-series.js";
@@ -20,12 +18,8 @@ export interface VenueFiscalFields {
   readonly operationDescription: string;
 }
 
-/* The next three constants restate rules `@waitron/verifactu` owns, rather than importing them:
- * that module exports the whole-record validator and not its individual patterns. Nothing in the
- * type system keeps a restatement honest, so ./venue-fields.charset.test.ts runs each of the three
- * against `validate`'s own verdict on a real record and compares them. Every case in its tables is
- * there because some narrowing or widening of these three flips it — measured by making each of
- * those changes and watching a case go red. */
+/* The next three constants restate rules `@waitron/verifactu` owns, which exports only the
+ * whole-record validator; ./venue-fields.charset.test.ts compares each against its verdict. */
 
 /** The character set the validator applies to `NumSerieFactura` (`NUMSERIE_PATTERN`). */
 const NUMSERIE_CHARSET = /^[A-Za-z0-9/_.-]+$/;
@@ -62,7 +56,7 @@ function refuse(field: VenueFiscalFieldPath): never {
 
 /** Refuse a venue whose fiscal text fields would produce a record AEAT cannot accept, naming the
  * offending field and writing nothing. Run BEFORE `provisionVenue` mints the unrepairable SIF and
- * hash chain (CLAUDE.md §5), so the operator fixes it in the wizard rather than discovering it at
+ * hash chain, so the operator fixes it in the wizard rather than discovering it at
  * the till when the first sale is refused. */
 export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
   for (const [field, code] of [

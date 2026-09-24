@@ -14,24 +14,9 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 
 /**
- * **Four cases went with the storage switch, and each is named here rather than left as a silent
- * deletion.**
- *
- *  - `fails when fiscal runs before core` expected `runMigrations(db, FISCAL_MIGRATIONS)` on an
- *    empty database to be refused `42P01` and to leave no fiscal tables behind. This engine
- *    ACCEPTS it: a `CREATE TABLE` whose foreign key names a table that does not exist is created
- *    anyway, and only the first INSERT is refused, with `no such table: main.<parent>` (measured
- *    on node v26.7.0 against `node:sqlite`, one table referencing a missing one). So the ordering
- *    mistake is no longer caught at migrate time and no longer leaves the database clean — it
- *    surfaces at the first write instead. Nothing here holds that property now; what decides the
- *    order in the product is `orderedMigrationSets` (`packages/module/src/module.ts`), and
- *    `scripts/module-graph-honesty.test.ts` reads the declared dependency edges.
- *  - the three `envios drainer enumeration` cases asked a PostgreSQL catalogue
- *    (`has_function_privilege`, `pg_proc`) about `envios_work_due(timestamptz)`, a SQL function
- *    this branch's regeneration dropped and this engine could not hold anyway. What the two
- *    THRESHOLD cases pinned is live again, through `drain()` rather than through SQL, in
- *    `drain.containment.test.ts`'s "the due-work gate's thresholds". The grant case has no
- *    successor and is not owed one: there are no roles on this engine.
+ * Nothing here catches fiscal migrating before core: this engine creates a table whose foreign key
+ * names a missing table. The product's order comes from `orderedMigrationSets`
+ * (`packages/module/src/module.ts`).
  */
 const pg = useVenueDb({
   migrations: [],
@@ -43,15 +28,7 @@ afterEach(async () => {
   await pg.db.execute(sql`delete from envios`);
 });
 
-/**
- * Every table in the database, drizzle's per-package journals included and SQLite's own excluded.
- *
- * `information_schema.tables` reached this engine as `no such table:
- * information_schema.tables`; `sqlite_master` is the catalogue here, the way
- * `packages/db/src/testing/venue-db.ts` and `scripts/append-only-triggers.test.ts` both read it.
- * The journals stay IN the list because the `table_schema = 'public'` filter they replace
- * included them — there is one namespace on this engine and nothing to filter by.
- */
+/** Every table in the database, drizzle's per-package journals included, SQLite's own excluded. */
 async function tableNames(db: Database): Promise<string[]> {
   const rows = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name not glob 'sqlite_*' order by 1`,
@@ -59,14 +36,6 @@ async function tableNames(db: Database): Promise<string[]> {
   return rows.rows.map((r) => r.name);
 }
 
-/**
- * How many rows a package's migration journal holds.
- *
- * `count(*)::int` was casting away the BigInt the PostgreSQL driver returned. Measured on node
- * v26.7.0 against `node:sqlite`: `select count(*) as n` comes back as a JavaScript `number`, so
- * nothing needs casting — and the `::` the cast needed reaches this engine as `unrecognized
- * token: ":"`.
- */
 async function journalCount(db: Database, table: string) {
   const rows = await db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.identifier(table)}`,
@@ -74,17 +43,7 @@ async function journalCount(db: Database, table: string) {
   return rows.rows[0]?.n ?? 0;
 }
 
-/**
- * A table's columns as `{ <column>: "NO" | "YES" }`, the two words `information_schema.columns`
- * answered `is_nullable` with.
- *
- * That view reached this engine as `no such table: information_schema.columns`;
- * `pragma_table_info` answers the same question, the way
- * `packages/db/src/schema/sales.test.ts`'s own `columnsOf` helper reads it. Its `notnull` is 1 or
- * 0, translated back here so the expected values below are unchanged. The table name is BOUND:
- * measured on node v26.7.0, `pragma_table_info(?)` accepts a bind parameter and returns the same
- * rows as the literal form.
- */
+/** A table's columns as `{ <column>: "NO" | "YES" }`, meaning nullable or not. */
 async function nullabilityOf(db: Database, table: string): Promise<Record<string, string>> {
   const { rows } = await db.execute<{ name: string; notnull: number }>(
     sql`select name, "notnull" from pragma_table_info(${table})`,
@@ -97,9 +56,7 @@ describe("migration composition across packages", () => {
     const db = pg.db;
 
     const names = await tableNames(db);
-    // Core's tables and the module's tables coexist in one schema, created by independent migration
-    // sets. The whole manifest is migrated in production order (see ../test/migrations.ts) so fiscal
-    // lands on top of its `core` dependency.
+    // Core's tables and the module's tables coexist, created by independent migration sets.
     expect(names).toContain("sales");
     expect(names).toContain("tills");
     expect(names).toContain("registros_facturacion");
@@ -111,8 +68,7 @@ describe("migration composition across packages", () => {
   it("keeps the two journals separate", async () => {
     const db = pg.db;
 
-    // Two tables, both non-empty. One shared journal would make each package's next `generate`
-    // read the other's entries as unknown and re-apply its own set from zero.
+    // Separate journals: drizzle runs only migrations newer than a journal's latest `created_at`.
     expect(await journalCount(db, CORE_MIGRATIONS.migrationsTable)).toBeGreaterThan(0);
     expect(await journalCount(db, FISCAL_MIGRATIONS.migrationsTable)).toBeGreaterThan(0);
     expect(CORE_MIGRATIONS.migrationsTable).not.toBe(FISCAL_MIGRATIONS.migrationsTable);
@@ -128,9 +84,7 @@ describe("migration composition across packages", () => {
       (await tableNames(db)).length,
     ];
 
-    // No throw, and nothing applied a second time: a re-application would try to CREATE TABLE a
-    // table that exists and be refused, rather than pass quietly, which is the reason this test
-    // asserts on a fresh run rather than on the counts alone.
+    // A re-application would CREATE TABLE an existing table and be refused.
     for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
 
     expect([
@@ -151,7 +105,6 @@ describe("envio_flujo migration", () => {
       tiempo_espera_seg: "NO",
     });
 
-    // The one-row constraint: a second row is refused by the singleton check, whatever id it names.
     await db.execute(sql`
       insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
       values (1, '2026-07-21T00:00:00Z', 60)

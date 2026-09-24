@@ -12,29 +12,16 @@ const pg = useVenueDb({
 
 /**
  * `cuota_total`/`importe_total` hold the huella's literal hash input, so the bytes read back must
- * equal the bytes written. `@waitron/verifactu`'s `buildCadena` reads
- * `record.CuotaTotal`/`record.ImporteTotal` verbatim as strings and hashes them byte-for-byte; it
- * never re-runs `formatAmountExact`. A column that re-rendered the literal — dropping a trailing
- * zero, normalising `-0.00` — would corrupt an art. 7.i re-render of a row nobody touched.
+ * equal the bytes written: `@waitron/verifactu`'s `buildCadena` hashes them byte-for-byte. A column
+ * that re-rendered the literal — dropping a trailing zero, normalising `-0.00` — would corrupt a
+ * re-hash of a row nobody touched.
  *
- * The amount below is 12 integer digits, the widest `ImporteSgn12.2Type` permits, and the case
- * still asks for it because a column that silently narrowed a legal amount is the failure this
- * test was written for. What the ENGINE refuses has changed: `packages/db/src/schema/columns.ts`
- * records that the SQLite column accepts values its PostgreSQL predecessor rejected, so this case
- * is now about the round trip alone and nothing here should be read as a width guarantee.
- *
- * Three spellings in the statement below changed with the engine, each measured against it by
- * running this file: `'[]'::jsonb` arrived as `unrecognized token: ":"` (a colon opens a bind
- * parameter to SQLite's parser) and the columns are TEXT holding JSON, so the cast is gone;
- * `repeat('F', 64)` arrived as `no such function: repeat`, so the 64 F's are built in JavaScript
- * and bound, the shape `node-columns.test.ts` already used; and `id`/`creado_en` are stated rather
- * than omitted, because both are `$defaultFn` columns only the insert BUILDER fills — a raw
- * statement omitting them is refused `NOT NULL constraint failed: registros_facturacion.id`.
+ * The amount below is 12 integer digits, the widest `ImporteSgn12.2Type` permits. This case is
+ * about the round trip alone: nothing here should be read as a width guarantee, because the column
+ * refuses no width (`packages/db/src/schema/columns.ts`).
  */
 describe("cuota_total / importe_total round-trip the huella's literal hash input", () => {
   it("stores and reads back a 12-integer-digit AEAT-legal amount byte-identically", async () => {
-    // 12 integer digits + 2 decimal. Not scale-2-padded from a round number either: proves no
-    // re-rendering happens on the way in or out, only a literal string round-trip.
     const importeTotal = "999999999999.99";
     const cuotaTotal = "173913043.47";
 

@@ -10,14 +10,6 @@ import { appendToChain, readChainHead } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
-// ONE database for the suite, reseeded per test — chain.concurrency.test.ts's convention, and for
-// its reason: `seedTill` mints a fresh node (and therefore a fresh NIF) per call, and every query
-// below is scoped to that node's `node_id`, so a previous test's committed rows are simply out of
-// scope rather than something to clean up. Nothing here can truncate `registros_facturacion`
-// anyway — the append-only trigger blocks it (src/testing/seed.ts's own note).
-//
-// Until 2026-07-31 this was a fresh PGlite per test closed by a single `afterAll` — one close for
-// however many instances the run opened, leaving every one but the last alive for the whole run.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
@@ -39,8 +31,7 @@ async function records(): Promise<
 > {
   // Through the table definition, not raw SQL: `primer_registro` is a flag, which this engine
   // stores as 0 or 1, and only the builder maps it back to a boolean. A raw read returns the
-  // number, so `toBe(true)` reads `expected 1 to be true` against a perfectly correct row. The
-  // keys are aliased to the column names so every assertion below is unchanged.
+  // number, so `toBe(true)` reads `expected 1 to be true` against a perfectly correct row.
   return pg.db
     .select({
       secuencia: registrosFacturacion.secuencia,
@@ -64,7 +55,7 @@ describe("appendToChain", () => {
   });
 
   it("marks the first record PrimerRegistro=S and stores a huella anyway", async () => {
-    // The trap from spec §5: on the first record the predecessor huella field is present but
+    // On the first record the predecessor huella field is present but
     // EMPTY, and the record's own huella is still computed and stored. A start-of-chain is a
     // normal state, not an absence of hashing.
     const saleId = await seedSale(pg.db, till, 1);
@@ -103,7 +94,7 @@ describe("appendToChain", () => {
   });
 
   it("interleaves alta and anulación in one chain in generation order", async () => {
-    // Findings §1: it is a RECORD chain, not an invoice chain. A void does not start a second
+    // It is a RECORD chain, not an invoice chain. A void does not start a second
     // chain and does not jump the queue.
     const a = await seedSale(pg.db, till, 1);
     const b = await seedSale(pg.db, till, 2);
@@ -162,10 +153,6 @@ describe("appendToChain", () => {
       importe_total: string;
       cuota_total: string;
       huella: string;
-      // A raw db.execute(sql`...`) result is not tied to any schema column, so drizzle has no
-      // PgColumn to run mapFromDriverValue through — unlike the query builder's typed .select(),
-      // it hands back whatever the driver itself returns for a timestamptz, which is a plain
-      // string here, not a JS Date.
       fecha_hora_huso_gen_registro: string;
       offset_minutos: number;
     }>(sql`
@@ -175,9 +162,9 @@ describe("appendToChain", () => {
     const row = rows[0];
     expect(row?.importe_total).toBe("123.45");
     expect(row?.cuota_total).toBe("21.43");
-    // fecha_hora_huso_gen_registro is a timestamptz: it stores the correct absolute instant but
-    // cannot, by itself, tell you which offset the huella was hashed with. offset_minutos is what
-    // makes the ORIGINAL literal reproducible, not merely a value equal to it in wall-clock terms.
+    // fecha_hora_huso_gen_registro stores the absolute instant but not which offset the huella
+    // was hashed with. offset_minutos is what makes the ORIGINAL literal reproducible, not merely a
+    // value equal to it in wall-clock terms.
     expect(formatDateTime(new Date(row!.fecha_hora_huso_gen_registro), row!.offset_minutos)).toBe(
       "2026-07-20T19:20:01+02:00",
     );
@@ -205,7 +192,7 @@ describe("appendToChain", () => {
     const b = await seedSale(pg.db, till, 2);
     await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
     // Bypasses appendToChain entirely: this is the backstop, and it must hold against a writer
-    // that never took the lock.
+    // that never went through it.
     const error = await captureError(() =>
       pg.db.insert(registrosFacturacion).values({
         tillId: till.tillId,
@@ -236,34 +223,14 @@ describe("appendToChain", () => {
   });
 
   it("retries inside a savepoint, so a real collision does not poison the whole transaction", async () => {
-    // Unlike the stubbed test below (which proves the RETRY BOUND deterministically), this one
-    // drives REAL refusals, with no concurrency at all: a single writer, sequentially, against a
-    // position that is ALREADY occupied before appendToChain ever runs. Every attempt collides for
-    // the same reason, so it reaches exhaustion through three refusals the database issued.
+    // REAL refusals, with no concurrency: a single writer against a position that is ALREADY
+    // occupied before appendToChain runs, so it reaches exhaustion through three refusals the
+    // database issued.
     //
-    // What this case was ORIGINALLY written to catch was deleting the savepoint: on PostgreSQL the
-    // first 23505 aborted the outer transaction and the second attempt's first statement came back
-    // 25P02, which isUniqueViolation does not recognise, so appendToChain rethrew a raw driver
-    // error instead of chain.append_contention. That mechanism is gone — SQLite backs out the
-    // refused statement and leaves the transaction open.
-    //
-    // THE CONTROL HAS NOW BEEN RUN, and it says this case does NOT discriminate the savepoint on
-    // this engine: replacing `tx.transaction((nested) => attemptAppend(nested, …))` with a plain
-    // `attemptAppend(tx, …)` leaves this case PASSING. The cases that stub `tx` go red under that
-    // deletion and none of them is evidence either — each stub has a `transaction` method and
-    // nothing else, so they fail because the stub has no other method, not because the savepoint
-    // matters.
-    //
-    // So this is a case about exhaustion surfacing as a structured error, and the savepoint is
-    // held by nothing here. Its remaining job (undoing what a losing attempt wrote before the
-    // refused statement) is not reachable from this path either: the refused insert is the FIRST
-    // write an attempt makes, and the only earlier write is `readChainHead` creating a missing
-    // head row, which is idempotent. CLAUDE.md §4, "a proof-by-deletion belongs to the SHAPE of
-    // the code it was taken against" — the shape changed and the proof did not survive it.
-    // "lands the record on the retry after a refused first attempt" shows a rollback to the
-    // attempt's savepoint removing a write, but its wrapper, like the stubs, has only a
-    // `transaction` method, so deleting appendToChain's savepoint fails it for that reason alone
-    // and the savepoint is still held by no case.
+    // Weaker than its name: this case does NOT hold appendToChain's savepoint. Replacing the nested
+    // `tx.transaction(...)` with a plain `attemptAppend(tx, …)` leaves it passing, and the stubbed
+    // cases below fail that deletion only because their stub has nothing but `transaction`. No case
+    // in this file holds the savepoint.
     const occupied = await seedSale(pg.db, till, 1);
     await pg.db.insert(registrosFacturacion).values({
       tillId: till.tillId,
@@ -299,16 +266,9 @@ describe("appendToChain", () => {
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
     const saleId = await seedSale(pg.db, till, 1);
-    // Every savepoint attempt loses its race. Stubbing tx.transaction is the only way to reach
-    // exhaustion deterministically: contention cannot produce three collisions here, because one
-    // write transaction runs on the venue file at a time (chain.concurrency.test.ts's `holds a
-    // second appender on the same chain until the first commits` watches the second body fail to
-    // START), and the case above reaches three real refusals only by occupying the position first,
-    // with no concurrency at all. appendToChain touches only tx.transaction on this path, so the
-    // stub is exactly that one method and nothing else — a wider fake would let the test keep
-    // passing if the retry loop started doing something else. The forged rejection is the
-    // chain-position index's refusal, from `refusalError`, whose own suite holds it equal to the
-    // engine's.
+    // Every savepoint attempt loses its race. Contention cannot produce three collisions, because
+    // one write transaction runs on the venue file at a time. The stub is exactly the one method
+    // appendToChain calls on `tx`, so a wider fake cannot hide the retry loop doing something else.
     const alwaysCollides = {
       transaction: () =>
         Promise.reject(
@@ -340,7 +300,6 @@ describe("appendToChain", () => {
     // unique index; rolling back to the savepoint takes the planted record with it, and the second
     // attempt passes straight through. The only thing wrapped is `transaction`, the one method
     // appendToChain calls on `tx`.
-    // The controls that fail it are in the pull request that added it.
     const decoy = await seedSale(pg.db, till, 1);
     const saleId = await seedSale(pg.db, till, 2);
     let calls = 0;
@@ -440,8 +399,7 @@ describe("appendToChain — pre-fetched SIF", () => {
     await expect(
       pg.db.transaction(async (tx) => {
         const sif = await currentSif(tx, till.nodeId);
-        // A sif whose nodeId does not match the node being appended to — a caller bug the
-        // dedup must never silently mis-attribute. A fabricated UUID stands in for another node.
+        // A fabricated UUID stands in for another node.
         const wrongSif = {
           ...sif,
           nodeId: "ffffffff-0000-4000-8000-000000000000" as typeof sif.nodeId,
@@ -454,13 +412,8 @@ describe("appendToChain — pre-fetched SIF", () => {
 
 describe("readChainHead", () => {
   it("creates the chain head row from scratch when a till has none yet", async () => {
-    // Every other test in this file reaches readChainHead through appendToChain on a till that
-    // seedTill already provisioned via registerSif — which itself always inserts (or resets) a
-    // cadenas row as its own last step (./registro-sif.ts). That leaves readChainHead's OWN
-    // create-the-head-if-missing branch — the one Task 14 exists to build, for "the residual
-    // window where there is no head row yet to lock" — untouched by every test above. Deleting the
-    // row this fixture's registerSif already created reproduces that cold-start state directly,
-    // without inventing a second, non-SIF-registered kind of till fixture just to reach it.
+    // seedTill's registerSif already wrote a cadenas row, so every other test skips readChainHead's
+    // create-the-head branch. Deleting that row reproduces the cold start.
     await pg.db.execute(sql`delete from cadenas where node_id = ${till.nodeId}`);
 
     const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
