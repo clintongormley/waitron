@@ -1,24 +1,6 @@
 /**
- * The dashboard's registered icon set — see registerIcons() in @waitron/ui and "Icons" in
- * docs/developers/design-system.md. Each is a plain geometric shape at wt-icon's 16x16 viewBox.
- *
- * - hamburger: the sidebar drawer toggle (three bars — opens the whole app's navigation).
- * - kebab: wt-row-actions' per-row "more actions" trigger (three dots — a small, local menu, not
- *   the same thing a hamburger means; wt-row-actions requires its consuming app to register this).
- * - chevron-down: a collapsible section header's disclosure indicator, rotated via CSS to point up
- *   when expanded rather than needing a second registered icon. wt-combobox's trigger also draws
- *   this icon, so an app using that primitive has to register it too.
- * - gear: the Settings nav group's header icon. Generated (not hand-plotted) — an 8-tooth ring
- *   computed with trigonometry at 16x16, verified by rendering it large before use.
- * - person: the banner's account-menu trigger (head + shoulders bust).
- * - plus: an add or create action trigger (two crossing filled rectangles forming a plus sign,
- *   centered) — the Modifiers list's round "new modifier" button, and Categories' round "create
- *   category" button.
- * - grip: the drag handle that reorders a modifier's choices (two columns of dots).
- * - bell: the banner's alerts trigger.
- * - close: wt-toast's dismiss button (wt-toast requires its consuming app to register this).
- *   Whether bell and close were drawn fresh or adapted from a published glyph is unrecorded: their
- *   path data first appears in the dashboard alerts plan (Task 11) with no note of its source.
+ * Paths for wt-icon's 16x16 viewBox. `kebab` (wt-row-actions), `chevron-down` (wt-combobox) and
+ * `close` (wt-toast) are drawn by shared primitives, which need their consuming app to register them.
  *
  * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
  * Google, licensed under the Apache License, Version 2.0
@@ -33,7 +15,6 @@ export const DASHBOARD_ICONS: Record<string, string> = {
   person:
     "M8,8c1.47,0 2.67,-1.19 2.67,-2.67s-1.19,-2.67 -2.67,-2.67-2.67,1.19 -2.67,2.67 1.19,2.67 2.67,2.67zm0,1.33c-1.78,0 -5.33,0.89 -5.33,2.67v1.33h10.67v-1.33c0,-1.77 -3.55,-2.67 -5.33,-2.67z",
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
-  // grip: the drag handle that reorders a modifier's choices (two columns of dots).
   grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",
   bell: "M8 14.5a1.5 1.5 0 0 0 1.5-1.5h-3A1.5 1.5 0 0 0 8 14.5ZM12.5 10.5V7.25c0-2.2-1.2-4-3.25-4.5V2.25a1.25 1.25 0 0 0-2.5 0v.5C4.7 3.25 3.5 5.05 3.5 7.25v3.25L2 12v.5h12V12Z",
   close:

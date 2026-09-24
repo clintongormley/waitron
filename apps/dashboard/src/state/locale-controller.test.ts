@@ -41,10 +41,8 @@ describe("LocaleChangeController", () => {
 
   it("invokes a custom handler instead of the default requestUpdate", async () => {
     let calls = 0;
-    // A second controller on the same (already-connected) host with an explicit handler
-    // exercises the `handler ?? default` branch; the probe above covers the default branch.
-    // Lit's addController calls hostConnected immediately when the host is already
-    // connected, so the custom controller subscribes at construction time here.
+    // Lit's addController calls hostConnected at once on an already-connected host, so this
+    // controller subscribes at construction.
     const { el } = await mountWidget<LocaleProbe>("locale-probe", {});
     new LocaleChangeController(el, () => {
       calls += 1;

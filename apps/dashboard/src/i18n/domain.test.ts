@@ -21,8 +21,7 @@ import {
 import { setLocale } from "./t.js";
 
 afterEach(() => {
-  // The resolvers default to t.ts's module-level locale; reset to the shipped
-  // default so a setLocale in one test cannot leak into another.
+  // Reset to the shipped default so a setLocale in one test cannot leak into another.
   setLocale("es-ES");
 });
 
@@ -32,7 +31,6 @@ it("resolves a role token to Spanish, to English, and passes an unknown value th
   expect(roleName("staff", "es")).toBe("Empleado");
   expect(roleName("supervisor", "es")).toBe("Supervisor");
   expect(roleName("admin", "es")).toBe("Administrador");
-  // Unknown value → the raw value, never a throw or an empty string.
   expect(roleName("wizard", "es")).toBe("wizard");
 });
 
@@ -93,8 +91,6 @@ it("resolves an allergen code to Spanish and English, unknown code raw", () => {
 it("names every breach kind, falling back to the raw token (shift-planning slice 1)", () => {
   expect(breachKindName("exceeds_daily_max", "es")).not.toBe("exceeds_daily_max");
   expect(breachKindName("night_work", "es")).toBe("Trabajo nocturno");
-  // Raw-value fallback for an unmapped token (proven by deletion: make resolve() return "" for a miss
-  // and this assertion goes red).
   expect(breachKindName("unknown_kind", "es")).toBe("unknown_kind");
 });
 
@@ -127,16 +123,12 @@ it("names both swap directions, raw fallback for an unknown token (staff portal)
 });
 
 it("passes a prototype-chain token (toString/constructor) through raw, never undefined", () => {
-  // A token colliding with an Object.prototype member must fall back to the raw value like any other
-  // unknown token — a bare `table[value]` would resolve the inherited method (truthy) and return
-  // undefined instead of the raw token. The own-key check is what keeps the raw fallback correct.
   expect(roleName("toString", "es")).toBe("toString");
   expect(allergenName("constructor", "es")).toBe("constructor");
   expect(vatClassName("valueOf", "en")).toBe("valueOf");
 });
 
 it("falls back to English for a known value in an unknown language", () => {
-  // "fr" is not a column, so the `?? table[value]?.en` arm fires — proven across resolvers.
   expect(roleName("manager", "fr")).toBe("Manager");
   expect(allergenName("milk", "fr")).toBe("Milk");
 });
@@ -191,12 +183,10 @@ it("resolves a purchase-VAT-kind token to Spanish and English, unknown value raw
 });
 
 it("strips a region subtag before the language lookup", () => {
-  // "es-ES" → "es"; proves the region strip runs before indexing the table.
   expect(roleName("admin", "es-ES")).toBe("Administrador");
 });
 
 it("defaults to the active locale when none is passed", () => {
-  // No locale arg → currentLocale(). The shipped default is es-ES; setLocale drives it.
   expect(roleName("manager")).toBe("Encargado");
   expect(statusName("active")).toBe("Activo");
   expect(vatClassName("zero")).toBe("Sin impuestos");
