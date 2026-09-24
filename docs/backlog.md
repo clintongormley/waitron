@@ -506,7 +506,7 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 6 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 7 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
 the menus' extras publications, their per-item extras prices and the variant price overrides, or,
 once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
@@ -697,7 +697,7 @@ lists. Its published allergens and diet stay blank unless it overrides them, so 
 parent's; a parent's recipe or diet change republishes the variants that do override. The "is this
 a product in its own right" check that was written out at each product-by-id route is now one
 shared function, and every route other than the editor still refuses a variant's id as before. No
-migration: **no venue reset needed.** The dashboard screen for a variant's page is Task 7. What it
+migration: **no venue reset needed.** The dashboard screen for a variant's page is Task 7 (#545). What it
 left open, besides the bullets above that it updated:
 - **Reassigning a unit's products to another real unit (not Each) does not update their stored
   pricing unit** — for top-level products as well as variants. Found by the review; I believe it
@@ -711,7 +711,21 @@ left open, besides the bullets above that it updated:
   reconsider on their own; nothing waits on them. Task 9's cleanup removes the old variant table
   and its shapes, not the editor's types, so it does not cover them.
 
-What Task 7 (`feat/variants-editor-screen`, the dashboard's variant page) leaves open:
+**Task 7 LANDED as #545 (2026-09-24): a variant has its own page in the dashboard.** The products
+list shows each variant under its product with its own name, and the price and categories it is
+sold and reported under, plus a note of its VAT where that differs from its product's (the list
+still has no VAT column, as #387 decided). A removed variant is kept Inactive, shown behind the
+list's Status filter and the product editor's "Show variants" filter, and can be restored from
+either; the editor's save body now carries each variant's `active`, so a save never brings one back
+by accident. A variant's own page shows its product's values as hints in every field it leaves
+blank (never in its three names), and has no Modifiers or Variants section; adding the first
+variant adds one row, with no "Regular". A variant can be opened from its product's variants table
+(held while the product has unsaved changes) and from the image library. On a narrow table the
+variants' prices move under their names and the price column is hidden. Shared primitives changed
+with it: `wt-price-input` gained a `placeholder`, `wt-input`'s and `wt-price-input`'s hints use the
+muted text colour, `wt-switch` gained `hide-label`, and `wt-dialog` no longer lets a late close
+report shut a dialog that has been reopened. No migration: **no venue reset needed.** Next is Task
+8 (top sellers roll variants up under their parent). What Task 7 leaves open:
 - **The product list shows "—" for a variant's allergens**, because the list's data carries none for
   a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
   whether the list should read a variant's effective allergens, and add them to that read if so.
