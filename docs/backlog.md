@@ -837,7 +837,7 @@ error, the table was gone and the product row kept. A
 product with Active variants is now refused on the till's plain product path, as an extras pick on
 either path, and on a raised held line (the Task 5 bullet above). (2026-09-24: B4 has since removed
 the plain product path; see "A sale needs a zone" below.) What Task 9 leaves open:
-- **DONE (owner decision 2026-09-24): paying a held order bills its lines as parked, and the till
+- **DONE (#575, owner decision 2026-09-24): paying a held order bills its lines as parked, and the till
   shows what it bills.** A line, or an extras pick, whose product gained an Active variant after
   the order was parked is billed as parked: the cash and card pays price a retrieved order from its
   stored lines (`priceStoredOrder`, `apps/server/src/working-order.ts`), following the 2026-09-20
