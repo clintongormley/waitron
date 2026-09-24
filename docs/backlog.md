@@ -3951,8 +3951,9 @@ Five things it leaves open:
   `build: { target: "chrome120" }` sets it. Those two are what was measured; no other way of pinning
   it was tried. **No BROWSER floor is stated anywhere in the repo.** The compile floors that do
   exist are for Node and are a different knob: `tsconfig.base.json`'s `"target": "ES2022"`, which
-  constrains the syntax TypeScript emits, and `--target=node24` in the four esbuild build scripts
-  (`apps/server`, `apps/print-agent`, `packages/credentials`, `packages/provisioning`). Nothing is
+  constrains the syntax TypeScript emits, and `--target=node24` in `scripts/bundle-node.mjs`, which
+  builds the Node bundles of `apps/server`, `apps/print-agent`, `packages/credentials` and
+  `packages/provisioning`. Nothing is
   known to break, and the devices are bought new — but note that the hardware track's own stated
   floors do NOT establish that, and one of them cuts the other way: Screen Wake Lock's iOS Safari
   16.4 (`docs/superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md` line 83) sits

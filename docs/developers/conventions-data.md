@@ -117,8 +117,8 @@ warnings on every install, in every worktree and in the image build, plus an AEA
 `pnpm --filter … exec waitron-credentials` steps could never have run; the measurements are in that
 runbook's dated note (`docs/superpowers/plans/2026-07-28-first-aeat-submission.md`, Task 3). Guards:
 `scripts/manifest-commands.test.ts` (a declared `bin` target must be tracked by git; a
-`waitron.commands` target must appear as an `--outfile=` in its own package's `build` script, which
-is a text match) and `scripts/deploy-image-env.test.ts` (the image ships every name the server
+`waitron.commands` target must be the outfile of an `<entry>=<outfile>` pair its own package's
+`build` script hands to `scripts/bundle-node.mjs`, which is a text match) and `scripts/deploy-image-env.test.ts` (the image ships every name the server
 declares).
 
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
