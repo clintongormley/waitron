@@ -36,14 +36,14 @@ import { restoreDatabase } from "./restore.js";
  * about the product. `useVenueDb` pairs each migration set with `installAppendOnlyTriggers` over the
  * tables that set declared (`packages/db/src/testing/venue-db.ts`), and
  * `migrationOptionsFor` carries the declared list through
- * (`packages/migrations/src/manifest.ts:163`), so this database already refuses what the box
+ * (`packages/migrations/src/manifest.ts`), so this database already refuses what the box
  * refuses before a case runs. Measured 2026-09-23, with the control in the other direction: with the
  * `setup` loop below doing nothing the one case still passes, and with the declared list emptied as
  * well it fails (`expected [ …(22) ] to deeply equal ArrayContaining{…}`). The statements are
  * `create trigger if not exists`, which is why the duplicate is silent; their text is copied rather
  * than imported because `apps/server` does not depend on `@waitron/store`. The product's own
  * migrating paths install the same pair from the same list
- * (`applyMigrations`, `packages/migrations/src/apply.ts:105`).
+ * (`migrateEverySet` in `packages/migrations/src/apply.ts`, which `applyMigrations` calls).
  * What the INSTALLER produces is pinned by `scripts/append-only-triggers.test.ts`; what is pinned
  * HERE is the restore — and the "present in the copy" assertion below compares the copy's whole
  * trigger set against the SOURCE's rather than against a hand-written list, so it says the same

@@ -43,10 +43,11 @@ interface Held extends CardFacts {
   onFirstFind?: SumUpTransaction["status"];
 }
 
-/** A deterministic in-memory `SumUpClient`. NOT barrel-exported. The `…Next` controls are one-shot
- * and shape the NEXT checkout; `invisibleUntilSettled` models a reader that has not started the
- * checkout (a 404 until it resolves). `pairReader` inserts a reader as `processing`, because the
- * device confirms asynchronously; `setReaderStatus` stands in for that confirmation. */
+/** A deterministic in-memory `SumUpClient`. NOT barrel-exported. The `…Next` controls are one-shot;
+ * each shapes the next call of its kind (create, find or refund). `invisibleUntilSettled` models a
+ * reader that has not started the checkout (a 404 until it resolves). `pairReader` inserts a reader
+ * as `processing`, because the device confirms asynchronously; `setReaderStatus` stands in for that
+ * confirmation. */
 export class FakeSumUp implements SumUpClient {
   lastCreate: Parameters<SumUpClient["createCheckout"]>[0] | undefined;
   lastRefund: { transactionId: string; amount?: Decimal } | undefined;

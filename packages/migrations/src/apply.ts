@@ -88,8 +88,8 @@ async function migrateEverySet(
  * migrated by a NEWER image, a different fault with its own code (`provisioning.database_ahead`).
  *
  * `expected` is read from `set.migrationsFolder` exactly as drizzle's migrator reads it, not through
- * `expectedSchemaVersion`, which would resolve a relative folder against this module's parent
- * directory rather than the working directory drizzle uses.
+ * `expectedSchemaVersion`, which would resolve a relative folder against the parent of this
+ * module's directory rather than the working directory drizzle uses.
  */
 async function assertSetApplied(
   db: Pick<Database, "execute">,

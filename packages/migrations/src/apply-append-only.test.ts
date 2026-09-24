@@ -94,7 +94,6 @@ function seedOneRow(db: Database, table: string): void {
   );
 }
 
-/** Rows in `table`. */
 function rowCount(db: Database, table: string): number {
   return db.all<{ n: number }>(sql.raw(`select cast(count(*) as int) as n from "${table}"`))[0]!.n;
 }

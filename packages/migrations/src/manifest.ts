@@ -96,14 +96,15 @@ export function resolveExistingMigrationsFolder(
 /**
  * Where each set's SQL actually lives, plus a guard that the folder carries a real journal.
  *
- * `root === null` means "running from source": resolve each `from` against this module's parent
- * directory. Otherwise every set lives at `<root>/<name>` — an ABSOLUTE `root` is used as-is; a
- * RELATIVE one resolves against that same base, never the process's current working directory.
+ * `root === null` means "running from source": resolve each `from` against the parent of this
+ * module's directory. Otherwise every set lives at `<root>/<name>` — an ABSOLUTE `root` is used
+ * as-is; a RELATIVE one resolves against that same base, never the process's current working
+ * directory.
  *
  * That base comes from `import.meta.url`, so it moves: from source a relative root resolves under
- * `packages/migrations`, but inside a bundle it resolves under the bundle's parent directory (for
- * the server bundle, `apps/server`). A relative root is supported deliberately, because
- * `apps/server`'s operator-supplied `WAITRON_MIGRATIONS_DIR` may be one.
+ * `packages/migrations`, but inside a bundle it resolves under the parent of the directory the
+ * bundle sits in (for the server bundle, `apps/server`). A relative root is supported deliberately,
+ * because `apps/server`'s operator-supplied `WAITRON_MIGRATIONS_DIR` may be one.
  *
  * The `*_MIGRATIONS` descriptors' own `migrationsFolder`s are not used: each is computed from its
  * own `import.meta.url`, which the bundle collapses too, so in the shipped artefact they all resolve
