@@ -2,16 +2,13 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /**
- * Merges the ten `mutation-db` shard reports into ONE score for `packages/db`.
+ * Merges the `mutation-db` shard reports into ONE score for `packages/db`.
  *
  * Each shard mutates its own slice and publishes its own report, so a `thresholds.break` in
- * `packages/db/stryker.config.json` would gate each SLICE rather than the package (a shard holding
- * the well-tested files passes while the package as a whole is far below the bar). This reads every
+ * `packages/db/stryker.config.json` would gate each SLICE rather than the package. This reads every
  * shard's json report, adds the mutants up, and gates the total.
  *
- * Status handling follows Stryker's own definition of the mutation score: killed and timed-out
- * mutants are detected, survived and never-covered ones are not, and everything else — an ignored
- * mutant, one that would not compile, one whose test run errored — is outside the ratio.
+ * Status handling follows Stryker's own definition of the mutation score.
  */
 const DETECTED = new Set(["Killed", "Timeout"]);
 const UNDETECTED = new Set(["Survived", "NoCoverage"]);
@@ -36,9 +33,7 @@ export function aggregate(reports) {
         // ConditionalExpression mutants that both replace with `true` and both START at the same
         // column — the whole condition, and its left operand. Keyed on the start alone the two
         // merge into one, and `Map.set` keeps whichever report was read last, so the package's
-        // score moves with the order the shard artifacts happen to be listed in. Measured on run
-        // 35504169506's ten real reports: 21 mutants disappeared that way and 7 of the merges put
-        // a detected and an undetected mutant together.
+        // score moves with the order the shard artifacts happen to be listed in.
         const { start, end } = mutant.location;
         const key = `${mutant.mutatorName}@${start.line}:${start.column}-${end.line}:${end.column}=${mutant.replacement ?? ""}`;
         // A mutant two reports disagree about resolves the same way whichever order the shard
@@ -49,9 +44,7 @@ export function aggregate(reports) {
         // Undetected over detected is what stops a merge RAISING the score. Detected over a
         // status outside the ratio does the opposite — keeping a `Killed` over an `Ignored` adds
         // 1/1 to the ratio — and it is there because a shard that actually ran the mutant knows
-        // more than one that skipped it. Neither can fire in this workflow anyway: the ten shards
-        // run one config, so a mutant is `Ignored` in all of them or none, and each file is in
-        // exactly one shard's mutate list. This is what to do if that ever stops being true.
+        // more than one that skipped it.
         const seen = mutants.get(key);
         if (seen !== undefined && weight(seen) >= weight(mutant.status)) continue;
         mutants.set(key, mutant.status);
@@ -89,15 +82,7 @@ function ratio(killed, valid) {
   return valid === 0 ? 0 : (100 * killed) / valid;
 }
 
-/**
- * Every json under `dir` that IS a mutation report — it parses, and it carries a `files` object.
- *
- * Counting bare `*.json` files was enough to be fooled — a reviewer showed it with a constructed
- * case: nine real reports plus one unrelated json counted as ten, and the missing shard went
- * unnoticed. So the shape is checked, and
- * the CLI below counts DIRECTORIES rather than files, because each shard arrives as its own
- * artifact directory and two reports in one directory are not two shards.
- */
+/** Every json under `dir` that IS a mutation report — it parses, and it carries a `files` object. */
 export function findReports(dir) {
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -121,8 +106,7 @@ export function findReports(dir) {
 // CLI: `node scripts/mutation-aggregate.mjs <dir> --shards <n> --break <score>` reads every json
 // report under <dir> — the directory the workflow downloads the shard artifacts into — and prints
 // one score for the package, exiting 1 below `--break`. Ignored for coverage because the suite
-// exercises it in a CHILD process, which the v8 provider does not see; the unit tests above cover
-// `aggregate` in-process. Same arrangement, and the same reason, as mutation-shard.mjs.
+// exercises it in a CHILD process, which the v8 provider does not see.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
   const die = (message) => {
@@ -144,10 +128,9 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
   if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) die(`no such directory: ${dir}`);
 
   const paths = findReports(dir);
-  // A shard whose job failed uploads nothing, and the slice it holds is usually the one nobody has
-  // written tests for, so scoring what did arrive reports a number that is too high. Counted by
-  // the directory each report sits in — one artifact per shard — so a second json in one shard's
-  // directory cannot stand in for a shard that never arrived.
+  // A shard whose job failed uploads nothing. Counted by the directory each report sits in — one
+  // artifact per shard — so a second json in one shard's directory cannot stand in for a shard
+  // that never arrived.
   const directories = new Set(paths.map((path) => dirname(path)));
   if (directories.size !== shards)
     die(

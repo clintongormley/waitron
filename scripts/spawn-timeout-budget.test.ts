@@ -5,29 +5,18 @@ import { describe, expect, it } from "vitest";
 
 // A test may wait only as long as its per-test timeout allows, whatever the wait's own limit says.
 //
-// SCOPED TO `scripts/`, and the scope is a real hole. The rule is about WAITS generally — the name
-// of this file says `spawn` because that is where the lesson was paid for, but `expect.poll` and
-// `vi.waitFor` are bounded by the same per-test clock — yet no file under `packages/` or `apps/` is
-// scanned here any more. The long waits under those roots belonged to the real-PostgreSQL suites;
-// SQLite runs in-process and declares none, so the scan had nothing left to judge. The rule still
-// holds for a suite under either root and NOTHING enforces it there.
+// SCOPED TO `scripts/`, and the scope is a real hole: the rule holds for `expect.poll`,
+// `vi.waitFor` and every other wait under `packages/` and `apps/`, and NOTHING enforces it there.
+//
+// Vitest does NOT interrupt a blocking `spawnSync`, nor shorten the `timeout` handed to it; the
+// child is still killed at its own limit. What breaks is the HEALTHY case: a run that legitimately
+// needs longer than the per-test bound completes normally and Vitest fails it anyway.
+//
+// So a suite's bound has to clear the SUM of every wait a test performs, plus the untimed work
+// between them. This guard checks the bound against the largest single wait only, which is
+// NECESSARY and NOT SUFFICIENT: it catches the bounds that cannot possibly be right.
 //
 // Vitest's per-test timeout when a suite sets none.
-//
-// WHAT GOES WRONG WITHOUT A RAISED BOUND, stated as the experiment shows it rather than as it is
-// easy to assume: Vitest does NOT interrupt a blocking `spawnSync`, and it does not shorten the
-// `timeout` handed to it. A child given a 9s spawn timeout under the 5s default is still killed at
-// 9s, with `status: null`, `signal: "SIGTERM"` and `error.code: "ETIMEDOUT"` — measured 2026-09-18.
-// What breaks is the HEALTHY case: a run that legitimately needs longer than the per-test bound
-// completes normally and Vitest fails it anyway, reporting `Test timed out in 5000ms`.
-//
-// So what a suite's bound has to clear is the longest a HEALTHY TEST can take: the SUM of every wait
-// it performs, plus whatever untimed work sits between them. The largest single wait is only one
-// term of that sum. This guard checks the bound against that one term, which is NECESSARY and NOT
-// SUFFICIENT — a test that waits twice can outlast a bound set above either wait alone (measured:
-// two healthy 4s waits, each inside its own 6s spawn timeout, failed against a 7s bound). Setting a
-// suite's bound is still a judgement about that suite; this only catches the bounds that cannot
-// possibly be right.
 const VITEST_DEFAULT_TEST_TIMEOUT_MS = 5000;
 
 const SCRIPTS = import.meta.dirname;
@@ -156,20 +145,19 @@ function callArguments(source: string, open: number) {
  *   bound    — the largest per-test timeout the file sets, file-wide via `vi.setConfig` or on one
  *              case via `it(name, fn, ms)`. Zero when it sets none.
  *
- * WEAKER THAN ITS NAME, in ways a reader would otherwise assume away:
+ * WEAKER THAN ITS NAME:
  *
  *  1. It compares the bound against the LARGEST SINGLE wait, never the sum. See the note at the top
  *     of this file: passing here does not mean a suite's bound is big enough.
  *  2. It reads TEXT, and does not know code from strings. A timeout from an environment variable,
- *     imported, or computed in a helper resolves to nothing; a number inside a FIXTURE STRING counts
- *     as though it were code. This file is its own example — `budgets()` run over it reports numbers
- *     that come from the fixture sources below, and this suite performs no wait at all. Ordinary
- *     code counts too: a `timeout: 10_000` inside a `toHaveBeenCalledExactlyOnceWith(…)` is an
- *     assertion ABOUT a mocked call, waiting for nothing, and this reads it as a wait.
- *  3. It is per FILE, not per test. It takes the LARGEST bound anywhere in the file, so a suite that
- *     raises the bound on its slow cases and waits a long time in an untouched one still passes.
- *  4. A bound it cannot evaluate makes it DECLINE to judge the file rather than accuse it, because a
- *     false accusation stops every push. So an unreadable bound is a hole, deliberately.
+ *     imported, or computed in a helper resolves to nothing; a number inside a FIXTURE STRING
+ *     counts as though it were code, and so does a `timeout:` in an assertion ABOUT a mocked call,
+ *     which waits for nothing.
+ *  3. It is per FILE, not per test. It takes the LARGEST bound anywhere in the file, so a suite
+ *     that raises the bound on its slow cases and waits a long time in an untouched one still
+ *     passes.
+ *  4. A bound it cannot evaluate makes it DECLINE to judge the file rather than accuse it, because
+ *     a false accusation stops every push. So an unreadable bound is a hole, deliberately.
  */
 export function budgets(rawSource: string) {
   const source = withoutComments(rawSource);
@@ -204,12 +192,10 @@ export function budgets(rawSource: string) {
     else bounds.push(value);
   }
 
-  // The safety net, and the reason this guard can be trusted in a gate. Everything above extracts a
-  // NUMBER, and every extraction can fail silently on JavaScript it does not model — a regex literal
-  // in a test body, a tagged-template `it.each`, a form nobody has thought of. A silent failure
-  // reads as "no bound", which would fail a correct file on every push. So look, crudely and
-  // separately, for any SIGN that a bound is there: the word `testTimeout`, or a number passed after
-  // a callback. If a sign is present and precise extraction found nothing, say so and decline.
+  // The safety net. Every extraction above can fail silently on JavaScript it does not model — a
+  // regex literal in a test body, a tagged-template `it.each` — and a silent failure reads as "no
+  // bound", which would fail a correct file on every push. So look, crudely and separately, for any
+  // SIGN of a bound: the word `testTimeout`, or a number passed after a callback.
   const signOfBound =
     /(?<![\w$])testTimeout\s*:/.test(source) || /\}\s*,\s*[\d_]+\s*\)/.test(source);
   if (signOfBound && bounds.length === 0) unreadable = true;
@@ -263,11 +249,8 @@ describe("the root guard suites", () => {
   });
 });
 
-// The detector itself. Every scanner under `scripts/` carries these; without them a broken pattern
-// leaves the suite green, because a guard that matches nothing accuses nobody. Each case below was
-// taken from what the reader ACTUALLY returns, so the blind spots are recorded rather than wished
-// away — the ones marked BLIND are the cost of reading text, and the ones marked DECLINES are the
-// safety net choosing silence over a false accusation that would stop every push.
+// The detector itself. The ones marked BLIND are the cost of reading text, and the ones marked
+// DECLINES are the safety net choosing silence over a false accusation that would stop every push.
 describe("the detector itself", () => {
   const reads: [string, string, ReturnType<typeof budgets>][] = [
     ["a plain number", `spawnSync(x, { timeout: 20000 });`, u(20000, 0)],
@@ -366,8 +349,7 @@ describe("the detector itself", () => {
   });
 
   it("is BLIND to a test call written inside a fixture string, and says so", () => {
-    // Weakness 2. `scripts/waitron-sh.test.mjs` builds shell stubs out of template literals, so this
-    // is not hypothetical — a number in such a string is read as though it were code.
+    // Weakness 2. `scripts/waitron-sh.test.mjs` builds shell stubs out of template literals.
     const source = 'const stub = `it("x", f, 90000)`;\nspawnSync(x, { timeout: 20000 });';
     expect(budgets(source).bound).toBe(90000);
   });
@@ -396,7 +378,7 @@ describe("the detector itself", () => {
       // suite one level down is collected and run — and must therefore be read here too.
       writeFileSync(join(fixture, "nested", "deep.test.mjs"), "spawnSync(x, { timeout: 20000 });");
       writeFileSync(join(fixture, "flat.test.ts"), "");
-      // What a failing browser run leaves behind: a screenshot directory whose name ends `.test.ts`.
+      // A failing browser run leaves a screenshot directory whose name ends `.test.ts`.
       mkdirSync(join(fixture, "shot.test.ts"), { recursive: true });
       const found = suitesUnder(fixture)
         .map((path) => relative(fixture, path))

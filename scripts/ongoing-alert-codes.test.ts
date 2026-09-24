@@ -1,6 +1,5 @@
 // Reads source TEXT, which makes it weaker than its name in one way: a code assembled at runtime
-// (rather than written as a plain `code: "..."` string literal) escapes this scan. Every ongoing
-// alert code today is a plain literal in one of the two listed files.
+// (rather than written as a plain `code: "..."` string literal) escapes this scan.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -27,7 +26,6 @@ function ongoingCodes(): string[] {
 
 describe("ongoing alert codes reach the dashboard", () => {
   it("finds the ongoing codes it is meant to guard", () => {
-    // A control: the list is non-empty, so a broken regex fails loudly rather than passing vacuously.
     expect(ongoingCodes().length).toBeGreaterThanOrEqual(9);
   });
 

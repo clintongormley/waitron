@@ -3,58 +3,24 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Contract: the extras-and-options machinery writes no PostgreSQL-only construct OF ITS OWN for the
- * SQLite storage switch to rewrite. Three such constructs are the ones that switch removes, so none
- * of them may appear in the files listed below: an advisory lock, the JSON containment operators,
- * and a `pgEnum` declaration. What the feature reaches through a helper in a file this list does
- * not name is outside the contract as well as outside the scan — see 4 below, which is live today.
+ * The extras-and-options files listed below contain none of three PostgreSQL-only constructs: an
+ * advisory lock, the JSON containment operators, and a `pgEnum` declaration. `pgEnum` is checked in
+ * the catalogue files only; the order and sale path files are not scanned for it.
  *
- * READS TEXT, so it is weaker than "proves engine neutrality" in every way that matters to a
- * reader:
+ * READS TEXT, so it is weaker than "proves engine neutrality":
  *
  * 1. It cannot tell code from a comment or a string, so a construct NAMED in prose fails the guard
- *    as loudly as one that runs. That direction is safe — it over-reports — but it means a failure
- *    here is not by itself evidence that anything reaches a database.
- * 2. It reads a HAND-WRITTEN list of files. A new file added to the extras/options feature is
- *    outside the scan until somebody names it here, and nothing notices. A RENAME is noticed —
- *    `read` throws `ENOENT`, so every check over the missing path fails — and `scans every file it
- *    names` below is there to report that path BY NAME ahead of those throws, not to be the only
- *    thing that catches it. Nothing fires when an unlisted file appears.
+ *    as loudly as one that runs.
+ * 2. It reads a HAND-WRITTEN list of files. A new file added to the feature is outside the scan
+ *    until somebody names it here, and nothing notices. A file reached through a helper in an
+ *    unlisted file is outside it too.
  * 3. PostgreSQL-only spellings beyond these three are not covered at all. `::regclass`, `distinct
- *    on`, an array operator and `for update skip locked` are all engine-specific and all pass here.
- *    The three checked are the three the SQLite plan's §7 names.
- * 4. A construct the feature REACHES THROUGH A HELPER in an unlisted file is invisible here, and
- *    that is the live case rather than a theoretical one: `createOptionList`/`updateOptionList`
- *    (options.ts) and `createExtraList`/`updateExtraList` (extras.ts) each call their file's
- *    `validateNames`, which calls `findContentTranslationGap` in
- *    `packages/catalogue/src/content-languages.ts`, whose first statement is
- *    `select pg_advisory_xact_lock(hashtextextended('content-languages', 0))`. So every list save
- *    carrying a customer-facing name DOES take an advisory lock; what `takes no advisory lock of
- *    its own` below asserts is that the files listed below do not contain one. That lock came in
- *    with #339 on 2026-09-12, before this track started. The extras and options savers reach it
- *    through `findContentTranslationGap` directly, as traced above; the OTHER savers — categories,
- *    units, variants, product names and image names among them — reach the same lock through the
- *    same file's `validateContentTranslations`, which calls `findContentTranslationGap` itself.
- *    That is why `content-languages.ts` is not in the list: the SQLite switch owns that lock, not
- *    this feature.
- *
- * Why `pgEnum` is checked in the catalogue files and NOT in the order/sale path files: the two
- * order/sale schema files already declare enums that predate this feature by two months —
- * `packages/db/src/schema/orders.ts:14` (`working_order_status`) and
- * `packages/db/src/schema/sales.ts:27,29` (`fiscal_state`, `tender_method`), all three introduced by
- * `10b16fd5` on 2026-07-21, where the extras-and-options branch began at `1e9af260` on 2026-09-18
- * (`git log -1 -S 'pgEnum("working_order_status"' -- packages/db/src/schema/orders.ts`). The rule
- * the spec states is "no NEW pgEnum", and a guard that failed on those three would be satisfiable
- * only by an allowlist — which is the thing that goes stale. So the order/sale files are checked for
- * the two constructs they genuinely do not contain, and this paragraph is the receipt for the gap.
+ *    on`, an array operator and `for update skip locked` all pass here.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/**
- * The extras-and-options schema and CRUD files. Every construct below is banned in these: they were
- * written from nothing by this feature, so there is no history to grandfather.
- */
+/** The extras-and-options schema and CRUD files. */
 const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/options.ts",
   "packages/catalogue/src/schema/extras.ts",
@@ -65,7 +31,7 @@ const CATALOGUE_FILES = [
 
 /**
  * The order and sale path files the feature changed. Checked for the advisory lock and the
- * containment operators only — see the header for why `pgEnum` is not checked here.
+ * containment operators only.
  */
 const ORDER_PATH_FILES = [
   "apps/server/src/modifier-selection.ts",
@@ -77,18 +43,9 @@ const ORDER_PATH_FILES = [
 ] as const;
 
 /**
- * An advisory lock in any of its four spellings — `pg_advisory_lock`, `pg_advisory_xact_lock` and
- * the two `pg_try_…` variants. SQLite has no equivalent at all, so code that serialises on one has
- * to be rewritten rather than translated; the extras save serialises on the venue file's write
- * queue instead — `packages/store/src/write-queue.ts` issues `begin immediate` and admits one
- * write transaction on the file at a time, so every body it runs is serialised against every other
- * one rather than only against whatever a clause named.
- *
- * The `select … for update` this note used to name was the intermediate step, and it is gone too.
- * `scripts/postgres-sql-residue.test.ts` forbids that clause, but NOT here: its hand-written root
- * list holds `apps/server/src`, `packages/reporting/src`, `packages/reporting/test`,
- * `packages/workforce/src` and `packages/scheduler/src`, and `packages/catalogue/src` is not one
- * of them. So nothing would refuse the clause coming back into this package.
+ * An advisory lock in any of its four spellings. `scripts/postgres-sql-residue.test.ts` forbids
+ * `select … for update`, but `packages/catalogue/src` is not one of its roots, so no guard refuses
+ * that clause in this package.
  */
 const ADVISORY_LOCK = /pg_(?:try_)?advisory_[a-z_]*lock\b/;
 
@@ -111,9 +68,7 @@ function offenders(files: readonly string[], pattern: RegExp): string[] {
 
 describe("the extras and options machinery stays engine-neutral", () => {
   it("scans every file it names — a path that is gone fails by name, not as a throw", () => {
-    // `read` calls `readFileSync`, so a listed path that is gone does not pass quietly: every check
-    // over it throws instead. What this assertion buys is the ONE failure that names the path,
-    // ahead of those throws — a stale list reads as a stale list rather than as a broken checkout.
+    // A listed path that is gone makes every check over it throw; this names the path first.
     const missing = [...CATALOGUE_FILES, ...ORDER_PATH_FILES].filter(
       (file) => !existsSync(join(repoRoot, file)),
     );
@@ -135,8 +90,7 @@ describe("the extras and options machinery stays engine-neutral", () => {
 
 describe("negative controls", () => {
   it("would catch each banned construct — the patterns are not vacuous", () => {
-    // The three checks above pass equally well when their predicate is broken. These pin each
-    // pattern against the exact text the construct is written as in this repository.
+    // The three checks above pass equally well when their predicate is broken.
     expect(ADVISORY_LOCK.test("await tx.execute(sql`select pg_advisory_xact_lock(${key})`);")).toBe(
       true,
     );

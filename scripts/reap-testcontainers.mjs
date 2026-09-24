@@ -2,35 +2,21 @@ import { execFileSync } from "node:child_process";
 
 // Reap STALE waitron Testcontainers resources.
 //
-// Why this exists: containers here are started with `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory
-// locally — Ryuk hangs on this machine, CLAUDE.md §4), which disables Testcontainers' own reaper. A
-// caller that finishes normally stops its own container; an INTERRUPTED run (Ctrl-C, a timeout
-// SIGTERM, a crash) leaves a running container and its anonymous volume behind, un-reaped. Over many
-// interrupted runs these accumulate and bloat the Docker daemon, which slows container ops and adds
-// host-side overhead. This script is the compensating reaper (the manual `pnpm reap`).
+// Containers here are started with `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory locally — Ryuk hangs
+// on this machine), which disables Testcontainers' own reaper, so an INTERRUPTED run leaves a container
+// and its anonymous volume behind.
 //
-// WHAT IT CANNOT REACH, stated here so `pnpm reap` is not read as "everything is cleaned up":
-// starting a container and being reapable are not the same thing, because guard 1 below selects on a
-// label each rig has to stamp for itself. `runPostgres` in `bench/pglite-throughput/src/bench.ts:331`
-// starts a `postgres:18-alpine` with no `.withLabels` call at all, so an interrupted run of that rig
-// leaves a container this script will never select, to be removed by hand.
+// WHAT IT CANNOT REACH: guard 1 below selects on a label each rig has to stamp for itself. `runPostgres`
+// in `bench/pglite-throughput/src/bench.ts` starts a `postgres:18-alpine` with no `.withLabels` call, so
+// an interrupted run of that rig leaves a container this script will never select.
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
 //  1. LABEL. It removes only containers carrying `com.waitron.reapable`, never the generic
-//     `org.testcontainers` label that every testcontainers container in every project shares. One
-//     helper stamps it today, `startStore` in `bench/sqlite-failover/src/store.ts`. Taken 2026-09-23,
-//     `grep -rn com.waitron.reapable` finds that stamp and no other executable one outside this
-//     script and its own suite — every remaining hit is prose (this repo's docs and the bench
-//     README, plus historical plans quoting PostgreSQL fixtures the storage switch deleted). So
-//     another repo's containers are out of scope, and so is whatever this repo's dev stack runs:
-//     nothing `docker-compose.yml` declares carries the label, and a dev venue is a directory of
-//     SQLite files on the host rather than a container at all.
+//     `org.testcontainers` label that every testcontainers container in every project shares.
 //  2. AGE. Of those, it removes only ones older than STALE_CONTAINER_MS. A container younger than that
-//     may belong to a watch-mode vitest running RIGHT NOW in another terminal (its container lives for
-//     the whole process, which is necessarily younger than the threshold when freshly started), so it
-//     survives. The residual edge — a single watch session running longer than the threshold on one
-//     container — is accepted (it reaps a live container the dev then restarts), the price of having no
-//     way to distinguish that from a genuine orphan of the same age.
+//     may belong to a watch-mode vitest running RIGHT NOW in another terminal. The residual edge — a
+//     single watch session running longer than the threshold on one container — is accepted, the price
+//     of having no way to distinguish that from a genuine orphan of the same age.
 // `rm -v` takes each removed container's anonymous data volume with it, so no blanket `volume prune`
 // (which would reach other projects' dangling volumes) is needed. It never removes images.
 
@@ -38,13 +24,8 @@ import { execFileSync } from "node:child_process";
 export const STALE_CONTAINER_MS = 2 * 60 * 60 * 1000;
 
 /**
- * Reap stale waitron Testcontainers containers and their anonymous volumes. A pure data-in/data-out
- * function over an injected `exec` (and clock), so it is testable without a real Docker daemon; the CLI
- * block below wires in the real `docker` and formats the one-line report from the returned result.
- *
  * @param {{ exec: (args: string[]) => string, now?: () => number }} deps
  *   `exec(args)` runs `docker <args>` and returns stdout (throwing on a non-zero exit / absent daemon).
- *   `now()` returns the current epoch-ms (defaults to the real clock); injected in tests for determinism.
  * @returns {{ dockerAvailable: boolean, containersRemoved: number }}
  */
 export function reap({ exec, now = () => Date.now() }) {
@@ -55,7 +36,7 @@ export function reap({ exec, now = () => Date.now() }) {
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
   } catch {
-    // Docker not running / not installed: a best-effort reaper must not fail its caller (the push).
+    // Docker not running / not installed: a best-effort reaper must not fail its caller.
     return { dockerAvailable: false, containersRemoved: 0 };
   }
 
@@ -64,8 +45,7 @@ export function reap({ exec, now = () => Date.now() }) {
     return { dockerAvailable: true, containersRemoved: 0 };
   }
 
-  // Age-check the candidates: keep only ones older than STALE_CONTAINER_MS. `docker inspect` reports
-  // each container's ISO-8601 `.Created` (which has no embedded space, so a plain split is safe).
+  // ISO-8601 `.Created` has no embedded space, so a plain split is safe.
   let stale;
   try {
     const cutoff = now() - STALE_CONTAINER_MS;
@@ -83,12 +63,11 @@ export function reap({ exec, now = () => Date.now() }) {
   }
 
   // Guarded like the calls above (a container can vanish between `inspect` and `rm`, or `rm` can hit a
-  // permission error) so the reaper stays best-effort and never throws — `containersRemoved` counts only
-  // a `rm` that actually succeeded.
+  // permission error) so the reaper stays best-effort and never throws.
   let removed = 0;
   if (stale.length > 0) {
     try {
-      exec(["rm", "-f", "-v", ...stale]); // -f: even if running; -v: their anonymous data volumes
+      exec(["rm", "-f", "-v", ...stale]);
       removed = stale.length;
     } catch {
       /* best-effort */
@@ -98,15 +77,11 @@ export function reap({ exec, now = () => Date.now() }) {
   return { dockerAvailable: true, containersRemoved: removed };
 }
 
-// Reap orphaned vitest WORKERS — the process-side leak the container reaper above cannot see.
+// Reap orphaned vitest WORKERS. A hard interrupt (an Esc, a killed parent, a timeout signal) can kill
+// vitest's orchestrator while its workers are reparented to launchd (ppid 1), where they keep spinning
+// at ~100% CPU indefinitely.
 //
-// Why this exists: the test runs here are launched by tooling, and the only interrupt available is a
-// hard stop (an Esc, a killed parent, a timeout signal). That can kill vitest's orchestrator while its
-// tinypool workers are reparented to launchd (ppid 1), where they keep spinning at ~100% CPU
-// indefinitely. `reap()` above only removes Docker containers, so nothing reaps these; this is the
-// compensating process reaper, run by `pnpm reap` before local database tests.
-//
-// SAFETY — two guards, mirroring the container reaper's label+age pair:
+// SAFETY — two guards:
 //  1. PPID. Only processes whose parent is 1 (launchd, on macOS). A LIVE run's workers are parented to
 //     the orchestrator and the orchestrator to the shell — never 1 — so a running suite is untouched.
 //  2. COMMAND. Two shapes, because the two vitest majors this repository has run look different in
@@ -115,37 +90,12 @@ export function reap({ exec, now = () => Date.now() }) {
 //     - Vitest 3 set a process TITLE: `node (vitest N)` for a tinypool worker, `node (vitest)` for the
 //       orchestrator. Matched on the parenthesised `(vitest` marker, a sequence an ordinary path or
 //       flag is vanishingly unlikely to contain.
-//     - Vitest 4 sets no title at all and spawns its own workers, so a worker appears as its
-//       entrypoint path `…/node_modules/vitest/dist/workers/<pool>.js` and the orchestrator as
-//       `…/vitest/vitest.mjs` (in the row measured it is reached through `.bin/../vitest/`, so the
-//       `node_modules/vitest/` form is absent there — which is why the orchestrator pattern asks only
-//       for the trailing `/vitest/vitest.mjs`). What each pattern actually requires is that path
-//       ANYWHERE in the row, not as its final token: a tool pointed at vitest's own worker file and
-//       orphaned to launchd would be killed. That is narrower than the Vitest 3 title match and wider
-//       than "the entrypoint" — the narrowing that matters is that a bare `vitest` in a log path or a
-//       flag value does not match either pattern.
-//     Measured 2026-09-19 on the same package, one version each: under 3.2.7 `ps` showed
-//     `node (vitest)` and `node (vitest 1)`; under 4.1.11 it showed no `(vitest` anywhere and
-//     `/…/node_modules/vitest/dist/workers/forks.js`.
-// SIGKILL, not SIGTERM: the orphaned workers were observed not to exit on SIGTERM and to need `kill -9`,
-// so a best-effort sweep of confirmed orphans signals once, hard.
+//     - Vitest 4 sets no title, so a worker appears as its entrypoint path
+//       `…/node_modules/vitest/dist/workers/<pool>.js` and the orchestrator as `…/vitest/vitest.mjs`,
+//       which can be reached through `.bin/../vitest/` — hence only the trailing `/vitest/vitest.mjs`.
+//       Each pattern matches that path ANYWHERE in the row, not only as its final token.
+// SIGKILL, not SIGTERM: the orphaned workers were observed not to exit on SIGTERM.
 /**
- * Kill orphaned vitest worker processes — the CPU-side counterpart to `reap()`'s container cleanup. A
- * pure data-in/data-out function over an injected `psExec` and `kill`, testable without touching a real
- * process; the CLI block below wires in the real `ps` and `process.kill`. It also kills parentless
- * test binaries `isTestBinaryProcess` matches.
- *
- * @param {{ psExec: (args: string[]) => string, kill: (pid: number, signal: string) => void }} deps
- *   `psExec(args)` runs `ps <args>` and returns stdout (throwing when `ps` is absent). `kill(pid, sig)`
- *   signals a process. Both are required (like `reap`'s `exec`), so the real `process.kill` lives only
- *   in the v8-ignored CLI block, never in this measured function.
- * @returns {{ psAvailable: boolean, workersKilled: number }}
- */
-/**
- * Does this `ps` command column belong to a vitest orchestrator or worker? Vitest 3's process title
- * and Vitest 4's entrypoint path are different shapes; both are recognised, and neither matches a bare
- * `vitest` word elsewhere in a command line. See the SAFETY note above.
- *
  * @param {string} command the command column of one `ps` row
  * @returns {boolean}
  */
@@ -158,13 +108,11 @@ function isVitestProcess(command) {
 }
 
 /**
- * Is this `ps` command column one of the test binaries a checkout keeps in a `.bin` (Litestream,
- * which `scripts/setup-litestream.mjs` installs at the root and the bench rig under
- * `bench/sqlite-failover/`, and `versitygw`, which nothing in the tree installs today)? The row's
- * FIRST token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
- * `<dir>/bench/sqlite-failover/`, where `<dir>` is a directory whose name starts `waitron` — the main
- * checkout and every `waitron-<branch>` worktree. Any other `.bin` (a developer's own `~/.bin`, a
- * `node_modules/.bin`), a Litestream on PATH, and a tool that merely names the file are not matched.
+ * Is this `ps` command column one of the test binaries a checkout keeps in a `.bin` (Litestream, and
+ * `versitygw`, which nothing in the tree installs today)? The row's FIRST token must be a path ending
+ * `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under `<dir>/bench/sqlite-failover/`,
+ * where `<dir>` is a directory whose name starts `waitron` — the main checkout and every
+ * `waitron-<branch>` worktree.
  *
  * @param {string} command the command column of one `ps` row
  * @returns {boolean}
@@ -175,19 +123,24 @@ function isTestBinaryProcess(command) {
   );
 }
 
+/**
+ * Also kills parentless test binaries `isTestBinaryProcess` matches.
+ *
+ * @param {{ psExec: (args: string[]) => string, kill: (pid: number, signal: string) => void }} deps
+ *   `kill` is required, so the real `process.kill` lives only in the v8-ignored CLI block.
+ * @returns {{ psAvailable: boolean, workersKilled: number }}
+ */
 export function sweepOrphanedVitestWorkers({ psExec, kill }) {
   let table;
   try {
-    // `-o pid=,ppid=,command=` suppresses the header (the `=` empties each column label), so every line
-    // is a row: right-padded pid, ppid, then the command (which may contain spaces) as the remainder.
+    // The `=` empties each column label, which suppresses the header.
     table = psExec(["-axo", "pid=,ppid=,command="]);
   } catch {
-    // `ps` missing (returns non-zero / not found): a best-effort reaper must not fail its caller.
+    // A best-effort reaper must not fail its caller.
     return { psAvailable: false, workersKilled: 0 };
   }
 
-  // `^\s*` absorbs the pid column's padding, so blank or partial lines simply fail to match and drop out
-  // at the null filter — no separate trim/non-empty passes needed.
+  // Blank or partial lines fail to match and drop out at the null filter.
   const orphans = table
     .split("\n")
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
@@ -202,25 +155,21 @@ export function sweepOrphanedVitestWorkers({ psExec, kill }) {
       kill(pid, "SIGKILL");
       killed += 1;
     } catch {
-      // The worker exited between `ps` and `kill` (ESRCH), or we lack permission: best-effort, count only
-      // the kills that landed.
+      // The worker exited between `ps` and `kill` (ESRCH), or we lack permission.
     }
   }
 
   return { psAvailable: true, workersKilled: killed };
 }
 
-// CLI entry — wires in the real `docker`. Ignored for coverage because the tests exercise it in a CHILD
-// process (`spawnSync`), which the v8 provider does not measure (the same reason `changed-scope.mjs`
-// ignores its own entry block). Best-effort: it exits 0 whatever happens, so a bloat-clearing step can
-// never fail a push.
+// Ignored for coverage because the tests exercise it in a CHILD process (`spawnSync`), which the v8
+// provider does not measure. It exits 0 whatever happens.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("reap-testcontainers.mjs")) {
   const dockerExec = (args) =>
     execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const psExec = (args) =>
     execFileSync("ps", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  // Workers first — they are the ~100% CPU leak; the container sweep is disk pressure.
   const workers = sweepOrphanedVitestWorkers({
     psExec,
     kill: (pid, signal) => process.kill(pid, signal),

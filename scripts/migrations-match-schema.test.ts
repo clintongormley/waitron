@@ -29,17 +29,14 @@ import {
  * 2. **It trusts drizzle-kit's own diff.** Whatever drizzle-kit does not model, this does not see.
  *
  * drizzle-kit reads a throwaway config that spreads the package's own and replaces only `out`, so
- * every option the package sets reaches `generate`. `out` is a path RELATIVE to the package:
- * measured 2026-09-23 on drizzle-kit v0.31.10, an absolute one fails because drizzle-kit prefixes
- * `./` and gets ENOENT on `.//tmp/...` — and exits 0, which `generationFailure` refuses.
+ * every option the package sets reaches `generate`. `out` is a path RELATIVE to the package: an
+ * absolute one fails because drizzle-kit prefixes `./` — and exits 0, which `generationFailure`
+ * refuses.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/**
- * Measured 2026-09-23: one set regenerates in about half a second. The spawn limit is far above
- * that; the per-test bound clears the spawn limit plus the copy and the comparison around it.
- */
+/** The per-test bound clears the spawn limit plus the copy and the comparison around it. */
 const GENERATE_TIMEOUT_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000;
 
@@ -160,10 +157,9 @@ function describeRun(run: Run): string {
  * What drizzle-kit v0.31.10 prints when `generate` reaches the end: the first when the schema
  * matches the head snapshot, the second when it wrote a migration (`writeResult` in its `bin.cjs`).
  *
- * The exit status alone is not evidence. Measured 2026-09-23: a schema module that throws at import,
- * and a column rename (which makes drizzle-kit ask an interactive question and fail with
- * `Interactive prompts require a TTY terminal`), each printed the error, exited 0 and left the copy
- * untouched, so a check reading the status and the files passed both.
+ * The exit status alone is not evidence: a schema module that throws at import, and a column rename
+ * (which makes drizzle-kit ask an interactive question), each print the error, exit 0 and leave the
+ * copy untouched. The negative controls below pin both.
  */
 const COMPLETED = ["No schema changes, nothing to migrate", "Your SQL migration file"];
 
@@ -176,9 +172,7 @@ function generationFailure(run: Run): string | undefined {
 const sets = migrationSets(repoRoot);
 
 describe("every migration set matches its package's TypeScript schema", () => {
-  // Vacuous-pass anchor: a discovery that matched nothing would run no case below and pass. The
-  // floor sits below today's tree so retiring a set does not fail it; the two names stop an empty
-  // or mis-pathed discovery.
+  // A discovery that matched nothing would run no case below and pass.
   it("checks the real sets", () => {
     expect(sets.length).toBeGreaterThan(5);
     expect(sets).toContain(join("packages", "db", "drizzle"));
@@ -237,11 +231,9 @@ describe("negative control", () => {
 });
 
 /**
- * A generation that fails without saying so must still fail the check. Both cases run on a copy of
- * a set other than identity's, so the committed tree is never touched: one points drizzle-kit at a
- * throwaway schema module that throws at import, the other renames a column in the copy's head
- * snapshot, which makes drizzle-kit ask whether the column was renamed. Each run leaves the copy as
- * it found it, which is why the file comparison alone cannot see them.
+ * A generation that fails without saying so must still fail the check. Both cases run on a copy,
+ * and each run leaves the copy as it found it, which is why the file comparison alone cannot see
+ * them.
  */
 describe("negative control: a generation that did not finish", () => {
   const set = join("packages", "bookings", "drizzle");

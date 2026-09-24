@@ -6,27 +6,11 @@ import { describe, expect, it } from "vitest";
  * Pins both halves of how the front-ends get their icons: each app's `index.html` icon `<link>`s,
  * and each app's `vite.config.ts` `publicDir`, against the one brand directory in `packages/ui`.
  *
- * Nothing else checks either. `packages/ui`'s own suite excludes `brand/**` from coverage, and no
- * app test reads its `index.html` or its Vite config. So renaming a file under `brand/public`, or
- * repointing a `publicDir` at a directory that does not exist, would ship apps with broken icon
- * links behind a fully green gate: Vite copies whatever the directory holds and warns about
- * nothing, and a missing favicon is invisible until someone looks at a browser tab.
- *
- * It lives in the ROOT project (CLAUDE.md §4) because it spans packages — the assertion is about
- * `apps/*` and `packages/ui` agreeing, which is a fact neither one's own suite owns. (Scope is NOT
- * the reason: all three apps depend on `@waitron/ui`, so a push touching only `packages/ui/brand`
- * already selects them as dependents.)
- *
- * It reads TEXT and never imports, renders or executes what it reads. What that cannot see, stated
- * rather than guarded, since none of the three files has ever carried any of it: a `<link>` inside
- * an HTML comment counts as real; `rel='icon'` in single quotes, `rel="shortcut icon"` and
- * `rel="icon shortcut"` are all legal HTML and all missed; an icon declared through a web app
- * manifest instead of a `<link>` is invisible; and a `publicDir` built by anything other than the
- * one literal `new URL(...)` shape below is not matched.
- *
- * Apps are discovered from the filesystem, not listed, so a fourth front-end is covered the day it
- * appears. Proven by deletion on 2026-09-08: renaming `brand/public/favicon.ico` turned four of
- * these tests red, each naming the missing href.
+ * It reads TEXT and never imports, renders or executes what it reads. What that cannot see: a
+ * `<link>` inside an HTML comment counts as real; `rel='icon'` in single quotes,
+ * `rel="shortcut icon"` and `rel="icon shortcut"` are all legal HTML and all missed; an icon
+ * declared through a web app manifest instead of a `<link>` is invisible; and a `publicDir` built
+ * by anything other than the one literal `new URL(...)` shape below is not matched.
  */
 const REPO_ROOT = join(import.meta.dirname, "..");
 const BRAND_PUBLIC = join(REPO_ROOT, "packages", "ui", "brand", "public");

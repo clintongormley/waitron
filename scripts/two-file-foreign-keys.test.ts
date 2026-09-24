@@ -10,33 +10,20 @@ import {
 /**
  * No foreign key joins a `local` table to a `ledger`/`state` one, in either direction.
  *
- * Every table lives in `venue.db` (slice-2 spec §2). A `local` row belongs to one node and means
- * nothing to another, so no venue row may depend on one; and `node.db` is reserved, empty, for a
- * later slice that may move `local` tables into it, which a key across the classes would block.
+ * A `local` row belongs to one node and means nothing to another, so no venue row may depend on
+ * one; and `node.db` is reserved, empty, for a later slice that may move `local` tables into it,
+ * which a key across the classes would block.
  *
- * WHY A ROOT-PROJECT PROGRAM. The classification is assembled in `@waitron/composition` and the
- * foreign keys are spread across a dozen packages' own migration sets, so no per-package suite can
- * see both sides — the same reason `classification-complete.test.ts` lives here.
- *
- * WHAT IT READS. Drizzle's own head snapshot per migration set, resolved through `meta/_journal.json`
- * by `headSnapshot` in `packages/sync-enrolment/src/testing/migration-sets.ts`, the reader
- * `no-tenant-column.test.ts` shares: the normalised schema drizzle-kit diffs to emit
- * its SQL, which holds the graph directly as `tables[*].foreignKeys[*]`. Reading generated artifacts
- * rather than the TypeScript keeps this file free of the storage engine's types, which is what the
- * flip exists to avoid having to revisit.
- *
- * Three gaps, stated because a failing test can never restore a missing hedge:
+ * It reads drizzle's head snapshot per migration set (`headSnapshot` in
+ * `packages/sync-enrolment/src/testing/migration-sets.ts`), which holds the graph as
+ * `tables[*].foreignKeys[*]`. Three gaps:
  *
  * 1. **A key declared in TypeScript but not yet generated is invisible to it.** That state fails
- *    `migrations-match-schema.test.ts` instead, which regenerates every set into a copy and requires
- *    nothing to change. Reading the snapshot rather than the TypeScript is deliberate: an
- *    ungenerated key reaches no database, while a reading taken from the TypeScript would pass the
- *    moment someone deleted a key there, with the key still live in every migrated database.
- * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
- *    the snapshot, and `migrations-match-schema.test.ts` compares the TypeScript with the snapshot,
- *    never with the SQL. None is known today: on 2026-09-23 the three custom migrations (journal
- *    entries whose snapshot equals the one before, `id` and `prevId` aside and keys sorted) had no
- *    `REFERENCES` or `FOREIGN KEY` outside a `--` comment. Nothing keeps it that way.
+ *    `migrations-match-schema.test.ts` instead. An ungenerated key reaches no database, while a
+ *    reading taken from the TypeScript would pass the moment someone deleted a key there.
+ * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not
+ *    change the snapshot, and `migrations-match-schema.test.ts` compares the TypeScript with the
+ *    snapshot, never with the SQL.
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */
@@ -99,10 +86,8 @@ function declaredForeignKeys(): Edge[] {
 }
 
 /**
- * What the check below says about one edge: `null` when it is fine, a message when it is not. Lifted
- * out of the test so the negative controls at the bottom can pin that it fires — an absence
- * assertion passes just as well when the predicate underneath it has stopped working, which is why
- * `no-tenant-column.test.ts` carries controls of its own.
+ * What the check below says about one edge: `null` when it is fine, a message when it is not.
+ * Lifted out of the test so the negative controls at the bottom can pin that it fires.
  */
 function violationOf(edge: Edge, classes: Map<string, string>): string | null {
   const from = classes.get(edge.from);
@@ -130,9 +115,7 @@ describe("no key crosses between a node's own tables and the venue's", () => {
     expect(sets.filter((set) => headSnapshot(repoRoot, set).kind === "missing")).toEqual([]);
   });
 
-  // Vacuous-pass anchor. An empty graph — a snapshot shape that changed under us, a discovery that
-  // matched no set — would leave the check above passing, which is what a fully resolved tree looks
-  // like too. So pin that the scan really read the tree.
+  // An empty graph would leave the check above passing, as a fully resolved tree does.
   it("reads a real foreign-key graph, not an empty one", () => {
     const edges = declaredForeignKeys();
     const printed = edges.map((edge) => `${edge.from} -> ${edge.to}`);
@@ -144,9 +127,8 @@ describe("no key crosses between a node's own tables and the venue's", () => {
 });
 
 /**
- * The check above asserts an absence, which passes exactly as well when the judgement underneath it
- * has stopped working. These feed `violationOf` edges built by hand — the real classifications, a
- * made-up constraint — so that both answers are pinned rather than one.
+ * The check above asserts an absence, which passes as well when the judgement underneath it has
+ * stopped working, so these feed `violationOf` hand-built edges over the real classifications.
  */
 describe("negative controls", () => {
   const edge = (from: string, to: string): Edge => ({

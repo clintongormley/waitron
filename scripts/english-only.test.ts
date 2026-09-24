@@ -1,19 +1,11 @@
 /**
- * The English-only vocabulary guard's suite. It scans the generic packages' `src/`, so it
- * polices the tree rather than any one package, and lives in the repo-level Vitest project for that
- * reason — see the repo-root `vitest.config.ts` for what that project is and which two gates run it.
+ * The English-only vocabulary guard's suite, over the generic packages' `src/`.
  *
- * The forbidden set is ASSEMBLED here, not listed in one place (SP-3b): `packages/db/src/english-only.ts`
- * holds only the base list of generic Spanish no module owns, and every Spanish-by-design module
- * declares its own terms on its descriptor's `vocabulary` seat (`@waitron/composition`). This
- * suite derives each owner's package dir from `migrations.from` (`@waitron/module`'s
- * `packageDirOf`, which `module-graph-honesty.test.ts` reads through as well), asserts no owner is
- * generic, and proves each declaration fires on its owner's real source. `ALL_MODULES` is imported
- * for runtime values only — the root project is not typechecked (CLAUDE.md §2).
- *
- * `english-only.ts` lives under `packages/db/src` so that package's `typecheck` covers it — the
- * root project typechecks nothing (CLAUDE.md §2). Nothing in `packages/db` imports it; the root
- * config measures its coverage and `packages/db`'s config excludes it.
+ * The forbidden set is ASSEMBLED here: `packages/db/src/english-only.ts` holds only the base list
+ * of generic Spanish no module owns, and every Spanish-by-design module declares its own terms on
+ * its descriptor's `vocabulary` seat. `english-only.ts` lives under `packages/db/src` so that
+ * package's `typecheck` covers it; the root config measures its coverage and `packages/db`'s config
+ * excludes it.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,11 +50,10 @@ const FIXTURE: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Per-owner vacuous-pass anchors: terms each declaration MUST find in its owner's real source. A new
- * owner must add a row here (the "every owner has an anchor" test below insists), so a declaration
- * can never pass empty — the same reason module-graph-honesty pins its three known edges. The
- * declaration file itself (`vocabulary.ts`, where every term is a string literal) is excluded from
- * the scan, so an anchor must occur in the owner's REAL source.
+ * Per-owner vacuous-pass anchors: terms each declaration MUST find in its owner's real source. A
+ * new owner must add a row here (the "every owner has an anchor" test below insists). The
+ * declaration file itself (`vocabulary.ts`) is excluded from the scan, so an anchor must occur in
+ * the owner's REAL source.
  */
 const ANCHORS: Record<string, readonly string[]> = {
   "fiscal-verifactu": ["huella", "registro", "facturacion"],
@@ -135,10 +126,9 @@ describe("configuration", () => {
   });
 
   it("does not scan country-specific implementations or other Spanish-domain packages", () => {
-    // reporting (the modelo-303 form) is Spanish by nature
-    // and unscanned by OMISSION — neither a generic package nor a vocabulary owner. Pinned so a
-    // future edit cannot silently re-add one to the generic set, and so "unscanned" is never a
-    // silent gap: a generic English package (fiscal-none) belongs in GENERIC_PACKAGES, not here.
+    // reporting (the modelo-303 form) is Spanish by nature and unscanned by OMISSION — neither a
+    // generic package nor a vocabulary owner. Pinned so a future edit cannot silently re-add one to
+    // the generic set.
     for (const domainSpecific of ["country-es", "country-gb", "reporting"]) {
       expect(GENERIC_PACKAGES).not.toContain(domainSpecific);
     }
@@ -146,19 +136,18 @@ describe("configuration", () => {
 
   it("excludes provisioning's test files as a documented production-only interim", () => {
     // Provisioning's e2e test provisions a real Veri*Factu venue and names the Spanish fiscal
-    // TABLES in SQL, which cannot be renamed. Until that test runs against fiscal-none (spec §6
-    // step 5), only provisioning's production is scanned — the ONLY test exemption.
+    // TABLES in SQL, which cannot be renamed, so only provisioning's production source is scanned —
+    // the ONLY test exemption.
     const files = sourceFilesIn("provisioning");
     expect(files.length).toBeGreaterThan(0);
     expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
-    // Every other generic package keeps the "tests are scanned too" rule — db still lists its tests.
+    // Every other generic package keeps the "tests are scanned too" rule.
     expect(sourceFilesIn("db").some((f) => f.endsWith(".test.ts"))).toBe(true);
   });
 
   it("derives the vocabulary owners from the descriptors, in ALL_MODULES order", () => {
-    // The vacuous-pass anchor for the derivation itself: these are the two Spanish-by-design
-    // packages, each the descriptor `name` paired with the package its `migrations.from` resolves to.
-    // A third owner appears here the day a module declares vocabulary.
+    // The vacuous-pass anchor for the derivation itself: each descriptor `name` paired with the
+    // package its `migrations.from` resolves to.
     expect(OWNERS.map((o) => [o.module, o.packageDir])).toEqual([
       ["workforce-es", "workforce-es"],
       ["fiscal-verifactu", "fiscal-verifactu"],
@@ -181,8 +170,8 @@ describe("configuration", () => {
 
   it("excludes the dashboard i18n translation catalogues by exact suffix, and nothing wider", () => {
     // A module's `src/dashboard/strings.ts` holds `{ en, es }` UI copy: its `es` values are
-    // translation, not vocabulary (the dashboard-kit exclusion's principle, one file down). Only that
-    // one suffix is excluded, so every other file in the package stays in scope.
+    // translation, not vocabulary (the dashboard-kit exclusion's principle, one file down). Only
+    // that one suffix is excluded, so every other file in the package stays in scope.
     expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts"]);
   });
 
@@ -200,9 +189,8 @@ describe("configuration", () => {
   });
 
   it("would flag the catalogues' es values if scanned, so the pass is the exclusion not weak vocab", () => {
-    // Prove-by-construction, the guard's own style: run findSpanish on the catalogue's real content
-    // with the assembled forbidden set. It fires (the Spanish translations ARE forbidden vocabulary),
-    // so the file passing the tree scan is DUE TO the exclusion, not because the words slipped the set.
+    // The catalogue's real content fires on the assembled set, so the file passing the tree scan is
+    // DUE TO the exclusion.
     for (const pkg of ["payments-stripe", "payments-sumup"]) {
       const catalogue = join(PACKAGES_ROOT, pkg, "src", "dashboard", "strings.ts");
       expect(existsSync(catalogue), pkg).toBe(true);
@@ -211,9 +199,7 @@ describe("configuration", () => {
   });
 
   it("still scans a Spanish identifier in a non-catalogue dashboard file (the exclusion keeps its teeth)", () => {
-    // The exclusion is by PATH, not content: only `dashboard/strings.ts` is dropped. A Spanish
-    // identifier in any other file — a `dashboard/panel.ts` widget, say — is still caught. The
-    // exclusion cannot be widened into a loophole for Spanish code.
+    // The exclusion is by PATH, not content: only `dashboard/strings.ts` is dropped.
     const isCatalogue = (relative: string) =>
       I18N_CATALOGUES.some((suffix) => relative.endsWith(suffix));
     expect(isCatalogue("dashboard/strings.ts")).toBe(true);
@@ -233,7 +219,7 @@ describe("configuration", () => {
 
   it("returns nothing for a package that does not exist on disk", () => {
     // A name in GENERIC_PACKAGES with no directory yet is silence, not a crash: the guard has to be
-    // in place BEFORE a generic package is created. Deleting the `existsSync` line makes this throw.
+    // in place BEFORE a generic package is created.
     expect(sourceFilesIn("no-such-package")).toEqual([]);
   });
 
@@ -277,11 +263,9 @@ describe("each module's vocabulary declaration", () => {
   it.each(OWNERS.map((o) => [o.module, o] as const))(
     "%s: fires on its owner's own source, so the declaration is not decorative",
     (module, owner) => {
-      // Proves two things at once: the declaration matches vocabulary that actually occurs in the
-      // owner's REAL source, and the owner is excluded by SCOPE — not by a list too weak to fire
-      // on it. Delete an anchor term from the module's list and this goes red.
-      // The declaration file is excluded: every declared term is a literal there, so it would
-      // satisfy any anchor and prove nothing about the package's real source.
+      // The declaration matches vocabulary that occurs in the owner's REAL source, and the owner is
+      // excluded by SCOPE, not by a list too weak to fire on it. The declaration file is excluded:
+      // every declared term is a literal there.
       const files = sourceFilesIn(owner.packageDir).filter((f) => !f.endsWith("/vocabulary.ts"));
       expect(files.length).toBeGreaterThan(0);
       const own = new Set(owner.terms);
@@ -300,8 +284,8 @@ describe("findSpanish", () => {
   });
 
   it("flags a Spanish table name inside a string literal", () => {
-    // The load-bearing case. No ESLint selector can see into this string, and this is the mistake
-    // that reaches a migration and then a database.
+    // No ESLint selector can see into this string, and this is the mistake that reaches a migration
+    // and then a database.
     const found = findSpanish(
       'export const records = pgTable("registros_facturacion", {});',
       FIXTURE,
@@ -327,8 +311,7 @@ describe("findSpanish", () => {
   });
 
   it("does not flag English words that contain a Spanish word", () => {
-    // The whole difference between a guard people keep and a guard people disable. `series`
-    // contains `serie`; `imported` contains `importe`; `delta` contains `alta`.
+    // `series` contains `serie`; `imported` contains `importe`; `delta` contains `alta`.
     expect(
       findSpanish(
         "import { invoiceSeries } from './series.js';\n" +
@@ -339,24 +322,19 @@ describe("findSpanish", () => {
   });
 
   it("does not flag words shared by both languages", () => {
-    // total, base, local, error, real: identical in Spanish and English, and all five appear in the
-    // naming contract. Flagging them would make the guard fire on `sales.total` on its first day.
-    // On the ASSEMBLED set: the claim is that no module declares one of these, not that the
-    // tokeniser skips a word nobody listed.
+    // total, base, local, error, real: identical in Spanish and English. On the ASSEMBLED set:
+    // no module declares one of these, which is a different claim from the tokeniser skipping them.
     expect(findSpanish("const { total, base, locale, error } = row;", FORBIDDEN)).toEqual([]);
   });
 
   it("does not flag NIF", () => {
-    // tenants.nif is in the naming contract: a legal identifier and an acronym, not vocabulary.
-    // On the ASSEMBLED set: the claim is that no module declares `nif`, not that the tokeniser
-    // skips a word nobody listed.
+    // tenants.nif is a legal identifier and an acronym, not vocabulary. On the ASSEMBLED set: the
+    // claim is that no module declares `nif`.
     expect(findSpanish('nif: text("nif").notNull(),', FORBIDDEN)).toEqual([]);
   });
 
   it("flags bare Spanish prose in a line comment", () => {
-    // The owner principle (spec §1a): generic code describes regime-neutral operations, so its
-    // comments must be English too. A bare Spanish word in a comment is the leak #258 slipped
-    // through (comments were never scanned).
+    // Generic code describes regime-neutral operations, so its comments must be English too.
     expect(findSpanish("// the cadena head is per node", FIXTURE).map((v) => v.word)).toEqual([
       "cadena",
     ]);
@@ -369,26 +347,24 @@ describe("findSpanish", () => {
   });
 
   it("exempts a Spanish term quoted in guillemets in a comment", () => {
-    // «…» is a verbatim regulatory quote — the source's own words (CLAUDE.md §1). Left intact.
+    // «…» is a verbatim regulatory quote — the source's own words.
     expect(findSpanish("// AEAT: «se conserva la cadena original»", FIXTURE)).toEqual([]);
   });
 
   it("exempts a Spanish term in a backtick citation in a comment", () => {
-    // A backticked term cites a specific identifier / wire field / owned term — a quotation of a
-    // name, left intact (spec §3). `cadena` here names the module's column.
+    // A backticked term cites a specific identifier, wire field or owned term.
     expect(findSpanish("// the `cadena` row is owned by the fiscal module", FIXTURE)).toEqual([]);
   });
 
   it("exempts a multi-line guillemet quote spanning a block comment", () => {
-    // The quote wraps across lines (e.g. core/record-correction.ts), so quotation blanking runs on
-    // the whole source before the line split.
+    // A quote that wraps across lines, so quotation blanking runs on the whole source before the
+    // line split.
     expect(findSpanish("/*\n * AEAT: «la cadena\n * y su huella»\n */", FIXTURE)).toEqual([]);
   });
 
   it("still flags a Spanish table name in a sql template literal in code", () => {
     // The backtick exemption is COMMENT-ONLY. In code a backtick opens a TEMPLATE LITERAL, and a
-    // Spanish table name in `sql`…`` is the load-bearing case the guard exists to catch — it must
-    // NOT be exempted the way a backtick citation in a comment is.
+    // Spanish table name in `sql`…`` is the case the guard exists to catch.
     expect(
       findSpanish("await db.execute(sql`select from registros_facturacion`);", FIXTURE).map(
         (v) => v.word,
@@ -402,7 +378,7 @@ describe("findSpanish", () => {
   });
 
   it("flags Spanish in BOTH the code and the comment on one line", () => {
-    // Comment prose is scanned now, so a line's code hit and its comment hit are both reported.
+    // Comment prose is scanned, so a line's code hit and its comment hit are both reported.
     expect(findSpanish("const mesa = 1; // the mesa number", FIXTURE).map((v) => v.word)).toEqual([
       "mesa",
       "mesa",
@@ -410,9 +386,8 @@ describe("findSpanish", () => {
   });
 
   it("scans with exactly the set it is handed — the base list alone knows no fiscal term", () => {
-    // The parameter is required, with no default, so a caller can never silently narrow to the base
-    // list: here the narrowing is deliberate and visible. `mesa` is base vocabulary, `huella` is
-    // fiscal's.
+    // The parameter is required, with no default, so a caller can never silently narrow to the
+    // base list: here the narrowing is deliberate. `mesa` is base vocabulary, `huella` fiscal's.
     expect(
       findSpanish("const mesa = 1; const huella = 2;", SPANISH_WORDS).map((v) => v.word),
     ).toEqual(["mesa"]);

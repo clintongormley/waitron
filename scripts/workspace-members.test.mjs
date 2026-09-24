@@ -8,7 +8,6 @@ const REPO_ROOT = join(import.meta.dirname, "..");
 // kill, for a slow-but-completing cold CI runner (scripts/ci-workflow.test.mjs records the pair).
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
-/** A fake `spawnSync` that records the options it was given and answers with `result`. */
 const fakeSpawn = (result, seen = []) => {
   const spawn = (command, args, options) => {
     seen.push({ command, args, options });

@@ -12,69 +12,33 @@ import {
 
 // Answers, in ONE call, the only question either gate asks about a diff: is this documentation, is
 // it something that could reach anything, or is it a specific set of packages? BOTH gates ask it
-// here — `.husky/pre-push` about a push's range, ci.yml's `changes` job about a pull request's —
-// which is the point. Two mechanisms answering the same question is two mechanisms that can drift,
-// and the one CI used to run drifted in the silent direction; docs/backlog.md's entry on it has the
-// receipts.
+// here — `.husky/pre-push` about a push's range, ci.yml's `changes` job about a pull request's — so
+// the two cannot drift apart.
 //
-// pnpm's own changed-since filter is what CI ran, and it CANNOT be the shared mechanism, for two
-// independent reasons — the second is the defect, the first is why the hook never used it:
+// pnpm's own changed-since filter cannot be that mechanism: it reports nothing in a `git worktree`
+// (zero bytes and exit 0, the same output as a filter that matched nothing), and it attributes a
+// path belonging to NO workspace member, such as `tsconfig.base.json`, to the workspace ROOT, which
+// runs no tests.
 //
-//   1. It reports nothing in a `git worktree`. Run in both directions on 2026-07-31, pnpm 9.15.0,
-//      one commit touching `packages/db/README.md` on top of `main`, the identical two commands in
-//      each place:
-//
-//        git diff --name-only main...HEAD          → packages/db/README.md   (both)
-//        pnpm --filter "...[main]" ls --depth -1 --json
-//          in a `git worktree add`ed checkout      → 0 bytes, exit 0
-//          in a plain `git clone` of the same repo → 2760 bytes, 11 packages
-//
-//      Zero bytes and exit 0 is the same output pnpm gives for a filter that matched nothing, so in
-//      a worktree it reads as "no package is affected" rather than as an error, while git in the
-//      SAME directory reports the changed path perfectly well. (Why pnpm's own change detection
-//      behaves differently there was not established — only that it does.) Every branch in this
-//      repository is developed in a `git worktree` (CLAUDE.md §6).
-//
-//   2. It attributes a path belonging to NO workspace member — `tsconfig.base.json`,
-//      `pnpm-lock.yaml`, `.github/**` — to the workspace ROOT, which is a package that runs no
-//      tests. Run on 2026-08-01 in a `git clone --no-hardlinks` of this repository, one commit
-//      touching `tsconfig.base.json` on top of `main`: `pnpm --filter "...[main]" ls --depth -1
-//      --json` printed exactly one entry, `{"name": "waitron"}`. That is the WRONG DIRECTION for a
-//      gate — the change every package inherits, resolved to the narrowest possible scope.
-//
-// So the attribution is ours and it fails CLOSED. The unit it works in is the package DIRECTORY,
-// not the package graph: a path is attributed to the innermost workspace member that contains it,
-// and anything that lands outside every member is GLOBAL — it could affect anything, so nothing may
-// be narrowed away on account of it. The OTHER half — expanding a changed package to its
-// dependents — is still pnpm's, via the `--filter "...<pkg>"` arguments both callers build from
-// this file's output.
+// So the attribution is ours and it fails CLOSED: a path is attributed to the innermost workspace
+// member DIRECTORY that contains it, and anything outside every member is GLOBAL. Expanding a changed
+// package to its dependents is still pnpm's, via the `--filter "...<pkg>"` arguments both callers
+// build from this file's output.
 
 /**
  * The workspace's members as `{name, dir}`, `dir` being relative to `repoRoot` — or `null` when the
  * input cannot be read.
  *
- * The two callers fail closed on that `null` in OPPOSITE directions, because "we could not read it"
- * means different things to them. `scopeForPaths` runs everything. `scriptRunCheck` refuses:
- * measured on 2026-08-01, `pnpm --filter "@waitron/nope" ls --depth -1 --json | node
- * scripts/changed-packages.mjs runnable test:coverage` exits **1** with `the workspace layout could
- * not be read` — the filter matched nothing, so pnpm printed zero bytes and this returned `null`.
- * A guard that cannot tell whether a run happened must not report that one did.
+ * The two callers fail closed on that `null` in OPPOSITE directions: `scopeForPaths` runs
+ * everything, and `scriptRunCheck` refuses, because a guard that cannot tell whether a run happened
+ * must not report that one did.
  *
- * Input is the stdout of `pnpm ls -r --depth -1 --json`. Run in this worktree on 2026-07-31 that is
- * 16 entries: the fifteen workspace members plus the workspace ROOT, whose `name` is `waitron` and
- * whose `path` is the repository root itself. The root is dropped here rather than by name, because
- * a member's name is a manifest field anyone can change while its path is a fact about the tree.
+ * Input is the stdout of `pnpm ls -r --depth -1 --json`, which also lists the workspace ROOT. The
+ * root is dropped by path rather than by name, because a member's name is a manifest field anyone can
+ * change while its path is a fact about the tree.
  *
- * `null` and the empty array are deliberately different answers, the same distinction
- * `packagesInScope` keeps in scripts/changed-scope.mjs: `null` is "we do not know", which
- * `scopeForPaths` turns into a global run, while an empty array would be the definite answer
- * "this workspace has no members".
- *
- * The `Array.isArray` and per-entry type checks are what separate a real result from pnpm reporting
- * its OWN failure — which it does as valid JSON on stdout, not as a diagnostic on stderr (measured
- * on pnpm 9.15.0; the transcript is in changed-scope.mjs's packagesInScope). Getting that wrong
- * reads a pnpm failure as "no packages exist", attributes every path to nothing, and lands on a
- * global run — which is at least the safe direction here, but by accident rather than by design.
+ * The `Array.isArray` and per-entry type checks separate a real result from pnpm reporting its OWN
+ * failure, which it does as valid JSON on stdout (see changed-scope.mjs's packagesInScope).
  */
 export function workspacePackages(pnpmLsJson, repoRoot) {
   const raw = pnpmLsJson.trim();
@@ -95,21 +59,13 @@ export function workspacePackages(pnpmLsJson, repoRoot) {
   for (const entry of parsed) {
     if (typeof entry?.name !== "string" || typeof entry?.path !== "string") return null;
 
-    // `relative` returns platform-native separators, and every comparison downstream is against a
-    // path from `git diff --name-only`, which is always `/`-delimited on every platform. On a
-    // separator where `sep` is not `/` the two could never match, so `owningPackage` would attribute
-    // nothing and every push would fall back to a global run — scoping silently switched off rather
-    // than broken, which is the quiet direction.
-    //
-    // Not a bug reachable today: CI is `ubuntu-latest`, the hook is POSIX `sh` run by husky, and
-    // `sep` is `/` on both. Verified only on darwin, where `relative()` already returns `/` and this
-    // join is a no-op — so this normalises the comparison rather than adding Windows support, which
-    // nothing here tests. Raised by Copilot on PR #31.
+    // `relative` returns platform-native separators, while every path it is compared with comes from
+    // `git diff --name-only`, which is always `/`-delimited. Where they differ nothing would ever be
+    // attributed, and every push would silently fall back to a global run.
     const dir = relative(root, resolve(entry.path)).split(sep).join("/");
 
-    // The workspace root: `pnpm ls -r` lists it alongside the members, and it "contains" every path
-    // in the repository, so leaving it in would attribute the whole diff to it and never report a
-    // global run at all.
+    // The workspace root "contains" every path, so leaving it in would attribute the whole diff to
+    // it and never report a global run at all.
     if (dir === "") continue;
 
     // A member outside the checkout owns no path in this diff, and `relative` walks upwards to say
@@ -126,22 +82,13 @@ export function workspacePackages(pnpmLsJson, repoRoot) {
 /**
  * The innermost workspace member containing `path`, or `undefined`.
  *
- * Innermost, not first: no member's directory CONTAINS another's today — checked against
- * `pnpm ls -r --depth -1 --json` on 2026-08-01, where no member's `dir + "/"` is a prefix of any
- * other's. (Two dirs are bare string prefixes of a sibling — `packages/fiscal` of
- * `packages/fiscal-verifactu`, `packages/payments` of `packages/payments-stripe` — which is exactly
- * why the trailing slash below is not decoration.) One line in pnpm-workspace.yaml would make a
- * real nesting, and the failure would be silent in the dangerous direction: the outer package's
- * suite runs, the inner one's does not.
+ * Innermost, not first: no member's directory contains another's today, but one line in
+ * pnpm-workspace.yaml would make a real nesting, and the failure would be silent in the dangerous
+ * direction: the outer package's suite runs, the inner one's does not.
  *
- * The trailing slash is what makes this a directory test rather than a string-prefix test, and the
- * case it catches is narrower than it first looks. Established by deletion, twice. Against the
- * first version of the test — `packages/db` AND `packages/db-extra` both workspace members — a bare
- * `startsWith(pkg.dir)` matched both, the innermost rule above picked the longer, and the whole
- * suite still passed: the right answer for the wrong reason. What actually breaks is a sibling
- * directory that is NOT a member. `packages/db-extra/src/a.ts` then matches `packages/db` alone and
- * is attributed to `@waitron/db`, whose suite passes, instead of widening the run to global — and
- * with the test rewritten to that shape, deleting the slash fails it and nothing else.
+ * The trailing slash makes this a directory test rather than a string-prefix test. The case it
+ * catches is a sibling directory that is NOT a member: without it, `packages/db-extra/src/a.ts` would
+ * be attributed to `@waitron/db` instead of widening the run to global.
  */
 function owningPackage(path, packages) {
   let owner;
@@ -157,49 +104,21 @@ function owningPackage(path, packages) {
  * `{ kind, packages, root, deploy, reason }`, where `kind` is one of FOUR outcomes and the hook
  * does something different for each.
  *
- *   "documentation"  every changed path is inert — prose, or the root config no `code`-gated job
- *                    reads (see `isInertPath`). format:check still reads it (`.prettierignore` excludes
- *                    `docs/` but NOT a root-level `CLAUDE.md` or `README.md` — run here on
- *                    2026-08-01: `prettier --file-info docs/backlog.md` is `"ignored": true`,
- *                    `--file-info CLAUDE.md` is `"ignored": false, "inferredParser": "markdown"`,
- *                    and appending a mis-formatted heading to CLAUDE.md makes `prettier --check`
- *                    exit 1). Nothing else can read it.
+ *   "documentation"  every changed path is inert (see `isInertPath`).
  *   "root"           every changed CODE path is the repository's own machinery (`isRootScopePath`)
  *                    and none is a file members read (`ROOT_SCOPE_CONSUMERS`). The repo-level Vitest
- *                    project is the only suite that reads it, so that is the only suite that runs;
- *                    no package is typechecked or tested.
+ *                    project is the only suite that runs; no package is typechecked or tested.
  *   "global"         run everything: a path outside every package that is not root scope, an
  *                    unreadable workspace, or a push whose contents could not be determined at all.
  *   "packages"       `packages` names the members to narrow to. Non-empty exactly here.
  *
- * `root` is orthogonal to `kind` and true whenever ANY changed path is root scope — so a push of
- * `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with `root: true`, and both
- * the repo-level project and `@waitron/db`'s suite have work. It is the fourth line `formatScope`
- * emits. `deploy` is orthogonal in the same way (`isImageInputPath`): true whenever a changed path
- * is one of the box image's inputs, and the fifth line — ci.yml's `image` job reads it to re-run
- * its smoke on a pull request only when `deploy/` changed.
+ * `root` and `deploy` are orthogonal to `kind`. `root` is true whenever ANY changed path is root
+ * scope, so a push of `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with
+ * `root: true`. `deploy` is true whenever a changed path is one of the box image's inputs
+ * (`isImageInputPath`).
  *
- * The predecessor returned ONE object for the first two — `{packages: [], global: true, reason: "no
- * changed code path could be determined — running everything"}` — so a documentation-only push read
- * as "run everything" from this module, and was narrowed only because the hook consulted a SECOND
- * classifier first and exited before asking. That ordering contract lived in the shell rather than
- * here, so any other caller got it wrong by default; and the reason string was false in the docs
- * case, because the paths WERE determined, they were prose.
- *
- * `loadPackages` is a THUNK, not a value, and the documentation and undetermined outcomes return
- * without calling it. The hook's thunk shells out to `pnpm ls -r --depth -1 --json`: timed here on
- * 2026-08-01 by wrapping ten `subprocess.run` calls in `time.time()`, that command took 191-200ms
- * every time, which a docs-only push has no use for. `scripts/changed-packages.test.mjs` asserts
- * the thunk is untouched on both outcomes, so that is a tested property rather than a reading of
- * the control flow.
- *
- * DOCUMENTATION is decided by `classify` from scripts/changed-scope.mjs — the same function
- * CI's docs gate calls — and the per-path filter below by that module's `isInertPath`, so "what
- * counts as documentation" has exactly one definition and this cannot report code work and then
- * find no code path to attribute. Without the exception a global run would be the common case, not
- * the rare one: CLAUDE.md §7 and docs/backlog.md's own closing section both tell every branch to
- * update those files in the change that makes them stale, so nearly every push in this repository
- * carries a `docs/` or root-Markdown path.
+ * `loadPackages` is a THUNK, not a value: the hook's thunk shells out to `pnpm ls -r`, and the
+ * documentation, undetermined and root outcomes return without calling it.
  *
  * When `kind` is not "packages" the list is EMPTY rather than partial, so a caller that reads it
  * without checking `kind` narrows to nothing visible instead of to a plausible-looking subset.
@@ -208,18 +127,12 @@ export function scopeForPaths(changedPaths, loadPackages) {
   const meaningful = changedPaths.map((path) => path.trim()).filter((path) => path.length > 0);
   const { code, reason } = classify(meaningful);
 
-  // Orthogonal to `kind`, the same way `root` is: did the box image's build/runtime inputs change?
-  // ci.yml's `image` job reads this to re-run its smoke on a pull request only then. Fails CLOSED on
-  // an undetermined diff (empty list), exactly as `code` does — a diff we could not work out is a
-  // reason to run the smoke, not to skip it.
+  // Fails CLOSED on an undetermined diff (empty list), exactly as `code` does.
   const deploy = meaningful.length === 0 || meaningful.some(isImageInputPath);
 
-  // Prose only. `classify`'s own reason already says so — "all N changed path(s) are documentation".
   if (!code) return { kind: "documentation", packages: [], root: false, deploy, reason };
 
-  // Fails CLOSED, the same principle as `classify` itself and as the hook's deletion guard: an empty
-  // list means we could not work out what is being pushed, not that nothing is. `classify` says
-  // "no changed paths could be determined — running everything", which is what this does.
+  // An empty list means we could not work out what is being pushed, not that nothing is.
   if (meaningful.length === 0) return { kind: "global", packages: [], root: false, deploy, reason };
 
   const codePaths = meaningful.filter((path) => !isInertPath(path));
@@ -228,8 +141,6 @@ export function scopeForPaths(changedPaths, loadPackages) {
   const attributable = codePaths.filter((path) => !isRootScopePath(path));
   const consumed = rootPaths.filter((path) => ROOT_SCOPE_CONSUMERS.has(path));
 
-  // Nothing for any package to run. Returning before `loadPackages` is what keeps a hook-only or
-  // workflow-only push off the 191-200ms `pnpm ls -r`, the same saving the documentation path takes.
   if (attributable.length === 0 && consumed.length === 0) {
     return {
       kind: "root",
@@ -256,9 +167,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
   for (const path of attributable) {
     const owner = owningPackage(path, packages);
     // `pnpm-workspace.yaml`, `tsconfig.base.json`, the root manifest, the lockfile and the lint and
-    // format config all land here. Those can affect anything. The two other kinds of root path are
-    // already gone: `isInertPath` filtered out the config no `code`-gated job reads, and
-    // `isRootScopePath` the machinery, whose member-read files ROOT_SCOPE_CONSUMERS handles below.
+    // format config all land here. Those can affect anything.
     if (owner === undefined) {
       return {
         kind: "global",
@@ -301,28 +210,13 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * Renders a scope as the five lines its two callers read.
  *
  * `code` is ci.yml's gate on every job that builds, typechecks, tests or mutates a PACKAGE, which
- * is why `kind: "root"` answers it false alongside `documentation`: a `kind: "root"` change —
- * machinery ROOT_SCOPE_CONSUMERS does not list — gives none of them work, and ci.yml's UNGATED
- * `lint` job is what runs the repo-level project that does read it. It is emitted from here rather
- * than recomputed by the workflow's shell so the two cannot drift. ci.yml reads `code=`, `scope=`,
- * `packages=` and `deploy=` into job outputs with `sed`; the hook reads `scope=` and `packages=`
- * and routes a root-only push on `scope=root`. `root=` is emitted for the record — a mixed push
- * says `packages` AND `root=true` — and is read by no consumer today: the hook runs the repo-level
- * suite on every non-documentation push anyway, and ci.yml's `lint` job runs it on every push.
- * `deploy=` is read only by ci.yml (its `image` job); the hook builds no image.
+ * is why `kind: "root"` answers it false alongside `documentation`: ci.yml's UNGATED `lint` job is
+ * what runs the repo-level project a root change does reach. `root=` is emitted for the record and
+ * read by no consumer today.
  *
  * A single space separates the package names, and that separator is the contract between this file
- * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in
- * $scope_packages` — so a name containing whitespace would still come apart into two filters. What
- * they do after the split is append each word with `set -- "$@" --filter "...$pkg"` rather than
- * concatenating into a string for `eval`, so there is no second shell pass to reinterpret a quote,
- * a `$` or a backtick in a name.
- *
- * A GLOB is not in that list, and an earlier version of this paragraph put it there. Dropping
- * `eval` removes the second pass; it does not touch the first, and an unquoted expansion undergoes
- * pathname expansion as well as field splitting. Both callers wrap their loop in `set -f` … `set
- * +f` for that, which is the guard the sentence used to claim was unnecessary — receipts beside the
- * loop in .husky/pre-push.
+ * and its callers. Both callers WORD-SPLIT that line, so a name containing whitespace would come
+ * apart into two filters.
  */
 export function formatScope({ kind, packages, root, deploy }) {
   const code = kind === "packages" || kind === "global";
@@ -333,18 +227,15 @@ export function formatScope({ kind, packages, root, deploy }) {
  * Whether `pnpm <filters> <script>` will actually run something, given the `pnpm <the same filters>
  * ls --depth -1 --json` result already read by `workspacePackages` — `{ok, reason}`.
  *
- * This exists because pnpm answers "nothing to do" with SUCCESS, in two different ways, both
- * measured in this workspace on 2026-08-01 (pnpm 9.15.0), both on STDOUT and both exit **0**:
+ * This exists because pnpm answers "nothing to do" with SUCCESS, in two different ways, both on
+ * STDOUT and both exit **0**:
  *
  *   pnpm --filter "@waitron/nope" test:coverage          → No projects matched the filters in "…"
  *   pnpm --filter "...@waitron/bench-pglite" test:cov…   → None of the selected packages has a
  *                                                          "test:coverage" script
  *
- * A shard that printed either and reported green is the failure this branch exists to close: with
- * `pnpm --filter "...[origin/main]"` resolving a root-config change to the workspace ROOT, the
- * light shard's `pnpm --filter "waitron" --no-sort test:coverage` was the first of those. The
- * message is not what is checked here — a wording change would silently switch the guard off, which
- * is the quiet direction — the SELECTION is.
+ * The message is not what is checked here — a wording change would silently switch the guard off,
+ * which is the quiet direction — the SELECTION is.
  *
  * Fails closed, which for a guard means the opposite of what it means in `scopeForPaths`: not
  * knowing there means run everything, and not knowing here means refuse to claim anything ran. So
@@ -410,34 +301,18 @@ export function scriptRunCheck(members, script, readScripts) {
 //     that is 1 when that selection would run no `<script>` at all. The exit code is the only part
 //     of it a shell step can act on, which is why this is a subcommand rather than a sixth line.
 //
-// In the DEFAULT shape the workspace layout is resolved HERE rather than passed in, because that
-// shape's own input is the changed paths and the two cannot share stdin; threading a JSON document
-// through argv or a temporary file buys nothing. (The `runnable` shape above is the other way round
-// — it IS handed a `pnpm <filters> ls` result on stdin, because the selection it must judge is one
-// pnpm already resolved.) A `pnpm ls` that fails for any reason — not installed, not a workspace,
-// killed — leaves `stdout` null or empty, which `workspacePackages` reads as `null` and
-// `scopeForPaths` turns into a global run.
+// In the default shape the workspace layout is resolved HERE, because stdin already carries the
+// changed paths. A `pnpm ls` that fails for any reason leaves `stdout` null or empty, which
+// `workspacePackages` reads as `null` and `scopeForPaths` turns into a global run. `pnpm ls` needs no
+// `pnpm install` first, which matters because the hook classifies before installing and ci.yml's
+// `changes` job never installs.
 //
-// It runs `pnpm ls` from inside the thunk, so a documentation-only push never pays for it. That it
-// runs at all without `pnpm install` having happened first — the hook now classifies BEFORE
-// installing, and ci.yml's `changes` job never installs at all — was measured rather than assumed:
-// in a `git clone --no-hardlinks` of the main checkout, with no `node_modules` directory anywhere in
-// it, `pnpm ls -r --depth -1 --json` exited 0 with all 16 entries on stdout and nothing on stderr
-// (2026-08-01, pnpm 9.15.0). Deliberately not a byte count: that output is absolute paths, so it
-// moves with the checkout's location — the first version of this line said 3917 bytes and a
-// reviewer's clone gave 3885.
+// stdout carries the five lines and NOTHING else: both callers `sed` the `<name>=` lines out of it,
+// so a stray line that happened to carry a prefix would become a bogus job output or scope. The
+// human-readable reason goes to stderr.
 //
-// stdout carries the five lines and NOTHING else: ci.yml seds `code=`/`scope=`/`packages=`/`deploy=`
-// out of it into job outputs and the hook reads `scope=` and `packages=` the same way, so a stray line
-// that happened to carry a prefix would become a bogus job output or a bogus scope. The
-// human-readable reason goes to stderr, where both print it for whoever is watching.
-//
-// Ignored for coverage because the tests run it in a CHILD process, and the v8 provider only
-// measures the module graph loaded into the test process — so this block reads as 0% however
-// thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
-// two `describe("… CLI")` suites and twelve `it()`s about this block go with it — six each,
-// counted on 2026-08-01 with `pnpm vitest run --reporter=verbose` — including the only ones that
-// run the real `pnpm ls` against the real workspace.
+// Ignored for coverage because the tests run it in a CHILD process, which the v8 provider does not
+// measure.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("changed-packages.mjs")) {
   const stdin = () => readFileSync(0, "utf8");

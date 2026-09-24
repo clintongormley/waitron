@@ -2,12 +2,8 @@ import { expect, it } from "vitest";
 import fiscalConfig from "../packages/fiscal-verifactu/vitest.config.js";
 import mediaConfig from "../packages/media/vitest.config.js";
 
-// What these cases pin is the arrangement fiscal-verifactu and media chose — a `maxWorkers` cap on
-// the outer config, with none inside a project — not a claim about how Vitest resolves the cap. On
-// Vitest 4 a project's own `maxWorkers` wins and the outer config's is the fallback, so keeping the
-// cap outside is these two packages' choice rather than something Vitest forces
-// (docs/developers/testing-guide.md). Vitest 4 removed `poolOptions`: the option is the top-level
-// `maxWorkers`.
+// Pins the arrangement fiscal-verifactu and media chose — a `maxWorkers` cap on the outer config,
+// none inside a project — not how Vitest resolves the cap (docs/developers/testing-guide.md).
 
 it("caps the shared fiscal worker pool at the outer Vitest configuration", () => {
   expect(fiscalConfig.test?.maxWorkers).toBe(4);

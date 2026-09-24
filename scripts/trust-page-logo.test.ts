@@ -6,25 +6,14 @@ import { describe, expect, it } from "vitest";
  * Pins the drawing inside `apps/server/src/trust-page-logo.ts` against the one brand lockup,
  * `packages/ui/brand/waitron-lockup.svg`.
  *
- * There are two copies of that drawing on purpose. The certificate-help page is one self-contained
- * HTML string served to a browser that may have no internet and no access to anything else on the
- * box, and `apps/server` does not depend on `@waitron/ui`, so the page cannot import or fetch the
- * brand file — the svg has to sit in the server's own source. Nothing else compares them: the brand
- * directory is excluded from `packages/ui`'s coverage, and `apps/server`'s own suite asserts what
- * the page renders, not whether the logo in it is still the logo. So redrawing the lockup would
- * leave the certificate page showing the old one behind a fully green gate.
+ * The certificate-help page is one self-contained HTML string, and `apps/server` does not depend on
+ * `@waitron/ui`, so the svg is copied into the server's own source.
  *
- * It lives in the ROOT project (CLAUDE.md §4) because it spans packages — the assertion is about
- * `apps/server` and `packages/ui/brand` agreeing, a fact neither package's own suite owns, and a
- * push that touches only `packages/ui/brand` does not put `apps/server` in scope.
- *
- * It reads TEXT and never imports, renders or executes either file. WHAT THAT CANNOT SEE, stated
- * rather than guarded:
+ * It reads TEXT and never imports, renders or executes either file. WHAT THAT CANNOT SEE:
  *
  *   - It proves the two DRAWINGS match. It proves nothing about whether the pasted svg actually
  *     renders, whether the wordmark and mark are readable against the page in either theme, or
- *     whether the `prefers-color-scheme` rule inside the svg works at all. Nothing anywhere checks
- *     those — there is no browser test of this page.
+ *     whether the `prefers-color-scheme` rule inside the svg works at all.
  *   - Paint and labelling are ignored deliberately, because they are the parts that differ: `fill`,
  *     `class`, `style`, the whole inline `<style>` block, `role` and `aria-label`. A wrong colour
  *     is invisible to this guard.
@@ -35,10 +24,6 @@ import { describe, expect, it } from "vitest";
  *     display size and the brand file has none. Its `viewBox` IS compared.
  *   - Only markup between the first `<svg` and the last `</svg>` is read, so a second svg pasted
  *     elsewhere in the TypeScript file, or the constant being renamed, is not noticed here.
- *
- * Proven by deletion on 2026-09-13: perturbing one coordinate in `waitron-lockup.svg`
- * (`cx="102.45071"` → `cx="102.55071"` on the mark's head) turned this red, naming the position and
- * both values; restoring the file turned it green again.
  */
 const REPO_ROOT = join(import.meta.dirname, "..");
 const BRAND_PATH = join(REPO_ROOT, "packages", "ui", "brand", "waitron-lockup.svg");

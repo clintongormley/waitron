@@ -9,36 +9,22 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * Every foreign key and every unique index the product's schema is supposed to have, checked
  * against the database the tree's own migrations actually build.
  *
- * WHAT IT IS FOR. A constraint that lives only in hand-written migration SQL disappears the moment
- * a set is regenerated from the TypeScript schema, and nothing else in the tree notices. That is
- * not hypothetical: regenerating the thirteen sets for the storage switch dropped 33 foreign keys
- * and 13 unique indexes, and the first thing that would have failed was a route test several steps
- * later. The lists below are the contract, so the same loss fails here instead, in a guard that
- * runs on every push.
- *
- * WHERE THE LISTS CAME FROM. Both halves were read off a LIVE engine, never parsed out of SQL:
- * PostgreSQL's `pg_constraint` and `pg_index` after applying the pre-switch migration sets, minus
- * every key whose column list named the tenant column (that column went on 2026-09-14). Entries
- * for constraints added since the switch are written by the change that adds them.
- *
- * WHY A TREE-WIDE ROOT-PROJECT PROGRAM. The tables are created by every domain package's
- * `drizzle/` directory and no package suite can see all thirteen sets at once. Like everything
- * under `scripts/`, this file is NOT typechecked, so it stays plain.
+ * A constraint that lives only in hand-written migration SQL disappears the moment a set is
+ * regenerated from the TypeScript schema, and nothing else in the tree notices. The lists below are
+ * the contract; a change that adds a constraint adds its entry.
  *
  * WHAT IT DOES NOT COVER. It reads the schema the migrations build; it does not try an offending
  * INSERT, so it cannot tell a constraint SQLite records from one SQLite enforces — `foreign_keys`
  * is a per-connection pragma, and whether the product turns it on is proven in
  * `packages/store/src/index.test.ts`. It matches a unique index and a check constraint by NAME, so
  * one renamed and left otherwise intact fails here, while one whose COLUMNS or PREDICATE changed
- * under a kept name passes. It reads a check's name out of the built schema's `CREATE TABLE` TEXT,
- * because SQLite has no catalogue of check constraints to query. And it says nothing about indexes
- * that are not unique.
+ * under a kept name passes. It reads a check's name out of the built schema's `CREATE TABLE` TEXT.
+ * And it says nothing about indexes that are not unique.
  *
  * TWO KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)` and
- * `category_details(image)`, both of which referenced `media_images` before the switch.
- * `packages/media` depends on `@waitron/catalogue` and `@waitron/db`, so neither owning package may
- * import media's schema to name the column, and `scripts/workspace-cycles.test.ts` is the guard
- * that refuses the import. `~/waitron-campaign/questions.md` carries the decision.
+ * `category_details(image)`, both referencing `media_images`. `packages/media` depends on
+ * `@waitron/catalogue` and `@waitron/db`, so neither owning package may import media's schema to
+ * name the column; `scripts/workspace-cycles.test.ts` refuses the import.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -278,11 +264,9 @@ const EXPECTED_UNIQUE_INDEXES = [
 ];
 
 /**
- * Every named check constraint, by the name its declaration gives it.
- *
- * The switch ADDED checks as well as losing them — thirty `pgEnum` declarations became a text
- * column plus a named check, because SQLite has no enum type — so this list is what the schema had
- * BEFORE the switch and the built schema is expected to be a superset of it, never an equal.
+ * Every named check constraint, by the name its declaration gives it. The built schema is expected
+ * to be a superset of this list, never an equal: each enum column is a text column plus a named
+ * check.
  */
 const EXPECTED_CHECK_CONSTRAINTS = [
   "absences_range_ck",
@@ -445,8 +429,8 @@ function buildSchema() {
     try {
       entries = readdirSync(drizzleDir);
     } catch {
-      // A descriptor whose package ships no `drizzle/` directory (`fiscal-none` ships only
-      // `meta/`). The anti-vacuity floors below catch a discovery that found too little.
+      // A descriptor whose package ships no `drizzle/` directory. The anti-vacuity floors below
+      // catch a discovery that found too little.
       continue;
     }
     for (const name of entries.filter((entry) => entry.endsWith(".sql")).sort()) {
@@ -499,11 +483,9 @@ function uniqueIndexNamesIn(connection) {
 }
 
 /**
- * Every named check constraint in the built schema, read out of the `CREATE TABLE` text.
- *
- * SQLite exposes foreign keys and indexes through pragmas but keeps no catalogue of check
- * constraints, so `sqlite_master.sql` is the only place a name can be read from. That is why this
- * one function reads text where the rest of the file queries the engine.
+ * Every named check constraint in the built schema, read out of the `CREATE TABLE` text: SQLite
+ * keeps no catalogue of check constraints, so `sqlite_master.sql` is the only place a name can be
+ * read from.
  */
 function checkConstraintNamesIn(connection) {
   const names = new Set();

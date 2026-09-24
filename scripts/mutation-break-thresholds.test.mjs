@@ -1,11 +1,6 @@
-// Every package that can be mutation-tested declares the score it FAILS at.
-//
-// The owner set 90 for every package on 2026-09-19. Four packages carry it in their own
-// `stryker.config.json`; `packages/db` cannot, because CI splits its run across ten shards and a
-// `thresholds.break` there would gate each shard's slice rather than the package — so it is gated
-// once, on the merged score, by the `mutation-db-aggregate` job. Both shapes are checked here, so a
-// package that gains a `mutation` script without a bar, or a bar that quietly drops below 90, fails
-// the build instead of publishing a score nobody reads.
+// Every package that can be mutation-tested declares the score it FAILS at. `packages/db` carries
+// its bar in the `mutation-db-aggregate` job rather than its own `stryker.config.json`, because CI
+// splits its run across shards and a `thresholds.break` there would gate each shard's slice.
 //
 // Weaker than its name in one way worth stating: it reads the workflow as TEXT for db's bar, so a
 // step that reached the same command through a variable would be invisible to it.
@@ -19,12 +14,8 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const BAR = 90;
 
 /**
- * Every workspace member whose `package.json` declares a `mutation` script, as `{name, dir}`.
- *
- * Members come from `pnpm ls` through `workspaceMembers` (scripts/workspace-members.mjs) — the
- * same source the pre-push hook and CI scope from — rather than from a directory listing of
- * `packages/`, so a `mutation` script added under `apps/` or any other workspace root reaches this
- * guard without an edit.
+ * Members come from `pnpm ls` rather than a listing of `packages/`, so a `mutation` script added
+ * under any workspace root reaches this guard without an edit.
  */
 function mutationPackages() {
   return workspaceMembers()
@@ -46,8 +37,7 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     "finds the packages that run mutation testing",
     { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
     () => {
-      // The list is read, not written down, so a new one arrives here on its own. It is asserted
-      // non-empty because an empty list would make every case below vacuous.
+      // An empty list would make every case below vacuous.
       expect(mutationPackages().length).toBeGreaterThan(0);
     },
   );
@@ -57,9 +47,8 @@ describe("every mutation-tested package declares the bar it fails at", () => {
     { timeout: PNPM_LS_SPAWN_TIMEOUT_MS * 2 },
     () => {
       // One case over the whole list rather than `it.each`, which would have to build the list
-      // while the file is being COLLECTED — where no per-test bound applies (the spawn's own 30s
-      // kill still does) and where a throw fails the whole file as a collection error rather
-      // than as an assertion.
+      // while the file is being COLLECTED, where no per-test bound applies and a throw fails the
+      // whole file as a collection error rather than as an assertion.
       const bars = mutationPackages()
         .filter(({ dir }) => dir !== "packages/db")
         .map(({ dir }) => ({
@@ -74,16 +63,13 @@ describe("every mutation-tested package declares the bar it fails at", () => {
   );
 
   it("packages/db breaks at 90 on the merged score of its shards", () => {
-    // Its own config deliberately carries no `thresholds.break`: CI passes each shard its own
-    // `--mutate` list, so a break there would gate a slice. The aggregate job is where its bar
-    // lives.
     const config = JSON.parse(
       readFileSync(join(root, "packages", "db", "stryker.config.json"), "utf8"),
     );
     expect(config.thresholds).toBeUndefined();
 
     // Matched as a whole `run:` line, not as a substring: `run: echo node scripts/…` contains the
-    // command and executes nothing, and passed this guard until 2026-09-20.
+    // command and executes nothing.
     const workflow = readFileSync(join(root, ".github", "workflows", "mutation.yml"), "utf8");
     const runs = workflow
       .split("\n")

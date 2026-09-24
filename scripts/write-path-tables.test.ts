@@ -12,68 +12,44 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  * survives only as a convention over source text, and this guard is the whole of its enforcement.
  * Read the four hedges below before trusting it.
  *
- * It is about WHICH FILE does the write, not about being a request. A request can legitimately
- * reach these tables: the setup-mode provision route reaches `tenants`, `nodes` and `deployment`,
- * the setup-mode adopt route reaches `deployment`, `node_roles` and `mirror_config`, and the
- * promote route reaches `node_roles`. Each does it by calling into one of the files
- * `write-path-tables.json` names, which is where such a write is allowed to live. Keeping
- * those writes in a handful of named files is the property being defended; hedge 2 below is what it
- * costs.
+ * It is about WHICH FILE does the write, not about being a request: a request may reach these
+ * tables by calling into one of the files `write-path-tables.json` names, which is where such a
+ * write is allowed to live.
  *
- * WHY A ROOT-PROJECT PROGRAM. The list of tables lives in a different package from the code that
- * could write them, which is spread across every app and package, so no per-package suite can see
- * both sides — the same reason `two-file-foreign-keys.test.ts` and `classification-complete.test.ts`
- * live here. The root project is not typechecked (the root `vitest.config.ts` carries the mutation
- * that measured it), so the import of `PRIVILEGES` above is checked by running, not by `tsc`.
+ * The list comes from `packages/fiscal-verifactu/src/privileges.expected.ts`, the frozen record of
+ * `app_user`'s table grants: the four tables it records as `S`, plus `node_roles`, which inherits
+ * `deployment`'s rule (`ADDED_SINCE_THE_MATRIX` below). Nothing checks that record against a
+ * database. The case below cross-checks it with `write-path-tables.json` while both exist.
  *
- * WHERE THE LIST COMES FROM. `packages/fiscal-verifactu/src/privileges.expected.ts` — the matrix
- * that recorded `app_user`'s table privileges. Four of the tables are the ones it records as `S`;
- * `node_roles` came later and inherits `deployment`'s rule (`ADDED_SINCE_THE_MATRIX` below). It
- * is a frozen record, not a measurement: nothing checks it against a database. It only ever
- * measured TABLE-level grants, so a column-scoped write grant on one of the four never showed up in
- * it or here. `write-path-tables.json` beside this file holds the same four FROZEN, plus
- * `node_roles`, because the matrix goes when the rest of the grant-era record does; the case below
- * cross-checks the two while both exist, and deleting the matrix breaks this file's import rather
- * than making it quietly pass.
- *
- * It is WEAKER than "no write path touches a forbidden table", in four ways that are worth stating
- * because a failing test can never restore a missing hedge:
+ * It is WEAKER than "no write path touches a forbidden table", in four ways:
  *
  * 1. **It reads TEXT.** A write assembled from a variable table name, or reached through a helper
- *    that names the table somewhere this reader does not look, is invisible to it. So is any spelling
- *    the detector below does not list — it knows `insert into`, `delete from`, `truncate`, `update …
- *    set`, each optionally schema-qualified, and drizzle's three builder calls on a receiver whose
- *    name looks like a database handle. Nothing else, and the two paragraphs on `withoutComments`
- *    and `detector` name what each of those gives up.
+ *    that names the table somewhere this reader does not look, is invisible to it. So is any
+ *    spelling the detector below does not list — it knows `insert into`, `delete from`, `truncate`,
+ *    `update … set`, each optionally schema-qualified, and drizzle's three builder calls on a
+ *    receiver whose name looks like a database handle. The notes on `withoutComments` and
+ *    `detector` name what each of those gives up.
  * 2. **It judges a FILE, not a call chain.** An allowed file is allowed outright, so a request path
- *    that calls into one of them writes through it unseen. What it catches is the shape that has
- *    actually occurred: a write appearing in a file that had no business having one.
+ *    that calls into one of them writes through it unseen.
  * 3. **It reads `<member>/src` under `apps` and `packages` only**, minus `*.test.ts` and everything
- *    under a `testing/` directory. Fixtures there seed `tenants` and `nodes` outright
- *    (`packages/db/src/testing/seed.ts` among them), so including them would mean an allowance list
- *    of fixtures that hides the real ones. Outside the walk entirely, and so unseen: a package's
- *    `test/` directory, `apps/<app>/scripts` (four demo scripts there write `tenants`, three of them `nodes` too),
- *    and anything at a package root.
+ *    under a `testing/` directory, where fixtures seed `tenants` and `nodes` outright. Outside the
+ *    walk entirely, and so unseen: a package's `test/` directory, `apps/<app>/scripts`, and
+ *    anything at a package root.
  * 4. **It is about the tables that were refused AT ALL**, plus `node_roles`. The grants used to
  *    refuse plenty more one operation at a time — no DELETE on the sale tables, UPDATE narrowed to
- *    named columns on two others — and none of that was ever checked here, nor is any of it
- *    refused now.
- *    `docs/backlog.md` → B9 carries the decision.
+ *    named columns on two others — and none of that is checked here or refused now.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 
 /**
- * table -> the files allowed to write it, repo-relative.
- *
- * A frozen JSON file rather than a constant here, because it has to outlive the grants it was taken
- * from. Why each entry is allowed, traced caller by caller on 2026-09-19 (the `deployment.ts` entry
- * re-traced on 2026-09-24):
+ * table -> the files allowed to write it, repo-relative. A frozen JSON file rather than a constant
+ * here, because it has to outlive the grants it was taken from. Why each entry is allowed:
  *
  *   `packages/provisioning/src/venue-apply.ts`   creates the taxpayer row and the node, under the
- *                                                setup-mode provision route, the `waitron-provision`
- *                                                command line, and the fiscal-readiness runner's
- *                                                throwaway database.
+ *                                                setup-mode provision route, the
+ *                                                `waitron-provision` command line, and the
+ *                                                fiscal-readiness runner's throwaway database.
  *   `packages/db/src/node-identity.ts`           stamps a node's public key, from the setup-mode
  *                                                provision route.
  *   `packages/db/src/reserved-identity.ts`       writes a standby's dormant node row, from the boot
@@ -99,30 +75,22 @@ function schemaObject(table: string): string {
 }
 
 /**
- * Comments removed, line by line, including a comment that follows code on its own line.
- *
- * Why remove them at all: `packages/db/src/mirror-config.ts` explains in a comment that
- * `stampDeployment` writes through `db.insert(deployment)`, and that one sentence was everything the
- * first version of this guard reported across the whole tree.
- *
- * Why a trailing comment has to go too: leaving it there made the sentence above report the file it
- * was written in as soon as somebody moved it to the end of a line of code. The line in front of the
- * comment is still read, so a write there is not lost.
+ * Comments removed, line by line, including a comment that follows code on its own line: a comment
+ * describing a write that lives elsewhere would otherwise be reported. The line in front of a
+ * trailing comment is still read.
  *
  * A `//` that follows `:` is left alone, because that is a URL inside a string and cutting the line
  * there could drop a write sitting after it.
  *
  * Only a block opener that STARTS its line runs on to the lines below. A `"/*"` in the middle of a
- * line is nearly always a string — the review seat wrote exactly that file and hid a real write on
- * the lines under it — so an unclosed one ends its own line and nothing more.
+ * line is nearly always a string, so an unclosed one ends its own line and nothing more.
  *
  * WHERE IT IS STILL WRONG, three ways, each needing a parser rather than a reader. A block comment
  * that opens at the END of a line of code and runs on is not followed, so its text is read as code:
- * a write written inside one is reported, which is the false direction to be wrong in but still
- * wrong. A comment marker inside a string on a line of code ends that line here, so a write after it
- * on the same line is lost. And the string-literal hole is narrowed rather than closed — a line
- * inside a template literal whose first characters are `/*` still opens a block and still swallows
- * the code below it, measured on this reader, so a write can hide under one.
+ * a write written inside one is reported. A comment marker inside a string on a line of code ends
+ * that line here, so a write after it on the same line is lost. And a line inside a template
+ * literal whose first characters are `/*` still opens a block and swallows the code below it, so a
+ * write can hide under one.
  */
 function withoutComments(source: string): string {
   const kept: string[] = [];
@@ -161,19 +129,16 @@ function withoutComments(source: string): string {
 /**
  * How a write of `table` is spelled.
  *
- * `UPDATE` must carry its `SET`. That is defensive rather than a fix for something observed:
- * `nodes` and `deployment` are ordinary English words, and a sentence about updating nodes would
- * otherwise read as a write. No such sentence is in the tree today — the requirement is there to
- * keep one from arriving. The rest are shapes
- * reviewers proved slip past a narrower reader: a schema qualification, an alias between the table
- * and its `SET`, `TRUNCATE`, a space before a builder's parenthesis, a namespace or a cast inside it.
+ * `UPDATE` must carry its `SET`: `nodes` and `deployment` are ordinary English words, and a
+ * sentence about updating nodes would otherwise read as a write. The rest are shapes reviewers
+ * proved slip past a narrower reader: a schema qualification, an alias between the table and its
+ * `SET`, `TRUNCATE`, a space before a builder's parenthesis, a namespace or a cast inside it.
  *
  * The builder's receiver has to look like a database handle — a name ending in `db`, `tx`, `trx`,
  * `transaction`, `conn` or `client`, or nothing at all where the call opens its line as part of a
  * chain. Without that, `cache.delete(nodes)` on an ordinary `Set` is reported as a write to the
- * `nodes` table, and every one of these tables has a name an ordinary variable might carry. The cost
- * is the other half of the same coin: a real write through a handle named something else, on a line
- * that does not start with the dot, is invisible here.
+ * `nodes` table. The cost: a real write through a handle named something else, on a line that does
+ * not start with the dot, is invisible here.
  */
 function detector(table: string): string {
   const object = schemaObject(table);
@@ -203,11 +168,9 @@ const SOURCE_EXTENSIONS = [".ts", ".mts", ".cts", ".tsx"];
 
 /**
  * Production source under both roots: no suites, and nothing from a `testing/` directory.
- *
- * Directories are pruned as the walk descends rather than filtered afterwards, the way
- * `module-seams.test.ts` does it — `guarded-teardowns.test.ts` measured a post-filter walk of
- * `packages/` at "~996,000 entries to find ~190 files". A directory can also vanish between listing its parent and reading it, so a failed
- * read is skipped rather than thrown.
+ * Directories are pruned as the walk descends rather than filtered afterwards, because
+ * `node_modules` is vast. A directory can vanish between listing its parent and reading it, so a
+ * failed read is skipped rather than thrown.
  */
 function sourceFiles(dir: string): string[] {
   let entries;
@@ -227,10 +190,8 @@ function sourceFiles(dir: string): string[] {
     }
     if (entry.name.includes(".test.")) continue;
     if (!SOURCE_EXTENSIONS.some((extension) => entry.name.endsWith(extension))) continue;
-    // A failing browser test leaves a screenshot DIRECTORY named like a source file (CLAUDE.md §4).
-    // The branch above descends into it rather than excluding it, and it holds no `.ts` file, so
-    // nothing reaches this line from one — which is why there is no `statSync` here: it would add a
-    // syscall that throws on the very race the read above is wrapped for.
+    // A screenshot DIRECTORY named like a source file is descended into above, so it never reaches
+    // this line; a `statSync` here would throw on the race the read above is wrapped for.
     if (!entry.isFile()) continue;
     files.push(relative(REPO_ROOT, path));
   }
@@ -312,9 +273,7 @@ describe("no source writes a table the application role may only read", () => {
     for (const root of ["apps", "packages"]) {
       expect(SOURCES.some((file) => file.startsWith(`${root}${sep}`))).toBe(true);
     }
-    // A lower bound, not a count — the same shape and the same number `no-tenant-column.test.ts`
-    // uses, and for the same reason: a figure that tracked the tree would go stale on any deletion,
-    // while a floor set well under it only fires when the walk has genuinely stopped descending.
+    // A lower bound, not a count: it fires only when the walk has genuinely stopped descending.
     expect(SOURCES.length).toBeGreaterThan(500);
   });
 
@@ -390,16 +349,14 @@ describe("the detector itself", () => {
     expect(writes(source, "tenants")).toBe(true);
   });
 
-  // A continuation line of an arithmetic expression starts with `*`, and an earlier version of this
-  // reader dropped every such line as though it were inside a block comment.
+  // A continuation line of an arithmetic expression starts with `*`; it is not inside a comment.
   it("reads a line that begins with an operator", () => {
     expect(writes("const n = a\n  * b;\nawait tx.insert(tenants).values(row);", "tenants")).toBe(
       true,
     );
   });
 
-  // Each of these fired on an ordinary line of code before the reader learned to strip a comment
-  // that follows code, and each would have failed a push that had nothing to do with a database.
+  // Each of these would otherwise fail a push that had nothing to do with a database.
   it("says nothing about a comment that follows code on its line", () => {
     expect(writes("const x = 1; // update nodes when set", "nodes")).toBe(false);
     expect(writes("const x = 1; /* insert into tenants (id) values (1) */", "tenants")).toBe(false);
@@ -424,7 +381,7 @@ describe("the detector itself", () => {
     expect(writes("insert into sync.tenants (id) values (1)", "tenants")).toBe(true);
   });
 
-  // The reader keeps a URL's `//` rather than cutting the line there, because a write can follow it.
+  // The reader keeps a URL's `//` rather than cutting the line there: a write can follow it.
   it("does not read a URL inside a string as a comment", () => {
     expect(
       writes('const url = "https://x/y"; await tx.insert(tenants).values(row);', "tenants"),

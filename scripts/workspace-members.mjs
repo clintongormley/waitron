@@ -26,7 +26,6 @@ export const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
  * reads them — the same source the pre-push hook and CI scope from, so a new workspace root in
  * pnpm-workspace.yaml reaches every root guard that calls this without an edit.
  *
- * Throws when pnpm could not run, exited non-zero, or printed nothing `workspacePackages` can read.
  * A listing that parses but is empty comes back as `[]`, so each caller checks it is non-empty.
  *
  * @param {Spawn} [spawn] injected only so a test can assert the kill timeout and each failure.

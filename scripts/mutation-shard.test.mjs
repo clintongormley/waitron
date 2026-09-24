@@ -10,7 +10,6 @@ import { assignShards, NOT_MUTATED, splitRanges } from "./mutation-shard.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const dbSrc = join(here, "..", "packages", "db", "src");
 
-/** Every mutate-eligible db file (*.ts minus *.test.ts), as `src/`-relative paths, sorted. */
 function eligibleFiles() {
   const out = [];
   const walk = (dir) => {
@@ -83,12 +82,12 @@ describe("splitRanges", () => {
   it("covers every line exactly once with no gaps or overlaps when it doesn't divide evenly", () => {
     const parts = splitRanges("x.ts", 100, 3).map((r) => r.replace("x.ts:", ""));
     const bounds = parts.map((p) => p.split("-").map(Number));
-    expect(bounds[0][0]).toBe(1); // starts at line 1
-    expect(bounds.at(-1)[1]).toBe(100); // ends at the last line
-    for (let i = 1; i < bounds.length; i++) expect(bounds[i][0]).toBe(bounds[i - 1][1] + 1); // contiguous
+    expect(bounds[0][0]).toBe(1);
+    expect(bounds.at(-1)[1]).toBe(100);
+    for (let i = 1; i < bounds.length; i++) expect(bounds[i][0]).toBe(bounds[i - 1][1] + 1);
     const sizes = bounds.map(([s, e]) => e - s + 1);
-    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1); // balanced
-    expect(sizes.reduce((a, b) => a + b)).toBe(100); // whole file
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+    expect(sizes.reduce((a, b) => a + b)).toBe(100);
   });
 
   it("returns the whole file as one range when parts is 1", () => {
@@ -97,7 +96,7 @@ describe("splitRanges", () => {
 });
 
 describe("the CLI over the real @waitron/db tree", () => {
-  const fileOf = (entry) => entry.replace(/:\d+-\d+$/, ""); // strip a `:startLine-endLine` range
+  const fileOf = (entry) => entry.replace(/:\d+-\d+$/, "");
 
   it("covers every mutate-eligible file exactly once — whole, or as ranges for a split file", () => {
     const total = 6;
@@ -106,21 +105,20 @@ describe("the CLI over the real @waitron/db tree", () => {
 
     expect([...new Set(collected.map(fileOf))].sort()).toEqual(
       eligibleFiles().filter((path) => !NOT_MUTATED.includes(path)),
-    ); // every file covered but the ones nothing here can kill
+    );
 
     const ranges = collected.filter((e) => /:\d+-\d+$/.test(e));
     const wholes = collected.filter((e) => !/:\d+-\d+$/.test(e));
-    expect(new Set(wholes).size).toBe(wholes.length); // no whole file duplicated
-    expect([...new Set(ranges.map(fileOf))]).toEqual(["src/schema/sales.ts"]); // only sales is split
-    expect(ranges).toHaveLength(3); // into 3 ranges
-    expect([...new Set(collected.map(fileOf))]).not.toContain(""); // ranges kept their path
+    expect(new Set(wholes).size).toBe(wholes.length);
+    expect([...new Set(ranges.map(fileOf))]).toEqual(["src/schema/sales.ts"]);
+    expect(ranges).toHaveLength(3);
+    expect([...new Set(collected.map(fileOf))]).not.toContain("");
   });
 
   it("leaves out a file whose only suite is in another vitest project", () => {
     // `src/english-only.ts` is imported by `scripts/english-only.test.ts` in the ROOT project and by
     // nothing under `packages/db`, so this package's own run cannot kill a single one of its
-    // mutants — all 119 survived in weekly run 34808295788 — and counting them drags the package
-    // score down by something no test written here could ever fix.
+    // mutants.
     expect(NOT_MUTATED).toContain("src/english-only.ts");
 
     const total = 6;
@@ -159,7 +157,7 @@ describe("the CLI over the real @waitron/db tree", () => {
     for (let shard = 1; shard <= total; shard++)
       for (const entry of shardFiles(shard, total))
         if (fileOf(entry) === "src/schema/sales.ts") shardOf[entry] = shard;
-    expect(new Set(Object.values(shardOf)).size).toBe(3); // 3 ranges, 3 different shards
+    expect(new Set(Object.values(shardOf)).size).toBe(3);
   });
 
   it("emits src/-relative .ts paths (optionally line-ranged) a stryker run can consume", () => {
@@ -185,10 +183,9 @@ describe("the CLI rejects bad input loudly", () => {
   it("fails when a shard would select no files (more shards than slices)", () => {
     // Derive the shard count from the LIVE slice count (shard 1 of 1 emits every slice) rather than
     // hard-coding it — `@waitron/db` grows, and a fixed number silently stops exceeding the slice
-    // count once it does (FP-1's `floor_zones` schema tripped the former literal `44`). One more
-    // shard than there are slices guarantees the HIGHEST-index shard is empty (greedy packs slices
-    // into the lowest-index shards), so requesting it must fail loudly, never print an empty
-    // --mutate list that would make stryker a confusing no-op.
+    // count once it does. One more shard than there are slices guarantees the HIGHEST-index shard
+    // is empty (greedy packs slices into the lowest-index shards), so requesting it must fail
+    // loudly, never print an empty --mutate list that would make stryker a confusing no-op.
     const n = String(shardFiles(1, 1).length + 1);
     const r = run(n, n);
     expect(r.status).not.toBe(0);

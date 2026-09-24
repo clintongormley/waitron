@@ -4,32 +4,17 @@ import { dirname, join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * The dashboard module-UI seam (bookings SP2): a module's `./dashboard` sub-path is BROWSER-SAFE. It is
- * bundled into the admin dashboard, so it must never reach server-only code — a runtime import of
- * `@waitron/db`, `hono`, `pg`, `drizzle-orm` or a `node:` builtin would drag Node into the browser
- * bundle (the #70 rule the app's local client shapes exist for). This guard reads text and scans, for
- * each listed sub-path, every file REACHABLE from it by RELATIVE imports for a forbidden specifier, and
- * forbids reaching the package's own server barrel/entry (`../index.js`, `../bookings.js`).
+ * A module's `./dashboard` sub-path is bundled into the admin dashboard, so it must never reach
+ * server-only code: a runtime import of `@waitron/db`, `hono`, `pg`, `drizzle-orm` or a `node:`
+ * builtin would drag Node into the browser bundle. For each listed sub-path this scans every file
+ * REACHABLE from it by RELATIVE imports, including ones that leave `src/dashboard`, and forbids
+ * reaching the package's own server barrel/entry (`../index.js`, `../bookings.js`).
  *
- * Reachability follows `./`/`../` specifiers, INCLUDING ones that leave `src/dashboard` for elsewhere in
- * the same package — so a dashboard file that imports a browser-innocent-looking sibling which itself
- * imports `drizzle-orm` is caught, not just a forbidden import written directly in a `src/dashboard`
- * file. LIMITATION, stated because the guard reads text: it resolves RELATIVE paths only. A CROSS-
- * WORKSPACE-PACKAGE transitive leak (a dashboard file → a browser-safe `@waitron/x` export → server code
- * inside that package) is NOT followed here — resolving arbitrary workspace-package internals is beyond
- * a text scan. It used to say that case "stays the Vite-build backstop's job (`bundle-smoke`)", which
- * was wrong on both halves and is corrected here (2026-09-19): `bundle-smoke` runs no `vite build` at
- * all, and the dashboard bundle is not built by any pull request that leaves `deploy/` alone. So
- * NOTHING catches that case on a pull request. See CLAUDE.md §2 and
- * docs/developers/ci-and-gates.md.
- *
- * It reads TEXT (like module-seams / module-graph-honesty): a `from "@waitron/db"` inside a comment
- * would count, and a dynamic `import("…")` would not. Stated, not papered over — the shape it protects
- * is a static import a bundler follows.
- *
- * SUBPATHS grows as UI modules land. The package-dependency check below covers both browser-bundled
- * infrastructure packages: `dashboard-kit` (shared helpers) and `dashboard-modules` (the app-side
- * registry the app imports to mount modules).
+ * LIMITATIONS, because it reads TEXT: it resolves RELATIVE paths only, so a CROSS-PACKAGE
+ * transitive leak (a dashboard file → a browser-safe `@waitron/x` export → server code inside that
+ * package) is NOT followed, and no dashboard bundle is built by a pull request that leaves
+ * `deploy/` alone, so nothing catches that case on such a pull request. A `from "@waitron/db"`
+ * inside a comment counts, and a dynamic `import("…")` does not.
  */
 const REPO = join(import.meta.dirname, "..");
 const FORBIDDEN = ["@waitron/db", "hono", "pg", "drizzle-orm", "node:"];
@@ -56,9 +41,9 @@ function serverEntryImports(text: string): string[] {
   return SERVER_ENTRIES.filter((e) => text.includes(e));
 }
 
-/** Every RELATIVE import/export specifier in a source (`from "./x"`, side-effect `import "../y"`), the
- * only edges reachability follows — a bare-package specifier (`@waitron/x`, `lit`) is left to the
- * bundle backstop (see the header). */
+/** Every RELATIVE import/export specifier in a source (`from "./x"`, side-effect `import "../y"`),
+ * the only edges reachability follows; a bare-package specifier (`@waitron/x`, `lit`) is not
+ * followed. */
 function relativeSpecifiers(text: string): string[] {
   const out: string[] = [];
   for (const re of [/from\s+["']([^"']+)["']/g, /import\s+["']([^"']+)["']/g]) {
@@ -67,9 +52,8 @@ function relativeSpecifiers(text: string): string[] {
   return out;
 }
 
-/** Resolve a relative specifier from `fromFile` to an on-disk `.ts` file, or undefined. ESM sources
- * spell `./x.js`; the source is `./x.ts`, so `.js` maps to `.ts`. Also tries a bare `.ts` and a
- * `/index.ts` directory entry. */
+/** Resolve a relative specifier from `fromFile` to an on-disk `.ts` file, or undefined: `.js`
+ * maps to `.ts`, then a bare `.ts`, then a `/index.ts` directory entry. */
 function resolveToTs(fromFile: string, spec: string): string | undefined {
   const base = join(dirname(fromFile), spec);
   const candidates = [base.replace(/\.js$/, ".ts"), `${base}.ts`, join(base, "index.ts")];
@@ -85,8 +69,7 @@ function resolveToTs(fromFile: string, spec: string): string | undefined {
 
 /**
  * Every `.ts` file reachable from `entryFiles` by RELATIVE imports (the entries included), followed
- * transitively. THIS is what the guard's transitive protection turns on: an entry file's sibling
- * OUTSIDE `src/dashboard` (elsewhere in the package) is reached and scanned, not just the entry itself.
+ * transitively, so a sibling OUTSIDE `src/dashboard` is scanned too.
  */
 function reachableFrom(entryFiles: string[]): string[] {
   const seen = new Set<string>();
@@ -138,11 +121,9 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
   }
 
   it("the kit and registry packages declare no server dependency", () => {
-    // The browser-bundled infrastructure packages: the kit (shared helpers) and the registry
-    // (@waitron/dashboard-modules, which the app imports to mount modules) must both stay free of a
-    // direct server dependency. The registry's `@waitron/bookings` dep is the whole module package, but
-    // the app imports only its browser `./dashboard` sub-path; a direct server specifier here (db/hono/
-    // pg/drizzle/node:) is what this forbids.
+    // The browser-bundled infrastructure packages must stay free of a direct server dependency. The
+    // registry's `@waitron/bookings` dep is the whole module package, but the app imports only its
+    // browser `./dashboard` sub-path.
     for (const pkg of ["dashboard-kit", "dashboard-modules"]) {
       const m = JSON.parse(readFileSync(join(REPO, `packages/${pkg}/package.json`), "utf8")) as {
         dependencies?: Record<string, string>;
@@ -157,28 +138,16 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
   });
 
   describe("the catalogue wire-shape leaves stay type-only (emit no runtime)", () => {
-    // `packages/catalogue/src/product-types.ts` (the product editor shapes, imported by the dashboard),
-    // `menu-types.ts` (the sell-side shapes, imported by the till) and `modifier-list-types.ts` (the
-    // extras-list and options-list shapes, imported by the dashboard) each hold wire shapes a browser
-    // app imports DIRECTLY (`@waitron/catalogue/src/<leaf>.js`). Each is a PURE type module: every
-    // import is `import type`, every export is a type/interface, and it declares no value — so it
-    // compiles to an empty runtime module and contributes NO code, and no runtime dependency, to any
-    // browser bundle. That is a STRONGER, more precise guarantee than the reachable-specifier scan
-    // above, which here would false-positive on a harmless `import type` edge (the leaves they draw
-    // types from reach `errors.ts`, whose own `import type { ProductUsingUnit } from "./units.js"` is
-    // erased at build time but text-visible); the check is on each leaf's own statements instead.
+    // Each leaf holds wire shapes a browser app imports DIRECTLY
+    // (`@waitron/catalogue/src/<leaf>.js`), so each must be a PURE type module that compiles to an
+    // empty runtime module. The reachable-specifier scan above would false-positive here on an
+    // erased `import type` edge, so the check is on each leaf's own statements instead.
     //
-    // HEDGE (it reads TEXT, not the compiler): it flags the runtime forms that actually occur — an
-    // `import` that is not `import type` (a side-effect `import "x"` or a value import, RELATIVE OR NOT,
-    // so a direct `import "@waitron/db"` is caught), an `export` that is not `export type`/`export
-    // interface` (`export const`, `export {value}`, `export default`), and a bare top-level value
-    // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
-    // top-level expression statement (`sideEffect();`) — which no type file writes; this guard reads
-    // text rather than transpiling, so the transpile check is left to whatever next builds the
-    // dashboard bundle, which on a pull request that leaves `deploy/` alone is nothing (corrected
-    // 2026-09-19; this line used to name `bundle-smoke`, which builds no vite bundle).
-    // Prove-by-deletion:
-    // add `import "@waitron/db";` or `export const x = 1;` to either leaf and it goes red.
+    // HEDGE (it reads TEXT, not the compiler): it flags an `import` that is not `import type`, an
+    // `export` that is not `export type`/`export interface`, and a bare top-level value declaration
+    // (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch a top-level expression
+    // statement (`sideEffect();`), and nothing transpiles these leaves on a pull request that
+    // leaves `deploy/` alone.
     const LEAVES = [
       "packages/catalogue/src/product-types.ts",
       "packages/catalogue/src/menu-types.ts",
@@ -187,13 +156,13 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
 
     /** Every top-level statement in `src` that would emit runtime JS: an `import` that is not
      * `import type`, an `export` that is not `export type`/`export interface`, or a bare value
-     * declaration. Comments are stripped first so prose mentioning `import`/`export` is not misread as
-     * code. A file with none of these transpiles to empty — it contributes nothing to a bundle. */
+     * declaration. Comments are stripped first so prose mentioning `import`/`export` is not
+     * misread as code. A file with none of these transpiles to empty. */
     function runtimeStatements(src: string): string[] {
       const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
       const out: string[] = [];
-      // Anchored at column 0 (no leading whitespace): a module's import/export/value statements sit at
-      // the top level, while an interface's members are always indented — so a wire field NAMED
+      // Anchored at column 0 (no leading whitespace): a module's import/export/value statements sit
+      // at the top level, while an interface's members are always indented — so a wire field NAMED
       // `import`, `export`, `class`, `enum`, `const`, … is not mistaken for a runtime statement.
       for (const m of code.matchAll(/^import\b[^\n]*/gm)) {
         if (!/^import\s+type\b/.test(m[0])) out.push(m[0].trim());
@@ -207,11 +176,8 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       return out;
     }
 
-    // The not-vacuous check: an EMPTY file is type-only too, and so is a path that no longer names
-    // the leaf the browser imports, so the type-only assertion below passes on both. What every leaf
-    // must have instead is at least one exported type — the thing a browser app imports it FOR.
-    // (It used to read `import type`, which `modifier-list-types.ts` has none of: its shapes are
-    // built from primitives alone, so that check would have had to exempt it.)
+    // An EMPTY file is type-only too, and so is a path that no longer names the leaf the browser
+    // imports, so every leaf must have at least one exported type.
     it.each(LEAVES)("%s exports at least one type (not vacuous)", (leaf) => {
       expect(/^export\s+(?:type|interface)\b/m.test(readFileSync(join(REPO, leaf), "utf8"))).toBe(
         true,
@@ -223,8 +189,8 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     });
 
     it("flags planted runtime constructs, ignores type-only ones (control)", () => {
-      // A relative side-effect import, a NON-relative server-package import, a value import, a value
-      // export and a bare declaration are each caught — the leaks the bundle guarantee is about.
+      // A relative side-effect import, a NON-relative server-package import, a value import, a
+      // value export and a bare declaration are each caught.
       expect(runtimeStatements('import "./operations.js";')).toEqual(['import "./operations.js";']);
       expect(runtimeStatements('import "@waitron/db";')).toEqual(['import "@waitron/db";']);
       expect(runtimeStatements('import { readProductEditor } from "./operations.js";')).toEqual([
@@ -234,13 +200,10 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
         "export const reviewRuntime = 1;",
       ]);
       expect(runtimeStatements("const x = 1;")).toEqual(["const x = 1;"]);
-      // Type-only statements are correctly NOT runtime — they never reach the bundle.
       expect(runtimeStatements('import type { Product } from "./operations.js";')).toEqual([]);
       expect(runtimeStatements('export type { Product } from "./operations.js";')).toEqual([]);
       expect(runtimeStatements("export interface Foo { a: string }")).toEqual([]);
-      // An INDENTED interface member whose name happens to be a keyword is not a top-level statement,
-      // so the column-0 anchoring must leave it alone (it would otherwise false-positive a legitimate
-      // type-only field named `class`, `import`, `export`, …).
+      // An INDENTED interface member whose name is a keyword is not a top-level statement.
       expect(
         runtimeStatements("export interface Foo {\n  class: string;\n  import: number;\n}"),
       ).toEqual([]);
@@ -248,12 +211,8 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
   });
 
   describe("reachability follows a relative import out of src/dashboard (regression)", () => {
-    // The bypass a run-it reviewer FALSIFIED: a `src/dashboard` file importing a sibling OUTSIDE
-    // `src/dashboard` that imports a forbidden specifier passed a DIRECT-only scan. The fixture below
-    // reproduces exactly that shape; the transitive walk must reach the sibling and flag it. Prove-by-
-    // deletion: reverting `reachableFrom` to return only its entry files (the non-transitive gap) makes
-    // the "reaches and flags" assertion go red while the direct-only scan below still passes it green —
-    // which is the whole point.
+    // A `src/dashboard` file importing a sibling OUTSIDE `src/dashboard` that imports a forbidden
+    // specifier passes a DIRECT-only scan; the transitive walk must reach the sibling and flag it.
     const root = mkdtempSync(join(tmpdir(), "dash-purity-"));
     const dashDir = join(root, "src", "dashboard");
     const otherDir = join(root, "src", "server");
