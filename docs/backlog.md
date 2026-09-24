@@ -2308,10 +2308,10 @@ image constraints under *Detail → Box image*.
   service mode with its line snapshots kept, an empty round, one menu-item read per round,
   copying from an order or line with no snapshot, route refusals and a route widened to the whole
   venue, and the operations screen's sorting, fallbacks, form refusals, keyboard paths and focus
-  return; no source file changed; 99.4/99.34/100/97.61). Left uncovered in `venue-service`: seven guards in
-  `operations.ts` and four branches in the operations screen that no current caller reaches — by
-  reading, except the missing-department refusal in `recordWorkingLineContexts`, which a foreign key
-  was measured to block; each is listed with its reason in the pull request.
+  return; no source file changed; seven guards in `operations.ts` and four branches in the
+  operations screen left uncovered because no current caller reaches them — by reading, except the
+  missing-department refusal in `recordWorkingLineContexts`, which a foreign key was measured to
+  block; each is listed with its reason in the pull request; 99.4/99.34/100/97.61).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

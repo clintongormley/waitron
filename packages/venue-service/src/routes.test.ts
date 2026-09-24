@@ -823,7 +823,7 @@ describe("venue service management routes", () => {
     ]);
   });
 
-  it("orders a zone menu by an explicit display order and refuses one that is not a whole number from zero", async () => {
+  it("stores a zone menu's explicit display order and refuses one that is not a whole number from zero", async () => {
     const fx = await fixture();
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
@@ -862,7 +862,7 @@ describe("venue service management routes", () => {
     ).toEqual([{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 3, isDefault: false }]);
   });
 
-  it("routes a single product with no category, and refuses a route naming neither", async () => {
+  it("routes a single product rather than a category, and refuses a route naming neither", async () => {
     const fx = await fixture();
     const product = await withTransaction(db, (tx) =>
       createProduct(tx, {

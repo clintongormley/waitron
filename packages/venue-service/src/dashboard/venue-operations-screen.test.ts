@@ -1530,8 +1530,11 @@ function modal(el: VenueOperationsScreen) {
 }
 
 describe("the venue lists", () => {
-  // Every list below starts out of alphabetical order, so a column that stopped sorting by its
-  // name would leave the rows where they were.
+  // Every sort below starts from an order other than its result, so a column that stopped sorting
+  // would leave the rows where they were. The offers' products and sections sort in OPPOSITE
+  // orders, so the product column sorting by section, or the section column by product, fails.
+  // Department, zone and section ids sort against their names, so a column sorting by id fails
+  // too; menu ids happen to sort WITH their names, so the menus sort does not catch that.
   const unsorted: VenueServiceView = {
     ...model,
     menus: [
@@ -1539,19 +1542,26 @@ describe("the venue lists", () => {
       { id: "m1", name: "Casa Delgado", active: true },
     ],
     offers: [
-      { ...model.offers[0]!, id: "i1", menuId: "m2", sectionName: { en: "Tapas" } },
+      {
+        ...model.offers[0]!,
+        id: "i1",
+        menuId: "m2",
+        sectionId: "sec-z",
+        sectionName: { en: "Cocktails" },
+      },
       {
         ...model.offers[0]!,
         id: "i2",
         menuId: "m2",
         productId: "p2",
         name: "Bravas",
-        sectionName: { en: "Cocktails" },
+        sectionId: "sec-a",
+        sectionName: { en: "Tapas" },
       },
     ],
     sections: [
-      { id: "sec-t", menuId: "m2", name: { en: "Tapas" }, displayOrder: 0, active: true },
-      { id: "sec-c", menuId: "m2", name: { en: "Cocktails" }, displayOrder: 1, active: true },
+      { id: "sec-a", menuId: "m2", name: { en: "Tapas" }, displayOrder: 0, active: true },
+      { id: "sec-z", menuId: "m2", name: { en: "Cocktails" }, displayOrder: 1, active: true },
     ],
   };
 
@@ -1565,16 +1575,21 @@ describe("the venue lists", () => {
     expect(column(el, "departments", 0)).toEqual(["Deli", "Restaurant and bar"]);
 
     await selectTab(el, "menus");
+    expect(column(el, "menus", 0)).toEqual(["Deli takeaway", "Casa Delgado"]);
     await sortBy(el, "menus", "name");
     expect(column(el, "menus", 0)).toEqual(["Casa Delgado", "Deli takeaway"]);
-    await sortBy(el, "menu-offers-m2", "section");
-    expect(column(el, "menu-offers-m2", 0)).toEqual(["Cocktails", "Tapas"]);
+    expect(column(el, "menu-offers-m2", 1)).toEqual(["Negroni", "Bravas"]);
     await sortBy(el, "menu-offers-m2", "product");
     expect(column(el, "menu-offers-m2", 1)).toEqual(["Bravas", "Negroni"]);
+    expect(column(el, "menu-offers-m2", 0)).toEqual(["Tapas", "Cocktails"]);
+    await sortBy(el, "menu-offers-m2", "section");
+    expect(column(el, "menu-offers-m2", 0)).toEqual(["Cocktails", "Tapas"]);
+    expect(column(el, "menu-sections-m2", 0)).toEqual(["Tapas", "Cocktails"]);
     await sortBy(el, "menu-sections-m2", "name");
     expect(column(el, "menu-sections-m2", 0)).toEqual(["Cocktails", "Tapas"]);
 
     await selectTab(el, "zones");
+    expect(column(el, "zones", 0)).toEqual(["Dining room", "Deli counter"]);
     await sortBy(el, "zones", "name");
     expect(column(el, "zones", 0)).toEqual(["Deli counter", "Dining room"]);
   });
@@ -1600,7 +1615,7 @@ describe("the venue lists", () => {
     expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);
   });
 
-  it("falls back to the stored id where a list's menu, category or product is not loaded", async () => {
+  it("labels a zone-menu row's actions with the stored menu id, and shows a route's stored category or product id, when they are not loaded", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -1678,6 +1693,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "new-menu");
     await action(el, "save-editor");
     expect(fieldError(el, "menu-name")).toBe("Menu name: This field is required.");
+    expect(summary(el)).toContain("Menu name: This field is required.");
     expect(api.createMenu).not.toHaveBeenCalled();
   });
 
@@ -1692,11 +1708,15 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "save-editor");
     expect(fieldError(el, "hours-opens")).toBe("Opens: This field is required.");
     expect(fieldError(el, "hours-closes")).toBe("Closes: This field is required.");
+    expect(summary(el)).toContain("Opens: This field is required.");
+    expect(summary(el)).toContain("Closes: This field is required.");
     field(el, "hours-opens").value = "10:00";
     field(el, "hours-closes").value = "10:00";
     await action(el, "save-editor");
     expect(fieldError(el, "hours-opens")).toBe("Opening and closing times must differ.");
     expect(fieldError(el, "hours-closes")).toBe("Opening and closing times must differ.");
+    expect(summary(el)).toContain("Opening and closing times must differ.");
+    expect(summary(el)).not.toContain("This field is required.");
     expect(api.replaceHours).not.toHaveBeenCalled();
   });
 
@@ -1713,6 +1733,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "edit-zone-z2");
     await action(el, "save-editor");
     expect(fieldError(el, "zone-department-z2")).toBe("Department: This field is required.");
+    expect(summary(el)).toContain("Department: This field is required.");
     expect(api.configureZone).not.toHaveBeenCalled();
   });
 
@@ -1734,6 +1755,7 @@ describe("the venue editors refuse an incomplete form", () => {
     expect(field(el, "assignment-menu").value).toBe("");
     await action(el, "save-editor");
     expect(fieldError(el, "assignment-menu")).toBe("Menu name: This field is required.");
+    expect(summary(el)).toContain("Menu name: This field is required.");
     expect(api.allowMenu).not.toHaveBeenCalled();
   });
 
@@ -1750,6 +1772,7 @@ describe("the venue editors refuse an incomplete form", () => {
       field(el, "assignment-order").value = order;
       await action(el, "save-editor");
       expect(fieldError(el, "assignment-order")).toBe("Enter a whole number of zero or more.");
+      expect(summary(el)).toContain("Enter a whole number of zero or more.");
     }
     expect(api.allowMenu).not.toHaveBeenCalled();
     field(el, "assignment-order").value = "0";
@@ -1767,6 +1790,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "new-route");
     await action(el, "save-editor");
     expect(fieldError(el, "route-subject")).toBe("Product or category: This field is required.");
+    expect(summary(el)).toContain("Product or category: This field is required.");
     expect(fieldError(el, "route-target")).toBeUndefined();
     expect(api.createRoute).not.toHaveBeenCalled();
   });
@@ -1845,8 +1869,9 @@ describe("the editor's keyboard", () => {
     await action(el, "new-menu");
     input(el, "menu-name").focus();
     await userEvent.keyboard("{Escape}");
-    await settle(el);
-    expect(modal(el)).toBeNull();
+    // Escape closes the native dialog at once, but the modal leaves only when its close event
+    // arrives, which the HTML spec's dialog-closing steps queue as a later task.
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
     expect(api.createMenu).not.toHaveBeenCalled();
   });
 
@@ -1871,8 +1896,7 @@ describe("the editor's keyboard", () => {
     expect(modal(el)).not.toBeNull();
     expect(modal(el)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     finish();
-    await settle(el);
-    expect(modal(el)).toBeNull();
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
   });
 
   it("saves on Enter in a text field", async () => {
@@ -1885,9 +1909,8 @@ describe("the editor's keyboard", () => {
     await action(el, "new-menu");
     input(el, "menu-name").focus();
     await userEvent.keyboard("Brunch{Enter}");
-    await settle(el);
+    await vi.waitFor(() => expect(modal(el)).toBeNull());
     expect(api.createMenu).toHaveBeenCalledWith("Brunch");
-    expect(modal(el)).toBeNull();
   });
 });
 
@@ -1898,7 +1921,9 @@ it("returns focus to the row that opened an editor, or to the tabs once that row
   await selectTab(el, "departments");
   await action(el, "edit-department-d1");
   await action(el, "cancel-editor");
-  expect(el.shadowRoot!.activeElement).toBe(table(el, "departments"));
+  const menu = table(el, "departments").shadowRoot!.activeElement as HTMLElement;
+  expect(menu.getAttribute("label")).toBe("Actions: Restaurant and bar");
+  expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
 
   await action(el, "edit-department-d2");
   const updated = structuredClone(model);
