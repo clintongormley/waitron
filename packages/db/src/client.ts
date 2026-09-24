@@ -17,6 +17,7 @@ export {
   setVenueCrashReportDirectory,
   setVenueHolderKind,
   setVenueWatchdogLogFile,
+  VENUE_HOLDER_KINDS,
 } from "@waitron/store";
 
 export interface OpenVenueOptions {

@@ -6,6 +6,7 @@ export {
   setVenueCrashReportDirectory,
   setVenueHolderKind,
   setVenueWatchdogLogFile,
+  VENUE_HOLDER_KINDS,
 } from "./client.js";
 export type {
   Database,

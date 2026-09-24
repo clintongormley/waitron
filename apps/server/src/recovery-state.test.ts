@@ -1,13 +1,17 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   FRESH,
   afterFailure,
   levelFor,
   readRecoveryState,
+  updateRecoveryState,
+  withFailureCode,
+  withoutAttempt,
   writeRecoveryState,
+  type RecoveryState,
 } from "./recovery-state.js";
 
 describe("levelFor", () => {
@@ -85,5 +89,155 @@ describe("readRecoveryState", () => {
       lastErrorCode: null,
       lastFailureAt: null,
     });
+  });
+});
+
+describe("the holder's kind", () => {
+  it("round-trips a kind from the closed set", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    const state: RecoveryState = {
+      ...afterFailure(FRESH, "provisioning.database_holder_stalled", new Date()),
+      holderKind: "restore",
+    };
+    await writeRecoveryState(dir, state);
+    expect(await readRecoveryState(dir)).toStrictEqual(state);
+  });
+
+  it.each([
+    ["a kind outside the set", "sidecar"],
+    ["a kind of the wrong type", 3],
+  ])("reads %s as no kind at all", async (_label, holderKind) => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(
+      join(dir, "recovery.json"),
+      JSON.stringify({ failures: 3, lastErrorCode: "x", lastFailureAt: null, holderKind }),
+    );
+    expect(await readRecoveryState(dir)).toStrictEqual({
+      failures: 3,
+      level: "recovery",
+      lastErrorCode: "x",
+      lastFailureAt: null,
+    });
+  });
+
+  it("is dropped by the next failure of any other kind", () => {
+    const stalled: RecoveryState = { ...FRESH, failures: 1, holderKind: "server" };
+    expect(afterFailure(stalled, "boom", new Date())).not.toHaveProperty("holderKind");
+  });
+});
+
+describe("withFailureCode", () => {
+  const at = new Date("2026-09-24T10:00:00Z");
+
+  it("keeps the count and records the code, the time and the level the count gives", () => {
+    const current: RecoveryState = { ...FRESH, failures: 3, holderKind: "rejoin" };
+    expect(withFailureCode(current, "migrations.set_missing", at)).toStrictEqual({
+      failures: 3,
+      level: "recovery",
+      lastErrorCode: "migrations.set_missing",
+      lastFailureAt: at.toISOString(),
+    });
+  });
+
+  it("records the holder's kind when it is given one", () => {
+    expect(
+      withFailureCode(
+        { ...FRESH, failures: 1 },
+        "provisioning.database_holder_stalled",
+        at,
+        "server",
+      ),
+    ).toStrictEqual({
+      failures: 1,
+      level: "normal",
+      lastErrorCode: "provisioning.database_holder_stalled",
+      lastFailureAt: at.toISOString(),
+      holderKind: "server",
+    });
+  });
+});
+
+describe("withoutAttempt", () => {
+  const before: RecoveryState = {
+    failures: 1,
+    level: "normal",
+    lastErrorCode: "migrations.set_missing",
+    lastFailureAt: "2026-09-20T10:00:00.000Z",
+  };
+  const wrote = afterFailure(before, "server.boot_incomplete", new Date("2026-09-24T10:00:00Z"));
+
+  it("puts back the state read before the attempt when nothing else wrote since", () => {
+    expect(withoutAttempt({ ...wrote }, before, wrote)).toStrictEqual(before);
+  });
+
+  it("takes one failure off, and keeps the rest, when another start recorded one since", () => {
+    const another = afterFailure(wrote, "provisioning.database_ahead", new Date());
+    expect(withoutAttempt(another, before, wrote)).toStrictEqual({
+      ...another,
+      failures: 2,
+      level: "normal",
+    });
+  });
+
+  it("keeps a clear the running server made", () => {
+    expect(withoutAttempt(FRESH, before, wrote)).toStrictEqual(FRESH);
+  });
+
+  it("takes the level down with the count", () => {
+    const three = afterFailure(wrote, "x", new Date());
+    expect(three.level).toBe("recovery");
+    expect(withoutAttempt(three, before, wrote)).toMatchObject({ failures: 2, level: "normal" });
+  });
+
+  it("treats a different kind as a different state", () => {
+    const withKind: RecoveryState = { ...wrote, holderKind: "script" };
+    expect(withoutAttempt(withKind, before, wrote)).toStrictEqual({
+      ...withKind,
+      failures: 1,
+      level: "normal",
+    });
+  });
+});
+
+describe("updateRecoveryState", () => {
+  it("reads and writes inside the lock, and returns what it read and wrote", async () => {
+    const events: string[] = [];
+    const stored: RecoveryState = { ...FRESH, failures: 1 };
+    const result = await updateRecoveryState(
+      {
+        lock: async (stateDir, body) => {
+          events.push(`lock ${stateDir}`);
+          const value = await body();
+          events.push("unlock");
+          return value;
+        },
+        read: (stateDir) => {
+          events.push(`read ${stateDir}`);
+          return Promise.resolve(stored);
+        },
+        write: (stateDir, next) => {
+          events.push(`write ${stateDir} ${next.failures}`);
+          return Promise.resolve();
+        },
+      },
+      "/state",
+      (current) => ({ ...current, failures: current.failures + 1 }),
+    );
+    expect(events).toEqual(["lock /state", "read /state", "write /state 2", "unlock"]);
+    expect(result).toEqual({ before: stored, after: { ...FRESH, failures: 2 } });
+  });
+
+  it("writes nothing when the change throws", async () => {
+    const write = vi.fn(() => Promise.resolve());
+    await expect(
+      updateRecoveryState(
+        { lock: (_dir, body) => body(), read: () => Promise.resolve(FRESH), write },
+        "/state",
+        () => {
+          throw new Error("no");
+        },
+      ),
+    ).rejects.toThrow("no");
+    expect(write).not.toHaveBeenCalled();
   });
 });
