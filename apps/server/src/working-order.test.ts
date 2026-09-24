@@ -7033,6 +7033,56 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     await edit("1");
     expect(await stored()).toEqual([parked]);
   });
+  it("refuses raising a held line whose extra has gained an Active variant, and keeps an unchanged one", async () => {
+    const { cfg, catalogueId, cafeId } = await setupVenue();
+    const bacon = await withTransaction(db, (tx) => addExtraList(tx, catalogueId, cafeId, "Bacon"));
+    const extras = [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }];
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1", extras }] });
+    const stored = () =>
+      db
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          quantity: workingOrderLines.quantity,
+          lineTotal: workingOrderLines.lineTotal,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id))
+        .orderBy(workingOrderLines.lineNo);
+    const parked = await stored();
+    expect(parked.map((row) => row.productId)).toEqual([cafeId, bacon.productId]);
+    await withTransaction(db, (tx) =>
+      setProductVariants(
+        tx,
+        bacon.productId,
+        [
+          {
+            name: "Bacon ahumado",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.20",
+            available: true,
+          },
+        ],
+        LOCALE,
+      ),
+    );
+    const edit = (quantity: string) =>
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [{ workingOrderLineId: parked[0]!.id, productId: cafeId, quantity, extras }],
+      });
+
+    await expect(edit("2")).rejects.toMatchObject({
+      code: "product.variant_required",
+      params: { productId: bacon.productId },
+    });
+    expect(await stored()).toEqual(parked);
+    await edit("1");
+    expect(await stored()).toEqual(parked);
+  });
+
   it("refuses raising a menu offer's held line whose product has gained an Active variant", async () => {
     const { cfg, zoneId, cafeId, cafeOfferId } = await setupVenue();
     const [doble] = await withTransaction(db, (tx) =>

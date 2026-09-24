@@ -829,7 +829,11 @@ either path, and on a raised held line (the Task 5 bullet above). What Task 9 le
   gained an Active variant after the order was parked is billed as parked: the cash and card pays
   price a retrieved order from its stored lines (`priceStoredOrder`,
   `apps/server/src/working-order.ts`). That follows the 2026-09-20 service spec §10 (existing work
-  is not cancelled), and only a raised quantity is refused. **Next action:** confirm with the owner
+  is not cancelled), and only a raised quantity is refused. On the till, retrieving the order drops
+  such an extra from the basket with the `held.product_gone` notice, as it drops a sold-out one
+  (`deriveExtraSelections`, `apps/till/src/state/held-extras.ts`); any edit then re-prices without
+  it, but paying with no edit still bills it, since an unedited retrieved basket sends no update
+  (`#syncIfDirty`, `apps/till/src/till-app.ts`). **Next action:** confirm with the owner
   that paying parked work is meant to go through unchanged.
 - **An extras list whose items all have Active variants reaches the till with no items**
   (`readExtraProducts` leaves each one out), so a list that requires a pick cannot be answered from

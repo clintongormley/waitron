@@ -127,9 +127,9 @@ async function walkAttachedModifiers(
  * map plus the allergens and dietary labels a picker draws. */
 type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
-/** One query for every product any offered list names, and none at all when no list names one. */
 const activeVariant = alias(products, "active_variant");
 
+/** One query for every product any offered list names, and none at all when no list names one. */
 async function readExtraProducts(
   tx: Transaction,
   productIds: string[],
