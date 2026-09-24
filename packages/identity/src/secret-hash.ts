@@ -5,8 +5,6 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 /** Fresh per hash: without a per-hash salt two identical secrets would share a stored hash. */
 const SALT_BYTES = 16;
 const KEY_BYTES = 32;
-/** The algorithm tag stored alongside the salt and derived key, so a future KDF migration can tell
- * an old row from a new one rather than guessing from length. */
 const ALGORITHM = "scrypt";
 
 export function hashSecret(secret: string): string {
