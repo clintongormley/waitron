@@ -1532,15 +1532,16 @@ export async function startServer(
     );
   }
   if (isMirror) {
+    let viewerToken: string;
     try {
-      await ensureMirrorViewer(db);
+      viewerToken = await ensureMirrorViewer(db);
     } catch (error) {
       await store.close();
       throw error;
     }
     app.use(
       "*",
-      mirrorSession(db, secureCookies, () => holders.mode.current),
+      mirrorSession(db, secureCookies, () => holders.mode.current, viewerToken),
     );
   }
 

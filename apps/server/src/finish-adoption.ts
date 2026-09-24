@@ -117,6 +117,8 @@ export async function runFinishAdoption(deps: {
       modules: deps.modules,
       reserved: pending.reserved,
     });
+    // The cookie token this returns is dropped: this boot mounts no mirror session, and the boot
+    // that does mints its own, which replaces the hash stored here.
     await ensureViewer();
     await rm(pendingPath(deps.stateDir), { force: true });
     deps.log("info", "adoption.established", { nodeId: pending.standby.nodeId });

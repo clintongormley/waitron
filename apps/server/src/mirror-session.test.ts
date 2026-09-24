@@ -5,8 +5,9 @@ import { nowIso, withTransaction, type Database, type DeploymentMode } from "@wa
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { resolveManagementSession, verifyPin } from "@waitron/identity";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { authorizeManager, resolveManagementSession, verifyPin } from "@waitron/identity";
+import { isAppError } from "@waitron/shared";
+import { MANAGEMENT_COOKIE, requireManagementSession } from "@waitron/server-kit";
 import {
   ensureMirrorViewer,
   MIRROR_VIEWER_PERSON_ID,
@@ -54,7 +55,7 @@ beforeAll(async () => {
 
 describe("mirror ambient viewer session", () => {
   it("ensureMirrorViewer seeds an admin viewer + a live session that resolves", async () => {
-    await ensureMirrorViewer(db);
+    const token = await ensureMirrorViewer(db);
     const person = await withTransaction(db, (tx) =>
       tx.execute<{
         role: string;
@@ -83,10 +84,65 @@ describe("mirror ambient viewer session", () => {
     expect(verifyPin("", stored.pin_hash)).toBe(false);
     expect(stored.password_hash).toBeNull();
 
-    const resolved = await withTransaction(db, (tx) =>
-      resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID),
-    );
+    const resolved = await withTransaction(db, (tx) => resolveManagementSession(tx, token));
     expect(resolved).toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID, role: "admin" });
+  });
+
+  // What a copy of the database, or a node served without `mirrorSession`, can do with the row: the
+  // row id is a public constant, so it must not work as a cookie. Proven by deletion: storing
+  // `hashSessionToken(MIRROR_VIEWER_SESSION_ID)` again makes the public value resolve and this reddens.
+  it("the viewer's public row id is refused as a cookie; only the token ensureMirrorViewer returns resolves", async () => {
+    const token = await ensureMirrorViewer(db);
+    await expect(
+      withTransaction(db, (tx) => resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID)),
+    ).rejects.toMatchObject({ code: "management_session.required" });
+    expect(token).not.toBe(MIRROR_VIEWER_SESSION_ID);
+    await expect(
+      withTransaction(db, (tx) => resolveManagementSession(tx, token)),
+    ).resolves.toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID, role: "admin" });
+  });
+
+  it("a gated write route WITHOUT the mirror middleware refuses the public row id and accepts the token", async () => {
+    const token = await ensureMirrorViewer(db);
+    const app = new Hono();
+    app.post("/gated", async (c) => {
+      try {
+        await withTransaction(db, (tx) =>
+          authorizeManager(tx, {
+            managementSessionId: requireManagementSession(c),
+            permission: "mirror.create",
+          }),
+        );
+      } catch (error) {
+        if (isAppError(error)) return c.json({ code: error.code }, 401);
+        throw error;
+      }
+      return c.text("ok");
+    });
+    const post = (cookie: string): Promise<Response> =>
+      Promise.resolve(
+        app.request("/gated", {
+          method: "POST",
+          headers: { cookie: `${MANAGEMENT_COOKIE}=${cookie}` },
+        }),
+      );
+
+    const refused = await post(MIRROR_VIEWER_SESSION_ID);
+    expect(refused.status).toBe(401);
+    expect(await refused.json()).toEqual({ code: "management_session.required" });
+    expect((await post(token)).status).toBe(200);
+  });
+
+  it("each ensureMirrorViewer call rotates the token, so an earlier boot's cookie stops resolving", async () => {
+    const first = await ensureMirrorViewer(db);
+    const second = await ensureMirrorViewer(db);
+    expect(second).not.toBe(first);
+    await expect(
+      withTransaction(db, (tx) => resolveManagementSession(tx, first)),
+    ).rejects.toMatchObject({ code: "management_session.required" });
+    await expect(
+      withTransaction(db, (tx) => resolveManagementSession(tx, second)),
+    ).resolves.toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID });
   });
 
   it("ensureMirrorViewer is idempotent (a second call does not throw or duplicate)", async () => {
@@ -126,28 +182,32 @@ describe("mirror ambient viewer session", () => {
     );
   };
 
-  const driveOnce = async (db: Database, mode: DeploymentMode = "mirror"): Promise<Response> => {
+  const driveOnce = async (
+    db: Database,
+    token: string,
+    mode: DeploymentMode = "mirror",
+  ): Promise<Response> => {
     const app = new Hono();
     app.use(
       "*",
-      mirrorSession(db, false, () => mode),
+      mirrorSession(db, false, () => mode, token),
     );
     app.get("/thing", (c) => c.text("ok"));
     return app.request("/thing");
   };
 
   it("mirrorSession refreshes a STALE session's last_seen_at (the idle-mirror keepalive) and sets the cookie", async () => {
-    await ensureMirrorViewer(db);
+    const token = await ensureMirrorViewer(db);
     // An idle mirror: last_seen_at is older than the 1-minute throttle (and, in reality, older than the
     // 30-minute IDLE_TIMEOUT_MS that would 401 the next request). The keepalive must refresh it.
     await backdateLastSeen(db);
     const before = await readLastSeen(db);
 
-    const res = await driveOnce(db);
+    const res = await driveOnce(db, token);
 
     expect(res.status).toBe(200);
-    // No cookie on the request → the middleware injects the ambient session's id.
-    expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
+    // No cookie on the request → the middleware injects the ambient session's token.
+    expect(res.headers.get("set-cookie")).toContain(`${MANAGEMENT_COOKIE}=${token}`);
     // Proven by deletion: dropping the keepalive `update` in mirrorSession leaves last_seen_at at the
     // backdated value, so `after` no longer advances past `before` and this reddens.
     const after = await readLastSeen(db);
@@ -155,10 +215,10 @@ describe("mirror ambient viewer session", () => {
   });
 
   it("mirrorSession SKIPS the write for a FRESH session (the throttle — no per-request amplification)", async () => {
-    await ensureMirrorViewer(db); // seeds last_seen_at = now(), well within the 1-minute throttle
+    const token = await ensureMirrorViewer(db); // seeds last_seen_at = now(), within the throttle
     const before = await readLastSeen(db);
 
-    const res = await driveOnce(db);
+    const res = await driveOnce(db, token);
 
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
@@ -171,13 +231,14 @@ describe("mirror ambient viewer session", () => {
 
   const driveWithCookie = async (
     db: Database,
+    token: string,
     cookie: string,
     mode: DeploymentMode = "mirror",
   ): Promise<Response> => {
     const app = new Hono();
     app.use(
       "*",
-      mirrorSession(db, false, () => mode),
+      mirrorSession(db, false, () => mode, token),
     );
     app.get("/thing", (c) => c.text("ok"));
     return app.request("/thing", { headers: { cookie } });
@@ -192,35 +253,33 @@ describe("mirror ambient viewer session", () => {
   };
 
   it("mirrorSession leaves the AMBIENT cookie untouched (no redundant Set-Cookie)", async () => {
-    await ensureMirrorViewer(db);
-    const res = await driveWithCookie(db, `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`);
+    const token = await ensureMirrorViewer(db);
+    const res = await driveWithCookie(db, token, `${MANAGEMENT_COOKIE}=${token}`);
     expect(res.status).toBe(200);
-    // The request already carries the ambient session id, so the middleware sets no new cookie.
+    // The request already carries the ambient session's token, so the middleware sets no new cookie.
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("mirrorSession OVERWRITES a corrupted/forged non-ambient cookie with the ambient session", async () => {
-    await ensureMirrorViewer(db);
+    const token = await ensureMirrorViewer(db);
     // A corrupted/non-UUID cookie (and, equally, a forged valid-UUID one) must not survive: left
     // untouched it would fail requireManagementSession's shape check (or resolve to no row) and 401,
     // breaking the unauthenticated dashboard posture. The middleware overwrites anything that is not
-    // already the ambient id. Proven by deletion: reverting the guard to `=== null` leaves the bad
+    // already the ambient token. Proven by deletion: reverting the guard to `=== null` leaves the bad
     // cookie in place and injects nothing, reddening the Set-Cookie assertion.
-    const res = await driveWithCookie(db, `${MANAGEMENT_COOKIE}=not-a-valid-uuid`);
+    const res = await driveWithCookie(db, token, `${MANAGEMENT_COOKIE}=not-a-valid-uuid`);
     expect(res.status).toBe(200);
-    expect(res.headers.get("set-cookie")).toContain(
-      `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
-    );
+    expect(res.headers.get("set-cookie")).toContain(`${MANAGEMENT_COOKIE}=${token}`);
   });
 
   it("once promoted, a request WITHOUT the ambient cookie neither injects a cookie nor writes", async () => {
-    await ensureMirrorViewer(db);
+    const token = await ensureMirrorViewer(db);
     // Promote (holder reads 'primary'). A fresh browser (no ambient cookie) gets nothing — real auth
     // applies. Backdate so an UNGUARDED mirror middleware WOULD write, proving the mode guard stops it.
     await backdateLastSeen(db);
     const before = await readLastSeen(db);
 
-    const res = await driveOnce(db, "primary");
+    const res = await driveOnce(db, token, "primary");
 
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -230,28 +289,24 @@ describe("mirror ambient viewer session", () => {
   });
 
   it("once promoted, a request carrying the ambient cookie ENDS the session and CLEARS the cookie", async () => {
-    await ensureMirrorViewer(db);
+    const token = await ensureMirrorViewer(db);
     // The security fix: a client holding a pre-promotion ambient cookie must NOT keep admin access once
     // the write gate opens. Promotion drops it — ends the ambient session (resolveManagementSession then
     // 401s it) and clears the cookie. Proven by deletion: removing the end+clear block leaves the session
     // live (isEnded false) and sets no clearing cookie, so a promoted node still auto-logs-in an admin.
-    const res = await driveWithCookie(
-      db,
-      `${MANAGEMENT_COOKIE}=${MIRROR_VIEWER_SESSION_ID}`,
-      "primary",
-    );
+    const res = await driveWithCookie(db, token, `${MANAGEMENT_COOKIE}=${token}`, "primary");
     expect(res.status).toBe(200);
     expect(await isEnded(db)).toBe(true);
     // The ambient session no longer resolves — a promoted node requires real auth.
     await expect(
-      withTransaction(db, (tx) => resolveManagementSession(tx, MIRROR_VIEWER_SESSION_ID)),
-    ).rejects.toThrow();
-    // A clearing Set-Cookie is emitted (an expiry), so the browser stops presenting the ambient id.
+      withTransaction(db, (tx) => resolveManagementSession(tx, token)),
+    ).rejects.toMatchObject({ code: "management_session.required" });
+    // A clearing Set-Cookie is emitted (an expiry), so the browser stops presenting the ambient token.
     expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
   });
 
   it("on a mirror, the keepalive REVIVES a session whose ended_at was stamped (even if last_seen_at is fresh)", async () => {
-    await ensureMirrorViewer(db); // fresh last_seen_at
+    const token = await ensureMirrorViewer(db); // fresh last_seen_at
     // Defensively stamp ended_at while last_seen_at stays fresh — the throttle-only WHERE would skip the
     // write and leave the session dead. The `or ended_at is not null` clause must revive it.
     await withTransaction(db, (tx) =>
@@ -263,7 +318,7 @@ describe("mirror ambient viewer session", () => {
     );
     expect(await isEnded(db)).toBe(true);
 
-    const res = await driveOnce(db); // mirror mode
+    const res = await driveOnce(db, token); // mirror mode
     expect(res.status).toBe(200);
     // Proven by deletion: dropping `or ended_at is not null` leaves ended_at set and this reddens.
     expect(await isEnded(db)).toBe(false);
