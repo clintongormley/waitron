@@ -99,21 +99,21 @@ describe("sealNodeState / unsealNodeState", () => {
     { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_CREDENTIALS_KEY=abc\n") },
   ];
 
-  it("gives back the same entries under the key it was sealed with", () => {
-    const opened = unsealNodeState(sealNodeState(entries, KEY), KEY);
+  it("gives back the same entries under the key it was sealed with", async () => {
+    const opened = unsealNodeState(await sealNodeState(entries, KEY), KEY);
     expect(names(opened)).toEqual(names(entries));
     expect(text(opened, "secrets/secrets.env")).toBe("WAITRON_CREDENTIALS_KEY=abc\n");
   });
 
-  it("opens nothing under a different recovery key", () => {
-    const sealed = sealNodeState(entries, KEY);
+  it("opens nothing under a different recovery key", async () => {
+    const sealed = await sealNodeState(entries, KEY);
     expect(codeThrownBy(() => unsealNodeState(sealed, OTHER_KEY))).toBe(
       "recovery.passphrase_invalid",
     );
   });
 
-  it("opens nothing once a byte of the sealed row has changed", () => {
-    const sealed = Buffer.from(sealNodeState(entries, KEY));
+  it("opens nothing once a byte of the sealed row has changed", async () => {
+    const sealed = Buffer.from(await sealNodeState(entries, KEY));
     sealed[sealed.length - 1] ^= 0xff;
     expect(codeThrownBy(() => unsealNodeState(sealed, KEY))).toBe("recovery.passphrase_invalid");
   });
@@ -124,8 +124,22 @@ describe("sealNodeState / unsealNodeState", () => {
     );
   });
 
-  it("does not carry the plaintext in the sealed bytes", () => {
-    const sealed = Buffer.from(sealNodeState(entries, KEY));
+  it("lets other work run while it derives the key", async () => {
+    const order: string[] = [];
+    const timer = new Promise<void>((resolve) =>
+      setTimeout(() => {
+        order.push("timer");
+        resolve();
+      }, 0),
+    );
+    // Promise.resolve so a synchronous seal, which returns only after the derivation, is ordered too.
+    const sealing = Promise.resolve(sealNodeState(entries, KEY)).then(() => order.push("sealed"));
+    await Promise.all([timer, sealing]);
+    expect(order).toEqual(["timer", "sealed"]);
+  });
+
+  it("does not carry the plaintext in the sealed bytes", async () => {
+    const sealed = Buffer.from(await sealNodeState(entries, KEY));
     expect(sealed.includes(Buffer.from("WAITRON_CREDENTIALS_KEY"))).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { nodeSealedState, withTransaction, type Database, type Transaction } fro
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
-import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
+import { decryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -20,8 +20,11 @@ export async function collectSealedEntries(deps: {
 }
 
 /** Packed and locked exactly as an archive is, so one key and one reader open both. */
-export function sealNodeState(entries: ArchiveEntry[], recoveryKey: string): Uint8Array {
-  return encryptArtifact(packArchive(entries), recoveryKey);
+export async function sealNodeState(
+  entries: ArchiveEntry[],
+  recoveryKey: string,
+): Promise<Uint8Array> {
+  return encryptArtifactAsync(packArchive(entries), recoveryKey);
 }
 
 /** Throws `recovery.passphrase_invalid` for a wrong key or altered bytes, and
@@ -109,9 +112,8 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
         resolvers: deps.resolvers,
         manifest,
       });
-      // Sealed outside the transaction: the key derivation is the slow part, and the write lock
-      // must not wait on it.
-      const sealed = sealNodeState(entries, recoveryKey);
+      // Sealed before the transaction opens, so the write lock is not held across the derivation.
+      const sealed = await sealNodeState(entries, recoveryKey);
       await withTransaction(deps.db, (tx) => writeSealedStateRow(tx, deps.nodeId, sealed, now));
       deps.log("info", "backup.sealed_state_refreshed", { entries: entries.length });
       return "sealed";

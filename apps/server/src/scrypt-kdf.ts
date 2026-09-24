@@ -1,4 +1,5 @@
-import { scryptSync } from "node:crypto";
+import { scrypt, scryptSync, type BinaryLike, type ScryptOptions } from "node:crypto";
+import { promisify } from "node:util";
 
 /** The scrypt cost knobs a derivation needs — pulled out as a type so a caller can pass a
  * non-default set (e.g. the cost recorded in an older, self-describing envelope) while still
@@ -33,4 +34,22 @@ export function deriveKey(
 ): Buffer {
   const { N, r, p, keylen, maxmem } = params;
   return scryptSync(passphrase, salt, keylen, { N, r, p, maxmem });
+}
+
+// Typed by hand: promisify infers from scrypt's overload without options.
+const scryptOffThread = promisify(scrypt) as (
+  password: BinaryLike,
+  salt: BinaryLike,
+  keylen: number,
+  options: ScryptOptions,
+) => Promise<Buffer>;
+
+/** `deriveKey` on libuv's thread pool, so the derivation does not stall the event loop. */
+export async function deriveKeyAsync(
+  passphrase: string,
+  salt: Buffer,
+  params: ScryptParams = SCRYPT_PARAMS,
+): Promise<Buffer> {
+  const { N, r, p, keylen, maxmem } = params;
+  return scryptOffThread(passphrase, salt, keylen, { N, r, p, maxmem });
 }
