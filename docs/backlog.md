@@ -4989,6 +4989,7 @@ What the preparation tasks left, with F1's own answers where it found them:
   - `db`: 577 tests, slowest 74ms, slowest setup 83ms; 20.3s at one worker, 6.4s at four, 5.9s at
     eight; coverage covered and total counts the same per file at one and at four workers; the
     48-line history of the `english-only.ts` exclusion is cut to a pointer at f8d6097d0.
+    (2026-09-24: #589 deleted that pointer too.)
   - `identity`: 278 tests, slowest 185ms, slowest setup 49ms; `test:coverage` gave the same covered
     and total counts per file at one worker (22.3s) and with `--maxWorkers=6` (6.2s), so its
     one-worker pin is recorded as a precaution, not a need. Its comment's `venue-db.ts:176`, `:183`
