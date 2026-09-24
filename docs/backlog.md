@@ -1703,6 +1703,15 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
   "Provisioning…", with no retry. The connection check releases itself in the same case. The app
   mounts the wizard once and never removes it, so this may be unreachable in use.
 
+- *Restoring a backup and importing a configuration fail in a real browser — OPEN (found by #567,
+  2026-09-24).* `restore` and `stageConfiguration` in `apps/setup/src/api/client.ts` call
+  `this.#fetchImpl(...)` as a method, and `main.ts` builds the client with the browser's own `fetch`,
+  which refuses to run on any other object. A Chromium probe of that shape printed `TypeError: Failed
+  to execute 'fetch' on 'Window': Illegal invocation`; the control, copying it into a local first as
+  `#request` does, returned 200. The suites stub `fetch` with `vi.fn`, which does not care what it
+  is called on. The fix is small: call it the way `#request` does, with a test whose stub refuses a
+  wrong receiver.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
@@ -2566,11 +2575,11 @@ image constraints under *Detail → Box image*.
   unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
   comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
-  2,000 to about 640), `provisioning` (#561, about 1,740 to about 400) and `fiscal-verifactu` (#562,
-  about 3,250 to about 1,550). A pruning pull request
-  cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only push
-  after the merge. Found by #555, #558, #559, #561 and #562 and left for the package that owns each, all
-  still OPEN:
+  2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
+  about 3,250 to about 1,550) and `apps/setup` (#567, about 1,390 to about 310). A pruning pull
+  request cannot carry this file (the checker refuses it), so each one's line lands here as a
+  docs-only push after the merge. Found by #555, #558, #559, #561, #562 and #567 and left for the
+  package that owns each, all still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2677,6 +2686,30 @@ image constraints under *Detail → Box image*.
   - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
     to another", which #561 deleted from provisioning (`tenants` holds one row). Prune with
     `apps/server`.
+  - `apps/setup` code, found by #567 and not changed (the restore and import bug is filed under
+    *Setup wizard* above): `#onGoto` in `setup-app.ts` does not clear `fiscalTestError`, so the
+    routed-back fiscal-test banner survives navigating away and back; `deployment.already_stamped`
+    is labelled "Reload to open the till" on the provision path and plain "Reload" on the adopt
+    path, and a reload of a box still in setup mode reopens the wizard; `AdoptOutcome`'s
+    `breakGlassSecret` is typed as required, but a replayed adopt answers without it
+    (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box is
+    trading", so a passing 503 could offer the reload early; the mode screen's own text says a live
+    server files real invoices, which a live run on a development box does not; `setup-app.test.ts`
+    has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
+    `server.internal`, and one saying a re-POST is "unrecoverable" where the server answers 409;
+    `events.test.ts` has no case for the restore and fiscal-test dispatchers; the `*.css?inline`
+    declaration in `vite-env.d.ts` is redundant (vite/client declares it); `vitest.config.ts`
+    excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
+    `widgets/test-helpers.ts` has no accessibility suite that fails without it; `done-screen.ts`'s
+    styles use hex fallbacks and `rem`, and a CSS comment inside its style string is history; and
+    `connection-screen.ts`'s `connection-continue` event is not named `wt-*` and carries no
+    `detail`.
+  - "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
+    deleted from `apps/setup/src/server-fields.ts`, is too wide: with
+    `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime
+    checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
+    `scripts/setup-wizard-fiscal-fields.test.ts` and `packages/fiscal-verifactu/src/venue-fields.ts`.
+    Prune with those.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
