@@ -1458,8 +1458,7 @@ rather than a language. Its forbidden set is regime vocabulary in ANY language: 
 `incidencia`), plus the regime's proper nouns (`verifactu`, `ticketbai`, `sif`, `csv`, `aeat`). What
 it refuses inside `packages/fiscal` is naming a regime mechanism at all, however it is spelled. It
 strips comments first, so a comment citing AEAT is fine while `export const aeatEndpoint` fails.
-Read the `FORBIDDEN` list in that file, not its header comment, which says "ENGLISH regime
-vocabulary" and is wrong — half the list is Spanish. Measured 2026-09-12 on a copy of
+Measured 2026-09-12 on a copy of
 `packages/fiscal/src`: planting `export const huellaValue = 1;` and `export const cadenaValue = 1;`
 each turned the suite red. A PR introducing a Spanish
 identifier into a generic package, a regime term in any language into `packages/fiscal`, one that adds a

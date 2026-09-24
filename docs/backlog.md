@@ -2779,11 +2779,29 @@ image constraints under *Detail → Box image*.
   `packages/credentials` (#577, about 990 to about 410, tests included), `packages/shared` (#579,
   about 945 to about 330, tests included) and `packages/scheduler` (#581, about 820 to about 350,
   tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included)
-  and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included). A pruning pull
-  request
+  and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included) and
+  `packages/fiscal` (#592, about 690 to about 245, tests included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585 and #589 and left for the package that owns each, all still OPEN:
+  #579, #581, #585, #589 and #592 and left for the package that owns each, all still OPEN:
+  - Found by #592 (`packages/fiscal`), not fixable in a comments-only change or outside the
+    package. Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts`
+    are code, not comments: one points at `packages/fiscal/src/backend.ts:72` for `total: Decimal`
+    (it is at line 50) and names "Task 14", and one says the breakdown column is NULL only for a
+    void, while the fake's corrections and substitutions leave it NULL too.
+    `fiscal.node_not_registered` is thrown only by `FakeFiscalBackend.recordSale`, yet
+    `packages/core/src/record-sale.test.ts:155` and `incidents.test.ts:151` say the fake refuses
+    "exactly like a real backend" (Veri*Factu throws `sif.not_registered`; `fiscal-none` checks
+    nothing). `FiscalBackend.pendingCount` has no caller outside the backends and their tests, yet
+    `packages/db/src/schema/sales.ts:29` says it is how the count is read.
+    `packages/core/src/record-void.ts:23` cites a `recordVoid` doc comment in
+    `packages/fiscal/src/backend.ts` that does not exist. `packages/fiscal-verifactu/src/slot.ts:51`
+    says `validate` runs BEFORE `provisionVenue`, which #592 narrowed in `contribution.ts` to an
+    instruction to the caller, because `apps/server/scripts/cloud-integration-fixture.ts` calls
+    `provisionVenue` without it. `packages/fiscal-verifactu/src/no-regime-scope.test.ts:7` says
+    `packages/fiscal`'s guard forbids ENGLISH regime terms; its list is half Spanish.
+    `no-hardcoded-margin.test.ts` scans only the files directly in `packages/fiscal/src`, not
+    `src/testing/`, and does not say so.
   - "The transaction is already aborted by Postgres" in `packages/core/src/record-substitution.ts`
     and `record-void.ts`, and "no UPDATE grant" in `record-void.ts`, describe PostgreSQL; this
     engine has no grants and a refused statement leaves the transaction usable (CLAUDE.md §3).
@@ -2975,7 +2993,7 @@ image constraints under *Detail → Box image*.
     `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
     status 0); `apps/server/src/node-identity.ts` still says "ONE
     tenant transaction" and omits `credentials.key_version_unknown` among another node's read
-    failures; pointers to a missing `errors.reachability.test.ts` in `core`, `fiscal`,
+    failures; pointers to a missing `errors.reachability.test.ts` in `core`,
     `workforce-es` and `reporting` (the guard is `scripts/errors-reachable.test.ts`); and two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
     `docs/compliance/getting-to-production.md` §4 closed that day.
@@ -4282,7 +4300,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
   taken through a Stripe webhook.
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** One database
-  files for one taxpayer (`packages/fiscal/src/backend.ts`), and the field reaches `apps/server`'s
+  files for one taxpayer, and the field reaches `apps/server`'s
   awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off `> 0`) and `fiscal-none`. A
   rename would want to keep that "did this pass attempt work?" meaning rather than flatten it to a
   boolean, since the flag deliberately distinguishes a no-work pass from a pass that exercised the
