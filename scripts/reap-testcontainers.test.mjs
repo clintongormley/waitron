@@ -276,32 +276,39 @@ describe("reap-testcontainers", () => {
       expect(kills.map((k) => k.pid)).toEqual([89860, 89862, 89864, 89865]);
     });
 
-    it("SIGKILLs a parentless Litestream or versitygw started from the repository's .bin", () => {
+    it("SIGKILLs a parentless Litestream or versitygw started from a Waitron checkout's .bin", () => {
       const { psExec, kill, kills } = fakeProcs({
         ps: [
-          "5101     1 /repo/.bin/litestream replicate -config /tmp/waitron-loop-a/stream/litestream.yml",
-          "5102     1 /repo/.bin/versitygw --port 127.0.0.1:7070 posix /tmp/waitron-s3-x",
+          "5101     1 /Users/dev/repos/waitron/.bin/litestream replicate -config /tmp/waitron-loop-a/stream/litestream.yml",
+          "5102     1 /Users/dev/worktrees/waitron-feat-x/.bin/versitygw --port 127.0.0.1:7070 posix /tmp/waitron-s3-x",
+          "5103     1 /Users/dev/repos/waitron/bench/sqlite-failover/.bin/litestream replicate -config /tmp/b/litestream.yml",
         ].join("\n"),
       });
       expect(sweepOrphanedVitestWorkers({ psExec, kill })).toEqual({
         psAvailable: true,
-        workersKilled: 2,
+        workersKilled: 3,
       });
       expect(kills).toEqual([
         { pid: 5101, signal: "SIGKILL" },
         { pid: 5102, signal: "SIGKILL" },
+        { pid: 5103, signal: "SIGKILL" },
       ]);
     });
 
-    it("spares a Litestream with a live parent, one installed elsewhere, and a mere mention of the name", () => {
+    it("spares a Litestream with a live parent, one outside a Waitron checkout, and a mere mention of the name", () => {
       const { psExec, kill, kills } = fakeProcs({
         ps: [
           // A running loop test's child: its parent is alive.
-          "5201  5200 /repo/.bin/litestream replicate -config /tmp/waitron-loop-b/stream/litestream.yml",
-          // A box's own Litestream is on PATH, never under the repository's .bin.
+          "5201  5200 /Users/dev/repos/waitron/.bin/litestream replicate -config /tmp/waitron-loop-b/stream/litestream.yml",
+          // A box's own Litestream is on PATH, never under a checkout's .bin.
           "5202     1 /usr/local/bin/litestream replicate -config /var/lib/waitron/stream/litestream.yml",
+          // A developer's own Litestream, started by launchd (ppid 1), in another .bin directory.
+          "5205     1 /Users/someone/.bin/litestream replicate -config /Users/someone/litestream.yml",
+          "5206     1 /opt/otherproj/node_modules/.bin/litestream replicate",
+          // A .bin deeper inside a checkout is not one the setup scripts write.
+          "5207     1 /Users/dev/repos/waitron/packages/x/node_modules/.bin/litestream replicate",
           // A tool that only names the binary in an argument.
-          "5203     1 tail -f /repo/.bin/litestream.log",
+          "5203     1 tail -f /Users/dev/repos/waitron/.bin/litestream.log",
           "5204     1 grep versitygw /tmp/notes.txt",
         ].join("\n"),
       });

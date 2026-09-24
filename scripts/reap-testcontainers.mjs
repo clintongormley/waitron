@@ -158,16 +158,20 @@ function isVitestProcess(command) {
 }
 
 /**
- * Is this `ps` command column one of the test binaries the repository installs under `.bin/` (the
- * pinned Litestream from `scripts/setup-litestream.ts`, and the loop test's S3 server)? The row's
- * FIRST token must be that path — never the bare name anywhere in the row — so a box's own Litestream
- * (on PATH, outside the repository) and a tool that merely names the file are never matched.
+ * Is this `ps` command column one of the test binaries a checkout keeps in its `.bin` (the pinned
+ * Litestream from `scripts/setup-litestream.ts`, and the loop test's S3 server)? The row's FIRST
+ * token must be a path ending `<dir>/.bin/litestream` or `<dir>/.bin/versitygw`, or the same under
+ * `<dir>/bench/sqlite-failover/`, where `<dir>` is a directory whose name starts `waitron` — the main
+ * checkout and every `waitron-<branch>` worktree. Any other `.bin` (a developer's own `~/.bin`, a
+ * `node_modules/.bin`), a Litestream on PATH, and a tool that merely names the file are not matched.
  *
  * @param {string} command the command column of one `ps` row
  * @returns {boolean}
  */
 function isTestBinaryProcess(command) {
-  return /^\S*\/\.bin\/(?:litestream|versitygw)(?:\s|$)/.test(command);
+  return /^(?:\S*\/)?waitron[^/\s]*\/(?:bench\/sqlite-failover\/)?\.bin\/(?:litestream|versitygw)(?:\s|$)/.test(
+    command,
+  );
 }
 
 export function sweepOrphanedVitestWorkers({ psExec, kill }) {
