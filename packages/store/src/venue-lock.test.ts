@@ -35,7 +35,6 @@ const openStore = async (directory: string, exclusive?: boolean) => {
   return store;
 };
 
-// Plain JavaScript run by another process: a child cannot load this package's TypeScript.
 const TRY = `import { DatabaseSync } from "node:sqlite";
 const db = new DatabaseSync(process.argv[1]);
 db.exec("pragma busy_timeout = 0");
@@ -177,8 +176,7 @@ describe("the venue folder's process lock", () => {
   );
 
   it("reports a lock file it cannot open as the engine reported it, not as in use", async () => {
-    // Measured 2026-09-24, Node v26.7.0: opening a DIRECTORY as a database throws errcode 14,
-    // `unable to open database file`, from the constructor.
+    // Opening a directory as a database throws errcode 14 from the constructor.
     const directory = tempDir();
     mkdirSync(join(directory, "venue.lock"));
     const refusal = await lockVenueDirectory(directory).catch((error: unknown) => error);

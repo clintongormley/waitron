@@ -3,16 +3,9 @@ import { describe, expect, it } from "vitest";
 import { connectionPair, isReadOnlyRefusal, settle } from "./connections.js";
 
 /**
- * Two connections with no file behind them.
- *
- * What is checked here is the rule itself: which of the two a statement is sent to, under nesting,
- * failure and detachment. Identity is the whole of the check — a handle is told apart from the
- * other because it is a different object.
- *
- * Two `:memory:` handles are also two separate DATABASES, which production's pair is not: there
- * both connections open one file. So nothing here can observe what a read SEES, only where it was
- * sent. `./index.test.ts` drives the routing through a real store, and that is where the seeing is
- * checked.
+ * Two `:memory:` handles are two separate databases, unlike production's pair over one file, so
+ * this suite checks only where a statement is sent, never what a read sees. `./index.test.ts`
+ * checks that through a real store.
  */
 const pair = () => {
   const write = new DatabaseSync(":memory:");
@@ -22,7 +15,6 @@ const pair = () => {
     write,
     read,
     connections,
-    /** Where a statement issued at this moment would go. */
     where: () => (connections.forStatement() === write ? "write" : "read"),
     close: () => {
       write.close();
@@ -53,8 +45,8 @@ describe("the connection pair", () => {
   it("sends a statement outside a running body to the reader", async () => {
     const p = pair();
     try {
-      // A synchronous body has already ended by the time it returns, so the reading has to happen
-      // while a body is still suspended — which is what a transaction body awaiting anything is.
+      // A synchronous body has already ended when it returns, so the reading is taken while a body
+      // is suspended.
       const held = p.connections.asTransactionBody(
         () => new Promise<void>((resolve) => setImmediate(resolve)),
       );
@@ -87,8 +79,6 @@ describe("the connection pair", () => {
           throw new Error("deliberate");
         }),
       ).toThrow("deliberate");
-      // The token has to leave the running set on the failing path too, or every later statement
-      // in the process is routed to a reader on behalf of a body that is long gone.
       expect(p.where()).toBe("write");
     } finally {
       p.close();
@@ -114,9 +104,7 @@ describe("the connection pair", () => {
         p.connections.asTransactionBody(() => {
           expect(p.where()).toBe("write");
         });
-        // The inner body has ended and the outer has not: a statement here is still inside a
-        // running body of this pair's, so it stays on the writer. A flag that the inner body
-        // cleared would send it to the reader.
+        // The inner body has ended and the outer has not.
         await Promise.resolve();
         expect(p.where()).toBe("write");
       });
@@ -146,9 +134,8 @@ describe("the connection pair", () => {
           }),
       );
       resume();
-      // The detached callback carries the FIRST body's context, and that body ended long ago, so
-      // it is an outsider to the one running now. Reading its inherited mark as "inside" would put
-      // it on the writer, where it would see rows this later body may still undo.
+      // The callback carries the FIRST body's context, which has ended, so it is an outsider to
+      // the body running now and must not see rows that body may still undo.
       expect(await detached).toBe("read");
       finish();
       await later;
@@ -197,8 +184,8 @@ describe("settle", () => {
 
   it("finishes before whatever the caller chains onto its result", async () => {
     const seen: string[] = [];
-    // The ordering both call sites depend on: the transaction's `commit` and the pair's own
-    // bookkeeping happen before anyone downstream is told the body is over.
+    // Both call sites depend on this: the `commit` and the pair's bookkeeping happen before anyone
+    // downstream is told the body is over.
     await settle(
       Promise.resolve("value"),
       () => seen.push("ok"),
@@ -218,12 +205,9 @@ describe("isReadOnlyRefusal", () => {
   });
 
   it("answers no rather than throwing for a value that is not an object", () => {
-    // `null` and `undefined` are the two that would take a property read with them and replace
-    // the failure the caller has to see with a TypeError — measured on Node v26.7.0, reading
-    // `.errcode` off either throws one — and `typeof null` is `"object"`, which is why the null
-    // check is written out. The string is here for a different reason: reading `.errcode` off it
-    // gives plain `undefined` rather than a TypeError, and the value chosen is the engine's own
-    // wording for a read-only refusal, so a classifier matching on the MESSAGE would answer yes.
+    // Reading `.errcode` off `null` or `undefined` throws a TypeError, which would replace the
+    // caller's failure. The string is the engine's own wording for a read-only refusal, so a
+    // classifier matching on the MESSAGE would answer yes.
     expect(isReadOnlyRefusal(null)).toBe(false);
     expect(isReadOnlyRefusal("attempt to write a readonly database")).toBe(false);
     expect(isReadOnlyRefusal(undefined)).toBe(false);
