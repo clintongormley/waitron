@@ -4192,17 +4192,16 @@ any of this code, so you can still read how something worked under PostgreSQL.
   Waitron retains the engine's required semantics and checks for claimed self-host targets.
   Every store result in the prototype note is MinIO's. Topology §12.2's real-store gate remains
   open; the conditional-write promotion tie-break must be demonstrated on each target (risk 11).
-- **The restart reset is built (2026-09-23), and its precondition is not.** `resetInFlightClaims`
+- **The restart reset is built (2026-09-23), and so is its precondition (#566).** `resetInFlightClaims`
   (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising
   `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a
   boot's first filing pass, and again only if that attempt failed — so a node that restarts files
   an inherited "being filed right now" sale on its first pass once the reset succeeds, with no
   five-minute wait; a failed reset is retried no later than `WAITRON_SKIP_RETRY_MS` after it failed.
   It runs only where the drain does: on the singleton primary, with submission
-  switched on. What it assumes and nothing enforces is ONE server process per venue folder: a second
-  process filing from the same database would have its claims undone. The slice-2 spec puts that
-  lock first ([§6](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
-  §9 step 3), and it is still to build.
+  switched on. It assumes ONE server process per venue folder — a second process filing from the
+  same database would have its claims undone — and slice 2's Task 3a (#566) now refuses a second
+  process `provisioning.database_in_use`; see the slice-2 entry below.
 - **`apps/server/src/restore-fiscal-e2e.test.ts`'s header gives a reason that no longer holds — OPEN
   (2026-09-23, found by review of PR #520).** It says `useVenueDb` is not used because it "never
   reaches the trigger installer". Traced, not run: `useVenueDb` applies each set through
@@ -4315,6 +4314,16 @@ rewrites a sealed file while the server keeps running (#560's per-task review tr
 promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
 are written in setup or by the command line, before a restart); Tasks 8a and 9a must call the one
 `sealedState.refresh()` boot builds.
+Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`, a SQLite
+`begin immediate` the operating system releases when the process dies; a second process is refused
+`provisioning.database_in_use`, while opens inside one process share it; restore and
+`waitron-rejoin` take it before changing any file; break-glass, `waitron-credentials`, two dev
+scripts and the Cloud backup fixture's capture open without it), landed as #566. Left open, the
+owner's call: a second container copy the lock refuses still counts as a failed start in the box's
+boot-failure counter (`apps/server/src/node-entry.ts`; three failures put the box on the recovery
+page) — default: leave it. Also left by #566's review, no behaviour change: the migrator's lock and
+the venue lock use one technique in two copies, and the test helper that holds the lock from another
+process is copied into five test files.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
