@@ -9,12 +9,14 @@ import {
 } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
+  lockVenueDatabase,
   nodes,
   openVenueDatabase,
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   withTransaction,
   type Database,
+  type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
@@ -82,6 +84,8 @@ export interface RestoreDeps extends ValidationDeps {
   /** Migrates the restored database to this binary's schema before any hook runs. Default
    * `applyMigrations`; tests stub it. */
   readonly migrate?: typeof applyMigrations;
+  /** Holds the venue folder for the whole write. Default {@link lockRestoreTarget}. */
+  readonly lockVenue?: (directory: string) => Promise<VenueLock>;
   readonly log: Logger;
 }
 
@@ -226,10 +230,7 @@ export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedA
  * {@link restoreDatabase} writes its incoming file beside the target and removes it itself on a
  * failed write.
  */
-export async function writeValidated(
-  validated: ValidatedArtifact,
-  deps: RestoreDeps,
-): Promise<void> {
+async function placeValidated(validated: ValidatedArtifact, deps: RestoreDeps): Promise<void> {
   const { log } = deps;
   if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
   await restoreDatabase({
@@ -270,6 +271,32 @@ export async function writeValidated(
 }
 
 /**
+ * Writes a validated artifact ({@link placeValidated}) holding the venue folder, so a restore
+ * started while a server runs is refused `provisioning.database_in_use` with nothing on the box
+ * changed. The hook's own open and the migrate inside share the hold.
+ */
+export async function writeValidated(
+  validated: ValidatedArtifact,
+  deps: RestoreDeps,
+): Promise<void> {
+  const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
+  try {
+    await placeValidated(validated, deps);
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * The lock creates the folder when the restore is the first thing to write there, so it is created
+ * here first, for the operator alone, as {@link restoreDatabase} would.
+ */
+async function lockRestoreTarget(directory: string): Promise<VenueLock> {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  return lockVenueDatabase(directory);
+}
+
+/**
  * Validate an encrypted backup and its identity completeness, then set aside any existing identity,
  * restore, migrate, run the module hooks in one transaction and write the artifact's secrets last.
  * After set-aside and before
@@ -304,9 +331,8 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  *    afterwards reads the OLD database plus whatever that connection wrote AFTER the restore — the
  *    restore silently and completely undone, on the cold-recovery path CLAUDE.md §5 says has to
  *    work. Unlinking first leaves the stale connection on an orphaned inode, and the fresh open
- *    reads the archive. (It does not stop a live writer from carrying on, so refusing to restore
- *    under a running server is still worth having; what this buys is that the restored DATA is
- *    correct either way.)
+ *    reads the archive. (It does not stop a live writer from carrying on; {@link writeValidated}
+ *    refuses to restore while another process holds the folder.)
  *
  * The incoming bytes are written BEFORE anything is removed, so a failed or short write leaves the
  * existing database where it was rather than nothing at all; the stale incoming file is dropped

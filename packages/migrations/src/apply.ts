@@ -35,6 +35,10 @@ import "./errors.js";
  * it once released — a waiter given a 10s busy timeout acquired 697ms into a 600ms hold. A holder
  * killed with SIGKILL releases it, and so does closing the connection with the transaction still
  * open. An `open(..., "wx")` lock file would survive the crash and wedge every later boot.
+ *
+ * It is also what makes a second migrator WAIT: the store's open takes `venue.lock`, which refuses a
+ * second process at once, and this lock is taken first. Receipt: `docs/developers/conventions-data.md`,
+ * "One process per venue folder".
  */
 const LOCK_FILE = "migrations.lock";
 

@@ -115,7 +115,8 @@ seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one t
 writes the stamp" above for why that file was removed).
 
 It runs **against a directory something has already migrated**, and stamps that directory itself
-when it carries no stamp (see "What actually writes the stamp" above). A directory nothing has
+when it carries no stamp (see "What actually writes the stamp" above). Stop the server first: while
+a server has the directory open, `venue` is refused with `provisioning.database_in_use`. A directory nothing has
 migrated is refused with `provisioning.database_unmigrated`, and one stamped for the other
 environment with `deployment.already_stamped` — one database per environment is a fiscal invariant. It opens the venue
 **directory** — `--venue-dir`, else `WAITRON_VENUE_DIR` (the same variable this server reads, so a

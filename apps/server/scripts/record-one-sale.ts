@@ -149,7 +149,8 @@ export async function recordOneSale(
   // enforces: sum(amount) = total + tip.
   const tenderAmount = addDecimal(total, tipAmount);
 
-  const store = await openVenueDatabase(await resolveScriptVenueDir(env));
+  // No lock: the sale is written for a running server's drain to send.
+  const store = await openVenueDatabase(await resolveScriptVenueDir(env), { exclusive: false });
   const db = store.venue;
   try {
     const clock = systemClock();

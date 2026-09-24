@@ -28,9 +28,13 @@ type Env = Record<string, string | undefined>;
  * `rejoin-command.ts`'s `openVenue` records. `close` closes BOTH files, because
  * `openVenueDatabase` opens `node.db` beside `venue.db` and a CLI that exits holding either leaves
  * them to process teardown.
+ *
+ * No lock: break-glass is run beside a running server (`deploy/README.md`).
  */
-async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
-  const store = await openVenueDatabase(directory);
+export async function openBreakGlassVenue(
+  directory: string,
+): Promise<{ db: Database; close(): Promise<void> }> {
+  const store = await openVenueDatabase(directory, { exclusive: false });
   return { db: store.venue, close: () => store.close() };
 }
 
@@ -69,7 +73,7 @@ export async function runBreakGlassReset(deps: {
   argv: string[];
   env: Env;
   out: (line: string) => void;
-  /** DI for tests; defaults to {@link openVenue} over the resolved venue directory. */
+  /** DI for tests; defaults to {@link openBreakGlassVenue} over the resolved venue directory. */
   openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
 }): Promise<number> {
   // Every required value is read from env only — never argv, which `ps` exposes. A blank value is
@@ -124,7 +128,7 @@ export async function runBreakGlassReset(deps: {
   // The same resolution `config.ts` does for `venueDir`, against the state root that won above.
   const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
 
-  const opened = await (deps.openDb ?? openVenue)(venueDir);
+  const opened = await (deps.openDb ?? openBreakGlassVenue)(venueDir);
   try {
     try {
       return await withTransaction(opened.db, async (tx) => {

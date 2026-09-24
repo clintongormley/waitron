@@ -47,7 +47,9 @@ export async function runBin(argv: string[], env: NodeJS.ProcessEnv, io: CliIo):
   try {
     // Before the files are opened, so a broken key ring costs nothing and leaves nothing to close.
     const ring = loadKeyRing(env);
-    store = await openVenueDatabase(venueDir);
+    // No lock: the command runs beside a running server, which reads credentials fresh on every
+    // pass (`apps/server/README.md`).
+    store = await openVenueDatabase(venueDir, { exclusive: false });
     return await runCli(argv, {
       db: store.venue,
       ring,

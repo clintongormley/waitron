@@ -439,6 +439,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   reason, stated at each: they confine a losing attempt's own writes. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
   Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+- **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` (a SQLite
+  `begin immediate`, released when the process dies — measured with `SIGKILL`), and a second
+  PROCESS is refused `provisioning.database_in_use` at once; opens inside one process share the
+  hold. A tool documented to run beside the server passes `exclusive: false`; a command that changes
+  the folder's files takes `lockVenueDatabase` before its first change. Never unlink `venue.lock`.
+  Guard: `packages/store/src/venue-lock.test.ts`, weaker than its name — it proves the lock, not
+  that each caller takes it, so a caller passing `exclusive: false` wrongly is seen by nothing.
+  Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
   [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)

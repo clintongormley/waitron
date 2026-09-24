@@ -1,5 +1,24 @@
-import { openVenueStore, type NodeSqliteDatabase, type StoreHandle } from "@waitron/store";
+import {
+  lockVenueDirectory,
+  openVenueStore,
+  VenueInUseError,
+  type NodeSqliteDatabase,
+  type StoreHandle,
+  type VenueLock,
+} from "@waitron/store";
+import { AppError } from "@waitron/shared";
 import * as schema from "./schema/index.js";
+import "./errors.js";
+
+export type { VenueLock } from "@waitron/store";
+
+export interface OpenVenueOptions {
+  /**
+   * False for a short-lived tool documented to run beside a running server: it takes no lock on the
+   * folder. Default true.
+   */
+  readonly exclusive?: boolean;
+}
 
 export type Schema = typeof schema;
 
@@ -53,7 +72,37 @@ export interface VenueDatabase {
  * is the relational-query map. A later task that wants the compiler to hold this line too would
  * split the barrel, not this function.
  */
-export async function openVenueDatabase(directory: string): Promise<VenueDatabase> {
-  const store = await openVenueStore({ directory, venueSchema: schema, nodeSchema: schema });
+export async function openVenueDatabase(
+  directory: string,
+  options: OpenVenueOptions = {},
+): Promise<VenueDatabase> {
+  const store = await inUseAsAppError(directory, () =>
+    openVenueStore({
+      directory,
+      venueSchema: schema,
+      nodeSchema: schema,
+      exclusive: options.exclusive,
+    }),
+  );
   return { venue: store.venue, node: store.node, close: store.close };
+}
+
+/**
+ * Holds the venue folder without opening it, for a command that changes the folder's files and
+ * must be refused before it changes anything while a server runs. Opens inside the same process
+ * share the hold.
+ */
+export function lockVenueDatabase(directory: string): Promise<VenueLock> {
+  return inUseAsAppError(directory, () => lockVenueDirectory(directory));
+}
+
+async function inUseAsAppError<T>(directory: string, open: () => Promise<T>): Promise<T> {
+  try {
+    return await open();
+  } catch (error) {
+    if (error instanceof VenueInUseError) {
+      throw new AppError("provisioning.database_in_use", { database: directory });
+    }
+    throw error;
+  }
 }

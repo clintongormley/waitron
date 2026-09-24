@@ -152,6 +152,12 @@ export async function runRestore(deps: {
     await restore(restoreDeps);
   } catch (err) {
     if (err instanceof AppError) {
+      if (err.code === "provisioning.database_in_use") {
+        deps.out(
+          "restore failed: provisioning.database_in_use — the Waitron server is still running; stop it first (docker compose stop app)",
+        );
+        return 1;
+      }
       if (DECRYPT_PHASE_CODES.has(err.code)) {
         deps.out("restore failed: wrong recovery key or corrupt artifact");
         return 1;

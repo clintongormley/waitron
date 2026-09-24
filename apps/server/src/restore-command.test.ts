@@ -301,6 +301,25 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
+  it("names a running server as the reason, and returns 1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-in-use-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("provisioning.database_in_use", { database: "/var/lib/waitron/venue" });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: provisioning.database_in_use — the Waitron server is still running; stop it first (docker compose stop app)",
+    ]);
+  });
+
   it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
     // An AppError from some OTHER domain (here: a config error) is still an error `runRestore` must
     // not let propagate raw — `bin-restore.ts`'s `.then(process.exit)` has no `.catch`, so an

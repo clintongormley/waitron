@@ -261,6 +261,7 @@ describe("curated operator text", () => {
     const thrownByRunEntry = [
       "server.config_missing",
       "provisioning.database_ahead",
+      "provisioning.database_in_use",
       "migrations.set_missing",
       "migrations.incomplete",
       "server.boot_incomplete",

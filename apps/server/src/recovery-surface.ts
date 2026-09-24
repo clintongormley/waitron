@@ -149,6 +149,11 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     action:
       "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, ask whoever installed this box for help: the box's database is a file on its disk, and the software cannot read it.",
   },
+  "provisioning.database_in_use": {
+    title: "Another copy of Waitron is already using this box's database.",
+    action:
+      "Restart the box. If this page comes back, ask whoever installed this box for help: two copies of the software are pointed at the same data, and only one may run.",
+  },
   "migrations.incomplete": {
     // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations
     // itself (`restore.ts` → `applyMigrations`), so a restore is one of the things that raises this

@@ -17,6 +17,7 @@
 // records:
 //   pnpm --filter @waitron/server build
 //   node apps/server/dist/register-till.js <nodeId>
+// Stop the server first: it refuses with provisioning.database_in_use while one runs.
 //
 // Re-running this against an already-registered node is how a REIMAGED node is re-provisioned. It
 // closes the previous chain either way, so do not run it to "check" anything.

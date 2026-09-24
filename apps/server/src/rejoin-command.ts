@@ -1,6 +1,12 @@
 import { join } from "node:path";
-import { openVenueDatabase, readNodeMembership, type Database } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import {
+  lockVenueDatabase,
+  openVenueDatabase,
+  readNodeMembership,
+  type Database,
+  type VenueLock,
+} from "@waitron/db";
+import { AppError, isAppError } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
 import { deploymentEnvironment, resolveConfigDir } from "./config.js";
@@ -62,6 +68,7 @@ export async function runRejoin(deps: {
   rejoin?: (d: RejoinDeps) => Promise<RejoinResult>;
   openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
   migrate?: (venueDir: string) => Promise<void>;
+  lockVenue?: (directory: string) => Promise<VenueLock>;
 }): Promise<number> {
   const [cmd, ...rest] = deps.argv;
   const acceptLoss = rest.includes("--accept-loss");
@@ -111,6 +118,21 @@ export async function runRejoin(deps: {
     () => new Date(),
   );
 
+  // Held from before the pre-wipe read to the end: the wipe empties the folder a running server
+  // would be serving. The migrate inside shares the hold.
+  let lock: VenueLock;
+  try {
+    lock = await (deps.lockVenue ?? lockVenueDatabase)(venueDir);
+  } catch (err) {
+    if (isAppError(err) && err.code === "provisioning.database_in_use") {
+      deps.out(
+        "rejoin failed: provisioning.database_in_use — the Waitron server is still running; stop it first",
+      );
+      return 1;
+    }
+    return failGeneric();
+  }
+
   const open = deps.openDb ?? openVenue;
   const migrate =
     deps.migrate ??
@@ -125,12 +147,14 @@ export async function runRejoin(deps: {
   try {
     opened = await open(venueDir);
   } catch {
+    lock.release();
     return failGeneric();
   }
   try {
     held = await readNodeMembership(opened.db);
   } catch {
     await opened.close();
+    lock.release();
     return failGeneric();
   }
 
@@ -171,5 +195,6 @@ export async function runRejoin(deps: {
     // still open — close it here (idempotent via `closed`, so the success/wipe path never closes
     // twice).
     if (!closed) await opened.close().catch(() => {});
+    lock.release();
   }
 }

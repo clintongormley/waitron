@@ -1,6 +1,13 @@
 // The public surface of @waitron/db. Re-exports only — no logic here.
-export { openVenueDatabase } from "./client.js";
-export type { Database, Schema, Transaction, VenueDatabase } from "./client.js";
+export { lockVenueDatabase, openVenueDatabase } from "./client.js";
+export type {
+  Database,
+  OpenVenueOptions,
+  Schema,
+  Transaction,
+  VenueDatabase,
+  VenueLock,
+} from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
 // Claiming a batch of job rows by stamping them, in one statement (`job-claim.ts`). A caller that
