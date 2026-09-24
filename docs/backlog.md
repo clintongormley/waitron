@@ -1560,11 +1560,12 @@ Comments across many packages still cite deleted guard suites, from two deletion
 `errors.reachability.test.ts` suites went on 2026-08-11 (the real guard is
 `scripts/errors-reachable.test.ts`); the outbox removal (#280) deleted
 `apps/server/src/sync-origin.test.ts` and left comments across the tree describing capture-origin
-machinery that no trigger does any more. Fix in one pass whenever a file is open anyway, not a sweep
-(CLAUDE.md §1: thin on touch). Two grep hazards: searching `sync-origin.test.ts` finds only the
-comments that name the file and misses those that cite it obliquely; and searching "sync origin"
-also reaches a still-live thing — the mirror's own `origin_node_id` column
-(`packages/db/src/schema/mirror-config.ts`), which is outside this item and must not be swept with it.
+machinery that no trigger does any more. Fix whenever a file is open anyway; the comment-pruning
+sweep (B9 → *Prune the comments*) reaches every package and takes these as it goes. Two grep
+hazards: searching `sync-origin.test.ts` finds only the comments that name the file and misses those
+that cite it obliquely; and searching "sync origin" also reaches a still-live thing — the mirror's
+own `origin_node_id` column (`packages/db/src/schema/mirror-config.ts`), which is outside this item
+and must not be swept with it.
 
 ### A1a. A foreign business customer needs an identifier-type decision
 
@@ -2502,6 +2503,18 @@ image constraints under *Detail → Box image*.
   each is listed with its reason in the pull request; 99.82/100/100/98.46). With `media`, no
   package was left at the floor.
 
+- **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
+  Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
+  §1). The rule change and the checker every pruning pull request passes,
+  `scripts/comments-only.mjs <base>`, came first; its header states what it refuses and misses.
+  What a pruner meets: it reads commits only, never an uncommitted edit; any changed file that is
+  not TypeScript or JavaScript fails it; and it refuses a trailing comma added or dropped after a
+  spread, where Prettier writes one, so a pruning edit that lets such a call, array or object
+  fold onto one line is refused. The packages follow, the fiscal ones under the
+  same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
+  unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
+  root `vitest.config.ts` and `eslint.config.js`.
+
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
   pattern that looks for a slash-star opener anywhere in the raw text, so a glob path written
@@ -3306,8 +3319,9 @@ Either bring the three decisions across and re-baseline, or change the sentence 
   version 7 does not ship the old JavaScript API, and typescript-eslint refuses the version outright
   in any case. typescript-eslint tracks the work in its issue 10940,
   and the message it prints today names version **7.1** as the target. When a typescript-eslint
-  release supports it, the root entry goes back to a plain `^7` range and the alias disappears. The
-  whole arrangement, with the receipts, is in
+  release supports it, the root entry goes back to a plain `^7` range and the alias disappears.
+  `scripts/comments-only.mjs` parses with the version 6 API (`ts.createSourceFile`), so it has to be
+  ported, or the alias kept for it, before that move. The whole arrangement, with the receipts, is in
   [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
   is deliberate*.
 - **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree, and the
@@ -4433,7 +4447,8 @@ Each track is its own worktree so sessions do not edit the same files. Rules, ea
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
 - **Shared files:** `apps/server/src/boot.ts`, `CLAUDE.md`, `packages/db`'s core schema and
   migrations, the dashboard printers screen, and this file (each track edits its own items).
-- **Comment thinning on touch only** (CLAUDE.md §1); no sweep in any track.
+- **Comments are cut on touch, and pruned deliberately one package per pull request** (CLAUDE.md
+  §1) — see B9 → *Prune the comments*.
 - **Update this file as items land**, in the same PR.
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → till
@@ -4484,7 +4499,8 @@ conflict.
   venue's liability, so lockdown and a certificate install are available again. Buy a cheap Android
   with an autofocus camera, plus a spare; NFC is optional and Android-only. Decisions and receipts:
   [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
-- **Comments carry invariants, not history** (CLAUDE.md §1).
+- **Comments carry invariants, not history, and deliberate pruning sweeps are wanted** (owner,
+  2026-09-23; CLAUDE.md §1) — see B9 → *Prune the comments*.
 - **The coverage bar is negotiable only where the rest of a package's gap could be closed solely by
   tests that assert nothing useful** (owner, 2026-09-23, narrowing the 2026-09-05 "negotiable with a
   reason"): "we never want to add junk tests just to meet a coverage bar. the tests added must

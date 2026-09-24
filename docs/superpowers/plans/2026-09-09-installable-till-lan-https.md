@@ -20,7 +20,7 @@
 - **No new core table without a stated reason (CLAUDE.md §3):** this adds a COLUMN to the existing core `device_profiles`; state the reason in the commit.
 - **English-only guard (CLAUDE.md §3):** `packages/layouts` is scanned — English identifiers, strings AND comments. `apps/*` is out of scope for the guard (UI Spanish lives in i18n string files).
 - **Tenant isolation (CLAUDE.md §3):** a by-id read scopes to the tenant. This plan adds no new by-id read; do not remove the existing `eq(tenantId)` scoping on `device_profiles` reads.
-- **Comments (CLAUDE.md §1):** invariant + non-obvious why, not history. Thin on touch; do not sweep.
+- **Comments (CLAUDE.md §1):** invariant + non-obvious why, not history. Thin on touch; do not sweep. (2026-09-24: superseded — CLAUDE.md §1 now wants deliberate pruning sweeps too.)
 - **Every commit is `git commit -s`.** Conventional-commit subjects.
 - **Coordination:** Tasks 1, 2, 3, 6b, 11 touch Track P / provisioning files (`self-signed-cert.ts`, `tls.ts`, `boot.ts`, `config.ts`, `discovery-api.ts`, `venue-plan.ts`, `deploy/`) that active backup/recovery and printer-agent sessions may own. Rebase onto their work on conflict (`boot.ts`, `config.ts` are the likely points); regenerate nothing blindly.
 - **Deploy owed-note (not built here):** binding the landing listener on port 80 in the box image needs `cap_net_bind_service` (already granted for 443) and, under the image's host networking, no compose port map — record this as owed to the deploy/ owner; this plan does not edit `deploy/`.

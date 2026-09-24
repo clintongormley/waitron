@@ -36,7 +36,7 @@ From #287 (`apps/server/src/join-requests.ts`, `packages/db/src/schema/join-requ
 - No SQL by string concatenation (Drizzle `sql` tags / query builder only). **Every read scopes to `cfg.tenantId` explicitly, by-id reads included** (CLAUDE.md §3) — the till-reroute S3 receipt: a by-id read keyed on a UUID alone let one tenant read another's row. Real-PG two-tenant probes as `app_user` (`rolsuper = f`), not reasoning, are what catch this class.
 - Pre-production: the schema change is a regenerated core migration, no backfill; drop and recreate (CLAUDE.md §3). Never widen a grant to pass a test (`app_user` holds no DELETE on `print_agents`; the deny path deletes a `join_requests` row, where `app_user` DOES hold DELETE).
 - Real-Postgres suites need `TESTCONTAINERS_RYUK_DISABLED=true` and Docker; run `pnpm reap` first if a previous run was interrupted (CLAUDE.md §4). Chromium browser suites are not touched here.
-- Comments state the invariant and the non-obvious why, never the history (CLAUDE.md §1); thin on touch, no sweeps.
+- Comments state the invariant and the non-obvious why, never the history (CLAUDE.md §1); thin on touch, no sweeps. (2026-09-24: superseded — CLAUDE.md §1 now wants deliberate pruning sweeps too.)
 
 ## Decisions this plan makes (fill-ins the amendment left to the plan) — flag for review
 

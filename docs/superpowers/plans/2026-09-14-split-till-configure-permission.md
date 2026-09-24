@@ -151,7 +151,8 @@ git commit -s -m "Move every call site off till.configure onto the new permissio
 > mentions of `` `till.configure` `` in files it did not functionally touch (dashboard client/screens,
 > `apps/server/src/kitchen.ts`, till floor screens, provisioning). Rewriting those risks a false claim
 > (CLAUDE.md §1) where a comment describes "a config management session" rather than one new
-> permission, and is the broad sweep the repo discourages ("thin on touch, don't sweep"). A comment
+> permission, and is the broad sweep the repo discourages ("thin on touch, don't sweep"; 2026-09-24: superseded —
+> CLAUDE.md §1 now wants deliberate pruning sweeps too). A comment
 > cannot gate a route, so it is a doc nit, not an access risk. The exception: the comments in
 > `packages/identity/src/permissions.ts` itself, which this task edits anyway — thin those (Step 3),
 > which also clears Task 1's deferred minor.

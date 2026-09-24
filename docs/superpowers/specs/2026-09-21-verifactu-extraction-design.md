@@ -306,7 +306,8 @@ Every root import (`apps/server`, and the rest of `fiscal-verifactu`) stays byte
 Optional, non-blocking: doc-comment cross-references that cite `@waitron/verifactu/src/...` file paths
 (in `packages/fiscal-verifactu/src/drain.ts` and `packages/workforce/src/projection.ts`) become stale
 pointers into a repo that no longer holds those files. Thin them to name the package, not the old path,
-when those files are next touched — do not sweep.
+when those files are next touched — do not sweep. (2026-09-24: CLAUDE.md §1 now wants deliberate
+pruning sweeps too, so a sweep may take them first.)
 
 ### 3.3 Local iteration without publishing
 

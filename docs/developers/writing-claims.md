@@ -115,3 +115,11 @@ controller who was supposed to be watching for it. The instances:
 The cheapest habit, and it would have caught nearly all of these: before writing a sentence that
 names a part of the system you did not edit, open that part. If you cannot open it — because you do
 not know where it is — that is the finding, and the sentence should say "I believe" until you do.
+
+## How much of the code is comments
+
+`CLAUDE.md` section 1's "about three in ten" was measured on 2026-09-24 with a throwaway script, not
+kept. For every file that `git ls-files '*.ts' '*.mjs' '*.js'` lists and whose name does not end in
+`.test.*` or `.spec.*`, it collected the comment ranges around each token the TypeScript parser
+produced. It then counted the non-blank lines whose every non-space character lies inside a comment:
+59,713 of the 198,596 non-blank lines.
