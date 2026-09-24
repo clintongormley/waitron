@@ -8,38 +8,24 @@ import "../widgets/language-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
-/** The localStorage key holding the last operator who logged in on a given device. Keyed by deviceId so
- * two enrolled browsers on one venue remember independently; read on connect to default "Login as". */
+/** Keyed by deviceId so two enrolled browsers at one venue remember their last operator independently. */
 const lastOperatorKey = (deviceId: string): string => `waitron.lastOperator.${deviceId}`;
 
 /**
- * The `logged-in` event payload: the server-confirmed `personId`, the operator's `displayName`, and
- * the server-computed `canConfigureTill` capability. The name rides along because the screen already
- * holds it (the roster entry the operator picked), so the parent (`till-app`) can label the counter
- * header without a second `listStaff` round-trip; `canConfigureTill` comes from the `POST /api/session`
- * response so the app can gate manager-only affordances (FP-2's on-till "Editar plano") without another
- * round-trip either — and without the client re-deriving it from a role (which would drift).
+ * `canConfigureTill` is the server's answer from `POST /api/session`, so the client never re-derives it
+ * from a role.
  */
 export interface LoggedInDetail {
   personId: string;
   displayName: string;
   canConfigureTill: boolean;
-  /**
-   * The operator's stored per-user UI locale from the `POST /api/session` response (or `null` when
-   * they have never set one), forwarded verbatim so `till-app` can `resolveActiveLocale` it against
-   * the venue default and switch the UI on login. The lock screen only carries it — it never calls
-   * `setLocale` or the preference-write endpoint itself.
-   */
+  /** `null` when the operator has never set one. */
   locale: string | null;
 }
 
 /**
- * Maps a login error `code` to a user-facing string KEY. Only the two codes the operator can act on
- * are spelled out — a wrong PIN and a suspended account; every other code (a stale roster entry's
- * `person.not_found`, a `server.internal`) collapses to the generic `login.error`. This is the one
- * place that decides what the screen says, and it deliberately NEVER surfaces the raw code: a domain
- * code is an internal contract, not UI copy. `pin.throttled` is handled out of band (a countdown, not
- * a banner) and never reaches here.
+ * Only the two codes the operator can act on are spelled out; every other code collapses to the generic
+ * `login.error`, never the raw code.
  */
 function loginErrorKey(code: string): StringKey {
   if (code === "pin.invalid") return "pin.invalid";
@@ -48,25 +34,8 @@ function loginErrorKey(code: string): StringKey {
 }
 
 /**
- * The staff-picker + PIN login screen the counter shows before a shift can sell. Its heading is the
- * device's own name; two modes are chosen by whether a person is `selected`:
- *
- *  - LIST — the roster from `api.listStaff()`, one `<wt-button>` per person. It renders a loading
- *    state until the fetch settles, an empty-roster message when nobody is returned, and a
- *    load-failed message if the fetch rejects.
- *  - PIN — a `till-numeric-pad` (the shared numeric surface) for the selected person, with a Cancel
- *    control to correct a wrong name and a Log in control that calls `api.login(personId, pin)`.
- *
- * The screen defaults "Login as" to the last operator who logged in on THIS device (localStorage,
- * keyed by {@link deviceId}), landing straight in PIN mode for them when they are still on the roster.
- * On a successful login it writes that memory and emits a composed `logged-in` CustomEvent carrying the
- * server-confirmed `personId`; the parent (`till-app`) swaps this screen for the counter. On a rejected
- * `{ code }` it shows the LOCALISED message for that code (never the raw code — see {@link loginErrorKey})
- * and clears the PIN so the operator can retry — except `pin.throttled`, which greys the pad and counts
- * a back-off down (Task 10's wrong-PIN throttle).
- *
- * The `till-numeric-pad` runs in `mode="pin"` (digit-append, no `.` key), so the pad's entered string
- * is captured raw as the PIN and leading zeros survive — a PIN like `"0000"` or `"0123"` round-trips.
+ * The staff-picker + PIN login screen. The `till-numeric-pad` runs in `mode="pin"`, so the entered
+ * string is captured raw and leading zeros survive — a PIN like `"0123"` round-trips.
  */
 @customElement("till-lock-screen")
 export class TillLockScreen extends LitElement {
@@ -166,56 +135,31 @@ export class TillLockScreen extends LitElement {
   /** The HTTP face of the till. Set before the element connects (its lifecycle fetches the roster). */
   @property({ attribute: false }) api!: TillApi;
 
-  /** The enrolled device's own name (from `GET /api/device/me`), shown as the screen's heading. Absent
-   * on a browser with no device identity (pre-Task-13), where the heading falls back to a mode label. */
   @property() deviceName?: string;
 
-  /** The enrolled device's id, the key for the remembered-operator default. Absent → no default, no
-   * write (a browser with no device identity has nowhere venue-stable to remember an operator). */
+  /** Absent → no remembered operator, read or written: there is nowhere venue-stable to keep one. */
   @property() deviceId?: string;
 
-  /** Dev only (device-enrolment §3.2): whether THIS TAB has adopted a dev device — the app sets it from
-   * the tab's `sessionStorage` id. When true the screen offers a "Switch device" affordance that emits
-   * `switch-device` (the app clears the tab device and returns to the chooser). Off in production. */
+  /** Whether THIS TAB has adopted a dev device; off in production. */
   @property({ type: Boolean }) devMode = false;
 
-  /**
-   * The venue's known servers and each one's probed state (till-reroute §4.4), from `ServerRouter.statuses()`.
-   * Rendered as a one-line status under the roster so the operator can see WHY a till is not selling — the
-   * box unreachable, a standby not yet promoted — rather than a silent failure. Empty (the default) on a
-   * till with no router (tests, a single-server dev box) renders nothing.
-   */
+  /** From `ServerRouter.statuses()`; empty on a till with no router, which renders no status line. */
   @property({ attribute: false }) serverStatuses: ServerStatus[] = [];
 
-  /**
-   * The URL of the server the till is currently ON (`ServerRouter.current`), so its row can read
-   * "On: <label>" (§4.4) rather than "<label>: <state>". Empty (the default) on a till with no router
-   * marks nothing — every row then renders as "<label>: <state>". Only a CURRENT server that is also
-   * `primary` is marked; a current-but-not-primary server (the waiting case) keeps its state row.
-   */
+  /** The URL of the server the till is currently ON (`ServerRouter.current`). */
   @property({ attribute: false }) serverCurrent = "";
 
-  /**
-   * Whether the router is WAITING for a promotion (§4.4) — no server is accepting sales right now. Drives
-   * the "waiting for the standby to be promoted" suffix on the status line. The healthy single-primary
-   * till (see {@link #renderServers}) shows no line at all.
-   */
   @property({ type: Boolean }) serverWaiting = false;
 
-  /** The roster: `undefined` while the fetch is in flight, then the (possibly empty) list. */
+  /** `undefined` while the fetch is in flight. */
   @state() private staff?: StaffMember[];
-  /** The person whose PIN is being entered; its presence is what puts the screen in PIN mode. */
+  /** Its presence is what puts the screen in PIN mode. */
   @state() private selected?: StaffMember;
-  /** The raw string the numeric pad has entered — captured verbatim as the PIN. */
   @state() private pin = "";
-  /** The string key of the message to show, or `undefined` for none. Shared by both modes. */
   @state() private errorKey?: StringKey;
-  /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. While positive the pad is
-   * greyed and submit disabled. Driven down each second by {@link #throttleTimer}. */
+  /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. */
   @state() private throttleRemaining = 0;
 
-  /** The countdown interval, live only while {@link throttleRemaining} is positive. Cleared on reaching
-   * zero, on Cancel, on a fresh submit, and on disconnect — so no timer outlives the screen. */
   #throttleTimer?: ReturnType<typeof setInterval>;
 
   override connectedCallback(): void {
@@ -228,10 +172,7 @@ export class TillLockScreen extends LitElement {
     this.#clearThrottle();
   }
 
-  /** Fetch the roster once on connect, then default "Login as" to the last operator remembered on this
-   * device when they are still present. A rejection becomes the load-failed state rather than an
-   * unhandled promise. State written after a mid-fetch disconnect is harmless — Lit simply does not
-   * paint a detached element — so no `isConnected` guard is needed here. */
+  /** State written after a mid-fetch disconnect is harmless, so no `isConnected` guard is needed. */
   async #loadStaff(): Promise<void> {
     try {
       this.staff = await this.api.listStaff();
@@ -243,10 +184,7 @@ export class TillLockScreen extends LitElement {
     this.#preselectRemembered();
   }
 
-  /** Preselect the operator remembered on this device (→ straight to PIN mode) when the stored id is
-   * still on the roster. Keyed by {@link deviceId}; guarded by the roster membership check so a since-
-   * removed person never lands the screen in PIN mode for someone it cannot show. The read is wrapped
-   * because localStorage throws in a private window — a failure just means no default. */
+  /** The read is wrapped because localStorage can throw in a private window. */
   #preselectRemembered(): void {
     if (this.deviceId === undefined || this.staff === undefined) return;
     let remembered: string | null = null;
@@ -260,14 +198,12 @@ export class TillLockScreen extends LitElement {
     if (person !== undefined) this.#select(person);
   }
 
-  /** Enter PIN mode for `person`, starting from a blank PIN and no error. */
   #select(person: StaffMember): void {
     this.selected = person;
     this.pin = "";
     this.errorKey = undefined;
   }
 
-  /** Cancel: return to the roster, discarding any half-entered PIN, error, and throttle back-off. */
   #cancel(): void {
     this.selected = undefined;
     this.pin = "";
@@ -276,20 +212,14 @@ export class TillLockScreen extends LitElement {
     this.throttleRemaining = 0;
   }
 
-  /** Capture the pad's new value as the PIN and clear any stale error as the operator retypes. */
   #onPadChange(event: Event): void {
     event.stopPropagation();
     this.pin = (event as CustomEvent<{ value: string }>).detail.value;
     this.errorKey = undefined;
   }
 
-  /**
-   * Attempt the login. Guarded so an empty PIN — and a throttled screen — can never call the API, even
-   * if Log in is force-clicked past its disabled state. On success — and only if the screen is still
-   * connected, so a torn-down screen never announces a login — it remembers the operator on this device
-   * and emits `logged-in` with the server-confirmed personId. On a rejected `{ code }` it either starts
-   * the `pin.throttled` back-off or shows the localised message and clears the PIN for a retry.
-   */
+  /** Guarded so an empty PIN or a throttled screen never calls the API, even if Log in is force-clicked
+   * past its disabled state. */
   async #submit(): Promise<void> {
     const person = this.selected;
     if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;
@@ -318,9 +248,7 @@ export class TillLockScreen extends LitElement {
     }
   }
 
-  /** Remember this operator on this device so the next unlock defaults to them. No deviceId → nowhere
-   * venue-stable to write; a private-window throw is swallowed (the memory is a convenience, not state
-   * the login depends on). */
+  /** A private-window throw is swallowed: the memory is a convenience the login does not depend on. */
   #remember(personId: string): void {
     if (this.deviceId === undefined) return;
     try {
@@ -330,9 +258,7 @@ export class TillLockScreen extends LitElement {
     }
   }
 
-  /** Begin (or restart) the throttle back-off: seconds from the server's `retryAfterSeconds` (min 1 for
-   * a missing/absurd value), a per-second tick down, and re-enable at zero. The PIN is kept so entry
-   * resumes with what was typed. */
+  /** The PIN is kept so entry resumes with what was typed. */
   #startThrottle(retryAfterSeconds: number | undefined): void {
     this.#clearThrottle();
     const seconds =
@@ -350,8 +276,7 @@ export class TillLockScreen extends LitElement {
     }, 1000);
   }
 
-  /** Stop the countdown interval if one is running. Does not touch {@link throttleRemaining}, so a caller
-   * that wants entry live again resets it too (the tick does; disconnect need not). */
+  /** Does not touch {@link throttleRemaining}, so a caller that wants entry live again resets it too. */
   #clearThrottle(): void {
     if (this.#throttleTimer !== undefined) {
       clearInterval(this.#throttleTimer);
@@ -359,8 +284,6 @@ export class TillLockScreen extends LitElement {
     }
   }
 
-  /** Dev only: drop this tab's adopted device and return to the chooser. The app owns the clear + re-boot;
-   * the screen only announces the intent. */
   #switchDevice(): void {
     this.dispatchEvent(new CustomEvent("switch-device", { bubbles: true, composed: true }));
   }
@@ -389,23 +312,11 @@ export class TillLockScreen extends LitElement {
     `;
   }
 
-  /**
-   * The venue's server status line (till-reroute §4.4): one `label: state` row per known server joined by
-   * " · ", a waiting-promotion suffix while no server accepts sales, and a "check again" control that
-   * dispatches `check-again` (the app turns it into `router.probeNow()`). Rendered nothing for a HEALTHY
-   * single-server till — the only known server is the page's own and it is primary — so a normal counter
-   * shows no status chrome; every other shape (a second server, an unreachable box, a waiting promotion)
-   * shows the line. `role="status"` so a screen reader announces a state change without stealing focus.
-   */
+  /** Shows the operator WHY a till is not selling; a healthy single-primary till shows no line. */
   #renderServers() {
     const known = this.serverStatuses;
-    // No line for a till with no known servers (no router), nor for the healthy single-server till whose
-    // only server is its own page origin and it is primary. Every other shape (a second server, an
-    // unreachable box, a waiting promotion) shows the line.
     if (known.length === 0) return nothing;
     if (known.length === 1 && !this.serverWaiting && known[0]?.state === "primary") return nothing;
-    // The server the till is ON, when it is primary, reads "On: <label>" (§4.4); every other server —
-    // including the current one when it is not primary (the waiting case) — reads "<label>: <state>".
     const row = (s: ServerStatus) =>
       s.url === this.serverCurrent && s.state === "primary"
         ? `${t("server.on")} ${s.label}`
@@ -427,8 +338,6 @@ export class TillLockScreen extends LitElement {
     `;
   }
 
-  /** The heading: the device's own name, or a mode-appropriate fallback for a browser with no device
-   * identity (pre-Task-13). */
   #renderHeading(fallback: StringKey) {
     return html`<h1 class="heading">${this.deviceName ?? t(fallback)}</h1>`;
   }

@@ -4,13 +4,11 @@ import { t } from "../i18n/t.js";
 import { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
-/** A fully-typed zone; overrides tweak the fields a case cares about (the render asserts real data). */
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return { id: "z1", name: "Comedor", displayOrder: 0, active: true, ...over };
 }
 
-/** A fully-typed occupancy row; defaults to a free, unstatused, UNPLACED table in zone z1 (so the
- *  screen defaults to the LIST view, exactly as every FP-1 assertion below expects). */
+/** Defaults to a free, unstatused, UNPLACED table in zone z1, so the screen defaults to the LIST view. */
 function table(over: Partial<TableState> = {}): TableState {
   return {
     id: "t1",
@@ -34,12 +32,10 @@ function table(over: Partial<TableState> = {}): TableState {
   };
 }
 
-/** A PLACED table (carries spatial coordinates), so the screen defaults to the MAP view. */
 function placed(id: string, over: Partial<TableState> = {}): TableState {
   return table({ id, posX: 250, posY: 400, shape: "round", rotation: 0, ...over });
 }
 
-/** A fake `TillApi` exposing only the two placement writes the floor screen calls in edit mode. */
 function fakeTillApi(overrides: Partial<TillApi> = {}): TillApi {
   return {
     setTablePlacement: vi.fn().mockResolvedValue(undefined),
@@ -48,14 +44,8 @@ function fakeTillApi(overrides: Partial<TillApi> = {}): TillApi {
   } as unknown as TillApi;
 }
 
-/** The roles that hold `till.configure` (spec §3 — manager + admin), mirrored here so `mountFloor`'s
- *  `role` shorthand maps to `canEdit` the same way the app will once the server exposes the role. */
 const EDIT_ROLES = new Set(["manager", "admin"]);
 
-/**
- * Mounts the floor screen, translating a `role` shorthand into the `canEdit` gate and (optionally)
- * entering edit mode by clicking the manager-only "Editar plano" toggle.
- */
 async function mountFloor(
   opts: {
     role?: string;
@@ -87,7 +77,6 @@ const mount = (over: Partial<TillFloorScreen> = {}) =>
     ...over,
   });
 
-/** Captures the first `open-table` event the element emits (composed + bubbling). */
 function captureOpenTable(el: TillFloorScreen): { detail?: unknown } {
   const seen: { detail?: unknown; event?: Event } = {};
   el.addEventListener("open-table", (event) => {
@@ -151,9 +140,7 @@ describe("till-floor-screen", () => {
         }),
       ],
     });
-    // readyToServe (2) outranks pendingToServe (1) under the en-camino > listos > por-servir
-    // precedence, so ONLY the "N listos" badge (kitchen-done, not yet carried out) renders here,
-    // carrying the readyToServe count and its localised suffix; the to-serve badge is suppressed.
+    // readyToServe outranks pendingToServe, so only the ready badge renders.
     const ready = el.shadowRoot!.querySelector("[data-ready]")!;
     expect(ready.textContent).toContain("2");
     expect(ready.textContent).toContain(t("floor.ready"));
@@ -170,8 +157,6 @@ describe("till-floor-screen", () => {
     const { el } = await mount({
       tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, enRoute: 2 })],
     });
-    // The "en camino" badge (dispatched by the pass, not yet acknowledged) carries the enRoute count and
-    // its localised suffix.
     const enRoute = el.shadowRoot!.querySelector("[data-en-route]")!;
     expect(enRoute.textContent).toContain("2");
     expect(enRoute.textContent).toContain(t("floor.en_route"));
@@ -205,7 +190,6 @@ describe("till-floor-screen", () => {
   });
 
   it("shows listos (not por servir) when ready but nothing dispatched", async () => {
-    // enRoute 0, readyToServe > 0 → listos wins over por servir; the to-serve hint is suppressed.
     const { el } = await mount({
       tables: [
         table({
@@ -342,7 +326,6 @@ describe("till-floor-screen", () => {
     });
     const chip = el.shadowRoot!.querySelector('[data-table="t1"] [data-reserved]')!;
     expect(chip).not.toBeNull();
-    // The label ("Reservada"/"Reserved" per locale) precedes the wall-clock time.
     expect(chip.textContent).toContain(t("floor.reserved"));
     expect(chip.textContent).toContain("20:30");
   });
@@ -367,7 +350,6 @@ describe("till-floor-screen", () => {
     expect(chip.textContent).toContain("21:00");
   });
 
-  // ── KDS order-timing alerts (design §7.3): the flash-red requirement ──────────────────────────────
   describe("order-timing accent (timingBand)", () => {
     it("renders no timing accent for a fresh table (the existing occupancy accent is untouched)", async () => {
       const { el } = await mount({ tables: [table({ id: "t1", timingBand: "fresh" })] });
@@ -428,8 +410,7 @@ describe("till-floor-screen", () => {
     });
 
     it("coexists with the occupancy accent — a forgotten OPEN-TAB table carries BOTH classes", async () => {
-      // The house a11y rule (never one property fighting over ownership): the occupancy state-* accent
-      // (this screen's border-left) and the timing age-* accent must never clobber one another.
+      // The occupancy state-* accent and the timing age-* accent must never clobber one another.
       const { el } = await mount({
         tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, timingBand: "forgotten" })],
       });
@@ -537,10 +518,6 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("wt-button.back")).toBeNull();
   });
 
-  // --- Embedded chrome seam (SP-B2.1): mounted inside a card host, the screen drops its own
-  // standalone header (title + Back) but KEEPS the view/edit toggles — those are floor BODY function,
-  // not shell chrome — so a manager can still edit the plan from inside a card.
-
   it("suppresses its own header + back when embedded, keeping view/edit toggles", async () => {
     const { el } = await mount({ embedded: true, canEdit: true });
     expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
@@ -553,13 +530,9 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
   it("defaults to the MAP (shared canvas) when the active zone has a placed table", async () => {
     const el = await mountFloor({ tables: [placed("t1")] });
     expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
-    // The list grid is not rendered in map view.
     expect(el.shadowRoot!.querySelector(".grid")).toBeNull();
   });
 
-  // KDS order-timing alerts (design §7.3, fix round 1): the MAP view must carry the SAME flash-red
-  // accent the LIST card shows — the till threads each placed table's timingBand through
-  // #toFloorTable into the shared canvas/token (packages/ui), never recomputed here.
   it("threads a placed table's timingBand through to the canvas's wt-table-token (forgotten flashes on the map too)", async () => {
     const el = await mountFloor({ tables: [placed("t1", { timingBand: "forgotten" })] });
     const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
@@ -613,7 +586,6 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
       tables: [placed("t1", { zoneId: "z1" }), table({ id: "t9", label: "9", zoneId: "z1" })],
     });
     expect(el.shadowRoot!.querySelector('[data-tray-table="t9"]')).not.toBeNull();
-    // The placed table is drawn on the canvas, not duplicated into the tray.
     expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).toBeNull();
   });
 
@@ -625,9 +597,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
   });
 
   it("in EDIT mode, tapping an unplaced tray table PLACES it (not opens it)", async () => {
-    // Tap-to-place (owner's chosen UX): in edit mode a tray tap gives the table a default position via
-    // the on-till route — its own zone, round, no rotation, in-range coords — so it appears on the
-    // canvas for repositioning. It must NOT emit open-table in this mode.
+    // In edit mode a tray tap places the table; it must NOT emit open-table.
     const api = fakeTillApi();
     const el = await mountFloor({
       role: "manager",
@@ -676,9 +646,6 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
   });
 
   it("re-emits a canvas wt-open-table as open-table with hasOpenTab resolved from the read-model", async () => {
-    // The shared canvas emits `wt-open-table { tableId }` only; the screen must resolve `hasOpenTab`
-    // from the read-model and re-emit the app-facing `open-table` so the app resumes an EXISTING tab
-    // rather than minting a second one on an occupied table.
     const el = await mountFloor({
       tables: [
         placed("t1", {
@@ -831,8 +798,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
   });
 
   it("swallows a rejected placement-change and still refreshes (reconciles to server truth)", async () => {
-    // A staff operator who bypassed the hidden toggle is 403 server-side (the route re-gates); the
-    // screen must not throw — it swallows and refreshes so the map snaps back to what actually persisted.
+    // The screen must not throw on a refused write; it refreshes so the map snaps back to what persisted.
     const api = fakeTillApi({
       setTablePlacement: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });

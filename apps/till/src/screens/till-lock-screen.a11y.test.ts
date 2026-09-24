@@ -17,13 +17,11 @@ function stubApi(overrides: Partial<Record<"listStaff" | "login", unknown>> = {}
   } as unknown as TillApi;
 }
 
-/** Settles the in-flight roster fetch and the follow-up render. */
 async function flush(el: TillLockScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
 }
 
-/** Selects a person and enters `digits` on the PIN pad, so a submit can drive an error state. */
 async function enterPin(el: TillLockScreen, digits: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>('wt-button.operator-button[data-person="p1"]')!.click();
   await el.updateComplete;

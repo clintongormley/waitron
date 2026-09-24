@@ -2,9 +2,8 @@ import { tillPath } from "../navigation.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
-// `baseStyles` also loads the `@waitron/ui` barrel, which registers `<wt-floor-canvas>` and
-// `<wt-table-token>` (self-registering `wt-*` components) — the map view and the tray consume them by
-// tag below. The type-only imports carry the canvas's copy/table/placement-event shapes.
+// Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>` and `<wt-table-token>`, which
+// the map view and the tray use by tag.
 import {
   baseStyles,
   UrlStateController,
@@ -26,52 +25,14 @@ import { t } from "../i18n/t.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
 /**
- * The TILL live-floor screen (FP-1 §4 + FP-2 §5b): the venue's tables shown by zone with their live
- * occupancy, so an operator can see at a glance which tables are free, which carry an open tab and how
- * much, which are waiting on a delivery, and which still have food to take out. Tapping a table asks the
- * app to open (or resume) that table's tab — the screen itself owns NO fiscal path (design H2): a tab is
- * a PRE-FISCAL working order, and `open-table` is the only thing this screen decides. The app turns it
- * into an `openTab` (a free table) or a straight transition (an occupied one) and moves to the
- * table-ordering screen.
+ * The TILL live-floor screen. Tapping a table asks the app to open (or resume) its tab; the screen
+ * itself owns NO fiscal path, because a tab is a PRE-FISCAL working order.
  *
- * Zones are shown as TABS (ordered by `displayOrder`), plus a "Sin zona" tab for tables not yet assigned
- * to any zone. Each tab has two VIEWS, flipped by a manual toggle:
- *  - **MAP** — the shared `<wt-floor-canvas>` (FP-2 Task 5) draws every PLACED table at its `posX`/`posY`
- *    permille coordinates; the active zone's UNPLACED tables sit in a tray strip beneath it. The default
- *    when the active zone has at least one placed table.
- *  - **LIST** — FP-1's responsive grid of occupancy-coloured cards (the {@link #card} render, unchanged).
- *    The default when the active zone has no placed table.
+ * Each zone tab has a MAP view (the shared `<wt-floor-canvas>`, with the zone's unplaced tables in a
+ * tray beneath) and a LIST view; the map is the default when the zone has at least one placed table.
+ * The map is deliberately terser than the list card.
  *
- * A manager (an operator holding `till.configure`, surfaced as {@link canEdit}) also gets an "Editar
- * plano" toggle: entering edit mode passes `.editable` to the canvas, whose `wt-placement-change` /
- * `wt-placement-clear` this screen persists through the ON-TILL route ({@link TillApi.setTablePlacement} /
- * {@link TillApi.clearPlacement}) and then asks the app to refresh. Client hiding is convenience only —
- * the server re-checks the gate (FP-2 Task 4).
- *
- * TOKEN RECONCILIATION (Ruling FP2-A). The map and the tray render each table with the shared
- * `<wt-table-token>` (FP-2 Task 5) — the SAME component the dashboard map uses — so the on-canvas token
- * can never drift from the till's. The LIST {@link #card} keeps FP-1's fuller occupancy body (the
- * line-count / "Libre" / "por entregar" lines, which need the till's own i18n copy the terse shared
- * token deliberately omits per spec §5a); the shared subset it and the token both show (state accent,
- * open-tab total, to-serve + status badges) is identical because the token was extracted verbatim from
- * this very card. The map is deliberately terser than the list — a design call recorded in spec §5a.
- *
- * It reads the venue's {@link FloorZone}s, the live {@link TableState} read-model (now carrying each
- * table's FP-2 placement), the operator's {@link canEdit} gate and the {@link TillApi} (for the two
- * placement writes) — and holds no data of its own beyond which tab/view is showing and whether it is
- * editing; the app owns and refreshes the zones + tables.
- *
- * COPY. Every user-facing label comes from the till's i18n catalogue (`i18n/strings.ts`) via `t()`, like
- * the sibling screens — the `floor.*` keys. `t()` takes no params, so a count-bearing label is
- * `${n} ${t(key)}` (value + suffix word). Labels render in the active locale — English by default
- * ("Floor", "Free", "to serve", "No zone"), Spanish for a Spanish venue ("Sala", "Libre", "por servir",
- * "Sin zona"); the English base is the source of truth. Identifiers stay English. Zone names and totals
- * are DATA and pass through verbatim.
- *
- * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome colour/spacing, so the
- * screen follows the operator's theme exactly like every sibling till screen (the occupancy accent and
- * the manual-status swatch are the only colours, and the status colour is DATA from the read-model, not
- * chrome). HA-free — the till's own design system.
+ * `t()` takes no params, so a count-bearing label is `${n} ${t(key)}`.
  */
 @customElement("till-floor-screen")
 export class TillFloorScreen extends LitElement {
@@ -320,83 +281,32 @@ export class TillFloorScreen extends LitElement {
     `,
   ];
 
-  /** The venue's active floor-plan zones (the app loads them from `GET /api/zones`). */
   @property({ attribute: false }) zones: FloorZone[] = [];
-  /** The live-floor occupancy read-model, one row per active table (from `GET /api/tables/state`). */
   @property({ attribute: false }) tables: TableState[] = [];
-  /**
-   * The HTTP face of the till (FP-2), threaded from the app — used ONLY in edit mode, to persist a
-   * canvas `wt-placement-change` / `wt-placement-clear` through the on-till route. Optional: the view-only
-   * floor (and every FP-1 test) never touches it, so it may be absent, and the placement handlers
-   * no-op when it is.
-   */
+  /** Used only by the placement writes, which no-op when it is absent. */
   @property({ attribute: false }) api?: TillApi;
-  /**
-   * Whether the operator may edit the plan — true iff they hold `till.configure` (a manager/admin,
-   * spec §3). Threaded from the app, which sets it from the session's SERVER-COMPUTED
-   * `canConfigureTill` capability (`till-api.ts` derives it via `roleHasPermission`; the client no
-   * longer mirrors a role→permission table, which would silently drift from the server's `permissions.ts`).
-   * Gates the "Editar plano" toggle's visibility ONLY; the server re-checks the gate on every placement
-   * write (FP-2 Task 4), so this is convenience, not security.
-   */
+  /** Hides the plan-edit toggle. Convenience, not security: the server re-checks the permission on
+   * every placement write. */
   @property({ attribute: false }) canEdit = false;
-  /**
-   * Whether this face may return to the COUNTER (handheld-tableside §6a). A counter/fixed till can
-   * (default `true`); a handheld's floor is the TOP of the phone shell — its face set `HANDHELD_FACES`
-   * excludes `counter` — so the app threads `false` and the Back-to-counter affordance is not rendered.
-   * Inside the shell a stray `back-to-counter` selects the `counter` tab (`till-app.ts`
-   * `#onBackToCounter`), and because the phone canvas authors no counter tab the shell falls back to
-   * its first tab (`#activeTab`).
-   */
   @property({ attribute: false }) canExitToCounter = true;
-  /**
-   * Whether this screen is mounted INSIDE a card host (SP-B2.1) rather than as a standalone screen.
-   * When embedded, it drops its own `<header class="head">` (the `<h1 class="title">` + the Back
-   * button) — the card host supplies that chrome — but KEEPS the view/edit toggles, which are floor
-   * BODY function (a manager still edits the plan, an operator still flips map/list from inside a
-   * card), rendered in the always-present `.actions` bar. Default `false` keeps the standalone screen
-   * (its own header + Back) exactly as before, so every existing floor test stays green.
-   */
+  /** Mounted inside a card host, which supplies the header; the view/edit toggles stay. */
   @property({ type: Boolean }) embedded = false;
   /**
-   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
-   * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
-   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
-   * deterministic assertion — the same injectable-override shape `till-station-queue`/
-   * `till-expo-screen` already use (KDS order-timing alerts, design §7.3).
+   * `undefined` checks the live `prefers-reduced-motion` query on every render; a test injects a value.
    *
-   * NO `TickingClock` here, unlike those two widgets — a deliberate call, not an oversight.
-   * `listTablesWithState` (Task 4) ships each table's ALREADY-REDUCED worst `timingBand` only, never
-   * the raw per-line ages/thresholds `classifyBand` needs (confirmed against
-   * `apps/server/src/working-order.ts`'s `TableState` — unlike `StationQueueGroup.thresholds` /
-   * `ExpoItem.thresholds`, which exist precisely so those widgets CAN re-derive a climbing band
-   * locally). `#card` reads `table.timingBand` directly, so a tick would re-render the identical
-   * classes — inert. The floor also has no polling refresh to piggyback on: `till-app.ts`'s
-   * `#refreshFloor`/`#loadFloor` only run on explicit actions (mount, a placement write, the
-   * `floor-refresh` event), confirmed by grep — design §7.4 reserves interval refetching for the
-   * manager overview alone ("the ONE screen that refetches on an interval"). A table already
-   * `forgotten` at the last fetch flashes immediately (the CSS `@keyframes` needs no JS clock to
-   * run); a table that CROSSES into a worse band while the floor sits untouched surfaces only on the
-   * next actual refresh, exactly like every other occupancy field on this screen (`state`,
-   * `pendingToServe`, …) — none of which tick between fetches either.
+   * NO `TickingClock` here, unlike the station and expo views: the read-model ships each table's
+   * ALREADY-REDUCED `timingBand`, never the per-line ages and thresholds, so a tick would re-render
+   * identical classes. A table crossing into a worse band shows on the next refresh.
    */
   @property({ attribute: false }) reducedMotion?: boolean;
 
   /**
-   * Which zone tab is showing: a zone id, `null` for the "Sin zona" tab, or `undefined` before the
-   * operator has picked one — in which case {@link render} falls back to the FIRST tab. Kept as a
-   * distinct `undefined` (rather than defaulting to a zone id) so the default tracks the current tab
-   * order even before the zones prop has settled.
+   * A zone id, `null` for the no-zone tab, or `undefined` before the operator has picked one — kept
+   * distinct so the default tracks the current tab order even before the zones prop has settled.
    */
   @state() private activeZone: string | null | undefined = undefined;
-  /**
-   * The operator's manual view override, or `undefined` to DERIVE the view per active zone (map when
-   * the zone has ≥1 placed table, else list — see {@link render}). A tap on the view toggle pins the
-   * override for the session (spec §5b: "a manual toggle overrides for the session, local, not
-   * persisted"); until then each zone shows its own data-driven default.
-   */
+  /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
   @state() private viewOverride: "map" | "list" | undefined = undefined;
-  /** Edit mode (FP-2) — passes `.editable` to the canvas; only reachable while {@link canEdit}. */
   @state() private editing = false;
 
   readonly #url = new UrlStateController(
@@ -408,8 +318,6 @@ export class TillFloorScreen extends LitElement {
     tillPath,
   );
 
-  /** Announce the operator wants this table's tab. The app opens (free) or resumes (occupied) it and
-   * moves to the table-ordering screen — this screen never touches a fiscal path (design H2). */
   #openTable(table: TableState): void {
     this.dispatchEvent(
       new CustomEvent("open-table", {
@@ -420,33 +328,29 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
-  /** Return to the counter (basket-preserving, handled by the app — mirrors the schedule screen). */
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
 
-  /** Select a zone tab (a zone id, or `null` for the "Sin zona" tab). */
   #selectZone(key: string | null): void {
     this.activeZone = key;
     this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key ?? "" });
   }
 
-  /** Flip the view and PIN it for the session (spec §5b) — from whatever it is showing now. */
   #toggleView(current: "map" | "list"): void {
     this.viewOverride = current === "map" ? "list" : "map";
   }
 
-  /** Enter/leave edit mode. Entering also switches to the map — the canvas is what you edit. */
+  /** Entering edit mode also switches to the map: the canvas is what you edit. */
   #toggleEdit(): void {
     this.editing = !this.editing;
     if (this.editing) this.viewOverride = "map";
   }
 
   /**
-   * The shared canvas emits `wt-open-table { tableId }` only (it has no read-model). Stop that terse
-   * event and re-emit the FP-1 `open-table { tableId, hasOpenTab }` from THIS screen (the app-facing
-   * event, unprefixed), resolving `hasOpenTab` from the read-model — so the app resumes an existing tab
-   * rather than minting a second one on an occupied table.
+   * The shared canvas has no read-model, so it emits `wt-open-table { tableId }` only. Re-emit it as
+   * `open-table` with `hasOpenTab` resolved here, so the app resumes an existing tab rather than minting
+   * a second one on an occupied table.
    */
   #onCanvasOpen(event: Event): void {
     event.stopPropagation();
@@ -455,12 +359,7 @@ export class TillFloorScreen extends LitElement {
     if (found !== undefined) this.#openTable(found);
   }
 
-  /**
-   * Persist a canvas placement edit through the ON-TILL route ({@link TillApi.setTablePlacement}), then
-   * ask the app to refresh (below). A rejected write — a staff operator who bypassed the hidden toggle
-   * (the server re-gates, FP-2 Task 4), or an invalid value — is swallowed: the refresh reconciles the
-   * view to the server's truth (the change did not land) rather than leaving a half-applied map.
-   */
+  /** A rejected write is swallowed: the refresh reconciles the view to the server's truth. */
   async #onPlacementChange(event: Event): Promise<void> {
     event.stopPropagation();
     const { tableId, posX, posY, shape, rotation, zoneId } = (event as CustomEvent<PlacementChange>)
@@ -469,13 +368,11 @@ export class TillFloorScreen extends LitElement {
     try {
       await this.api.setTablePlacement(tableId, { posX, posY, shape, rotation, zoneId });
     } catch {
-      // Non-fatal — the refresh reconciles the view to server truth (see the method doc).
+      // Non-fatal — the refresh reconciles the view to server truth.
     }
     this.#requestFloorRefresh();
   }
 
-  /** Un-place a table (the canvas's `wt-placement-clear`) via {@link TillApi.clearPlacement}, then refresh.
-   * Same swallow-and-reconcile shape as {@link #onPlacementChange}. */
   async #onPlacementClear(event: Event): Promise<void> {
     event.stopPropagation();
     const { tableId } = (event as CustomEvent<PlacementClear>).detail;
@@ -488,25 +385,16 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
-  /** Ask the app (which owns the zones + tables) to re-read the floor after a placement write. The app
-   * re-supplies `.tables`, which re-feeds the canvas — the data-down / events-up pattern the sibling
-   * screens use. */
   #requestFloorRefresh(): void {
     this.dispatchEvent(new CustomEvent("floor-refresh", { bubbles: true, composed: true }));
   }
 
-  /** Map a read-model row to the shared canvas/token's {@link FloorTable} shape via the shared
-   * {@link toFloorTable}. A `TableState` carries both the placement half and the live occupancy half, so
-   * it is passed as both arguments; unplaced tables (the tray) have null coordinates the token ignores. */
+  /** A `TableState` carries both the placement half and the occupancy half, so it is passed as both. */
   #toFloorTable(table: TableState): FloorTable {
-    // The occupancy half carries the live read-model AND the reserved-on-floor time (Bookings-1 §4):
-    // the shared `FloorOccupancyInput` names it `reservedTime`, so derive it from `nextReservation.time`
-    // (the till's shape) here — the token then draws "Reserved HH:MM" on the map exactly as the list card.
     return toFloorTable(table, { ...table, reservedTime: table.nextReservation?.time ?? null });
   }
 
-  /** The till's Spanish copy for the shared canvas (its edit-mode inspector + token suffix words). Only
-   * the overridden keys are supplied; the canvas fills the rest from its English defaults. */
+  /** Only the overridden keys are supplied; the canvas fills the rest from its English defaults. */
   #canvasCopy(): Partial<FloorCanvasCopy> {
     return {
       floor: t("floor.title"),
@@ -525,18 +413,12 @@ export class TillFloorScreen extends LitElement {
 
   override render() {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
-    // The tabs (active zones by displayOrder + a trailing "Sin zona" tab when needed) and the active
-    // key come from the shared @waitron/ui helpers; the screen owns only the Spanish no-zone LABEL.
     const tabs = buildZoneTabs(this.zones, this.tables, t("floor.no_zone"));
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
-    // The "Sin zona" tab (activeKey === null) gathers the zoneless AND the deactivated-zone tables; a
-    // real zone tab shows exactly its own tables.
+    // The no-zone tab (activeKey === null) gathers the zoneless AND the deactivated-zone tables.
     const visible = this.tables.filter((table) =>
       activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
-    // Derive placed/unplaced ONCE here (the map view re-uses both, and the view default reads them):
-    // the four placement columns are written/nulled together, so `placed.length > 0` is exactly the
-    // "this zone has any placed table" the map/list default turns on. A manual toggle pins an override.
     const placed = visible.filter(
       (table): table is TableState & { posX: number; posY: number } =>
         table.posX != null && table.posY != null,
@@ -597,12 +479,6 @@ export class TillFloorScreen extends LitElement {
     `;
   }
 
-  /**
-   * The MAP view: the shared `<wt-floor-canvas>` drawing the PLACED tables, with the active zone's
-   * UNPLACED tables in a tray strip beneath. Both sets are derived ONCE in {@link render} and passed in
-   * (never recomputed here). `wt-placement-change` / `wt-placement-clear` are persisted here; a canvas
-   * `wt-open-table` is re-emitted as `open-table` with the resolved `hasOpenTab` ({@link #onCanvasOpen}).
-   */
   #map(
     placed: (TableState & { posX: number; posY: number })[],
     unplaced: TableState[],
@@ -629,12 +505,7 @@ export class TillFloorScreen extends LitElement {
     `;
   }
 
-  /**
-   * One unplaced table in the tray: a tappable button wrapping the shared `<wt-table-token>` (Ruling
-   * FP2-A — the same token the map draws, so the tray can never drift from it). A tap OPENS the table in
-   * view mode, or PLACES it (tap-to-place, {@link #placeFromTray}) in edit mode — `placed` is the
-   * active zone's already-placed tables, so the default slot can dodge them.
-   */
+  /** `placed` is the active zone's already-placed tables, so the default slot can dodge them. */
   #trayItem(table: TableState, placed: TableState[]): TemplateResult {
     return html`<button
       class="tray-item"
@@ -652,7 +523,6 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  /** A tray tap: PLACE the table onto the map in edit mode, else OPEN it (view mode) — the FP-1 tap. */
   #onTrayTap(table: TableState, placed: TableState[]): void {
     if (this.editing) {
       void this.#placeFromTray(table, placed);
@@ -661,15 +531,7 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
-  /**
-   * Tap-to-place (FP-2, the owner's chosen UX — no drag-onto-canvas): give an unplaced tray table a
-   * DEFAULT position through the on-till route, then refresh so it appears on the canvas for the
-   * operator to reposition with the canvas's own drag / keyboard controls. The slot is the centre nudged
-   * right by 50‰ per already-placed table (clamped into range) so successive placements don't stack
-   * exactly; `shape` defaults to `round` and `rotation` to 0 (the canvas defaults), and `zoneId` is the
-   * table's own zone. A rejected write (e.g. a zoneless table the server refuses) is swallowed and the
-   * refresh reconciles the view — same shape as {@link #onPlacementChange}.
-   */
+  /** Tap-to-place gives the table a DEFAULT position, which the operator then adjusts on the canvas. */
   async #placeFromTray(table: TableState, placed: TableState[]): Promise<void> {
     if (this.api === undefined) return;
     const { posX, posY } = defaultTraySlot(placed.length);
@@ -682,7 +544,7 @@ export class TillFloorScreen extends LitElement {
         zoneId: table.zoneId,
       });
     } catch {
-      // Non-fatal — the refresh reconciles the view to server truth (see #onPlacementChange).
+      // Non-fatal — the refresh reconciles the view to server truth.
     }
     this.#requestFloorRefresh();
   }
@@ -699,18 +561,11 @@ export class TillFloorScreen extends LitElement {
     </wt-button>`;
   }
 
-  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
-   *  `prefers-reduced-motion` media query unless {@link reducedMotion} is injected (house a11y rule:
-   *  motion must respect the OS preference). Mirrors `till-station-queue`/`till-expo-screen`. */
   #prefersReducedMotion(): boolean {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** The order-timing accent class for a table's `timingBand` (KDS order-timing alerts, design §7.3):
-   *  `fresh` renders nothing (the card's occupancy accent is untouched); `warm`/`overdue` get the
-   *  steady `age-*` class; `forgotten` additionally gets `flash` unless motion is reduced. Space-
-   *  prefixed (or empty) so it can be interpolated directly after `.card` in the template. Mirrors
-   *  `till-station-queue`'s `#accentClasses`/`till-expo-screen`'s `#accentClasses`. */
+  /** Space-prefixed (or empty) so it can be interpolated directly after `.card` in the template. */
   #timingAccentClass(band: TimingBand): string {
     if (band === "fresh") return "";
     const flash = band === "forgotten" && !this.#prefersReducedMotion();
@@ -762,12 +617,8 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  /** The card's ONE service hint — the MOST ADVANCED of the three floor signals (KDS-3 §3c): en camino
-   * (`enRoute`, dispatched by the pass and awaiting the waiter) over listos (`readyToServe`, kitchen-done,
-   * KDS-1 §3d) over por servir (`pendingToServe`, unserved). Exactly one renders: a dispatched line is
-   * still `ready` + unserved, so all three counts can be positive at once, and the floor shows the
-   * furthest-along state rather than stacking chips. The manual-status badge is independent — rendered
-   * separately in {@link #card}. Returns `nothing` when the table has no open tab / no pending lines. */
+  /** Only the MOST ADVANCED of the three service signals renders: a dispatched line is still `ready`
+   * and unserved, so all three counts can be positive at once. */
   #hint(table: TableState): TemplateResult | typeof nothing {
     if (table.enRoute > 0) {
       return html`<span class="badge en-route" data-en-route
@@ -787,8 +638,8 @@ export class TillFloorScreen extends LitElement {
     return nothing;
   }
 
-  /** The state-specific body of a card. The switch is exhaustive over {@link TableState.state}'s three
-   * members, so a new occupancy state is a compile error here rather than a silently blank card. */
+  /** The switch is exhaustive over {@link TableState.state}, so a new occupancy state is a compile error
+   * here rather than a silently blank card. */
   #occupancy(table: TableState): TemplateResult {
     switch (table.state) {
       case "open-tab":

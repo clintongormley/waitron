@@ -12,17 +12,12 @@ import type { TillProduct } from "../api/client.js";
 import type { AllergenCode } from "@waitron/catalogue/src/allergens.js";
 
 /**
- * The 14 EU allergens (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order — the matrix's column
- * order and the order the detail dialog lists a product's declarations.
+ * The matrix's column order and the order the detail dialog lists a product's declarations.
  *
- * Redefined LOCALLY here rather than imported from `@waitron/catalogue`'s `ALLERGEN_CODES`, exactly as
- * `api/client.ts` redefines the server's response shapes: a runtime import from that package would drag
- * its barrel — and through it `@waitron/db` and Node builtins — into the browser bundle. The order
- * mirrors `i18n/allergen-names.ts` (Task 5), which the suite pins to catalogue's canonical list, so a
- * drift in either is caught: `till-allergen-screen.test.ts` asserts this array's key set equals
- * `Object.keys(ALLERGEN_NAMES)`. The `readonly AllergenCode[]` type — a type-only import, fully erased
- * at build, so no catalogue barrel reaches the bundle — additionally makes a misspelled or non-EU code
- * a COMPILE error.
+ * Redefined LOCALLY rather than imported from `@waitron/catalogue`'s `ALLERGEN_CODES`: a runtime import
+ * would drag that package's barrel, and through it `@waitron/db` and Node builtins, into the browser
+ * bundle. `till-allergen-screen.test.ts` pins this array's code SET to `ALLERGEN_NAMES`, whose own suite
+ * pins it to `ALLERGEN_CODES`; the order is not checked.
  */
 export const ALLERGEN_DISPLAY_ORDER: readonly AllergenCode[] = [
   "gluten",
@@ -41,40 +36,22 @@ export const ALLERGEN_DISPLAY_ORDER: readonly AllergenCode[] = [
   "molluscs",
 ] as const;
 
-/** One product's declaration for a single allergen — the value type of `TillProduct.allergens`. */
 type AllergenPresence = NonNullable<TillProduct["allergens"]>[string];
 
-/** The short keys of the allergen-screen UI chrome (`allergens.<key>` in `strings.ts`). */
 type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "print" | "close";
 
 /**
- * The customer-facing ALLERGEN SCREEN — the operator's food-safety lookup (menu & allergens). A
- * product × 14-allergen matrix plus a per-product detail dialog and a print path, reachable from the
- * counter's "Allergens" button (`till-counter-screen`), never mixed in with the sellable product tiles.
+ * The ALLERGEN SCREEN: a product × allergen matrix, a per-product detail dialog and a print path.
  *
- * The three declaration states are deliberately DISTINCT, because conflating them is a food-safety
- * hazard:
- *  - `allergens === null` — NOT reviewed. Rendered as an explicit "pending" treatment, NEVER as an
- *    all-clear row. Fourteen blank cells would read as "reviewed, contains none of them"; a product
- *    nobody has checked must not make that claim.
- *  - `allergens === {}` — reviewed, none declared. A full, reviewed cell row, all fourteen blank —
- *    genuinely all-clear, and visibly different from pending.
- *  - `allergens === { code: {…} }` — reviewed with declarations. Each declared code shows contains /
- *    may-contain in its column; the row's detail dialog spells them out with their sources.
+ * The three declaration states stay DISTINCT, because conflating them is a food-safety hazard:
+ *  - `allergens === null` — NOT reviewed, rendered as "pending", NEVER as an all-clear row: fourteen
+ *    blank cells would read as "reviewed, contains none of them".
+ *  - `allergens === {}` — reviewed, none declared: genuinely all-clear.
+ *  - `allergens === { code: {…} }` — reviewed with declarations.
  *
- * LOCALE. On-screen the matrix renders in the OPERATOR locale ({@link locale}); a Print re-renders in
- * the INVOICE locale ({@link invoiceLocale}) before handing off to the browser. Only the invoice-locale
- * RENDERING approach is shared with `till-ticket-view`, which likewise renders its legal receipt in
- * `invoiceLocale` independent of the operator UI; the `globalThis.print()` hand-off is this component's
- * own — `till-ticket-view` has no print path. The printed allergen sheet is a customer document, so it
- * follows the customer's language: the UI chrome and ALLERGEN names resolve against the full region
- * locale ("es-ES") — `allergenName` strips the region subtag internally (its table keys on `en`/`es`),
- * so "es-ES" yields "Leche" (proven in the suite), and `t()` maps both `es` and `es-ES` in its
- * catalogues.
- *
- * PRODUCT names are the exception, and not because of language: the two renders show two DIFFERENT
- * names, not one name translated. The printed sheet names a dish the way the customer menu does; the
- * on-screen matrix names it the way the venue does internally. See this class's own `#productLabel`.
+ * On screen the matrix renders in the OPERATOR locale ({@link locale}); a Print re-renders in the
+ * INVOICE locale ({@link invoiceLocale}), because the printed sheet is a customer document. Product
+ * names differ between the two renders by more than language: see `#productLabel`.
  */
 @customElement("till-allergen-screen")
 export class TillAllergenScreen extends LitElement {
@@ -216,34 +193,18 @@ export class TillAllergenScreen extends LitElement {
     `,
   ];
 
-  /** The products to lay out, each carrying its `allergens` — fed by `till-counter-screen` from the
-   * same zone-offer list the sale grid shows, so the sheet and the till agree on what is sellable. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The OPERATOR-UI locale the matrix renders in on-screen. The parent (`till-counter-screen`) feeds
-   * the active `currentLocale()`; this default (FALLBACK_LOCALE, the neutral English floor) is only the
-   * standalone/pre-wire fallback. NOT the invoice locale below — that is the fiscal receipt language. */
   @property() locale: string = FALLBACK_LOCALE;
-  /** The INVOICE (customer) locale a Print re-renders in — the printed sheet's language, independent of
-   * the operator UI, exactly like `till-ticket-view.invoiceLocale`. Defaults to the deli's es-ES. */
   @property() invoiceLocale = "es-ES";
 
-  /** The product whose detail dialog is open, or `undefined` when none is. */
   @state() private selected?: TillProduct;
-  /**
-   * Whether the screen is currently rendering its PRINTABLE form (invoice locale). Flipped true by
-   * {@link print}; {@link updated} then hands the committed render to the browser and immediately flips
-   * it back to false. Resetting the latch is what lets a repeat Print tap re-fire (a stuck-true latch
-   * would print only once per mount), and it reverts the on-screen render to the operator locale.
-   */
+  /** True only for the one render {@link updated} hands to the browser's print. */
   @state() private printing = false;
 
-  /** The locale in force for the current render — the invoice locale while printing, else the operator's.
-   * Passed straight to `allergenName`, which strips the region subtag itself (see the class doc). */
   #activeLocale(): string {
     return this.printing ? this.invoiceLocale : this.locale;
   }
 
-  /** Resolve one UI-chrome key in the active locale. */
   #t(key: Chrome): string {
     return t(`allergens.${key}`, this.#activeLocale());
   }
@@ -259,46 +220,31 @@ export class TillAllergenScreen extends LitElement {
     return this.printing ? customerProductName(product, this.invoiceLocale) : productName(product);
   }
 
-  /** Open the detail dialog for `product`. */
   #openDetail(product: TillProduct): void {
     this.selected = product;
   }
 
-  /** Close the detail dialog — from its own Close button or when it closes itself (escape/backdrop);
-   * clearing `selected` keeps our state in step with the dialog so it does not immediately reopen. */
   #closeDetail(): void {
     this.selected = undefined;
   }
 
-  /** Enter the printable (invoice-locale) render; {@link updated} does the browser hand-off. */
   #print(): void {
     this.printing = true;
   }
 
-  /** Ask the counter to close the screen and return to the sale. */
   #close(): void {
     this.dispatchEvent(new CustomEvent("close-allergens", { bubbles: true, composed: true }));
   }
 
   override updated(changed: PropertyValues): void {
-    // The invoice-locale render has just committed; hand the printable sheet to the browser. The
-    // invoice-locale RENDERING is shared with `till-ticket-view`; the `globalThis.print()` hand-off is
-    // this component's own — `till-ticket-view` only renders in the invoice locale, it never prints.
-    // Fire only when `printing` has just become true — never on the first render (it starts false) or
-    // any unrelated update.
     if (changed.has("printing") && this.printing) {
       globalThis.print?.();
-      // Drop the latch straight back so a SECOND Print tap flips false→true again and re-fires — a
-      // latch that stayed true would set true→true, Lit would see no change, and nothing would print.
-      // The false-transition re-render is inert here (the guard above requires `printing` to be true),
-      // so this cannot loop; it also reverts the on-screen render to the operator locale, as wanted.
+      // Drop the latch straight back so a SECOND Print tap flips false→true again and re-fires: a latch
+      // left true would set true→true, Lit would see no change, and nothing would print.
       this.printing = false;
     }
   }
 
-  /** One matrix cell: a contains/may-contain marker, or a blank for an undeclared allergen. The marker
-   * is a `role="img"` graphic named for a screen reader; the table's row/column headers supply which
-   * product and allergen it belongs to. */
   #cell(code: string, entry: AllergenPresence | undefined) {
     if (!entry) {
       return html`<td class="cell" data-code=${code}></td>`;
@@ -310,8 +256,6 @@ export class TillAllergenScreen extends LitElement {
     </td>`;
   }
 
-  /** One product row: a tappable name that opens its detail, then either the pending treatment (never an
-   * all-clear row) or the fourteen reviewed cells. */
   #row(product: TillProduct) {
     const name = this.#productLabel(product);
     const open = html`<wt-button
@@ -334,8 +278,6 @@ export class TillAllergenScreen extends LitElement {
     </tr>`;
   }
 
-  /** One line of the detail dialog: the strength label plus the allergen name, with its source in
-   * parentheses when known ("Cereals containing gluten (wheat)"). */
   #detailItem(code: string, entry: AllergenPresence) {
     const contains = entry.presence === "contains";
     const label = contains ? this.#t("contains") : this.#t("may_contain");
@@ -347,16 +289,13 @@ export class TillAllergenScreen extends LitElement {
     </li>`;
   }
 
-  /** The body of the detail dialog for `product`: pending, the ask-staff notice for a reviewed product
-   * with nothing declared, or the list of declarations. */
   #detailBody(product: TillProduct) {
     const declared = product.allergens;
     if (declared === null) {
       return html`<p class="detail-pending">${this.#t("pending")}</p>`;
     }
-    // Iterate in ALLERGEN_DISPLAY_ORDER, not `Object.entries(declared)`: the dialog must list
-    // declarations in the SAME order as the matrix columns (and the order this const's doc guarantees),
-    // never the server's JSON key order — a payload keyed `{ milk, gluten }` still lists gluten first.
+    // Iterate in ALLERGEN_DISPLAY_ORDER, not `Object.entries(declared)`: the dialog lists declarations
+    // in the matrix's column order, never the server's JSON key order.
     const codes = ALLERGEN_DISPLAY_ORDER.filter((code) => declared[code]);
     if (codes.length === 0) {
       return html`<p class="detail-none">${this.#t("notice")}</p>`;
@@ -366,20 +305,15 @@ export class TillAllergenScreen extends LitElement {
     </ul>`;
   }
 
-  /** The product's DIET summary in the detail dialog (dietary-classification, Task 7) — the PUBLISHED
-   * `product.diet` (never a per-line as-served fold; the allergen screen is a per-product lookup) as
-   * vegan/vegetarian/halal/kosher badges + contains chips, with the NEUTRAL "not reviewed" note when the
-   * derivation is pending. `nothing` when the product carries no diet (or nothing to assert), so an
-   * unreviewed-diet product simply shows no diet block rather than a false claim. Localised in the
-   * ACTIVE locale so a Print re-renders it in the invoice locale, exactly like the allergen names. */
+  /** The PUBLISHED `product.diet`, never a per-line as-served fold: this screen is a per-product lookup. */
   #detailDiet(product: TillProduct) {
     const badges = dietBadges(product.diet, "detail-diet", this.#activeLocale());
     if (badges === nothing) return nothing;
     return html`<div class="detail-diet">${badges}</div>`;
   }
 
-  /** The per-product detail dialog. Always present, driven by `selected`, so escape/backdrop closes
-   * flow back through `wt-close` into `selected` rather than fighting the `.open` binding. */
+  /** Always present, driven by `selected`, so escape/backdrop closes flow back through `wt-close` into
+   * `selected` rather than fighting the `.open` binding. */
   #detail() {
     const product = this.selected;
     return html`<wt-dialog

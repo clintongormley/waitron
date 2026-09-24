@@ -9,11 +9,8 @@ const zones: FloorZone[] = [
   { id: "z2", name: "Terraza", displayOrder: 1, active: true },
 ];
 
-// A spread of occupancy states + a zoneless table, plus one card for EACH of the three floor service
-// hints — en camino (t1), listos (t5), por servir (t6) — so axe sees every card variant, all three
-// hint-badge styles (the floor renders only the most-advanced per card, KDS-3 §3c) and the manual-status
-// swatch in the one mount. All UNPLACED, so the screen defaults to the LIST view here (the map view is
-// exercised by its own suite below).
+// A spread of occupancy states + a zoneless table, plus one card for EACH of the three service hints
+// (t1, t5, t6), so axe sees every card variant in one mount. All UNPLACED, so the LIST view shows.
 const tables: TableState[] = [
   {
     id: "t1",
@@ -33,7 +30,6 @@ const tables: TableState[] = [
     enRoute: 1,
     timingBand: "fresh",
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
-    // Carries a reservation too, so the list card's "Reservada HH:MM" chip is axe-scanned in both themes.
     nextReservation: { time: "20:30" },
     posX: null,
     posY: null,
@@ -51,8 +47,6 @@ const tables: TableState[] = [
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
-    // The subtler steady WARM accent (KDS order-timing alerts, design §7.3) alongside the
-    // delivery-pending occupancy accent — proves the two never fight over the same card.
     timingBand: "warm",
     status: null,
     nextReservation: null,
@@ -100,7 +94,6 @@ const tables: TableState[] = [
     rotation: null,
   },
   {
-    // Nothing dispatched → listos wins (the success-bordered chip).
     id: "t5",
     label: "5",
     zoneId: "z1",
@@ -114,7 +107,6 @@ const tables: TableState[] = [
     pendingToServe: 2,
     readyToServe: 2,
     enRoute: 0,
-    // The steady OVERDUE accent, no flash/badge.
     timingBand: "overdue",
     status: null,
     nextReservation: null,
@@ -124,7 +116,6 @@ const tables: TableState[] = [
     rotation: null,
   },
   {
-    // Nothing ready or dispatched → por servir (the neutral chip).
     id: "t6",
     label: "6",
     zoneId: "z1",
@@ -138,8 +129,6 @@ const tables: TableState[] = [
     pendingToServe: 3,
     readyToServe: 0,
     enRoute: 0,
-    // FORGOTTEN — the flashing-red tile plus the non-colour "Forgotten" badge, rendered alongside the
-    // to-serve chip already on this card, so axe scans both badges side by side in one mount.
     timingBand: "forgotten",
     status: null,
     nextReservation: null,
@@ -150,9 +139,7 @@ const tables: TableState[] = [
   },
 ];
 
-// The MAP view (FP-2): the first zone's table is PLACED (drawn on the shared canvas), a second is
-// UNPLACED (the tray). Mounted with `canEdit` so the manager-only "Editar plano" toggle also renders,
-// and `editing` is entered by the suite so axe sees the canvas's edit inspector chrome too.
+// One PLACED table (on the canvas) and one UNPLACED (the tray).
 const placedTables: TableState[] = [
   {
     id: "t1",
@@ -168,12 +155,8 @@ const placedTables: TableState[] = [
     pendingToServe: 2,
     readyToServe: 1,
     enRoute: 0,
-    // The MAP view renders `<wt-table-token>` (a `@waitron/ui` shared component out of THIS task's
-    // scope — it carries no `timingBand`), so `fresh` here is a type-satisfying value only; it has no
-    // rendering effect on the canvas token either way.
     timingBand: "fresh",
     status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
-    // Carries a reservation too, so the map token's "Reservada HH:MM" chip is axe-scanned in both themes.
     nextReservation: { time: "20:30" },
     posX: 250,
     posY: 400,
@@ -219,13 +202,10 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       { zones, tables: placedTables, canEdit: true },
       theme,
     );
-    // Enter edit mode so the canvas is `.editable`…
     el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
     await el.updateComplete;
-    // …then SELECT a table on the canvas so its edit inspector (shape palette / zone / rotate / remove),
-    // rendered with the till's SPANISH copy, is in the tree for axe. The inspector needs the canvas's
-    // own `selectedId`, which its `#onTap` sets — so click a `[data-table]` inside the canvas's shadow
-    // root (mirrors wt-floor-canvas.a11y.test.ts's edit-mode case).
+    // SELECT a table on the canvas so its edit inspector is in the tree for axe; the inspector needs the
+    // canvas's own `selectedId`, which its `#onTap` sets.
     const canvas = el.shadowRoot!.querySelector("wt-floor-canvas") as HTMLElement & {
       shadowRoot: ShadowRoot;
       updateComplete: Promise<unknown>;
@@ -233,7 +213,6 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     canvas.shadowRoot.querySelector<HTMLElement>("[data-table]")!.click();
     await canvas.updateComplete;
     await el.updateComplete;
-    // The inspector is present (so axe is scanning the real Spanish chrome, not an empty canvas).
     expect(canvas.shadowRoot.querySelector(".inspector")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

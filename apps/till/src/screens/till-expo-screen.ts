@@ -12,60 +12,20 @@ import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js"
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
-/** A course's ordering key: the null (courseless) group sorts FIRST — it is the auto-fired earliest set —
- *  then named courses by `displayOrder` ascending, matching the server's coursing sequence. The SAME
- *  null-first ordering `till-station-queue`'s `courseOrder` uses, so the pass and the station display
- *  sequence a coursed order identically. */
+/** The null (courseless) group sorts FIRST: it is the auto-fired earliest set. */
 function courseOrder(course: ExpoCourse): number {
   return course.courseId === null ? Number.NEGATIVE_INFINITY : (course.displayOrder ?? 0);
 }
 
 /**
- * The TILL EXPO / PASS display (KDS-3, design §5): the expediter's cross-station board — a card per open
- * order on this node, each order's items grouped BY COURSE in `display_order` (null course first), so the
- * pass sees a whole order's coursing at once. UNLIKE the per-station kitchen display (`till-station-screen`,
- * which filters to ONE station), every item here carries its STATION name, so the expediter reads "the
- * grill is lagging the cold station" off one board.
+ * The TILL EXPO / PASS display: a card per open order, its items grouped BY COURSE across stations.
  *
- * Each course carries the ONE lever its state calls for (design §5, `fire_control`-aware):
- *  - a HELD course (not all items fired) offers **Fire** ({@link TillApi.fireCourse}) — but ONLY under
- *    `fire_control = 'expo'`, the mode that hands the pass the fire; under `waiter`/`kitchen` another
- *    surface owns it, so the pass shows none and the held items sit greyed;
- *  - a FIRED, not-yet-all-plated course offers **"Curso listo"** ({@link TillApi.bumpCourseReady}) — bump
- *    every plated line of the course to `ready`;
- *  - a FIRED, all-`ready` course offers **"En camino"** ({@link TillApi.markCourseAway}) — dispatch the
- *    plated course to the floor.
- * The null (courseless) course has no per-course route (both bump routes are keyed by a course UUID), so
- * it offers no lever; its auto-fired lines advance on the per-station display instead. A fully-away course
- * has been dispatched and DROPS OFF the board (the server keeps the order while any item is not-away and
- * returns all its items, so the SCREEN filters `course.away` — the read does not).
+ * A fully-away course DROPS OFF the board: the server keeps the order while any item is not away and
+ * returns all its items, so the SCREEN filters `course.away`.
  *
- * Like `till-station-screen` it OWNS its `.api` (the pass is the whole node's, so there is no picker and
- * nothing to screen): it fetches `getExpoQueue` on connect and after every lever, and a failed lever is
- * SWALLOWED and the reload reconciles the board to server truth — the degrade-gracefully shape the
- * station/floor screens use (the pass touches no fiscal path).
- *
- * AGE (KDS order-timing alerts, design §7.2). UNLIKE the per-station kitchen display
- * (`till-station-queue`, one station ⇒ one set of thresholds ⇒ one age per order), an expo order's
- * items can span SEVERAL stations, each with its own thresholds — so each {@link ExpoItem} carries its
- * OWN `queuedAt`/`thresholds`, classified via the shared `classifyBand` (`@waitron/shared`): fresh →
- * warm → overdue → **forgotten**. A card's own accent is the WORST band across its visible items
- * ({@link worstBand}), as a LEFT BORDER (never behind text, so the accent cannot fail a11y contrast) —
- * the same `age-*`/`flash` class scheme `till-station-queue`'s rail card uses, reduced-motion aware
- * (`#prefersReducedMotion`, checked live or injected via {@link reducedMotion}). A `forgotten` band
- * additionally FLAGS the individual lagging item with a non-colour tell (a text label beside its
- * station/state, never a second border colour competing with the item's own kitchen-state border) —
- * the item-level counterpart to the header's {@link #overdueCount} count badge, the pass-wide
- * non-colour tell. A `TickingClock` ({@link #clock}) advances the display while it sits idle, between
- * the container's own refreshes; `now` is still directly injectable so a test controls the band
- * deterministically. The server's `ExpoItem.band`/`ExpoOrder.worstBand` are authoritative only for
- * the very first paint — this screen re-derives both locally so they keep escalating between
- * refreshes with no new fetch.
- *
- * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome, so it follows the operator's
- * theme like every sibling; the token/course-header/state-class/action-button primitives mirror
- * `till-station-queue`. Copy is the till's i18n (`expo.*`, reusing `station.*` for item states + "min");
- * identifiers stay English, station/dish names are DATA.
+ * AGE. An expo order's items can span several stations, each with its own thresholds, so each item is
+ * classified against its OWN `queuedAt`/`thresholds`. The server's `ExpoItem.band`/`ExpoOrder.worstBand`
+ * are ignored: this screen re-derives both on every render so they keep escalating between refreshes.
  */
 @customElement("till-expo-screen")
 export class TillExpoScreen extends LitElement {
@@ -414,48 +374,24 @@ export class TillExpoScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the till — the screen fetches the pass queue and writes its levers through it
-   *  (owned by the screen, threaded from the app, like `till-station-screen`). */
   @property({ attribute: false }) api!: TillApi;
-  /** Who owns the per-course FIRE — the `fire_control` venue setting, threaded from the app. The pass
-   *  shows the Fire lever on a held course ONLY under `expo`; the ready/away levers are the pass's own
-   *  regardless of this (the setting decides who FIRES, not who dispatches — server route docs). */
+  /** Decides who FIRES a held course; the ready/away levers are the pass's own regardless. */
   @property() fireControl: FireControlMode = "waiter";
-  /** Injectable clock for age classification; falls back to the {@link #clock}'s ticked time (never a
-   *  bare `Date.now()`, so a re-render from the tick and a re-render from a fresh fetch use the SAME
-   *  clock source) when unset. Set in tests for deterministic bands — mirrors `till-station-queue`. */
+  /** Injectable clock for age classification; unset falls back to the {@link #clock}'s ticked time. */
   @property({ attribute: false }) now?: number;
-  /**
-   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
-   * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
-   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
-   * deterministic assertion — the same injectable-override shape {@link now} already uses, mirroring
-   * `till-station-queue`.
-   */
+  /** `undefined` checks the live `prefers-reduced-motion` query on every render; a test injects a value. */
   @property({ attribute: false }) reducedMotion?: boolean;
-  /**
-   * Whether this screen is mounted INSIDE a card host (SP-B2.1) rather than as a standalone screen.
-   * When embedded, it drops its own `<header class="head">` + Back button — the card host supplies the
-   * chrome (title, close) — and renders only the pass body. Default `false` keeps the standalone screen
-   * (its own header + Back) exactly as before, so every existing expo test stays green.
-   */
+  /** Mounted inside a card host, which supplies the header. */
   @property({ type: Boolean }) embedded = false;
 
-  /** This node's open orders, grouped into courses across stations (reloaded after every lever). */
   @state() private orders: ExpoOrder[] = [];
   /**
-   * The raw error CODE of a rejected reprint (KDS-4 §3d), surfaced via {@link codeMessage} in the banner
-   * (never the raw code) — or `undefined` for none. UNLIKE the fire/ready/away levers, a reprint is NOT
-   * run through {@link #act}: it changes no order state, so a reload reconciles nothing and a silent
-   * swallow would leave the expediter no signal that the ticket did not reprint. So it takes a try/catch →
-   * localised banner shape instead. Cleared on the next reprint attempt.
+   * UNLIKE the fire/ready/away levers, a failed reprint is not swallowed: it changes no order state, so a
+   * reload reconciles nothing and a silent failure would leave the expediter no signal.
    */
   @state() private reprintErrorCode?: string;
 
-  /** Drives the display forward while it sits idle — no refetch, just the client-side re-tick the
-   *  order-timing design calls for (§5.2): every ~20s it bumps {@link TickingClock.now} and requests a
-   *  re-render, so an item can climb fresh → warm → overdue → forgotten between the container's own
-   *  refreshes. {@link now}, when set, always wins (tests stay deterministic). */
+  /** Re-renders the idle display so an item's band can climb between refreshes, with no refetch. */
   readonly #clock = new TickingClock(this);
 
   override connectedCallback(): void {
@@ -463,9 +399,6 @@ export class TillExpoScreen extends LitElement {
     void this.#reload();
   }
 
-  /** (Re)load the pass queue. A failed read leaves the last-known board in place (degrade gracefully —
-   *  the pass touches no fiscal path); no `isConnected` guard (state-only, Lit does not paint a detached
-   *  element — the sibling screens' reasoning). */
   async #reload(): Promise<void> {
     try {
       this.orders = await this.api.getExpoQueue();
@@ -474,11 +407,8 @@ export class TillExpoScreen extends LitElement {
     }
   }
 
-  /**
-   * Run one pass lever, then reconcile on BOTH paths: a rejected call (a race, an already-dispatched
-   * course) is SWALLOWED and the reload converges the board on server truth — the degrade-gracefully
-   * shape `till-station-screen`'s `#advance` uses.
-   */
+  /** A rejected call (a race, an already-dispatched course) is SWALLOWED; the reload converges the board
+   * on server truth. */
   async #act(call: () => Promise<void>): Promise<void> {
     try {
       await call();
@@ -488,14 +418,6 @@ export class TillExpoScreen extends LitElement {
     await this.#reload();
   }
 
-  /**
-   * Reprint an order's current kitchen tickets (KDS-4 §3d). DELIBERATELY not run through {@link #act}: a
-   * reprint changes no order state, so there is nothing to reload/reconcile, and a swallow would hide a
-   * failure the expediter needs to see (the ticket did not come out). So it surfaces a localised
-   * {@link reprintErrorCode} banner on rejection (via {@link codeMessage}, never the raw wire code) and
-   * clears it on the next attempt — the enrol path's shape, not the degrade-gracefully lever shape. The
-   * expo/pass always runs in a session (R-K), so this is offered on every card with no mode guard.
-   */
   async #reprint(orderId: string): Promise<void> {
     this.reprintErrorCode = undefined;
     try {
@@ -505,8 +427,6 @@ export class TillExpoScreen extends LitElement {
     }
   }
 
-  /** Return to the counter (basket-preserving, handled by the app — mirrors the station/schedule/floor
-   *  screens). */
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
@@ -535,19 +455,14 @@ export class TillExpoScreen extends LitElement {
     `;
   }
 
-  /** No open orders on the pass. */
   #empty(): TemplateResult {
     return html`<p class="empty">${t("expo.empty")}</p>`;
   }
 
-  /** The board — a card per order, oldest first (the server's `opened_at` order is preserved). */
   #board(): TemplateResult {
     return html`<div class="board">${this.orders.map((order) => this.#card(order))}</div>`;
   }
 
-  /** One order's card: its number + optional table label + age, then its non-away courses in
-   *  `display_order` (null course first). The left-border accent is the WORST band across the card's
-   *  visible items (design §7.2), never the old hardcoded `openedMinutes` bucket. */
   #card(order: ExpoOrder): TemplateResult {
     const band = this.#orderBand(order);
     return html`<article class="order ${this.#accentClasses(band)}" data-order=${order.orderNumber}>
@@ -561,12 +476,6 @@ export class TillExpoScreen extends LitElement {
     </article>`;
   }
 
-  /** The per-order reprint button (KDS-4 §3d) — a full-width secondary `wt-button` at the card foot, under
-   *  the per-course levers. The expo/pass ALWAYS has a session (R-K), so it is shown on every card (no mode
-   *  guard, unlike the station display). Its accessible name is the slotted "Reprint" text; that suffices
-   *  here (a "Reprint" button is self-explanatory and the order context comes from the card heading, #N), so
-   *  no `aria-label` is added and no differentiated per-order name is needed — the light/dark axe sweeps
-   *  pass with the button present. The click runs {@link #reprint}. */
   #reprintAction(order: ExpoOrder): TemplateResult {
     return html`<wt-button
       class="reprint"
@@ -578,17 +487,12 @@ export class TillExpoScreen extends LitElement {
     </wt-button>`;
   }
 
-  /** An order's courses to SHOW, oldest coursing first: fully-away (dispatched) courses drop off, the
-   *  rest sort null-first then by `displayOrder` (the server already orders them, re-sorted here so the
-   *  board is robust to input order — the station display's `courseOrder` discipline). */
   #visibleCourses(order: ExpoOrder): ExpoCourse[] {
     return order.courses
       .filter((course) => !course.away)
       .sort((a, b) => courseOrder(a) - courseOrder(b));
   }
 
-  /** One coursing subsection of a card: its named course header (the null course has none), its items,
-   *  and the ONE lever the course state calls for. */
   #courseSection(order: ExpoOrder, course: ExpoCourse): TemplateResult {
     return html`<div class="course" data-course=${course.courseId ?? "none"}>
       ${course.courseName ? html`<div class="course-head">${course.courseName}</div>` : nothing}
@@ -599,12 +503,8 @@ export class TillExpoScreen extends LitElement {
     </div>`;
   }
 
-  /** An item row: the dish (`qty unit× name`), its STATION (the cross-station label), its kitchen state, and
-   *  — beneath, indented (ordering modifiers, Task 14) — its selected options as `+ <name>` sub-text.
-   *  Greyed when HELD (its course unfired) — a non-interactive box (the pass acts per course). A
-   *  FORGOTTEN item additionally carries a non-colour tell (design §7.2) — its own station is badly
-   *  lagging, flagged with a text label rather than a second border colour (which would compete with
-   *  this item's own kitchen-state border for the same CSS property). */
+  /** A FORGOTTEN item is flagged with a text label, not a second border colour, which would compete with
+   *  the item's own kitchen-state border for the same CSS property. */
   #item(item: ExpoItem): TemplateResult {
     const held = item.firedAt === null;
     const forgotten = this.#itemBand(item) === "forgotten";
@@ -630,10 +530,6 @@ export class TillExpoScreen extends LitElement {
     </span>`;
   }
 
-  /** The item's per-line kitchen customisation (order-line customisation, Task 5) as indented muted
-   *  sub-text — the free-text NOTE the server SNAPSHOTTED at fire, the same rendering the per-station
-   *  display uses. `nothing` when the line carried none, so a plain dish renders identically to before
-   *  this task. */
   #customisation(item: ExpoItem): TemplateResult | typeof nothing {
     const note = item.note ?? null;
     if (note === null || note === "") return nothing;
@@ -642,15 +538,7 @@ export class TillExpoScreen extends LitElement {
     </span>`;
   }
 
-  /**
-   * The item's OWN allergen profile (modifier↔allergen), indented beneath the dish + its modifiers —
-   * the SAME rendering the per-station display uses: the dish's OWN {@link ExpoItem.asServed} codes as
-   * localised "contains" chips (`allergenName`, never a hardcoded EU-14 list), and a "not reviewed"
-   * warning whenever the profile is `pending` (the dish's own allergens unreviewed — the Cautious
-   * policy). Colour is NEVER the only signal (house a11y rule): the chips carry their names, the warning
-   * its text/weight. `nothing` when there is nothing to say — no profile attached, not pending — so a
-   * plain dish renders identically to before. Each extra's own allergens are shown separately.
-   */
+  /** The dish's OWN allergen profile; each extra's own allergens are shown separately. */
   #allergens(item: ExpoItem): TemplateResult | typeof nothing {
     const asServed = item.asServed;
     const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
@@ -673,9 +561,6 @@ export class TillExpoScreen extends LitElement {
     </span>`;
   }
 
-  /** The dish's extras and its frozen options answers as indented sub-text beneath the item row —
-   *  the same rendering the per-station display uses, in the same KITCHEN wording (spec §10).
-   *  `nothing` when the item has neither, so a plain dish renders as a single row. */
   #modifiers(item: ExpoItem): TemplateResult | typeof nothing {
     const modifiers = item.modifiers ?? [];
     const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
@@ -696,24 +581,14 @@ export class TillExpoScreen extends LitElement {
   }
 
   /**
-   * The ONE per-course lever the course state calls for (design §5), or `nothing`:
-   *  - a null (courseless) course has no course route — no lever;
-   *  - a HELD course (`fired === false`) → **Fire** (`data-fire`), but ONLY under `fire_control = 'expo'`;
-   *  - a FIRED, not-all-`ready` course → **"Curso listo"** (`data-ready`, bump the plated lines to ready);
-   *  - a FIRED, all-`ready` course → **"En camino"** (`data-away`, dispatch the plated course).
-   * A fully-away course never reaches here ({@link #visibleCourses} drops it). The three data-attributes
-   * mirror the station display's `data-fire`/`data-collect` convention; each button is a full-width
-   * primary control (see `.lever`), named for a11y by its verb + course, running its call through
-   * {@link #act} (call then reload). One `?` binding cannot name three attributes, so the branches are
-   * explicit — Lit fixes an attribute NAME at template-compile time.
+   * The null (courseless) course has no per-course route, so no lever. The branches are explicit because
+   * Lit fixes an attribute NAME at template-compile time, so one binding cannot name three attributes.
    */
   #lever(order: ExpoOrder, course: ExpoCourse): TemplateResult | typeof nothing {
     if (course.courseId === null) return nothing;
     const courseId = course.courseId;
     const name = course.courseName ?? "";
     if (!course.fired) {
-      // Held — the fire lever, shown only when THIS display owns the fire (the tab/kitchen screen does
-      // under `waiter`/`kitchen`, so the pass shows none and the items sit greyed).
       if (this.fireControl !== "expo") return nothing;
       return html`<button
         class="lever fire"
@@ -744,28 +619,15 @@ export class TillExpoScreen extends LitElement {
     </button>`;
   }
 
-  /** The current clock reading for age classification: {@link now} when injected (deterministic
-   *  tests), else the {@link #clock}'s own ticked time — never a fresh `Date.now()` call, so every
-   *  render in one tick sees the identical `now` and the display genuinely advances only when the
-   *  clock ticks (or a test moves {@link now}). Mirrors `till-station-queue`'s `#clockNow`. */
+  /** Never a fresh `Date.now()`, so every render in one tick sees the identical `now`. */
   #clockNow(): number {
     return this.now ?? this.#clock.now;
   }
 
-  /** An item's escalation band against its OWN station's thresholds (`classifyBand`,
-   *  `@waitron/shared`) — fresh / warm / overdue / forgotten (design §7.2). UNLIKE
-   *  `till-station-queue`'s per-GROUP `#band` (one station ⇒ one clock), this is per-ITEM: an expo
-   *  order's items can span several stations, each with its own `queuedAt`/`thresholds`. Recomputed
-   *  from the item's own data on every render rather than trusting the server's `ExpoItem.band`
-   *  snapshot, so it keeps climbing between refreshes under the `TickingClock`. */
   #itemBand(item: ExpoItem): TimingBand {
     return classifyBand(Date.parse(item.queuedAt), this.#clockNow(), item.thresholds);
   }
 
-  /** An order's card accent: the WORST band across its currently-VISIBLE items ({@link
-   *  #visibleCourses} — a fully-away course's items are already off the board), via `worstBand`
-   *  (`@waitron/shared`). Recomputed locally rather than reading the server's `ExpoOrder.worstBand`
-   *  snapshot, for the same tick-consistency reason as {@link #itemBand}. */
   #orderBand(order: ExpoOrder): TimingBand {
     return worstBand(
       this.#visibleCourses(order).flatMap((course) =>
@@ -774,32 +636,22 @@ export class TillExpoScreen extends LitElement {
     );
   }
 
-  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
-   *  `prefers-reduced-motion` media query unless {@link reducedMotion} is injected (house a11y rule:
-   *  motion must respect the OS preference). Mirrors `till-station-queue`'s identical check. */
   #prefersReducedMotion(): boolean {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** The age-accent class list for a band: always `age-${band}`, plus `flash` for `forgotten` unless
-   *  motion is reduced — the CSS `.order.age-forgotten.flash` rule carries the `@keyframes`, so a
-   *  reduced-motion render never gets the class an animation is defined against. Mirrors
-   *  `till-station-queue`'s identical helper. */
   #accentClasses(band: TimingBand): string {
     const flash = band === "forgotten" && !this.#prefersReducedMotion();
     return `age-${band}${flash ? " flash" : ""}`;
   }
 
-  /** Count of orders whose card band has escalated to at least `overdue` (overdue OR forgotten,
-   *  `BAND_RANK`) — the pass-wide non-colour tell (design §7.2): an expediter who cannot distinguish
-   *  the border colours still sees a number, mirroring `till-station-queue`'s per-station count. */
+  /** The pass-wide non-colour tell: an expediter who cannot distinguish the border colours still sees a
+   *  number. */
   #overdueOrderCount(): number {
     return this.orders.filter((order) => BAND_RANK[this.#orderBand(order)] >= BAND_RANK.overdue)
       .length;
   }
 
-  /** The pass-wide overdue+forgotten count badge, shown only when the count is non-zero (a pass
-   *  running entirely fresh/warm shows no badge at all, rather than a noisy "0 overdue"). */
   #overdueBadge(): TemplateResult | typeof nothing {
     const count = this.#overdueOrderCount();
     if (count === 0) return nothing;

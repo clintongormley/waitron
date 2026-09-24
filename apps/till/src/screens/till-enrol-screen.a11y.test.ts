@@ -19,7 +19,6 @@ async function flush(el: TillEnrolScreen): Promise<void> {
   await el.updateComplete;
 }
 
-/** Names the device and knocks, settling the join. */
 async function knock(el: TillEnrolScreen): Promise<void> {
   const input = el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-name]")!;
   input.value = "Front counter";

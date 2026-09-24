@@ -13,22 +13,15 @@ import type {
   TillApi,
 } from "../api/client.js";
 
-/** The four absence kinds, in display order — the request form's Type picker. Mirrors the server's
- * `absence_kind` enum; the server re-validates. */
+/** Mirrors the server's `absence_kind` enum; the server re-validates. */
 const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave", "unpaid"];
 
-/** How far ahead "my upcoming shifts" looks (a fixed default window; a wider range / pagination is a
- * recorded follow-up). */
 const WINDOW_DAYS = 14;
 
 /**
- * A `YYYY-MM-DD` string for `date`'s LOCAL calendar day — the wire format the schedule window bounds
- * use. The till device sits AT the venue, so its local wall date is the venue wall date the server's
- * window compares against: `listShiftsForPerson` filters on
- * `(starts_at at time zone 'UTC' + starts_offset_minutes)::date`, a LOCAL date, not the raw UTC instant.
- * Built from local components (`getFullYear`/`getMonth`/`getDate`) rather than `toISOString()`, which is
- * UTC and, near local midnight in a non-UTC venue (Spain is UTC+1/+2), names a different day — shifting
- * the requested window by one and missing or wrongly including a boundary shift.
+ * `date`'s LOCAL calendar day as `YYYY-MM-DD`. The till sits at the venue, and the server compares the
+ * window against each shift's local wall date. Not `toISOString()`, which is UTC and near local
+ * midnight names a different day.
  */
 export function localIsoDate(date: Date): string {
   const year = date.getFullYear();
@@ -37,11 +30,7 @@ export function localIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * The half-open `[from, to)` window of LOCAL dates for the shifts read: `now`'s local day through it plus
- * `days`, both `YYYY-MM-DD`. The upper bound is advanced on a LOCAL `Date` (`getDate`/`setDate`) so it
- * tracks local calendar days, matching {@link localIsoDate}; a copy is advanced, so `now` is untouched.
- */
+/** The half-open `[from, to)` window of LOCAL dates for the shifts read. */
 export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
   const to = new Date(now);
   to.setDate(to.getDate() + days);
@@ -51,7 +40,7 @@ export function scheduleWindow(now: Date, days: number): { from: string; to: str
 /**
  * The LOCAL wall date+time of an instant, recovered by shifting the UTC instant by its stored wall
  * offset and reading the UTC components — the same `(instant + offset)` recovery the server's window
- * uses. Offset 0 (this slice's shifts) leaves it equal to the UTC clock.
+ * uses.
  */
 function wallClock(iso: string, offsetMinutes: number): { date: string; time: string } {
   const shifted = new Date(Date.parse(iso) + offsetMinutes * 60_000);
@@ -59,15 +48,8 @@ function wallClock(iso: string, offsetMinutes: number): { date: string; time: st
 }
 
 /**
- * The STAFF-FACING schedule screen (menu of my shifts / swaps / time off), reachable from the counter's
- * "My schedule" control. It is the request half of shift swaps and absences: a logged-in operator can
- * view their own upcoming shifts, accept a swap offered to them, offer one of their shifts to a
- * colleague, and request time off. The requester is ALWAYS the session's operator server-side; these
- * forms never send a personId (the client methods don't carry one).
- *
- * Loads its three lists on connect and after every successful action. A rejected `{ code }` surfaces as
- * a non-fatal banner via `codeMessage` (never the raw code); the operator stays on the screen and can
- * retry. Lit + `@waitron/ui` primitives + `baseStyles`, HA-free (the till's own design system).
+ * The STAFF-FACING schedule screen. The server takes the requester of every action from the session,
+ * never from the request body.
  */
 @customElement("till-schedule-screen")
 export class TillScheduleScreen extends LitElement {
@@ -168,27 +150,19 @@ export class TillScheduleScreen extends LitElement {
 
   /** The HTTP face of the till. Set before the element connects (its lifecycle loads the schedule). */
   @property({ attribute: false }) api!: TillApi;
-  /** The active staff roster, for the colleague picker and to name a swap's requester. */
   @property({ attribute: false }) staff: StaffMember[] = [];
-  /** The logged-in operator's person id — filtered out of the colleague picker (you cannot offer to
-   * yourself) and used to skip your own name when resolving a requester. */
   @property() operatorPersonId = "";
 
   /** The three lists: `undefined` while first loading, then the (possibly empty) rows. */
   @state() private shifts?: MyShift[];
   @state() private swaps?: MySwap[];
   @state() private absences?: MyAbsence[];
-  /** Set when the initial load rejected — shows a load-failed status instead of a stuck spinner. */
   @state() private loadFailed = false;
-  /** The error CODE of a non-fatal banner (rendered via `codeMessage`), or undefined for none. */
   @state() private noticeCode?: string;
-  /** A request is in flight — disables the action controls (a single-flight/hygiene guard). */
   @state() private busy = false;
 
-  /** Offer-a-shift form: which of my shifts, and to which colleague. */
   @state() private coverShiftId = "";
   @state() private coverColleagueId = "";
-  /** Request-time-off form. */
   @state() private absKind: AbsenceKind = "holiday";
   @state() private absFrom = "";
   @state() private absTo = "";
@@ -199,17 +173,11 @@ export class TillScheduleScreen extends LitElement {
     void this.#reload();
   }
 
-  /** The half-open `[from, to)` window for the shifts read: today through today + {@link WINDOW_DAYS},
-   * as LOCAL calendar dates (the device is at the venue) — see {@link scheduleWindow}. */
   #window(): { from: string; to: string } {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
-  /**
-   * (Re)load all three lists. State written after a mid-load disconnect is harmless — Lit never paints
-   * a detached element — so no `isConnected` guard is needed (the `till-lock-screen` reasoning). A
-   * rejection leaves a load-failed status rather than an unhandled promise.
-   */
+  /** State written after a mid-load disconnect is harmless, so no `isConnected` guard is needed. */
   async #reload(): Promise<void> {
     const { from, to } = this.#window();
     try {
@@ -231,8 +199,6 @@ export class TillScheduleScreen extends LitElement {
     }
   }
 
-  /** Run an action guarded by `busy`, surfacing a rejected `{ code }` as a non-fatal banner (never the
-   * raw code) and reloading on success so the lists reflect the change. */
   async #act(fn: () => Promise<void>): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -283,12 +249,10 @@ export class TillScheduleScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
 
-  /** A colleague's display name from the roster, or the raw id if not on it (a defensive fallback). */
   #personName(personId: string): string {
     return this.staff.find((s) => s.personId === personId)?.displayName ?? personId;
   }
 
-  /** A one-line label for a shift: local wall date, time range and role. */
   #shiftLabel(shift: MyShift): string {
     const start = wallClock(shift.startsAt, shift.startsOffsetMinutes);
     const end = wallClock(shift.endsAt, shift.endsOffsetMinutes);
@@ -350,7 +314,6 @@ export class TillScheduleScreen extends LitElement {
   }
 
   #swapsSection() {
-    // Only swaps offered TO me that I can still act on — the Accept subset (design).
     const offered = (this.swaps ?? []).filter(
       (s) => s.direction === "offered_to_me" && s.status === "requested",
     );

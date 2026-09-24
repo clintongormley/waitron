@@ -4,8 +4,6 @@ import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-// Side-effect import: registers <till-station-queue>, the shared queue renderer this screen wraps with a
-// picker + view toggle. The screen names it only as a tag below, so the rendering stays the widget's.
 import "../widgets/station-queue.js";
 import type { BumpMode, FireControlMode } from "../widgets/station-queue.js";
 import type {
@@ -17,11 +15,9 @@ import type {
 } from "../api/client.js";
 
 /**
- * The one item state a per-line advance to `to` legitimately STARTS from — the widget's `NEXT` map
- * (`queued → preparing → ready`) inverted. A DEVICE has only a per-line advance verb ({@link
- * TillApi.deviceAdvance}), so a whole-ticket bump (device mode, `bump_mode = ticket`) expands to one
- * deviceAdvance per FIRED item at this predecessor state — mirroring what a per-line tap on each would
- * do, and so never issuing an invalid skip (a queued item is not jumped straight to `ready`).
+ * The one item state a per-line advance to `to` legitimately STARTS from. A DEVICE has only a per-line
+ * advance verb, so a whole-ticket bump expands to one advance per FIRED item at this state — never an
+ * invalid skip such as a queued item jumped straight to `ready`.
  */
 const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
   preparing: "queued",
@@ -29,27 +25,10 @@ const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
 };
 
 /**
- * The TILL station-display screen (KDS-1, design §5a): the kitchen's own view of one station's queue.
- * Kitchen staff reach it with the same PIN → session the counter uses (no device identity yet — §0), pick
- * a STATION from the venue's stations, and see that station's ticket items — grouped by order — through one
- * of two lenses: a KANBAN board (the default) or a TICKET RAIL, flipped by a toggle (the FP-2 map/list
- * pattern). A tap on a line BUMPS it one kitchen step: per-line by default (the source of truth), or the
- * whole ticket when {@link bumpMode} is `ticket` (the venue's convenience setting).
- *
- * UNLIKE the pure-view sibling screens, this one OWNS its `.api` (like `till-lock-screen`): it fetches the
- * station list + the active station's queue itself, and turns the embedded {@link TillStationQueue}'s
- * `advance-ticket-item` / `advance-ticket` events into `advanceTicketItem` / `advanceTicket` calls, then
- * reloads — the SAME event → owner → server shape #63's prep-queue widget used, with the owner being this
- * screen rather than the app. It STOPS those advance events at the screen so the app (which handles the
- * counter's own default-station widget) never double-fires them. A failed advance is SWALLOWED and the
- * reload reconciles the queue to server truth (a race, or a since-advanced line), the degrade-gracefully
- * shape `till-floor-screen` uses for its placement writes.
- *
- * It holds no queue data of its own beyond which station/view is showing; the widget renders from the
- * fetched {@link groups}. Lit + `@waitron/ui` `baseStyles` + theme tokens only (no hardcoded chrome), so it
- * follows the operator's theme like every sibling. Copy is the till's i18n (`station.*`), rendered in
- * the active locale (English by default, es-ES for a Spanish venue). Identifiers stay English; station
- * names are DATA.
+ * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue
+ * widget's events itself, STOPPING them so the app (which handles the counter's own default-station
+ * widget) never double-fires them. A failed state change is SWALLOWED and the reload reconciles the
+ * queue to server truth.
  */
 @customElement("till-station-screen")
 export class TillStationScreen extends LitElement {
@@ -118,71 +97,28 @@ export class TillStationScreen extends LitElement {
     `,
   ];
 
-  /** The HTTP face of the till — the screen fetches stations + the active queue and writes advances
-   * through it (owned by the screen, threaded from the app, like `till-lock-screen`). */
   @property({ attribute: false }) api!: TillApi;
-  /** Per-line (default) vs whole-ticket bump — the `bump_mode` venue setting, threaded from the app and
-   * passed straight to the widget. */
   @property() bumpMode: BumpMode = "line";
-  /** Who owns the per-course fire — the `fire_control` venue setting, threaded from the app and passed
-   * straight to the widget. `kitchen` surfaces the display's "Empezar curso" action; `waiter` (the
-   * default) surfaces none here (the tab screen fires — Task 7). */
   @property() fireControl: FireControlMode = "waiter";
   /**
-   * DEVICE MODE (device-identity-1 §5a). Default `false` — the EXISTING session-gated operator path
-   * (listStations → picker → `advanceTicketItem`) runs exactly as before. When `true` the screen is an
-   * always-on ENROLLED display: it probes `getDeviceStation()` (no login), renders that ONE bound
-   * station's queue with NO picker and NO Back-to-counter, and bumps through `deviceAdvance`. A 401
-   * (`device.unauthorized`) on that probe means the device cookie was revoked/expired: the screen emits
-   * `device-unauthorized` so the app RE-BOOTS through the unified front door (device-enrolment §3.1),
-   * which routes the now-unauthorized device to the join screen — this screen no longer carries its own
-   * enrol sub-view. Threaded from the app (the boot probe).
+   * An always-on ENROLLED display: no login, one bound station, no picker and no Back-to-counter. A 401
+   * on its probe emits `device-unauthorized` so the app re-boots through the front door.
    */
   @property() deviceMode = false;
-  /**
-   * The device station the app ALREADY probed at cold boot (device-identity-1 §5a), handed in so the
-   * screen does not fetch `GET /api/device/station` a SECOND time on mount (the boot probe and the mount
-   * `#loadDevice` were both reading the same authenticated queue — one read per enrolled-display boot is
-   * enough). Present on the cold-boot path (`till-app`'s `#boot` stashes the probe result); absent on a
-   * later re-connect, where `#loadDevice` fetches (and a 401 there emits `device-unauthorized` for the
-   * app to re-boot to the enrol front door). Adopted ONCE — a later fetch always reads the current bound
-   * station (see {@link #loadDevice}).
-   */
+  /** The station the app already probed at cold boot, adopted ONCE so the mount does not read it again. */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
-  /**
-   * Whether this screen is mounted INSIDE a card host (SP-B2.2) rather than as a standalone screen.
-   * When embedded, it drops its own `<header class="head">` (the `<h1 class="title">` + the
-   * `showBack`-gated Back button) on BOTH the queue surface and the enrol view — the card host supplies
-   * that chrome — but KEEPS the board/rail `view-toggle`, which is station BODY function (the kitchen
-   * still flips lens from inside a card), rendered in the always-present `.actions` bar. Mirrors the
-   * floor screen's `embedded` seam (`till-floor-screen.ts`). Default `false` keeps the standalone screen
-   * fully functional — its own header + Back, and the same `view-toggle`. NOTE the standalone DOM is NOT
-   * byte-identical to before this seam: the `view-toggle` moved OUT of the header into that sibling
-   * `.actions` bar (so it can survive embedding), the same restructure the floor screen carries — every
-   * existing station test still passes because none asserted the toggle's container.
-   */
+  /** Mounted inside a card host, which supplies the header; the view toggle stays. */
   @property({ type: Boolean }) embedded = false;
 
-  /** The venue's active stations (fetched once on connect). Operator path only. */
   @state() private stations: Station[] = [];
-  /** The requested or default operator station; device mode uses only its enrolled station. */
   @state() private activeStationId?: string;
-  /** The active station's queue, grouped by order (reloaded after every advance). */
   @state() private groups: StationQueueGroup[] = [];
-  /** The lens: kanban board (default) or ticket rail, flipped by the toggle. */
   @state() private view: "kanban" | "rail" = "kanban";
   /**
-   * The raw error CODE of a rejected reprint (KDS-4 §3d), surfaced via {@link codeMessage} in the operator
-   * banner (never the raw code) — or `undefined` for none. UNLIKE the advance/collect/fire levers, a
-   * reprint is swallow-and-reloaded by nobody: it changes no order state, so a reload reconciles nothing
-   * and a silent failure would leave the operator no feedback that the ticket did not reprint. So it takes
-   * a try/catch → localised banner shape, not the degrade-gracefully `#advance` swallow.
-   * Only ever set in operator mode ({@link #onReprintOrder} guards device mode), so the banner is
-   * operator-only without a separate gate. Cleared on the next reprint attempt.
+   * UNLIKE the advance/collect/fire levers, a failed reprint is not swallowed: it changes no order state,
+   * so a reload reconciles nothing and a silent failure would leave the operator no feedback.
    */
   @state() private reprintErrorCode?: string;
-  /** Whether {@link initialDeviceStation} has been adopted (a one-shot — see {@link #loadDevice}). Not
-   * reactive: it gates a fetch, never the render. */
   #initialConsumed = false;
 
   #queueRequest = 0;
@@ -227,7 +163,6 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** Fetch the operator's stations, then validate the latest requested station before loading its queue. */
   async #load(): Promise<void> {
     try {
       this.stations = await this.api.listStations();
@@ -241,19 +176,11 @@ export class TillStationScreen extends LitElement {
   }
 
   /**
-   * DEVICE MODE probe (§5a): read the display's OWN bound station + queue with no login. A 200 renders
-   * the queue. A 401 (`device.unauthorized`) means the device cookie is gone (revoked/expired) — the
-   * screen emits `device-unauthorized` so the app RE-BOOTS through the unified front door, which routes
-   * the unauthorized device to the join screen (device-enrolment §3.1); this screen holds no
-   * enrol sub-view of its own. Any OTHER failure is transient — keep the last-known queue and recover on
-   * the next reload/reboot, never tearing the kiosk down for a blip. State-only after the await, so no
-   * `isConnected` guard (the sibling screens' reasoning).
+   * Any failure other than `device.unauthorized` is transient: keep the last-known queue rather than
+   * tearing the kiosk down for a blip.
    */
   async #loadDevice(): Promise<void> {
-    // Cold-boot fast path: the app already probed the device station and handed it in as
-    // `initialDeviceStation`, so adopt it ONCE and skip the redundant fetch — one authenticated queue
-    // read per enrolled-display boot, not two. `#initialConsumed` makes it a one-shot: a later re-connect
-    // fetches instead, so a display never reuses a stale initial.
+    // A one-shot, so a later re-connect fetches and never reuses a stale initial.
     if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
       this.#initialConsumed = true;
       const { station } = this.initialDeviceStation;
@@ -274,8 +201,7 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** Reload the active queue, ignoring operator responses superseded by a later request. A failed
-   * read retains the current queue. Device mode reads through its bound-station probe. */
+  /** Ignores operator responses superseded by a later request. */
   async #reload(): Promise<void> {
     if (this.deviceMode) {
       try {
@@ -283,7 +209,7 @@ export class TillStationScreen extends LitElement {
         this.activeStationId = station.id;
         this.groups = station.queue;
       } catch {
-        // Non-fatal — leave the last-known queue; a mid-session revocation recovers on reload.
+        // Non-fatal — leave the last-known queue.
       }
       return;
     }
@@ -297,7 +223,6 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /** Switch to another station's queue (a picker tap). */
   async #selectStation(id: string, replace = false): Promise<void> {
     if (this.deviceMode) return;
     if (this.activeStationId !== id) this.groups = [];
@@ -306,21 +231,14 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
-  /** Flip the board ⇄ rail lens. */
   #toggleView(): void {
     this.view = this.view === "kanban" ? "rail" : "kanban";
   }
 
-  /** Return to the counter (basket-preserving, handled by the app — mirrors the schedule/floor screens). */
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
 
-  /**
-   * Run one advance verb, then reconcile on BOTH paths: a rejected move (a race, a since-advanced line)
-   * is SWALLOWED and the reload converges the queue on server truth. Shared by the per-line and
-   * whole-ticket handlers — the degrade-gracefully shape the method docs describe.
-   */
   async #advance(call: () => Promise<void>): Promise<void> {
     try {
       await call();
@@ -330,12 +248,6 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
-  /**
-   * A per-line bump from the widget (`bump_mode = line`, the source of truth). Handle it HERE and stop it
-   * — the app must not also see it (it owns the counter's own default-station widget). Advance, then
-   * reload on BOTH paths so a rejected move (a race, a since-advanced line) reconciles to server truth. In
-   * DEVICE mode the bump goes through the device-scoped `deviceAdvance` (no session) instead.
-   */
   async #onAdvanceTicketItem(event: Event): Promise<void> {
     event.stopPropagation();
     const { itemId, to } = (
@@ -346,12 +258,6 @@ export class TillStationScreen extends LitElement {
     );
   }
 
-  /**
-   * A whole-ticket bump from the widget (`bump_mode = ticket`, the convenience). Same handle-here-and-stop
-   * + advance-then-reconcile shape as {@link #onAdvanceTicketItem}, over the whole-ticket verb. In DEVICE
-   * mode the server has ONLY a per-line device advance, so the whole-ticket bump expands to one
-   * `deviceAdvance` per advanceable item ({@link #deviceAdvanceTicket}).
-   */
   async #onAdvanceTicket(event: Event): Promise<void> {
     event.stopPropagation();
     const { orderId, stationId, to } = (
@@ -368,12 +274,6 @@ export class TillStationScreen extends LitElement {
     );
   }
 
-  /**
-   * The device-mode expansion of a whole-ticket bump: advance every FIRED item of `orderId` at the bound
-   * station whose legitimate next step is `to` (see {@link ADVANCE_FROM}), one `deviceAdvance` each —
-   * mirroring what a per-line tap on each would do, so a held course or a wrong-state line is skipped
-   * rather than sent an invalid transition. Reads the group off the last-loaded {@link groups}.
-   */
   async #deviceAdvanceTicket(orderId: string, to: Exclude<TicketState, "queued">): Promise<void> {
     const group = this.groups.find((candidate) => candidate.orderId === orderId);
     if (group === undefined) return;
@@ -384,53 +284,24 @@ export class TillStationScreen extends LitElement {
     }
   }
 
-  /**
-   * A Mode-P collect from the widget's rail lens (a settled order's handover, KDS-1 §3e). Handle it HERE
-   * and stop it — the app owns the counter's own default-station widget, so it must not double-handle this
-   * screen's. `markCollected` stamps the order-level `collected_at`; the reload then drops the handed-over
-   * order off the display. Same run-then-reconcile shape as the advance handlers ({@link #advance}), so a
-   * rejected collect (a race, an already-collected order) is swallowed and the reload converges on truth.
-   */
   async #onMarkCollected(event: Event): Promise<void> {
     event.stopPropagation();
-    // DEVICE mode has no collect route (advance-only, §3d) — the advance-only widget never renders the
-    // button, so this cannot fire from the UI; guard anyway (belt-and-braces), so a stray composed event
-    // never reaches the session `markCollected` a device holds no cookie for.
+    // A device holds no session for this verb; the advance-only widget hides the button, and this guards
+    // a stray composed event.
     if (this.deviceMode) return;
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
     await this.#advance(() => this.api.markCollected(orderId));
   }
 
-  /**
-   * A kitchen-fire from the widget (`fire_control = 'kitchen'`, KDS-2 §5a) — release a held course.
-   * Handle it HERE and stop it (the app owns the counter's own default-station widget, so it must not
-   * double-handle this screen's), then `fireCourse` and reload on BOTH paths so a rejected fire (a race,
-   * an already-fired or now-unknown course) reconciles to server truth — the same run-then-reconcile
-   * shape as the advance/collect handlers ({@link #advance}). The reload drops the released course's
-   * greying and makes its lines advanceable.
-   */
   async #onFireCourse(event: Event): Promise<void> {
     event.stopPropagation();
-    // DEVICE mode has no fire route (advance-only, §3d) — same belt-and-braces guard as
-    // {@link #onMarkCollected}: the advance-only widget hides the button, so a stray composed event never
-    // reaches the session `fireCourse`.
+    // Same device-mode guard as #onMarkCollected.
     if (this.deviceMode) return;
     const { orderId, courseId } = (event as CustomEvent<{ orderId: string; courseId: string }>)
       .detail;
     await this.#advance(() => this.api.fireCourse(orderId, courseId));
   }
 
-  /**
-   * A reprint-order from the widget (KDS-4 §3d) — re-send this order's current kitchen tickets. Handle it
-   * HERE and stop it (the app owns the counter's own default-station widget, so it must not double-handle
-   * this screen's). NOT run through {@link #advance}: reprint changes no order state, so there is nothing to
-   * reload/reconcile, and a swallow would hide a failure the operator needs to see (the ticket did not come
-   * out). Instead it takes the enrol path's shape — try/catch → a localised {@link reprintErrorCode} banner
-   * (via {@link codeMessage}, never the raw wire code). DEVICE mode has no reprint route (session-guarded,
-   * the R-K guard): {@link showReprint} is off there so the button never renders, and this guards anyway
-   * (belt-and-braces, like {@link #onMarkCollected}/{@link #onFireCourse}) so a stray composed event never
-   * reaches the session verb a device holds no cookie for.
-   */
   async #onReprintOrder(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.deviceMode) return;
@@ -447,8 +318,6 @@ export class TillStationScreen extends LitElement {
     return this.deviceMode ? this.#renderDevice() : this.#renderOperator();
   }
 
-  /** The SESSION-GATED operator display (KDS-1): the shared queue surface WITH the Back-to-counter
-   * control, over the station-picker body (or the no-stations message). */
   #renderOperator(): TemplateResult {
     return this.#renderQueueSurface({
       showBack: true,
@@ -456,29 +325,10 @@ export class TillStationScreen extends LitElement {
     });
   }
 
-  /**
-   * The DEVICE-mode display (§5a): the shared queue surface with NO Back-to-counter and NO picker (a
-   * device has one fixed station and never logged in) over an ADVANCE-ONLY queue. A revoked/expired
-   * cookie is handled by {@link #loadDevice} (which re-boots the app to the unified enrol front door),
-   * not by a sub-view here. The advance/collect/fire listeners are the SAME as the operator path — wired
-   * once by the shared surface; the handlers branch on {@link deviceMode} to route through the
-   * device-scoped verbs, and {@link #onMarkCollected}/{@link #onFireCourse} keep their device-mode guards
-   * as defense-in-depth (§3d).
-   */
   #renderDevice(): TemplateResult {
     return this.#renderQueueSurface({ showBack: false, body: this.#queue(true) });
   }
 
-  /**
-   * The queue surface SHARED by the operator and device displays: the `<section class="screen">`, the
-   * header (title + board/rail view toggle, plus the Back-to-counter control when `showBack`), and the
-   * FOUR queue events wired to their handlers — byte-identical on both paths, which is the whole point of
-   * the extraction (the two renders repeated it verbatim). The paths differ only in `showBack` and the
-   * `body` they pass (the picker/no-stations body vs an advance-only queue). The four `@…` listeners are
-   * wired here on BOTH paths deliberately: in device mode the advance-only widget never renders the
-   * collect/fire buttons, but the listeners stay bound and the handlers self-guard (belt-and-braces, §3d)
-   * so a stray composed event can never reach a session verb a device holds no cookie for.
-   */
   #renderQueueSurface(opts: { showBack: boolean; body: TemplateResult }): TemplateResult {
     return html`
       <section
@@ -529,12 +379,10 @@ export class TillStationScreen extends LitElement {
     `;
   }
 
-  /** The venue has no configured stations — nothing to display or route to. */
   #noStations(): TemplateResult {
     return html`<p class="empty">${t("station.no_stations")}</p>`;
   }
 
-  /** The picker + the active station's queue (the operator body). */
   #body(): TemplateResult {
     return html`
       <nav class="picker" aria-label=${t("station.pick")}>
@@ -544,13 +392,8 @@ export class TillStationScreen extends LitElement {
     `;
   }
 
-  /** The active/bound station's queue widget, shared by both paths. `advanceOnly` hides the collect/fire
-   * controls (device mode, §3d); the operator path passes `false` and keeps them. `showReprint` is its
-   * inverse — the per-order reprint (KDS-4 §3d) shows in OPERATOR mode only (`!advanceOnly`), since the
-   * reprint route is session-guarded and a device holds no session (the R-K guard). This is the ONLY
-   * caller of the widget in the station screen, so setting `showReprint` here cannot leak reprint into the
-   * counter/app widget instances (which never mount through this method). The other props are identical on
-   * both paths, so this is the one place they are threaded to the widget. */
+  /** Reprint shows in OPERATOR mode only: the reprint route is session-guarded and a device holds no
+   * session. */
   #queue(advanceOnly: boolean): TemplateResult {
     return html`<till-station-queue
       .groups=${this.groups}

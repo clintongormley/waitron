@@ -30,7 +30,6 @@ const swaps: MySwap[] = [
     createdAt: "2026-05-01T10:00:00Z",
     direction: "offered_to_me",
   },
-  // Offered to me but already accepted — must NOT show an Accept control.
   {
     id: "sw-accepted",
     requestedByPersonId: "col1",
@@ -41,7 +40,6 @@ const swaps: MySwap[] = [
     createdAt: "2026-05-01T09:00:00Z",
     direction: "offered_to_me",
   },
-  // Requested by me — belongs to neither the offered-to-me list.
   {
     id: "sw-mine",
     requestedByPersonId: "me",
@@ -145,7 +143,6 @@ describe("till-schedule-screen", () => {
         .mockResolvedValue([{ ...swaps[0], id: "sw-x", requestedByPersonId: "ghost" }]),
     });
     const { el } = await mount(api);
-    // Not on the roster (`staff` has only me + col1), so the raw id shows as a defensive fallback.
     expect(root(el).textContent).toContain("ghost");
   });
 
@@ -154,10 +151,8 @@ describe("till-schedule-screen", () => {
     const swapRows = root(el).querySelectorAll(".swap");
     expect(swapRows).toHaveLength(1);
     expect(swapRows[0]!.getAttribute("data-swap")).toBe("sw-offered");
-    // The accepted one and my own request are excluded.
     expect(root(el).querySelector('[data-swap="sw-accepted"]')).toBeNull();
     expect(root(el).querySelector('[data-swap="sw-mine"]')).toBeNull();
-    // The requester is named from the roster, not shown as a raw id.
     expect(root(el).textContent).toContain("Colega");
   });
 
@@ -167,7 +162,6 @@ describe("till-schedule-screen", () => {
     root(el).querySelector<HTMLElement>("wt-button.accept")!.click();
     await flush(el);
     expect(api.acceptSwap).toHaveBeenCalledWith("sw-offered");
-    // Reloaded: listMySwaps ran on connect AND again after the accept.
     expect(api.listMySwaps).toHaveBeenCalledTimes(2);
   });
 
@@ -338,8 +332,7 @@ describe("till-schedule-screen", () => {
 
 describe("localIsoDate / scheduleWindow (LOCAL wall-date window bounds)", () => {
   it("formats a Date's LOCAL calendar date as zero-padded YYYY-MM-DD", () => {
-    // Constructed with the local-time Date constructor, so its components ARE its local wall date.
-    // January is month 0 and the day is single-digit, so this also proves the `+ 1` and the padStart.
+    // January is month 0 and the day is single-digit, so this also checks the `+ 1` and the padStart.
     const d = new Date(2026, 0, 5, 12, 0, 0); // 2026-01-05 12:00 local
     expect(localIsoDate(d)).toBe("2026-01-05");
     expect(localIsoDate(d)).toBe(
@@ -348,12 +341,8 @@ describe("localIsoDate / scheduleWindow (LOCAL wall-date window bounds)", () => 
   });
 
   it("uses the LOCAL date, not the UTC date, when the two differ (the regression guard)", () => {
-    // The bug: `toISOString()` reads the UTC date. Near local midnight in a non-UTC venue (Spain is
-    // UTC+1/+2) the UTC date is a DIFFERENT day, so the requested window would shift by a day and a
-    // boundary shift be missed or wrongly included. A stub Date whose LOCAL date (4 May) and UTC date
-    // (5 May) deliberately diverge pins that the LOCAL one wins REGARDLESS of this machine's timezone —
-    // a real Date can only diverge in a non-UTC test host, so the stub makes the guard deterministic.
-    // Reverting `localIsoDate` to `date.toISOString().slice(0, 10)` makes this return "2026-05-05" red.
+    // A real Date's local and UTC dates diverge only on a non-UTC test host, so a stub makes this
+    // deterministic.
     const localMay4ButUtcMay5 = {
       getFullYear: () => 2026,
       getMonth: () => 4, // May, 0-indexed

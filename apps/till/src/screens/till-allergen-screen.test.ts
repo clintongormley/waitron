@@ -47,7 +47,6 @@ const water: TillProduct = {
 
 const products: TillProduct[] = [coffee, sandwich, water];
 
-/** The tbody row whose row-header button carries `name`. */
 function rowFor(el: TillAllergenScreen, name: string): HTMLTableRowElement {
   const rows = [...el.shadowRoot!.querySelectorAll<HTMLTableRowElement>("tbody tr")];
   const row = rows.find((r) => r.querySelector(".row-open")?.textContent?.trim() === name);
@@ -128,9 +127,7 @@ describe("till-allergen-screen", () => {
   });
 
   it("lists a product's declarations in ALLERGEN_DISPLAY_ORDER, not server key order", async () => {
-    // A payload whose keys are in REVERSE display order: milk (column 6) before gluten (column 0). The
-    // detail dialog must still list gluten first, matching the matrix column order — otherwise the
-    // dialog contradicts the matrix and the ALLERGEN_DISPLAY_ORDER doc's own guarantee.
+    // Keys in REVERSE display order: the dialog must still list gluten first, matching the matrix.
     const wrap: TillProduct = {
       id: "wrap",
       name: "Wrap",
@@ -218,7 +215,6 @@ describe("till-allergen-screen", () => {
     expect(dialog.textContent).not.toContain(t("allergens.pending", "en"));
   });
 
-  // ── Diet summary in the detail dialog (dietary-classification, Task 7) ───────────────────────
   it("shows vegan/vegetarian diet badges in a product's detail dialog when its diet asserts them", async () => {
     const salad: TillProduct = {
       ...water,
@@ -300,8 +296,6 @@ describe("till-allergen-screen", () => {
   });
 
   it("resolves a region locale to its language for allergen names (es-ES → Spanish)", async () => {
-    // allergenName does an EXACT key match and only carries en/es, so allergenName("milk","es-ES")
-    // would fall back to English — the screen must reduce "es-ES" → "es". Proven here.
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,
       locale: "es-ES",
@@ -324,7 +318,7 @@ describe("till-allergen-screen", () => {
       expect(el.shadowRoot!.textContent).toContain(allergenName("milk", "en")); // "Milk"
       el.shadowRoot!.querySelector<HTMLElement>("wt-button.print")!.click();
       await el.updateComplete;
-      // Printed: the invoice locale (Spanish names) — mirrors till-ticket-view's invoiceLocale path.
+      // Printed: the invoice locale (Spanish names).
       expect(printSpy).toHaveBeenCalledTimes(1);
       expect(el.shadowRoot!.textContent).toContain(ALLERGEN_NAMES.milk!.es); // "Leche"
     } finally {
@@ -381,8 +375,6 @@ describe("till-allergen-screen", () => {
   });
 
   it("prints again on a second Print tap (the printing latch is reset)", async () => {
-    // The screen used to latch `printing` true and never reset it, so a SECOND Print tap set true→true,
-    // Lit saw no change, and nothing printed. Resetting the latch in updated() restores re-tap printing.
     const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
     try {
       const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
@@ -411,8 +403,8 @@ describe("till-allergen-screen", () => {
   });
 
   it("keeps its local display order in step with the allergen-name table", () => {
-    // The 14-code order is redefined locally (no @waitron/catalogue in the browser bundle); pin it to
-    // Task 5's name table so a drift in either is caught without importing the catalogue.
+    // The list is redefined locally (no @waitron/catalogue in the browser bundle), so pin its code set to
+    // the name table.
     expect(ALLERGEN_DISPLAY_ORDER).toHaveLength(14);
     expect([...ALLERGEN_DISPLAY_ORDER].sort()).toEqual(Object.keys(ALLERGEN_NAMES).sort());
   });

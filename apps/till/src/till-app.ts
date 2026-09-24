@@ -815,7 +815,7 @@ export class TillApp extends LitElement {
    * `till.locale` (the venue default), while `invoiceLocale` takes the SEPARATE `till.invoiceLocale`
    * (the fiscal `cfg.locale`): they drive different things, come from different server fields, and
    * are threaded separately — the receipt uses its `invoiceLocale` PROP and must never follow the
-   * operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
+   * operator UI (see `till-ticket-view`'s class doc).
    *
    * A FAILED `getTill` at start-up — the server unreachable, OR a non-2xx answer the client surfaces as a
    * rejected `{ code }` such as `server.internal` (see `api/client.ts`'s `!res.ok` branch) — must be a
