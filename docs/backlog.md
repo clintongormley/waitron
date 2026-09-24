@@ -2603,7 +2603,8 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle.** The shared
+- **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle** (left by #580,
+  which moved every Node bundle's esbuild flags into that script). The shared
   script every Node bundle is built with lives under `scripts/`, which `scripts/changed-scope.mjs`
   classifies as root scope, and root scope emits `code=false`, so neither ci.yml's `bundle-smoke`
   nor any member's build runs on that pull request (checked 2026-09-24 by running the classifier
