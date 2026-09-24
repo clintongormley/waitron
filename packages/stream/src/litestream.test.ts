@@ -144,6 +144,18 @@ describe("the Litestream configuration", () => {
     );
   });
 
+  // encodeURIComponent throws a bare URIError on half a surrogate pair; a whole pair encodes.
+  it("refuses a prefix holding half a surrogate pair, and encodes a whole one", () => {
+    expect(
+      refusalOf(() =>
+        replicaUrl({ ...BUCKET, prefix: "a\uD800b" }, "v1", "gen-0-a-20260923T120000Z"),
+      ),
+    ).toEqual({ code: "backup.stream_config_unsafe", params: { field: "prefix" } });
+    expect(
+      replicaUrl({ ...BUCKET, prefix: "a\uD83D\uDE00b" }, "v1", "gen-0-a-20260923T120000Z"),
+    ).toBe("s3://venue-copies/a%F0%9F%98%80b/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2");
+  });
+
   it.each(["a//b", "a/../b", "..", "./a", "a/."])(
     "refuses a prefix path cleaning would change: %j",
     (prefix) => {

@@ -27,6 +27,7 @@ export const ENV_ACCESS_KEY_ID = "WAITRON_STREAM_ACCESS_KEY_ID";
 export const ENV_SECRET_ACCESS_KEY = "WAITRON_STREAM_SECRET_ACCESS_KEY";
 
 const BUCKET_NAME = /^[a-z0-9.-]+$/;
+const LONE_SURROGATE = /\p{Cs}/u;
 
 /** Printable ASCII without the quote: what a single-quoted YAML scalar holds whole on one line. */
 const SINGLE_QUOTABLE = /^[\x20-\x26\x28-\x7e]*$/;
@@ -94,15 +95,21 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
  * Litestream reads the path through Go's `url.Parse` and then `path.Clean`
  * (`replica_url.go:106` at the pinned tag). Each segment is percent-encoded so `#` and `?` stay in
  * the path, and a prefix holding an empty, `.` or `..` segment is refused, because cleaning would
- * move Litestream to a folder the object store does not write to. The bucket is the host, which is
- * not encoded, so only S3's bucket-name characters are let through there.
+ * move Litestream to a folder the object store does not write to. Half a surrogate pair is refused
+ * too: `encodeURIComponent` throws on it. The bucket is the host, which is not encoded, so only
+ * S3's bucket-name characters are let through there.
  */
 export function replicaUrl(bucket: BucketConfig, venueId: string, generation: string): string {
   if (!BUCKET_NAME.test(bucket.bucket)) {
     throw new AppError("backup.stream_config_unsafe", { field: "bucket" });
   }
   const prefixSegments = normalisePrefix(bucket.prefix).split("/").slice(0, -1);
-  if (prefixSegments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+  if (
+    prefixSegments.some(
+      (segment) =>
+        segment === "" || segment === "." || segment === ".." || LONE_SURROGATE.test(segment),
+    )
+  ) {
     throw new AppError("backup.stream_config_unsafe", { field: "prefix" });
   }
   const path = bucketKey(bucket, `${venuePrefix(venueId)}${generation}`)
