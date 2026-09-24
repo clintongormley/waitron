@@ -4246,6 +4246,21 @@ Also left by #557's review, the owner's call: `rotate` with a destination loaded
 `backup.env` from the running settings rather than keeping the file's other lines, so a
 destination added to the file by hand and not yet loaded is dropped; keeping the file's lines
 instead would change that behaviour.
+Task 2b, the box's own state files locked with the recovery key in the venue database (a new
+core table `node_sealed_state`, one row per node, `local`, kept off the dashboard's change feed;
+`apps/server/src/sealed-state.ts` packs everything the archive carries except the database copy
+and encrypts it exactly as the archive is; the backup sweep and the row build their entries through
+`apps/server/src/archive-entries.ts`), landed as #560. The row is rewritten at every start, after
+`backupSupervisor.reload()`, and straight after every `backup.env` write the backup routes make,
+refused requests included. Left open by #560, the owner's call: (1) a failed refresh is only logged
+(`backup.sealed_state_failed`), with no dashboard alert, while a stale row would leave a box rebuilt
+from the stream without the secrets it carries — default: decide when Task 7 builds the stream's
+alerts; (2) every node writes its own row at every start, standby and mirror nodes included, while
+the backup job runs only on the primary — default: keep it. Nothing outside the backup routes
+rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
+promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
+are written in setup or by the command line, before a restart); Tasks 8a and 9a must call the one
+`sealedState.refresh()` boot builds.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
