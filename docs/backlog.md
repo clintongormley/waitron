@@ -4083,22 +4083,21 @@ holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt rese
 rebuilds it. Left by #548: deny's delete is the one join-request node filter no test fails
 without (the `requirePending` read before it already refuses another node's row, as its doc
 comment says); identity's comments that still place its tables in different files are Task 1b's
-to rewrite (done on its branch); and the run-it review did not reach three claims within its
+to rewrite (done by #554); and the run-it review did not reach three claims within its
 budget — holders torn by a concurrent promotion, credential sealing, and scheduler takeover.
 Task 1b, session cookies stored only as hashes (the till's and the dashboard's cookie carry a
 random token, and `sessions` and `management_sessions` keep only its SHA-256 in a new `token_hash`
-column; identity's logins and sign-in ceremonies are reclassified `state`), is on branch
-`feat/sqlite-slice2-hashed-sessions`, PR #554. Every seeded dev venue holds a session row
+column; identity's logins and sign-in ceremonies are reclassified `state`), landed as #554. Every seeded dev venue holds a session row
 (provisioning's `seed-device-profiles` step opens a management session and never ends it,
 `packages/provisioning/src/venue-apply.ts`), so each fails its migration until
 `wa-wt reset demo <name>` rebuilds it, and every existing login signs in again.
-Left by Task 1b's review, not fixed on its branch (items 1 and 2): (1) with the cookie now hashed, nothing
+Left by #554's review, not fixed there (items 1 and 2): (1) with the cookie now hashed, nothing
 fails when the UUID shape screens in `requireSession` and the till logout route are deleted —
 measured 2026-09-24, the three malformed-cookie cases in `apps/server/src/till-api.test.ts` still
 pass, because a non-UUID value hashes to no row; the screens now only save a lookup. (2) Test
 titles and comments still promising "not a 500" from PostgreSQL's `22P02` remain in
 `till-api.courses.test.ts`, `till-api.receipt.test.ts` and `till-api.reprint.test.ts`. (3) Fixed
-on the branch: the mirror viewer's ambient `admin` session (`apps/server/src/mirror-session.ts`)
+by #554: the mirror viewer's ambient `admin` session (`apps/server/src/mirror-session.ts`)
 used its fixed, public row id as its cookie, so a copy of the database, or a node served without
 the mirror's middleware, accepted that public value as an admin login. Its cookie is now a random
 token, minted afresh each time the viewer is seeded and stored only as a hash, and every trading
