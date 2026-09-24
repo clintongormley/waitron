@@ -1,24 +1,19 @@
 import { AppError } from "@waitron/shared";
-// Side-effect only: registers this package's two error codes on the shared `ErrorParams`
-// registry by declaration merging. See errors.ts for why, and errors.reachability.test.ts for
-// the mechanical check that this import keeps that file reachable from the package's own
-// public barrel (index.ts re-exports everything below from this module).
+// Side-effect only: registers this package's error codes on the shared `ErrorParams` registry.
 import "./errors.js";
 
 export type TrustedTimeSource = "upstream" | "authority";
 
 export type ClockConfidence = "anchored" | "degraded" | "unanchored";
 
-/** Returns milliseconds from an arbitrary origin that only ever increases within a page's
- * lifetime — `performance.now()` in the PWA. Injected rather than referenced directly so tests
- * can drive it independently of the wall clock, which is the entire point of the design. */
+/** Milliseconds from an arbitrary origin that only increases within a page's lifetime, such as
+ * `performance.now()`. Injected so it can move independently of the wall clock. */
 export type MonotonicSource = () => number;
 
 /**
- * Persisted verbatim by the caller after every contact with a trusted source. `wallClockMs` is
- * the reading `Date.now()` gave at anchor time and exists for exactly one purpose: after a
- * reload has destroyed the monotonic reference, comparing it against the current wall clock is
- * the only way to DETECT a jump rather than silently trusting whatever the device now says.
+ * Persisted by the caller after every contact with a trusted source. `wallClockMs` is the wall
+ * clock at anchor time: after a reload has lost the monotonic reference, comparing it with the
+ * current wall clock is how a backwards jump is detected.
  */
 export interface TrustedTimeAnchor {
   trustedAtMs: number;
@@ -46,16 +41,13 @@ export interface TrustedClockOptions {
    * Seconds of anchor age after which confidence is reported as degraded and a warning is
    * attached to every reading.
    *
-   * REQUIRED, with no default, deliberately. This is a PRODUCT threshold about when to tell a
-   * member of staff that the clock is stale. It is NOT the regulatory timestamp margin: the
-   * published sources give no number for that, breaching it is a non-rejecting warning, and
-   * AEAT appears to serve the value dynamically. A default here would become a hardcoded
-   * regulatory constant the first time somebody read it as one.
+   * REQUIRED, with no default, deliberately. This is a PRODUCT threshold for telling staff the
+   * clock is stale, NOT the regulatory timestamp margin, and a default here would read as one.
    */
   degradedAfterSeconds: number;
-  /** Resolves the time zone for a given instant, e.g. through the venue's IANA zone. Defaults to the
-   * offset recorded at anchor time — never to `Date.prototype.getTimezoneOffset()`, which
-   * reports the DEVICE's zone and is precisely what a "timezone fix" changes. */
+  /** Resolves the offset for a given instant. Defaults to the offset recorded at anchor time —
+   * never to `Date.prototype.getTimezoneOffset()`, which reports the DEVICE's zone and is exactly
+   * what a time-zone change on the device alters. */
   resolveOffsetMinutes?: (instant: Date) => number;
   /** A previously persisted anchor, supplied at construction after a reload. */
   anchor?: TrustedTimeAnchor | null;
@@ -75,49 +67,30 @@ export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
   const { tillId, monotonic, wallClock, degradedAfterSeconds, resolveOffsetMinutes } = options;
 
   let anchor: TrustedTimeAnchor | null = null;
-  /** Elapsed time carried over from before a reload, which the new monotonic source knows
-   * nothing about. Zero for an anchor set in this page's lifetime. */
+  /** Elapsed time carried over from before a reload. Zero for an anchor set in this page's
+   * lifetime. */
   let carriedElapsedMs = 0;
   let jump: { wallClockDeltaSeconds: number; monotonicElapsedSeconds: number } | null = null;
 
   /**
-   * DOCUMENTED LIMITATION — a reload cannot prove a FORWARD wall-clock jump.
-   *
-   * On construction with a restored `anchor`, this page's monotonic reference is gone (a fresh
-   * page load starts `performance.now()` back near zero) and the only witness left is the wall
-   * clock itself. Comparing the current wall-clock reading against `anchor.wallClockMs` can
-   * PROVE a backwards jump — time does not run backwards, so a wall clock reading earlier than
-   * it did at anchor time is unambiguous evidence of a jump (handled in the `wallDeltaMs < 0`
-   * branch below, held at the anchor). It cannot prove a forward jump: `performance.timeOrigin`
-   * is itself derived from the wall clock at page-load time, so it is not an independent
-   * witness, and "the wall clock reads 30 minutes later" is exactly what a genuine 30 minutes of
-   * elapsed time would also produce. There is no way to tell the two apart from inside this
-   * page.
-   *
-   * The deliberate choice is to ACCEPT this rather than invent a plausibility heuristic (e.g.
-   * "reject any forward delta over N minutes as implausible"): a heuristic here would need its
-   * own threshold, and an unpublished, invented threshold is exactly what findings §4 forbids
-   * elsewhere in this module. Instead: the forward wall-clock delta is adopted as the elapsed
-   * estimate, confidence ages against `degradedAfterSeconds` exactly as it would for genuine
-   * offline elapsed time, and the next contact with a trusted source (`anchor()`) corrects
-   * whatever error accumulated. This is consistent with "bias slow" only in the sense that a
-   * forward jump this can't detect is the one direction this design does NOT defend against —
-   * it defends against blocking a sale, not against every possible clock manipulation.
+   * DOCUMENTED LIMITATION — a reload cannot prove a FORWARD wall-clock jump. With the monotonic
+   * reference gone, the wall clock is the only witness (`performance.timeOrigin` is itself derived
+   * from the wall clock at page-load time, so it is not an independent one): reading earlier than
+   * at anchor time proves a backwards jump, but reading later is also what genuine elapsed time
+   * produces. Rather than invent a plausibility threshold, the forward delta is adopted as the
+   * elapsed estimate, confidence ages against `degradedAfterSeconds` as usual, and the next
+   * `anchor()` corrects it.
    */
   if (options.anchor) {
     const restored = options.anchor;
     const wallDeltaMs = wallClock() - restored.wallClockMs;
     if (wallDeltaMs < 0) {
-      // Provably a jump: the wall clock reads earlier than it did when the anchor was written,
-      // and time does not run backwards. No estimate of elapsed time is available, so hold at
-      // the anchor — the earliest instant consistent with the evidence, which is also the slow
-      // end of the plausible range.
+      // Provably a jump. With no estimate of elapsed time, hold at the anchor: the earliest
+      // instant consistent with the evidence.
       carriedElapsedMs = 0;
       jump = { wallClockDeltaSeconds: Math.trunc(wallDeltaMs / 1000), monotonicElapsedSeconds: 0 };
     } else {
-      // NOT provably a jump — see the DOCUMENTED LIMITATION comment above. Adopt the forward
-      // delta as the elapsed estimate; it is the only one available, and it is what genuine
-      // elapsed time would also produce.
+      // NOT provably a jump — see the DOCUMENTED LIMITATION above.
       carriedElapsedMs = wallDeltaMs;
     }
     anchor = { ...restored, monotonicMs: monotonic() };
@@ -125,8 +98,8 @@ export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
 
   function elapsedMs(current: TrustedTimeAnchor): number {
     const sinceAnchor = monotonic() - current.monotonicMs;
-    // A monotonic source that has gone backwards has reset under us. Clamp at zero rather than
-    // subtracting: the derived instant must never precede the anchor.
+    // A monotonic source that has gone backwards has reset. Clamp at zero: the derived instant
+    // must never precede the anchor.
     return carriedElapsedMs + (sinceAnchor > 0 ? sinceAnchor : 0);
   }
 
@@ -187,8 +160,8 @@ export function createTrustedClock(options: TrustedClockOptions): TrustedClock {
     },
 
     anchor(trusted): TrustedTimeAnchor {
-      // A trusted source always wins, including when it corrects backwards. Rejecting a
-      // backwards correction would pin a till that has run fast to its own drift permanently.
+      // A trusted source always wins, including when it corrects backwards: rejecting that would
+      // pin a till that has run fast to its own drift.
       anchor = {
         trustedAtMs: trusted.instant.getTime(),
         offsetMinutes: trusted.offsetMinutes,

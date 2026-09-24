@@ -35,8 +35,7 @@ const NODE = nodeId("7ba7b810-9dad-11d1-80b4-00c04fd430c1");
 
 describe("FiscalBackend", () => {
   it("is satisfied structurally by the fake", () => {
-    // If a method is added to the interface and not to the fake, this line stops compiling —
-    // which is the point of writing it as an annotated binding rather than a runtime check.
+    // A compile-time check: a method added to the interface and not the fake stops this compiling.
     const backend: FiscalBackend = new FakeFiscalBackend(null as never);
     expect(backend).toBeInstanceOf(FakeFiscalBackend);
   });
@@ -60,8 +59,6 @@ describe("FiscalBackend", () => {
   });
 
   it("reports integrity as a count plus issues, not a boolean alone", () => {
-    // `ok` alone cannot distinguish "checked 400 records, all sound" from "checked nothing".
-    // The count is what makes a green report meaningful.
     const report: IntegrityReport = { ok: true, checked: 400, issues: [] };
     expect(report.checked).toBe(400);
   });

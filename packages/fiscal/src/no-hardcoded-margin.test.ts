@@ -1,16 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createTrustedClock } from "./clock.js";
 
-/**
- * Vite supplies `import.meta.glob` at runtime — Vitest always runs through Vite's transform
- * pipeline, whether or not the `vite` package itself is resolvable from this workspace member —
- * but its *type* normally comes from a `/// <reference types="vite/client" />`, which requires
- * `vite` to be an installed, resolvable package. This package deliberately carries no dependency
- * beyond `@waitron/shared` and `vitest` (see package.json), so rather than add `vite` as a
- * devDependency solely to pull in that reference, this narrowly types the one member this file
- * actually calls — the same technique packages/shared/src/conventions.test.ts and
- * packages/ui/src/no-hardcoded-chrome.test.ts use for the same reason.
- */
+/** Types the one `import.meta.glob` form this file calls, rather than adding `vite` as a
+ * dependency for the `vite/client` types. */
 declare global {
   interface ImportMeta {
     glob(
@@ -34,10 +26,9 @@ describe("the source glob itself", () => {
 });
 
 describe("no regulatory timestamp margin is encoded anywhere", () => {
-  // The published AEAT text says only «admitiéndose un margen de error», with no number. The
-  // 240 s figure circulating on vendor pages comes from errores.properties and practitioner
-  // reports, not from the specification, and AEAT appears to serve it dynamically. Encoding it
-  // would pin the code to a number nobody chose and which nobody can cite.
+  // The published submission tolerance has no number; the commonly reported ones are not in the
+  // specification (docs/compliance/verifactu-findings.md). Encoding one would pin the code to a
+  // figure nobody can cite.
   it.each(Object.entries(sources))("%s contains no 240-second constant", (_path, source) => {
     expect(source).not.toMatch(/\b240\b/);
     expect(source).not.toMatch(/240_?000/);
@@ -60,10 +51,7 @@ describe("the degraded threshold has no default", () => {
   });
 
   it("changes behaviour with the value supplied, so no constant is being substituted", () => {
-    // A default silently overriding the injected value would make these two clocks agree no
-    // matter how far the monotonic source advances (a fixed default is a fixed default, whatever
-    // it is). The assertion is that they DISAGREE once advanced past 1s but short of 100_000s,
-    // which no single substituted constant can satisfy for both configured values at once.
+    // A substituted constant would make these two clocks agree; they must DISAGREE.
     const wallClock = () => 0;
     let monotonicMs = 10_000;
     const monotonic = () => monotonicMs;
@@ -81,7 +69,6 @@ describe("the degraded threshold has no default", () => {
     });
     strict.anchor({ instant: new Date(0), offsetMinutes: 0, source: "upstream" });
     lax.anchor({ instant: new Date(0), offsetMinutes: 0, source: "upstream" });
-    // Advance 2 seconds: past the strict threshold, nowhere near the lax one.
     monotonicMs += 2_000;
     expect(strict.now().confidence).toBe("degraded");
     expect(lax.now().confidence).toBe("anchored");

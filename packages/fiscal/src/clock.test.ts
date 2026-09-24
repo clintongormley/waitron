@@ -7,9 +7,8 @@ const TILL = "till-1";
 const TRUSTED = new Date("2027-03-14T10:00:00.000Z");
 const WALL_START = new Date("2027-03-14T09:59:58.000Z").getTime();
 
-/** Mutable, injected sources. Fake timers alone are not enough — Vitest's fake timers do not
- * reliably control `performance.now()` across environments, and the whole design turns on the
- * monotonic source and the wall clock moving INDEPENDENTLY of each other. */
+/** Injected sources, because the design turns on the monotonic source and the wall clock moving
+ * INDEPENDENTLY of each other. */
 function makeSources(startWall = WALL_START) {
   const state = { monotonic: 1_000, wall: startWall };
   return {
@@ -54,8 +53,7 @@ describe("before any anchor exists", () => {
   });
 
   it("never throws", () => {
-    // The load-bearing assertion of the whole file. A clock that throws stops a sale, and
-    // spec §4 lists nothing fiscal that may stop a sale.
+    // A clock that throws stops a sale.
     const { clock } = makeClock();
     expect(() => clock.now()).not.toThrow();
   });
@@ -74,9 +72,6 @@ describe("deriving time from the anchor", () => {
   });
 
   it("reports confident as true while freshly anchored", () => {
-    // Mutation testing found this boolean unguarded: every other test in this describe block
-    // reads `.instant` only, so a mutant hardcoding `confident: false` on the happy path
-    // survived. `.confidence` (the string) is checked elsewhere; this is the boolean twin.
     const { clock } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
     expect(clock.now().confident).toBe(true);
@@ -85,15 +80,12 @@ describe("deriving time from the anchor", () => {
   it("advances by the monotonic elapsed, not by the wall clock", () => {
     const { clock, sources } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
-    // Move the monotonic source WITHOUT moving the wall clock. A derived time that tracks the
-    // wall clock would not move at all here.
+    // A derived time that tracked the wall clock would not move at all here.
     sources.state.monotonic += 90_000;
     expect(clock.now().instant.getTime()).toBe(TRUSTED.getTime() + 90_000);
   });
 
   it("ignores a wall-clock jump forward", () => {
-    // A timezone fix, a manual correction or an OS update. This is the risk the whole design
-    // exists to remove, and it is why the derived instant must never read Date.now().
     const { clock, sources } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
     sources.state.monotonic += 60_000;
@@ -110,9 +102,8 @@ describe("deriving time from the anchor", () => {
   });
 
   it("truncates a fractional monotonic elapsed rather than rounding it", () => {
-    // Bias slow, at millisecond granularity. `performance.now()` returns fractional
-    // milliseconds; rounding 1500.9 up to 1501 puts the record one millisecond AHEAD of the
-    // truth, and the timestamp is validated only as an upper bound.
+    // Rounding up would put the record ahead of the truth, and the timestamp is validated only
+    // as an upper bound.
     const { clock, sources } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
     sources.state.monotonic += 1_500.9;
@@ -120,9 +111,6 @@ describe("deriving time from the anchor", () => {
   });
 
   it("never goes backwards when the monotonic source itself resets", () => {
-    // A monotonic source that resets without a reload — a suspended worker resuming, say. The
-    // earliest instant consistent with the evidence is the anchor itself, never something
-    // earlier.
     const { clock, sources } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
     sources.state.monotonic += 60_000;
@@ -163,8 +151,6 @@ describe("degraded confidence", () => {
   });
 
   it("carries the warning as a value rather than throwing it", () => {
-    // Warn only. Constructing an AppError and attaching it is the whole mechanism — throwing
-    // it would propagate out of the sale write path and stop the sale.
     const { clock, sources } = makeClock({ degradedAfterSeconds: 100 });
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
     sources.state.monotonic += 150_000;
@@ -188,8 +174,6 @@ describe("degraded confidence", () => {
   });
 
   it("accepts a trusted instant earlier than the one currently derived", () => {
-    // If the local clock has run fast, an AEAT response is still authoritative. Rejecting a
-    // backwards correction would pin the till to its own drift forever.
     const { clock, sources } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 60, source: "authority" });
     sources.state.monotonic += 600_000;
@@ -207,9 +191,6 @@ describe("UTC plus offset", () => {
   });
 
   it("does not read the device timezone", () => {
-    // A timezone change is one of the causes of a wall-clock jump, so deriving the time zone from
-    // Date.prototype.getTimezoneOffset() would let the very event we defend against rewrite a
-    // fiscally meaningful field.
     const { clock } = makeClock();
     clock.anchor({ instant: TRUSTED, offsetMinutes: 120, source: "authority" });
     expect(clock.now().offsetMinutes).toBe(120);
@@ -246,9 +227,7 @@ describe("PWA reload — the monotonic reference resets", () => {
   });
 
   it("adopts the wall-clock delta as the elapsed estimate when the wall clock is plausible", () => {
-    // Reload: a brand-new monotonic source starting near zero, an anchor loaded from storage.
-    // The only estimate of elapsed time available is the wall-clock difference, and here it is
-    // consistent with time simply having passed.
+    // Reload: a new monotonic source near zero and an anchor loaded from storage.
     const sources = makeSources(WALL_START + 30_000);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
@@ -262,12 +241,8 @@ describe("PWA reload — the monotonic reference resets", () => {
   });
 
   it("treats an exact-zero wall-clock delta at reload as no jump at all", () => {
-    // Boundary case between "time passed" and "provable backwards jump": the wall clock reads
-    // EXACTLY what it read at anchor time (an instant reload, or a wall clock coarser than the
-    // gap). Zero is not negative, so this must take the forward/plausible path, not the jump
-    // path — a mutant that widens the jump check to `<= 0` collapses this into "degraded" with
-    // no test noticing, since carriedElapsedMs is 0 either way and only `.confidence`/`.warning`
-    // reveal the difference.
+    // Zero is not negative, so this takes the forward path, not the jump path. The instant is the
+    // same either way; only `.confidence` and `.warning` tell them apart.
     const sources = makeSources(WALL_START);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
@@ -299,10 +274,6 @@ describe("PWA reload — the monotonic reference resets", () => {
   });
 
   it("detects a backwards wall-clock jump across the reload and holds at the anchor", () => {
-    // The wall clock now reads EARLIER than it did when the anchor was written. Time cannot
-    // have run backwards, so this is provably a jump. The earliest instant consistent with the
-    // evidence is the anchor itself — which is also the slow end of the plausible range, so
-    // biasing slow and being correct coincide here.
     const sources = makeSources(WALL_START - 3_600_000);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({

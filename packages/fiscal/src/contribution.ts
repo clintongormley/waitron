@@ -41,42 +41,30 @@ export interface FiscalContribution {
   /** The exact preproduction authority endpoint bound into activation evidence. */
   activationReadinessTarget?(secret: unknown): string | null;
   /** The SALE-PATH backend: it records locally and never contacts an authority — nothing external
-   * may block a sale. The duty that does contact one is a separate, later seat. */
+   * may block a sale. */
   makeBackend(deps: FiscalBackendDeps): FiscalBackend;
-  /** One runtime submission pass. A regime with nothing to submit (id "none") returns the empty
-   * DrainResult. The sale-path backend (makeBackend) never contacts an authority; this does. */
+  /** One runtime submission pass: the seat that does contact the authority. */
   drain(deps: FiscalDutyDeps, now: Date): Promise<DrainResult>;
-  /** Returns every submission a previous run left in flight to the queue, with no wait. The
-   * server's trading loop calls it before its first `drain` on a node that files
-   * (`apps/server/src/restart-reset.ts`), and again after a failed attempt: only then can nothing
-   * in flight belong to a live pass of this process. The fiscal readiness check's drain of its own
-   * test database does not call it. Required, not optional like `provisioningSecret`, so a regime
-   * that files cannot omit it; a regime that files nothing has nothing to reset. */
+  /** Returns every submission a previous run left in flight to the queue, with no wait. The server
+   * calls it before its first `drain` (`apps/server/src/restart-reset.ts`), when nothing in flight
+   * can belong to a live pass of this process. Required, so a regime that files cannot omit it. */
   resetInFlight(deps: { readonly db: Database }, now: Date): Promise<void>;
-  /** The provision-time secret this regime seals into a fresh venue's vault (a Veri*Factu venue's
-   * AEAT signing certificate; absent for a regime that files nothing). The host holds the opaque
-   * blob and the vault ring but does not know the regime's shape, so it reaches the regime through
-   * this seat: `required` decides whether the environment demands the secret, `validate` refuses a
-   * malformed one WITHOUT any write, and `seal` writes it in its own transaction. */
+  /** The provision-time secret this regime seals into a fresh venue's vault. The host holds the
+   * opaque blob but does not know its shape, so it reaches the regime through this seat. */
   readonly provisioningSecret?: {
-    /** Whether a provision in `environment` must carry the secret (Veri*Factu: production only). */
+    /** Whether a provision in `environment` must carry the secret. */
     required(environment: DeploymentEnvironment): boolean;
-    /** Validate the opaque secret's SHAPE, throwing `setup.request_invalid` naming the offending
-     * field, and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
-     * (CLAUDE.md §5) so a malformed secret is refused with nothing stamped or minted. */
+    /** Validate the secret's SHAPE, throwing `setup.request_invalid` naming the offending field,
+     * and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
+     * (CLAUDE.md §5). */
     validate(raw: unknown): void;
-    /** Seal the (validated) secret into the venue's vault under `withTransaction`, re-validating as
-     * defence in depth. Runs after the taxpayer row is written, though nothing in the schema ties
-     * the vault row to it: `tenant_credentials` is keyed by `purpose` alone and references no other
-     * its last supplier, is converted. */
+    /** Seal the secret into the venue's vault in its own transaction, re-validating it. */
     seal(deps: { db: Database; ring: KeyRing }, raw: unknown): Promise<void>;
   };
-  /** The operator-typed venue fields this regime puts on the wire verbatim. The host collects them
-   * and does not know the regime's rules, so — exactly as `provisioningSecret` does for the signing
-   * certificate — it reaches them through this seat. `validate` throws `setup.request_invalid`
-   * naming ONE offending field and writes nothing; it is run BEFORE `provisionVenue` mints the
-   * unrepairable SIF and hash chain (CLAUDE.md §5). A regime that files nothing offers no seat and
-   * its venues are not checked, because there is no filing format to violate. */
+  /** The operator-typed venue fields this regime puts on the wire verbatim, reached through this
+   * seat because the host does not know the regime's rules. `validate` throws
+   * `setup.request_invalid` naming ONE offending field and writes nothing. Run it BEFORE
+   * provisioning mints the unrepairable SIF and hash chain (CLAUDE.md §5). */
   readonly venueFields?: {
     readonly defaults?: { readonly operationDescription: string };
     validateOperationDescription(description: string): void;

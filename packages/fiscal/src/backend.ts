@@ -1,11 +1,3 @@
-// Side-effect only: registers this package's `fiscal.*` codes on the shared `ErrorParams`
-// registry by declaration merging. See errors.ts for why, and errors.reachability.test.ts for the
-// mechanical check that keeps errors.ts reachable from this package's own public barrel
-// (index.ts). errors.ts is already reachable via ./clock.ts's own such import; this second import
-// is redundant for reachability specifically, but every file whose JSDoc references a `fiscal.*`
-// code carries it anyway, mirroring packages/db/src/allocate-number.ts's convention of importing
-// from the file that documents the codes it throws — even though, unlike that file, nothing in
-// backend.ts itself throws (it is types only; ./testing/fake-backend.ts does the throwing).
 import "./errors.js";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -13,17 +5,13 @@ import type { VatBreakdownLine } from "./vat-breakdown.js";
 
 export type { VatBreakdownLine };
 
-/**
- * The lifecycle of a fiscal record as the POS understands it. Regime-neutral: `recorded` means
- * the legally-required record exists locally, which in Spain is the point at which the sale is
- * compliant regardless of whether anything has been sent anywhere.
- */
+/** `recorded` means the required record exists locally, whether or not anything has been sent. */
 export type FiscalState = "recorded" | "pending" | "acknowledged" | "rejected";
 
 export interface NodeRegistration {
   backend: string;
   nodeId: NodeId;
-  /** Opaque to the POS. An installation number, a device id, or nothing meaningful at all. */
+  /** Opaque to the POS. */
   registrationId: string;
   registeredAt: Date;
 }
@@ -43,18 +31,13 @@ export interface Counterparty {
 }
 
 /**
- * Everything a regime could plausibly need about a completed sale, in English and in exact
- * decimals. Line descriptions are deliberately absent: they are a receipt-rendering concern and
- * reach no authority anywhere (spec §9), so putting them here would invite a backend to depend
- * on text that is locale-dependent and snapshotted per venue.
+ * Everything a regime could plausibly need about a completed sale, in exact decimals. Line
+ * descriptions are deliberately absent: they are a receipt-rendering concern.
  */
 export interface SaleForFiscalRecord {
-  /** Where the sale rang — an informational snapshot on the immutable fiscal record. Kept beside
-   * `nodeId` (node-id rekey, 2026-08-03): the chain/SIF are keyed by node, the till is where it
-   * rang. */
+  /** Where the sale rang. */
   tillId: TillId;
-  /** Which node processed and chained this sale — the chain/SIF key (node-id rekey, 2026-08-03;
-   * the SIF is the node, #33). */
+  /** The node recording this sale: the chain key, not the till. */
   nodeId: NodeId;
   saleId: SaleId;
   seriesId: SeriesId;
@@ -73,15 +56,8 @@ export interface SaleForFiscalRecord {
 export interface FiscalRecordRef {
   backend: string;
   /**
-   * Opaque to the POS, like `NodeRegistration.registrationId` — deliberately plain `string`
-   * rather than the `FiscalRecordId` branded type `@waitron/shared` already exports. That brand's
-   * own constructor (`fiscalRecordId()`) validates its input as a UUID, which is the right
-   * constraint for a value this repo mints itself, but wrong here: a real backend's own identifier
-   * for what it recorded is regime-shaped, not this repo's — a sequence-derived value, a device
-   * plus counter pair, or something else again — and none of that has any reason to be
-   * UUID-shaped, so forcing one would be a generic-layer decision about a regime-owned value.
-   * `FiscalRecordId` remains available for whatever DB-level column later tasks give an actual
-   * UUID primary key; this field is not that.
+   * Opaque to the POS, so a plain `string` rather than the `FiscalRecordId` brand, whose
+   * constructor requires a UUID: a backend's own identifier for a record need not be one.
    */
   recordId: string;
   state: FiscalState;
@@ -91,11 +67,7 @@ export interface FiscalRecordRef {
   verificationUrl?: string;
 }
 
-/**
- * An issue found by `checkIntegrity`, as a code plus params rather than an AppError instance — a
- * report is persisted and displayed, and an Error does not survive JSON. A caller that wants to
- * render one rehydrates it into an AppError at the display boundary.
- */
+/** A code plus params rather than an AppError, because an Error does not survive JSON. */
 export interface IntegrityIssue {
   code: string;
   params: Record<string, unknown>;
@@ -111,36 +83,17 @@ export interface IntegrityReport {
 }
 
 /**
- * The outcome of one `drain(now)` pass. `nextDueAt` is the only field a scheduler needs — when to
- * invoke `drain` again. `null` means nothing pending, but only when `skipped` is ALSO empty: a pass
- * recorded in `skipped` was abandoned mid-way with nothing scheduled for it (no gate, no backoff
- * row), so `nextDueAt` is never `null` while `skipped` is non-empty — an implementation must fold
- * in `now` plus its own configured skip-retry interval in that case rather than report `null`, so a
- * host sleeping on this field wakes up again rather than sleeping forever past art. 16.4's hour.
- * That interval is the implementation's to choose and name — this package
- * neither defines nor depends on one. `now` alone is not enough either: a skip is frequently not
- * transient (a certificate nobody has provisioned answers the same way every pass), and a host
- * that wakes on `now` pins its loop at its MIN_TICK floor indefinitely. FOLD, never assign: the
- * reported instant is that interval, or anything EARLIER the same pass computed — never the
- * interval unconditionally, so an abandoned batch's retry can never delay an earlier gate the pass
- * had already computed. Mirrors `TickResult.nextDueAt` in `@waitron/scheduler`
- * in spirit, not exactly: `runDue` (`packages/scheduler/src/run.ts`) folds its own skip time the
- * identical way, but ONLY when `deferred` is zero — a tick with `deferred > 0` reports `now`
- * outright instead, discarding that fold entirely, because capped-but-runnable work takes priority
- * over a skip's own retry interval. `drain` has no `deferred` concept at all, so the fold described
- * above is unconditional here: a skip always contributes at least the skip-retry floor to
- * `nextDueAt`, with nothing else this pass could find that overrides it away. The counts are for a
- * log line and observability; a caller needing per-record detail reads the module's own tables.
+ * The outcome of one `drain(now)` pass. `nextDueAt` is when to invoke `drain` again, and is never
+ * `null` while `skipped` is non-empty: an implementation folds in `now` plus its own skip-retry
+ * interval as a MINIMUM with any earlier instant the pass computed, so a host sleeping on this
+ * field wakes again and an abandoned pass's retry never delays an earlier one.
  */
 export interface DrainResult {
   nextDueAt: Date | null;
   /**
-   * Whether this pass found due work and attempted it — 1 if it did, whether it submitted, deferred
-   * to a gate, or landed in `skipped`; 0 for a pass that found no work or never looked for any, and
-   * read no certificate. One database files for one taxpayer, so the only values are 0 and 1; it
-   * stays a COUNT because the
-   * awaiting-fiscal-certificate flag (`apps/server/src/pass.ts`) keys off `> 0` — a no-work pass
-   * must not clear it, since a pass that exercised no cert is no evidence the cert has arrived.
+   * 1 if this pass found due work, whatever became of it; 0 if it found none or never looked. The
+   * awaiting-certificate flag (`apps/server/src/pass.ts`) changes only when this is `> 0`, because
+   * a pass with no work read no certificate.
    */
   tenantsWithWork: number;
   batchesSent: number;
@@ -149,23 +102,14 @@ export interface DrainResult {
   recordsHalted: number; // records rejected or otherwise stopped
   incidentsRaised: number;
   /**
-   * A pass that abandoned the work it found — its transport could not be built, or its sweep
-   * threw — or, from the host's wrapper (`apps/server/src/restart-reset.ts`), a pass whose restart
-   * reset failed, so no work was looked for. Mirrors `TickResult.skipped` in `@waitron/scheduler`,
-   * and for the same reason: a failure like this has no ledger row of its own to carry it, so
-   * reporting it here is the alternative to swallowing it. NEVER silent — due fiscal work this pass
-   * could not submit is an unmet legal obligation. At most one entry: one database files for one
-   * taxpayer.
+   * A pass that abandoned the work it found, or (from `apps/server/src/restart-reset.ts`) one whose
+   * restart reset failed. Such a failure has no ledger row of its own, so it is reported here
+   * rather than swallowed.
    */
   skipped: { errorCode: string }[];
 }
 
-/**
- * A fresh empty `DrainResult` — every counter zero, no next due time, nothing skipped. The no-regime
- * regime returns it wholesale (it has no authority to contact), and `drain`'s own pass seeds its
- * result from it. A FUNCTION, not a shared constant, because a caller mutates the object it gets back
- * (`drain` accumulates counts into its seed), so each call must own a fresh `skipped` array.
- */
+/** A function, not a shared constant, because callers mutate the result they get back. */
 export function emptyDrainResult(): DrainResult {
   return {
     nextDueAt: null,
@@ -180,39 +124,31 @@ export function emptyDrainResult(): DrainResult {
 }
 
 /**
- * How this POS classifies what a regime reports back about a submission — plan 3b's own settled
- * classification, independent of whatever raw code a particular regime uses for the same idea.
- * `"accepted_with_errors"` still counts as accepted, mirroring `DrainResult.recordsAccepted`'s
- * identical convention above.
+ * How this POS classifies what a regime reports back about a submission, whatever raw code the
+ * regime uses. `"accepted_with_errors"` still counts as accepted.
  */
 export type AckState = "accepted" | "accepted_with_errors" | "rejected" | "halted";
 
 /**
- * One record `reconcile` found this POS and the regime disagreeing about, or that the regime has
- * nothing to say about at all. `localState`/`reportedState` are deliberately plain strings, like
- * `FiscalRecordRef.recordId` — this POS's own last-known state and whatever the regime reported
- * back are each a vocabulary a generic report should not force into `FiscalState` or `AckState`;
- * a backend maps its own codes onto whichever of those fits before handing this back.
+ * One record `reconcile` found this POS and the regime disagreeing about. The states are plain
+ * strings because each side's vocabulary is the regime's, not `FiscalState` or `AckState`.
  */
 export interface ReconcileMismatch {
   recordId: string;
   localState: string;
-  /** Null when the regime has no record of this one at all — the `noTrace` case below. */
+  /** Null when the regime has no record of this one at all. */
   reportedState: string | null;
 }
 
 /**
- * The outcome of one `reconcile(period)` pass — the read-side counterpart to
- * `DrainResult` above. `lostAck`/`noTrace`/`drift` are non-overlapping: a record still awaiting
- * acknowledgement that the regime has simply not reported on yet is ordinary in-flight state, not
- * any of the three.
+ * The outcome of one `reconcile(period)` pass. `lostAck`, `noTrace` and `drift` do not overlap, and
+ * a record awaiting acknowledgement that the regime has not reported on yet is in none of them.
  */
 export interface ReconcileResult {
   year: string;
   month: string;
   checked: number;
-  /** Still `pending` locally, but the regime already reports something for it — this POS's own
-   * acknowledgement was lost, or never arrived. */
+  /** Still `pending` locally, but the regime already reports something for it. */
   lostAck: ReconcileMismatch[];
   /** `acknowledged` locally, but the regime has no trace of it at all. */
   noTrace: ReconcileMismatch[];
@@ -222,23 +158,15 @@ export interface ReconcileResult {
 }
 
 /**
- * The only thing that crosses between the POS and a fiscal regime.
- *
- * Nothing in this file names an inter-record linking structure, a one-way digest, a derived
- * per-record signature, or an authority, and a guard test (./no-regime-vocabulary.test.ts)
- * enforces that mechanically. Structuring records that way is a regime requirement, not a POS
- * one: a second backend arrives with its own tables and its own vocabulary and changes nothing
- * here.
- *
- * The runtime submission pass (`drain`) and the reconciliation sweep (`reconcile`) are NOT on this
- * interface: they run outside the sale path, on the module's own tables, and are reached through
- * the `FiscalContribution` slot's own seats — not by every caller that records a sale. `DrainResult`
- * and `ReconcileResult` above are their return shapes, produced by `@waitron/fiscal-verifactu`'s
- * standalone `drain`/`reconcile` functions.
+ * The sale-path boundary between the POS and a fiscal regime. It names no regime mechanism; the
+ * guard is ./no-regime-vocabulary.test.ts. The submission pass (`drain`) is not on it: that runs
+ * outside the sale path, through `FiscalContribution`.
  */
 export interface FiscalBackend {
-  /** This backend's identifying string — what `sales.fiscal_backend` records, and the value the
-   * `backend` field of every `NodeRegistration`/`FiscalRecordRef` it returns carries. */
+  /**
+   * What `sales.fiscal_backend` records, and the `backend` field of every
+   * `NodeRegistration`/`FiscalRecordRef` it returns.
+   */
   readonly id: string;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
@@ -251,45 +179,18 @@ export interface FiscalBackend {
   recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef>;
 
   /**
-   * The reprint data for an ALREADY-FILED sale — the verification link a customer scans and the exact
-   * VAT breakdown and issuer identity that were filed. For an idempotent replay (a lost-response pay
-   * retry that reprints the ticket WITHOUT re-filing — park & retrieve, spec §3), this is the only way the replayed
-   * receipt can carry the regime's mandatory QR and the authoritative VAT breakdown: both live only on the
-   * regime's own immutable record, which the generic caller may not read across this boundary, and
-   * `FiscalRecordRef` is minted at filing time and long gone by the time a retry arrives.
-   *
-   * Returns the figures EXACTLY as filed, never a recomputation: `vatBreakdown` is the stored
-   * difference-method VAT breakdown (tax = gross − base), which can diverge by up to a cent from a naive
-   * base×rate recompute over a multi-line same-rate group. A replayed legal receipt must show what was
-   * filed, not a value that merely approximates it.
-   *
-   * `undefined` when the sale has no filed record to reprint (no `recordSale` ran for it) — the caller
-   * keeps whatever fallback it had. Takes the transaction, like the write methods and unlike
-   * `pendingCount`: a replay resolves the settled sale and reads its record in ONE transaction.
-   *
-   * READ-ONLY. It files nothing, appends nothing and re-hashes nothing — the immutable record (§5) is
-   * only read back. `verificationUrl` here is a plain non-optional `string` (unlike
-   * `FiscalRecordRef.verificationUrl`, optional because a regime may offer none): this method returns a
-   * value only when a filed record exists, and a regime that mints no QR simply need not implement a
-   * receipt read-back at all.
+   * The reprint data for an already-filed sale, so a replayed receipt can carry what the regime's
+   * own record holds. Read-only, and EXACTLY as filed, never recomputed: a replayed receipt must
+   * show what was filed. `undefined` when the sale has no filed record.
    */
   filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined>;
 
   recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
 
   /**
-   * Records a corrective fiscal record — a credit note, the corrective invoice of a prior sale. Like
-   * `recordSale` it takes the transaction: atomicity between the corrective sale and its fiscal
-   * record is the entire point, exactly as for a sale. `sale` is the corrective invoice's OWN data
-   * — its own new number, its own (negative) total and breakdown — while `correction.correctsSaleId`
-   * names the earlier sale being corrected. The regime maps this onto its own corrective mechanism;
-   * no fiscal condition blocks it (spec §4), a correction being a staff remedy the till must always
-   * be able to issue.
-   *
-   * Regime-neutral in name and shape, like every method here: nothing about a corrective mechanism's
-   * own vocabulary leaks across this boundary (the guard in ./no-regime-vocabulary.test.ts enforces
-   * it), and `SaleForFiscalRecord` is reused unchanged — a corrective's negative total and breakdown
-   * fit its existing shape with no new field.
+   * Records a corrective invoice of a prior sale. `sale` is the corrective invoice's OWN data — its
+   * own number and its own negative total and breakdown — while `correction.correctsSaleId` names
+   * the sale being corrected.
    */
   recordCorrection(
     tx: Transaction,
@@ -298,27 +199,12 @@ export interface FiscalBackend {
   ): Promise<FiscalRecordRef>;
 
   /**
-   * Records a substitution fiscal record — a full invoice issued in place of one or more prior
-   * simplified sales, at a customer's later request for a proper invoice naming them. Like
-   * `recordSale`/`recordCorrection` it takes the transaction: atomicity between the substitution
-   * sale and its fiscal record is the entire point. `sale` is the full invoice's OWN data — its own
-   * new number, its own POSITIVE total and breakdown, and a counterparty that is REQUIRED here
-   * rather than optional as it is on `recordSale`, because a full invoice must always name its
-   * recipient — while `substitution.substitutedSaleIds` names the earlier simplified sales it
-   * replaces (one or many, the N:1 fan-out a correction's single `correctsSaleId` does not have).
-   *
-   * A substitution is NOT a correction and issues no credit note: the replaced sales are neither
-   * edited nor annulled, they remain recorded exactly once, and the regime avoids double-counting
-   * the amount because the record identifies ITSELF as a substitution naming what it replaces — not
-   * because anything is negated. The replaced sales must therefore already have a prior
-   * `recordSale`, like the sale a correction points at; a backend that cannot issue a full
-   * substitution for one of them refuses rather than mis-filing an unrepairable record.
-   *
-   * Regime-neutral in name and shape, like every method here (the guard in
-   * ./no-regime-vocabulary.test.ts enforces it), and `SaleForFiscalRecord` is reused unchanged — its
-   * `counterparty` field is REQUIRED here (a substitution always names its recipient) and optional
-   * on `recordSale`, which reads and files one when a caller supplies it, with no new interface
-   * field on either.
+   * Records a full invoice issued in place of one or more prior simplified sales. `sale` is the
+   * full invoice's OWN data, with a positive total and a non-null `counterparty`, while
+   * `substitution.substitutedSaleIds` names the sales it replaces. It is not a correction: the
+   * replaced sales are neither edited nor annulled, and the record avoids double-counting by
+   * naming what it replaces. A backend that cannot issue a full substitution for one of the
+   * replaced sales refuses rather than mis-filing an unrepairable record.
    */
   recordSubstitution(
     tx: Transaction,
@@ -328,19 +214,12 @@ export interface FiscalBackend {
 
   /**
    * Whatever this backend must check about what it has already recorded, before recording
-   * anything more. `nodeId` because the chain being verified is per-node (node-id rekey,
-   * 2026-08-03). The caller records the report and
-   * surfaces it to staff; it must NEVER branch on `ok` to abandon the sale. No fiscal condition
-   * blocks a sale (spec §4), and a backend whose regime has nothing to check answers
-   * `{ ok: true, checked: 0, issues: [] }`.
+   * anything more. The caller records the report and surfaces it to staff; it must NEVER branch on
+   * `ok` to abandon the sale: no fiscal condition blocks a sale.
+   * A backend with nothing to check answers `{ ok: true, checked: 0, issues: [] }`.
    */
   checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport>;
 
-  /**
-   * How many records this node has not yet had confirmed. The UI reads this, never the module's
-   * own tables. Takes NO transaction: the unsent-count read happens outside any sale transaction,
-   * so the backend opens its own. `nodeId` because the chain is per-node (node-id rekey,
-   * 2026-08-03).
-   */
+  /** How many records this node has not yet had confirmed. */
   pendingCount(nodeId: NodeId): Promise<number>;
 }
