@@ -1,5 +1,8 @@
-import { readFileSync } from "node:fs";
-import { createServer as createHttpsServer } from "node:https";
+import { createHash, X509Certificate } from "node:crypto";
+import { createSecureContext } from "node:tls";
+import { isIP } from "node:net";
+import { readFileSync, statSync } from "node:fs";
+import { createServer as createHttpsServer, Server as HttpsServer } from "node:https";
 import { serve } from "@hono/node-server";
 
 /**
@@ -32,8 +35,7 @@ export interface TlsFiles {
  * HTTPS — the adaptor does `options.createServer(options.serverOptions || {}, …)`.
  *
  * With no `tls`, the base options are returned UNCHANGED (referentially — no file is read and no
- * `createServer` is added), which is the plain-HTTP loopback-dev path. This function is the whole of
- * the process's TLS capability: production local-CA trust and LAN binding are deployment (#9).
+ * `createServer` is added), which is the plain-HTTP loopback-dev path. Certificate reload is handled by `watchTlsFiles`; this function only builds the initial context.
  *
  * `readFileSync`, not async: `boot.ts` builds these options synchronously right before its single
  * `serve` call, and a missing or unreadable file must fail the boot loudly and immediately (spec §8
@@ -45,4 +47,45 @@ export function buildServeOptions(base: ServeOptions, tls: TlsFiles | undefined)
   const key = readFileSync(tls.keyFile);
   const cert = readFileSync(tls.certFile);
   return { ...base, createServer: createHttpsServer, serverOptions: { key, cert } };
+}
+
+/** Refresh only future handshakes. A failed renewal leaves the last valid TLS context serving. */
+export function watchTlsFiles(
+  server: HttpsServer,
+  files: TlsFiles,
+  hostname: string,
+  onError: () => void,
+  intervalMs = 10000,
+): void {
+  let accepted = "",
+    lastFailure: number | undefined;
+  const timer = setInterval(() => {
+    try {
+      if (statSync(files.keyFile).size > 16384 || statSync(files.certFile).size > 16384)
+        throw new Error("TLS file too large");
+      const key = readFileSync(files.keyFile),
+        cert = readFileSync(files.certFile);
+      const fingerprint = createHash("sha256").update(key).update(cert).digest("hex");
+      if (fingerprint === accepted) return;
+      const leaf = new X509Certificate(cert);
+      const matches = isIP(hostname) ? leaf.checkIP(hostname) : leaf.checkHost(hostname);
+      if (
+        matches !== hostname ||
+        Date.parse(leaf.validFrom) > Date.now() ||
+        Date.parse(leaf.validTo) <= Date.now()
+      )
+        throw new Error("TLS certificate invalid");
+      createSecureContext({ key, cert });
+      server.setSecureContext({ key, cert });
+      accepted = fingerprint;
+      lastFailure = undefined;
+    } catch {
+      if (lastFailure === undefined || Date.now() - lastFailure >= 300000) {
+        onError();
+        lastFailure = Date.now();
+      }
+    }
+  }, intervalMs);
+  timer.unref();
+  server.once("close", () => clearInterval(timer));
 }
