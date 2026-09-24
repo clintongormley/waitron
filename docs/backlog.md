@@ -2404,15 +2404,14 @@ image constraints under *Detail → Box image*.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). The rule change and the checker every pruning pull request passes,
-  `scripts/comments-only.mjs <base>`, came first. It reads the commits since the branch left
-  `<base>`, never an uncommitted edit. It fails on any changed file that is not a regular
-  TypeScript or JavaScript file; on a file added, deleted, renamed, or changed in mode or type; and
-  on a code file that parses to a different syntax tree or token text, or whose shebang or a comment
-  on its hand-written list of tool directives changed. It lets through the trailing comma Prettier
-  adds or drops when a list is rewrapped. The packages follow, the fiscal ones under the same gates
-  as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass unedited.
-  Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the root
-  `vitest.config.ts` and `eslint.config.js`.
+  `scripts/comments-only.mjs <base>`, came first; its header states what it refuses and misses.
+  What a pruner meets: it reads commits only, never an uncommitted edit; any changed file that is
+  not TypeScript or JavaScript fails it; and it refuses a trailing comma added or dropped after a
+  spread or rest element, where Prettier writes one, so a pruning edit that lets such a call,
+  array or object fold onto one line is refused. The packages follow, the fiscal ones under the
+  same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
+  unedited. Not reached by any package's pull request: `bench/` (about 2,300 comment lines) and the
+  root `vitest.config.ts` and `eslint.config.js`.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
