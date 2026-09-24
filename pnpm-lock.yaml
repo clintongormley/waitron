@@ -238,6 +238,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@waitron/stream':
+        specifier: workspace:*
+        version: link:../../packages/stream
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../../packages/sync-enrolment

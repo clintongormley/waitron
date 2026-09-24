@@ -30,6 +30,20 @@ export const PURPOSES = {
   "sync.mirror_token": ["token"],
   /** The node's own Ed25519 membership identity PRIVATE key. */
   "membership.node_key": ["privateKey"],
+  /**
+   * The owner's S3-compatible bucket the venue's database streams to. `venueId` names the venue's
+   * folder in it. An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-`, the same
+   * convention `payments.sumup`'s affiliate fields use, because every field must be non-empty.
+   */
+  "backup.stream": [
+    "venueId",
+    "endpoint",
+    "region",
+    "bucket",
+    "prefix",
+    "accessKeyId",
+    "secretAccessKey",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Purpose = keyof typeof PURPOSES;
