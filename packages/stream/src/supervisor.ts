@@ -74,6 +74,8 @@ export interface SupervisorDeps {
   spawn?: SpawnFn;
   store?: ObjectStore;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+  /** Default {@link STOP_WAIT_MS}. */
+  stopWaitMs?: number;
   /** Reads a PID's command line; default {@link readCommandLine}. */
   readCommandLine?: (pid: number) => Promise<string | null>;
 }
@@ -187,6 +189,7 @@ export class StreamSupervisor {
   readonly #store: ObjectStore;
   readonly #spawn: SpawnFn;
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  readonly #stopWaitMs: number;
   #status: StreamStatus;
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
@@ -203,6 +206,7 @@ export class StreamSupervisor {
     this.#store = deps.store ?? createS3ObjectStore(deps.bucket);
     this.#spawn = deps.spawn ?? spawnLitestream;
     this.#sleep = deps.sleep ?? abortableSleep;
+    this.#stopWaitMs = deps.stopWaitMs ?? STOP_WAIT_MS;
     this.#status = {
       state: "off",
       generation: null,
@@ -243,7 +247,7 @@ export class StreamSupervisor {
     if (controller === undefined) return;
     controller.abort();
     await this.#stopChild();
-    await Promise.race([this.#run, delay(STOP_WAIT_MS, undefined, { ref: false })]);
+    await Promise.race([this.#run, delay(this.#stopWaitMs, undefined, { ref: false })]);
     await this.#stopChild();
     await this.#versionExit;
     this.#set("off", "stopped");
@@ -315,6 +319,7 @@ export class StreamSupervisor {
     for (;;) {
       signal.throwIfAborted();
       this.#set("opening", null, null);
+      let moving: Promise<unknown> = Promise.resolve();
       try {
         const probe = await probeBucket(this.#store);
         signal.throwIfAborted();
@@ -357,7 +362,7 @@ export class StreamSupervisor {
         const pointer: SignedPointer = { body, signature };
         const moved = await this.#watchingLimit(
           generation,
-          (within) => this.#movePointer(pointer, previous?.etag ?? null, within),
+          (within) => (moving = this.#movePointer(pointer, previous?.etag ?? null, within)),
           signal,
         );
         if (!moved) {
@@ -373,6 +378,9 @@ export class StreamSupervisor {
         if (signal.aborted) throw error;
         this.#deps.log("warn", "stream.open_failed", { errorCode: codeOf(error) });
         await this.#stopChild();
+        // A pointer write already sent cannot be called back. Landing after the next attempt reads
+        // the pointer, it would make that attempt's own write be refused as another box's.
+        await moving.catch(() => undefined);
         await this.#sleep(OPEN_RETRY_MS, signal);
       }
     }

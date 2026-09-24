@@ -134,6 +134,7 @@ interface HarnessOptions {
   /** A `replicate` start that throws at once, as `spawn` does for arguments it cannot use. */
   replicateThrows?: boolean;
   litestreamBin?: string;
+  stopWaitMs?: number;
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -190,6 +191,7 @@ async function harness(options: HarnessOptions = {}) {
     },
     store,
     sleep: clock.sleep,
+    ...(options.stopWaitMs === undefined ? {} : { stopWaitMs: options.stopWaitMs }),
     ...(options.readCommandLine === undefined ? {} : { readCommandLine: options.readCommandLine }),
   };
   const supervisor = new StreamSupervisor(deps);
@@ -221,8 +223,8 @@ async function harness(options: HarnessOptions = {}) {
         },
       };
     },
-    failWal: () => {
-      walFails = true;
+    failWal: (fails = true) => {
+      walFails = fails;
     },
   };
 }
@@ -599,7 +601,7 @@ describe("opening a generation", () => {
   });
 
   it("waits, on stop, for a `litestream version` that is slow to exit once killed", async () => {
-    const h = await harness({ versionHangs: true });
+    const h = await harness({ versionHangs: true, stopWaitMs: 10 });
     await h.supervisor.start();
     await vi.waitFor(() => expect(h.litestream.children).toHaveLength(1));
     const probe = h.litestream.children[0]!;
@@ -611,8 +613,8 @@ describe("opening a generation", () => {
       stopped = true;
     });
     await vi.waitFor(() => expect(probe.killed).toBe(true));
-    // Longer than stop()'s one-second wait for a run blocked on the bucket.
-    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    // Thirty times stop()'s wait for a run blocked on the bucket.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     expect(stopped).toBe(false);
     probe.exit(null);
     await stopping;
@@ -753,6 +755,73 @@ describe("opening a generation", () => {
     const writes = pointerWrites;
     for (let wake = 0; wake < 10; wake += 1) await h.clock.next();
     expect(pointerWrites).toBe(writes);
+  });
+
+  it("waits for a pointer write it already sent before opening again, so that write never reads as another box's", async () => {
+    const h = await harness();
+    const put = h.store.put.bind(h.store);
+    const get = h.store.get.bind(h.store);
+    let release: (() => void) | undefined;
+    h.store.put = async (key, body, cond) => {
+      if (key === pointerKey(VENUE) && release === undefined) {
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      return put(key, body, cond);
+    };
+    // The held write lands just after the pointer is next read: the order that makes it a change.
+    h.store.get = async (key) => {
+      const answer = await get(key);
+      if (key === pointerKey(VENUE)) release?.();
+      return answer;
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => release !== undefined);
+    h.failWal();
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.open_failed"));
+    h.failWal(false);
+    // Asleep in its retry wait only if it gave the attempt up without waiting for the write.
+    const retrying = await h.clock.asleep(300).then(
+      () => true,
+      () => false,
+    );
+    if (!retrying) release!();
+    await h.clock.until(() => h.litestream.replicas().length === 2);
+    const second = h.supervisor.status().generation!;
+    h.store.upload(fullCopyOf(second));
+    await h.clock.until(() => ["streaming", "refused"].includes(h.supervisor.status().state));
+    expect(h.supervisor.status()).toMatchObject({
+      state: "streaming",
+      reason: null,
+      generation: second,
+    });
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(second);
+  });
+
+  it("still stops promptly while waiting for a pointer write already sent, and sends nothing new after", async () => {
+    const h = await harness({ stopWaitMs: 10 });
+    const put = h.store.put.bind(h.store);
+    let release: (() => void) | undefined;
+    h.store.put = async (key, body, cond) => {
+      if (key === pointerKey(VENUE) && release === undefined) {
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      return put(key, body, cond);
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => release !== undefined);
+    h.failWal();
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.open_failed"));
+    const before = h.events.length;
+    await h.supervisor.stop();
+    expect(h.supervisor.status()).toMatchObject({ state: "off", reason: "stopped" });
+    release!();
+    await vi.waitFor(() => expect(h.events.length).toBeGreaterThan(before));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.events.slice(before)).toEqual([`put ${pointerKey(VENUE)}`]);
   });
 
   it("does nothing more when started twice, and nothing at all when stopped before it started", async () => {
@@ -998,7 +1067,7 @@ describe("while streaming", () => {
   });
 
   it("waits, on stop, for a Litestream a pause is still stopping", async () => {
-    const h = await streaming();
+    const h = await streaming({ stopWaitMs: 10 });
     const child = h.litestream.running()!;
     child.kill = () => {
       child.killed = true;
@@ -1010,8 +1079,8 @@ describe("while streaming", () => {
     const stopping = h.supervisor.stop().then(() => {
       stopped = true;
     });
-    // Longer than stop()'s one-second wait for a run blocked on the bucket.
-    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    // Thirty times stop()'s wait for a run blocked on the bucket.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     expect(stopped).toBe(false);
     child.exit(null);
     await stopping;
