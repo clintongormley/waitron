@@ -5,16 +5,19 @@ import { join } from "node:path";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { reserveCloudCapture, publishCloudCapture } from "./cloud-backup.js";
 import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
+const captureKeys = new Map<string, string>();
 function grant(values: unknown[], saved: Record<string, unknown>) {
   const r = (saved.view as { registration: { installationId: string; venueId: string } })
     .registration;
+  const id = String(values[4]);
+  if (!captureKeys.has(id)) captureKeys.set(id, randomBytes(32).toString("base64url"));
   return {
     id: values[4],
     ...r,
     keyVersion: 1,
     location: { endpoint: "https://storage.test", bucket: "venue-one", region: "local" },
     incomingKey: "incoming/" + String(values[4]),
-    recoveryKey: randomBytes(32).toString("base64url"),
+    recoveryKey: captureKeys.get(id)!,
     credentials: { accessKeyId: "upload", secretAccessKey: "secret", sessionToken: "token" },
     expiresAt: new Date(Date.now() + 900000).toISOString(),
   };
@@ -32,7 +35,9 @@ it("uses current installation proof and renews the same capture without saving u
     expect(f.requests.at(-1)?.[6]).toContain("payload");
     expect(f.requests.at(-1)?.[7]).toBe("{}");
     const restarted = createCloudConnection(f.options);
-    expect((await restarted.reserveCapture(id)).id).toBe(id);
+    const retried = await restarted.reserveCapture(id);
+    expect(retried.id).toBe(id);
+    expect(retried.recoveryKey).toBe(first.recoveryKey);
     const saved = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
     for (const secret of [first.recoveryKey, '"secretAccessKey"', '"sessionToken"'])
       expect(saved).not.toContain(secret);
@@ -192,6 +197,65 @@ it("refuses malformed response bodies, redirects, invalid inputs and missing loc
     await expect(reserveCloudCapture(state, randomUUID(), controller.signal)).rejects.toMatchObject(
       { code: "cloud.unavailable" },
     );
+  } finally {
+    await f.close();
+  }
+});
+it("queues capture requests behind the connection gate", async () => {
+  const f = await installationFixture(async (v, s, _req, res) => {
+    res.end(JSON.stringify(grant(v, s)));
+  });
+  try {
+    const ids = [randomUUID(), randomUUID()];
+    const results = await Promise.allSettled(ids.map((id) => f.client.reserveCapture(id)));
+    expect(results.map((r) => (r.status === "fulfilled" ? "ok" : r.reason.code))).toEqual([
+      "ok",
+      "ok",
+    ]);
+    expect(results.map((r) => (r.status === "fulfilled" ? r.value.id : null))).toEqual(ids);
+    expect(f.requests.filter((v) => v[2] === "backup-reserve")).toHaveLength(2);
+  } finally {
+    await f.close();
+  }
+});
+it("revocation discovered during refresh prevents the capture request", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh();
+    f.revoke();
+    const before = f.requests.length;
+    await expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
+      code: "cloud.binding_conflict",
+    });
+    expect(f.requests.slice(before).map((v) => v[2])).toEqual(["configuration"]);
+  } finally {
+    await f.close();
+  }
+});
+it("cancels an oversized response stream before it finishes", async () => {
+  let closed!: () => void;
+  const finished = new Promise<void>((r) => {
+    closed = r;
+  });
+  const f = await installationFixture(async (_v, _s, _req, res) => {
+    res.once("close", closed);
+    res.write("x".repeat(70000));
+  });
+  try {
+    await expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        finished,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(Error("Response stream stayed open")), 2000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   } finally {
     await f.close();
   }

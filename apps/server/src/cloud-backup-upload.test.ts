@@ -97,3 +97,39 @@ it("uploads with capture credentials and a conditional PUT; retries need no read
     await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
   }
 });
+it("refuses HTTP before sending upload credentials to a listening server", async () => {
+  const { createServer: plainServer } = await import("node:http");
+  let requests = 0;
+  const server = plainServer(async (req, res) => {
+    requests++;
+    for await (const _ of req) {
+    }
+    res.end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const id = randomUUID(),
+    g: CloudCaptureGrant = {
+      id,
+      installationId: randomUUID(),
+      venueId: randomUUID(),
+      keyVersion: 1,
+      location: {
+        endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+        bucket: "venue-one",
+        region: "local",
+      },
+      incomingKey: "incoming/" + id,
+      recoveryKey: randomBytes(32).toString("base64url"),
+      credentials: { accessKeyId: "upload", secretAccessKey: "secret", sessionToken: "token" },
+      expiresAt: new Date(Date.now() + 900000).toISOString(),
+    };
+  try {
+    await expect(uploadCloudCapture(g, Buffer.from("archive"))).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    expect(requests).toBe(0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
+  }
+});

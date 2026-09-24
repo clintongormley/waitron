@@ -107,7 +107,9 @@ the local restore fixture only. The signed capture client now reserves upload au
 uploads directly with scoped credentials, and publishes exact snapshot metadata through Cloud.
 It renews the current control lease, rejects unbound replies and keeps upload secrets out
 of connection state. Scheduled capture, durable local archive spooling, production
-deployment and customer recovery UI remain open.
+deployment and customer recovery UI remain open. Before scheduled uploads reach real
+venue uplinks, replace the local 30-second total upload deadline with a measured transfer
+budget, add bounded retries/streaming, and avoid reporting shutdown cancellation as an outage.
 Cloud's independent Litestream storage proof does not supply the sealed state row,
 stream supervisor or cold-restore activation still owned by SQLite slice 2. Next,
 connect those landed interfaces to Cloud's scoped storage and owner recovery flow;

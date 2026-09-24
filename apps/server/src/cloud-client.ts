@@ -329,10 +329,13 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   }
   return {
     async reserveCapture(id: string, signal?: AbortSignal) {
-      return run(async () => reserveCloudCapture(await captureState(signal), id, signal));
+      return run(async () => reserveCloudCapture(await captureState(signal), id, signal), true);
     },
     async publishCapture(id: string, metadata: CloudCaptureMetadata, signal?: AbortSignal) {
-      return run(async () => publishCloudCapture(await captureState(signal), id, metadata, signal));
+      return run(
+        async () => publishCloudCapture(await captureState(signal), id, metadata, signal),
+        true,
+      );
     },
     async status() {
       return project(await read());
