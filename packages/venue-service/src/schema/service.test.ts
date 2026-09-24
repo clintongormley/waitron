@@ -13,29 +13,10 @@ import {
 } from "./service.js";
 
 /**
- * The Drizzle table declarations themselves: evaluated in JavaScript, so no database is involved.
- *
- * `getTableConfig` comes from `drizzle-orm/sqlite-core`. The `pg-core` one it used to come from
- * threw `TypeError: Cannot convert undefined or null to object` on every table here, which is a
- * CRASH and not a failure — this file asserted nothing at all, so neither constraint name it listed
- * was guarded by anything.
- *
- * What it pins, and what it does NOT — the two are different, and measuring them apart is the
- * point. A FOREIGN KEY's name lives nowhere but here: `drizzle/0000_baseline.sql` emits every key
- * with a bare `FOREIGN KEY (...) REFERENCES ...` and no `CONSTRAINT` clause, and `pragma
- * foreign_key_list` returns no name column at all (measured on node:sqlite, Node v26.7.0: its row
- * keys are id, seq, table, from, to, on_update, on_delete, match). A refused write says
- * `FOREIGN KEY constraint failed` and stops. So `../migrations.test.ts` can ask a migrated database
- * for a key's SHAPE and never for what it is called, and it points here for the name.
- *
- * A CHECK is the opposite and was asserted here the wrong way round until it was run: the generated
- * SQL DOES name each one (`CONSTRAINT "departments_service_mode_ck" CHECK(...)`) and SQLite reports
- * `CHECK constraint failed: <name>` when one fires — measured in the same probe. So a check name is
- * reachable from the engine; what this file adds for those is that the DECLARATION still carries
- * the name, which is what keeps the generated SQL naming it.
- *
- * Each list is asserted with `toEqual`, never `toContain`: a DELETED constraint is the change this
- * has to catch, and `toContain` cannot see one.
+ * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
+ * generated SQL emits no `CONSTRAINT` clause for one, so `../migrations.test.ts` can read back a
+ * key's shape but never its name. Lists are compared with `toEqual`, because `toContain` cannot see
+ * a deleted constraint.
  */
 const EXPECTED: Record<
   string,
@@ -141,8 +122,7 @@ const EXPECTED: Record<
 };
 
 describe("venue-service schema", () => {
-  // The positive control: without it a rewrite that emptied EXPECTED would leave the loop below
-  // passing over nothing.
+  // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers all eight of the package's tables", () => {
     expect(Object.keys(EXPECTED)).toHaveLength(8);
   });
@@ -161,10 +141,8 @@ describe("venue-service schema", () => {
     });
   }
 
-  // Six indexes are PARTIAL, and each is partial for a reason the schema states: a route the
-  // predicate excludes is outside its index entirely, and that is what lets a venue-wide route and a
-  // zone route for one subject both exist. Dropping a predicate leaves the name unchanged, so the
-  // per-table assertions above cannot see it.
+  // Dropping a predicate leaves the index's name unchanged, so the per-table assertions above
+  // cannot see it.
   it("keeps every partial index partial", () => {
     const partial = [
       ...getTableConfig(departments).indexes,

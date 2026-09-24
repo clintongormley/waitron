@@ -67,27 +67,10 @@ export interface DepartmentHoursInterval {
 }
 
 /**
- * A venue-local wall-clock time in the one form these columns store: `HH:MM:SS`.
- *
- * `opens_at` and `closes_at` were PostgreSQL `time` columns, and the ENGINE turned `09:00` into
- * `09:00:00` on the way in. `timeOfDay` is plain `text` on this engine
- * (`packages/db/src/schema/columns.ts`), which stores the bytes it is handed and normalises
- * nothing, so the normalising moves here, to the write path. Same fix and same reason as
- * `storedTime` in `packages/bookings/src/bookings.ts`, which took it for `booking_time`.
- *
- * Two things rest on one stored form rather than on the seconds themselves.
- * `department_hours_interval_key` is a unique key over `(department_id, weekday, opens_at,
- * closes_at)`, and text compares byte for byte: two spellings of one interval would sit in that
- * key as two different intervals. And every read of a STORED one of these values in
- * `./dashboard/venue-operations-screen.ts` slices it to five characters, to fill an
- * `<input type="time">` and to display — code written against `HH:MM:SS`, which would hand that
- * input a four-character time if the seconds were absent. (The reads near that file's save handler
- * are of the form's own fields, not of a stored row, and are `HH:MM` by the input type.)
- *
- * Only the seconds are supplied, because the shorter form is the only one that can arrive.
- * `CLOCK_TIME` in `./routes.ts` refuses anything that is not two-digit `HH:MM`, and that route is
- * the sole caller of {@link replaceDepartmentHours} in this repository; the barrel exports it, so a
- * future consumer could hand it `HH:MM:SS`, which this passes through unchanged.
+ * A venue-local wall-clock time in the one form these columns store: `HH:MM:SS`. The columns are
+ * text, so two spellings of one interval would be two entries in `department_hours_interval_key`,
+ * and the dashboard slices a stored value to five characters. `HH:MM` gains `:00`; anything else
+ * passes through unchanged.
  */
 function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
@@ -111,18 +94,11 @@ export async function listDepartmentHours(
 }
 
 /**
- * Replaces one department's whole opening-hours set.
- *
- * The existence read below took `for update` on the department row, and this is the site in this
- * file where that mattered most: the delete-then-insert here REPLACES the set, which is the shape
- * CLAUDE.md §3 records ("Rewriting rows one at a time inside a transaction can break a unique index
- * the FINAL state satisfies") — the second of two overlapping saves deletes nothing it can see and
- * then collides on `department_hours_interval_key`. I did not reproduce that on PostgreSQL; what is
- * measured is the replacement: one write transaction runs on the venue file at a time, so there is
- * no second save to overlap with. The pattern, with its measurement and its control, is stated once
- * on
- * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The same clause went from
- * {@link deactivateDepartment} and {@link allowMenuInZone}, where it only ordered two saves.
+ * Replaces one department's whole opening-hours set by deleting it and inserting the new one, not
+ * by rewriting rows one at a time, which can break `department_hours_interval_key` midway (CLAUDE.md
+ * §3). No foreign key points at `department_hours`. One write transaction runs on the venue file at
+ * a time, so two saves cannot interleave; the pattern is stated on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`).
  */
 export async function replaceDepartmentHours(
   tx: Transaction,
@@ -346,14 +322,9 @@ export async function listVenueReadiness(
         });
       }
     }
-    // The readiness list is staff-facing, so it names each product by its staff name rather than by
-    // resolving customer-facing text per language. The id fallback stays: `products.name` is only
-    // NOT NULL (`packages/db/src/schema/catalogue.ts:91` carries no non-blank check). Every HTTP
-    // write path does refuse a blank one — `requiredText` in
-    // `packages/catalogue/src/product-editor-input.ts` for the editor, and the two hand-written
-    // checks in `apps/server/src/catalogue-api.ts` for create and patch — but a direct
-    // `createProduct` call (a demo seed script, say) bypasses all three, so an empty name is
-    // storable.
+    // Staff-facing, so each product is named by its staff name. `products.name`
+    // (`packages/db/src/schema/catalogue.ts`) is NOT NULL with no non-blank check, so a blank one
+    // falls back to the id.
     const productsById = new Map(
       configured.offers.map((offer) => [offer.productId, offer.name || offer.productId]),
     );
@@ -961,21 +932,8 @@ export async function deletePreparationRoute(
 type PreparationRouteOutcome = PreparationRoute | AppError;
 
 /**
- * The spelling a product id is STORED in, for every id a caller hands this file.
- *
- * An id column is plain `text` now and text compares byte for byte, so the folding that used to be
- * the column's job is the caller's. `normaliseUuid` is the one place a uuid's spelling is settled
- * (`packages/shared/src/ids.ts`, owner decision 2026-09-21); this file uses it BOTH as the key it
- * groups a caller's spellings under and as the value it binds into SQL, because those have to be
- * the same string for a lookup to find a row.
- *
- * WHAT THIS LOST. The helper it replaces stripped braces and hyphens as well as folding case; its
- * own comment gave the reason, that PostgreSQL's uuid input accepted `{...}` and an unhyphenated
- * run of 32 digits, so this file had to compare a caller's spelling against what that parser handed
- * back. That reason is inherited, not re-measured. What IS measured is the behaviour now: nothing
- * parses an id on the way to a `text` column, and a braced id is refused here with
- * `shared.invalid_id` rather than resolving — the case in `operations.test.ts` drives it. Case
- * survives unchanged: `normaliseUuid` folds it, so an upper-cased id still finds its product.
+ * The spelling a product id is stored in. An id column is text and compares byte for byte, so this
+ * is both the key a caller's spellings are grouped under and the value bound into SQL.
  */
 function storedUuid(id: string): string {
   return normaliseUuid(id, "ProductId");

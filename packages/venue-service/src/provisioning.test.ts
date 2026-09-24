@@ -20,12 +20,6 @@ beforeAll(() => {
 describe("VENUE_SERVICE_PROVISIONING", () => {
   it("seeds one counter policy idempotently without resetting authored mode", async () => {
     await seedTenant(db);
-    // Through the insert BUILDER, not raw SQL. Two things the raw statement relied on PostgreSQL
-    // for are gone: `array['en-GB']` is refused at prepare — `near "['en-GB']": syntax error` —
-    // because SQLite has no array literal and `invoice_locales` is a JSON array in a TEXT column
-    // that `labelList` encodes; and `locations.id` and `created_at` are JavaScript `$defaultFn`
-    // generators rather than SQL DEFAULTs, which only the builder runs. Same shape as every
-    // converted fixture in the tree (`packages/identity/test/fixtures.ts`).
     const [location] = await db
       .insert(locations)
       .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
@@ -36,8 +30,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
     await expect(runSeed()).resolves.toBe("default department and counter zone ready");
-    // The builder again, for `catalogues.id` — measured, the raw insert was refused with
-    // `NOT NULL constraint failed: catalogues.id`.
     const menus = await db
       .insert(catalogues)
       .values([{ name: "Provisioned" }, { name: "Authored" }])
@@ -53,10 +45,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       set service_mode = 'invoice_first', default_menu_id = ${menus[1]!.id}`);
     await runSeed();
 
-    // No cast on either count. `count(*)::int` was refused before the statement ran —
-    // `unrecognized token: ":"`, a colon opening a bind parameter to SQLite's parser — and the cast
-    // existed only to turn the PostgreSQL driver's BigInt into a number. Measured on node v26.7.0,
-    // this driver returns `select count(*)` as a JavaScript number already.
     const departments = await db.execute<{ count: number }>(sql`
       select count(*) as count from departments`);
     const zones = await db.execute<{ count: number }>(sql`

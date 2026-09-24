@@ -31,13 +31,9 @@ export const departments = table(
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     tradingName: label("trading_name").notNull(),
-    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair.
-    // The first of the two reasons in columns.ts holds, and it holds for all five value-set checked
-    // text columns in this file: none of their constraints carries the ", " spacing enumCheck
-    // emits, so substituting rewrites the constraint. Measured 2026-09-18 on this column and on
-    // working_line_contexts.hardware_unit -- the schema probe generated a migration dropping and
-    // re-adding both, differing from the originals only in that spacing. Rewriting a constraint is
-    // not a conversion's job. See enumText in packages/db/src/schema/columns.ts.
+    // Not the enumText/enumCheck pair, here or in the four other checked value-set columns in this
+    // file: enumCheck joins the values with ", " and these constraints have no space, so
+    // substituting it rewrites the constraint.
     defaultServiceMode: label("default_service_mode").notNull(),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
@@ -45,8 +41,6 @@ export const departments = table(
   },
   (t) => [
     unique("departments_location_name_key").on(t.locationId, t.name),
-    // At most one default department per location. Partial, so every non-default department at
-    // that location is outside the index and unconstrained by it.
     uniqueIndex("departments_one_default_per_location_key")
       .on(t.locationId)
       .where(sql`${t.isDefault}`),
@@ -68,8 +62,7 @@ export const zoneServicePolicies = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
-    // for the reason stated above departments.default_service_mode.
+    // Not enumText: see departments.default_service_mode.
     serviceMode: label("service_mode"),
     defaultMenuId: id("default_menu_id"),
     isCounterDefault: flag("is_counter_default").notNull().default(false),
@@ -96,22 +89,15 @@ export const zoneServicePolicies = table(
       foreignColumns: [catalogues.id],
       name: "zone_service_policies_default_menu_fk",
     }),
-    // A default menu must also be an allowed menu for that zone. `default_menu_id` is nullable and
-    // a null satisfies the key, so a draft policy a manager has not finished configuring is still
-    // insertable. What does NOT carry from PostgreSQL is the DEFERRABLE INITIALLY DEFERRED this
-    // key was declared with — sqlite-core has no deferrable option, so the check lands at the
-    // statement and the zone_menus row must exist BEFORE the policy names it as its default.
-    // Measured on node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/zone-default.mjs, against
-    // this generated schema: the null default accepted; naming cat-1 with no zone_menus row
-    // refused (787); the zone_menus row then the same update accepted; and naming a catalogue
-    // allowed in no zone refused.
+    // A default menu must also be an allowed menu for that zone; a null default satisfies the key.
+    // The key is not declared deferrable, so outside `pragma defer_foreign_keys` it is checked at
+    // each statement, and `zone_menus.zone_id` points back at this row: insert the policy with a
+    // null default, then its `zone_menus` rows, then name the default.
     foreignKey({
       columns: [t.zoneId, t.defaultMenuId],
       foreignColumns: ZONE_MENU_KEY,
       name: "zone_service_policies_default_allowed_fk",
     }),
-    // At most one counter-default zone per location. Partial, so every zone that is not the
-    // counter default is outside the index.
     uniqueIndex("zone_service_policies_one_counter_default_key")
       .on(t.locationId)
       .where(sql`${t.isCounterDefault}`),
@@ -146,12 +132,8 @@ export const zoneMenus = table(
 );
 
 /**
- * `zone_menus`'s primary key, as the pair `zone_service_policies`'s composite foreign key points
- * at. It is a separately declared constant with an EXPLICIT type, and the type is what it is for:
- * the two tables reference each other, and TypeScript refuses to infer either table's type from an
- * initializer that reaches back into the other (TS7022). Naming the pair's type here means the
- * policy table's declaration no longer depends on `zoneMenus`'s inferred type. Evaluated at module
- * load, AFTER `zoneMenus` above; the table callbacks that read it run later still.
+ * Explicitly typed because the two tables reference each other, and TypeScript cannot infer either
+ * table's type through the cycle (TS7022). The callback that reads it runs after this line.
  */
 const ZONE_MENU_KEY: [AnySQLiteColumn, AnySQLiteColumn] = [zoneMenus.zoneId, zoneMenus.menuId];
 
@@ -213,15 +195,8 @@ export const preparationRoutes = table(
       foreignColumns: [kitchenStations.id],
       name: "preparation_routes_station_fk",
     }),
-    // Until 2026-09-21 both of these counted with `num_nonnulls(...)`, which SQLite does not have
-    // (`no such function: num_nonnulls`, measured at CREATE TABLE time). A comparison is either
-    // true or false and SQLite spells those 1 and 0, so adding them counts the same thing.
-    // Measured on node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/nonnulls.mjs, against tables
-    // carrying exactly these bodies: exactly one of the pair accepted, both refused, neither
-    // refused. The `nullif(no_preparation, false)` half survives unchanged — `flag` stores 0 or 1
-    // and SQLite reads `false` as 0, so a false flag still becomes NULL and stops counting: with a
-    // station and the flag false accepted, with a station and the flag true refused, with no
-    // station and the flag true accepted, and with neither refused.
+    // Each comparison is 1 or 0, so the sum counts the non-null columns; `nullif` turns a false
+    // flag into NULL so it does not count.
     check(
       "preparation_routes_subject_ck",
       sql`(${t.categoryId} is not null) + (${t.productId} is not null) = 1`,
@@ -231,11 +206,8 @@ export const preparationRoutes = table(
       sql`(${t.stationId} is not null) + (nullif(${t.noPreparation}, false) is not null) = 1`,
     ),
     index("preparation_routes_lookup_idx").on(t.locationId, t.zoneId, t.productId, t.categoryId),
-    // A null zone means venue-wide routing, so the four specificities are four separate partial
-    // uniques rather than one key: a venue-wide route and a zone route for the same subject are
-    // different rows, and each specificity is unambiguous on its own. A route the predicate
-    // excludes is outside its index entirely — the venue keys constrain no zone route, and the
-    // zone keys constrain no venue-wide one.
+    // A null zone means venue-wide routing, so each of the four specificities has its own partial
+    // unique index: a venue-wide route and a zone route for the same subject can both exist.
     uniqueIndex("preparation_routes_zone_product_key")
       .on(t.locationId, t.zoneId, t.productId)
       .where(sql`${t.zoneId} is not null and ${t.productId} is not null`),
@@ -278,8 +250,7 @@ export const orderServiceContexts = table(
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
-    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
-    // for the reason stated above departments.default_service_mode.
+    // Not enumText: see departments.default_service_mode.
     serviceMode: label("service_mode").notNull(),
   },
   (t) => [
@@ -319,11 +290,9 @@ export const workingLineContexts = table(
     unitId: id("unit_id").notNull(),
     unitName: json<Record<string, string>>("unit_name").notNull(),
     unitPrecision: count("unit_precision").notNull(),
-    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
-    // for the reason stated above departments.default_service_mode.
+    // Not enumText: see departments.default_service_mode.
     hardwareUnit: label("hardware_unit"),
-    // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
-    // for the reason stated above departments.default_service_mode.
+    // Not enumText: see departments.default_service_mode.
     vatClass: label("vat_class").notNull(),
     allergens:
       json<Record<string, { presence: "contains" | "may_contain"; source?: string }>>("allergens"),
