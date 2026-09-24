@@ -9,7 +9,7 @@ import {
   deploymentTableExists,
   openVenueDatabase,
   readDeploymentEnvironment,
-  setVenueHolderKind,
+  setVenueHolderIdentity,
   stampDeployment,
 } from "@waitron/db";
 import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
@@ -117,5 +117,7 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-setVenueHolderKind("provisioning");
+// No state-directory default here, as for `modules.json` above: without one, the log directory is
+// `WAITRON_LOG_DIR` alone.
+setVenueHolderIdentity("provisioning", process.env, process.env.WAITRON_STATE_DIR || undefined);
 process.exitCode = await main();

@@ -10,6 +10,12 @@ export {
   setVenueWatchdogLogFile,
   VENUE_HOLDER_KINDS,
 } from "./client.js";
+export {
+  applicationVersion,
+  LOG_FILE_NAME,
+  resolveLogDir,
+  setVenueHolderIdentity,
+} from "./venue-holder-identity.js";
 export type {
   Database,
   OpenVenueOptions,

@@ -4,12 +4,10 @@ import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ErrorCode } from "@waitron/shared";
-import type { VenueHolderKind } from "@waitron/db";
+import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
 const MAX_LOG_LINES = 200;
-/** The file under the log directory whose tail the page shows. */
-export const LOG_FILE_NAME = "waitron.log";
 
 export interface RecoveryDeps {
   state: RecoveryState;

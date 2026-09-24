@@ -367,7 +367,7 @@ otherwise:
 `venueHolder` is read from `venue.holder.json`, the file whichever process holds the venue folder
 keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, its last heartbeat,
 and whether that heartbeat is stale, meaning 30 seconds or more away from the current time in
-either direction. That is the reader and the limit a refused start uses (`src/node-entry.ts`). It is `null` when there is no readable file, carries no process id or host,
+either direction. That is the parser and the limit a refused start uses (`src/node-entry.ts`). It is `null` when there is no readable file, carries no process id or host,
 and never changes the status code.
 
 **A `503` is the single most important signal this process can produce.** It means one of four

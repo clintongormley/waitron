@@ -229,8 +229,8 @@ command against it treat that entrypoint differently:
   kill, the watchdog writes a one-line report to the program's own output, which is
   `docker compose logs` for the app. The report includes the main thread's stack when it can be
   read. It could not be read in a test where that thread was running one long database statement. The server,
-  restore and rejoin also append that line to `waitron.log` and write it as a JSON file in the
-  `logs` volume's `crash-reports` folder. `GET /health` reports the same holder file, without the
+  restore and rejoin (the programs in the box's image that take the folder) also append that line
+  to `waitron.log` and write it as a JSON file in the `logs` volume's `crash-reports` folder. `GET /health` reports the same holder file, without the
   process id or host.
 
 ## The box's environment — `deploy/.env`

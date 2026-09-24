@@ -25,6 +25,7 @@ import {
   readMirrorConfig,
   openVenueDatabase,
   withTransaction,
+  applicationVersion,
   type Database,
 } from "@waitron/db";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
@@ -74,7 +75,6 @@ import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { withDevMigrationHint } from "./dev-migration-hint.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
-import { applicationVersion } from "./app-version.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { createOriginAllowlist } from "./allowed-origins.js";

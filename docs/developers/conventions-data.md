@@ -1279,13 +1279,19 @@ opens the store, so it could not see this.
 (`packages/store/src/venue-lock.ts` → `beginHolding` in `venue-liveness.ts`). It names the holder's
 `kind` (`server`, `restore`, `rejoin`, `provisioning`, or `script` for anything that did not name
 itself), `pid`, `host`, `lockedAt` and `heartbeatAt`. A main-thread timer rewrites the heartbeat
-every 5 s, and the last release removes the file before it lets the lock go. The entry points name
-themselves through `setVenueHolderKind`: `apps/server/src/holder-identity.ts` for the server, restore
-and rejoin, and `packages/provisioning/src/bin.ts`. A holder that dies leaves its file behind; the
-next holder overwrites it.
+every 5 s, and the last release removes the file before it lets the lock go. A program names itself
+with `setVenueHolderIdentity` (`packages/db/src/venue-holder-identity.ts`), which also gives its
+watchdog the report folder, the log file and the version. Four do: the server (`apps/server/src/bin.ts`
+and `node-entry.ts`), restore and rejoin (`bin-restore.ts`, `bin-rejoin.ts`, through
+`apps/server/src/holder-identity.ts`), and the provisioning command (`packages/provisioning/src/bin.ts`).
+The development and demo scripts under `apps/server/scripts` name nothing and report `script`, and
+nothing checks that a new entry point names itself. `waitron-break-glass` and `waitron-credentials`
+open the folder with `exclusive: false`, so they take no lock and write no holder file. A holder that
+dies leaves its file behind; the next holder overwrites it.
 
 **Two limits, on purpose.** A start refused `provisioning.database_in_use`
-(`apps/server/src/node-entry.ts`) and `/health` read the file with `readVenueHolder`, and call the
+(`apps/server/src/node-entry.ts`) reads the file with `readVenueHolder` and `/health` with
+`readVenueHolderAsync`, one parser behind both, and both call the
 heartbeat stale at 30 s (`VENUE_HOLDER_STALE_MS`). A stale, missing or unreadable file makes the
 refusal count toward the recovery page, as `provisioning.database_holder_stalled`; a fresh one puts
 the count back. The holder's own watchdog kills it only after 120 s without a main-thread tick
@@ -1314,9 +1320,12 @@ process:
 - Control: a main thread awaiting a 4 s timer was not killed.
 
 The report file holds exactly `code`, `stack`, `kind`, `pid`, `host`, `lockedAt`, `lastTickAt`,
-`killedAt` and `version`: no environment, no command line, no venue data. The server, restore and
-rejoin put these files in `<logDir>/crash-reports`, which is the `logs` volume on a box. The
-recovery page reads only `waitron.log`.
+`killedAt` and `version`: no environment, no command line, no venue data. The four programs that
+name themselves put these files in `<logDir>/crash-reports`, where `<logDir>` is `WAITRON_LOG_DIR`,
+else `logs` under the state directory, an empty value counting as unset (`resolveLogDir`); on a box
+that is the `logs` volume. The provisioning command has no state-directory default, so with neither
+variable set it writes no file, and neither does a program that did not name itself: both write the
+line to their own error output only. The recovery page reads only `waitron.log`.
 
 **`recovery.json` has a lock of its own.** Every change to the recovery count (the count before a
 boot, the classified failure, a refused start's undo, the stayed-up clear, the recovery page's

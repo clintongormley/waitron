@@ -5555,8 +5555,8 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
     - `lockedAt`, `lastTickAt`, `killedAt`;
     - `version`: the build's own version, which on a box is `WAITRON_BUILD_ID`.
 
-    Only the server, restore and rejoin write them. The provisioning command and the scripts set no
-    folder, so they write none. Nothing reads or deletes them yet.
+    The server, restore, rejoin and the provisioning command write them. The development scripts set
+    no folder, so they write none. Nothing reads or deletes them yet.
 
 ### KDS operations — low priority (A9)
 

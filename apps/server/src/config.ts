@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { resolveLogDir } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
@@ -670,7 +671,6 @@ export function loadConfig(
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
-  const logDir = env.WAITRON_LOG_DIR;
   // The effective (absolute) state dir, computed once so `logDir`'s default reads the SAME value the
   // returned `stateDir` field carries — `join(stateDir, "logs")` must sit under whatever state root
   // actually won (the resolved override, or the boot-computed default), never a second derivation.
@@ -756,12 +756,9 @@ export function loadConfig(
     // on `listBoxIpv4`. Validated at load (`parseBoxAddresses`) so a typo fails boot rather than
     // minting a certificate for an address that is not an address.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
-    // The rotating-log directory. Default is `join(stateDir, "logs")` — under whichever state root won
-    // above (`resolvedStateDir`), so logs live beside the box's other persisted state. An unset OR empty
-    // WAITRON_LOG_DIR takes that default via `isUnset`, never `resolve("")` / cwd (CLAUDE.md §3); an
-    // operator override is used verbatim (the sink `mkdirSync`s it), matching how `tillAppDir` stores a
-    // set dir without `resolve`.
-    logDir: isUnset(logDir) ? join(resolvedStateDir, "logs") : logDir,
+    // The rotating-log directory, by the rule that also places the venue watchdog's report files
+    // (`resolveLogDir`). An operator override is used verbatim (the sink `mkdirSync`s it).
+    logDir: resolveLogDir(env, resolvedStateDir),
     logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
     logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
     // Conditionally present, never present-but-undefined. This is only the operator override;
