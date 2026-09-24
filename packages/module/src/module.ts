@@ -15,7 +15,7 @@ import "./errors.js";
 
 /**
  * The core verbs a module's routes need but cannot import — a module never depends on `apps/server`.
- * Boot implements it with the venue's config bound in, so a verb takes only a per-request `tx`.
+ * Boot implements it with the venue's config bound in, so a verb never takes the config.
  */
 export interface CoreServices {
   openTab(

@@ -3,7 +3,8 @@ import "@waitron/shared";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** `reason` is our own English description, never the file content. */
+    /** `reason` is our own English description; it names at most an override's key, never a value
+     * from the file. */
     "module.config_invalid": { reason: string };
     "module.config_unknown": { module: string };
     "module.mandatory_not_disableable": { module: string };

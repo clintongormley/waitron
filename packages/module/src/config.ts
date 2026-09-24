@@ -4,7 +4,7 @@ import "./errors.js";
 
 /**
  * The desired module set from modules.json: a SPARSE override map — a module is enabled unless it
- * appears here with `false`. A `mandatory` module never appears `false`.
+ * appears here with `false`. `parseModuleOverrides` refuses a `mandatory` module set `false`.
  */
 export interface ModuleConfig {
   readonly overrides: ReadonlyMap<string, boolean>;
@@ -70,8 +70,9 @@ export function serializeModuleConfig(config: ModuleConfig): Record<string, bool
 }
 
 /**
- * The disabled `provision-only` modules, which refuse venue provisioning. Fiscal-slot members are
- * excluded: with two members one is always disabled, and `fiscalSlot`'s exactly-one rule governs them.
+ * The disabled `provision-only` modules, which refuse venue provisioning: a provision-only module
+ * mints unrecoverable state at provision. Fiscal-slot members are excluded: with two members one is
+ * always disabled, and `fiscalSlot`'s exactly-one rule governs them.
  */
 export function disabledProvisionOnly(
   modules: readonly WaitronModule[],
