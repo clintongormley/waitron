@@ -912,8 +912,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           .update(pointId)
           .digest("hex");
         return deps.operations.run("restore", requestHash, async (operation) => {
-          if (operation.phase === "complete")
+          if (operation.phase === "complete") {
+            setTimeout(() => deps.requestRestart!(), 0);
             return c.json({ restoreStaged: true, restarting: true }, 202);
+          }
           const response = await execute();
           await operation.complete({ restoreStaged: true, restarting: true });
           return response;

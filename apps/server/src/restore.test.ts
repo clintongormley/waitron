@@ -1060,6 +1060,20 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     expect(await readFile(join(stateDir, "recovery.json"), "utf8")).toBe('{"failures":2}\n');
   });
 
+  it("omits the old backup destination from a managed Cloud restore", async () => {
+    await restoreFromArtifact(
+      makeRestoreDeps({
+        managedCloud: {
+          requestId: "1ea4560a-77ac-4c4b-8abc-06d09fe8c60e",
+          pointId: "252998c0-69eb-4bbc-a0f9-a8ba6451db42",
+        },
+        artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]),
+      }),
+    );
+    await expect(stat(join(stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, "modules.json"), "utf8")).toBe(MODULES_JSON);
+  });
+
   it("skipSecrets (rejoin) restores NEITHER file — a rejoining mirror keeps its own config", async () => {
     await restoreFromArtifact(
       makeRestoreDeps({

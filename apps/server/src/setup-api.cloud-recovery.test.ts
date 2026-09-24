@@ -89,6 +89,19 @@ describe("setup Cloud recovery", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requestRestart).toHaveBeenCalledOnce();
   });
+  it("refuses a different valid snapshot without an operation store", async () => {
+    const { app, cloudRecovery, stageRestore, requestRestart } = setup();
+    const response = await app.request("/setup-api/cloud-recovery/restore", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pointId: "715955bb-2dbd-4481-9746-f6d3e95a8651" }),
+    });
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe("setup.operation_conflict");
+    expect(cloudRecovery.restore).not.toHaveBeenCalled();
+    expect(stageRestore).not.toHaveBeenCalled();
+    expect(requestRestart).not.toHaveBeenCalled();
+  });
   it("does not replay a completed restore for a different request to the same snapshot", async () => {
     const dir = await mkdtemp(join(tmpdir(), "waitron-cloud-setup-"));
     try {
@@ -142,6 +155,57 @@ describe("setup Cloud recovery", () => {
         ).status,
       ).toBe(409);
       expect(second.cloudRecovery.restore).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it("restarts after a completed restore response is replayed on a fresh setup API", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cloud-setup-replay-"));
+    try {
+      const first = setup();
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          cloudRecovery: first.cloudRecovery,
+          stageRestore: first.stageRestore,
+          requestRestart: first.requestRestart,
+          operations: createSetupOperationStore(dir),
+        },
+        vi.fn(),
+      );
+      const body = JSON.stringify({ pointId });
+      const initial = await app.request("/setup-api/cloud-recovery/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(initial.status).toBe(202);
+      await vi.waitFor(() => expect(first.requestRestart).toHaveBeenCalledOnce());
+
+      const second = setup();
+      const restarted = new Hono();
+      mountSetup(
+        restarted,
+        {
+          environment: "preproduction",
+          cloudRecovery: second.cloudRecovery,
+          stageRestore: second.stageRestore,
+          requestRestart: second.requestRestart,
+          operations: createSetupOperationStore(dir),
+        },
+        vi.fn(),
+      );
+      const replay = await restarted.request("/setup-api/cloud-recovery/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(replay.status).toBe(202);
+      expect(second.cloudRecovery.restore).not.toHaveBeenCalled();
+      expect(second.stageRestore).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(second.requestRestart).toHaveBeenCalledOnce());
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

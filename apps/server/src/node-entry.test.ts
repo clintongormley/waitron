@@ -1,4 +1,5 @@
 import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { sql, type SQL } from "drizzle-orm";
@@ -52,6 +53,74 @@ function recoveryVolume(initial: RecoveryState) {
 }
 
 describe("runEntry", () => {
+  it("marks a completed managed restore and reports that snapshot after boot", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-entry-cloud-"));
+    const origin = "https://cloud.example.test";
+    const requestId = "1ea4560a-77ac-4c4b-8abc-06d09fe8c60e";
+    const pointId = "252998c0-69eb-4bbc-a0f9-a8ba6451db42";
+    const key = generateKeyPairSync("ed25519");
+    const path = join(stateDir, "cloud-recovery.json");
+    const actions: string[] = [];
+    await writeFile(
+      path,
+      JSON.stringify({
+        version: 1,
+        origin,
+        environment: "preproduction",
+        requestId,
+        pointId,
+        phase: "staged",
+        code: "12345678",
+        privateKey: key.privateKey.export({ type: "pkcs8", format: "der" }).toString("base64url"),
+        publicKey: key.publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
+      }),
+      { mode: 0o600 },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const action = new URL(url).pathname.split("/").at(-1)!;
+        actions.push(action);
+        if (action === "info")
+          return Response.json({
+            point: {
+              id: pointId,
+              venueId: "374cac38-cc58-46d5-8d3b-8443fc4343a4",
+              capturedAt: "2026-09-24T10:00:00.000Z",
+              kind: "snapshot",
+              verification: "verified",
+              deleting: false,
+              deletedAt: null,
+              objectKey: `snapshots/${pointId}`,
+              digest: "a".repeat(64),
+              size: 7,
+              modules: { core: 1 },
+            },
+          });
+        if (action === "restored") return Response.json({ status: "restored" });
+        throw new Error(`unexpected Cloud action: ${action}`);
+      }),
+    );
+    try {
+      await runEntry(
+        deps({
+          stateDir,
+          baseEnv: { WAITRON_CLOUD_ORIGIN: origin },
+          runStagedRestore: vi.fn(async ({ onManagedCloudRestored }) => {
+            await onManagedCloudRestored?.({ requestId, pointId });
+            return true;
+          }),
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ phase: "reported" });
+      });
+      expect(actions).toEqual(["info", "restored"]);
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
   it("refuses ANY argument before it reads or writes the counter or opens the venue folder", async () => {
     const reportFailure = vi.fn();
     const d = deps({
