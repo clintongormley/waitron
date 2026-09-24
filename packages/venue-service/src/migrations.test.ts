@@ -269,8 +269,6 @@ describe("the venue-service migration set carries no tenant column", () => {
 });
 
 describe("the venue-service foreign keys refuse a missing target", () => {
-  /** Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only the
-   * builder runs. */
   async function venue() {
     await seedTenant(db);
     const [location] = await db
@@ -350,9 +348,10 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   /**
    * The key is not deferred, so it is checked at each statement. `pragma defer_foreign_keys` moves
-   * the check to commit, which is how `apps/server/src/configuration-transfer.ts` refills this
-   * cycle: `zone_menus.zone_id` points at `zone_service_policies`, whose
-   * `(zone_id, default_menu_id)` points back at `zone_menus`.
+   * the check to commit, which is how `apps/server/src/configuration-transfer.ts` empties and
+   * refills this cycle: `zone_menus.zone_id` points at `zone_service_policies`, whose
+   * `(zone_id, default_menu_id)` points back at `zone_menus`. The title's "at commit" half is not
+   * asserted: the case under the pragma is accepted, not refused.
    */
   it("refuses a default menu the zone does not allow, at the statement or at commit", async () => {
     const v = await venue();

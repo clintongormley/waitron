@@ -67,10 +67,11 @@ export interface DepartmentHoursInterval {
 }
 
 /**
- * A venue-local wall-clock time in the one form these columns store: `HH:MM:SS`. The columns are
- * text, so two spellings of one interval would be two entries in `department_hours_interval_key`,
- * and the dashboard slices a stored value to five characters. `HH:MM` gains `:00`; anything else
- * passes through unchanged.
+ * The form {@link replaceDepartmentHours} writes a venue-local wall-clock time in: `HH:MM:SS`. The
+ * columns are text, so two spellings of one interval would be two entries in
+ * `department_hours_interval_key`, and the dashboard slices a stored value to five characters. This
+ * checks length alone: the one caller outside tests, the hours route, admits only `HH:MM`
+ * (`CLOCK_TIME` in `./routes.ts`).
  */
 function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;

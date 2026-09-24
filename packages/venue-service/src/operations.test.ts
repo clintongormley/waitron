@@ -75,8 +75,6 @@ async function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   });
 }
 
-/** Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only the
- * builder runs. */
 async function seedLocation(name: string): Promise<string> {
   const [row] = await db
     .insert(locations)

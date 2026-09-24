@@ -15,8 +15,7 @@ import {
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
  * generated SQL emits no `CONSTRAINT` clause for one, so `../migrations.test.ts` can read back a
- * key's shape but never its name. Lists are compared with `toEqual`, because `toContain` cannot see
- * a deleted constraint.
+ * key's shape but never its name.
  */
 const EXPECTED: Record<
   string,

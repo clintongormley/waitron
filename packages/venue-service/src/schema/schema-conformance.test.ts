@@ -1,6 +1,5 @@
-// Two of the shared suite's limits reach nothing here: every check constraint in
-// `drizzle/0000_baseline.sql` has a `CONSTRAINT <name>` clause, and both `unique()` declarations in
-// `service.ts` are named.
+// Every check constraint in `drizzle/0000_baseline.sql` has a `CONSTRAINT <name>` clause, so
+// `checksInDdl`'s blindness to an anonymous check reaches nothing here.
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
