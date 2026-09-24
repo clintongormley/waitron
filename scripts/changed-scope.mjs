@@ -46,19 +46,30 @@ const INERT_ROOT_FILES = [".gitignore", ".editorconfig"];
  * hook, and the workflows. Code — `isInertPath` says so, and a wrong classifier breaks every gating
  * decision — but it gives the root Vitest project work and gives no package any.
  *
- * Two files under `scripts/` ARE read by members, and a change to either still gets root scope:
- * `scripts/bundle-node.mjs`, which the `build` scripts of `apps/server`, `apps/print-agent`,
- * `packages/credentials` and `packages/provisioning` run, and `scripts/dev-server-proxy.ts`, which
- * the `vite.config.ts` of `apps/dashboard`, `apps/till` and `apps/setup` import. Root scope emits
- * `code=false`, so a change to either alone runs, in ci.yml, neither `bundle-smoke` nor any
- * member's build or tests; what covers a change to either is the root project's suites that
- * import it. `.husky/` is run by git alone; `.github/` is read by `scripts/ci-workflow.test.mjs`
- * and `scripts/check-signoff.test.mjs`, which are themselves in the root project.
+ * The files under `scripts/` that members DO read are in ROOT_SCOPE_CONSUMERS below. `.husky/` is
+ * run by git alone; `.github/` is read by `scripts/ci-workflow.test.mjs` and
+ * `scripts/check-signoff.test.mjs`, which are themselves in the root project.
  *
  * ROOT-ONLY, the same rule INERT_ROOT_PREFIXES carries: `packages/db/scripts/x.ts` is that
  * package's, and its own suite is what covers it.
  */
 const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
+
+/**
+ * Root-scope files that workspace members read, each mapped to the member DIRECTORIES that read it,
+ * so a change to one selects those members as well as the root project. Without an entry, root
+ * scope emits `code=false` and ci.yml runs neither `bundle-smoke` nor any member's build or tests.
+ *
+ * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a member file names a root
+ * `scripts/` file by relative path and is not listed here, or when an entry here is not read.
+ */
+export const ROOT_SCOPE_CONSUMERS = new Map([
+  [
+    "scripts/bundle-node.mjs",
+    ["apps/print-agent", "apps/server", "packages/credentials", "packages/provisioning"],
+  ],
+  ["scripts/dev-server-proxy.ts", ["apps/dashboard", "apps/setup", "apps/till"]],
+]);
 
 /**
  * True when `path` gives the ROOT Vitest project work and no workspace member any.

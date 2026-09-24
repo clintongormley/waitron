@@ -205,6 +205,83 @@ describe("scopeForPaths", () => {
     });
   });
 
+  describe("a root file that workspace members read", () => {
+    const consumers = workspacePackages(
+      ls(
+        member("@waitron/server", "apps/server"),
+        member("@waitron/print-agent-app", "apps/print-agent"),
+        member("@waitron/credentials", "packages/credentials"),
+        member("@waitron/provisioning", "packages/provisioning"),
+        member("@waitron/dashboard", "apps/dashboard"),
+        member("@waitron/setup", "apps/setup"),
+        member("@waitron/till", "apps/till"),
+        member("@waitron/db", "packages/db"),
+      ),
+      ROOT,
+    );
+
+    it("selects the four members whose build runs scripts/bundle-node.mjs", () => {
+      expect(scopeForPaths(["scripts/bundle-node.mjs"], workspace(consumers))).toMatchObject({
+        kind: "packages",
+        packages: [
+          "@waitron/credentials",
+          "@waitron/print-agent-app",
+          "@waitron/provisioning",
+          "@waitron/server",
+        ],
+        root: true,
+      });
+    });
+
+    it("selects the three front-ends whose vite.config.ts imports scripts/dev-server-proxy.ts", () => {
+      expect(scopeForPaths(["scripts/dev-server-proxy.ts"], workspace(consumers))).toMatchObject({
+        kind: "packages",
+        packages: ["@waitron/dashboard", "@waitron/setup", "@waitron/till"],
+        root: true,
+      });
+    });
+
+    it("still gives any other scripts/ file root scope alone", () => {
+      const load = loader(consumers);
+      expect(scopeForPaths(["scripts/changed-scope.mjs"], load)).toMatchObject({
+        kind: "root",
+        packages: [],
+      });
+      expect(load.called).toBe(false);
+    });
+
+    it("adds the consumers to the packages a push already names", () => {
+      expect(
+        scopeForPaths(["scripts/bundle-node.mjs", "packages/db/src/y.ts"], workspace(consumers)),
+      ).toMatchObject({
+        kind: "packages",
+        packages: [
+          "@waitron/credentials",
+          "@waitron/db",
+          "@waitron/print-agent-app",
+          "@waitron/provisioning",
+          "@waitron/server",
+        ],
+      });
+    });
+
+    // A consumer the workspace no longer lists could be a moved member whose build still runs the
+    // file under another directory; narrowing without it is the silent direction.
+    it("runs everything when a listed consumer is not a workspace member", () => {
+      expect(scopeForPaths(["scripts/bundle-node.mjs"], workspace())).toMatchObject({
+        kind: "global",
+        packages: [],
+        root: true,
+      });
+    });
+
+    it("runs everything when the workspace could not be read", () => {
+      expect(scopeForPaths(["scripts/dev-server-proxy.ts"], loader(null))).toMatchObject({
+        kind: "global",
+      });
+    });
+  });
+
   // Prose does not stop a root push being one, the same way it does not widen a package push.
   it("reports a root run when the rest of the push is documentation", () => {
     expect(scopeForPaths(["docs/backlog.md", ".husky/pre-push"], workspace())).toMatchObject({
@@ -642,6 +719,22 @@ describe("the CLI", () => {
   it("reports a root run for the repository\u2019s own machinery", () => {
     expect(run(".husky/pre-push\n").stdout).toBe(
       "code=false\nscope=root\npackages=\nroot=true\ndeploy=false\n",
+    );
+  });
+
+  // What ci.yml's `changes` job reads: `code=true` is what runs `bundle-smoke` and the members' own
+  // builds and tests on a pull request that changes only the shared build script.
+  it("selects the real members that build through scripts/bundle-node.mjs", () => {
+    expect(run("scripts/bundle-node.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/credentials @waitron/print-agent-app " +
+        "@waitron/provisioning @waitron/server\nroot=true\ndeploy=false\n",
+    );
+  });
+
+  it("selects the real front-ends that import scripts/dev-server-proxy.ts", () => {
+    expect(run("scripts/dev-server-proxy.ts\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/setup @waitron/till\n" +
+        "root=true\ndeploy=false\n",
     );
   });
 
