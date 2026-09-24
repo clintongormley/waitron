@@ -53,18 +53,14 @@ describe("orderedMigrationSets", () => {
   it("maps dependency-free modules in list order (no edges → input order preserved)", () => {
     const mods = [mod("core"), mod("fiscal"), mod("sync")];
     expect(orderedMigrationSets(mods)).toEqual(
-      // A module with no `classification` seat declares nothing append-only; the empty list is
-      // stated rather than omitted, because a set that says nothing and a set that says "none"
-      // reach `applyMigrations` as the same thing and only one of them is a decision.
+      // A module with no `classification` seat declares nothing append-only, stated as `[]`.
       mods.map((m) => ({ ...m.migrations, appendOnlyTables: [] })),
     );
   });
 
   it("takes the append-only tables from the appendOnly() marker, never from the ledger class", () => {
-    // The distinction this asserts is the whole reason the marker exists: `open` is classified
-    // `ledger` and is NOT append-only (a real one is `payments`, whose row moves through its card
-    // states), and `shut` is classified `state` and IS (a real one is `order_amendments`). Reading
-    // the class instead would return exactly the wrong pair.
+    // `open` is `ledger` and NOT append-only, `shut` is `state` and IS: reading the class instead
+    // would return exactly the wrong pair.
     const descriptor: WaitronModule = {
       ...mod("marked"),
       classification: [
@@ -85,8 +81,6 @@ describe("orderedMigrationSets", () => {
   });
 
   it("reorders a wrong input into dependency order, input order as tie-break", () => {
-    // workforce placed BEFORE identity in the input; the sort must move identity ahead of it, and
-    // core (required by both) ahead of all — while leaving unrelated modules in input order.
     const mods = [
       mod("workforce", { core: "*", modules: { identity: "*" } }),
       mod("core"),

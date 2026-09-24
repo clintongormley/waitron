@@ -3,8 +3,6 @@ import { reconcile } from "./index.js";
 
 describe("reconcile", () => {
   it("classifies each module into exactly one of toMigrate / steady / softDisabled", () => {
-    // enabled: core (already migrated), payments (not yet migrated)
-    // migrated: core, scheduler (scheduler is migrated but no longer enabled → soft-disabled)
     const r = reconcile(["core", "payments"], new Set(["core", "scheduler"]));
     expect(r.toMigrate).toEqual(["payments"]);
     expect(r.steady).toEqual(["core"]);

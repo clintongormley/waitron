@@ -23,8 +23,7 @@ const mod = (
   ...seats,
 });
 
-/** A minimal fiscal-slot contribution — enough for `disabledProvisionOnly` to see `fiscal` is set.
- * The gate reads only whether the seat is present; the backend/drain seats are never invoked here. */
+/** `disabledProvisionOnly` reads only whether the `fiscal` seat is present. */
 const contribution = (id: string): FiscalContribution => ({
   id,
   activationReadiness: "not-applicable",
@@ -108,12 +107,10 @@ describe("parseModuleConfig", () => {
 
 describe("serializeModuleConfig", () => {
   it("is the true inverse of parseModuleOverrides: same enabled set for every module", () => {
-    // A config where the two directions visibly DIFFER: payments disabled, fiscal left default.
     const parsed = parseModuleConfig({ modules: { payments: false } }, MODULES);
     const serialized = serializeModuleConfig(parsed);
     expect(serialized).toEqual({ payments: false });
 
-    // The bare serialized map round-trips through parseModuleOverrides WITHOUT a fabricated envelope.
     const reparsed = parseModuleOverrides(serialized, MODULES);
     for (const m of MODULES) {
       expect(isEnabled(reparsed, m.name)).toBe(isEnabled(parsed, m.name));
@@ -173,8 +170,7 @@ describe("enabledModules / disabledProvisionOnly", () => {
     ).toEqual([]);
   });
 
-  // Two fiscal-slot members (both provision-only, each carrying a `fiscal` seat) plus a provision-only
-  // module with NO fiscal seat — the shape the fiscal-none module introduces.
+  // Two fiscal-slot members plus a provision-only module with NO fiscal seat.
   const SLOT_MODULES = [
     mod("core", "mandatory"),
     mod("fiscal-verifactu", "provision-only", { fiscal: contribution("verifactu") }),
@@ -183,8 +179,6 @@ describe("enabledModules / disabledProvisionOnly", () => {
   ];
 
   it("a disabled fiscal-slot member is NOT flagged by disabledProvisionOnly (the slot handles it)", () => {
-    // Disabling one of two fiscal-slot members is the NORMAL configuration once the slot has two
-    // members: the slot's exactly-one rule (`fiscalSlot`) governs it, not this gate.
     const config = parseModuleOverrides({ "fiscal-none": false }, SLOT_MODULES);
     expect(disabledProvisionOnly(SLOT_MODULES, config)).toEqual([]);
   });
