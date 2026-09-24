@@ -4111,6 +4111,15 @@ Also left open: now that both ends are `state`, the keys #426 dropped could be d
 `google_oidc_states` to `persons` (`sessions` and `management_sessions` are rebuilt by
 `packages/identity/drizzle/0003_session_token_hash_required.sql` anyway). Doing so would change
 what deleting a person does.
+Task 2a, a recovery key that does not need an archive destination (`loadRecoveryKey` reads the
+key alone, `writeRecoveryKey` sets it in `backup.env` keeping the other settings, `rotate` changes
+the key of a box with no destination loaded, and `apply` reuses a key the box already holds,
+refusing a different one with `backup.recovery_key_exists`; every status answer carries
+`recoveryKeySet`), is on branch `feat/sqlite-slice2-recovery-key`. The dashboard does not yet read
+`recoveryKeySet` nor word `backup.recovery_key_exists`; both are Task 8b's. Left open: the
+"key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always
+passes `keyRotatedAt: undefined` — this predates Task 2a (a settings re-apply already dropped it),
+and the value is what the Backups screen shows as the date the key was rotated.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
