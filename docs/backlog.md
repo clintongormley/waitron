@@ -2855,7 +2855,7 @@ image constraints under *Detail → Box image*.
     re-deriving a closed day and comparing it to its snapshot is a valid audit does not hold as
     written (a dated pointer there says so). **Owner decision 2026-09-24: a void counts on the day it is
     made, not the day of the sale**, so a later void no longer changes a closed day's re-derived
-    figures — DONE on `fix/void-counts-on-its-own-day`: the daily close's VAT, the period VAT
+    figures — DONE in #605: the daily close's VAT, the period VAT
     summary and top sellers count a sale on its issue day and subtract it on the void's business
     day; the close counts keep the sale in `sales` on its issue day and count the void under
     `voids` on its own day; the cash-up is unchanged (a void writes no tender). The quarterly
@@ -3794,7 +3794,7 @@ the same shape. **What can and cannot go back to SQL:** the relevance ranking ge
 no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
 path is a separate decision.
 
-**`sale_voids` has no index on `voided_at` — OPEN (found 2026-09-24, `fix/void-counts-on-its-own-day`).**
+**`sale_voids` has no index on `voided_at` — OPEN (found 2026-09-24 by #605).**
 Besides its primary key's, its only index is the unique one on `sale_id`
 (`packages/db/src/schema/sale-voids.ts`). Four reads select voids by `voided_at` range: the void
 count in `packages/reporting/src/counts.ts` and, since that branch, the reversal half of the daily
