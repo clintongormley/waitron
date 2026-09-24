@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 
-// `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: this test
-// still runs and pins the one behaviour a live SumUp outage makes fiscal-critical — a hung call must
-// not hang forever. A fetch that never resolves models the outage; the client's own AbortController
-// deadline is what turns it into a bounded rejection, which `collect`/`resolvePending` already treat
-// as pending/defer (CLAUDE.md §5 — nothing external may freeze the sale or the pass loop).
+// `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: these tests
+// still run. A fetch that never resolves models an outage; the client's own deadline must turn it
+// into a bounded rejection, which `collect` and `resolvePending` treat as pending (CLAUDE.md §5).
 describe("sumupClient request deadline", () => {
   it("aborts and rejects a hung request within the timeout rather than hanging forever", async () => {
     let abortSignal: AbortSignal | undefined;
@@ -61,12 +59,9 @@ describe("sumupClient request deadline", () => {
   }, 2_000);
 });
 
-// The refund `amount` goes to SumUp's `/v1.0/.../refunds` endpoint, whose `amount` is in MINOR
-// units (integer cents) — the same unit as the checkout `value`, NOT euros. Sending euros (`0.40`)
-// truncates to `0` cents, so SumUp performs a silent €0.00 refund and still answers 201 (measured
-// against the live reader 2026-09-11, docs/research/2026-09-10-sumup-solo-experiments.md §4b). These
-// pin the unit and the documented route so a regression to euros — or to the undocumented, older
-// `/v0.2/refund` route — fails here.
+// SumUp's `/v1.0/.../refunds` `amount` is in MINOR units (integer cents), like the checkout
+// `value`, NOT euros: euros (`0.40`) truncate to a silent €0.00 refund that still answers 201
+// (docs/research/2026-09-10-sumup-solo-experiments.md §4b).
 describe("sumupClient refund", () => {
   function capturing(): { fetch: typeof fetch; url(): string; body(): string | undefined } {
     let seenUrl = "";
@@ -104,12 +99,9 @@ describe("sumupClient refund", () => {
   });
 });
 
-// The one genuinely new mapping in `findTransaction` is SumUp's snake_case transaction JSON
-// (`card.last_4_digits` / `card.type` / `entry_mode` / `auth_code`) onto our camelCase
-// `SumUpTransaction`, plus the partial-card guard that omits a `card` block missing either
-// sub-field. The fake stores already-mapped keys, so ONLY this real-fetch test exercises the key
-// names — a typo (`last4_digits`, `auth-code`) would silently blank a receipt's card block
-// otherwise (CLAUDE.md §1: reading is not verification; the body mirrors the live control run).
+// The fake stores already-mapped keys, so ONLY this real-fetch test exercises SumUp's snake_case
+// transaction keys (`card.last_4_digits` / `card.type` / `entry_mode` / `auth_code`) and the
+// partial-card guard; a typo would silently blank a receipt's card block.
 describe("sumupClient findTransaction card mapping", () => {
   const respondingWith =
     (body: unknown): typeof fetch =>
@@ -214,10 +206,9 @@ describe("sumupClient findTransaction card mapping", () => {
   });
 });
 
-// The five reader-management calls (Task 6) plus `memberships`, used by the reader-pairing UI
-// (Task 7's SumUp seat) to pair/monitor/remove a reader and let the operator pick a merchant. Each
-// test asserts the exact method + path — the shapes are the experiments runbook's recorded live
-// responses (docs/research/2026-09-10-sumup-solo-experiments.md §0.3-0.5), not a guess.
+// The reader-management calls plus `memberships`. Each test asserts the exact method + path; the
+// shapes are the experiments runbook's recorded live responses
+// (docs/research/2026-09-10-sumup-solo-experiments.md §0.3-0.5), not a guess.
 describe("sumupClient reader management", () => {
   function stub(
     responder: (method: string, pathname: string) => { status: number; body?: unknown },
@@ -297,9 +288,8 @@ describe("sumupClient reader management", () => {
   });
 
   it("throws SumUpPairingRefused on a 4xx (bad/expired/used code), carrying the problem title", async () => {
-    // The 4xx is a DEFINITE refusal — the old code returned the error body, so `{ id, status }` came
-    // back undefined and a null provider_ref reached the DB insert. Now it throws a distinguishable
-    // error the seat maps to `payment.pairing_refused`; the title is a status phrase, never a secret.
+    // The 4xx is a DEFINITE refusal: a distinguishable error the seat maps to
+    // `payment.pairing_refused`; the title is a status phrase, never a secret.
     const s = stub(() => ({ status: 409, body: { title: "pairing code already used" } }));
     const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
 

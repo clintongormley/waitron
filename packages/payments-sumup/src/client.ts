@@ -44,7 +44,7 @@ export interface SumUpReader {
 /** The narrow SumUp surface `SumUpCloudProvider` depends on — the calls it makes, not the API. The
  * real impl (`./sumup-client.ts`) maps these onto `fetch`; `FakeSumUp` (`./testing/`) models them
  * deterministically. Amounts cross this seam as exact `Decimal`; the real impl converts at the
- * boundary. Mirrors `StripeClient`. `findTransaction` returns null for a 404 — before the reader
+ * boundary. `findTransaction` returns null for a 404 — before the reader
  * has started a checkout, SumUp may hold no transaction yet, and the adapter reads null as
  * "still pending", never as an error. */
 export interface SumUpClient {
@@ -79,7 +79,7 @@ export interface SumUpClient {
   readerStatus(readerId: string): Promise<ReaderStatus>;
   /** Unpairs a reader from the merchant account. */
   deleteReader(readerId: string): Promise<void>;
-  /** The merchant accounts this API key can act as — the SumUp connect seat's picker (Task 7). */
+  /** The merchant accounts this API key can act as — the SumUp connect seat's picker. */
   memberships(): Promise<{ merchantCode: string; name: string }[]>;
 }
 

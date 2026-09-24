@@ -42,9 +42,8 @@ export const NOT_FOUND_GRACE_MS = 15 * 60_000;
 
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
-  /** A plain `Database` handle; every phase is scoped with `withTransaction(db, …)`. */
   db: Database;
-  /** Stamped on the incident `resolvePending` raises. */
+  /** Nothing reads it. */
   nodeId: string;
   /** Where `resolvePending` raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
@@ -87,7 +86,7 @@ export function cardFromTransaction(t: SumUpTransaction): CardDetails | undefine
 
 /** One SumUp status mapped onto a T2 decision, as DATA. `pending` = keep polling; `deferred` = a
  * status this adapter is not entitled to act on (`REFUNDED`, unknown) — the loop stops, the row
- * stays `attempting`, and `resolvePending` decides (spec §2/§3). `card` rides the `captured`
+ * stays `attempting`, and `resolvePending` decides. `card` rides the `captured`
  * variant so both capture paths persist it without re-fetching the transaction. */
 type PollOutcome =
   | { kind: "captured"; transactionId: string; settledAt: Date; card?: CardDetails }
@@ -104,9 +103,9 @@ type PollOutcome =
  *  poll the transaction until `status` leaves `PENDING`;
  *  T2   `captured` on `SUCCESSFUL`, `failed` on `FAILED`/`CANCELLED` or a definite create refusal.
  * Anything else — a timeout, a network error, `REFUNDED`, an unknown status — is NOT resolved here:
- * the row stays `attempting` and the result carries `state: "attempting"`, `settledAt: null`, so
- * `recordSale` refuses and staff retry or take cash. `Terminate Checkout` is never called: it races
- * the customer's tap (spec §2). `resolvePending` (the sweep) is what terminates those rows.
+ * the row stays `attempting` and the result carries `state: "attempting"`, `settledAt: null`.
+ * `Terminate Checkout` is never called: it races the customer's tap. `resolvePending` (the sweep) is
+ * what terminates those rows.
  */
 export class SumUpCloudProvider implements PaymentProvider {
   readonly provider = SUMUP_PROVIDER;
@@ -209,7 +208,7 @@ export class SumUpCloudProvider implements PaymentProvider {
   }
 
   /** Only the three documented terminal statuses resolve a row; `REFUNDED` and anything
-   * unrecognised are `deferred` to the sweep (spec §2). A null (SumUp holds no transaction yet —
+   * unrecognised are `deferred` to the sweep. A null (SumUp holds no transaction yet —
    * the reader has not started the checkout) is `pending`. */
   static classify(t: SumUpTransaction | null, now: Date): PollOutcome {
     if (t === null || t.status === "PENDING") return { kind: "pending" };
@@ -247,35 +246,27 @@ export class SumUpCloudProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
   /**
-   * One pass over this provider's `attempting` rows (spec §3). T1 lists them (unlocked); each is
-   * looked up at SumUp OUTSIDE any transaction — by the stamped poll key, else by OUR
-   * `payment_ref` (`foreign_transaction_id`) for a row that crashed before T1.5 — and resolved in
-   * its own short T2. The non-null case runs through `classify` (the one status→outcome mapping,
-   * shared with `collect`'s poll), so a future SumUp status is taught in one place:
+   * One pass over this provider's `attempting` rows. T1 lists them (unlocked); each is looked up at
+   * SumUp OUTSIDE any transaction — by the stamped poll key, else by OUR `payment_ref`
+   * (`foreign_transaction_id`) for a row that crashed before T1.5 — and resolved in its own short
+   * T2. The non-null case runs through `classify`, shared with `collect`'s poll:
    *   captured → captured;  failed → failed, no incident;
    *   pending → left, `nextDueAt` set;  deferred (REFUNDED / unknown) → failed +
    *   `payment.pending_outcome_unactionable` (money may have moved through a payment that never
    *   carried a sale — a human must look).
    * A null (SumUp holds no transaction) inside the grace period is left; PAST the grace period it is
-   * failed AND raises the same unactionable incident with `status: "not_found"`. The old code failed
-   * it silently on "SumUp holds nothing → no money moved"; that confidence only held when a
-   * correlation key SumUp had recorded was in play. With no affiliate key, the sweep queries by a
-   * `foreign_transaction_id` SumUp never received, so a create SumUp accepted but whose response was
-   * lost is a not-found we cannot correlate — an uncertain charge, not a proven non-event. A fiscal
-   * system errs toward a rare benign alert over a silently concealed charge; the full self-heal (the
-   * deferred reconciler) lands later.
+   * failed AND raises the same unactionable incident with `status: "not_found"`. With no affiliate
+   * key, the sweep queries by a `foreign_transaction_id` SumUp never received, so a create SumUp
+   * accepted but whose response was lost is a not-found we cannot correlate — an uncertain charge,
+   * not a proven non-event.
    * This is the one place a terminal state is written on incomplete information, safe only because
    * the outcome has stopped moving by the time the sweep sees it. The sweep MUST terminate every
-   * row it can, or a deferred status would be swept forever (spec §3).
+   * row it can, or a deferred status would be swept forever.
    *
-   * The incident carries no `saleId` (an attempting row has none), so `recordIncidentOnce` dedups
-   * per open `(till, code, sale_id=null)`: two unactionable rows on the SAME till in one
-   * sweep collapse to ONE incident and `incidentsRaised` undercounts. Accepted — spec §3 only needs
-   * a human alerted, and one incident per till satisfies that; the count is a log field, not a
-   * per-row guarantee. The till of each row is resolved in ONE batched read at the head of the sweep
-   * (`tillsForWorkingOrders` warns against the per-row call); each row's write transaction still does
-   * `failAttempting` + the incident together, so that atomicity is unchanged — only the till READ is
-   * lifted out and batched.
+   * The incident carries no `saleId` (an attempting row has none), so `recordIncidentOnce` (the sink
+   * boot wires) dedups per open `(till, code, sale_id=null)`: two unactionable rows on the SAME till
+   * in one sweep collapse to ONE incident and `incidentsRaised` undercounts. Accepted: one incident
+   * per till is enough to alert a human; the count is a log field, not a per-row guarantee.
    */
   async resolvePending(now: Date): Promise<ForwardResult> {
     const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER));
@@ -370,8 +361,8 @@ export class SumUpCloudProvider implements PaymentProvider {
   }
 
   /** void / refund / partialRefund all share one reversal path (`reverseViaSumUp`); a `void` is a
-   * full refund at SumUp (spec §5 — there is no separate void endpoint), a `partialRefund` carries
-   * the amount. */
+   * full refund at SumUp (there is no separate void endpoint), a `partialRefund` carries the
+   * amount. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaSumUp(this.opts.db, this.opts.client, ref, kind, amount);
   }

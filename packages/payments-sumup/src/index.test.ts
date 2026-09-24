@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as api from "./index.js";
 
-// Loading this barrel is also what exercises errors.ts's registry side-effect
-// (`import "./errors.js"`); index.ts itself is coverage-excluded, same as payments-stripe's. Only
-// VALUE exports appear in `Object.keys` — the type-only exports (the seam types,
-// `SumUpCloudProviderOptions`, `SumUpClientOptions`) are erased.
+// Loading this barrel is also what exercises errors.ts's registry side-effect. Only VALUE exports
+// appear in `Object.keys`; the type-only exports are erased.
 describe("the public surface", () => {
   it("exports exactly the intended names", () => {
     expect(Object.keys(api).sort()).toEqual([

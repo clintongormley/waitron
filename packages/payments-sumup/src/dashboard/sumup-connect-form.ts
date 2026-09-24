@@ -15,12 +15,9 @@ import { SumUpPaymentsClient, ambiguousMerchants, type AmbiguousMerchant } from 
 const MERCHANT_AMBIGUOUS = "payment.provider_merchant_ambiguous";
 
 /**
- * The SumUp CONNECT FORM: an API-key field (required, secret) plus the optional affiliate pair behind a
- * help tooltip. Follows the design-system Forms contract — required markers, a `wt-form-error-summary`,
- * secret fields as password inputs that are NEVER pre-filled, and `wt-form-actions` keeping the primary
- * action bottom-right. On submit it POSTs the connect route through the injected request; on success it
- * shows the returned merchant name for confirmation and calls `onConnected`. When the key covers several
- * merchants (`payment.provider_merchant_ambiguous`) it shows a picker and re-submits with the choice.
+ * The SumUp CONNECT FORM. Secret fields are password inputs that are NEVER pre-filled. When the key
+ * covers several merchants (`payment.provider_merchant_ambiguous`) it shows a picker and re-submits
+ * with the choice.
  */
 @customElement("sumup-connect-form")
 export class SumUpConnectForm extends LitElement {

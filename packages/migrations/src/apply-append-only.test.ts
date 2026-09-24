@@ -1,7 +1,5 @@
-// A real venue directory migrated by the product's own entry point, because what is under test is
-// whether the PRODUCT installs the append-only triggers — not whether the installer works, which
-// `packages/store/src/append-only.test.ts` already proves against a hand-built database. A mock
-// asserting `installAppendOnlyTriggers` was called would pass with the triggers absent.
+// A real venue directory migrated by the product's own entry point: a mock asserting
+// `installAppendOnlyTriggers` was called would pass with the triggers absent.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,9 +23,9 @@ const APPEND_ONLY_TABLES = ["sales", "order_amendments", "time_entries"] as cons
  * The controls, in the other direction — both must still take a delete after the same migrate.
  *
  * `payments` is the sharp one: it is classified `ledger` and is deliberately NOT append-only,
- * because `packages/payments/src/store.ts` moves a card payment's row through its states nine
- * times. A wiring that read the CLASS rather than the `appendOnly()` declaration would refuse
- * every one of those, and this case is what says so. `locations` is an ordinary `state` table.
+ * because `packages/payments/src/store.ts` moves a card payment's row through its states. A wiring
+ * that read the CLASS rather than the `appendOnly()` declaration would refuse those.
+ * `locations` is an ordinary `state` table.
  */
 const WRITABLE_TABLES = ["payments", "locations"] as const;
 
@@ -43,11 +41,9 @@ function freshVenue(): string {
 }
 
 /**
- * The refusal the DRIVER raised, dug out of the chain Drizzle wraps it in.
- *
- * Same shape, and for the same measured reason, as `packages/store/src/append-only.test.ts`'s
- * helper: Drizzle's wrapper message is `Failed to run the query '<the statement>'`, so a match on
- * the table name passes whether a trigger fired or not.
+ * The refusal the DRIVER raised, dug out of the chain Drizzle wraps it in. Drizzle's wrapper
+ * message is `Failed to run the query '<the statement>'`, so a match on the table name would pass
+ * whether a trigger fired or not.
  */
 function refusal(body: () => unknown): { message: string; errcode: number } {
   try {
@@ -71,8 +67,7 @@ function refusal(body: () => unknown): { message: string; errcode: number } {
  * EMPTY table both statements succeed and change nothing, and every assertion below would pass
  * whether the triggers existed or not. Foreign keys and check constraints are turned off around the
  * insert, which is what lets one generic row satisfy a table without building its parents; neither
- * pragma touches triggers, and the `STATE_TABLE` case is the control that says so, because it runs
- * under exactly the same two.
+ * pragma touches triggers.
  */
 function seedOneRow(db: Database, table: string): void {
   db.run(sql.raw("pragma foreign_keys = off"));
@@ -99,7 +94,7 @@ function seedOneRow(db: Database, table: string): void {
   );
 }
 
-/** Rows in `table`, read through a fresh handle. */
+/** Rows in `table`. */
 function rowCount(db: Database, table: string): number {
   return db.all<{ n: number }>(sql.raw(`select cast(count(*) as int) as n from "${table}"`))[0]!.n;
 }
@@ -149,11 +144,9 @@ describe("applyMigrations installs the append-only triggers on the product's own
   });
 
   it("applies a partial set list, protecting only the tables that set created", async () => {
-    // Boot in trading mode hands over the ENABLED modules only (`apps/server/src/boot.ts`, the
-    // `enabledModules(ALL_MODULES, moduleConfig)` branch), and the demo scripts hand over a named
-    // subset — `apps/server/scripts/allergens-demo.ts` filters `manifestSets()` down to `core` and
-    // `catalogue`. So a run that reached for every declared name rather than the ones belonging to
-    // the sets in front of it would ask for a table nothing had created.
+    // Boot in trading mode hands over the ENABLED modules only, and some demo scripts a named
+    // subset, so a run that reached for every declared name rather than the ones belonging to the
+    // sets in front of it would ask for a table nothing had created.
     const venue = freshVenue();
     const core = manifestSets().filter((set) => set.name === "core");
     await expect(applyMigrations(venue, migrationOptionsFor(core, null))).resolves.toBeUndefined();

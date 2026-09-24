@@ -19,19 +19,10 @@ export const PAIRING_POLL_MS = 2_000;
 type Phase = "form" | "pairing" | "expired" | "failed";
 
 /**
- * The SumUp ADD-READER DIALOG (`readerAdd.kind === "pairing-poll"`): the on-device steps in plain words
- * (including that pairing switches off standalone use on that Solo), a reader-name field and the 8–9
- * character pairing-code field. Pressing _Pair_ POSTs the code; the dialog then polls the reader's
- * status every {@link PAIRING_POLL_MS} and shows a countdown from {@link PAIRING_LIFETIME_MS}. It ends
- * three ways: the reader's `pairingStatus` reaching `paired` saves the row (`onAdded`) and closes; the
- * countdown running out shows `pairing_expired` and offers _try again_; a rejection shows
- * `pairing_failed` and offers the same. Completion is gated on `pairingStatus`, NOT device connectivity
- * (`online`): a reader can confirm pairing and then be briefly offline within the code's window, and
- * gating on `online` would wrongly time it out. Navigating away stops the poll — `disconnectedCallback`
- * clears the timer, the printers-screen `#endScan` precedent. On a genuine expiry or failure (never
- * reaching `paired`) the `processing` reader row this attempt created is unpaired, so no un-paired orphan
- * lingers to be picked as a device default. All pairing calls go through the server, so the API key
- * never reaches the browser.
+ * The SumUp ADD-READER DIALOG (`readerAdd.kind === "pairing-poll"`). Pressing _Pair_ POSTs the code;
+ * the dialog then polls the reader's status until it pairs, the code's lifetime runs out, or a read
+ * fails. On an expiry or failure the `processing` reader row this attempt created is unpaired, so no
+ * un-paired orphan lingers to be picked as a device default.
  */
 @customElement("sumup-add-reader")
 export class SumUpAddReader extends LitElement {
@@ -65,11 +56,9 @@ export class SumUpAddReader extends LitElement {
   @state() private phase: Phase = "form";
   @state() private remaining = PAIRING_LIFETIME_MS / 1000;
 
-  // The poll timer, its wall-clock end, and an in-flight guard — the printers-screen scan-timer shape
-  // (`#scanTimer`/`#scanUntil`/`#scanInFlight`). The timer is cleared in `disconnectedCallback` and
-  // never started once the dialog is detached (checked after each await); `#pairUntil` is the clock end
-  // (poll ticks are not real seconds in a throttled tab); `#pairInFlight` keeps a slow status read from
-  // being overlapped by the next tick.
+  // The timer is cleared in `disconnectedCallback` and never started once the dialog is detached
+  // (checked after each await); `#pairUntil` is the clock end (poll ticks are not real seconds in a
+  // throttled tab); `#pairInFlight` keeps a slow status read from being overlapped by the next tick.
   #pairTimer?: ReturnType<typeof setInterval>;
   #pairUntil = 0;
   #pairInFlight = false;
@@ -96,7 +85,6 @@ export class SumUpAddReader extends LitElement {
     return errors;
   }
 
-  /** POST the pairing code, then either finish (already paired) or start the status poll + countdown. */
   async #pair(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.phase === "pairing") return; // one pairing at a time

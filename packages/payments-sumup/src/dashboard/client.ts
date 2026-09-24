@@ -49,8 +49,8 @@ export interface SumUpConnectPayload {
   merchantCode?: string;
 }
 
-/** The SumUp routes as a small class over an injected {@link DashboardRequest}. The panel builds one
- * from the screen's `request` and hands it to the connect form and add-reader dialog. */
+/** The SumUp routes as a small class over an injected {@link DashboardRequest}. The connect form and
+ * the add-reader dialog each build one from the `request` the panel passes them. */
 export class SumUpPaymentsClient {
   readonly #request: DashboardRequest;
 

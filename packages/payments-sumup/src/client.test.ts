@@ -13,10 +13,6 @@ describe("SumUp amount conversions (the only place money becomes a number)", () 
     expect(fromMajorUnits(0.1 + 0.2)).toBe(decimal("0.30"));
     expect(fromMajorUnits(1)).toBe(decimal("1.00"));
   });
-  // Not part of the brief's given block: added so the sign branch (a refund correction, or any
-  // other negative amount SumUp might report) is covered rather than left dark like the sibling
-  // `fromMinorUnits` in payments-stripe — this package has too few files yet to dilute an
-  // untested branch below the coverage gate.
   it("fromMajorUnits: a negative major-units number keeps its sign", () => {
     expect(fromMajorUnits(-10.5)).toBe(decimal("-10.50"));
   });

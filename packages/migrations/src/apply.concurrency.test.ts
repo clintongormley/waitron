@@ -89,20 +89,11 @@ describe("applyMigrations under two concurrent hosts", () => {
   });
 
   it("waits for a peer process holding the venue's migration lock", async () => {
-    // Why a lock at all, measured rather than assumed: with none, two processes running drizzle's
-    // migrator against one virgin file both read the journal as empty and both replay the DDL. In
-    // 15 runs of that race on 2026-09-21 (Node v26.7.0, three sets), two ended with one process
-    // throwing `table \`locations\` already exists` / `table \`content_languages\` already exists`
-    // — errcode 1, from inside drizzle's own transaction. SQLite's file locking plus the 5s busy
-    // timeout serialises the WRITES and still allows that, because the journal READ happens
-    // outside the transaction that writes.
     expect(await race("yes")).toEqual(["peer-released", "migrated"]);
   });
 
   it("does not wait when the peer holds nothing — the control", async () => {
-    // The same peer, the same hold, the same log line, with only the `begin immediate` removed. It
-    // reverses the order, which is what makes the case above a measurement rather than a pair of
-    // answers that look alike.
+    // The same peer with only the `begin immediate` removed: it reverses the order.
     expect(await race("no")).toEqual(["migrated", "peer-released"]);
   });
 });
@@ -212,8 +203,7 @@ describe("two real migrating processes on one venue folder", () => {
   });
 
   // Opening the store takes `venue.lock`, which refuses a second process at once; the migration
-  // lock is taken first, so the second migrator waits instead. With the migration lock's
-  // `begin immediate` removed, one host of each pair is refused `provisioning.database_in_use`.
+  // lock is taken first, so the second migrator waits instead.
   it("both succeed, queued on the migration lock, and leave one migrator's journal", async () => {
     const alone = temp("wt-alone-");
     await applyMigrations(alone, migrationOptionsFor(manifestSets(), null));

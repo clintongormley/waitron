@@ -13,10 +13,7 @@ const DRIZZLE_MIGRATIONS_TABLE = /^__drizzle_migrations_[a-z_]+$/;
  *
  * Computed by drizzle's own `readMigrationFiles`, never by a local sha256 of our own: the value has
  * to equal what drizzle WROTE into the journal table for a comparison against the database to mean
- * anything, and a second copy of the rule is a second thing to keep in step. (The rule today is
- * sha256 of the whole `.sql` file text — `drizzle-orm@0.45.2/migrator.js` — and
- * `journal-hashes.test.ts` pins that against a hand-computed digest so a change in drizzle fails
- * loudly rather than reporting every migration as unknown.)
+ * anything. `journal-hashes.test.ts` pins drizzle's rule against a hand-computed digest.
  */
 export function imageMigrationHashes(set: MigrationSetSource, root: string | null): string[] {
   const folder = resolveExistingMigrationsFolder(set, root);
@@ -33,19 +30,12 @@ export function imageMigrationHashes(set: MigrationSetSource, root: string | nul
  * `appliedSchemaVersion` gives: a connection failure reported as "no journal" would let a caller
  * conclude a fully-migrated database is virgin.
  *
- * **The catalogue is asked, rather than a refusal being caught** — the same shape, and for the same
- * reason, as `appliedSchemaVersion` next door. This function caught SQLSTATE `42P01` until
- * 2026-09-22; `node:sqlite` produces no such value, so on this engine the absent table arrived as
- * `no such table: __drizzle_migrations_<set>` with `code: "ERR_SQLITE_ERROR"`, `errcode: 1` — the
- * same three values a syntax error carries — and was RETHROWN. It reached the container
- * entrypoint's ahead check, where a virgin venue directory made every first boot fail with an
- * unclassified driver error.
+ * **`sqlite_master` is asked, rather than a refusal being caught**, for the reason
+ * `appliedSchemaVersion` gives.
  *
  * NO `order by`. The hashes are compared as a SET by the only caller (`unknownHashes`), and there
- * is nothing to order by: drizzle creates this table with `id SERIAL PRIMARY KEY`
- * (`drizzle-orm@0.45.2/sqlite-core/dialect.js:646`), and `SERIAL` is not a SQLite type, so the
- * column is an ordinary one with no default — measured through this tree's own handle, every row's
- * `id` is `NULL`. The `order by "id"` that stood here sorted by a constant.
+ * is nothing to order by: drizzle creates this table with `id SERIAL PRIMARY KEY`, and `SERIAL` is
+ * not a SQLite type, so the column is an ordinary one with no default and every row's `id` is `NULL`.
  *
  * Only `hash` is read. `created_at` is deliberately untouched: drizzle compares only that column
  * when it decides what to apply, so a hash comparison is both the safer arithmetic and the stricter

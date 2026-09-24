@@ -1,6 +1,6 @@
 // A real SQLite venue directory, because the behaviour under test is drizzle's watermark
 // arithmetic against a real journal table — a mocked handle would assert only that the mock was
-// called. No container: the engine is a file.
+// called.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -96,7 +96,7 @@ describe("applyMigrations refuses to report success on an incomplete set", () =>
       },
     ]);
     // … then handed a folder whose second entry sits BELOW that watermark. Drizzle applies nothing
-    // and raises nothing; this is exactly the shape that skipped five core migrations in silence.
+    // and raises nothing.
     await expect(
       applyMigrations(venue, [
         {
@@ -117,10 +117,8 @@ describe("applyMigrations refuses to report success on an incomplete set", () =>
       applyMigrations(venue, [{ migrationsFolder: folder, migrationsTable: TABLE }]),
     ).resolves.toBeUndefined();
     expect(await journalRows(venue)).toBe(2);
-    // And again, idempotently: a re-run applies nothing and must still be complete, or every second
-    // boot of a healthy box would throw. The row count is asserted on BOTH sides so this is a
-    // measurement rather than a pair of answers that look alike: an idempotent re-run that resolved
-    // because it silently re-applied both migrations would read 4 here.
+    // And again: a re-run applies nothing and must still be complete, or every second boot of a
+    // healthy box would throw. A re-run that silently re-applied both migrations would read 4 here.
     await expect(
       applyMigrations(venue, [{ migrationsFolder: folder, migrationsTable: TABLE }]),
     ).resolves.toBeUndefined();
@@ -128,12 +126,9 @@ describe("applyMigrations refuses to report success on an incomplete set", () =>
   });
 
   it("resolves for a database holding MORE journal rows than the folder ships", async () => {
-    // The other direction, pinned because the comparison is `applied < expected` rather than
-    // `!==` on purpose: a journal row this image ships no migration for is a database migrated by a
-    // NEWER image, which is a different fault with its own code and its own remedy
-    // (`provisioning.database_ahead`). Naming it "incomplete" here — with `applied 3, expected 2` —
-    // would put a misleading count in front of the one reader who cannot debug it, and would take
-    // the case away from the check that CAN name it.
+    // The comparison is `applied < expected`, not `!==`: a journal row this image ships no
+    // migration for is a database migrated by a NEWER image, a different fault with its own code
+    // (`provisioning.database_ahead`).
     const venue = freshVenue();
     const folder = folderOf(MIGRATIONS.map((migration) => migration.entry));
     await applyMigrations(venue, [{ migrationsFolder: folder, migrationsTable: TABLE }]);

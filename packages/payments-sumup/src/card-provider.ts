@@ -16,24 +16,20 @@ import type { SumUpClient } from "./client.js";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 import type { SumUpClientOptions } from "./sumup-client.js";
 import { SumUpCloudProvider } from "./provider.js";
-// Registers `payment.provider_merchant_ambiguous` (the one SumUp-specific code this seat throws) on
-// the shared `ErrorParams` registry. `payment.provider_credential_rejected` is the neutral code both
-// provider seats throw, declared in `@waitron/payments` and reachable through the import above.
 import "./errors.js";
 
 const PROVIDER_ID = "sumup";
 const CREDENTIAL_PURPOSE = "payments.sumup";
 
-/** The literal an operator seals for an absent affiliate field, matching
- * the NO_AFFILIATE convention `optionsFromSealed` below applies: a `-` in either affiliate slot
- * means "no affiliate", and the create call omits the `affiliate` block. */
+/** The literal sealed for an absent affiliate field: a `-` in either affiliate slot means "no
+ * affiliate", and the create call omits the `affiliate` block. */
 const NO_AFFILIATE = "-";
 
 /** `memberships()` reads `GET /v0.1/memberships`, which does not carry a merchant code, so `connect`
  * builds its probe client with this placeholder rather than a real one it does not yet know. */
 const UNKNOWN_MERCHANT = "";
 
-/** The nine `SumUpClient` methods, listed once so `deferredClient` can build a lazy wrapper without
+/** The `SumUpClient` methods, listed once so `deferredClient` can build a lazy wrapper without
  * repeating a per-method arrow (which would each read as a separate uncovered function). */
 const CLIENT_METHODS = [
   "createCheckout",
@@ -88,9 +84,8 @@ export function optionsFromSealed(
 /** A `SumUpClient` that resolves the real client (from the sealed credential) on first use. `build`
  * must return synchronously, but reading the credential is asynchronous; every `SumUpClient` method
  * is async, so deferring the read to the first call is transparent to `SumUpCloudProvider`. The
- * resolved client is cached for the provider's lifetime — matching the server's read-once-at-boot
- * wiring — and a failed read is not cached, so a transient database error is retried on the next
- * sale rather than bricking the provider. */
+ * resolved client is cached for the provider's lifetime, and a failed read is not cached, so a
+ * transient database error is retried on the next sale rather than bricking the provider. */
 export function deferredClient(deps: {
   db: Database;
   ring: KeyRing;
@@ -122,10 +117,7 @@ function pairingStatus(raw: string): AddReaderResult["status"] {
 /**
  * The SumUp fill of the generic `CardProviderContribution` seat. It keeps every provider name inside
  * this package: the generic connect route, provider registry and pool reach SumUp only through this
- * value, never by importing SumUp directly. `connect` verifies the typed key against SumUp's
- * memberships endpoint and assembles the full four-field payload the route seals verbatim; `build`
- * turns a sealed credential into the live `SumUpCloudProvider`; `readers.*` manage the merchant's
- * paired card readers.
+ * value, never by importing SumUp directly.
  */
 export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
   providerId: PROVIDER_ID,

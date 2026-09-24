@@ -1,37 +1,6 @@
 import "@waitron/shared";
 
-/**
- * `@waitron/migrations`'s contribution to the shared error registry.
- *
- * **Renamed from `server.migrations_missing` when this package was extracted from `apps/server`.**
- * That looks like a breach of the never-rename rule (`packages/shared/src/errors.ts`), so here is
- * why it is not, and why now was the only free moment:
- *
- * The rule exists because a code is a translation key and may already sit in a persisted record.
- * Neither applies to this one. It is thrown by `migrationOptionsFor` before the host finishes
- * booting — earlier than any tenant scope, any `incidents` row, or any display layer — so no stored
- * value and no localisation bundle references it. `series.not_found` was renamed twice on the same
- * reasoning, both times inside #12 (`10b16fd57`).
- *
- * The prefix had to change because `server.*` is reserved for facts about the host PROCESS
- * (`apps/server/src/errors.ts` says so in its own doc comment), and "a migration set is not where
- * it should be" is a fact about the migration set. An earlier version of this comment kept
- * `server.` on the grounds that "`apps/server` is still the only thing that can actually hit it in
- * production" — true when written, and unsafe to keep relying on: this package was extracted
- * precisely so a second binary could run the migration sets, and `@waitron/provisioning` is the
- * consumer it was extracted for, and it has depended on this package since #11 (`86229c87`). No
- * production caller throws it today — inside `packages/provisioning` only test files call
- * `migrationOptionsFor` — and the rename argument does not rest on one. Renaming after this package shipped
- * would have cost a permanent deprecate-and-add instead of a find-replace, which is why the
- * extraction was the free moment.
- *
- * `tenant.not_found` (`apps/server/src/errors.ts`) is the closest SIBLING, not a precedent for
- * renaming: it was introduced under that name in `4fb3f2c` and never renamed —
- * `git log --all -S"server.tenant_not_found"` returns nothing — and its own comment calls it
- * "Deliberately NOT `server.*`". So it shows the naming rule being applied up front; it does not
- * show a rename. The prior renames are `series.not_found`'s, and there are TWO of them, both
- * inside #12 (`10b16fd57`).
- */
+/** `@waitron/migrations`'s contribution to the shared error registry. */
 declare module "@waitron/shared" {
   interface ErrorParams {
     /** A manifest set's folder is absent, or present with no `meta/_journal.json`. */
@@ -39,19 +8,15 @@ declare module "@waitron/shared" {
     /**
      * A set's `table` is not a drizzle journal-table name (`__drizzle_migrations_<lowercase>`).
      * `appliedSchemaVersion` and `journalHashes` both interpolate the table name into a query over
-     * it — an identifier a bind parameter cannot carry (§3) — so the name is validated before it
-     * reaches the SQL, rather than trusting that "callers only pass safe values".
+     * it — an identifier a bind parameter cannot carry — so the name is validated before it
+     * reaches the SQL.
      */
     "migrations.invalid_table": { table: string };
     /**
      * A migration set reported success with fewer migrations applied than the image ships.
      *
      * Drizzle skips an entry whose `when` sits at or below the watermark the database already
-     * recorded, and raises nothing — the rule, its citation and why no journal edit repairs it are
-     * in CLAUDE.md §3. Measured 2026-09-10: a database at the core set's entry 1 upgraded to HEAD
-     * with 10 of 15 migrations applied and no error. The wrong schema then surfaces as an
-     * unclassified driver failure in whatever query first touches it, which is the diagnosability
-     * defect this branch exists to remove.
+     * recorded, and raises nothing (CLAUDE.md §3; measured in #310).
      *
      * Both counts are journal lengths — public facts about a build artefact, never data.
      */
