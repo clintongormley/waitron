@@ -1,4 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { products, type Transaction } from "@waitron/db";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
@@ -127,6 +128,8 @@ async function walkAttachedModifiers(
 type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
 /** One query for every product any offered list names, and none at all when no list names one. */
+const activeVariant = alias(products, "active_variant");
+
 async function readExtraProducts(
   tx: Transaction,
   productIds: string[],
@@ -149,6 +152,14 @@ async function readExtraProducts(
         inArray(products.id, productIds),
         eq(products.active, true),
         eq(products.available, true),
+        // A product with an Active variant is never sold as itself (spec §15.1), and the order
+        // path refuses one picked as an extra (`priceOrderLines`, apps/server), so it is not offered.
+        notExists(
+          tx
+            .select({ one: sql`1` })
+            .from(activeVariant)
+            .where(and(eq(activeVariant.parentId, products.id), eq(activeVariant.active, true))),
+        ),
       ),
     );
   return new Map(

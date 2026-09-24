@@ -11,8 +11,10 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
   createCatalogue,
+  createExtraList,
   createProduct,
   setProductVariants,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -44,6 +46,9 @@ let wine: string;
 let beer: string;
 let coffee: string;
 let water: string;
+// Water's extras list, offering the wine parent, the wine's variant and the coffee.
+let extrasListId: string;
+let wineGlass: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -99,15 +104,46 @@ const suite = useVenueDb({
         active,
       });
       const wine = await product("Vino", "4.00");
-      await setProductVariants(tx, wine.id, [variant("Vino copa", true, true)], "es");
+      const [glass] = await setProductVariants(
+        tx,
+        wine.id,
+        [variant("Vino copa", true, true)],
+        "es",
+      );
       const beer = await product("Cerveza", "2.50");
       await setProductVariants(tx, beer.id, [variant("Cerveza tercio", false, true)], "es");
       const coffee = await product("Café", "1.20");
       await setProductVariants(tx, coffee.id, [variant("Café doble", true, false)], "es");
       const water = await product("Agua", "1.50");
-      return { wine: wine.id, beer: beer.id, coffee: coffee.id, water: water.id };
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Para acompañar",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [wine.id, glass!.id, coffee.id].map((productId) => ({
+            productId,
+            maxQuantity: 1,
+            preselected: false,
+            price: "0.50",
+          })),
+        },
+        "es",
+      );
+      await writeProductModifiers(tx, water.id, [{ kind: "extras", id: list.id }]);
+      return {
+        wine: wine.id,
+        beer: beer.id,
+        coffee: coffee.id,
+        water: water.id,
+        extrasListId: list.id,
+        wineGlass: glass!.id,
+      };
     });
-    ({ wine, beer, coffee, water } = ids);
+    ({ wine, beer, coffee, water, extrasListId, wineGlass } = ids);
     const [profile] = await db
       .insert(deviceProfiles)
       .values({
@@ -177,7 +213,7 @@ const park = (productId: string, id = randomUUID()) =>
 async function orderLines(id: string): Promise<string[]> {
   return (
     await suite.db.execute<{ product_id: string }>(
-      sql`select product_id from working_order_lines where working_order_id = ${id}`,
+      sql`select product_id from working_order_lines where working_order_id = ${id} order by line_no`,
     )
   ).rows.map((row) => row.product_id);
 }
@@ -244,6 +280,37 @@ describe("a venue with no service zones never sells a parent with Active variant
       const res = await park(productId, id);
       expect(res.status).toBe(200);
       expect(await orderLines(id)).toEqual([productId]);
+    }
+  });
+
+  const withExtra = (productId: string, id = randomUUID()) =>
+    post("/api/working-orders", {
+      id,
+      lines: [
+        {
+          productId: water,
+          quantity: "1",
+          extras: [{ listId: extrasListId, picks: [{ productId, quantity: 1 }] }],
+        },
+      ],
+    });
+
+  it("refuses an extras pick of a parent with an Active variant, and parks nothing", async () => {
+    const id = randomUUID();
+    const res = await withExtra(wine, id);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "product.variant_required", params: { productId: wine } },
+    });
+    expect(await orderLines(id)).toEqual([]);
+  });
+
+  it("still sells an extras pick of a variant, or of a product whose only variant is Inactive", async () => {
+    for (const pick of [wineGlass, coffee]) {
+      const id = randomUUID();
+      const res = await withExtra(pick, id);
+      expect(res.status).toBe(200);
+      expect(await orderLines(id)).toEqual([water, pick]);
     }
   });
 });

@@ -359,14 +359,6 @@ async function priceOrderLines(
     productId: line.menuItemId ?? line.productId ?? "",
   }));
   const byId = new Map(available.map((p) => [p.id, p]));
-  // Only a menu offer can name a variant, so on the plain path a parent with an Active variant
-  // cannot be sold at all (spec §15.1). One read for the whole basket.
-  const requiresVariant = usesOffers
-    ? new Set<string>()
-    : await parentsWithActiveVariants(
-        tx,
-        lines.map((line) => line.productId),
-      );
 
   // ONE read per definition kind for the WHOLE basket, before the line loop below (CLAUDE.md §3).
   const modifiers = await resolveBasketModifiers(
@@ -378,6 +370,14 @@ async function priceOrderLines(
     contentConfig.defaultLanguage,
     true,
   );
+  // A product with an Active variant is never sold as itself (spec §15.1). A line naming a menu
+  // offer is decided by `selectMenuVariant`; a plain-path line cannot name a variant, and neither
+  // can an extras pick, so either one naming such a product is refused below. One read for the
+  // whole basket: the plain-path dishes, and every product the basket's extras lists offer.
+  const requiresVariant = await parentsWithActiveVariants(tx, [
+    ...(usesOffers ? [] : lines.map((line) => line.productId)),
+    ...modifiers.extraProducts.keys(),
+  ]);
 
   // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
   // does not itself carry: which product/course a PARENT row takes, and which PICKED product a CHILD
@@ -428,7 +428,7 @@ async function priceOrderLines(
     if (!usesOffers && line.variantId !== undefined) {
       throw new AppError("management.request_invalid", { field: "variantId" });
     }
-    if (requiresVariant.has(underlyingProductId)) {
+    if (offer === undefined && requiresVariant.has(underlyingProductId)) {
       throw new AppError("product.variant_required", { productId: underlyingProductId });
     }
     const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
@@ -486,6 +486,11 @@ async function priceOrderLines(
       { extras: line.extras, options: line.options },
       contentConfig.defaultLanguage,
     );
+    for (const child of extraChildren) {
+      if (requiresVariant.has(child.productId)) {
+        throw new AppError("product.variant_required", { productId: child.productId });
+      }
+    }
 
     // A child is priced at `dishQuantity × pickQuantity` (`priceBasketWithOptions`), so a dish sold by
     // WEIGHT would charge a fraction of each extra — 0.333 kg of fish carrying "one lemon" would bill
@@ -3231,7 +3236,8 @@ export async function updateHeldOrder(
     // stored parent line explicitly; every line must still name the same product/offer, remain in the
     // same order, and answer its dish's extras and options exactly as the stored line did, and a
     // line whose quantity rises must have its dish's and its extras' product rows Active and
-    // Available. Anything else takes the replacement path below and is priced from the current offer.
+    // Available, and neither the product it sold nor any extra may have an Active variant. Anything
+    // else takes the replacement path below and is priced from the current offer.
     const storedLineRows = await tx
       .select({
         id: workingOrderLines.id,
@@ -3369,24 +3375,27 @@ export async function updateHeldOrder(
       });
     }
     // A line whose quantity RISES sells more of its dish and of every extra it carries, so each of
-    // their product rows must be Active and Available (spec §15.6). The dish is the variant's
-    // parent on a variant line; the variant itself and the menu offer's own switches are not
-    // re-checked on a raise. One that is not sends the edit to the
-    // replacement path, whose sellable reads refuse it. A kept or lowered quantity is not
-    // re-checked: existing work is not cancelled (2026-09-20 spec §10). One read for the basket.
+    // their product rows must be Active and Available (spec §15.6), and neither what the line sold
+    // nor any extra may have gained an Active variant since (§15.1: such a product is never sold as
+    // itself). The dish is the variant's parent on a variant line; the variant's own Active and
+    // Available and the menu offer's own switches are not re-checked on a raise. A line that fails
+    // sends the edit to the replacement path, whose reads refuse it. A kept or lowered quantity is
+    // not re-checked: existing work is not cancelled (2026-09-20 spec §10). One read of each kind
+    // for the basket.
     const keepsEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
-    const raisedProductIds = new Set(
-      keepsEveryLine
-        ? rebuilt.flatMap((entry, index) =>
-            compareDecimal(decimal(req.lines[index]!.quantity), decimal(entry!.stored.quantity)) > 0
-              ? [sameLines[index]!.productId, ...entry!.paired.map(({ pick }) => pick.productId)]
-              : [],
-          )
-        : [],
-    );
+    const raised = keepsEveryLine
+      ? rebuilt.flatMap((entry, index) =>
+          compareDecimal(decimal(req.lines[index]!.quantity), decimal(entry!.stored.quantity)) > 0
+            ? [{ entry: entry!, dishId: sameLines[index]!.productId }]
+            : [],
+        )
+      : [];
+    const pickIds = raised.flatMap(({ entry }) => entry.paired.map(({ pick }) => pick.productId));
+    const raisedProductIds = new Set([...raised.map(({ dishId }) => dishId), ...pickIds]);
+    const soldIds = [...raised.map(({ entry }) => entry.stored.productId!), ...pickIds];
     const raisesUnsellable =
       raisedProductIds.size > 0 &&
-      (
+      ((
         await tx
           .select({ id: products.id })
           .from(products)
@@ -3397,7 +3406,8 @@ export async function updateHeldOrder(
               eq(products.available, true),
             ),
           )
-      ).length < raisedProductIds.size;
+      ).length < raisedProductIds.size ||
+        (await parentsWithActiveVariants(tx, soldIds)).size > 0);
     const preservesEveryLine = keepsEveryLine && !raisesUnsellable;
     if (preservesEveryLine) {
       for (let index = 0; index < req.lines.length; index++) {

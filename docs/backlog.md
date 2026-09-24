@@ -698,7 +698,13 @@ rows: **this task needs no venue reset of its own.** What it left open:
   till's three line-carrying routes price by bare `productId` on such a venue, a path that cannot
   name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) now refuses the parent
   with `product.variant_required`, Available variants or not; a product whose variants are all
-  Inactive still sells as itself. Pinned by `apps/server/src/till-api.zoneless-variants.test.ts`.
+  Inactive still sells as itself. The same refusal covers an extras pick of such a product on
+  either path (a pick of a variant still sells), and a raised quantity on a held line whose product
+  has gained an Active variant since it was parked (`updateHeldOrder`). The till's extras lists no
+  longer offer such a product (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`).
+  Pinned by `apps/server/src/till-api.zoneless-variants.test.ts`, the "never sold as itself, as an
+  extra or on a raise" cases in `apps/server/src/working-order.test.ts`, and "an extra that is a
+  parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`.
   The zone-less path itself stays: removing it would reach every suite that rings up by
   `productId`. `GET /api/products` (`listAvailableProducts`) still lists such a parent; no
   production screen in `apps/till` calls it (the till builds its buttons from zone offers).
@@ -816,9 +822,19 @@ reader no product path called, went with it.
 A dev venue's old rows in that table go with the drop; the migration needs no reset of its own —
 measured 2026-09-24 through `applyMigrations` on Node v26.7.0: a venue migrated through catalogue
 `0003` and holding one product with one `product_variants` row took the new migration with no
-error, the table was gone and the product row kept. The
-till's plain product path now refuses a parent with Active variants (the Task 5 bullet above). What
-Task 9 leaves open:
+error, the table was gone and the product row kept. A
+product with Active variants is now refused on the till's plain product path, as an extras pick on
+either path, and on a raised held line (the Task 5 bullet above). What Task 9 leaves open:
+- **Paying a held order does not re-check its lines.** A line, or an extras pick, whose product
+  gained an Active variant after the order was parked is billed as parked: the cash and card pays
+  price a retrieved order from its stored lines (`priceStoredOrder`,
+  `apps/server/src/working-order.ts`). That follows the 2026-09-20 service spec §10 (existing work
+  is not cancelled), and only a raised quantity is refused. **Next action:** confirm with the owner
+  that paying parked work is meant to go through unchanged.
+- **An extras list whose items all have Active variants reaches the till with no items**
+  (`readExtraProducts` leaves each one out), so a list that requires a pick cannot be answered from
+  the till. **Next action:** decide whether
+  the dashboard should warn when a list offers a product with Active variants.
 - **The header of the shipped `packages/media/drizzle/0001_image_references.sql` still describes
   `product_variants.image`,** now a dropped table. It stays unedited, for the reason given under
   Task 1.

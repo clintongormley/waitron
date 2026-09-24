@@ -114,7 +114,8 @@ export async function variantsOfProducts(
 
 /**
  * Which of `productIds` have at least one Active variant, Available or not, in ONE query. Such a
- * product is never sold as itself (spec §15.1): only a menu offer can name the variant to sell.
+ * product is never sold as itself (spec §15.1), as a dish or as an extras pick: only a dish line
+ * rung up from a menu offer can name the variant to sell.
  */
 export async function parentsWithActiveVariants(
   tx: Transaction,

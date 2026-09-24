@@ -244,27 +244,40 @@ sold alone (`listMenuOffers`). A variant never has a button: it is listed only n
 parent's offer (`MenuOffer.variants`), and the plain product list (`listAvailableProducts`,
 `packages/catalogue/src/operations.ts`) reads top-level products alone.
 
-Tapping a parent sold in whole units opens the picker (`till-product-grid`,
-`apps/till/src/widgets/product-grid.ts`), which lists its variants in the one variant order,
+Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
+(`#pick`, `apps/till/src/widgets/product-grid.ts`). A parent sold by weight or in fractions, or
+tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
+`apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`setProductVariants` writes the order the
 variants were sent in). The first available one is chosen to start with; an unavailable one stays
 listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
-available on that menu gets no button (same grid file).
+available on that menu gets no button (`product-grid.ts`). An extras list does not offer a product
+that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
+since the order path refuses one picked as an extra (below).
 
 ### The sale line
 
 **A product with an Active variant, Available or not, is never sold as itself** (spec §15.1): a
-line that rings it up without naming a variant is refused `product.variant_required`. On a zone's
-menu offer `selectMenuVariant` (`packages/catalogue/src/variants.ts`) refuses it. On a venue with
-no service zones the till's three line-carrying routes — `POST /api/sales`, `POST /api/pay` and
-`POST /api/working-orders` — price by bare `productId` (`resolveHttpOrderZone`,
-`apps/server/src/till-api.ts`), a path that cannot name a variant at all, so `priceOrderLines`
-(`apps/server/src/working-order.ts`) refuses every such parent there, from one read for the whole
-basket (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). So a venue with no
-service zones can sell neither such a product nor its variants: a variant is sold only from a
-zone's menu offer. A product whose variants are all Inactive sells as itself on both paths.
+line that rings it up without naming a variant is refused `product.variant_required`, and so is an
+extras pick of it. On a zone's menu offer `selectMenuVariant` (`packages/catalogue/src/variants.ts`)
+refuses a dish line that names no variant. On a venue with no service zones the till's three
+line-carrying routes — `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders` — price by
+bare `productId` (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`), a path that cannot name a
+variant at all, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses every such parent
+there. An extras pick cannot name a variant on either path, so `priceOrderLines` refuses a pick of
+such a product on both; a pick of a variant itself sells. Both refusals come from one read for the
+whole basket (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). So a venue with no
+service zones can sell neither such a product nor its variants as dishes: a variant is sold as a
+dish only from a zone's menu offer. A product whose variants are all Inactive sells as itself on
+both paths.
+
+A held order keeps a line whose product has since gained an Active variant, and lowering or keeping
+its quantity is allowed; raising it is refused `product.variant_required`, as a raise of a line
+whose product has become Inactive or Unavailable is refused (`updateHeldOrder`,
+`apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
+re-check them (`priceStoredOrder`, same file).
 
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own

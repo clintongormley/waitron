@@ -17,6 +17,7 @@ import {
 import { createExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
 import { createOptionList, updateOptionList } from "./options.js";
 import { writeProductModifiers } from "./product-modifiers.js";
+import { setProductVariants } from "./variants.js";
 import { readOfferedModifiers, resolveAttachedModifiers } from "./offered-modifiers.js";
 import * as extraProjection from "./extra-projection.js";
 import * as productModifiers from "./product-modifiers.js";
@@ -418,6 +419,52 @@ describe("an extra the till cannot sell", () => {
       const [list] = offered.get(holder)!;
       expect(list!.kind === "extras" && list!.id).toBe(seeded.extrasId);
       expect(list!.kind === "extras" && list!.items.map((item) => item.productId)).toEqual([
+        ids.olives,
+      ]);
+    }
+  });
+});
+
+describe("an extra that is a parent with Active variants", () => {
+  // Spec §15.1: a product with an Active variant is never sold as itself, and the order path
+  // refuses one picked as an extra, so the till is not offered it. Bacon's variant is Active but
+  // Unavailable, so a read that checked Available rather than Active would still offer bacon;
+  // cheese's only variant is Inactive, so cheese still sells as itself.
+  it("leaves out an item whose product has an Active variant, on both paths", async () => {
+    const seeded = await run(async (tx) => {
+      const attached = await attach(tx, ["extras"]);
+      await setMenuItemExtraLists(tx, offerId, [
+        {
+          listId: attached.extrasId,
+          items: [{ productId: ids.bacon }, { productId: ids.cheese }, { productId: ids.olives }],
+        },
+      ]);
+      const variant = (name: string, available: boolean, active: boolean) => ({
+        name,
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "1.00",
+        available,
+        active,
+      });
+      await setProductVariants(tx, ids.bacon, [variant("Thick bacon", false, true)], "en");
+      await setProductVariants(tx, ids.cheese, [variant("Mature cheese", true, false)], "en");
+      return attached;
+    });
+
+    const offered = await run((tx) =>
+      readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.burger, menuItemId: offerId },
+      ]),
+    );
+
+    for (const holder of [ids.burger, offerId]) {
+      const [list] = offered.get(holder)!;
+      expect(list!.kind === "extras" && list!.id).toBe(seeded.extrasId);
+      expect(list!.kind === "extras" && list!.items.map((item) => item.productId)).toEqual([
+        ids.cheese,
         ids.olives,
       ]);
     }
