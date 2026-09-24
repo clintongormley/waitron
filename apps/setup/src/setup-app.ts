@@ -480,6 +480,7 @@ export class SetupApp extends LitElement {
     }>,
   ): Promise<void> {
     event.stopPropagation();
+    if (this.cloudRecoveryBusy) return;
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
     try {

@@ -3,6 +3,7 @@ import { applyTokens } from "@waitron/ui";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
+import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -560,6 +561,49 @@ describe("setup-app", () => {
     cloudRecoveryAction(el, "restore", pointId);
     await flush(el);
     expect(restoreFromCloud).toHaveBeenCalledWith(pointId);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it("submits one Cloud restore when the rendered button is clicked twice before the shell redraws", async () => {
+    const pointId = "3a1d5560-c5bd-407a-b596-e63fbe2600d5";
+    const approved = {
+      requestId: "b6cbaee9-ee8b-4da5-b023-900547debb94",
+      code: "12345678",
+      openCloudUrl:
+        "https://cloud.example.test/recover#request=b6cbaee9-ee8b-4da5-b023-900547debb94",
+      expiresAt: "2026-09-24T12:00:00.000Z",
+      state: "approved",
+      point: {
+        id: pointId,
+        venueId: "a7f570e8-e510-49eb-b1a7-096ff72171f5",
+        capturedAt: "2026-09-24T10:00:00.000Z",
+        modules: { core: 1 },
+      },
+    };
+    let finishRestore!: (value: { restoreStaged: true; restarting: true }) => void;
+    const restorePending = new Promise<{ restoreStaged: true; restarting: true }>((resolve) => {
+      finishRestore = resolve;
+    });
+    const restoreFromCloud = vi.fn().mockReturnValue(restorePending);
+    const el = await mountSetupApp(
+      stubApi({ cloudRecoveryStatus: vi.fn().mockResolvedValue(approved), restoreFromCloud }),
+    );
+    goto(el, "cloud-restore");
+    await flush(el);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    const screen = (await screenHost(el, "cloud-restore")) as SetupCloudRestoreScreen;
+    const checkbox = screen.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event("change"));
+    await screen.updateComplete;
+    const restore = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!;
+    restore.click();
+    restore.click();
+    expect(restoreFromCloud).toHaveBeenCalledTimes(1);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId);
+    finishRestore({ restoreStaged: true, restarting: true });
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
