@@ -780,6 +780,16 @@ What Task 11 left open:
   before re-emitting; `wt-tabs` does not. **Next action:** give the strip its own event name, or
   have it stop the inner event, and retire the guard in all five. Raised when the copy count reached
   five, which is what makes it worth the root fix.
+- **Two things on the Venue operations screen that #546's review raised and left for the owner**
+  (`packages/venue-service/src/dashboard/venue-operations-screen.ts`; found 2026-09-24, not fixed
+  because #546 changed tests only). (1) A zone-menu row whose menu is not in the loaded list shows
+  an empty Menu cell, while its row actions are labelled with the stored menu id; whether a
+  foreign key makes that row unreachable in practice was not checked. (2) When the row that opened
+  an editor is gone by the time the editor closes, focus goes to `wt-tabs` as a whole, and Chromium
+  puts it on the tab STRIP rather than the selected tab — seen at the test browser's 414-pixel
+  width, where the strip scrolls; a wider screen was not tried. A keyboard or screen-reader user
+  then starts from the strip. **Next action:** decide whether (1) should show the id or a
+  "missing menu" label, and whether (2) should focus the selected tab.
 - **The two list forms still share about a hundred lines of chrome.** Task 11 lifted what moved
   cleanly — `translations()`, the placeholder-carrying translated-name fields, the visually-hidden
   rule and the table chrome all live in `form-fields.ts` and `reorder-table.ts` now. What is still
