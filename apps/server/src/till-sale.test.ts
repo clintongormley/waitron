@@ -1599,6 +1599,12 @@ describe("ordering extras and options — parent + child lines", () => {
       LOCALE,
     );
     await tx.update(products).set({ active: true }).where(eq(products.parentId, productId));
+    expect(
+      await tx
+        .select({ active: products.active })
+        .from(products)
+        .where(eq(products.parentId, productId)),
+    ).toEqual([{ active: true }]);
   };
 
   // What the server BILLS for a pick the till can no longer re-send; the till's showing and dropping

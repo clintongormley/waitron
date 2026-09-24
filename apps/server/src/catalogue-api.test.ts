@@ -3184,6 +3184,7 @@ describe("mountCatalogueApi — extras lists and products with variants", () => 
       body: { active: true },
     });
     expect(patched.status).toBe(403);
+    expect(await patched.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     expect(
       (await suite.db.execute(sql`select active from products where id = ${variantId}`)).rows,
     ).toEqual([{ active: 0 }]);
