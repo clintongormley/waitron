@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SingletonRole } from "@waitron/db";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -22,6 +22,7 @@ import { writeBackupEnv, writeRecoveryKey } from "./backup-env-writer.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
+import type { SealedStateRefresher } from "./sealed-state.js";
 import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -104,6 +105,7 @@ function buildApp(
   base: NodeJS.ProcessEnv = {},
   readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, stateDir)),
+  sealedState: SealedStateRefresher = { refresh: async () => "sealed" },
 ): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -124,6 +126,7 @@ function buildApp(
       db: suite.db,
       stateDir,
       readRecoveryKey,
+      sealedState,
     },
     () => {},
   );
@@ -535,13 +538,41 @@ describe("backup admin routes", () => {
     expect(sup.current().recoveryKey).toBe(KEY_1);
   }, 60_000);
 
+  it("re-locks this node's state row after apply and after rotate", async () => {
+    const dest = makeDestDir();
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const refresh = vi.fn(async () => "sealed" as const);
+    const app = buildApp(makeSupervisor(sc), sc.stateDir, {}, undefined, { refresh });
+    const cookie = await login(app);
+    const post = (path: string, body: unknown) =>
+      app.request(path, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    expect(
+      (
+        await post("/api/backup/apply", {
+          destinationDir: dest,
+          recoveryKey: KEY_1,
+          schedule: DAILY_AT_0330,
+          retention: RETENTION,
+        })
+      ).status,
+    ).toBe(200);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+    expect(refresh).toHaveBeenCalledTimes(2);
+  }, 60_000);
+
   it("reads and rotates a recovery key that has no archive destination", async () => {
     const stateDir = await makeStateDir();
     await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
     await sup.reload(); // no destination, so the archive duty stays off
-    const app = buildApp(sup, stateDir);
+    const refresh = vi.fn(async () => "sealed" as const);
+    const app = buildApp(sup, stateDir, {}, undefined, { refresh });
     const cookie = await login(app);
 
     const before = await app.request("/api/backup/recovery-key", { headers: { cookie } });
@@ -554,6 +585,7 @@ describe("backup admin routes", () => {
     });
     expect(rot.status).toBe(200);
     expect(await rot.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
+    expect(refresh).toHaveBeenCalledTimes(1);
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
     expect(typeof file.WAITRON_BACKUP_KEY_ROTATED_AT).toBe("string");

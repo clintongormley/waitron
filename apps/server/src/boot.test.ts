@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import {
@@ -24,6 +24,7 @@ import {
   deviceProfiles,
   locations,
   nodes,
+  nodeSealedState,
   openVenueDatabase,
   readDeploymentEnvironment,
   readMembershipTrustSet,
@@ -70,6 +71,8 @@ import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { unsealNodeState } from "./sealed-state.js";
+import { RECOVERY_FILES } from "./state-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -1041,6 +1044,56 @@ describe("startServer, against a migrated venue directory", () => {
     } finally {
       await server.close();
       await close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("locks this node's state files into the venue database at a trading start", async () => {
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-sealed-"));
+    const key = "boot-recovery-key-0123";
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
+    // The one required file `ensureBoxSecrets` does not write; only its presence matters here.
+    await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_TILL_ID=boot-sealed\n");
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      },
+      // The raw process env, which boot merges over the state files when it reads the key.
+      { WAITRON_BACKUP_RECOVERY_KEY: key },
+    );
+    const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+    try {
+      // Listening, so `close()` below has a listener to shut.
+      await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      const rows = await sharedDb
+        .select({ sealed: nodeSealedState.sealed })
+        .from(nodeSealedState)
+        .where(eq(nodeSealedState.nodeId, TILL_ENV.WAITRON_TILL_NODE_ID));
+      expect(rows).toHaveLength(1);
+      const entries = unsealNodeState(rows[0]!.sealed, key);
+      expect(entries.map((e) => e.name)).toEqual([
+        "manifest.json",
+        ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
+        "secrets/modules.json",
+      ]);
+    } finally {
+      await server.close();
+      await close();
+      await sharedDb.delete(nodeSealedState);
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);

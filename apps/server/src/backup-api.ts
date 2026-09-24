@@ -15,6 +15,7 @@ import {
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
+import type { SealedStateRefresher } from "./sealed-state.js";
 // This file THROWS the `backup.*` admin codes, so it imports the host error registry directly, the
 // "every file that throws one of these imports ./errors.js" convention errors.ts states.
 import "./errors.js";
@@ -29,6 +30,9 @@ export interface BackupApiDeps {
   /** The recovery key from the box env (files merged under the process env), read afresh each call.
    * Answers with no archive destination configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
+  /** Called after every write to `backup.env`: that file is sealed into the row, and a rotation
+   * changes the key the row is locked with. */
+  sealedState: SealedStateRefresher;
 }
 
 /**
@@ -303,6 +307,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (deps.supervisor.current().recoveryKey !== input.recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});
         }
+        await deps.sealedState.refresh();
         // Return the COMPLETE status (the same shape `GET /api/backup/status` returns), so the
         // dashboard, which assigns this response straight to its status state and reads
         // `backupStatus`/`archiveUnderCurrentKey`, gets both — the sync `current()` snapshot omits them.
@@ -344,6 +349,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
+          await deps.sealedState.refresh();
           return c.json(await statusBody(true));
         }
         const input: BackupEnvInput = { ...fromCurrent(cur), recoveryKey, keyRotatedAt };
@@ -353,6 +359,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (deps.supervisor.current().recoveryKey !== recoveryKey) {
           throw new AppError("backup.effective_mismatch", {});
         }
+        await deps.sealedState.refresh();
         // Complete status, as `apply` returns and the dashboard expects (see the note there).
         return c.json(await statusBody());
       });

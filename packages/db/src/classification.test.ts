@@ -44,4 +44,8 @@ describe("CORE_CHANGE_SOURCES", () => {
     expect(CORE_CLASSIFICATION.map((c) => c.table)).toContain("change_log");
     expect(CORE_CHANGE_SOURCES.map((s) => s.table)).not.toContain("change_log");
   });
+  it("is not a change source for the sealed state row", () => {
+    expect(CORE_CLASSIFICATION.map((c) => c.table)).toContain("node_sealed_state");
+    expect(CORE_CHANGE_SOURCES.map((s) => s.table)).not.toContain("node_sealed_state");
+  });
 });

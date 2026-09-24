@@ -190,6 +190,23 @@ describe("runOnce (fan-out)", () => {
     }
   });
 
+  it("packs the archive in a fixed entry order: manifest, database, required state, optional state", async () => {
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
+    await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
+    const a = new FakeBackend("a");
+    await runOnce(deps([a]));
+    const order = unpackArchive(decryptArtifact(a.objects.get(KEY)!, "recovery-key-1")).map(
+      (e) => e.name,
+    );
+    expect(order).toEqual([
+      "manifest.json",
+      "db.dump",
+      ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
+      "secrets/backup.env",
+      "secrets/modules.json",
+    ]);
+  });
+
   it("fail-visible: a throwing manifest build ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const boom = new Error("journal unreadable");
