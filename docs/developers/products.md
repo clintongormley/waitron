@@ -147,7 +147,8 @@ to when the venue has no service zones configured (`resolveHttpOrderZone`,
 the kitchen sees the staff name however the product is configured. The paragraph above is about
 menu-offer lines; it does not hold for these, and nothing on this path closes the gap today.
 
-The top-sellers report ranks products by the parent's staff name, `sale_lines.name`, and lists
+The top-sellers report groups lines under the parent's staff name, `sale_lines.name`, ranks those
+products by quantity sold (name breaks a tie), and lists
 under each one a row per `sale_lines.variant_name` sold with it — so "Wine by the glass" shows its
 total with "Wine 175" and "Wine 125" beneath. The product's own row counts every line under its
 name, including any sold as the product itself with no variant, and the report's row limit counts

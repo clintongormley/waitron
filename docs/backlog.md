@@ -774,8 +774,8 @@ follows the list below. What Task 7 leaves open:
   handler by mistake.
 
 **Task 8 (branch `feat/variants-top-sellers`, 2026-09-24): top sellers now roll variants up under
-their parent.** The top-sellers list on the dashboard's overview and sales screens ranks products by
-the parent's name — "Wine by the glass", 5 sold, 24.50 — and shows each variant sold under it on its
+their parent.** The top-sellers list on the dashboard's overview and sales screens groups lines under
+the parent's name and ranks them by quantity sold — "Wine by the glass", 5 sold, 24.50 — and shows each variant sold under it on its
 own indented row beneath, under the variant's own name ("Wine 175", then "Wine 125", biggest seller
 first). A product's own figures count every line sold under its name, including any sold as the
 product itself with no variant, and the list's length counts products, not variants.

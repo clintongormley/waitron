@@ -71,7 +71,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
 export const topSellersStyles = css`
   th.seller-variant {
     padding-inline-start: calc(var(--wt-space-2) + var(--wt-space-4));
-    font-weight: normal;
+    font-weight: var(--wt-font-weight-normal);
   }
   .visually-hidden {
     position: absolute;
