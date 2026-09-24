@@ -1,10 +1,19 @@
-export { lockVenueDatabase, openVenueDatabase } from "./client.js";
+export {
+  isVenueHolderFresh,
+  lockVenueDatabase,
+  openVenueDatabase,
+  readVenueHolder,
+  setVenueCrashReportDirectory,
+  setVenueHolderKind,
+} from "./client.js";
 export type {
   Database,
   OpenVenueOptions,
   Schema,
   Transaction,
   VenueDatabase,
+  VenueHolder,
+  VenueHolderKind,
   VenueLock,
 } from "./client.js";
 export { runMigrations } from "./migrate.js";
