@@ -7773,6 +7773,22 @@ the prototype results note; the spec and the backlog point at them."
 
 ### Task 5: `@waitron/stream` — the bucket client, the signed pointer, generations, pruning and the bucket check
 
+**2026-09-24:** the built package departs from the code shown below in these ways; the files under
+`packages/stream/` are authoritative. (i) A 403 at the bucket check's listing step reports
+`list_failed`, not `access_denied`, as this task's own reasoning says; the snippet and its test
+still show `access_denied`. (ii) A 501 is reported as `conditional_write_unsupported` only when it
+answers a write step. (iii) There is no `errors.test.ts`: the registry's reachability is checked by
+the root guard `scripts/errors-reachable.test.ts`. (iv) The `HIGH_BAR_PACKAGES` step does not apply;
+that list was retired by #549. (v) Review fixes: a bucket listing that is incomplete (an entry with
+no key or no time, a truncated page with no continuation token, a repeated token) or that names a
+key outside the requested folder is refused rather than used, and pruning refuses a listed key
+outside the venue's folder; the bucket check, the pointer write and the generation claim each treat
+a "refused" answer to their own write as success when the bucket holds exactly the bytes they wrote
+(`putOwnBytes` in `conditional.ts`); the in-memory bucket's version tag is the MD5 of the bytes, as
+S3's is for a PUT stored unencrypted or with SSE-S3; and pruning deletes every old generation's files
+through one bounded pool of concurrent deletes, then their markers, so no marker is deleted until
+every file delete has succeeded.
+
 **Branch:** `feat/sqlite-slice2-stream-package` (one pull request)
 
 **Why these choices.**
