@@ -48,7 +48,13 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
-import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-order.js";
+import {
+  addTabRound,
+  createOpenOrder,
+  openTab,
+  updateHeldOrder,
+  voidTabLine,
+} from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -1570,6 +1576,74 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines[0]!.parentLineNo).toBeNull();
     expect(result.lines[1]!.parentLineNo).toBe(filedParent!.lineNo);
     expect(result.lines[2]!.parentLineNo).toBe(filedParent!.lineNo);
+  });
+
+  // The till can no longer re-send such a pick (no offered list carries it), so it shows the pick
+  // while the basket is unedited and drops it once edited; these two orders pin both halves.
+  it("bills a parked extra that gained an Active variant until an edit omits it, which re-prices without it", async () => {
+    const v = await setupModifierVenue();
+    const park = (id: string) =>
+      withTransaction(suite.db, (tx) =>
+        createOpenOrder(
+          tx,
+          v.cfg,
+          id,
+          [
+            {
+              menuItemId: v.offerFor(v.burgerId),
+              quantity: "1",
+              extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+            },
+          ],
+          null,
+          { zoneId: v.zoneId },
+        ),
+      );
+    const unedited = randomUUID();
+    const edited = randomUUID();
+    await park(unedited);
+    await park(edited);
+    await withTransaction(suite.db, (tx) =>
+      setProductVariants(
+        tx,
+        v.baconId,
+        [
+          {
+            name: "Bacon ahumado",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "0.90",
+            available: true,
+          },
+        ],
+        LOCALE,
+      ),
+    );
+    const pay = (id: string) =>
+      payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "50.00" },
+      });
+
+    // Hamburguesa 9.00 + Bacon 0.50.
+    expect((await pay(unedited)).total).toBe("9.50");
+
+    const [dish] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, edited));
+    await updateHeldOrder({ db: suite.db }, v.cfg, edited, {
+      lines: [{ workingOrderLineId: dish!.id, menuItemId: v.offerFor(v.burgerId), quantity: "2" }],
+    });
+    const stored = await suite.db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, edited));
+    expect(stored).toEqual([{ productId: v.burgerId }]);
+    // Two Hamburguesas at 9.00, and no Bacon.
+    expect((await pay(edited)).total).toBe("18.00");
   });
 
   it("settling a TAB with extras files child sale_lines linked to their parent (the primary path)", async () => {
