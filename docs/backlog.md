@@ -2800,11 +2800,18 @@ image constraints under *Detail → Box image*.
   `packages/catalogue` (#603, about 3,560 to about 2,200 counted with a parse-tree walk over every
   `.ts` file, tests included) and `packages/ui` (#604, about 1,144 to about 503 with the `grep -cE`
   count, tests included; comments inside `css` and `html` template literals are strings and were
-  left). A pruning pull request
+  left) and `packages/module` (#606, about 363 to about 200 counted with the parse-tree walk, tests
+  included). A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603 and #604 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604 and #606 and left for the package that owns each, all
   still OPEN:
+  - Found by #606 (`packages/module`), outside its package. `apps/server/src/provision.ts` (the
+    comment above its refusal of a disabled `provision-only` module) says such a module "mints
+    unrecoverable state at provision", which is untrue of `fiscal-none`; #606 dropped the same
+    reason from `disabledProvisionOnly` (`packages/module/src/config.ts`).
+    `apps/server/src/kitchen.test.ts` (the station test's comment) says a refusal would end up
+    "poisoning a shared transaction", the claim `working-order.test.ts` makes (below).
   - Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
     is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
     `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
@@ -5495,7 +5502,7 @@ permissions become rows the admin owns, per tenant, with the four seeded as defa
 code.
 
 The design turns on the **ladder**: a module contributes a permission by naming only the lowest role
-that should hold it (`grantedFrom`, `packages/module/src/module.ts:64`) and identity spreads it
+that should hold it (`grantedFrom`, on `ModulePermission` in `packages/module/src/module.ts`) and identity spreads it
 upward. A custom role has no position, so either every custom role declares where it sits, or the
 module contract names a permission group instead. Pick one before writing schema;
 `packages/composition/src/role-parity.ts` proves at compile time that the contract's roles and
