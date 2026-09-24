@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
@@ -58,7 +59,24 @@ function rows(el: VariantTable) {
   return [...el.shadowRoot!.querySelectorAll("tbody tr")];
 }
 function cells(el: VariantTable, column: number) {
-  return rows(el).map((row) => row.children[column]!.textContent!.trim());
+  return rows(el).map((row) => {
+    // The copy of the price a narrow table shows under the name is not part of the name.
+    const cell = row.children[column]!.cloneNode(true) as Element;
+    cell.querySelector(".stacked-price")?.remove();
+    return cell.textContent!.trim();
+  });
+}
+/** Runs `body` with the test frame at a desktop width, where the table keeps its price column. */
+async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    expect(window.innerWidth).toBe(1280);
+    await body();
+  } finally {
+    await page.viewport(width, height);
+  }
 }
 function handles(el: VariantTable) {
   return rows(el).map((row) => row.querySelector<HTMLButtonElement>("button.handle")!);
@@ -120,20 +138,51 @@ it("returns the unit chooser to its saved value after Add unit is chosen", async
 });
 
 it("keeps the unit chooser in the price heading a tap target on both axes", async () => {
-  const el = await mountTable({
-    unitId: "kg",
-    unitOptions: [
-      { value: null, label: "Each" },
-      { value: "kg", label: "kg" },
-    ],
+  await atDesktopWidth(async () => {
+    const el = await mountTable({
+      unitId: "kg",
+      unitOptions: [
+        { value: null, label: "Each" },
+        { value: "kg", label: "kg" },
+      ],
+    });
+    const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+    expect(tapMin).toBeGreaterThan(0);
+    const box = el
+      .shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!
+      .getBoundingClientRect();
+    expect(box.height).toBeGreaterThanOrEqual(tapMin);
+    expect(box.width).toBeGreaterThanOrEqual(tapMin);
   });
-  const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
-  expect(tapMin).toBeGreaterThan(0);
-  const box = el
-    .shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!
-    .getBoundingClientRect();
-  expect(box.height).toBeGreaterThanOrEqual(tapMin);
-  expect(box.width).toBeGreaterThanOrEqual(tapMin);
+});
+
+// Each width shows the price exactly once, so neither a sighted person nor a screen reader meets it
+// twice: in its own column on a wide table, under the name on a narrow one.
+it("moves each price under its name on a narrow table, and back to its own column on a wide one", async () => {
+  const shown = (element: Element | null) => (element?.getClientRects().length ?? 0) > 0;
+  const el = await mountTable({ basePrice: "9.00" });
+  el.variants = [{ ...threeVariants()[0]!, unitPrice: null }, ...threeVariants().slice(1)];
+  await el.updateComplete;
+  el.style.width = "20rem";
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (const row of rows(el)) {
+    expect(shown(row.children[2]!)).toBe(false);
+    expect(shown(row.querySelector(".stacked-price"))).toBe(true);
+  }
+  expect(shown(el.shadowRoot!.querySelector("thead th:nth-child(3)"))).toBe(false);
+  const stacked = (index: number) =>
+    el.shadowRoot!.querySelector(`[data-test="stacked-price-${index}"]`)!.textContent!;
+  expect(stacked(0).replace(/\s+/g, " ").trim()).toBe(
+    `${t("product.price")} ${t("editor.same_as").replace("{value}", "9.00")}`,
+  );
+  expect(stacked(2).replace(/\s+/g, " ").trim()).toBe(`${t("product.price")} 20.00`);
+  el.style.width = "40rem";
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (const row of rows(el)) {
+    expect(shown(row.children[2]!)).toBe(true);
+    expect(shown(row.querySelector(".stacked-price"))).toBe(false);
+  }
+  expect(cells(el, 2)).toEqual([t("editor.same_as").replace("{value}", "9.00"), "12.00", "20.00"]);
 });
 
 it("caps the name cell with the shared sizing token, not a literal width", async () => {

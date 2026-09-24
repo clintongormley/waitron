@@ -715,21 +715,21 @@ What Task 7 (`feat/variants-editor-screen`, the dashboard's variant page) leaves
   with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). `main` at `5add727d7`
   already labelled it the same way. **Next action:** name the switch after its variant.
 - **Not yet looked at on a phone (390px wide):** a variant's name may sit a few pixels low in its
-  product-list row. **Next action:** open it at that width, in both themes, and look. The variants
-  table was looked at there on 2026-09-24: its price heading reads the price word above a select
-  showing only the unit, and in Spanish a product with no unit shows that select cut to "Unid",
-  because the column is bounded so the row fits. **Next action:** decide whether the unit select
-  belongs in the price heading at phone width at all, since the base price field above the table
-  already shows and changes the same unit.
-- **The variants table's name column is what gives way on a narrow phone.** Measured 2026-09-24 in
-  the product editor with a four-digit price, in English and Spanish: at 390px wide the rows fit, but
-  with the text sizes raised a step the name column is 32px and a long name wraps nearly letter by
-  letter, because a price and the Available switch no longer shrink below their own width; at 360px
-  the name column is 31–41px at the normal size and the table is 26px too wide at the larger size;
-  at 320px it is 20–66px too wide and scrolls sideways inside its box. The dialog around the table
-  takes 98px of the width: the table's box starts at x=49 and ends 49px short of the right edge at
-  every width measured. **Next action:** decide whether `wt-modal`'s margins and padding should
-  shrink at phone width, which would hand that room to the name column.
+  product-list row. **Next action:** open it at that width, in both themes, and look. (The variants
+  table's unit select, once cut to "Unid" in Spanish at that width, is no longer shown there: a
+  table 30rem wide or less hides its price column, heading select included, and puts each price
+  under the variant's name, so on a phone the price field's unit button is the way to the unit. A
+  wider table still shows the select.)
+- **The variants table still scrolls sideways on phones narrower than 390px.** Measured 2026-09-24
+  in the product editor with a four-digit price, in English and Spanish, with each price under the
+  name: at 390px the table fits at both text sizes, with the name column 120px wide at the larger
+  one and about 12px to spare in Verdana (24px in the default fonts); at 360px it fits at the normal
+  size but is 6px too wide at the larger one (18px in Verdana); at 320px it is too wide in every
+  case measured but English at the normal size in the default fonts. The name column can shrink no
+  narrower than the widest price. The dialog around the table takes 98px of the width: the table's
+  box starts at x=49 and ends 49px short of the right edge at every width measured. **Next
+  action:** decide whether `wt-modal`'s margins and padding should shrink at phone width, which
+  would hand that room to the table.
 - **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
   browser command (`apps/dashboard/vitest.config.ts`, whose comment says it exercises the responsive
   breakpoints) resizes the outer Playwright page, not the frame a test renders in: measured

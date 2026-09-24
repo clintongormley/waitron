@@ -162,20 +162,28 @@ and the product editor's attached-lists table (`apps/dashboard/src/widgets/produ
 name is the one cell whose text can be long, so capping it makes the text wrap and keeps the
 controls after it (a switch, a row menu) on screen at phone width instead of pushing the row into a
 sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
-the product editor at a 390px-wide frame, removing it changed no column, while in a 1280px frame it
-held the name column to 231px against 342px without it. At phone width it relies instead on its
-own rule for a table 30rem wide or less: the name column takes whatever width the others leave and
-is the one column that may break inside a word, while the price and Available headings are capped
-by `--wt-tap-min` plus a spacing token. An amount and a heading's word never break, so a longer
-amount or larger text widens those two columns and the room comes out of the name. Measured
-2026-09-24 in the product editor with a four-digit price: the row menus stay inside a 390px frame in
-English and Spanish at both text sizes, with the name column down to 32px at the larger size; at
-360px that holds only at the normal size, and at 320px the table scrolls sideways inside its box.
+the product editor, on the earlier phone layout that still showed a price column, removing it
+changed no column at a 390px-wide frame, while in a 1280px frame it held the name column to 231px
+against 342px without it. It has not been re-measured since the price moved under the name. At phone width it relies instead on its
+own rule for a table 30rem wide or less: the price column goes, each price moves onto its own line
+under the variant's name, and the name column takes whatever width the grip, Available and row
+menu columns leave. The unit select in the price heading goes with its column; the price field
+above the table keeps a unit button that changes the same unit. The name is the one column that
+may break inside a word; an amount never breaks, so the name column is never narrower than the
+widest price. The Available heading is capped by `--wt-tap-min` plus a spacing token, and a longer
+heading runs on into the row menu's empty heading. Measured 2026-09-24 in the product editor at
+390px with a four-digit price, the text sizes raised a step and Verdana standing in for CI's Linux
+fonts: with the price column the table needed 304px of a 292px box; with the price under the name
+it fits with about 12px to spare (24px in this Mac's default fonts) and the name column is 120px
+wide. At 360px it fits at the normal text size but is 6px too wide at the larger one (18px in
+Verdana); at 320px it scrolls sideways inside its box in every case measured but English at the
+normal size in the default fonts.
 Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390px only,
-in English and Spanish and with the text sizes raised. They check that the table does not scroll,
-that each row menu ends inside both the table's box and the frame, that each price sits on one
-line and ends inside its cell, that the Available heading sits on one line, and that the unit
-chooser is a tap target on both axes. There was a third, the old modifier form's choices table,
+in English and Spanish, with the text sizes raised, and each again in Verdana. They check that the
+table does not scroll, that each row menu ends inside both the table's box and the frame, that the
+price column is hidden and each price sits on one line inside the name's cell, that the Available
+heading sits on one line, that the heading's unit select is hidden, and that the price field's unit
+button is a tap target on both axes. There was a third, the old modifier form's choices table,
 until Task 13 of the extras-and-options plan deleted that form. That deleted table was the ONLY one
 that ever spelled the literal out for itself:
 `git log -S140px --oneline --all -- apps packages` returns two commits, and
@@ -638,7 +646,9 @@ Two notes on the primitives this pattern uses, both in the table above:
   `wt-change` on input and `wt-unit-click` when the button is pressed. The product editor draws its
   price field with that button whether or not the product has variants, and opens the unit dropdown
   under the field on `wt-unit-click`. A product with variants also has a unit select (`pricing-unit`)
-  in the variants table's price heading. Both change the same product unit, on purpose.
+  in the variants table's price heading. Both change the same product unit, on purpose. A table
+  30rem wide or less hides its price column and that select with it, so on a phone the price
+  field's button is the only way to the unit.
 
 ### Dashboard banner
 

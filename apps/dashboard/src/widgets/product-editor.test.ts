@@ -181,18 +181,63 @@ it("uses the shared compact nutritional picker without a reviewed switch", async
   );
 });
 
+/** Runs `body` with the test frame at a desktop width, where the variants table keeps its price
+ * column and the unit select in that column's heading. */
+async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    expect(window.innerWidth).toBe(1280);
+    await body();
+  } finally {
+    await page.viewport(width, height);
+  }
+}
+
 it("puts the variant pricing unit chooser in the table header, not below the table", async () => {
+  await atDesktopWidth(async () => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, variants: [small, large] },
+      locales: ["en"],
+      units: [unit, { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+      taxChoices: reduced,
+    });
+    const table = variantTable(el)!;
+    await table.updateComplete;
+    const select = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+    expect(select.getClientRects().length).toBeGreaterThan(0);
+    expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
+  });
+});
+
+// A phone hides the variants table's price column and the unit select in its heading, so the price
+// field's own unit button has to reach everything that select offered.
+it("changes a product's unit from the price field when the table's heading select is hidden", async () => {
+  const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, variants: [small, large] },
     locales: ["en"],
-    units: [unit, { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+    units: [unit, litre],
     taxChoices: reduced,
   });
   const table = variantTable(el)!;
+  table.style.width = "20rem";
   await table.updateComplete;
-  expect(table.shadowRoot!.querySelector('select[name="pricing-unit"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="choose-unit"]')).toBeNull();
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const heading = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+  expect(heading.getClientRects()).toHaveLength(0);
+  await openUnits(el);
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  expect(select.getClientRects().length).toBeGreaterThan(0);
+  expect([...select.options].map((option) => option.value)).toEqual(["", unit.id, litre.id]);
+  expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).not.toBeNull();
+  select.value = litre.id;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  expect(el.currentValue.unitId).toBe(litre.id);
 });
 
 it("applies variant-table unit changes and forwards its add-unit action", async () => {
@@ -918,17 +963,22 @@ it("applies a reorder, an availability toggle and an edit from the variants tabl
 });
 
 it("names the product's unit in the variants table's price column", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, variants: [small, large] },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
+  await atDesktopWidth(async () => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, variants: [small, large] },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+    const table = variantTable(el)!;
+    await table.updateComplete;
+    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[name="pricing-unit"]',
+    )!;
+    expect(select.getClientRects().length).toBeGreaterThan(0);
+    expect(select.selectedOptions[0]!.textContent!.trim()).toBe("ea");
   });
-  const table = variantTable(el)!;
-  await table.updateComplete;
-  const select = table.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
-  expect(select.selectedOptions[0]!.textContent!.trim()).toBe("ea");
 });
 
 it("saves station and course with a new product, without a separate routing event", async () => {
@@ -1972,20 +2022,27 @@ function linesOf(cell: Element, text: string): number {
   throw new Error(`"${text}" is not in the cell`);
 }
 
-// A wider font and a longer language are what CI's Linux fonts and a real phone bring, so each case
-// is also run with every text size raised to a larger token. English and Spanish label the columns
-// differently, and a product with no unit shows the longest unit name. A four-digit price is the
-// widest amount a row is likely to carry, and it must never break inside the number.
-it.each([
+const phoneCases = [
   { locale: "en-GB", scaled: false, unitId: unit.id },
   { locale: "es-ES", scaled: false, unitId: unit.id },
   { locale: "es-ES", scaled: false, unitId: null },
   { locale: "en-GB", scaled: true, unitId: null },
   { locale: "es-ES", scaled: true, unitId: unit.id },
   { locale: "es-ES", scaled: true, unitId: null },
+];
+
+// A wider font and a longer language are what CI's Linux fonts and a real phone bring, so each case
+// is also run with every text size raised to a larger token, and each again in Verdana, whose widths
+// are close to CI's Linux fonts, so a Mac sees what CI sees; a machine without Verdana falls back to
+// the usual family. English and Spanish label the columns differently, and a product with no unit
+// gives the price field's unit button its longest name. A four-digit price is the widest amount a
+// row is likely to carry, and it must never break inside the number.
+it.each([
+  ...phoneCases.map((phone) => ({ ...phone, font: "default" })),
+  ...phoneCases.map((phone) => ({ ...phone, font: "Verdana" })),
 ])(
-  "keeps every variant row's menu on screen at phone width, with no sideways scroll ($locale, larger text: $scaled, unit: $unitId)",
-  async ({ locale, scaled, unitId }) => {
+  "keeps every variant row's menu on screen at phone width, with no sideways scroll ($locale, larger text: $scaled, unit: $unitId, font: $font)",
+  async ({ locale, scaled, unitId, font }) => {
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
@@ -2012,6 +2069,11 @@ it.each([
         host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
         host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
       }
+      if (font === "Verdana") {
+        const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+      }
       const table = variantTable(el)!;
       await table.updateComplete;
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -2027,25 +2089,34 @@ it.each([
         expect(right, `row ${index}`).toBeLessThanOrEqual(edge);
         expect(right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
       }
-      const cells = [...table.shadowRoot!.querySelectorAll("tbody tr")].map(
-        (row) => row.children[2]!,
-      );
+      // On a phone each price sits under its variant's name, and the price column is gone.
+      const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
+      for (const row of rows) expect(row.children[2]!.getClientRects()).toHaveLength(0);
+      const cells = rows.map((row) => row.children[1]!);
       expect(linesOf(cells[0]!, "9.00"), "the base price the first row falls back to").toBe(1);
       expect(linesOf(cells[1]!, "3.00")).toBe(1);
       expect(linesOf(cells[2]!, "1250.00")).toBe(1);
-      // Kept on one line, an amount wider than its column would run over the switch beside it.
+      // Kept on one line, an amount wider than the name column would run over the switch beside it.
       for (const cell of cells) {
         const amount = cell.querySelector(".amount")!.getBoundingClientRect();
+        expect(amount.width).toBeGreaterThan(0);
         expect(amount.right).toBeLessThanOrEqual(cell.getBoundingClientRect().right);
       }
       const available = table.shadowRoot!.querySelectorAll("thead th")[3]!;
       expect(linesOf(available, t("editor.available")), "the Available heading").toBe(1);
-      // The unit chooser is a tap target on both axes, like every other control on the row.
+      // The heading's unit select goes with the price column. The unit stays one tap away on the
+      // price field above the table, whose unit button changes the same unit.
       const unitSelect = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+      expect(unitSelect.getClientRects()).toHaveLength(0);
+      const unitButton = el
+        .shadowRoot!.querySelector('wt-price-input[name="unit-price"]')!
+        .shadowRoot!.querySelector("button.unit")!
+        .getBoundingClientRect();
       const tapMin = parseFloat(getComputedStyle(table).getPropertyValue("--wt-tap-min"));
       expect(tapMin).toBeGreaterThan(0);
-      expect(unitSelect.getBoundingClientRect().height).toBeGreaterThanOrEqual(tapMin);
-      expect(unitSelect.getBoundingClientRect().width).toBeGreaterThanOrEqual(tapMin);
+      expect(unitButton.height).toBeGreaterThanOrEqual(tapMin);
+      expect(unitButton.width).toBeGreaterThanOrEqual(tapMin);
+      expect(unitButton.right).toBeLessThanOrEqual(window.innerWidth);
     } finally {
       setLocale("es-ES");
       await page.viewport(width, height);

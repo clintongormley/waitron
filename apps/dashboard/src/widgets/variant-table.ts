@@ -102,22 +102,31 @@ export class VariantTable extends LitElement {
       .amount {
         white-space: nowrap;
       }
-      /* At phone width the name takes whatever the other columns leave. The price and Available
-         headings are capped by a token, but an amount and a heading's word never break, so a
-         longer amount or larger text widens those columns and the room comes out of the name.
-         Measured 2026-09-24 in the product editor with a four-digit price: at 390px the table fits
-         its box in English and Spanish at both text sizes, with the name column down to 32px at
-         the larger size; at 360px it fits only at the normal size; at 320px it scrolls sideways.
+      /* Shown only on a narrow table, where the price moves under the name. */
+      .stacked-price {
+        display: none;
+      }
+      /* On a narrow table the price moves under the name and its own column goes, taking the
+         heading's unit select with it; the price field above the table has a unit button for the
+         same unit. The name column takes what the grip, Available and row menu columns leave, and
+         is never narrower than its widest price. An Available heading longer than its cap runs on
+         into the row menu's empty heading. Measured 2026-09-24 in the product editor at 390px with
+         a four-digit price, larger text and Verdana standing in for CI's Linux fonts: with a price
+         column the table needed 304px of a 292px box; this way it fits with about 12px to spare.
          Guard: the phone-width cases in product-editor.test.ts, at 390px only. */
       @container (max-width: 30rem) {
         th:nth-child(2) {
           width: 100%;
         }
-        th:nth-child(3) {
-          max-width: calc(var(--wt-tap-min) + var(--wt-space-4));
+        th:nth-child(3),
+        td:nth-child(3) {
+          display: none;
+        }
+        .stacked-price {
+          display: block;
         }
         th:nth-child(4) {
-          max-width: calc(var(--wt-tap-min) + var(--wt-space-5));
+          max-width: calc(var(--wt-tap-min) + var(--wt-space-6));
         }
       }
       /* A rejected row is marked in the row itself: a message in the summary alone does not say
@@ -318,6 +327,12 @@ export class VariantTable extends LitElement {
     const { variant } = row;
     const label = this.#label(variant);
     const error = this.errors[index] ?? "";
+    const price =
+      variant.unitPrice !== null
+        ? html`<span class="amount">${variant.unitPrice}</span>`
+        : this.basePrice
+          ? html`<span class="muted">${this.#sameAs()}</span>`
+          : nothing;
     return html`<tr class=${error ? "invalid" : ""} data-test=${`row-${index}`}>
       <td>${this.#reorder.handle(row.key)}</td>
       <td>
@@ -329,17 +344,16 @@ export class VariantTable extends LitElement {
                 >${t("product.inactive_badge")}</span
               >`
         }
+        ${
+          price === nothing
+            ? nothing
+            : html`<span class="stacked-price" data-test=${`stacked-price-${index}`}
+                ><span class="visually-hidden">${t("product.price")}</span> ${price}</span
+              >`
+        }
         ${error ? html`<p class="error" data-test=${`error-${index}`}>${error}</p>` : nothing}
       </td>
-      <td>
-        ${
-          variant.unitPrice !== null
-            ? html`<span class="amount">${variant.unitPrice}</span>`
-            : this.basePrice
-              ? html`<span class="muted">${this.#sameAs()}</span>`
-              : nothing
-        }
-      </td>
+      <td>${price}</td>
       <td>
         <wt-switch
           name=${`available-${index}`}
