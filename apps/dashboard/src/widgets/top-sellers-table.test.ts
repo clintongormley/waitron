@@ -22,9 +22,9 @@ it("renders a row's plain staff name verbatim, regardless of the active locale o
       }),
       host,
     );
-    // A sales report shows the staff name (CLAUDE.md's three-name table); there is no translation
-    // map to resolve here, so a locale/content-language setting that would defeat one must not
-    // change what renders.
+    // A sales report shows the staff name (see `docs/developers/products.md`); there is no
+    // translation map to resolve here, so a locale/content-language setting that would defeat one
+    // must not change what renders.
     expect(host.querySelector('[data-test="seller-name"]')!.textContent).toBe("Pan de horno");
   } finally {
     setLocale(previousLocale);

@@ -30,9 +30,11 @@ name but no kitchen name still prints its staff Name to the kitchen.
 **A variant is named in full and shown under its own names alone** (spec
 `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15.2). "Wine by the glass" has the
 variants "Wine 125" and "Wine 175", and a line sold as Wine 125 reads `Wine 125` on the till, the
-tab, the kitchen ticket, the kitchen screens, the receipt and the sales report. A variant's names
-are never inherited: a blank customer or kitchen name falls back to the VARIANT's staff name, never
-to the parent's. A line that names no variant renders exactly as it did before variants existed.
+tab, the kitchen ticket, the kitchen screens, the receipt and the sales report, where it sits nested
+under its product (a screen reader hears the product's name first: "Wine by the glass, Wine 125").
+A variant's names are never inherited: a blank customer or kitchen name falls back to the VARIANT's
+staff name, never to the parent's. A line that names no variant renders exactly as it did before
+variants existed.
 
 The three resolvers, one per audience:
 

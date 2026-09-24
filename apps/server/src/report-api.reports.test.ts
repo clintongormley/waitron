@@ -63,8 +63,8 @@ const SEED = {
     tenderAmount: "121.00",
     tipAmount: "3.00",
     // `name` (staff) and `descriptions` (customer text) are deliberately distinct — a sales report
-    // shows the staff name (CLAUDE.md's three-name table), so a test reading the customer text
-    // instead of the staff name would fail here.
+    // shows the staff name (see `docs/developers/products.md`), so a test reading the customer
+    // text instead of the staff name would fail here.
     line: {
       name: "Tortilla",
       descriptions: { "es-ES": "Tortilla francesa" },

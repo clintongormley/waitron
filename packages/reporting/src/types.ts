@@ -39,9 +39,8 @@ export interface TopSellersInput extends PeriodVatInput {
 }
 
 /** One product in the top-sellers list: every line frozen under this STAFF `name` (a sales report
- * shows the staff name, never the customer-facing text — see
- * `packages/catalogue/src/product-presentation.ts`), including lines sold as the product itself,
- * with its variants nested underneath. */
+ * shows the staff name, never the customer-facing text — see `docs/developers/products.md`),
+ * including lines sold as the product itself, with its variants nested underneath. */
 export interface TopSeller {
   /** The frozen `sale_lines.name` — the parent's staff name on a variant line. */
   name: string;
