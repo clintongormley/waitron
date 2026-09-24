@@ -3,9 +3,6 @@ import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
-// the same reason, as packages/db/src/schema/sales.ts.
 export const recoveryCodes = table(
   "recovery_codes",
   {

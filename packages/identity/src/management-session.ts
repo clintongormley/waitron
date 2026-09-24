@@ -9,16 +9,8 @@ import { persons } from "./schema/persons.js";
 import type { PersonRoleValue } from "./permissions.js";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
 
-/**
- * The lifecycle of a browser MANAGEMENT session — the seam the dashboard login (Task 8) and the
- * server API (slice 1b) build on. Distinct from a till's PIN shift-login (`sessions`): this is a
- * person signed into the management dashboard from a browser.
- *
- * `resolveManagementSession` is the guard every authenticated request runs: it enforces a SLIDING
- * idle timeout and — importantly — re-reads `persons.status` on every call, so a mid-session
- * suspension loses access immediately rather than at the next login.
- */
-export const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes, sliding
+/** Sliding: a resolve restarts it unless the read is passive or passes `touch: false`. */
+export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 const passiveRead = new AsyncLocalStorage<boolean>();
 
@@ -33,7 +25,7 @@ export interface ManagementSession {
   personId: string;
 }
 
-/** Open a management session for a person. The caller has already authenticated them. */
+/** The caller has already authenticated the person. */
 export async function startManagementSession(
   tx: Transaction,
   input: { personId: string },
@@ -46,16 +38,11 @@ export async function startManagementSession(
 }
 
 /**
- * Resolve a live session to its person + role, or throw. `token` is the cookie's raw value; a
- * session's row id or stored hash names no session. Missing, ended, or — the table declares no
- * key to `persons` (why: `schema/management-sessions.ts`) — pointing at a person row that is gone →
- * `management_session.required` (two nets refuse that last one: the inner join finds nothing, and the
- * status check below refuses a status that is not `active`);
- * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;
- * a pending person → `management_session.required`.
- * On success it bumps `last_seen_at` (the sliding window) and returns the session's row id, the
- * person's current role and their stored UI `locale` (`persons.locale`, `null` when they have set no
- * preference).
+ * `token` is the cookie's raw value; a session's row id or stored hash names no session. Re-reads
+ * `persons.status` on every call, so a mid-session suspension loses access immediately rather than
+ * at the next login. A session whose person row is gone (the table declares no key to `persons`) is
+ * refused by two nets: the inner join finds nothing, and the status check refuses a status that is
+ * not `active`.
  */
 export async function resolveManagementSession(
   tx: Transaction,

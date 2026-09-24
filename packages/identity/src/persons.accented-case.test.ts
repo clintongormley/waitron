@@ -1,34 +1,9 @@
 /**
- * One live display name and one login address across the venue — **whatever case the accented
- * letters are typed in, and whichever way the accent is encoded.**
+ * One live display name and one login address across the venue, whatever case the accented letters
+ * are typed in and whichever way the accent is encoded.
  *
- * The names this venue employs are José, Begoña, Martín and Nuño. The three unique indexes on
- * `persons` used to fold their case in SQL, and on this engine `lower()` folds ASCII and nothing
- * else. Measured 2026-09-23 on Node v26.7.0, with an ASCII control in the other direction so that
- * the probe discriminates rather than agreeing with itself:
- *
- * ```
- * SQLite lower('JOSÉ GARCÍA') = josÉ garcÍa        <- the É is left alone
- * SQLite lower('ANA LOPEZ')   = ana lopez          <- plain letters do fold
- * ```
- *
- * The second half of the same difference is the ENCODING. `José` can be written with a single
- * precomposed `é` (U+00E9) or with a plain `e` followed by a combining acute (U+0065 U+0301); the
- * two look identical on screen and are different strings. Nothing in SQL brings them together, and
- * neither did PostgreSQL's `lower()` — so that half is a gap this suite closes rather than a
- * regression it reports. macOS hands out the second form where phone keyboards hand out the first,
- * so one venue really can receive both.
- *
- * **What each index can be reached by.** A display name is stored exactly as it was typed, so both
- * halves reach it through `createPerson`. An address does not: `normalizeEmail`
- * (`./email.ts`) already lower-cases in JavaScript, which IS Unicode-aware, so by the time an
- * address reaches the index its case has gone. Its encoding has not — so the email and
- * pending-email cases below are encoding cases, with an ASCII case case beside each as the control
- * that the address path refuses duplicates at all.
- *
- * Every refusal is asserted by its DOMAIN CODE. A unique-index failure also satisfies
- * `toBeInstanceOf(Error)`, so an assertion on the class alone would pass whether the right thing
- * refused or the wrong thing did (`CLAUDE.md` §4).
+ * `normalizeEmail` (`./email.ts`) already lower-cases an address in JavaScript, so the address
+ * cases are encoding cases, with an ASCII case-only control beside each.
  */
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, captureError, indexViolated, withTransaction } from "@waitron/db";
@@ -75,12 +50,8 @@ function create(
 }
 
 describe("a live display name is taken whatever case its accented letters are typed in", () => {
-  // Both orders, because only ONE of them was broken and a suite that drove the other would have
-  // reported the defect fixed. The duplicate check compares the name the caller sent, folded in
-  // JavaScript, against the STORED name folded in SQL; with the mixed-case name stored first, both
-  // sides happen to read `josé garcía` and the check fires. Store the SHOUTED name first and SQL
-  // leaves its `É` and `Í` alone, so the two sides read `josÉ garcÍa` and `josé garcía`, the check
-  // finds nothing, and the index behind it does not fold either.
+  // Both orders: a fold done in SQL's `lower()` leaves a stored `É` alone, so only the order that
+  // stores the shouted name first catches it.
   for (const [first, second] of [
     ["José García", "JOSÉ GARCÍA"],
     ["JOSÉ GARCÍA", "José García"],
@@ -97,9 +68,7 @@ describe("a live display name is taken whatever case its accented letters are ty
   }
 
   it("refuses a second person whose name differs only in the case of an ASCII letter", async () => {
-    // The control. This case passed before the fix as well: it is here because an ASCII-only probe
-    // is exactly the probe that missed the defect above, so the suite states what a PASSING
-    // ASCII case proves and what it does not.
+    // The control: `lower()` folds ASCII, so this case alone cannot tell the two folds apart.
     const { token } = await openManagementSession(suite.db, "manager");
     await create(token, "ANA LOPEZ");
 
@@ -120,8 +89,7 @@ describe("a live display name is taken whatever case its accented letters are ty
   });
 
   it("accepts a name that differs by an accent rather than by its case", async () => {
-    // The control in the other direction, and the reason the fold is a case fold and not an accent
-    // stripper: Lopez and López are two people, and this venue must be able to employ both.
+    // The control in the other direction: Lopez and López are two people.
     const { token } = await openManagementSession(suite.db, "manager");
     await create(token, "Ana Lopez");
 
@@ -141,8 +109,7 @@ describe("a login address is taken whichever way its accent is encoded", () => {
   });
 
   it("refuses a second person whose address differs only in case", async () => {
-    // The control: the address path refuses duplicates at all. It passed before the fix, because
-    // `normalizeEmail` had already folded the case in JavaScript before the index saw it.
+    // The control: the address path refuses duplicates at all.
     const { token } = await openManagementSession(suite.db, "manager");
     await create(token, "One", "owner@example.test");
 
@@ -181,7 +148,6 @@ describe("an unproven replacement address is taken whichever way its accent is e
   });
 
   it("refuses a new person taking a pending address that differs only in case", async () => {
-    // The control, as above: this one passed before the fix.
     const { token } = await openManagementSession(suite.db, "manager");
     await requestAddressChange("pending@example.test");
 
@@ -193,19 +159,13 @@ describe("an unproven replacement address is taken whichever way its accent is e
 });
 
 /**
- * The two cases above reach the DATABASE, and the rest of this file does not.
- *
  * Every gated write path pre-checks a name or an address before it writes, so a duplicate is
- * normally refused by a `select` and the index behind it never fires. The pre-check and the index
- * have to agree — they are built from one expression for exactly that reason
- * (`schema/persons.ts`, `foldedKey`) — and these two cases are what holds the index's half of it.
- * Each takes a path with no pre-check in front of it: `setEmail` has none, and the display-name
- * case writes through the table definition the way `person-constraints.db.test.ts` does.
+ * normally refused by a `select` and the index never fires. These two take a path with no
+ * pre-check in front of it: `setEmail` has none, and the display-name case writes through the
+ * table definition.
  */
 describe("the index itself folds, not only the check in front of it", () => {
   it("refuses setEmail when the address differs only in how the accent is encoded", async () => {
-    // `setEmail` writes straight to the row and translates whatever the database refuses, so the
-    // refusal here is the index's.
     const { token } = await openManagementSession(suite.db, "manager");
     await create(token, "Held", "mari\u0301a@example.test");
     const target = await seedPerson(suite.db, "staff");
@@ -225,9 +185,6 @@ describe("the index itself folds, not only the check in front of it", () => {
   });
 
   it("refuses a second live row whose folded name matches, written through the table", async () => {
-    // Both rows carry `display_name_folded`, which is what every write path in this package
-    // supplies. `captureError` fails the test if the second insert is ACCEPTED, so this can never
-    // read an absent refusal as a matching one.
     const write = (displayName: string): Promise<unknown> =>
       run((tx) =>
         tx.insert(persons).values({

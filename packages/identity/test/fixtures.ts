@@ -9,20 +9,9 @@ import { hashPin } from "../src/verify-pin.js";
 import { hashPassword } from "../src/verify-password.js";
 import type { PersonRoleValue } from "../src/permissions.js";
 
-/**
- * Seed helpers shared by the identity LOGIC suites (authorize / login / staff), which drive
- * `loginWithPin`/`authorize`/the staff-admin API. Pure setup, never a case — nothing here asserts,
- * exactly as `@waitron/db`'s own `seedTenant` documents. Under `test/`, so out of the
- * english-only scan and the src coverage glob.
- */
-
-/** Seed a location → till. Returns the till id a session references.
- *
- * Inserted through the table definitions rather than as raw SQL, exactly as
- * `packages/workforce/test/fixtures.ts`'s `seedLocation` is: `locations.id`, `tills.id` and
- * `tills.created_at` are JavaScript generators (`$defaultFn`), which only the insert BUILDER runs,
- * and `invoice_locales` is a JSON array in a text column that the `labelList` helper serialises
- * from the plain array passed here. */
+/** Through the table definitions rather than raw SQL: `locations.id`, `tills.id` and
+ * `tills.created_at` are `$defaultFn` generators, which only the insert BUILDER runs, and
+ * `labelList` serialises `invoice_locales` from the plain array passed here. */
 export async function seedTill(db: Database): Promise<string> {
   const [location] = await db
     .insert(locations)
@@ -35,12 +24,8 @@ export async function seedTill(db: Database): Promise<string> {
   return till!.id;
 }
 
-/** A person of the given role and status whose PIN is "1234". role/status are passed explicitly so a
- * test seeds a real row of that shape rather than relying on a later UPDATE.
- *
- * Inserted through the `persons` table definition for the same reason as {@link seedTill}:
- * `persons.id` and `persons.created_at` are `$defaultFn` generators (`src/schema/persons.ts:27`
- * and `:67`), so a raw INSERT omitting them writes nothing there. */
+/** A person whose PIN is "1234". Through the `persons` table definition for the same reason as
+ * {@link seedTill}: `persons.id` and `persons.created_at` are `$defaultFn` generators. */
 export async function seedPerson(
   db: Database,
   role: "staff" | "supervisor" | "manager" | "admin" = "staff",
@@ -54,8 +39,7 @@ export async function seedPerson(
   return row!.id;
 }
 
-/** Opens a shift session for a person (PIN "1234") and returns its id, exactly as the till would:
- * `loginWithPin` verifies the PIN and inserts the row. */
+/** Opens a shift session through `loginWithPin`, as the till would. */
 export async function openSession(db: Database, tillId: string, personId: string): Promise<string> {
   const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { tillId, personId, pin: "1234" }),
@@ -63,12 +47,7 @@ export async function openSession(db: Database, tillId: string, personId: string
   return session.id;
 }
 
-/**
- * Seeds a person of `role` and sets the known dashboard password "correct horse" via a raw update —
- * `seedPerson` leaves `password_hash` null. "correct horse" is length 13, above `MIN_PASSWORD_LENGTH`,
- * so a real login path accepts it. Returns the person id. Default role `manager` holds `person.manage`;
- * pass `"staff"` for the refusal cases.
- */
+/** A person whose dashboard password is "correct horse". */
 export async function seedPersonWithPassword(
   db: Database,
   role: PersonRoleValue = "manager",
@@ -82,12 +61,7 @@ export async function seedPersonWithPassword(
   return personId;
 }
 
-/**
- * Seeds a person who can sign in on the DASHBOARD (management) path: a known `email`, the known
- * password "correct horse", plus an explicit `role`/`status`. `loginManager` now resolves by email,
- * so every management-login fixture must carry one (unique case-insensitively — the seeded value is
- * already lowercase). Returns the person id.
- */
+/** A person who can sign in on the dashboard: `email` and the password "correct horse". */
 export async function seedManager(
   db: Database,
   opts: { email: string; role?: PersonRoleValue; status?: "pending" | "active" | "suspended" },
@@ -101,11 +75,7 @@ export async function seedManager(
   return personId;
 }
 
-/**
- * Seeds a manager (known email + password) and returns an OPEN management session for them — the
- * dashboard analogue of `openSession`. The email is unique per call so many managers can be seeded
- * without colliding on the email index.
- */
+/** Seeds a manager and returns an open management session for them. */
 export async function openManagementSession(
   db: Database,
   role: PersonRoleValue = "manager",

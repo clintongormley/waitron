@@ -13,8 +13,6 @@ describe("hashPin / verifyPin", () => {
   });
 
   it("salts each hash, so the same PIN never produces the same stored value", () => {
-    // Without a per-hash salt, two staff members who happen to pick the same PIN would carry
-    // identical `pin_hash` values — a visible equality an operator with SELECT could exploit.
     expect(hashPin("1234")).not.toBe(hashPin("1234"));
   });
 
@@ -23,8 +21,6 @@ describe("hashPin / verifyPin", () => {
   });
 
   it("rejects a malformed stored value rather than throwing", () => {
-    // A row whose pin_hash was never written by hashPin (a bad migration, a hand-edited row) must
-    // fail closed, not crash the clock-in path.
     expect(verifyPin("1234", "not-a-real-hash")).toBe(false);
   });
 
@@ -33,9 +29,7 @@ describe("hashPin / verifyPin", () => {
   });
 
   it("rejects a stored value whose derived key is the wrong length, without throwing", () => {
-    // timingSafeEqual throws on length-mismatched buffers; the length guard is what turns a
-    // truncated or tampered hash into a plain `false`. Deleting the guard makes this test throw
-    // instead of returning false.
+    // timingSafeEqual throws on length-mismatched buffers.
     const stored = hashPin("1234");
     const [algo, salt] = stored.split("$");
     const truncated = `${algo}$${salt}$00`;

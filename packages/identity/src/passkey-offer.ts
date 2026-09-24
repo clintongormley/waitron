@@ -4,9 +4,6 @@ import type { Transaction } from "@waitron/db";
 import { persons } from "./schema/persons.js";
 import { webauthnCredentials } from "./schema/webauthn.js";
 
-/**
- * Whether to offer this person a passkey at sign-in: they hold none, and have never been offered one.
- */
 export async function shouldOfferPasskey(
   tx: Transaction,
   input: { personId: string },
@@ -25,8 +22,8 @@ export async function shouldOfferPasskey(
 }
 
 /**
- * Record that the offer was made and resolved, so it is never made again. Called when the person
- * settles it — adding a passkey or skipping — not when it is shown, so an interrupted offer returns.
+ * Called when the person settles the offer — adding a passkey or skipping — not when it is shown, so
+ * an interrupted offer returns.
  */
 export async function markPasskeyOffered(
   tx: Transaction,

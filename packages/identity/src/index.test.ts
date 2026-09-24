@@ -9,19 +9,10 @@ describe("@waitron/identity barrel", () => {
   });
 });
 
-/**
- * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
- * runs it, which is why persons.ts's FK/index/check block shows as uncovered even though the
- * barrel imports the table. Calling `getTableConfig` forces the callback to run, and the
- * assertions below are the meaningful check that persons' constraints exist under the names the
- * baseline uses — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
- */
+/** drizzle runs each table's extraConfig callback LAZILY; `getTableConfig` forces it. */
 describe("persons constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares persons' primary key, its two partial unique indexes and its check constraints", () => {
     const config = getTableConfig(api.persons);
-
-    // The PK is inline on `id` (a column flag), not a composite in extraConfig; the indexes and
-    // checks below ARE in extraConfig, so asserting them is what forces the lazy callback to run.
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
 
     const indexNames = config.indexes.map((i) => i.config.name);
@@ -36,11 +27,7 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
   });
 });
 
-/**
- * Same mechanism for sessions — its index block is in the lazy extraConfig callback, so this both
- * forces it to run and pins what the generated baseline holds. It declares NO foreign key; the
- * column comment in `schema/sessions.ts` says why and what refuses a missing person instead.
- */
+/** It declares NO foreign key; `schema/sessions.ts` says why. */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares sessions' primary key and its open-session index, and no foreign key", () => {
     const config = getTableConfig(api.sessions);
@@ -55,11 +42,7 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
   });
 });
 
-/**
- * Same mechanism for management_sessions — its index block is in the lazy extraConfig callback, so
- * this both forces it to run and pins what the generated baseline holds. A management session
- * belongs to a person, but declares no foreign key to one; `schema/management-sessions.ts` says why.
- */
+/** It declares no foreign key to persons; `schema/management-sessions.ts` says why. */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares management_sessions' primary key and its open-session index, and no foreign key", () => {
     const config = getTableConfig(api.managementSessions);
@@ -74,11 +57,6 @@ describe("management_sessions constraint declarations (forces the lazy extraConf
   });
 });
 
-/**
- * Same mechanism for webauthn_credentials — its FK/unique/index block is in the lazy extraConfig
- * callback, so this both forces it to run and pins the names the generated baseline uses. A
- * registered passkey belongs to a person, so its one FK is to persons; the credential id is unique.
- */
 describe("webauthn_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares webauthn_credentials' primary key, its one foreign key, its unique credential id and its person index", () => {
     const config = getTableConfig(api.webauthnCredentials);

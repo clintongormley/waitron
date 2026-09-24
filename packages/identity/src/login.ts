@@ -13,25 +13,18 @@ export interface Session {
   token: string;
   personId: string;
   tillId: string;
-  /** The operator's own role, carried through so callers (the till's `POST /api/session` response) can
-   * gate manager-only affordances client-side. NOT a stored `sessions` column — it is the credential
-   * gate's looked-up `persons.role`. Convenience only: every server gate re-derives the role from the
+  /** Convenience for client-side affordances only: every server gate re-derives the role from the
    * session and re-checks the permission (`authorize`), so a tampered client value grants nothing. */
   role: PersonRoleValue;
-  /** The operator's preferred UI language (a supported-locale code), or `null` for no preference —
-   * the credential gate's looked-up `persons.locale`. Carried through so the till can render in the
-   * operator's language from the login response; `null` means fall back to the venue default. */
+  /** `null` means no preference: fall back to the venue default. */
   locale: string | null;
 }
 
-/** Opens a shift session for a person at a till after verifying their PIN. Throws `person.not_found`, `person.suspended`, `pin.invalid`. */
+/** Throws `person.not_found`, `person.suspended`, `pin.invalid`. */
 export async function loginWithPin(
   tx: Transaction,
   input: { tillId: string; personId: string; pin: string },
 ): Promise<Session> {
-  // The shared credential gate (not_found → suspended → pin.invalid). Login does not GATE on the role,
-  // but it surfaces it in the returned session (see {@link Session.role}). `authorize`'s override
-  // branch runs the identical credential sequence.
   const { role, locale } = await verifyPersonCredential(tx, input.personId, input.pin);
 
   const token = mintSessionToken();
@@ -49,8 +42,8 @@ export async function loginWithPin(
   };
 }
 
-/** Ends the open session the cookie's `token` names. True if this call closed it; false if it was
- * already ended, or the token names no session — a row id or a stored hash names none. */
+/** True if this call closed the session; false if it was already ended, or the token names no
+ * session — a row id or a stored hash names none. */
 export async function endSession(tx: Transaction, token: string): Promise<boolean> {
   const updated = await tx
     .update(sessions)

@@ -29,31 +29,21 @@ import {
   seedTill,
 } from "../test/fixtures.js";
 
-// The staff-admin API is LOGIC gated on authorizeManager() — the person.manage check, the
-// PIN-length assertion, and the role/status writes — which is what the cases below assert.
-
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 
-// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
-// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+// `Promise<T> | T`: `tx.execute` is synchronous on this engine.
 function run<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
-// No cast on the count. The `::int` this carried was refused before the statement ran —
-// `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's parser. It was
-// there to turn the PostgreSQL driver's BigInt into a number; measured on node v26.7.0, this driver
-// hands `select count(*)` back as a JavaScript number already (`3`, `typeof "number"`).
 async function personCount(): Promise<number> {
   const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from persons`);
   return rows.rows[0]!.n;
 }
 
-// The mutable columns the staff-admin API writes. A gate that rejects BEFORE its write leaves every
-// one of these unchanged.
 async function personRow(
   id: string,
 ): Promise<{ role: string; status: string; pin_hash: string; password_hash: string | null }> {
@@ -66,7 +56,6 @@ async function personRow(
   return rows.rows[0]!;
 }
 
-// The stored login email.
 async function emailOf(id: string): Promise<string | null> {
   const rows = await suite.db.execute<{ email: string | null }>(
     sql`select email from persons where id = ${id}`,
@@ -89,14 +78,11 @@ describe("createPerson", () => {
       }),
     );
 
-    // The row landed active, with the requested role and name.
     const rows = await suite.db.execute<{ role: string; status: string; display_name: string }>(
       sql`select role, status, display_name from persons where id = ${id}`,
     );
     expect(rows.rows).toEqual([{ role: "supervisor", status: "active", display_name: "Bea" }]);
 
-    // The stored hash verifies the given PIN end to end: loginWithPin (which checks the hash and the
-    // active status) opens a session for the new person.
     const session = await run((tx) => loginWithPin(tx, { tillId, personId: id, pin: "5678" }));
     expect(session).toEqual({
       id: expect.any(String),
@@ -124,8 +110,6 @@ describe("createPerson", () => {
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-
-    // authorizeManager() runs before the insert, so a denied actor creates no row.
     expect(await personCount()).toBe(before);
   });
 
@@ -133,8 +117,7 @@ describe("createPerson", () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const before = await personCount();
 
-    // "12" is length 2, below MIN_PIN_LENGTH (4). The actor IS permitted, so only the length gate
-    // can be the cause here.
+    // The actor IS permitted, so only the length gate can be the cause here.
     const code = await codeOf(() =>
       run((tx) =>
         createPerson(tx, {
@@ -181,7 +164,6 @@ describe("createPerson email", () => {
       ),
     );
     expect(code).toBe("person.email_invalid");
-    // The screen runs before the INSERT, so a malformed email creates no row.
     expect(await personCount()).toBe(before);
   });
 
@@ -227,33 +209,21 @@ describe("setEmail", () => {
     const { token: staffSession } = await openManagementSession(suite.db, "staff");
     const target = await seedPerson(suite.db, "staff"); // email null
 
-    // A genuine staff management session, no person.manage: rewriting a colleague's login email (an
-    // account-takeover vector) must be rejected before the UPDATE. "ok@x.com" is a valid email, so
-    // ONLY the gate can be the cause here.
+    // "ok@x.com" is a valid email, so ONLY the gate can be the cause here.
     const code = await codeOf(() =>
       run((tx) =>
         setEmail(tx, { managementSessionId: staffSession, personId: target, email: "ok@x.com" }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-    // authorizeManager() runs before the UPDATE, so a denied actor writes no email.
     expect(await emailOf(target)).toBeNull();
   });
 });
 
-// The duplicate-email → person.email_taken translation, proven end to end against the DB unique
-// index in staff.email.test.ts, and against one real refusal per `persons` index — the three
-// expression indexes and the plain-column control — in person-constraints.db.test.ts. Here we pin
-// the translator's branches directly with crafted errors — no DB — so each re-throw branch is
-// covered deterministically, including shapes a real collision cannot easily produce.
-//
-// Each crafted refusal comes from `refusalError`, whose own suite holds it equal to the engine's.
 // Four of these five cases assert a re-throw, which a matcher that can never match also passes, so
 // the one translating case is what shows the matcher reads these shapes at all.
-// asEmailTaken is exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
-  // A layer carrying the result code and no message at all: the engine always writes one, but a
-  // wrapper in the chain need not re-expose it, and `indexViolated` must not read that as a match.
+  // A wrapper in the chain need not re-expose the engine's message.
   it("re-throws a wrapped unique violation that names no index", () => {
     const original = { cause: { errcode: 2067 } };
     let thrown: unknown;
@@ -275,11 +245,6 @@ describe("asEmailTaken", () => {
     expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
   });
 
-  // A unique violation on a DIFFERENT persons key (the id PK here, or any index added later) must
-  // NOT be mislabelled person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the
-  // index gate in asEmailTaken and this fails (the error becomes person.email_taken). (Copilot,
-  // PR #172.) The primary key arrives under its own result code and names the table and column
-  // rather than an index.
   it("re-throws a unique violation on a persons key that is not the email index", () => {
     const original = {
       cause: refusalError({ primaryKey: { table: "persons", column: "id" } }),
@@ -293,11 +258,8 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  // A collision on another table's email index is not this refusal. The index's NAME is the
-  // discriminator, and it identifies the table because SQLite keeps every index in one namespace
-  // per database — a second `CREATE UNIQUE INDEX persons_tenant_email_uq` on another table is
-  // refused `index persons_tenant_email_uq already exists` (driven 2026-09-23 on node:sqlite, Node
-  // v26.7.0).
+  // The index's NAME identifies the table because SQLite keeps every index in one namespace per
+  // database.
   it("re-throws a collision on another table's email index", () => {
     const original = {
       cause: refusalError({ uniqueIndex: "invitees_email_uq" }),
@@ -311,8 +273,6 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  // Not a unique violation at all: a NOT NULL refusal (1299) on the same table. `indexViolated`
-  // asks the CLASS as well as the name, so this can never be read as an index collision.
   it("re-throws a non-unique error unchanged", () => {
     const original = {
       cause: refusalError({ notNull: { table: "persons", column: "display_name" } }),
@@ -334,7 +294,6 @@ describe("setRole", () => {
     const targetId = await seedPerson(suite.db, "staff");
     const targetSessionId = await openSession(suite.db, tillId, targetId);
 
-    // As staff, the target holds no person.manage — its own session cannot authorize it.
     const before = await codeOf(() =>
       run((tx) => authorize(tx, { sessionId: targetSessionId, permission: "person.manage" })),
     );
@@ -344,8 +303,7 @@ describe("setRole", () => {
       setRole(tx, { managementSessionId: token, personId: targetId, role: "manager" }),
     );
 
-    // authorize reads the role live, so the SAME open session now authorizes on the operator's own
-    // (upgraded) role — no override, authorizedBy the target.
+    // authorize reads the role live, so the SAME open session now authorizes.
     const after = await run((tx) =>
       authorize(tx, { sessionId: targetSessionId, permission: "person.manage" }),
     );
@@ -360,16 +318,12 @@ describe("setRole", () => {
     const { token: staffSession } = await openManagementSession(suite.db, "staff");
     const targetId = await seedPerson(suite.db, "staff");
 
-    // A genuine staff management session (authenticates fine) but no person.manage — the escalation
-    // attempt is staff→manager, so if the gate were absent the role would flip.
     const code = await codeOf(() =>
       run((tx) =>
         setRole(tx, { managementSessionId: staffSession, personId: targetId, role: "manager" }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-
-    // authorizeManager() runs before the UPDATE, so a denied actor changes no role.
     expect((await personRow(targetId)).role).toBe("staff");
   });
 });
@@ -411,8 +365,6 @@ describe("resetPin", () => {
       run((tx) => resetPin(tx, { managementSessionId: token, personId: targetId, pin: "1" })),
     );
     expect(code).toBe("pin.too_short");
-
-    // The actor IS permitted; the length gate rejects before the UPDATE, so the stored hash is intact.
     expect((await personRow(targetId)).pin_hash).toBe(before);
   });
 
@@ -421,8 +373,6 @@ describe("resetPin", () => {
     const targetId = await seedPerson(suite.db, "staff");
     const before = (await personRow(targetId)).pin_hash;
 
-    // A genuine staff management session, no person.manage: an account-takeover attempt (rewrite the
-    // target's PIN) must be rejected before the UPDATE.
     const code = await codeOf(() =>
       run((tx) =>
         resetPin(tx, { managementSessionId: staffSession, personId: targetId, pin: "9999" }),
@@ -438,7 +388,7 @@ describe("setPassword", () => {
   it("setPassword lets a manager grant dashboard access, then that person can log in", async () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const target = await seedPerson(suite.db, "supervisor");
-    // The target needs an email to sign in on the dashboard: loginManager now resolves by email.
+    // loginManager resolves by email.
     await run((tx) =>
       tx.execute(sql`update persons set email = 'granted@x.com' where id = ${target}`),
     );
@@ -471,9 +421,7 @@ describe("setPassword", () => {
     const targetId = await seedPerson(suite.db, "staff"); // password_hash null
     const before = (await personRow(targetId)).password_hash;
 
-    // A genuine staff management session, no person.manage: granting a colleague dashboard access (a
-    // privilege-escalation vector) must be rejected before the UPDATE. "second horse" is a
-    // valid-length password, so ONLY the gate can be the cause here.
+    // "second horse" is a valid-length password, so ONLY the gate can be the cause here.
     const code = await codeOf(() =>
       run((tx) =>
         setPassword(tx, {
@@ -484,8 +432,6 @@ describe("setPassword", () => {
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-
-    // authorizeManager() runs before the UPDATE, so a denied actor writes no password.
     expect((await personRow(targetId)).password_hash).toBe(before);
   });
 });
@@ -516,12 +462,7 @@ describe("suspendPerson / reactivatePerson", () => {
     expect((await personRow(personId)).status).toBe("active");
   });
 
-  // The other half of the case above, and the half that used to be SILENT. The self-check folded
-  // the id's case and the UPDATE did not, so an upper-case id naming somebody else matched no row:
-  // nobody was suspended, and nothing was thrown. `persons.id` is plain text now and compares byte
-  // for byte (`settleId`, staff.ts, carries the measurement). Proof-by-deletion: drop `settleId`
-  // from `suspendPerson`'s `where` and this case fails on the status while the case above, which
-  // only exercises the comparison, still passes.
+  // The case above exercises only the self-check; this one needs the UPDATE to fold the id's case.
   it("suspends another person whose id arrived in upper case", async () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const targetId = await seedPerson(suite.db, "staff");
@@ -536,7 +477,6 @@ describe("suspendPerson / reactivatePerson", () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const targetId = await seedPerson(suite.db, "staff"); // active, PIN "1234"
 
-    // Active to begin with: login works.
     await run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" }));
 
     await run((tx) => suspendPerson(tx, { managementSessionId: token, personId: targetId }));
@@ -563,8 +503,6 @@ describe("suspendPerson / reactivatePerson", () => {
     const { token: staffSession } = await openManagementSession(suite.db, "staff");
     const targetId = await seedPerson(suite.db, "staff"); // active
 
-    // A genuine staff management session, no person.manage: a lockout attempt (suspend a colleague)
-    // must be rejected before the UPDATE, so the target stays active.
     const code = await codeOf(() =>
       run((tx) => suspendPerson(tx, { managementSessionId: staffSession, personId: targetId })),
     );
@@ -575,15 +513,13 @@ describe("suspendPerson / reactivatePerson", () => {
 
   it("reactivatePerson throws authorization.not_permitted for a staff actor, leaving status suspended", async () => {
     const { token: staffSession } = await openManagementSession(suite.db, "staff");
-    // A SUSPENDED target so reactivate would be a real change (active would hide a missing gate).
+    // A SUSPENDED target so reactivate would be a real change.
     const targetId = await seedPerson(suite.db, "staff", "suspended");
 
     const code = await codeOf(() =>
       run((tx) => reactivatePerson(tx, { managementSessionId: staffSession, personId: targetId })),
     );
     expect(code).toBe("authorization.not_permitted");
-
-    // The gate rejects before the UPDATE, so an unauthorised actor cannot un-suspend anyone.
     expect((await personRow(targetId)).status).toBe("suspended");
   });
 });
@@ -592,8 +528,7 @@ describe("listActiveStaff", () => {
   it("returns active persons' id + name, sorted, no secrets", async () => {
     const { token } = await openManagementSession(suite.db, "manager");
 
-    // Insert Zoe BEFORE Ana so an Ana-first result proves the orderBy(displayName), not insertion
-    // order. "Gone" is created then suspended: it must NOT appear.
+    // Insert Zoe BEFORE Ana so an Ana-first result proves the orderBy, not insertion order.
     const zoe = await run((tx) =>
       createPerson(tx, {
         managementSessionId: token,
@@ -625,16 +560,11 @@ describe("listActiveStaff", () => {
 
     const staff = await run((tx) => listActiveStaff(tx));
 
-    // This file shares one database across every describe block, and `listActiveStaff`
-    // reads every active person — the roster therefore also carries persons the other
-    // describes seeded. Restrict to the cohort THIS test created, the way
-    // the sibling suites read specific rows by id, so the assertion is order-independent.
+    // The database is shared across this file (`resetPerTest: false`), so restrict to this test's rows.
     const mine = new Set([zoe.id, ana.id, gone.id]);
     const cohort = staff.filter((s) => mine.has(s.personId));
 
-    // Active only, name-sorted: Ana before Zoe though Zoe was inserted first; suspended "Gone" gone.
     expect(cohort.map((s) => s.displayName)).toEqual(["Ana", "Zoe"]);
-    // Only id + name reach the pre-login lock screen: no pinHash, no role, no status.
     expect(Object.keys(cohort[0]!)).toEqual(["personId", "displayName"]);
   });
 });
@@ -694,7 +624,6 @@ describe("listPersons", () => {
     const roster = await run((tx) => listPersons(tx, { managementSessionId: token }));
     expect(roster.find((p) => p.personId === withEmail.id)!.email).toBe("mailed@x.com");
     expect(roster.find((p) => p.personId === second.id)!.email).toBe("second@x.com");
-    // email is part of the summary shape.
     expect(Object.keys(roster[0]!)).toEqual(expect.arrayContaining(["email"]));
   });
 

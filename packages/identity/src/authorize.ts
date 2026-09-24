@@ -11,12 +11,6 @@ export interface Override {
   personId: string;
   pin: string;
 }
-/**
- * The authorization context a gated write threads through to `authorize`: the open session that
- * identifies the operator, plus an optional supervisor `override` (a second person's PIN). Declared
- * here and shared by the core write paths (`recordVoid`, `recordCorrection`) so the shape is stated
- * once rather than retyped inline at each call site.
- */
 export interface AuthzInput {
   sessionId: string;
   override?: Override;
@@ -28,10 +22,8 @@ export interface Authorization {
 }
 
 /**
- * Decides whether a privileged action is permitted, and by whom. Satisfied EITHER by the session's
- * operator holding `permission`, OR by a supervisor `override` (a second person's PIN, who must hold
- * it). Returns the authorizing person for the caller to record. The gate is intrinsic: a gated write
- * calls this itself, so it cannot be performed without a credential this function accepts.
+ * Satisfied EITHER by the session's operator holding `permission`, OR by a supervisor `override` (a
+ * second person's PIN, who must hold it). Returns the authorizing person for the caller to record.
  *
  * Throws `session.not_open`, `person.not_found`, `person.suspended`, `pin.invalid`,
  * `authorization.not_permitted`.
@@ -40,13 +32,8 @@ export async function authorize(
   tx: Transaction,
   args: { sessionId: string; permission: Permission; override?: Override },
 ): Promise<Authorization> {
-  // One round-trip, not two: the open-session lookup and the operator's role are resolved by a
-  // single innerJoin. `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so the
-  // row is absent when no session is open and, in principle, when a session's person row has been
-  // deleted. Both read as
-  // `session.not_open`, which fails closed — pinned by a case in `authorize.test.ts` that deletes the
-  // person and expects the refusal. No non-test file deletes a person today, by grep for both the
-  // drizzle and the raw-SQL form over `packages` and `apps`.
+  // `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so a session whose person
+  // row is gone is absent from this join and reads as `session.not_open`, which fails closed.
   const [row] = await tx
     .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)
@@ -61,8 +48,6 @@ export async function authorize(
   if (args.override === undefined) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  // Same credential gate as login (not_found → suspended → pin.invalid), then the override person
-  // must ALSO hold the permission. `verifyPersonCredential` owns the first three checks in order.
   const cred = await verifyPersonCredential(tx, args.override.personId, args.override.pin);
   if (!roleHasPermission(cred.role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });

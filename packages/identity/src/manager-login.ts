@@ -15,36 +15,25 @@ import {
   type ManagementSession,
 } from "./management-session.js";
 
-// A valid hash, computed once at load, to equalize timing on the person-not-found branch: without it
-// an unknown email returns fast (no KDF) while a wrong password pays for the slow `verifyPassword`,
-// and that difference is itself a user-enumeration oracle — the very thing the shared
-// `password.invalid` code exists to deny. On not-found we run one `verifyPassword` against this dummy
-// (result discarded) so both paths do the same KDF work. The plaintext is arbitrary; it is never a
-// real credential and never matches a supplied password.
+// Checked against on the paths that refuse without a real hash, so they cost the same KDF work as a
+// wrong password: a faster refusal would be a user-enumeration oracle.
 const DUMMY_PASSWORD_HASH = hashPassword("timing-equalization-dummy");
 
-// The person columns both login entry points read to check a credential. Named once so the email
-// lookup (`loginManager`) and the id lookup (`loginManagerById`) select the identical shape and share
-// `completeManagerLogin` below.
 const PERSON_LOGIN_COLUMNS = {
   id: persons.id,
   status: persons.status,
   passwordHash: persons.passwordHash,
   totpSecret: persons.totpSecret,
 };
-// The base SELECT both entry points run (each appends its own WHERE). Extracted so `PersonLoginRow` is
-// INFERRED from the query rather than hand-declared: that keeps `status` as the column's literal union
-// (`"pending" | "active" | "suspended"`), so `completeManagerLogin`'s active-status gate is checked
-// against the real values — a typo would not compile — rather than a widened `string`. This is the
-// infer-the-row-shape-from-the-query idiom the codebase already uses for such column sets.
+// Extracted so `PersonLoginRow` is INFERRED from the query, keeping `status` the column's literal
+// union rather than a widened `string`.
 function selectPersonLogin(tx: Transaction) {
   return tx.select(PERSON_LOGIN_COLUMNS).from(persons);
 }
 type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
-// The credential check + session mint for a person that has ALREADY been found, shared by both entry
-// points. The public email entry point screens suspended accounts before reaching this helper; the
-// trusted by-id entry point keeps the distinct suspension result used by its operator flow.
+// The public email entry point screens suspended accounts before reaching this helper; the trusted
+// by-id entry point keeps the distinct suspension result used by its operator flow.
 async function completeManagerLogin(
   tx: Transaction,
   input: {
@@ -64,12 +53,8 @@ async function completeManagerLogin(
   }
   let passwordOk = false;
   if (person.passwordHash === null) {
-    // A found person with NO dashboard password (for example, before activation) still runs one KDF
-    // against the dummy hash
-    // before failing, so it can't be told apart by response time from a wrong-password attempt — the
-    // same enumeration-timing class the not-found branch closes. A short-circuit here would leak "this
-    // email names an account awaiting password setup" by latency. Result unused: a null-password
-    // person can never sign in with a password.
+    // Same KDF work as a wrong password, so an account awaiting password setup does not stand out
+    // by its KDF time.
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
   } else {
     passwordOk = verifyPassword(input.password, person.passwordHash);
@@ -90,8 +75,6 @@ async function completeManagerLogin(
       throw new AppError("totp.invalid", {});
     }
   }
-  // Verifier seam: password (+ TOTP when enrolled) is one way to mint a management session; slice 1d's
-  // finishPasskeyAuthentication is a sibling entry point that likewise ends in startManagementSession.
   return startManagementSession(tx, { personId: person.id });
 }
 
@@ -105,23 +88,18 @@ export async function loginManager(
     totpKeyRing?: TotpKeyRing;
   },
 ): Promise<ManagementSession> {
-  // Dashboard sign-in resolves the person by EMAIL, not by a client-supplied id. It looks the
-  // address up under `loginEmailKey()`, which is the SAME expression `persons_tenant_email_uq` is
-  // declared over — one function builds both (`./schema/persons.ts`) — so the address that signs in
-  // is exactly the one the index treats as taken, whatever case or accent encoding it was typed in.
+  // `loginEmailKey()` is the SAME expression `persons_tenant_email_uq` is declared over, so the
+  // address that signs in is exactly the one the index treats as taken.
   const email = normalizeEmail(input.email);
   const [person] = await selectPersonLogin(tx).where(eq(loginEmailKey(), foldForUniqueness(email)));
-  // Enumeration hardening: an unknown email is indistinguishable from a wrong password on the public
-  // login form — both throw `password.invalid`, so the response never reveals which addresses have
-  // accounts. We run one `verifyPassword` against a dummy hash first so the not-found path costs the
-  // same KDF work as a wrong-password path (see DUMMY_PASSWORD_HASH).
+  // An unknown email gets the same error, after the same KDF work, as a wrong password, so the
+  // response does not say which addresses have accounts.
   if (person === undefined) {
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});
   }
-  // The email login is public. Spend the same KDF work and return the same result as an unknown
-  // account, so suspension cannot be discovered by entering somebody else's address. The trusted
-  // by-id entry point below retains `person.suspended` for its operator-facing server flow.
+  // The email login is public, so suspension must not be discoverable by entering somebody else's
+  // address.
   if (person.status === "suspended") {
     verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});
@@ -139,13 +117,8 @@ export async function loginManagerById(
     totpKeyRing?: TotpKeyRing;
   },
 ): Promise<ManagementSession> {
-  // The C2b mirror-bundle route (`apps/server/src/mirror-bundle-api.ts`) authenticates the primary's
-  // ADMIN by id, NOT by email — the mirror is a trusted server-to-server flow over the primary's
-  // first-contact TLS, carrying an id the operator typed, not an email login form. Every human admin
-  // now carries an email, but this path deliberately does not use it. There is no enumeration
-  // surface to hide here — a caller either holds a valid primary admin id or does not — so an unknown
-  // id is a straight `person.not_found` (no dummy-KDF equalisation). Everything after the lookup is
-  // identical to `loginManager`, via `completeManagerLogin`.
+  // For trusted server-to-server flows, not a public login form: there is no enumeration surface to
+  // hide here, so an unknown id is a straight `person.not_found`.
   const [person] = await selectPersonLogin(tx).where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   return completeManagerLogin(tx, input, person, "totp.invalid");
@@ -153,10 +126,8 @@ export async function loginManagerById(
 
 export async function authorizeManager(
   tx: Transaction,
-  // `permission` widens past the closed core `Permission` union so a module's OWN permission string
-  // (registerModulePermissions, e.g. bookings' booking.manage) type-checks here; `Permission` stays
-  // the closed core union everywhere else. `roleHasPermission` resolves either kind.
-  // `touch: false` leaves the session's last-seen time alone, so the check writes nothing.
+  // `permission` widens past the core `Permission` union so a module's OWN permission string
+  // type-checks. `touch: false` leaves the session's last-seen time alone.
   args: { managementSessionId: string; permission: Permission | (string & {}); touch?: boolean },
 ): Promise<{ authorizedBy: string; role: PersonRoleValue }> {
   const { personId, role } = await resolveManagementSession(tx, args.managementSessionId, {
