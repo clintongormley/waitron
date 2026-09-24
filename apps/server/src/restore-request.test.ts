@@ -16,6 +16,38 @@ afterEach(async () => {
 });
 
 describe("staged restore requests", () => {
+  it("persists a managed Cloud marker and passes it only to that cold restore", async () => {
+    const stateDir = await fresh();
+    const managedCloud = {
+      requestId: "1ea4560a-77ac-4c4b-8abc-06d09fe8c60e",
+      pointId: "252998c0-69eb-4bbc-a0f9-a8ba6451db42",
+    };
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([1]),
+      recoveryKey: "key",
+      environment: "preproduction",
+      managedCloud,
+    });
+    expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toEqual({
+      version: 1,
+      environment: "preproduction",
+      managedCloud,
+    });
+    const restore = vi.fn(async () => {});
+    const onManagedCloudRestored = vi.fn(async () => {});
+    await runStagedRestore(
+      {
+        stateDir,
+        venueDir: join(stateDir, "venue"),
+        migrationsRoot: null,
+        log: vi.fn(),
+        onManagedCloudRestored,
+      },
+      restore,
+    );
+    expect(restore).toHaveBeenCalledWith(expect.objectContaining({ managedCloud }));
+    expect(onManagedCloudRestored).toHaveBeenCalledWith(managedCloud);
+  });
   it("writes the encrypted artifact and recovery key owner-only, with the marker last", async () => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, {
@@ -73,6 +105,7 @@ describe("staged restore requests", () => {
     });
     await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
     const restore = vi.fn(async () => {});
+    const onManagedCloudRestored = vi.fn(async () => {});
     expect(
       await runStagedRestore(
         {
@@ -80,10 +113,12 @@ describe("staged restore requests", () => {
           venueDir: "/var/lib/waitron/venue",
           migrationsRoot: "/migrations",
           log: vi.fn(),
+          onManagedCloudRestored,
         },
         restore,
       ),
     ).toBe(true);
+    expect(onManagedCloudRestored).not.toHaveBeenCalled();
     expect(restore).toHaveBeenCalledWith(
       expect.objectContaining({
         // A Buffer, not a bare Uint8Array: `runStagedRestore` hands `restore` exactly what

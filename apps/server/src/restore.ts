@@ -77,6 +77,8 @@ const VENUE_FILE_MODE = 0o600;
  * placement exists to avoid — see that function's own comment.
  */
 export interface RestoreDeps extends ValidationDeps {
+  /** A managed replacement must receive fresh destination credentials. */
+  readonly managedCloud?: { requestId: string; pointId: string };
   /** The directory holding `venue.db` and `node.db` (`packages/store/src/index.ts`). */
   readonly venueDir: string;
   /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file. */
@@ -307,7 +309,17 @@ async function lockRestoreTarget(directory: string): Promise<VenueLock> {
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   const validated = await validateArtifact(deps);
-  await writeValidated(validated, deps);
+  await writeValidated(
+    deps.managedCloud
+      ? {
+          ...validated,
+          secretEntries: validated.secretEntries.filter(
+            (entry) => entry.name !== "secrets/backup.env",
+          ),
+        }
+      : validated,
+    deps,
+  );
 }
 
 /**

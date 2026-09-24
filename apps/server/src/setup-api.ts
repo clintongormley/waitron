@@ -30,6 +30,7 @@ import type {
   SetupOperationStore,
 } from "./setup-operation.js";
 import type { RestoreRequest } from "./restore-request.js";
+import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { FiscalReadinessResult } from "./fiscal-readiness.js";
@@ -107,6 +108,8 @@ export interface SetupDeps {
   operations?: SetupOperationStore;
   /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
   stageRestore?: (request: RestoreRequest) => Promise<void>;
+  /** Fresh replacement's private Cloud snapshot recovery client. */
+  cloudRecovery?: ReturnType<typeof createCloudRecoveryClient>;
   /** Validates and stages a prepared configuration archive before live provisioning. */
   stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
   /** Removes any staged archive after the selected venue and its configuration are durable. */
@@ -863,6 +866,62 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation.complete({ adopted: true, restarting: true });
       }
       return response;
+    });
+  });
+
+  app.post("/setup-api/cloud-recovery/start", async (c) => {
+    if (!deps.cloudRecovery) return directError(c, log, "setup.not_ready", 503);
+    return runRestore(c, log, async () => c.json(await deps.cloudRecovery!.start(), 200));
+  });
+  app.get("/setup-api/cloud-recovery/status", async (c) => {
+    if (!deps.cloudRecovery) return directError(c, log, "setup.not_ready", 503);
+    return runRestore(c, log, async () => c.json(await deps.cloudRecovery!.status(), 200));
+  });
+  app.post("/setup-api/cloud-recovery/start-again", async (c) => {
+    if (!deps.cloudRecovery) return directError(c, log, "setup.not_ready", 503);
+    return runRestore(c, log, async () => c.json(await deps.cloudRecovery!.startAgain(), 200));
+  });
+  app.post("/setup-api/cloud-recovery/restore", async (c) => {
+    if (!deps.cloudRecovery || !deps.stageRestore || !deps.requestRestart)
+      return directError(c, log, "setup.not_ready", 503);
+    if (provisioning || fiscalTesting || configurationStaging)
+      return directError(c, log, "setup.already_provisioning", 409);
+    provisioning = true;
+    return runRestore(c, log, async () => {
+      try {
+        const body = await readJsonBody<{ pointId?: unknown }>(c);
+        if (
+          typeof body.pointId !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(body.pointId)
+        )
+          invalidRequest("pointId");
+        const pointId = body.pointId;
+        const binding = await deps.cloudRecovery!.binding();
+        if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
+        const execute = async () => {
+          await deps.cloudRecovery!.restore((request) => deps.stageRestore!(request), pointId);
+          const response = c.json({ restoreStaged: true, restarting: true }, 202);
+          setTimeout(() => deps.requestRestart!(), 0);
+          return response;
+        };
+        if (!deps.operations) return execute();
+        const requestHash = createHash("sha256")
+          .update("cloud-recovery:")
+          .update(binding.requestId)
+          .update(":")
+          .update(pointId)
+          .digest("hex");
+        return deps.operations.run("restore", requestHash, async (operation) => {
+          if (operation.phase === "complete")
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          const response = await execute();
+          await operation.complete({ restoreStaged: true, restarting: true });
+          return response;
+        });
+      } catch (error) {
+        provisioning = false;
+        throw error;
+      }
     });
   });
 

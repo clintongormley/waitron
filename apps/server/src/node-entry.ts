@@ -42,6 +42,8 @@ import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { loadCloudOrigin } from "./cloud-client.js";
+import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { classifyBootFailure } from "./boot-failure.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
@@ -452,11 +454,20 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     // Resolved once, so the two steps below and the server cannot read different folders.
     const migrationsRoot = deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT;
 
+    const recoveryOrigin = loadCloudOrigin(deps.baseEnv);
     await (deps.runStagedRestore ?? runStagedRestore)({
       stateDir: deps.stateDir,
       venueDir: deps.venueDir,
       migrationsRoot,
       log: deps.log,
+      onManagedCloudRestored: async (binding) => {
+        if (recoveryOrigin)
+          await createCloudRecoveryClient({
+            stateDir: deps.stateDir,
+            origin: recoveryOrigin,
+            environment: "preproduction",
+          }).markRestored(binding);
+      },
     });
 
     // AFTER the restore, which replaces the venue files, and BEFORE the server opens them: only the
@@ -470,6 +481,15 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     // every backup reload (so the wizard's `backup.env` takes effect without a restart) and needs the
     // unmerged base to tell a file-sourced value from an env-sourced one (spec §3.2 provenance).
     server = await deps.startServer(env, deps.baseEnv);
+    if (recoveryOrigin) {
+      void createCloudRecoveryClient({
+        stateDir: deps.stateDir,
+        origin: recoveryOrigin,
+        environment: "preproduction",
+      })
+        .reportRestored()
+        .catch(() => {});
+    }
   } catch (error) {
     // The installer's channel first, so the real reason survives even if the state write fails.
     (deps.reportFailure ?? (() => {}))(failureDetail(error));

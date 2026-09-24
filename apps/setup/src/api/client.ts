@@ -83,6 +83,14 @@ export interface RestoreOutcome {
   restoreStaged: true;
   restarting: true;
 }
+export interface CloudRecoveryView {
+  requestId: string;
+  code: string;
+  openCloudUrl: string;
+  expiresAt: string;
+  state: "awaiting_owner" | "approved" | "expired";
+  point?: { id: string; venueId: string; capturedAt: string; modules: Record<string, number> };
+}
 
 export interface ConfigurationPreview {
   venue: Omit<ProvisionBody["venue"], "admin"> & {
@@ -158,6 +166,22 @@ export class SetupApi {
 
   adopt(body: AdoptBody): Promise<AdoptOutcome> {
     return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
+  }
+
+  startCloudRecovery(): Promise<CloudRecoveryView> {
+    return this.#request("/setup-api/cloud-recovery/start", "POST", {});
+  }
+
+  cloudRecoveryStatus(): Promise<CloudRecoveryView> {
+    return this.#request("/setup-api/cloud-recovery/status", "GET");
+  }
+
+  startCloudRecoveryAgain(): Promise<CloudRecoveryView> {
+    return this.#request("/setup-api/cloud-recovery/start-again", "POST", {});
+  }
+
+  restoreFromCloud(pointId: string): Promise<RestoreOutcome> {
+    return this.#request("/setup-api/cloud-recovery/restore", "POST", { pointId });
   }
 
   async restore(

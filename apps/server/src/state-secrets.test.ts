@@ -25,6 +25,17 @@ describe("state-secrets", () => {
     expect(files["tls/ca.crt"]).toBe("contents-of-tls/ca.crt\n");
   });
 
+  it("excludes a replacement's private Cloud recovery request from captured state", async () => {
+    const dir = await seedStateDir();
+    const privateKey = "distinct-private-signing-key";
+    await writeFile(join(dir, "cloud-recovery.json"), JSON.stringify({ privateKey }), {
+      mode: 0o600,
+    });
+    const files = await collectStateSecrets(dir);
+    expect(files).not.toHaveProperty("cloud-recovery.json");
+    expect(JSON.stringify(files)).not.toContain(privateKey);
+  });
+
   it("throws recovery.state_incomplete naming the first missing file", async () => {
     const dir = mkdtempSync(join(tmpdir(), "state-secrets-empty-"));
     await expect(collectStateSecrets(dir)).rejects.toThrow(

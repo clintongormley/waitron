@@ -5,6 +5,7 @@ import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
@@ -1051,6 +1052,14 @@ export async function startServer(
           environment: config.environment,
           devMode: config.devMode,
           operations: createSetupOperationStore(config.stateDir),
+          cloudRecovery:
+            cloudOrigin && config.environment === "preproduction"
+              ? createCloudRecoveryClient({
+                  stateDir: config.stateDir,
+                  origin: cloudOrigin,
+                  environment: config.environment,
+                })
+              : undefined,
           stageRestore: (request) =>
             stageRestoreRequest(config.stateDir, request, async (candidate) => {
               await validateArtifact({

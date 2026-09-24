@@ -85,7 +85,7 @@ session idle time unchanged. Clicking Check connection or Refresh status counts 
 
 Version 1 returns exactly three services. Adding services requires a negotiated protocol
 version before changing that response. Stopping access permanently retires the key;
-the replacement flow is not implemented yet. Do not delete the state file to reconnect:
+Cloud replacement enrollment is not implemented yet. Do not delete the state file to reconnect:
 a new key does not take over the existing venue. A stop request waits for the local
 worker, rechecks your permission, and saves the stop intent before contacting Cloud.
 
@@ -138,6 +138,33 @@ Its cached authority lasts at most ten minutes during a Cloud management outage;
 a restart cannot extend it. Expiry closes remote connections while local HTTPS
 continues. The local peer container grants no access to the rest of your LAN and
 has no SSH support feature.
+
+### Recover a test venue from a Cloud snapshot
+
+If a venue server has failed, open **Restore from backup** on a fresh replacement and choose
+**Restore from Waitron Cloud**. The replacement shows a code and a Cloud link. Sign in there,
+choose a verified snapshot, enter the code, and confirm that the old server and any surviving
+peers are stopped. Return to the replacement and choose **Check approval**. Review the snapshot
+capture time before you confirm the local restore; later changes are absent from that snapshot.
+
+This path supports preparation and demo venues. It restores a retained snapshot through the
+same local cold restore and module hooks as a backup file. It does not recover changes after the
+snapshot, activate a Cloud route, enroll the replacement with Cloud, or fence a running server.
+Use a backup file for the existing local recovery path. Do not start trading on a replacement
+while another server may hold newer data.
+
+The replacement saves its recovery request and signing key in `cloud-recovery.json` under
+`WAITRON_STATE_DIR` before contacting Cloud. The file is mode 0600 and is outside the named
+archive capture list. A lost reply or server restart reuses that request. When a request expires,
+choose **Start a new request**; a network failure leaves the existing request intact. The
+browser receives the code, link, deadline and approved snapshot details, while the archive key
+and temporary storage credentials stay on the server. A managed restore excludes the captured
+`backup.env`, so the replacement does not inherit the old backup destination credentials.
+
+The Cloud account page authorizes a target to read one snapshot. It does not confirm that local
+restore has finished. Waitron stages and validates the encrypted archive, restarts, runs cold
+restore, then tries to report completion to Cloud. Reporting is best effort and does not hold up
+the restored server if Cloud is unavailable.
 
 ### Reissue staff TLS after a restore
 
