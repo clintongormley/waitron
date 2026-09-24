@@ -1,8 +1,7 @@
 import { expect, it } from "vitest";
 import { formatIsoMinute } from "./date-utils.js";
 
-// Runs in the Node project (vitest.config.ts), whose worker has TZ=America/New_York. If the pin
-// failed, a UTC machine would make local equal UTC and the cases below would pass vacuously.
+// Runs in the Node project (vitest.config.ts), whose worker has TZ=America/New_York.
 it("runs with the timezone pinned to America/New_York (guards against a vacuous pass)", () => {
   expect(new Date("2026-01-15T05:30:00.000Z").getTimezoneOffset()).toBe(300);
 });

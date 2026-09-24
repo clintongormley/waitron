@@ -24,7 +24,8 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 
 /**
  * Resizes the outer Playwright page, NOT the frame a test renders in: the test's `window.innerWidth`
- * does not change. `page.viewport` from `vitest/browser` resizes the frame. See docs/backlog.md.
+ * does not change. `page.viewport` from `vitest/browser` resizes the frame. See
+ * docs/developers/testing-guide.md.
  */
 const setViewportSize: BrowserCommand<[width: number, height: number]> = async (
   context,
@@ -74,7 +75,7 @@ const nodeTimezoneProject = {
 } as const;
 
 export default defineConfig({
-  // Pre-bundles axe-core, which only the a11y suites import (via src/widgets/test-helpers.ts).
+  // Pre-bundled so Vite cannot discover it mid-run and reload an in-flight browser test.
   optimizeDeps: { include: ["axe-core"] },
   test: {
     projects: [browserProject, nodeTimezoneProject],

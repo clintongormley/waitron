@@ -203,6 +203,7 @@ export function allergenName(code: string, locale: string = currentLocale()): st
   return resolveNameTable(ALLERGEN_NAMES, code, locale);
 }
 
+// Key order in ALLERGEN_NAMES is the option order in allergen-dietary-picker.ts.
 export const ALLERGEN_CODES: readonly string[] = Object.keys(ALLERGEN_NAMES);
 
 export function regimeName(value: string, locale: string = currentLocale()): string {
