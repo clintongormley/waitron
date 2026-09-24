@@ -753,6 +753,22 @@ describe("checkpointTruncate", () => {
     expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 101 });
   });
 
+  // A transaction opened outside the queue, on the writer, makes the checkpoint statement throw.
+  it("puts the busy timeout back when the checkpoint statement throws", async () => {
+    const { store } = await open();
+    fill(store);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const held = store.venue.transaction(async (tx) => {
+      tx.run(sql`insert into sales (total) values (1)`);
+      await gate;
+    });
+    await expect(store.venue.checkpointTruncate()).rejects.toThrow("database table is locked");
+    release();
+    await held;
+    expect(pragma(store.venue, "busy_timeout")).toBe(5000);
+  });
+
   it("refuses a fold-back asked for from inside a write transaction's body", async () => {
     const { store } = await open();
     fill(store);

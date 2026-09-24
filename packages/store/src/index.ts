@@ -51,7 +51,9 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
   /**
    * Folds this file's write-ahead side file back into it and truncates the side file to nothing.
    * `reclaimed` is false when another connection was still reading it; nothing waits in that case,
-   * and the caller tries again later. Not callable from inside {@link StoreHandle.withWriteLock}.
+   * and the caller tries again later. Not callable from inside {@link StoreHandle.withWriteLock};
+   * it waits for those transactions but not for one opened with `transaction()`, and rejects
+   * `database table is locked` while one of those is open.
    */
   checkpointTruncate: () => Promise<{ reclaimed: boolean }>;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */

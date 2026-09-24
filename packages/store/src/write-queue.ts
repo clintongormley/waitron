@@ -60,14 +60,15 @@ export function createWriteQueue(connections: Connections) {
       return mine;
     },
     /**
-     * Runs `body` in the queue's order with NO transaction open: for work that must run neither
-     * inside a transaction nor beside one, such as a checkpoint (`./index.ts`, `checkpointTruncate`).
+     * Runs `body` in the queue's order with no transaction the QUEUE opened still open, and opens
+     * none itself: for work such as a checkpoint (`./index.ts`, `checkpointTruncate`). A transaction
+     * opened on the writer some other way is not waited for.
      */
     async exclusive<T>(body: () => T): Promise<T> {
       if (inBody.getStore() === true) {
         throw new Error("write lock: a body asked for the lock it is already holding");
       }
-      const mine = tail.then(() => body());
+      const mine = tail.then(() => inBody.run(true, body));
       tail = mine.catch(() => undefined);
       return mine;
     },

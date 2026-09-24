@@ -146,6 +146,21 @@ describe("the write queue", () => {
     await expect(queue.exclusive(() => "after")).resolves.toBe("after");
   });
 
+  it("refuses the lock asked for from inside exclusive work, rather than hanging", async () => {
+    const db = open();
+    const queue = createWriteQueue(connectionPair(db, db));
+    await expect(queue.exclusive(() => queue.run(async () => "inner"))).rejects.toThrow(
+      "write lock: a body asked for the lock it is already holding",
+    );
+    await expect(
+      queue.exclusive(async () => {
+        await Promise.resolve();
+        return queue.exclusive(() => "inner");
+      }),
+    ).rejects.toThrow("write lock: a body asked for the lock it is already holding");
+    await expect(queue.exclusive(() => "after")).resolves.toBe("after");
+  });
+
   it("keeps the queue usable after exclusive work throws", async () => {
     const db = open();
     const queue = createWriteQueue(connectionPair(db, db));
