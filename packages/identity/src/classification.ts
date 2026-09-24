@@ -6,8 +6,9 @@ const STATE = "manager configuration / live service; copied to a standby, never 
 /**
  * Identity's tables. Every one means the same on every node of the venue: a person, their
  * authenticators, their logins and their sign-in ceremonies. A login's cookie token is stored only
- * as its hash, so a copy of the database signs nobody in (slice-2 spec §2). Completeness against
- * identity's migrations is guarded by `classification.test.ts`.
+ * as its hash, so a session value read from a copy of the database — a row id or a stored hash —
+ * signs nobody in (slice-2 spec §2). Completeness against identity's migrations is guarded by
+ * `classification.test.ts`.
  */
 export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
   // Durable account data; copied to a standby, never drained back.

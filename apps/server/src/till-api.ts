@@ -742,9 +742,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Log out: end the shift session and clear the cookie. Idempotent — a request with no cookie, one
   // whose cookie is not even UUID-shaped (so it names no session row), or one whose token names an
   // already-closed session or none (`endSession` returns false), still clears the cookie and
-  // answers 200, so a double logout or a stale tab is never an error. The `isUuid` screen keeps a
-  // malformed cookie a 200 no-op and is the only thing looking at its shape (see
-  // `till-session.ts`).
+  // answers 200, so a double logout or a stale tab is never an error. The `isUuid` screen skips the
+  // database for a malformed cookie.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
       const token = readSessionId(c);

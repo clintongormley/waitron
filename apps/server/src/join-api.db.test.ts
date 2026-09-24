@@ -184,7 +184,7 @@ describe("the pairing-mode control", () => {
     "renews the window without extending the session (initially open: %s), while a manual open extends it",
     async (initiallyOpen) => {
       const venue = await setupVenue(suite.db);
-      const sessionId = venue.managerCookie.split("=")[1]!;
+      const token = venue.managerCookie.split("=")[1]!;
       let clock = Date.now();
       const mode = createPairingMode({ now: () => clock });
       const app = mountApp(venue.cfg, mode);
@@ -197,11 +197,9 @@ describe("the pairing-mode control", () => {
       const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
       await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
-      where token_hash = ${hashSessionToken(sessionId)}`);
+      where token_hash = ${hashSessionToken(token)}`);
       const session = () =>
-        withTransaction(suite.db, (tx) =>
-          resolveManagementSession(tx, sessionId, { touch: false }),
-        );
+        withTransaction(suite.db, (tx) => resolveManagementSession(tx, token, { touch: false }));
       const before = await session();
       const renewed = await send(app, "POST", "/management-api/pairing-mode/renew", {
         cookie: venue.managerCookie,
@@ -222,13 +220,13 @@ describe("the pairing-mode control", () => {
 
   it("refuses renewal after the management session expires without opening the window", async () => {
     const venue = await setupVenue(suite.db);
-    const sessionId = venue.managerCookie.split("=")[1]!;
+    const token = venue.managerCookie.split("=")[1]!;
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const sessionSeenAt = new Date(Date.now() - 60 * 60_000).toISOString();
     await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
-      where token_hash = ${hashSessionToken(sessionId)}`);
+      where token_hash = ${hashSessionToken(token)}`);
     const response = await send(app, "POST", "/management-api/pairing-mode/renew", {
       cookie: venue.managerCookie,
     });

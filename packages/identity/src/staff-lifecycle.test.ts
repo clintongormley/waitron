@@ -39,10 +39,10 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("invited person lifecycle", () => {
   it("stores legal and contact details as Pending with no usable PIN", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { id } = await run((tx) =>
       invitePerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "  Ada  ",
         firstNames: " Ada ",
         lastNames: " Lovelace ",
@@ -76,9 +76,9 @@ describe("invited person lifecycle", () => {
   });
 
   it("allows duplicate legal names but rejects duplicate active-or-pending display names", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const base = {
-      managementSessionId: sessionId,
+      managementSessionId: token,
       firstNames: "Alex",
       lastNames: "Smith",
       telephone: null,
@@ -104,7 +104,7 @@ describe("invited person lifecycle", () => {
   });
 
   it("rejects reactivating an inactive account whose display name is now in use", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const inactiveId = await seedPerson(suite.db, "staff", "suspended");
     await suite.db.execute(
       sql`update persons set display_name = 'Shared name', email = 'old-shared@example.com' where id = ${inactiveId}`,
@@ -118,7 +118,7 @@ describe("invited person lifecycle", () => {
       await codeOf(() =>
         run((tx) =>
           reactivatePersonForInvitation(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             personId: inactiveId,
           }),
         ),
@@ -127,10 +127,10 @@ describe("invited person lifecycle", () => {
   });
 
   it("returns the administrative fields without credential material", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "Grace",
         firstNames: "Grace Brewster",
         lastNames: "Hopper",
@@ -139,7 +139,7 @@ describe("invited person lifecycle", () => {
         email: "grace@example.com",
       }),
     );
-    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
+    const roster = await run((tx) => listPersons(tx, { managementSessionId: token }));
     expect(roster.find((person) => person.personId === created.id)).toMatchObject({
       displayName: "Grace",
       firstNames: "Grace Brewster",
@@ -152,10 +152,10 @@ describe("invited person lifecycle", () => {
   });
 
   it("does not allow a Pending account through normal password or PIN login", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "Pending login",
         firstNames: "Pending",
         lastNames: "Login",
@@ -183,10 +183,10 @@ describe("invited person lifecycle", () => {
   });
 
   it("updates all administrative details in one operation while preserving Pending", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "Edit me",
         firstNames: "Edith",
         lastNames: "Old",
@@ -197,7 +197,7 @@ describe("invited person lifecycle", () => {
     );
     await run((tx) =>
       updatePersonDetails(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         personId: created.id,
         displayName: "Edie",
         firstNames: "Edith Mary",
@@ -208,7 +208,7 @@ describe("invited person lifecycle", () => {
         status: "pending",
       }),
     );
-    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
+    const roster = await run((tx) => listPersons(tx, { managementSessionId: token }));
     expect(roster.find((person) => person.personId === created.id)).toMatchObject({
       displayName: "Edie",
       firstNames: "Edith Mary",
@@ -221,11 +221,11 @@ describe("invited person lifecycle", () => {
   });
 
   it("rejects a malformed telephone on both invite and update, but accepts an absent one", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
       run((tx) =>
         invitePerson(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           displayName: "Bad Phone",
           firstNames: "Bad",
           lastNames: "Phone",
@@ -237,7 +237,7 @@ describe("invited person lifecycle", () => {
     ).rejects.toMatchObject({ code: "person.telephone_invalid" });
     const created = await run((tx) =>
       invitePerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "Good Phone",
         firstNames: "Good",
         lastNames: "Phone",
@@ -249,7 +249,7 @@ describe("invited person lifecycle", () => {
     await expect(
       run((tx) =>
         updatePersonDetails(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           personId: created.id,
           displayName: "Good Phone",
           firstNames: "Good",
@@ -264,11 +264,11 @@ describe("invited person lifecycle", () => {
   });
 
   it("does not let the only active admin demote or deactivate themselves", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, token } = await openManagementSession(suite.db, "admin");
     const attempt = (role: "staff" | "admin", status: "active" | "suspended") =>
       withTransaction(suite.db, (tx) =>
         updatePersonDetails(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           personId: personId.toUpperCase(),
           displayName: "Owner",
           firstNames: "Only",
@@ -284,7 +284,7 @@ describe("invited person lifecycle", () => {
   });
 
   it("ends dashboard and till sessions when an administrator marks a person inactive", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await openManagementSession(suite.db, "staff");
     const tillId = await seedTill(suite.db);
     const tillSession = await run((tx) =>
@@ -292,7 +292,7 @@ describe("invited person lifecycle", () => {
     );
 
     await run((tx) =>
-      deactivatePerson(tx, { managementSessionId: sessionId, personId: target.personId }),
+      deactivatePerson(tx, { managementSessionId: token, personId: target.personId }),
     );
 
     // The COLUMN, not `ended_at is not null` — a raw select of a boolean expression answers 0 or 1
@@ -304,10 +304,10 @@ describe("invited person lifecycle", () => {
   });
 
   it("clears a PIN instead of letting an administrator choose its replacement", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const created = await run((tx) =>
       invitePerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "Reset pin",
         firstNames: "Reset",
         lastNames: "Pin",
@@ -317,7 +317,7 @@ describe("invited person lifecycle", () => {
       }),
     );
     await suite.db.execute(sql`update persons set pin_hash = 'old-hash' where id = ${created.id}`);
-    await run((tx) => clearPersonPin(tx, { managementSessionId: sessionId, personId: created.id }));
+    await run((tx) => clearPersonPin(tx, { managementSessionId: token, personId: created.id }));
     const row = await suite.db.execute<{ pin_hash: string | null }>(
       sql`select pin_hash from persons where id = ${created.id}`,
     );
@@ -328,7 +328,7 @@ describe("invited person lifecycle", () => {
     const actor = await openManagementSession(suite.db, "admin");
     const target = await withTransaction(suite.db, (tx) =>
       invitePerson(tx, {
-        managementSessionId: actor.sessionId,
+        managementSessionId: actor.token,
         displayName: "Reset login",
         firstNames: "Reset",
         lastNames: "Login",
@@ -341,7 +341,7 @@ describe("invited person lifecycle", () => {
       set status = 'active', pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp'
       where id = ${target.id}`);
     await withTransaction(suite.db, (tx) =>
-      resetPersonLogin(tx, { managementSessionId: actor.sessionId, personId: target.id }),
+      resetPersonLogin(tx, { managementSessionId: actor.token, personId: target.id }),
     );
     const row = await suite.db.execute<{
       status: string;
@@ -360,15 +360,15 @@ describe("invited person lifecycle", () => {
   });
 
   it("keeps inactive accounts inactive unless the explicit reactivation action is used", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff", "suspended");
     expect(
       await codeOf(() =>
-        run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: target })),
+        run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: target })),
       ),
     ).toBe("person.transition_invalid");
     await run((tx) =>
-      reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: target }),
+      reactivatePersonForInvitation(tx, { managementSessionId: token, personId: target }),
     );
     const row = await suite.db.execute<{ status: string }>(
       sql`select status from persons where id = ${target}`,
@@ -382,7 +382,7 @@ describe("invited person lifecycle", () => {
       await codeOf(() =>
         run((tx) =>
           updatePersonDetails(tx, {
-            managementSessionId: actor.sessionId,
+            managementSessionId: actor.token,
             personId: actor.personId,
             displayName: "Manager",
             firstNames: "Manager",
@@ -424,12 +424,12 @@ async function seedStaffWithSession(
 }
 
 function details(
-  sessionId: string,
+  token: string,
   personId: string,
   overrides: Partial<Parameters<typeof updatePersonDetails>[1]> = {},
 ): Parameters<typeof updatePersonDetails>[1] {
   return {
-    managementSessionId: sessionId,
+    managementSessionId: token,
     personId,
     displayName: "Edited",
     firstNames: "Edited",
@@ -446,31 +446,31 @@ const MISSING_ID = "00000000-0000-4000-8000-000000000000";
 
 describe("updatePersonDetails refusals and side effects", () => {
   it("refuses an edit to a person who does not exist", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
-      run((tx) => updatePersonDetails(tx, details(sessionId, MISSING_ID))),
+      run((tx) => updatePersonDetails(tx, details(token, MISSING_ID))),
     ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
   });
 
   it("refuses to move a Pending account straight to Active", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff", "pending");
     expect(
       await codeOf(() =>
-        run((tx) => updatePersonDetails(tx, details(sessionId, target, { status: "active" }))),
+        run((tx) => updatePersonDetails(tx, details(token, target, { status: "active" }))),
       ),
     ).toBe("person.transition_invalid");
     expect(await statusOf(target)).toBe("pending");
   });
 
   it("keeps the email-verified stamp when the address is unchanged", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { personId } = await seedStaffWithSession("kept@example.com");
     await suite.db.execute(
       sql`update persons set email_verified_at = '2026-09-01T00:00:00.000Z' where id = ${personId}`,
     );
     await run((tx) =>
-      updatePersonDetails(tx, details(sessionId, personId, { email: "kept@example.com" })),
+      updatePersonDetails(tx, details(token, personId, { email: "kept@example.com" })),
     );
     const rows = await suite.db.execute<{ email_verified_at: string | null }>(
       sql`select email_verified_at from persons where id = ${personId}`,
@@ -479,36 +479,36 @@ describe("updatePersonDetails refusals and side effects", () => {
   });
 
   it("leaves the person's sessions open when neither the address nor the status changes", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { personId, tillSessionId } = await seedStaffWithSession("same@example.com");
     await run((tx) =>
       updatePersonDetails(
         tx,
-        details(sessionId, personId, { displayName: "Renamed", email: "same@example.com" }),
+        details(token, personId, { displayName: "Renamed", email: "same@example.com" }),
       ),
     );
     expect(await sessionEndedAt(tillSessionId)).toBeNull();
   });
 
   it("ends the person's sessions when only the status changes", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { personId, tillSessionId } = await seedStaffWithSession("same@example.com");
     await run((tx) =>
       updatePersonDetails(
         tx,
-        details(sessionId, personId, { email: "same@example.com", status: "suspended" }),
+        details(token, personId, { email: "same@example.com", status: "suspended" }),
       ),
     );
     expect(await sessionEndedAt(tillSessionId)).toEqual(expect.any(String));
   });
 
   it("lets a manager edit the only active admin's details when role and status stay the same", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
     await run((tx) =>
       updatePersonDetails(
         tx,
-        details(sessionId, admin, { displayName: "Only admin", role: "admin", status: "active" }),
+        details(token, admin, { displayName: "Only admin", role: "admin", status: "active" }),
       ),
     );
     const rows = await suite.db.execute<{ display_name: string; role: string; status: string }>(
@@ -520,19 +520,19 @@ describe("updatePersonDetails refusals and side effects", () => {
 
 describe("deactivatePerson refusals", () => {
   it("refuses a person who does not exist", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
-      run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId: MISSING_ID })),
+      run((tx) => deactivatePerson(tx, { managementSessionId: token, personId: MISSING_ID })),
     ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
   });
 
   it("refuses to let a manager deactivate themselves, whatever the case of the id", async () => {
-    const { sessionId, personId } = await openManagementSession(suite.db, "manager");
+    const { token, personId } = await openManagementSession(suite.db, "manager");
     expect(
       await codeOf(() =>
         run((tx) =>
           deactivatePerson(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             personId: personId.toUpperCase(),
           }),
         ),
@@ -542,28 +542,28 @@ describe("deactivatePerson refusals", () => {
   });
 
   it("refuses to deactivate the only active admin", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
     expect(
       await codeOf(() =>
-        run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId: admin })),
+        run((tx) => deactivatePerson(tx, { managementSessionId: token, personId: admin })),
       ),
     ).toBe("person.last_admin");
     expect(await statusOf(admin)).toBe("active");
   });
 
   it("deactivates an admin while another active admin remains", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const admin = await seedPerson(suite.db, "admin");
-    await run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId: admin }));
+    await run((tx) => deactivatePerson(tx, { managementSessionId: token, personId: admin }));
     expect(await statusOf(admin)).toBe("suspended");
   });
 
   it("does nothing to an account that is already inactive, its sessions included", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { personId, tillSessionId } = await seedStaffWithSession("inactive@example.com");
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
-    await run((tx) => deactivatePerson(tx, { managementSessionId: sessionId, personId }));
+    await run((tx) => deactivatePerson(tx, { managementSessionId: token, personId }));
     expect(await statusOf(personId)).toBe("suspended");
     expect(await sessionEndedAt(tillSessionId)).toBeNull();
   });
@@ -571,57 +571,57 @@ describe("deactivatePerson refusals", () => {
 
 describe("clearPersonPin refusals", () => {
   it("refuses a person who does not exist", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
-      run((tx) => clearPersonPin(tx, { managementSessionId: sessionId, personId: MISSING_ID })),
+      run((tx) => clearPersonPin(tx, { managementSessionId: token, personId: MISSING_ID })),
     ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
   });
 });
 
 describe("resetPersonLogin refusals", () => {
   it("refuses a person who does not exist", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
-      run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: MISSING_ID })),
+      run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: MISSING_ID })),
     ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
   });
 
   it("refuses to reset the only active admin", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
     expect(
       await codeOf(() =>
-        run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: admin })),
+        run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: admin })),
       ),
     ).toBe("person.last_admin");
     expect(await statusOf(admin)).toBe("active");
   });
 
   it("resets an admin while another active admin remains", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const admin = await seedPerson(suite.db, "admin");
-    await run((tx) => resetPersonLogin(tx, { managementSessionId: sessionId, personId: admin }));
+    await run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId: admin }));
     expect(await statusOf(admin)).toBe("pending");
   });
 });
 
 describe("reactivatePersonForInvitation refusals", () => {
   it("refuses a person who does not exist", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
       run((tx) =>
-        reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: MISSING_ID }),
+        reactivatePersonForInvitation(tx, { managementSessionId: token, personId: MISSING_ID }),
       ),
     ).rejects.toMatchObject({ code: "person.not_found", params: { personId: MISSING_ID } });
   });
 
   it("refuses an account that is not inactive", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff");
     expect(
       await codeOf(() =>
         run((tx) =>
-          reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: target }),
+          reactivatePersonForInvitation(tx, { managementSessionId: token, personId: target }),
         ),
       ),
     ).toBe("person.transition_invalid");
@@ -633,11 +633,11 @@ describe("invitePerson required text", () => {
   it.each(["displayName", "firstNames", "lastNames"] as const)(
     "refuses a blank %s, naming the field",
     async (field) => {
-      const { sessionId } = await openManagementSession(suite.db, "admin");
+      const { token } = await openManagementSession(suite.db, "admin");
       await expect(
         run((tx) =>
           invitePerson(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             displayName: "Blank",
             firstNames: "Blank",
             lastNames: "Field",
@@ -696,13 +696,13 @@ async function personCount(): Promise<number> {
 
 describe("a colliding row that lands after the pre-check", () => {
   it("invitePerson reports a display-name collision as person.display_name_taken", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const before = await personCount();
     await expect(
       withRacerPlanted("insert", () =>
         run((tx) =>
           invitePerson(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             displayName: "Racer",
             firstNames: "Late",
             lastNames: "Comer",
@@ -720,12 +720,12 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("invitePerson reports a login-email collision as person.email_taken", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
       withRacerPlanted("insert", () =>
         run((tx) =>
           invitePerson(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             displayName: "Late comer",
             firstNames: "Late",
             lastNames: "Comer",
@@ -739,11 +739,11 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("invitePerson passes a refusal that is not a collision through untranslated", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const error = await captureError(() =>
       run((tx) =>
         invitePerson(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           displayName: "Bad role",
           firstNames: "Bad",
           lastNames: "Role",
@@ -758,13 +758,13 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("createPerson reports a display-name collision as person.display_name_taken", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const before = await personCount();
     await expect(
       withRacerPlanted("insert", () =>
         run((tx) =>
           createPerson(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             displayName: "Racer",
             role: "staff",
             pin: "5678",
@@ -780,12 +780,12 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("createPerson reports a login-email collision as person.email_taken", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     await expect(
       withRacerPlanted("insert", () =>
         run((tx) =>
           createPerson(tx, {
-            managementSessionId: sessionId,
+            managementSessionId: token,
             displayName: "Late comer",
             role: "staff",
             pin: "5678",
@@ -797,11 +797,11 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("createPerson passes a refusal that is not a collision through untranslated", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const error = await captureError(() =>
       run((tx) =>
         createPerson(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           displayName: "Bad role",
           role: "owner" as PersonRoleValue,
           pin: "5678",
@@ -814,14 +814,14 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("updatePersonDetails reports a display-name collision as person.display_name_taken", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const { personId } = await seedStaffWithSession("editing@example.com");
     await expect(
       withRacerPlanted("update", () =>
         run((tx) =>
           updatePersonDetails(
             tx,
-            details(sessionId, personId, { displayName: "Racer", email: "editing@example.com" }),
+            details(token, personId, { displayName: "Racer", email: "editing@example.com" }),
           ),
         ),
       ),
@@ -832,13 +832,13 @@ describe("a colliding row that lands after the pre-check", () => {
   });
 
   it("reactivatePersonForInvitation reports a display-name collision as person.display_name_taken", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "staff", "suspended");
     await suite.db.execute(sql`update persons set display_name = 'Racer' where id = ${target}`);
     await expect(
       withRacerPlanted("update", () =>
         run((tx) =>
-          reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId: target }),
+          reactivatePersonForInvitation(tx, { managementSessionId: token, personId: target }),
         ),
       ),
     ).rejects.toMatchObject({

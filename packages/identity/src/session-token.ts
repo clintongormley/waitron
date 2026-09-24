@@ -11,10 +11,11 @@ export function mintSessionToken(): string {
 }
 
 /**
- * What a session row stores in place of its token: lowercase hex SHA-256. A copy of the database —
- * a bucket, an archive — holds only this, and presenting it as a cookie is looked up as the hash of
- * the hash, which names no row. A fast digest rather than a password KDF because the token is random,
- * not chosen by a person: the choice `google-oidc.ts` makes for its state.
+ * What a session row stores in place of its token: lowercase hex SHA-256. For a session, a copy of
+ * the database — a bucket, an archive — holds only this and the row id; presenting the hash as a
+ * cookie is looked up as the hash of the hash, which names no row, and a row id names none either.
+ * A fast digest rather than a password KDF because the token is random, not chosen by a person:
+ * the choice `google-oidc.ts` makes for its state.
  */
 export function hashSessionToken(raw: string): string {
   return createHash("sha256").update(raw, "utf8").digest("hex");

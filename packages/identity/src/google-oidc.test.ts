@@ -45,7 +45,7 @@ describe("Google OpenID Connect state", () => {
     const owner = await openManagementSession(suite.db, "staff");
     const begun = await run((tx) =>
       beginGoogleLink(tx, {
-        managementSessionId: owner.sessionId,
+        managementSessionId: owner.token,
         currentPassword: "correct horse",
         ...config,
       }),
@@ -64,7 +64,7 @@ describe("Google OpenID Connect state", () => {
       await codeOf(() =>
         run((tx) =>
           beginGoogleLink(tx, {
-            managementSessionId: owner.sessionId,
+            managementSessionId: owner.token,
             currentPassword: "wrong",
             ...config,
           }),

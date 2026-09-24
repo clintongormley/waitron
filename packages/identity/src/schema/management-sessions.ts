@@ -25,12 +25,12 @@ export const managementSessions = table(
     endedAt: tsString("ended_at"),
   },
   (t) => [
-    // Forward-looking for slice 1b's "open management session for a person" lookup — filtering on
-    // person_id then ended_at IS NULL — whose equality predicate this index would cover. No consumer
-    // does that lookup in this slice: `resolveManagementSession` and `endManagementSession` key on
-    // `token_hash`. Mirrors sessions.ts's `sessions_open_idx` on (till_id). Kept plain (not a
-    // partial `WHERE ended_at IS NULL` index) so drizzle-kit round-trips it and db:generate stays a
-    // no-op.
+    // Covers the equality predicate of the writes that end a person's open sessions — filtering on
+    // person_id then ended_at IS NULL (`staff.ts`, `account-action.ts`, `profile.ts`,
+    // `apps/server/src/break-glass-command.ts`). `resolveManagementSession` and
+    // `endManagementSession` key on `token_hash`. Mirrors sessions.ts's `sessions_open_idx` on
+    // (till_id). Kept plain (not a partial `WHERE ended_at IS NULL` index) so drizzle-kit
+    // round-trips it and db:generate stays a no-op.
     index("management_sessions_open_idx").on(t.personId),
     uniqueIndex("management_sessions_token_hash_uq").on(t.tokenHash),
     check("management_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),

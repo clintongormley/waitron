@@ -247,7 +247,7 @@ describe("mountMeApi — whoami", () => {
 
   it("never reports a session lifetime above the configured idle timeout", async () => {
     const cookie = await cookieFor(me);
-    const sessionId = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
+    const token = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
     // Read out of the template rather than inlined into it: `postgres-sql-residue.test.ts` scans a
     // `sql` template's text with the `${…}` interpolation left in place, so a JavaScript
     // `Date.now()` inside one reads as PostgreSQL's `now()` to that guard. The value bound is
@@ -256,7 +256,7 @@ describe("mountMeApi — whoami", () => {
     await suite.db.execute(sql`
       update management_sessions
       set last_seen_at = ${tenSecondsFromNow}
-      where token_hash = ${hashSessionToken(sessionId)}`);
+      where token_hash = ${hashSessionToken(token)}`);
 
     const res = await send(mountApp(), "GET", "/management-api/session/me", { cookie });
 

@@ -1348,12 +1348,12 @@ describe("mountPrintApi — management: test-print", () => {
     async ({ personLocale, browserLocale, venueLocale, expected }) => {
       const app = mountApp({ venueLocale });
       const printerId = await createNetworkPrinter(app, "10.0.0.42", 9100, "Language test");
-      const sessionId = managerCookie.split("=")[1]!;
+      const token = managerCookie.split("=")[1]!;
       const setLocale = (locale: string | null) =>
         suite.db.execute(sql`
       update persons set locale = ${locale}
       where id = (
-        select person_id from management_sessions where token_hash = ${hashSessionToken(sessionId)}
+        select person_id from management_sessions where token_hash = ${hashSessionToken(token)}
       )`);
       await setLocale(personLocale);
       try {

@@ -100,10 +100,7 @@ export async function requireSession(
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
   const token = readSessionId(c);
-  // Screen the cookie's SHAPE before the DB: a missing OR non-UUID cookie is `session.required`
-  // (401) without a round-trip. Nothing below objects to a non-UUID — the token is hashed and the
-  // hash simply matches no row — so this shape check is the only thing that reads the cookie's
-  // shape, and what keeps a forged cookie a clean 401 (`till-api.ts`'s note on `shared.invalid_id`).
+  // Refuses a missing or non-UUID cookie as `session.required` (401) before any database lookup.
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
   const row = await withTransaction(deps.db, async (tx) => {
     const [found] = await tx

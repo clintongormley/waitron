@@ -585,10 +585,10 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // A malformed cookie names no `uuid` row and must not reach the DB — `endSession` would raise
-    // `22P02 invalid input syntax for type uuid`, which `run` maps to an opaque 500, contradicting the
-    // route's documented idempotency (a stale/garbage cookie is never an error). The `isUuid` screen
-    // skips `endSession`, clears the cookie and answers 200. Dropping the screen makes this a 500.
+    // A stale or garbage cookie is never an error: the route clears it and answers 200. This case
+    // no longer pins the `isUuid` screen: measured 2026-09-24, with the screen deleted from the
+    // logout route and from `requireSession`, it still passes — `endSession` hashes the value and
+    // matches no row.
     const del = await app.request("/api/session", {
       method: "DELETE",
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
@@ -606,12 +606,12 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 
     // A cookie naming a session that was already closed: `endSession` matches nothing, but logout
     // still answers 200 and clears the cookie (the idempotency the route comment claims).
-    const id = await openSession(suite.db);
-    await closeSession(suite.db, id);
+    const token = await openSession(suite.db);
+    await closeSession(suite.db, token);
 
     const del = await app.request("/api/session", {
       method: "DELETE",
-      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ ok: true });
@@ -931,9 +931,9 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("REJECTS (401 session.required) a NON-UUID cookie WITHOUT hitting the DB (not an opaque 500)", async () => {
-    // A forged, non-UUID cookie is a CLIENT fault. Passed into the `uuid` column it would raise
-    // `22P02` → an opaque 500; the `isUuid` shape screen in `requireSession` refuses it as
-    // `session.required` (401) before any query. Dropping the screen turns this into a 500.
+    // A forged, non-UUID cookie is a CLIENT fault and answers 401. This case no longer pins the
+    // `isUuid` screen in `requireSession`: measured 2026-09-24, with the screen deleted it still
+    // passes — the value is hashed and the hash matches no row, which is also `session.required`.
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -944,11 +944,11 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   it("REJECTS (401 session.required) an ENDED session — logging out invalidates the cookie", async () => {
     // Open a real session, then end it. Its token still names a row, but `ended_at IS NOT NULL`, so
     // the `IS NULL` filter excludes it: a logged-out cookie is as good as no cookie.
-    const id = await openSession(suite.db);
-    await closeSession(suite.db, id);
+    const token = await openSession(suite.db);
+    await closeSession(suite.db, token);
 
     const res = await guardApp(suite.db).request("/whoami", {
-      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
@@ -959,7 +959,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   // Log in a FRESH staff person rather than the shared `ana`, so the row this route MUTATES is
   // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Ana)
   // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
-  async function loginFresh(pin: string): Promise<{ personId: string; sessionId: string }> {
+  async function loginFresh(pin: string): Promise<{ personId: string; token: string }> {
     const [row] = await suite.db
       .insert(persons)
       .values({ displayName: "Locale User", pinHash: hashPin(pin), role: "staff" })
@@ -968,7 +968,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     const session = await withTransaction(suite.db, async (tx) => {
       return loginWithPin(tx, { tillId: cfg.tillId, personId, pin });
     });
-    return { personId, sessionId: session.token };
+    return { personId, token: session.token };
   }
   async function cleanup(personId: string): Promise<void> {
     await suite.db.execute(sql`delete from sessions where person_id = ${personId}`);
@@ -978,11 +978,11 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   it("204s and writes the session person's persons.locale for a supported value", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { personId, sessionId } = await loginFresh("6001");
+    const { personId, token } = await loginFresh("6001");
     try {
       const res = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
         body: JSON.stringify({ locale: "en-GB" }),
       });
       expect(res.status).toBe(204);
@@ -999,11 +999,11 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   it("400s (locale.unsupported) an unsupported value, leaving the row unchanged", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { personId, sessionId } = await loginFresh("6002");
+    const { personId, token } = await loginFresh("6002");
     try {
       const res = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
         body: JSON.stringify({ locale: "ca-ES" }),
       });
       expect(res.status).toBe(400);
@@ -1024,11 +1024,11 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     // There is no separate request-invalid branch — a missing/non-string locale is the same 400.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { personId, sessionId } = await loginFresh("6003");
+    const { personId, token } = await loginFresh("6003");
     try {
       const res = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
         body: JSON.stringify(null),
       });
       expect(res.status).toBe(400);
@@ -1050,12 +1050,12 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
     // flows through the same `locale` coercion → `""` → the ONE `locale.unsupported` rejection path.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const { personId, sessionId } = await loginFresh("6004");
+    const { personId, token } = await loginFresh("6004");
     try {
       // An EMPTY body under a JSON content-type.
       const empty = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
         body: "",
       });
       expect(empty.status).toBe(400);
@@ -1064,7 +1064,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
       // A MALFORMED body — not valid JSON at all.
       const malformed = await app.request("/api/session/locale", {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${sessionId}` },
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
         body: "not json",
       });
       expect(malformed.status).toBe(400);
@@ -1502,10 +1502,10 @@ describe("GET /api/products (session-guarded catalogue)", () => {
   it("returns the configured default counter zone and its offers", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
 
     const res = await app.request("/api/default-service-zone/offers", {
-      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
@@ -1518,7 +1518,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
   it("prefers the enrolled device's default service zone", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const sessionId = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
     const [second] = await suite.db
@@ -1539,7 +1539,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       values (${deviceId}, ${second!.id})`);
 
     const res = await app.request("/api/default-service-zone/offers", {
-      headers: { cookie: `${SESSION_COOKIE}=${sessionId}; ${deviceCookie}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}; ${deviceCookie}` },
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ context: { zoneId: second!.id } });
@@ -1548,10 +1548,10 @@ describe("GET /api/products (session-guarded catalogue)", () => {
   it("returns the offers allowed in an explicit service zone", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
 
     const res = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
-      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
@@ -1577,8 +1577,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // Through the real route: a non-UUID cookie must be refused by the guard as 401 before any
-    // catalogue read, not become an opaque 500 from a `22P02` on the `uuid` column.
+    // Through the real route: a non-UUID cookie is refused by the guard as 401 before any catalogue
+    // read. Measured 2026-09-24: it still passes with `requireSession`'s `isUuid` screen deleted,
+    // because the hashed value matches no row, so it does not pin the screen.
     const res = await app.request("/api/products", {
       headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
     });
@@ -1590,9 +1591,9 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const res = await app.request("/api/products", {
-      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
     // The wrapped `{ menus, products }` shape: `menus` carries BOTH accessible catalogues — the
@@ -1679,7 +1680,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
   it("POST with a malformed workingOrderId is 400 shared.invalid_id, not an opaque 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
 
     // The 7b malformed-id follow-up for the OPTIONAL `workingOrderId` (only a malformed one is an error;
     // absent / well-formed-unknown are valid walk-ups). The non-empty basket + cash tender clear
@@ -1688,7 +1689,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
     // at the HTTP boundary before any query runs.
     const res = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
         lines: [{ productId: aguaProduct.id, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
@@ -1726,13 +1727,13 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     // — the SP-A.2 §16.4 gate — before any reader read. The reader-routing happy path and the
     // `reader.not_found` refusal (a device with no default reader) are proven in
     // `till-api.fiscal-sale-paths.test.ts`, where a device + reader can be seeded.
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({ id: randomUUID(), lines: [] }),
     });
     expect(res.status).toBe(401);
@@ -1740,7 +1741,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 
   it("refuses a browser-selected simulation outcome for a real provider", async () => {
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const app = new Hono();
     mountTillApi(
       app,
@@ -1750,7 +1751,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
         id: randomUUID(),
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -1764,7 +1765,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 
   it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b /api/pay sibling)", async () => {
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const app = new Hono();
     // A non-undefined stub provider clears the route's `cardProvider === undefined` guard, so in the RED
     // state a malformed `id` genuinely reaches `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)`
@@ -1774,7 +1775,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
 
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
         id: "not-a-uuid",
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -1835,10 +1836,10 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
   it("POST /api/sales with a malformed zoneId is 400 shared.invalid_id", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const res = await app.request("/api/sales", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
@@ -1854,10 +1855,10 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
   it("POST /api/pay with a malformed zoneId is 400 shared.invalid_id", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
       body: JSON.stringify({
         id: randomUUID(),
         lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
@@ -1877,11 +1878,11 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
       { ...deps(suite.db), cardProvider: { provider: "simulator" } as PaymentProvider },
       collect([]),
     );
-    const id = await openSession(suite.db);
+    const token = await openSession(suite.db);
     const pay = (simulationOutcome: string) =>
       app.request("/api/pay", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
         body: JSON.stringify({
           id: randomUUID(),
           lines: [{ menuItemId: aguaOfferId, quantity: "1" }],

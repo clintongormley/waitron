@@ -6,8 +6,8 @@ import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
  * A shift login: a person active at a physical till, keyed to the TILL. MUTABLE, with no
  * append-only trigger: `ended_at` is stamped on logout, and the callers end a session that way
  * rather than deleting it. The till's cookie carries a random token; this row stores only its hash
- * (`../session-token.ts`), so a copy of the database signs nobody in. `id` is the row's identity,
- * never the cookie — `authorize` takes it.
+ * (`../session-token.ts`), so neither the row id nor the stored hash read from a copy of the
+ * database signs anybody in. `id` is the row's identity, never the cookie — `authorize` takes it.
  */
 export const sessions = table(
   "sessions",

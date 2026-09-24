@@ -21,11 +21,11 @@ function run<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("createPerson / setEmail email_taken on a real unique index", () => {
   it("createPerson rejects a second person with the same email", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
 
     await run(suite.db, (tx) =>
       createPerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "A",
         role: "staff",
         pin: "5678",
@@ -38,7 +38,7 @@ describe("createPerson / setEmail email_taken on a real unique index", () => {
     await expect(
       run(suite.db, (tx) =>
         createPerson(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           displayName: "B",
           role: "staff",
           pin: "5678",
@@ -49,11 +49,11 @@ describe("createPerson / setEmail email_taken on a real unique index", () => {
   });
 
   it("setEmail rejects a duplicate address", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
 
     await run(suite.db, (tx) =>
       createPerson(tx, {
-        managementSessionId: sessionId,
+        managementSessionId: token,
         displayName: "A",
         role: "staff",
         pin: "5678",
@@ -64,7 +64,7 @@ describe("createPerson / setEmail email_taken on a real unique index", () => {
 
     await expect(
       run(suite.db, (tx) =>
-        setEmail(tx, { managementSessionId: sessionId, personId: target, email: "owner@x.com" }),
+        setEmail(tx, { managementSessionId: token, personId: target, email: "owner@x.com" }),
       ),
     ).rejects.toMatchObject({ code: "person.email_taken", params: { email: "owner@x.com" } });
   });

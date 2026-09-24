@@ -59,13 +59,13 @@ const DECOMPOSED = "José García";
 
 /** A person created through the gated write path, which is where the duplicate check lives. */
 function create(
-  sessionId: string,
+  token: string,
   displayName: string,
   email = `${randomUUID()}@example.test`,
 ): Promise<{ id: string }> {
   return run((tx) =>
     createPerson(tx, {
-      managementSessionId: sessionId,
+      managementSessionId: token,
       displayName,
       role: "staff",
       pin: "5678",
@@ -86,10 +86,10 @@ describe("a live display name is taken whatever case its accented letters are ty
     ["JOSÉ GARCÍA", "José García"],
   ] as const) {
     it(`refuses ${second} when ${first} is already employed`, async () => {
-      const { sessionId } = await openManagementSession(suite.db, "manager");
-      await create(sessionId, first);
+      const { token } = await openManagementSession(suite.db, "manager");
+      await create(token, first);
 
-      await expect(create(sessionId, second)).rejects.toMatchObject({
+      await expect(create(token, second)).rejects.toMatchObject({
         code: "person.display_name_taken",
         params: { displayName: second },
       });
@@ -100,20 +100,20 @@ describe("a live display name is taken whatever case its accented letters are ty
     // The control. This case passed before the fix as well: it is here because an ASCII-only probe
     // is exactly the probe that missed the defect above, so the suite states what a PASSING
     // ASCII case proves and what it does not.
-    const { sessionId } = await openManagementSession(suite.db, "manager");
-    await create(sessionId, "ANA LOPEZ");
+    const { token } = await openManagementSession(suite.db, "manager");
+    await create(token, "ANA LOPEZ");
 
-    await expect(create(sessionId, "Ana Lopez")).rejects.toMatchObject({
+    await expect(create(token, "Ana Lopez")).rejects.toMatchObject({
       code: "person.display_name_taken",
       params: { displayName: "Ana Lopez" },
     });
   });
 
   it("refuses a second person whose name differs only in how the accent is encoded", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
-    await create(sessionId, PRECOMPOSED);
+    const { token } = await openManagementSession(suite.db, "manager");
+    await create(token, PRECOMPOSED);
 
-    await expect(create(sessionId, DECOMPOSED)).rejects.toMatchObject({
+    await expect(create(token, DECOMPOSED)).rejects.toMatchObject({
       code: "person.display_name_taken",
       params: { displayName: DECOMPOSED },
     });
@@ -122,19 +122,19 @@ describe("a live display name is taken whatever case its accented letters are ty
   it("accepts a name that differs by an accent rather than by its case", async () => {
     // The control in the other direction, and the reason the fold is a case fold and not an accent
     // stripper: Lopez and López are two people, and this venue must be able to employ both.
-    const { sessionId } = await openManagementSession(suite.db, "manager");
-    await create(sessionId, "Ana Lopez");
+    const { token } = await openManagementSession(suite.db, "manager");
+    await create(token, "Ana Lopez");
 
-    await expect(create(sessionId, "Ana López")).resolves.toMatchObject({ id: expect.any(String) });
+    await expect(create(token, "Ana López")).resolves.toMatchObject({ id: expect.any(String) });
   });
 });
 
 describe("a login address is taken whichever way its accent is encoded", () => {
   it("refuses a second person whose address differs only in how the accent is encoded", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
-    await create(sessionId, "One", "josé@example.test");
+    const { token } = await openManagementSession(suite.db, "manager");
+    await create(token, "One", "josé@example.test");
 
-    await expect(create(sessionId, "Two", "josé@example.test")).rejects.toMatchObject({
+    await expect(create(token, "Two", "josé@example.test")).rejects.toMatchObject({
       code: "person.email_taken",
       params: { email: "josé@example.test" },
     });
@@ -143,10 +143,10 @@ describe("a login address is taken whichever way its accent is encoded", () => {
   it("refuses a second person whose address differs only in case", async () => {
     // The control: the address path refuses duplicates at all. It passed before the fix, because
     // `normalizeEmail` had already folded the case in JavaScript before the index saw it.
-    const { sessionId } = await openManagementSession(suite.db, "manager");
-    await create(sessionId, "One", "owner@example.test");
+    const { token } = await openManagementSession(suite.db, "manager");
+    await create(token, "One", "owner@example.test");
 
-    await expect(create(sessionId, "Two", "OWNER@example.test")).rejects.toMatchObject({
+    await expect(create(token, "Two", "OWNER@example.test")).rejects.toMatchObject({
       code: "person.email_taken",
       params: { email: "owner@example.test" },
     });
@@ -171,10 +171,10 @@ describe("an unproven replacement address is taken whichever way its accent is e
   }
 
   it("refuses a new person taking an address that differs only in how the accent is encoded", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
     await requestAddressChange("maría@example.test");
 
-    await expect(create(sessionId, "Someone", "maría@example.test")).rejects.toMatchObject({
+    await expect(create(token, "Someone", "maría@example.test")).rejects.toMatchObject({
       code: "person.email_taken",
       params: { email: "maría@example.test" },
     });
@@ -182,10 +182,10 @@ describe("an unproven replacement address is taken whichever way its accent is e
 
   it("refuses a new person taking a pending address that differs only in case", async () => {
     // The control, as above: this one passed before the fix.
-    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const { token } = await openManagementSession(suite.db, "manager");
     await requestAddressChange("pending@example.test");
 
-    await expect(create(sessionId, "Someone", "PENDING@example.test")).rejects.toMatchObject({
+    await expect(create(token, "Someone", "PENDING@example.test")).rejects.toMatchObject({
       code: "person.email_taken",
       params: { email: "pending@example.test" },
     });
@@ -206,14 +206,14 @@ describe("the index itself folds, not only the check in front of it", () => {
   it("refuses setEmail when the address differs only in how the accent is encoded", async () => {
     // `setEmail` writes straight to the row and translates whatever the database refuses, so the
     // refusal here is the index's.
-    const { sessionId } = await openManagementSession(suite.db, "manager");
-    await create(sessionId, "Held", "mari\u0301a@example.test");
+    const { token } = await openManagementSession(suite.db, "manager");
+    await create(token, "Held", "mari\u0301a@example.test");
     const target = await seedPerson(suite.db, "staff");
 
     await expect(
       run((tx) =>
         setEmail(tx, {
-          managementSessionId: sessionId,
+          managementSessionId: token,
           personId: target,
           email: "mar\u00eda@example.test",
         }),

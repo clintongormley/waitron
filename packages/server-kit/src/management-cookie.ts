@@ -17,8 +17,8 @@ export const MANAGEMENT_COOKIE = "waitron_management_session";
  * Writes the session's token into the management cookie. `httpOnly` so no browser script can read
  * it (the token is a bearer credential; the session row stores only its hash —
  * `@waitron/identity`'s `session-token.ts`); `sameSite: "Strict"` so it never rides a cross-site
- * request; `path: "/"` so it covers the whole dashboard. `secure` is caller-supplied — TRUE on a production HTTPS host,
- * FALSE on loopback dev where there is no TLS to attach it to.
+ * request; `path: "/"` so it covers the whole dashboard. `secure` is caller-supplied — TRUE on a
+ * production HTTPS host, FALSE on loopback dev where there is no TLS to attach it to.
  */
 export function setManagementCookie(c: Context, token: string, secure: boolean): void {
   setCookie(c, MANAGEMENT_COOKIE, token, {
@@ -54,7 +54,7 @@ export function readManagementSessionId(c: Context): string | null {
  * home.
  */
 export function requireManagementSession(c: Context): string {
-  const id = readManagementSessionId(c);
-  if (id === null || !isUuid(id)) throw new AppError("management_session.required", {});
-  return id;
+  const token = readManagementSessionId(c);
+  if (token === null || !isUuid(token)) throw new AppError("management_session.required", {});
+  return token;
 }
