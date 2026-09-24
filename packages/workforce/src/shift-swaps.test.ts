@@ -10,9 +10,6 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
 
-// requestSwap / acceptSwap are LOGIC over mutable planning rows (ownership and existence checks, a
-// status flip).
-
 let locationId: string;
 
 const suite = useVenueDb({
@@ -33,7 +30,6 @@ async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | und
   return error instanceof AppError ? error.code : `not an AppError: ${String(error)}`;
 }
 
-/** A requester who owns one shift, and a second person offered the swap. */
 async function twoPeopleAndAShift(): Promise<{
   requester: string;
   toPerson: string;
@@ -100,9 +96,6 @@ describe("requestSwap", () => {
   });
 
   it("throws swap.not_permitted when the requester does not own the from_shift", async () => {
-    // The guard: you may only offer a shift that is YOURS. Here the shift belongs to `requester`, but
-    // `intruder` tries to offer it. Prove by deletion — remove the ownership check and this stops
-    // throwing (the intruder's swap inserts).
     const { toPerson, fromShift } = await twoPeopleAndAShift();
     const intruder = await seedPerson(suite.db, `intr-${crypto.randomUUID()}`);
     const code = await codeOfRejection(() =>
@@ -134,10 +127,7 @@ describe("requestSwap", () => {
   });
 
   it("throws swap.not_permitted when a supplied to_shift is not owned by the to_person", async () => {
-    // Fix B: a supplied return shift must belong to the person the swap is offered TO — you cannot put
-    // up SOMEONE ELSE's shift as the return leg. Here the return shift belongs to a THIRD person, not
-    // `toPerson`. Prove by deletion — drop the `toShiftOwner === toPersonId` check in requestSwap and
-    // this offer inserts instead of throwing, reddening the assertion.
+    // The return shift belongs to a THIRD person, not `toPerson`.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
     const thirdPerson = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
     const foreignReturnShift = await insertDraftShift(suite.db, {
@@ -186,8 +176,6 @@ describe("acceptSwap", () => {
   });
 
   it("throws swap.not_permitted when someone other than the offered person accepts", async () => {
-    // Only the swap's `to_person` may accept. Prove by deletion — remove the acceptor check and a
-    // stranger's accept succeeds.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
     const stranger = await seedPerson(suite.db, `str-${crypto.randomUUID()}`);
     const swapId = await insertShiftSwap(suite.db, {
@@ -204,11 +192,7 @@ describe("acceptSwap", () => {
   it.each(["accepted", "approved", "rejected"] as const)(
     "throws swap.not_acceptable when the to_person accepts a swap already in '%s' state",
     async (status) => {
-      // Fix A, the requested-only guard: only a `requested` swap may be accepted. The
-      // `and status = 'requested'` predicate on acceptSwap's conditional UPDATE IS that guard — drop
-      // it and this already-decided swap is flipped back to `accepted` (the 0-row no-match path is
-      // never taken, so nothing throws), reddening the assertion. Distinct from swap.not_found (the
-      // swap EXISTS) and swap.not_permitted (the acceptor IS the to_person) — exists-but-wrong-state.
+      // The swap exists and the acceptor is its to_person: only the state is wrong.
       const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
       const swapId = await insertShiftSwap(suite.db, {
         requestedByPersonId: requester,
@@ -224,10 +208,7 @@ describe("acceptSwap", () => {
   );
 
   it("checks IDENTITY before STATE — a non-recipient accepting an already-accepted swap gets swap.not_permitted", async () => {
-    // Screen identity before state (mirroring the read order today): a stranger accepting a swap that
-    // is BOTH not theirs AND no longer `requested` gets swap.not_permitted, never swap.not_acceptable —
-    // the permission check runs before the state-guarded UPDATE, so the non-recipient never learns the
-    // swap's state.
+    // Identity is screened before state, so a non-recipient never learns the swap's state.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
     const stranger = await seedPerson(suite.db, `str-${crypto.randomUUID()}`);
     const swapId = await insertShiftSwap(suite.db, {
@@ -283,9 +264,6 @@ describe("decideSwap", () => {
   });
 
   it("throws swap.not_found for a swap that does not exist", async () => {
-    // Prove by deletion: the conditional UPDATE matches nothing, so the cold-path `SELECT` finds no
-    // row → `swap.not_found`. Remove the `if (rows[0] === undefined) throw swap.not_found` branch and
-    // this reddens (it falls through to swap.not_decidable instead).
     const code = await codeOfRejection(() =>
       run((tx) =>
         decideSwap(tx, {
@@ -299,9 +277,6 @@ describe("decideSwap", () => {
   });
 
   it("throws swap.not_decidable for a REQUESTED swap (not yet accepted)", async () => {
-    // Prove by deletion: the `and status = 'accepted'` predicate on the UPDATE is the decidability
-    // guard. Remove it and this REQUESTED swap is wrongly UPDATEd (0-row path never taken, no throw),
-    // reddening this test.
     const requester = await seedPerson(suite.db, `r-${crypto.randomUUID()}`);
     const toPerson = await seedPerson(suite.db, `t-${crypto.randomUUID()}`);
     const fromShift = await insertDraftShift(suite.db, {
@@ -332,9 +307,7 @@ describe("decideSwap", () => {
 
 describe("listPendingSwaps", () => {
   it("returns only accepted swaps, ordered by created_at", async () => {
-    // The shared database persists across the file, and `acceptSwap`'s "moving the swap to accepted"
-    // test leaves an `accepted` swap behind. The queue reads every swap in the database (one tenant per
-    // database), so clear the earlier tests' swaps to keep this order-independent (CLAUDE.md §4).
+    // The queue reads every swap in the shared database, so clear the earlier tests' rows.
     await suite.db.execute(sql`delete from shift_swaps`);
     const listLocation = locationId;
     const requester = await seedPerson(suite.db, `lr-${crypto.randomUUID()}`);
@@ -351,10 +324,7 @@ describe("listPendingSwaps", () => {
       personId: requester,
       locationId: listLocation,
     });
-    // TWO accepted swaps seeded OUT OF created_at ORDER: the FIRST-inserted carries the LATER
-    // timestamp, the SECOND-inserted the EARLIER one, so insertion order and created_at order
-    // DISAGREE. `order by created_at` must return [early, late]; delete it and the query falls back to
-    // physical/insert order [late, early] and the toEqual below reddens (CLAUDE.md §4 prove-by-deletion).
+    // Inserted out of created_at order, so `order by created_at` is what puts the early one first.
     const acceptedLate = await insertShiftSwap(suite.db, {
       requestedByPersonId: requester,
       fromShiftId: s1,
@@ -369,7 +339,6 @@ describe("listPendingSwaps", () => {
       status: "accepted",
       createdAt: "2026-03-01T10:00:00Z",
     });
-    // A requested (not accepted) swap must NOT appear (the status filter).
     await insertShiftSwap(suite.db, {
       requestedByPersonId: requester,
       fromShiftId: s3,
@@ -377,11 +346,9 @@ describe("listPendingSwaps", () => {
       status: "requested",
     });
     const rows = await withTransaction(suite.db, (tx) => listPendingSwaps(tx));
-    // created_at ASC → [early, late], the REVERSE of insertion order; the requested swap is excluded.
     expect(rows.map((r) => r.id)).toEqual([acceptedEarly, acceptedLate]);
     expect(rows.map((r) => r.createdAt)).toEqual(["2026-03-01T10:00:00Z", "2026-03-02T10:00:00Z"]);
     expect(rows.map((r) => r.status)).toEqual(["accepted", "accepted"]);
-    // Field mapping on the head row (the earlier-created accepted swap, from_shift s2).
     expect(rows[0]!.requestedByPersonId).toBe(requester);
     expect(rows[0]!.fromShiftId).toBe(s2);
   });

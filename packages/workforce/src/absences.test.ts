@@ -9,9 +9,6 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertAbsence, seedPerson } from "../test/fixtures.js";
 
-// createAbsence / setAbsenceStatus are LOGIC over mutable planning rows (an overlap query, a
-// status flip).
-
 let personId: string;
 
 const suite = useVenueDb({
@@ -32,10 +29,7 @@ async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | und
 }
 
 describe("createAbsence", () => {
-  // A FRESH person per test: the suite shares one database, and the overlap guard is scoped per
-  // person, so a person reused across tests would carry an earlier test's absence and make
-  // these order-dependent (CLAUDE.md §4). Seeding a new person is cheaper than an afterEach cleanup
-  // and cannot be forgotten.
+  // A fresh person per test: the suite shares one database and the overlap guard is per person.
   it("inserts a requested absence with no note by default", async () => {
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
@@ -70,7 +64,6 @@ describe("createAbsence", () => {
   });
 
   it("rejects an absence overlapping an existing one for the same person", async () => {
-    // Existing 10–15 Feb. New 12–18 Feb overlaps it (12 ≤ 15 and 10 ≤ 18) → absence.overlaps.
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
       personId: p,
@@ -92,10 +85,7 @@ describe("createAbsence", () => {
   });
 
   it("allows an absence that is merely ADJACENT to an existing one (starts the day after it ends)", async () => {
-    // The negative control the overlap test needs: existing 10–15 Feb, new 16–20 Feb. These dates
-    // genuinely distinguish overlap from adjacency — a guard that dropped the date predicate (any
-    // same-person absence blocks) would wrongly reject THIS, and a guard whose overlap was too loose
-    // would wrongly accept the 12–18 case above. 16 > 15, so there is no shared day.
+    // Adjacent, not overlapping: a guard that dropped the date predicate would wrongly reject this.
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
       personId: p,
@@ -118,12 +108,8 @@ describe("createAbsence", () => {
   });
 
   it("rejects an INVERTED date range (ends_on < starts_on) — absence.invalid", async () => {
-    // The cross-field ordering guard: 10 May starts, 1 May ends — end before start. Both are real
-    // calendar days (so the route's requirePeriod screen passes each in isolation), but the interval
-    // is malformed. createAbsence must refuse it here with `absence.invalid` BEFORE the insert, not
-    // let it reach the `absences_range_ck` (ends_on >= starts_on) and come back as a raw driver
-    // error. Delete the guard in createAbsence and this reddens: the code becomes that raw
-    // constraint error, not `absence.invalid` (CLAUDE.md §4 prove-by-deletion).
+    // Each day is valid alone, so only createAbsence's own ordering guard turns this into
+    // `absence.invalid` rather than a raw `absences_range_ck` refusal.
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const code = await codeOfRejection(() =>
       run((tx) =>
@@ -140,9 +126,7 @@ describe("createAbsence", () => {
   });
 
   it("allows a single-day absence (ends_on == starts_on) — the range is inclusive", async () => {
-    // The boundary the ordering guard must NOT reject: a one-day absence is starts_on = ends_on, which
-    // the `absences_range_ck` (>=) allows. A guard written `endsOn <= startsOn` would wrongly reject
-    // this; `endsOn < startsOn` accepts it.
+    // A one-day absence is starts_on = ends_on, which the ordering guard must accept.
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
@@ -160,8 +144,6 @@ describe("createAbsence", () => {
   });
 
   it("does not treat another person's overlapping absence as a conflict", async () => {
-    // The overlap is scoped to the SAME person: a second person's absence over the same days must not
-    // block this one. Dropping the person_id predicate from the guard fails this.
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const other = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
@@ -222,17 +204,10 @@ describe("setAbsenceStatus", () => {
 
 describe("listPendingAbsences", () => {
   it("returns only requested absences, ordered by created_at", async () => {
-    // The shared database persists across the file, and the `createAbsence` tests leave several
-    // `requested` absences behind. The queue reads every absence in the database (one tenant per
-    // database), so clear the earlier tests' absences to keep the ordered assertion below
-    // order-independent (CLAUDE.md §4) — mirrors listPendingSwaps in shift-swaps.test.ts.
+    // The queue reads every absence in the shared database, so clear the earlier tests' rows.
     await suite.db.execute(sql`delete from absences`);
     const p = await seedPerson(suite.db, `la-${crypto.randomUUID()}`);
-    // TWO requested absences seeded OUT OF created_at ORDER: the FIRST-inserted (the holiday) carries
-    // the LATER timestamp, the SECOND-inserted (the sick_leave) the EARLIER one, so insertion order and
-    // created_at order DISAGREE. `order by created_at` must return [sick_leave, holiday]; delete it and
-    // the query falls back to physical/insert order [holiday, sick_leave] and the toEqual below reddens
-    // (CLAUDE.md §4 prove-by-deletion).
+    // Inserted out of created_at order, so `order by created_at` is what puts sick_leave first.
     const requestedLate = await insertAbsence(suite.db, {
       personId: p,
       kind: "holiday",
@@ -251,7 +226,6 @@ describe("listPendingAbsences", () => {
       note: "flu",
       createdAt: "2026-03-01T10:00:00Z",
     });
-    // An already-approved absence must NOT appear (the status filter).
     await insertAbsence(suite.db, {
       personId: p,
       startsOn: "2026-07-01",
@@ -259,15 +233,10 @@ describe("listPendingAbsences", () => {
       status: "approved",
     });
     const rows = await withTransaction(suite.db, (tx) => listPendingAbsences(tx));
-    // created_at ASC → [early, late], the REVERSE of insertion order; the approved absence is excluded.
     expect(rows.map((r) => r.id)).toEqual([requestedEarly, requestedLate]);
     expect(rows.map((r) => r.createdAt)).toEqual(["2026-03-01T10:00:00Z", "2026-03-02T10:00:00Z"]);
     expect(rows.map((r) => r.status)).toEqual(["requested", "requested"]);
-    // Field mapping on the head row (the earlier-created sick_leave absence). Assert EVERY mapped
-    // column so a snake_case→camelCase mis-wire on an unasserted column cannot pass silently
-    // (CLAUDE.md §4 toMatchObject-gap / Task 3 review). `createdAt` is now pinned to its exact seeded
-    // instant by the ordered assertion above — a mis-wire to a date column (e.g. starts_on) would not
-    // carry the "T…Z" instant.
+    // Every mapped column, so a snake_case→camelCase mis-wire cannot pass unasserted.
     expect(rows[0]!.personId).toBe(p);
     expect(rows[0]!.kind).toBe("sick_leave");
     expect(rows[0]!.startsOn).toBe("2026-06-01");

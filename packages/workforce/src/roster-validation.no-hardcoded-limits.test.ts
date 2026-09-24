@@ -1,20 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 /**
- * The `no-hardcoded-margin` discipline (CLAUDE.md §3; the pattern is
- * packages/fiscal/src/no-hardcoded-margin.test.ts) applied to the roster-guardrail engine: EVERY
- * threshold it measures against is read from the caller-supplied `WorkTimeRuleset`, so NONE of the
- * ET-statutory default values may appear as a literal in the engine source. A baked-in limit would
- * silently ignore a collective agreement that tightened it — the exact defect this guard exists to prevent.
- *
- * Proved to bite by deletion: temporarily replacing a `ruleset.<field>` read with its statutory
- * default value (e.g. `540`) fails the matching assertion below. The structural constants the engine
- * legitimately uses — 60000 (ms/min), 1440 (min/day), 60 (min/hour), 7 (days/week) — are not
- * guardrail limits and are deliberately not listed.
+ * The roster-guardrail engine reads every threshold from the caller's `WorkTimeRuleset`, so no
+ * ET-statutory default may appear in its source as a literal: a baked-in limit would ignore a
+ * collective agreement that tightened it. Weaker than its name: it matches the listed numbers as
+ * text in one file, so a limit spelled any other way (`9 * 60`) passes. The structural constants
+ * (60000, 1440, 60, 7) are not limits and are not listed.
  */
 
-// Vitest runs through Vite, so `import.meta.glob` is available at runtime; its type is narrowed here
-// (this package carries no `vite` devDependency) exactly as no-hardcoded-margin.test.ts does.
+// Vitest runs through Vite, so `import.meta.glob` exists at runtime; this package has no `vite` types.
 declare global {
   interface ImportMeta {
     glob(
@@ -30,7 +24,6 @@ const engine = import.meta.glob(["./roster-validation.ts"], {
   eager: true,
 }) as Record<string, string>;
 
-/** Each ET-statutory default, and the ruleset field it must be read from instead of hard-coded. */
 const FORBIDDEN_LIMITS: Array<[value: number, field: string]> = [
   [2400, "maxWeeklyMinutes"],
   [720, "minInterShiftRestMinutes"],
@@ -46,7 +39,7 @@ describe("the roster-guardrail engine hard-codes no ruleset limit", () => {
   const source = Object.values(engine)[0];
 
   it("resolves exactly one engine source file", () => {
-    // Without this the checks below would pass vacuously against an undefined/empty source.
+    // Otherwise the checks below pass vacuously against an empty source.
     expect(Object.keys(engine)).toHaveLength(1);
     expect(source).toContain("export function validateRoster");
   });

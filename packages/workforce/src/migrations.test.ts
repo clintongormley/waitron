@@ -29,10 +29,9 @@ import {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core for the setup, which seeds its `tenants`, and for the cases, which seed its `locations`
-  // and `nodes` (`seedLocation`, `seedNode`); identity for `persons`, which the first cases write
-  // and workforce's tables reference. Listed in manifest order; the suite also passes with the
-  // list reversed (measured 2026-09-23).
+  // Core for the `tenants` row the setup seeds and the `locations` and `nodes` rows the cases seed
+  // (`seedLocation`, `seedNode`); identity for `persons`, which the cases write and workforce's
+  // tables reference.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
@@ -41,18 +40,12 @@ const suite = useVenueDb({
 
 const PIN = hashPin("1234");
 
-/** The two values every raw insert below has to supply itself: `id` and `created_at` come from the
- * table's `$defaultFn` generators, which drizzle runs for a BUILDER insert and never for raw SQL,
- * and the generated DDL declares neither with a SQL DEFAULT — without them the statement is refused
- * `NOT NULL constraint failed: <table>.id`. Every insert here stays raw deliberately: what it is
- * proving is the constraint or DEFAULT the MIGRATION declares, not the values drizzle would send. */
+/** `id` and `created_at` come from `$defaultFn` generators a raw insert does not run. The inserts
+ * stay raw because they test what the MIGRATION declares, not what drizzle would send. */
 function rowIdentity() {
   return sql`${newId()}, ${nowIso()}`;
 }
 
-// persons is created by the IDENTITY migration set, which this suite applies with WORKFORCE because
-// employments/time_entries reference it. These integration checks prove the combined
-// [core, identity, workforce] stack lands persons correctly.
 describe("persons, from the identity migration set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
@@ -81,10 +74,7 @@ describe("persons, from the identity migration set layered under workforce", () 
         insert into persons (id, created_at, display_name, pin_hash, role)
         values (${rowIdentity()}, 'Bad role', ${PIN}, 'ceo')`),
     );
-    // The refusal the PostgreSQL enum TYPE performed on its own is now a named CHECK constraint on
-    // a plain text column (`enumCheck`, packages/db/src/schema/columns.ts), so the class is a check
-    // violation rather than the old `22P02`. The constraint NAME is asserted too: the class alone
-    // is also satisfied by any of the eleven other checks on this table.
+    // The name as well as the class: any other check on this table would satisfy the class.
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/persons_role_ck/);
   });
@@ -134,10 +124,7 @@ describe("the D1a time & attendance tables", () => {
 
   it("rejects an entry_kind outside the enum", async () => {
     const { personId, locationId, nodeId } = await seedPersonAndLocation();
-    // Valid genesis chain columns, like the offset case below: the enum's refusal is now a CHECK
-    // constraint rather than a value-coercion error, and a check runs AFTER the NOT NULL columns
-    // are read — so a row missing `node_id`/`recorded_at`/the Slice-4 columns would be refused on
-    // the wrong constraint and the case would pass without ever reaching `entry_kind`.
+    // Every other column valid, so the row cannot be refused on the wrong constraint.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -153,9 +140,7 @@ describe("the D1a time & attendance tables", () => {
 
   it("rejects an event_offset_minutes outside the ±840 range", async () => {
     const { personId, locationId, nodeId } = await seedPersonAndLocation();
-    // Valid genesis chain columns (node_id, recorded_at and the Slice-4 columns are all NOT NULL) so
-    // ONLY the offset check is violated — a raw insert must carry them or it fails on the wrong
-    // constraint.
+    // Every other column valid, so ONLY the offset check is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -204,13 +189,8 @@ describe("the D1b correction columns", () => {
     const personId = await seedPerson(suite.db, `d1b-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db);
     const nodeId = await seedNode(suite.db, brandLocationId(locationId));
-    // Genesis chain columns (node_id, recorded_at + the Slice-4 columns, all NOT NULL) so this base
-    // event is a valid position-1 entry; the D1b tests below append their (deliberately malformed)
-    // correction at position 2 of the SAME (node, location), so the chain columns never collide on
-    // time_entries_chain_position_uq. The instants carry `.000Z` because
-    // `time_entries_event_at_second_ck` admits exactly that spelling of a whole second — a raw
-    // insert writing `…09:00:00Z` is refused on THAT constraint, before reaching the one the case
-    // is about.
+    // A valid position-1 entry; the cases below write at position 2, so they never collide on
+    // time_entries_chain_position_uq. `.000Z` because the whole-second checks demand it.
     const rows = await suite.db.execute<{ id: string }>(sql`
       insert into time_entries (
         id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
@@ -222,8 +202,6 @@ describe("the D1b correction columns", () => {
   }
 
   it("accepts a fully-populated correction row (the ADD VALUE 'correction' landed)", async () => {
-    // Proves migration 0002's `ALTER TYPE ... ADD VALUE 'correction'` applied: an entry_kind the
-    // enum did not carry before is now insertable, with all four correction columns set.
     const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
     await suite.db.execute(sql`
       insert into time_entries (
@@ -240,11 +218,8 @@ describe("the D1b correction columns", () => {
   });
 
   it("rejects a half-populated correction via the shape check", async () => {
-    // corrects_entry_id set but the other three correction columns null — neither all-null (a base
-    // event) nor all-non-null (a correction). Deleting the OR-arm of time_entries_correction_shape_ck
-    // is what this catches.
+    // corrects_entry_id set but the other three correction columns null: neither shape.
     const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
-    // Valid position-2 chain columns so ONLY the correction-shape check is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -259,11 +234,7 @@ describe("the D1b correction columns", () => {
   });
 
   it("rejects a base event carrying a stray correction column", async () => {
-    // The other direction: an `in` event with correction_status set is neither shape. The same check
-    // stops a base row from smuggling in correction metadata.
     const { personId, locationId, nodeId } = await seedBaseEntry();
-    // Valid position-2 chain columns so ONLY the correction-shape check (a base event with a stray
-    // correction column) is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -278,9 +249,7 @@ describe("the D1b correction columns", () => {
   });
 
   it("rejects a correction whose corrects_entry_id references no entry", async () => {
-    // The self-FK: a correction must point at a real entry.
     const { personId, locationId, nodeId } = await seedBaseEntry();
-    // Valid position-2 chain columns so ONLY the self-FK (a dangling corrects_entry_id) is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
@@ -322,9 +291,6 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a published status carrying a null published_at (the publish-shape invariant)", async () => {
-    // draft ⟺ published_at is null. A 'published' row with no stamp is neither shape. Deleting the
-    // roster_versions_publish_shape_ck constraint is what this catches — and it is what stops
-    // publishRoster from ever flipping status without stamping.
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
@@ -347,10 +313,6 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a second published version for the same (location, period) via the partial unique index", async () => {
-    // roster_versions_published_period_uq at most one PUBLISHED version per (location,
-    // exact period). Insert one published row directly (with a stamp so publish-shape passes),
-    // then a second identical-period published row is rejected 23505. Prove by deletion: drop the
-    // CREATE UNIQUE INDEX and the second insert succeeds (two published rows coexist).
     const { locationId } = await seedPersonAndLocation();
     await suite.db.execute(sql`
       insert into roster_versions (id, created_at, location_id, period_start, period_end, status, published_at)
@@ -361,20 +323,14 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         values (${rowIdentity()}, ${locationId}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-    // SQLite names the index's COLUMNS, never the index: the message is
-    // `UNIQUE constraint failed: roster_versions.location_id, roster_versions.period_start,
-    // roster_versions.period_end`. That is what discriminates here, so it is what is asserted —
-    // `roster_versions_published_period_uq` is the only unique index on this table, and it is the
-    // only one over those three columns.
+    // SQLite names the index's columns, not the index; these three are
+    // `roster_versions_published_period_uq`'s.
     expect(engineErrorMessage(error)).toMatch(
       /UNIQUE constraint failed: roster_versions\.location_id, roster_versions\.period_start, roster_versions\.period_end/,
     );
   });
 
   it("allows two DRAFT versions for the same period — the published-only index is partial", async () => {
-    // The index is WHERE status = 'published', so drafts (and superseded rows) for one period
-    // accumulate freely; only the live published row is unique. A non-partial unique index here would
-    // wrongly reject a second draft for a period being re-planned.
     const { locationId } = await seedPersonAndLocation();
     await insertRosterVersion(suite.db, {
       locationId,
@@ -462,8 +418,6 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const error = await captureError(() =>
       insertAbsence(suite.db, { personId, kind: "sabbatical" }),
     );
-    // The enum TYPE's refusal is a named CHECK constraint here (`enumCheck`); see the persons-role
-    // case above for the class change.
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/absences_absence_kind_ck/);
   });
@@ -520,9 +474,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("stores a shift_swap defaulting status to requested, and cascades it away when its from_shift is deleted", async () => {
-    // Also proves the from_shift FK is ON DELETE cascade: a swap is meaningless once its offered
-    // shift is gone, so deleting the shift discards the swap (changing the FK to `restrict` fails the
-    // delete; to `set null` leaves the row and fails the count-0 assertion).
+    // A swap is meaningless once its offered shift is gone, so the from_shift FK cascades.
     const { personId, locationId } = await seedPersonAndLocation();
     const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
     const fromShiftId = await insertDraftShift(suite.db, { personId, locationId });
@@ -571,14 +523,9 @@ describe("the workforce set carries no tenant column", () => {
   ];
 
   /**
-   * One table's columns, as the engine's own catalogue reports them.
-   *
-   * `pragma table_info` replaces `information_schema.columns`, which SQLite does not have. `pk` is
-   * 0 for an ordinary column and the column's 1-based position in the primary key otherwise, which
-   * is what makes a composite key readable in declaration order. The table name is written into
-   * the statement rather than bound: `pragma table_info(?)` is refused at prepare time with
-   * `near "?": syntax error` (measured, and recorded on `packages/db/src/deployment.ts`), and the
-   * names here are this file's own constants, never input.
+   * `pk` is the column's 1-based position in the primary key, 0 otherwise. The table name is written
+   * into the statement because `pragma table_info(?)` does not prepare; the names are this file's
+   * own constants, never input.
    */
   async function columnsOf(table: string) {
     return (
@@ -605,13 +552,8 @@ describe("the workforce set carries no tenant column", () => {
   });
 
   /**
-   * The indexes, read off `sqlite_master` and `pragma index_info` in place of `pg_indexes`.
-   *
-   * `sql is null` is the filter, not a name pattern: SQLite stores no statement for an index it
-   * created itself for a `PRIMARY KEY` or a single-column `UNIQUE` declaration, so those are not
-   * the migration's own indexes and are skipped. The partial index's WHERE clause is not reported
-   * by `pragma index_info`, so it is read out of the stored `CREATE INDEX` text — which is the only
-   * place SQLite keeps it.
+   * A null `sql` marks an index SQLite created itself for a key, not one the migration declared.
+   * `pragma index_info` does not report a partial index's WHERE, so it is read from the stored text.
    */
   it("rebuilds the multi-column keys on their remaining columns", async () => {
     const indexes: Record<string, { columns: string; sql: string }> = {};

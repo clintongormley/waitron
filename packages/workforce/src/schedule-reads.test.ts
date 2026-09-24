@@ -18,10 +18,6 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-// These are person-scoped READ models over mutable planning rows — the scoping predicate is
-// application code, so there is no privilege decision to prove here. The ROUTE that passes the
-// session's personId is proven by deletion in `apps/server/src/schedule-api.test.ts`.
-
 let locationId: string;
 
 const suite = useVenueDb({
@@ -39,12 +35,9 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("listShiftsForPerson", () => {
   it("returns only the requester's shifts in the window (never a second person's), ordered by starts_at", async () => {
-    // Person-scoping is application code. Prove by deletion — drop the
-    // `person_id = ${personId}` predicate and the OTHER person's shift (seeded under the same tenant)
-    // leaks into the result, reddening the `map((r) => r.id)` assertion.
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
-    // Two of MINE, seeded OUT of starts_at order, plus one of the OTHER person's in the same window.
+    // Two of mine, seeded out of starts_at order, plus one of the other person's in the same window.
     const late = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
@@ -69,9 +62,7 @@ describe("listShiftsForPerson", () => {
     const rows = await run((tx) =>
       listShiftsForPerson(tx, { personId: me, from: "2026-01-05", to: "2026-01-08" }),
     );
-    // Only mine, and in starts_at ASC order (the reverse of insertion order above).
     expect(rows.map((r) => r.id)).toEqual([early, late]);
-    // Field mapping on the head row (the earlier shift).
     expect(rows[0]).toEqual({
       id: early,
       locationId,
@@ -85,8 +76,6 @@ describe("listShiftsForPerson", () => {
   });
 
   it("uses a HALF-OPEN [from, to) local-date window — a shift at `from` is in, one at `to` is out", async () => {
-    // Prove by deletion of EACH bound: drop `>= from` and the 04-Jan shift (before the window) leaks in;
-    // drop `< to` and the 06-Jan shift (at the exclusive upper bound) leaks in.
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const before = await insertDraftShift(suite.db, {
       personId: me,
@@ -116,10 +105,7 @@ describe("listShiftsForPerson", () => {
   });
 
   it("compares the LOCAL wall date (offset-aware), not the raw UTC instant", async () => {
-    // A shift at 2026-01-05T23:30Z with a +60-minute offset is LOCAL 2026-01-06T00:30 → local date
-    // 2026-01-06, so a [2026-01-05, 2026-01-06) window EXCLUDES it, even though its UTC date is 05-Jan.
-    // Delete the `+ starts_offset_minutes * interval '1 minute'` term and the raw UTC date (05-Jan)
-    // would fall inside, leaking it in — the offset-awareness this window shares with publishRoster.
+    // 23:30Z at +60 is local 01-06, outside the window, though its UTC date is 01-05.
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const rollsOver = await insertDraftShift(suite.db, {
       personId: me,
@@ -144,16 +130,11 @@ describe("listSwapsForPerson", () => {
   }
 
   it("returns swaps I REQUESTED and swaps OFFERED TO ME with the right direction, and nobody else's", async () => {
-    // A swap matches on `requested_by_person_id = me` OR `to_person_id = me`. Person-scoping is
-    // application code — prove by deletion: drop that predicate and a swap between two OTHER people
-    // (below) leaks into my list, reddening the `not.toContain` assertion. `direction` is derived from
-    // which column matched.
     const { me, other } = await twoPeople();
     const third = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
     const myShift = await insertDraftShift(suite.db, { personId: me, locationId });
     const theirShift = await insertDraftShift(suite.db, { personId: other, locationId });
     const othersShift = await insertDraftShift(suite.db, { personId: other, locationId });
-    // One I requested (me → other), one offered to me (other → me), one between two other people.
     const requestedByMe = await insertShiftSwap(suite.db, {
       requestedByPersonId: me,
       fromShiftId: myShift,
@@ -173,13 +154,11 @@ describe("listSwapsForPerson", () => {
     });
     const rows = await run((tx) => listSwapsForPerson(tx, { personId: me }));
     const ids = rows.map((r) => r.id);
-    // created_at DESC → the later-created (offeredToMe) first.
     expect(ids).toEqual([offeredToMe, requestedByMe]);
     expect(ids).not.toContain(notMine);
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get(requestedByMe)!.direction).toBe("requested_by_me");
     expect(byId.get(offeredToMe)!.direction).toBe("offered_to_me");
-    // Field mapping on the offered-to-me row.
     expect(byId.get(offeredToMe)).toEqual({
       id: offeredToMe,
       requestedByPersonId: other,
@@ -195,12 +174,9 @@ describe("listSwapsForPerson", () => {
 
 describe("listAbsencesForPerson", () => {
   it("returns only the requester's absences (all statuses), ordered by starts_on desc", async () => {
-    // Person-scoping is application code — prove by deletion: drop the `person_id = ${personId}`
-    // predicate and the OTHER person's absence leaks in, reddening the `not.toContain`.
     const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
-    // Two of mine (a requested and a rejected, so ALL statuses show — not just requested like the
-    // manager queue), seeded out of starts_on order, plus one of the other person's.
+    // A requested and a rejected: every status shows, unlike the manager queue.
     const mineEarly = await insertAbsence(suite.db, {
       personId: me,
       startsOn: "2026-02-01",
@@ -220,11 +196,9 @@ describe("listAbsencesForPerson", () => {
     });
     const rows = await run((tx) => listAbsencesForPerson(tx, { personId: me }));
     const ids = rows.map((r) => r.id);
-    // starts_on DESC → the later-starting absence first.
     expect(ids).toEqual([mineLate, mineEarly]);
     expect(ids).not.toContain(theirs);
     expect(rows.map((r) => r.status)).toEqual(["rejected", "requested"]);
-    // Field mapping on the head row.
     expect(rows[0]).toEqual({
       id: mineLate,
       personId: me,

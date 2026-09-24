@@ -1,64 +1,27 @@
 /**
- * The work-session projection — the derived, exportable view of the immutable `time_entries`
- * stream, computed rather than stored (design §5: "recomputed over events, latest-correction-wins,
- * full history retained"). Slice 2 has no corrections yet, so this is a plain fold; Slice 3 layers
- * reprojection on top of the SAME functions.
- *
- * Pure and DB-free on purpose: overtime is projection LOGIC over `time_entries`, so
- * ./projection.test.ts drives these functions with hand-built entry arrays and no database at all.
- *
- * Overtime has TWO lawful readings under Spanish labour law, and the code returns BOTH rather than
- * choosing (which one binds is collective-agreement/contract-dependent — an asesor-laboral decision, not a code
- * decision; see `summarisePeriod` and the plan's advisor items):
- *
- *   - **Daily-accrual** (the reasoning attributed to ET art. 35): a day worked over its ordinary
- *     target is an overtime hour THAT DAY, and a shorter later day does not cancel it. So
- *     overtime is `Σ over days of max(0, worked(day) − dailyTarget(day))`.
- *   - **Period-net** (the reasoning attributed to ET art. 34.2, «distribución irregular de la
- *     jornada»): hours may net out across days within a reference period — lawful only under a
- *     collective agreement or the default annual-working-time allowance. Overtime is `max(0, totalWorked −
- *     totalContracted)` over the period.
- *
- * These are legal-reasoning attributions to guide the model, NOT a legal opinion; the binding rule
- * for a given employment is collective-agreement-driven (D2 / employment terms).
+ * Overtime has TWO lawful readings, and the code returns BOTH rather than choosing: which one binds
+ * for an employment is a collective-agreement decision, not a code decision. The article
+ * attributions below guide the model; they are NOT a legal opinion.
  */
 
-/** The clock-event kinds a shift is built from, plus `correction` (Slice 3) — an append row that
- * supersedes an earlier entry's timestamp rather than mutating it. */
+/** `correction` supersedes an earlier entry's timestamp rather than mutating it. */
 export type WorkforceEntryKind = "in" | "out" | "break_start" | "break_end" | "correction";
 
-/** A correction's lifecycle. Only `approved` corrections affect the projection; `requested` ones are
- * retained in history but pending (the worker's art. 34.9 right to contest, not yet actioned). */
+/** Only `approved` corrections affect the projection. */
 export type CorrectionStatus = "requested" | "approved";
 
-/** Exactly the `time_entries` columns the projection reads — never the whole row. */
 export interface TimeEntryRecord {
-  /** The row's own id (`time_entries.id`) — what a correction targets via `correctsEntryId`. */
   entryId: string;
   personId: string;
   locationId: string;
-  /** The node whose chain this entry belongs to (`node_id`) — part of the chain key and the second
-   * key of the cross-node correction order (`applyCorrections`). */
   nodeId: string;
   entryKind: WorkforceEntryKind;
-  /** The trusted event instant (`event_at`), an ISO-8601 timestamptz string. On a `correction` this
-   * is the CORRECTED value (the new clock time), not a recording time — that is `recordedAt`. */
+  /** On a `correction`, the CORRECTED clock time, not a recording time — that is `recordedAt`. */
   eventAt: string;
-  /** The recording node's clock at append (`recorded_at`), an ISO-8601 timestamptz string. Hashed and
-   * monotonic per chain (spec §4.1); the first key of the cross-node correction order
-   * (`applyCorrections`). */
   recordedAt: string;
-  /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
-  /** The 1-based tamper-evident chain position (`sequence_no`) within this (node, location)
-   * chain — hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
-   * undetected. The last key of the cross-node correction order (`applyCorrections`), decisive only
-   * within a single chain once `recordedAt` and `nodeId` tie. */
   sequenceNo: number;
-  /** On a `correction`, the entry it supersedes (a base event or an earlier correction). Null/absent
-   * on a base event. */
   correctsEntryId?: string | null;
-  /** On a `correction`, `requested` or `approved`. Null/absent on a base event. */
   correctionStatus?: CorrectionStatus | null;
 }
 
@@ -66,69 +29,48 @@ export interface TimeEntryRecord {
 export interface WorkSession {
   personId: string;
   locationId: string;
-  /** The worker's LOCAL calendar day (art. 34.9 records per worker per day). */
+  /** The worker's LOCAL calendar day. */
   workDate: string;
-  /** The shift start as the raw UTC instant (`event_at`). The local render is derived via
-   * `localWallClock(startedAt, startOffsetMinutes)`, never stored here. */
+  /** The raw UTC instant; render it with `localWallClock(startedAt, startOffsetMinutes)`. */
   startedAt: string;
-  /** The wall-clock offset in minutes at the shift start (`event_offset_minutes`). May differ from
-   * `endOffsetMinutes` across a DST boundary, so both ends are carried. */
+  /** May differ from `endOffsetMinutes` across a DST boundary, so both ends are carried. */
   startOffsetMinutes: number;
-  /** The shift end as the raw UTC instant (`event_at`); local render via
-   * `localWallClock(endedAt, endOffsetMinutes)`. */
   endedAt: string;
-  /** The wall-clock offset in minutes at the shift end (`event_offset_minutes`). */
   endOffsetMinutes: number;
   breakMinutes: number;
   workedMinutes: number;
 }
 
-/** One day's worked-vs-contracted line, exposed so any overtime rule — including future
- * collective-agreement-specific ones — is DERIVABLE from the data rather than baked into this module. */
+/** Exposed so any overtime rule is DERIVABLE from the data rather than baked into this module. */
 export interface DailyWorkTotal {
-  /** The worker's LOCAL calendar day. */
   workDate: string;
-  /** All the day's sessions summed (a split shift has more than one), so the daily target is
-   * compared against the whole day, not each session. */
+  /** All the day's sessions summed, so the daily target is compared against the whole day. */
   workedMinutes: number;
-  /** The day's ordinary target — a floor-scope default today (`dailyContractedTargetMinutes`). */
   contractedTargetMinutes: number;
-  /** `max(0, workedMinutes − contractedTargetMinutes)` — this day's daily-accrual overtime. */
   overtimeMinutes: number;
 }
 
-/** Which of the two overtime models a caller wants as the single headline figure. */
 export type OvertimeModel = "daily-accrual" | "period-net";
 
-/** The contracted baseline the two overtime models measure against. The two figures come from
- * DIFFERENT aggregations (the period baseline is scaled across the whole period; the daily target is
- * a per-day floor-scope default), so they are supplied separately and may not be mutually
- * derivable. */
+/** The two baselines come from different aggregations, so they are supplied separately and may not
+ * be mutually derivable. */
 export interface ContractedTerms {
   /** The period-net baseline: ordinary working time scaled across the whole pay period. */
   periodMinutes: number;
-  /** One ordinary day's target — the daily-accrual baseline. A documented default via
-   * `dailyContractedTargetMinutes`; D2 scheduling/`convenio_config` refines it per employment. */
+  /** The daily-accrual baseline. */
   dailyTargetMinutes: number;
 }
 
-/**
- * A pay-period summary that reports BOTH overtime models side by side plus the per-day breakdown, so
- * no legal reading is hard-coded away. `overtimeMinutes` is a single headline for callers that need
- * one — a conservative default, never the authoritative figure (see `summarisePeriod`).
- */
 export interface PeriodSummary {
   workedMinutes: number;
-  /** The period-net baseline (`ContractedTerms.periodMinutes`). */
   contractedMinutes: number;
   /** `Σ over days of max(0, worked(day) − dailyTarget(day))` — the daily-accrual model (art. 35). */
   dailyAccrualOvertimeMinutes: number;
   /** `max(0, workedMinutes − contractedMinutes)` — the period-net model (art. 34.2). */
   periodNetOvertimeMinutes: number;
-  /** The headline figure selected by `summarisePeriod`'s `headlineModel` parameter. NOT
-   * authoritative — the binding model is collective-agreement-driven (asesor-laboral). */
+  /** The headline selected by `headlineModel`. NOT authoritative. */
   overtimeMinutes: number;
-  /** The per-day worked-vs-contracted lines, ascending by `workDate`. */
+  /** Ascending by `workDate`. */
   days: DailyWorkTotal[];
 }
 
@@ -141,28 +83,14 @@ export interface Period {
 
 const MS_PER_MINUTE = 60_000;
 
-/** The wall-clock calendar day for an instant + its offset. `event_at` is stored as a UTC instant
- * alongside `event_offset_minutes` (the `sales.issued_at`/`issued_offset_minutes` pattern), so the
- * local day is the instant shifted by the offset, read back as a UTC date. */
 function localDate(eventAt: string, offsetMinutes: number): string {
   return new Date(Date.parse(eventAt) + offsetMinutes * MS_PER_MINUTE).toISOString().slice(0, 10);
 }
 
 /**
- * Renders an instant as its LOCAL wall-clock time with an explicit offset, e.g.
- * `2026-01-06T00:30:00+01:00` — the sibling of `localDate` for a full timestamp. The part before the
- * offset is the concrete local time a human reads (art. 34.9 requires «el horario concreto de inicio
- * y finalización»); the `±HH:MM` offset keeps the instant recoverable and disambiguates the DST
- * fall-back hour (the same wall-clock time appears once at +02:00 and once at +01:00).
- *
- * Computed as `instant + offsetMinutes`, read back as UTC — the offset is captured PER EVENT, so a
- * January event carries +60 and a July one +120 with no timezone lookup. Whole seconds only (the
- * stored instants are already whole-second, `time_entries_event_at_second_ck`).
- *
- * Deliberately MIRRORS the fiscal `formatDateTime` (from `@waitron/verifactu`) — same
- * `YYYY-MM-DDThh:mm:ss±hh:mm` shape — without importing it: `@waitron/workforce` must not depend on
- * the fiscal domain. Also
- * mirrors its file-local sibling `localDate`, which renders the date half of the same instant.
+ * E.g. `2026-01-06T00:30:00+01:00`. The explicit offset keeps the instant recoverable and
+ * disambiguates the DST fall-back hour. Mirrors the fiscal `formatDateTime` shape without importing
+ * it: `@waitron/workforce` must not depend on the fiscal domain.
  */
 export function localWallClock(instant: string, offsetMinutes: number): string {
   const local = new Date(Date.parse(instant) + offsetMinutes * MS_PER_MINUTE)
@@ -207,12 +135,9 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
 }
 
 /**
- * True when `a` is the later of two approved corrections under the total order
- * `(recordedAt, nodeId, sequenceNo)` (spec §4.2). A single tuple compare, NOT a "same-node →
- * sequenceNo, else recordedAt" special case — that is not transitive across three entries spanning
- * two chains, so it could pick different winners depending on comparison order. Within one chain
- * `recordedAt` is monotonic and `nodeId` constant (spec §4.1), so this reduces to the old
- * greatest-`sequenceNo` rule and the single-node tests still hold.
+ * The total order `(recordedAt, nodeId, sequenceNo)` (spec §4.2). A single tuple compare, NOT a
+ * "same-node → sequenceNo, else recordedAt" special case, which is not transitive across three
+ * entries spanning two chains.
  */
 function laterThan(a: TimeEntryRecord, b: TimeEntryRecord): boolean {
   if (a.recordedAt !== b.recordedAt) return a.recordedAt > b.recordedAt;
@@ -221,24 +146,12 @@ function laterThan(a: TimeEntryRecord, b: TimeEntryRecord): boolean {
 }
 
 /**
- * The effective (corrected) timestamp and offset for one base event, and the base events with their
- * corrections applied.
+ * Latest approved correction wins, following a chain when a correction is itself corrected. A
+ * correction is chained under its OWN recording node, so two nodes' corrections of one target can sit
+ * in different chains — hence `laterThan`'s cross-chain order rather than `sequenceNo` alone.
  *
- * A correction never mutates a stored row — it is an append that carries a new timestamp and points
- * at the entry it supersedes (`correctsEntryId`). Reprojection resolves each base event by walking
- * the approved corrections that target it, latest-correction-wins by the total order `laterThan`
- * commits to, following a chain when a correction is itself corrected (design §5).
- *
- * All corrections of one target share that target's location, but a correction is chained under its
- * OWN recording node, so two nodes' approved corrections of one target can sit in different chains —
- * the reason the winner is ordered across chains by `(recordedAt, nodeId, sequenceNo)` rather than by
- * `sequenceNo` alone (spec §4.2). `sequenceNo` remains the within-chain position the tamper-evidence
- * hash commits to, so a reorder within a chain is still tamper-evident.
- *
- * Only `approved` corrections are followed; a `requested` one is retained in history but pending, so
- * it is invisible here. The walk needs no cycle guard: a correction can only be inserted after the
- * row it targets already exists (the self-FK), so a chain's `sequenceNo` values strictly increase and
- * are bounded — it cannot revisit a node.
+ * No cycle guard: each correction has exactly one target, so a walk that starts at a base event
+ * cannot return to an entry it has passed.
  */
 function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[] {
   const latestApprovedByTarget = new Map<string, TimeEntryRecord>();
@@ -269,19 +182,12 @@ function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[
 }
 
 /**
- * Folds a flat `time_entries` stream into per-person workday sessions.
- *
- * Sorts each person's events by `event_at` BEFORE pairing — offline capture appends in ingest
- * order, which need not be event-time order (design §5), and the projection commits to event time.
- * A stray event with no matching open shift is dropped rather than throwing: the state-machine in
- * `clocking.ts` keeps the live stream well-formed, and a projection over historical data must stay
- * total.
+ * Sorts each person's events by `event_at` BEFORE pairing: offline capture appends in ingest order,
+ * which need not be event-time order. A stray event with no matching open shift is dropped rather
+ * than throwing, so a projection over historical data stays total.
  */
 export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSession[] {
   const sessions: WorkSession[] = [];
-  // Reproject over events + corrections: corrections are folded into the base events they supersede
-  // before pairing (design §5, the Slice-2 computed-projection seam), so a recompute always reflects
-  // the latest approved value while every prior row stays in the source stream (history retained).
   for (const [personId, personEntries] of groupByPerson(applyCorrections(entries))) {
     const ordered = [...personEntries].sort(
       (a, b) => Date.parse(a.eventAt) - Date.parse(b.eventAt),
@@ -313,28 +219,12 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
   return sessions;
 }
 
-/**
- * One ordinary day's contracted target, derived as the contracted weekly working time divided by the
- * number of ordinary working days in the week.
- *
- * `workingDaysPerWeek` is now a PARAMETER, not a module constant: it comes from the resolved
- * `WorkTimeRuleset` (D2 `convenio_config.working_days_per_week`, default 5 — a Mon–Fri week — set on
- * the config row, no longer baked in here). The former `DEFAULT_WORKING_DAYS_PER_WEEK = 5` is now
- * that column's default, so a default config row reproduces the old value exactly; a collective agreement with a
- * different working week gets a different target without a code change.
- *
- * Deliberately NOT hard-coded collective-agreement numbers (that would misrepresent the law and trip the
- * english-only guard on Spanish labour tokens): only a division by a caller-supplied denominator.
- */
 export function dailyContractedTargetMinutes(
   contractedMinutesPerWeek: number,
   workingDaysPerWeek: number,
 ): number {
-  // Defence in depth: `convenio_config`'s `working_days_per_week` CHECK already pins this to 1..7, but
-  // this helper is on the public barrel, so a caller reaching it another way must not silently get
-  // Infinity/NaN — a 0, negative, or NaN denominator would corrupt the overtime target. `> 0` rejects
-  // all three at once (NaN > 0 is false). A plain Error, not a registered code: this is a
-  // programmer-error invariant, never a till-facing domain condition (cf. `@waitron/verifactu`).
+  // `convenio_config`'s CHECK already pins this to 1..7, but this helper is public. `> 0` also rejects
+  // NaN. A plain Error: a programmer error, never a till-facing condition.
   if (!(workingDaysPerWeek > 0)) {
     throw new Error(
       `dailyContractedTargetMinutes: workingDaysPerWeek must be positive, received ${workingDaysPerWeek}`,
@@ -344,21 +234,12 @@ export function dailyContractedTargetMinutes(
 }
 
 /**
- * Summarises a pay period, reporting BOTH overtime models plus the per-day breakdown.
+ * Both models clamp at zero: undertime is a deficit, not negative overtime.
  *
- * `dailyAccrualOvertimeMinutes` sums each day's `max(0, worked − dailyTarget)` (art. 35: a day's
- * excess is an overtime hour that day, never nettable against a later short day).
- * `periodNetOvertimeMinutes` is `max(0, totalWorked − periodMinutes)` (art. 34.2 distribución
- * irregular: hours may net out across days within a reference period). Both clamp at zero — undertime
- * is a deficit, not negative overtime.
- *
- * `headlineModel` chooses the single `overtimeMinutes` field, defaulting to `daily-accrual`. This is
- * a CONSERVATIVE DEFAULT, not an authoritative choice: `daily-accrual ≥ period-net` whenever both are
- * measured against the same per-day targets — `Σ max(0, x_d) ≥ max(0, Σ x_d)` — so it never nets a
- * day's overtime away. (That inequality can be crossed when `periodMinutes` is scaled independently
- * of the daily targets, e.g. a 5-day-equivalent weekly baseline against a worker who worked 7 days;
- * this is precisely why BOTH figures are returned and neither is stamped "official". Which model
- * binds for a given employment is collective-agreement/contract-driven — an asesor-laboral decision.)
+ * `headlineModel` defaults to `daily-accrual` as a CONSERVATIVE default, not an authoritative one:
+ * `Σ max(0, x_d) ≥ max(0, Σ x_d)` when both are measured against the same per-day targets. That can be
+ * crossed when `periodMinutes` is scaled independently of the daily targets, which is why BOTH
+ * figures are returned.
  */
 export function summarisePeriod(
   sessions: readonly WorkSession[],
@@ -374,8 +255,6 @@ export function summarisePeriod(
   }
 
   const days: DailyWorkTotal[] = [...workedByDate.entries()]
-    // Ascending by date. `localeCompare` on zero-padded ISO dates orders chronologically; the map's
-    // keys are unique days, so no equal-key tie-break arises.
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([workDate, workedMinutes]) => ({
       workDate,

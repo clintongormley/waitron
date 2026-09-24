@@ -19,16 +19,11 @@ const OWNED = [
   "shift_swaps",
 ];
 
-/** Every core table this package's schema files import to declare foreign keys. None of these may
- * ever appear in this package's generated SQL. `nodes` joined the list with the per-node chain
- * rekey — referenced by `time_entries`/`workforce_chains`, owned by @waitron/db. */
+/** Core tables: none may appear in this package's generated SQL. */
 const CORE = ["tenants", "locations", "tills", "nodes"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
-/** How drizzle-kit writes a table name in this package's generated SQL. SQLite quotes an
- * identifier with backticks where PostgreSQL used double quotes, measured by reading
- * `drizzle/0000_baseline.sql` on 2026-09-22. */
 function createTable(table: string): string {
   return `create table \`${table}\``;
 }

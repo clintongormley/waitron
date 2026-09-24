@@ -1,4 +1,3 @@
-// The entire public surface of @waitron/workforce. Re-exports only — no logic here.
 export { WORKFORCE_MIGRATIONS } from "./migrations.js";
 export { employments } from "./schema/employments.js";
 export {
@@ -94,8 +93,6 @@ export type {
 export { WORKFORCE_CLASSIFICATION } from "./classification.js";
 export { WORKFORCE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
-// Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
-// from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
-// See errors.reachability.test.ts.
+// Keeps errors.ts's registry augmentation reachable from the public barrel.
 import "./errors.js";
 export { WORKFORCE_CHANGE_SOURCES } from "./classification.js";

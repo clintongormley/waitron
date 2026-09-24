@@ -1,34 +1,11 @@
 /**
  * A cold restore CONTINUES the working-time chain, and a survivor's forked row is refused loudly.
- *
  * CLAUDE.md §5 names this file as the guard for both halves.
  *
- * ## What this suite documents (spec §2 decision 3, §5.1)
- *
- * `packages/workforce` declares NO `backup.restore` hook. A cold-restored box keeps its `node_id`
- * and the backup's chain head (pointing at row M with M's stored hash) and rows 1..M; its next
- * append CONTINUES that chain at M+1, chaining onto M's hash. There is no reset and no clock-floor
- * — UNLIKE the fiscal chain, whose restore mints a fresh SIF for AEAT. A survivor holding a forked
- * copy of the chain is refused by `time_entries_chain_position_uq` rather than merged into a fork,
- * however its rows reach this database; nothing carries rows between nodes today.
- *
- * ## What converting it cost
- *
- * It ran against real PostgreSQL through `useTemplateDb`. Nothing here ever needed a second
- * connection or a lock — the header said so, and gave spec §6's naming convention as the only
- * reason for real Postgres — so the conversion is the harness and the two refusal assertions, not
- * the subject.
- *
- * **The one assertion that could not be carried over verbatim is the second case's, and it is the
- * guard CLAUDE.md §5 names, so here is exactly what changed.** On PostgreSQL the refusal was
- * asserted as SQLSTATE `23505` plus a message containing the index's NAME,
- * `time_entries_chain_position_uq`. SQLite does not report a constraint's name for a unique index
- * over plain columns; it reports the table and the columns that collided. Measured 2026-09-22 on
- * Node v26.7.0, a real collision on a two-column index: errcode `2067`, message
- * `UNIQUE constraint failed: <table>.<col>, <table>.<col>`. The assertion below therefore names the
- * SAME index by its columns instead of by its name — `(node_id, location_id, sequence_no)`, which
- * is `time_entries_chain_position_uq`'s declaration and nothing else's. The refusal is still
- * asserted as a uniqueness violation, and a row count confirms the fork did not land.
+ * `packages/workforce` declares NO `backup.restore` hook: the restored box keeps its `node_id`, the
+ * backup's chain head and rows 1..M, and its next append continues at M+1. No reset, unlike the
+ * fiscal chain. A forked copy of position M+1 is refused by `time_entries_chain_position_uq`.
+ * SQLite names a unique index's columns, not the index, so the refusal is asserted by those columns.
  */
 import { and, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
@@ -89,23 +66,10 @@ async function readHead() {
 }
 
 /**
- * A raw insert claiming `position` on this (node, location) chain — the survivor's copy arriving at
- * drain. Every column but the position is a valid non-genesis row (prev_entry_hash set, whole-second
- * timestamps, hex hash), so the ONLY constraint it can trip is the chain-position uq.
- *
- * `id` is stated rather than left out. On PostgreSQL the column had a server-side default; on this
- * engine it is a Drizzle `$defaultFn` that only the insert BUILDER runs, so a raw insert omitting it
- * is refused `NOT NULL constraint failed: time_entries.id` — a refusal on the WRONG constraint,
- * which would make this case pass for a reason that has nothing to do with the chain position.
- * A fresh uuid is also what a survivor's row would genuinely carry.
- *
- * The two timestamps carry `.000` for the same reason, and it was measured here rather than
- * assumed: `'2026-01-05T20:00:00Z'` — the exact literal this fixture used on PostgreSQL — is
- * refused `CHECK constraint failed: time_entries_event_at_second_ck` (errcode 275, 2026-09-22), so
- * the case would have gone green on the WRONG constraint. The check is a `glob` admitting exactly
- * `…T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z` (`drizzle/0000_baseline.sql:163`), which is what
- * `truncateToWholeSecond` (`./chain.ts`) emits, since `toISOString` always writes the milliseconds
- * field.
+ * A raw insert claiming `position` on this (node, location) chain — the survivor's copy arriving.
+ * Every other column is valid, so the ONLY constraint it can trip is the chain-position uq: `id` is
+ * stated because its default is a Drizzle `$defaultFn` a raw insert does not run, and the
+ * timestamps carry `.000` because the whole-second checks on both columns demand it.
  */
 function rawForkInsertAt(position: number) {
   return suite.db.run(sql`
@@ -125,10 +89,7 @@ describe("cold restore continues the working-time chain (no hook)", () => {
       await suite.db.transaction((tx) => appendToChain(tx, k, inputAt(at)));
     }
 
-    // The restore is a NO-OP by design: the restored DB holds exactly rows 1..M and a head pointing
-    // at row M with M's stored hash. That is precisely the state M appends leave behind, so we
-    // assert it and then continue — there is no hook to invoke, no pointer to reset, no counter to
-    // floor.
+    // The restore is a no-op: the restored DB is exactly the state M appends leave behind.
     const restored = await readChain(suite.db, k);
     const head = await readHead();
     const rowM = restored[restored.length - 1]!;
@@ -136,7 +97,6 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     expect(head.sequenceNo).toBe(3);
     expect(head.lastEntryHash).toBe(rowM.entryHash);
 
-    // Continue: the next append reads the restored head, computes M+1, and chains onto row M's hash.
     const appended = await suite.db.transaction((tx) =>
       appendToChain(tx, k, inputAt("2026-01-06T09:00:00Z")),
     );
@@ -148,8 +108,7 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     expect(rowMPlus1.isFirstEntry).toBe(false);
     expect(rowMPlus1.prevEntryHash).toBe(rowM.entryHash);
 
-    // ONE strict segment 1..4: genesis stays at position 1 (no mid-chain genesis a reset would have
-    // planted), contiguous, and every hash recomputes — the strict verifier is untouched (spec §5.2).
+    // One strict segment: a reset would have planted a second genesis mid-chain.
     expect(chain.map((e) => e.sequenceNo)).toEqual([1, 2, 3, 4]);
     expect(chain.filter((e) => e.isFirstEntry).map((e) => e.sequenceNo)).toEqual([1]);
     expect(verifyChain(chain)).toEqual({ ok: true });
@@ -163,24 +122,15 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     }
     await suite.db.transaction((tx) => appendToChain(tx, k, inputAt("2026-01-06T09:00:00Z")));
 
-    // A survivor (a promoted cloud) also wrote position 4 on this same (node, location) lineage.
-    // However its copy ever reaches this database, it lands on a position the box already holds and
-    // is refused LOUDLY — never merged into a fork. The insert here is the local proxy for that
-    // arrival; nothing carries rows between nodes today.
+    // A survivor also wrote position 4 on this lineage; nothing carries rows between nodes today, so
+    // a raw insert stands in for its arrival.
     const error = await captureError(() => rawForkInsertAt(4));
     expect(isUniqueViolation(error)).toBe(true);
-    // The header records why this names the index's COLUMNS rather than its name. These three are
-    // `time_entries_chain_position_uq`'s declaration, so a refusal naming any other key — the
-    // primary key, say — fails here rather than being read as this one.
+    // `time_entries_chain_position_uq`'s columns, so a refusal on any other key fails here.
     expect(constraintTarget(error)).toEqual({
       table: "time_entries",
       columns: ["node_id", "location_id", "sequence_no"],
     });
-    // Control in the other direction, run 2026-09-22: the SAME row at `rawForkInsertAt(5)` — a
-    // position the box does not hold — is ACCEPTED, and `captureError` fails with `expected the
-    // operation to be rejected, but it succeeded`. So what refuses position 4 is the position, not
-    // some other constraint this fixture trips on the way past.
-    // And the fork did not land: the box's own four rows are all that is there.
     expect(await readChain(suite.db, k)).toHaveLength(4);
   });
 });

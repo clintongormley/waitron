@@ -12,10 +12,8 @@ import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
-/** The values a DEFAULT `convenio_config` row resolves to — the single source of the default is now
- * that column, not a fallback in `workSummary`. The generic package cannot import the -es resolver,
- * so its tests pass the resolved values explicitly; `packages/workforce-es`'s `work-summary.test.ts`
- * pins that a default row resolves to exactly these and reproduces these same numbers. */
+/** What a default `convenio_config` row resolves to; this package cannot import the -es resolver,
+ * and `packages/workforce-es`'s `work-summary.test.ts` pins that it resolves to these. */
 const DEFAULT_RULESET = {
   workingDaysPerWeek: 5,
   overtimeModel: "daily-accrual",
@@ -35,7 +33,6 @@ const suite = useVenueDb({
   },
 });
 
-/** A fresh person per test, so each test's clock state is isolated in the shared append-only table. */
 async function freshPerson(name: string): Promise<string> {
   return seedPerson(suite.db, name);
 }
@@ -44,7 +41,6 @@ function event(personId: string, at: string): ClockEventInput {
   return { nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
-/** Runs a backend call inside a tenant transaction, the shape a till caller uses. */
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
@@ -150,15 +146,13 @@ describe("clock state machine", () => {
 });
 
 describe("workSummary", () => {
-  /** Clocks a plain 08:00→17:00 (9h) day for a person. */
   async function nineHourDay(personId: string, date: string): Promise<void> {
     await run((tx) => backend.clockIn(tx, event(personId, `${date}T08:00:00Z`)));
     await run((tx) => backend.clockOut(tx, event(personId, `${date}T17:00:00Z`)));
   }
 
   it("reports worked and both overtime figures against the employment's contracted week", async () => {
-    // Five 9h days against a 40h (2400) week. Every day is 60 over its 8h (480) target, so the two
-    // models agree at 300 here; the daily target is 2400 ÷ 5 = 480 (`dailyContractedTargetMinutes`).
+    // Every day runs 60 over its 480 target, so the two models agree at 300.
     const p = await freshPerson("summary-over");
     await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
@@ -192,10 +186,8 @@ describe("workSummary", () => {
   });
 
   it("scales the period-net baseline to the period length while the daily model stays per-day", async () => {
-    // A two-week period against a 2400-minute week is a 4800-minute PERIOD-NET baseline. One 9h day
-    // (540) is well under it, so period-net overtime is zero — proving the baseline is
-    // period-length-scaled, not a bare weekly figure. The daily model is unaffected by period length:
-    // that same day is still 60 over its 8h target, so the two figures legitimately diverge here.
+    // Two weeks make a 4800 period-net baseline, so one 9h day is no period-net overtime but is still
+    // 60 over its daily target.
     const p = await freshPerson("summary-scaled");
     await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
@@ -227,10 +219,7 @@ describe("workSummary", () => {
   });
 
   it("sizes the daily target from a supplied working_days_per_week, not the 5-day default", async () => {
-    // The de-hard-coding, end to end through the backend. A 6-day collective-agreement week makes the daily
-    // target 2400 ÷ 6 = 400, so a 9h (540) day is 140 over it — where the 5-day `DEFAULT_RULESET`
-    // gives 480 and 60. Passing the resolved WorkTimeRuleset's working_days_per_week is what changes
-    // it.
+    // 2400 ÷ 6 = 400, so a 9h day is 140 over it, where 5 days would give 480 and 60.
     const p = await freshPerson("summary-6day");
     await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
@@ -246,12 +235,7 @@ describe("workSummary", () => {
   });
 
   it("uses an explicit dailyTargetMinutes override as the daily-accrual target, bypassing the weekly derivation", async () => {
-    // `convenio_config.daily_target_minutes`, once the asesor sets one, IS the per-day target — the
-    // weekly ÷ working-days derivation is bypassed. A 400-min override against a 9h (540) day is 140
-    // over it, where the derived 2400 ÷ 5 = 480 target gives 60. Prove by deletion: drop the
-    // `ruleset.dailyTargetMinutes ??` in workSummary and this reverts to 480/60. The NULL path (a
-    // DEFAULT `convenio_config` row → derivation, the 2700/2400/300 case) is pinned by the
-    // default-ruleset tests above, which carry `dailyTargetMinutes: null` and stay green.
+    // The override bypasses the weekly ÷ working-days derivation, which would give 480 and 60.
     const p = await freshPerson("summary-daily-override");
     await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
@@ -267,9 +251,7 @@ describe("workSummary", () => {
   });
 
   it("selects the headline overtime model from the options, changing only the headline", async () => {
-    // Which model binds is collective-agreement-driven (overtime_model). A 9h day then a 7h day is 60
-    // daily-accrual but 0 period-net against a full-week baseline. Flipping the model must move ONLY
-    // the headline `overtimeMinutes`; the two underlying figures are computed regardless and stay put.
+    // 60 daily-accrual but 0 period-net; flipping the model must move only the headline.
     const p = await freshPerson("summary-model");
     await seedEmployment(suite.db, { personId: p, contractedMinutesPerWeek: 2400 });
     await run((tx) => backend.clockIn(tx, event(p, "2026-01-05T08:00:00Z"))); // 9h
@@ -287,7 +269,6 @@ describe("workSummary", () => {
 
     expect(daily.overtimeMinutes).toBe(60);
     expect(period.overtimeMinutes).toBe(0);
-    // Only the headline moved: both underlying figures are identical between the two calls.
     expect(period.dailyAccrualOvertimeMinutes).toBe(60);
     expect(period.periodNetOvertimeMinutes).toBe(0);
     expect(daily.dailyAccrualOvertimeMinutes).toBe(period.dailyAccrualOvertimeMinutes);

@@ -6,7 +6,6 @@ import {
   type VerifiableEntry,
 } from "./chain-hash.js";
 
-/** A base clock event's content, minus the chain fields (`sequenceNo`, `prevEntryHash`). */
 function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
   return {
     sequenceNo: 1,
@@ -28,12 +27,10 @@ function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
   };
 }
 
-/** Builds one chained, verifiable entry from content — the shape a read-back row projects to. */
 function link(input: EntryHashInput, isFirstEntry: boolean): VerifiableEntry {
   return { ...input, isFirstEntry, entryHash: computeEntryHash(input) };
 }
 
-/** A valid three-entry chain: genesis + two linked successors. */
 function validChain(): VerifiableEntry[] {
   const e1input = content({ sequenceNo: 1, entryKind: "in", prevEntryHash: null });
   const e1 = link(e1input, true);
@@ -115,8 +112,6 @@ describe("computeEntryHash", () => {
   });
 
   it("commits to the event instant, not its string form — the same instant hashes identically", () => {
-    // `09:00Z` and `10:00+01:00` are the same instant; the hash is over the instant (epoch ms), so a
-    // change of offset representation that preserves the instant must not change the digest.
     const asZulu = computeEntryHash(content({ eventAt: "2026-01-05T09:00:00Z" }));
     const asOffset = computeEntryHash(content({ eventAt: "2026-01-05T10:00:00+01:00" }));
     expect(asOffset).toBe(asZulu);
@@ -130,9 +125,8 @@ describe("verifyChain", () => {
 
   it("detects an INSERTED entry (teeth-test)", () => {
     const chain = validChain();
-    // An attacker splices in a fabricated event, renumbering the tail to make room — but without
-    // recomputing the tail's stored hashes/links (a full downstream rewrite is out of an unsigned
-    // chain's threat model). The inserted row's own hash is valid; the break shows downstream.
+    // The tail is renumbered but its stored links are not recomputed; the injected row's own hash is
+    // valid, so the break shows downstream.
     const injectedInput = content({
       sequenceNo: 2,
       entryKind: "out",
@@ -151,15 +145,12 @@ describe("verifyChain", () => {
 
   it("detects a REMOVED entry (teeth-test)", () => {
     const chain = validChain();
-    // The middle entry is deleted from the record — the tail's predecessor pointer now dangles.
     const tampered = [chain[0]!, chain[2]!];
     expect(verifyChain(tampered).ok).toBe(false);
   });
 
   it("detects a REORDERED pair (teeth-test)", () => {
     const chain = validChain();
-    // Two entries swap chain positions (their sequence numbers), leaving their stored links pointing
-    // at the wrong neighbours.
     const tampered: VerifiableEntry[] = [
       chain[0]!,
       { ...chain[1]!, sequenceNo: 3 },
@@ -170,8 +161,6 @@ describe("verifyChain", () => {
 
   it("detects in-place content tampering that leaves the stored hash stale", () => {
     const chain = validChain();
-    // The employer rewrites a clock-out time but cannot recompute the stored hash without the whole
-    // downstream chain — the recompute no longer matches.
     const tampered: VerifiableEntry[] = [
       chain[0]!,
       chain[1]!,

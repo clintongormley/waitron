@@ -4,38 +4,23 @@ import { count, day, id, newId, nowIso, smallCount, table, tsString } from "@wai
 import { persons } from "@waitron/identity";
 
 /**
- * A person's STATED availability window on a given weekday — "available Mondays 09:00–17:00 from 1
- * March". PLANNING data, ordinary mutable rows: no append-only trigger and no chain — a person's
- * stated availability changes freely (design 2026-07-22 §2.1 / plan §2.1), and nothing in the
- * database refuses an edit or a delete here; the grant that used to name the permitted writes went
- * with PostgreSQL.
- *
- * `weekday` is 0–6 (Monday..Sunday is a rendering choice, not fixed here — only the 0–6 domain is).
- * `available_from_minute`/`available_to_minute` are minutes past local midnight in [0, 1440], from <
- * to. `effective_from`/`effective_to` bound the date range the window applies over; `effective_to`
- * null means open-ended.
+ * A person's stated availability window on a weekday — "available Mondays 09:00–17:00 from 1 March".
+ * Which day `weekday` 0 is, is a rendering choice not fixed here. Minutes are past local midnight.
  */
 export const availability = table(
   "availability",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
-    /** Day of week, 0–6. */
     weekday: smallCount("weekday").notNull(),
-    /** Start of the window, minutes past local midnight, [0, 1440]. */
     availableFromMinute: count("available_from_minute").notNull(),
-    /** End of the window, minutes past local midnight, [0, 1440], strictly after the start. */
     availableToMinute: count("available_to_minute").notNull(),
-    /** First day the window applies, inclusive. */
     effectiveFrom: day("effective_from").notNull(),
-    /** Last day the window applies, inclusive; null while open-ended. */
+    /** Inclusive; null while open-ended. */
     effectiveTo: day("effective_to"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the
-    // sibling schema files document. restrict: an availability window must not be orphaned by a
-    // person delete.
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
@@ -45,9 +30,7 @@ export const availability = table(
     check("availability_weekday_ck", sql`${t.weekday} between 0 and 6`),
     check("availability_from_minute_ck", sql`${t.availableFromMinute} between 0 and 1440`),
     check("availability_to_minute_ck", sql`${t.availableToMinute} between 0 and 1440`),
-    // A window has positive length — a zero- or negative-length window is malformed.
     check("availability_window_ck", sql`${t.availableToMinute} > ${t.availableFromMinute}`),
-    // effective_to, when set, is on or after effective_from.
     check(
       "availability_effective_ck",
       sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,

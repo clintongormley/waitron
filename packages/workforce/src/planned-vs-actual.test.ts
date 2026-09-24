@@ -21,8 +21,7 @@ function shift(
   };
 }
 
-/** A projected `WorkSession` — only the fields the read model reads carry meaning; `endedAt`/
- * `breakMinutes`/`locationId` and the wall offsets are set to inert values. */
+/** Only the fields the read model reads carry meaning; the rest are inert. */
 function session(
   personId: string,
   workDate: string,
@@ -107,9 +106,6 @@ describe("comparePlannedVsActual", () => {
   });
 
   it("joins by LOCAL date via the shift's wall offset, not its UTC instant", () => {
-    // Planned starts 2026-01-05T23:30Z +120 → local 2026-01-06; the session's workDate is 2026-01-06,
-    // so they join. Against the raw UTC date (01-05) the shift would be a no-show and the session
-    // unplanned — two spurious rows instead of one matched row.
     const rows = comparePlannedVsActual(
       [
         shift("p1", "2026-01-05T23:30:00Z", "2026-01-06T03:30:00Z", {
@@ -117,8 +113,7 @@ describe("comparePlannedVsActual", () => {
           endsOffsetMinutes: 120,
         }), // 240 min, local day 01-06 (23:30Z +120 = local 01:30)
       ],
-      // startedAt is the ABSOLUTE instant; local 01:35 (5 min after the planned 01:30 start) is 23:35Z,
-      // whose local date is still 01-06 — so it joins the shift and is 5 minutes late.
+      // Local 01:35: five minutes after the planned 01:30 start.
       [session("p1", "2026-01-06", "2026-01-05T23:35:00Z", 235)],
     );
     expect(rows).toHaveLength(1);
@@ -144,8 +139,7 @@ describe("comparePlannedVsActual", () => {
   });
 
   it("takes the earliest planned start for lateness even when shifts arrive out of order", () => {
-    // The later-starting shift is listed FIRST, so the fold must lower `earliestStart` when the
-    // second, earlier shift arrives — otherwise lateness would be measured from 17:00, not 09:00.
+    // Listed later-first, so the fold must lower `earliestStart` when the earlier shift arrives.
     const [row] = comparePlannedVsActual(
       [
         shift("p1", "2026-01-05T17:00:00Z", "2026-01-05T21:00:00Z"), // later half, listed first

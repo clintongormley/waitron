@@ -15,11 +15,8 @@ import { shiftTemplates } from "../src/schema/shift-templates.js";
 import { shifts } from "../src/schema/shifts.js";
 
 /**
- * A `WorkTimeRuleset` with every field at its ET-statutory / today's-default value — what a DEFAULT
- * `convenio_config` row resolves to (see packages/workforce-es/src/convenio.ts). A suite overrides
- * exactly the one limit it is exercising, so the guardrail thresholds are the TEST's, never the
- * engine's (the engine hard-codes none — roster-validation.no-hardcoded-limits.test.ts proves it).
- * Under `test/`, so its explicit numbers are out of the english-only scan and the src coverage glob.
+ * A `WorkTimeRuleset` at the ET-statutory defaults. A suite overrides the one limit it exercises, so
+ * the guardrail thresholds are the test's, never the engine's.
  */
 export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeRuleset {
   return {
@@ -44,18 +41,8 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
   };
 }
 
-/**
- * Seed helpers for the workforce suites, using the fixture connection directly. English strings
- * throughout: this file is under `test/`, out of the English-only guard's `src` scan, but the
- * package's vocabulary is English regardless.
- */
-
-/** A location (centro de trabajo) for the tenant. Returns its id.
- *
- * Inserted through the `locations` table definition rather than as raw SQL: `id` is a JavaScript
- * generator (`$defaultFn(newId)`), not a database DEFAULT, so a raw INSERT that omits the column
- * writes nothing there; and `invoice_locales` is a JSON array in a text column, which the
- * `labelList` helper serialises from the plain array passed here. */
+/** Through the table definition, not raw SQL: `id` is a `$defaultFn` generator that only the
+ * insert builder runs. */
 export async function seedLocation(db: Database): Promise<string> {
   const [row] = await db
     .insert(locations)
@@ -64,10 +51,7 @@ export async function seedLocation(db: Database): Promise<string> {
   return row!.id;
 }
 
-/** A person, PIN '1234'. Returns its id.
- *
- * Through the `persons` table definition for the same reason as {@link seedLocation}: `persons.id`
- * and `persons.created_at` are `$defaultFn` generators, which only the insert BUILDER runs. */
+/** A person, PIN '1234'. Through the table definition for the same reason as {@link seedLocation}. */
 export async function seedPerson(db: Database, name = "Ana"): Promise<string> {
   const [row] = await db
     .insert(persons)
@@ -76,7 +60,6 @@ export async function seedPerson(db: Database, name = "Ana"): Promise<string> {
   return row!.id;
 }
 
-/** An employment for the person, defaulting to a 40h (2400-minute) contracted week. Returns its id. */
 export async function seedEmployment(
   db: Database | Transaction,
   params: { personId: string; contractedMinutesPerWeek?: number },
@@ -94,8 +77,6 @@ export async function seedEmployment(
   return row!.id;
 }
 
-/** A draft roster_versions row for the location. Defaults to a one-week period. Returns its
- * id. Planning data (mutable) — inserted as `draft` with no `published_at`. */
 export async function insertRosterVersion(
   db: Database | Transaction,
   params: {
@@ -115,8 +96,6 @@ export async function insertRosterVersion(
   return row!.id;
 }
 
-/** A draft `shifts` row (planning data, `roster_version_id` null until publish). Defaults to a
- * 09:00–17:00 shift on 2026-01-05, wall offset 0. Returns its id. */
 export async function insertDraftShift(
   db: Database | Transaction,
   params: {
@@ -146,19 +125,9 @@ export async function insertDraftShift(
   return row!.id;
 }
 
-/** An `absences` row for the person. Defaults to a 5–8 Jan holiday, status `requested`, no
- * note. Pass `createdAt` to control ordering (the listPending suites seed OUT-OF-INSERT-ORDER
- * timestamps to prove `order by created_at`); OMITTING it leaves the column to
- * `absences.created_at`'s own `$defaultFn(nowIso)` generator
- * (`packages/workforce/src/schema/absences.ts:59`), which is why the insert goes through the table
- * definition — the generated DDL declares the column `text NOT NULL` with no DEFAULT, so neither a
- * raw INSERT omitting it nor the `default` keyword can reach it (node:sqlite refuses that keyword
- * inside a VALUES list: `near "default": syntax error`, measured on Node v26.7.0).
- *
- * `kind` and `status` stay plain `string` rather than the column's union, and the cast below is
- * what keeps them so: `migrations.test.ts`'s `rejects an absence_kind outside the enum` seeds
- * `"sabbatical"` on purpose, and a union-typed parameter would refuse to compile it.
- * Planning data (mutable). Returns its id. */
+/** Omitting `createdAt` leaves it to the column's `$defaultFn` generator, which only the insert
+ * builder runs. `kind` and `status` are plain `string` so a suite can seed a value outside the enum.
+ */
 export async function insertAbsence(
   db: Database | Transaction,
   params: {
@@ -186,8 +155,6 @@ export async function insertAbsence(
   return row!.id;
 }
 
-/** An `availability` row for the person. Defaults to weekday 0, 09:00–17:00, from 1 Jan,
- * open-ended. Planning data (mutable). Returns its id. */
 export async function insertAvailability(
   db: Database | Transaction,
   params: {
@@ -213,8 +180,6 @@ export async function insertAvailability(
   return row!.id;
 }
 
-/** A `shift_templates` row for the location. Defaults to "Evening bar", weekday 0,
- * 18:00–24:00, role null. Planning data (mutable). Returns its id. */
 export async function insertShiftTemplate(
   db: Database | Transaction,
   params: {
@@ -240,12 +205,7 @@ export async function insertShiftTemplate(
   return row!.id;
 }
 
-/** A `shift_swaps` row. Status defaults to `requested`, `to_shift_id` null. `createdAt` behaves
- * exactly as on {@link insertAbsence}: `shift_swaps.created_at` is `tsString(...).$defaultFn(nowIso)`
- * (`packages/workforce/src/schema/shift-swaps.ts:49`) with no DEFAULT in the generated DDL, so
- * omitting it here leaves the generator to run. Pass it to control ordering (the listPending suites
- * seed OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable).
- * Returns its id. */
+/** `createdAt` behaves as on {@link insertAbsence}. */
 export async function insertShiftSwap(
   db: Database | Transaction,
   params: {
@@ -271,15 +231,8 @@ export async function insertShiftSwap(
   return row!.id;
 }
 
-/** Appends one clock event THROUGH the Slice-4 chain, so seeded rows are chained exactly as the
- * write path produces them (`recorded_by_person_id` defaults to the subject — self-service).
- *
- * Wrapped in `.transaction()` because `appendToChain` needs a Transaction for its savepoint retry;
- * both a `Database` and a `Transaction` expose `.transaction()` — and which statement that becomes
- * is the connection's business, not the handle's: the adapter emits SAVEPOINT when a transaction is
- * already open and BEGIN when none is (`packages/store/src/node-sqlite-adapter.ts`), so this
- * fixture works whether a suite hands it a connection or a live tx. The head lock this note also
- * named is gone — `selectHead` (src/chain.ts) says why. */
+/** Appends through the real chain, so seeded rows are chained exactly as the write path does it.
+ * `.transaction()` opens a savepoint inside a live tx, so this takes either handle. */
 export async function insertTimeEntry(
   tx: Database | Transaction,
   params: {
