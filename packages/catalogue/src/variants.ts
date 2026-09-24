@@ -1,21 +1,15 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
-import { catalogues, now, products, type Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, decimal, decimalToCents, toScale } from "@waitron/shared";
+import { now, products, type Transaction } from "@waitron/db";
+import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
-import { menuItems, menuSections } from "./schema/menu.js";
+import { menuItems } from "./schema/menu.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
-import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
+import { priceOrNull } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
 import type { MenuOffer } from "./menu-types.js";
-import {
-  effectiveProductColumns as effective,
-  INHERITED_KEYS,
-  parentJoin,
-  parentProducts,
-  productWithId,
-} from "./variant-fallback.js";
+import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
 export type { ProductVariant, ProductVariantInput } from "./product-types.js";
@@ -116,6 +110,22 @@ export async function variantsOfProducts(
     grouped.set(parentId!, variants);
   }
   return grouped;
+}
+
+/**
+ * Which of `productIds` have at least one Active variant, Available or not, in ONE query. Such a
+ * product is never sold as itself (spec §15.1): only a menu offer can name the variant to sell.
+ */
+export async function parentsWithActiveVariants(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<Set<string>> {
+  if (productIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ parentId: products.parentId })
+    .from(products)
+    .where(and(inArray(products.parentId, [...new Set(productIds)]), eq(products.active, true)));
+  return new Set(rows.map((row) => row.parentId!));
 }
 
 /**
@@ -312,7 +322,7 @@ export async function setMenuVariants(
 }
 
 /**
- * The line an offer sells, as `resolveMenuVariant` resolves it: the three names of the offer's
+ * The line an offer sells, as {@link selectMenuVariant} resolves it: the three names of the offer's
  * product beside the chosen variant's own three, and the price charged.
  */
 export interface SelectedName extends ProductPresentation {
@@ -400,89 +410,5 @@ export function selectMenuVariant<Unit, Vat extends string>(
     vatClass: variant.vatClass,
     category: variant.category,
     courseId: variant.courseId,
-  };
-}
-
-export async function resolveMenuVariant(
-  tx: Transaction,
-  menuItemId: string,
-  variantId: string | null,
-): Promise<SelectedName> {
-  const [offer] = await tx
-    .select({
-      productId: products.id,
-      name: products.name,
-      customerName: products.customerName,
-      kitchenName: products.kitchenName,
-      active: products.active,
-      available: products.available,
-      offerAvailable: menuItems.active,
-      menuAvailable: catalogues.active,
-      sectionAvailable: menuSections.active,
-      menuPrice: menuItems.grossPrice,
-      productPrice: effective.unitPrice,
-    })
-    .from(menuItems)
-    .innerJoin(products, eq(products.id, menuItems.productId))
-    .leftJoin(parentProducts, parentJoin)
-    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
-    .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
-    .where(eq(menuItems.id, menuItemId));
-  if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
-  if (
-    !offer.active ||
-    !offer.available ||
-    !offer.offerAvailable ||
-    !offer.menuAvailable ||
-    !offer.sectionAvailable
-  ) {
-    throw new AppError("product.unavailable", { productId: offer.productId });
-  }
-  const variants = await activeVariants(tx, offer.productId);
-  if (variants.length && variantId === null)
-    throw new AppError("product.variant_required", { productId: offer.productId });
-  if (variantId === null)
-    return {
-      productId: offer.productId,
-      name: offer.name,
-      customerName: offer.customerName,
-      kitchenName: offer.kitchenName,
-      variantName: null,
-      variantCustomerName: null,
-      variantKitchenName: null,
-      // No variant: the chain's last two steps, this menu's price else the product's own.
-      unitPrice: resolveOfferPrice({
-        variantMenuPrice: null,
-        variantPrice: null,
-        parentMenuPrice: priceOrNull(offer.menuPrice),
-        parentPrice: centsToDecimal(offer.productPrice),
-      }),
-    };
-  const variant = variants.find((v) => v.id === variantId);
-  const [override] = await tx
-    .select({ price: menuItemVariantOverrides.price, offered: menuItemVariantOverrides.offered })
-    .from(menuItemVariantOverrides)
-    .where(
-      and(
-        eq(menuItemVariantOverrides.menuItemId, menuItemId),
-        eq(menuItemVariantOverrides.variantId, variantId),
-      ),
-    );
-  if (!variant?.available || override?.offered === false)
-    throw new AppError("product.variant_unavailable", { variantId });
-  return {
-    productId: variantId,
-    name: offer.name,
-    customerName: offer.customerName,
-    kitchenName: offer.kitchenName,
-    variantName: variant.name,
-    variantCustomerName: variant.customerName,
-    variantKitchenName: variant.kitchenName,
-    unitPrice: resolveOfferPrice({
-      variantMenuPrice: priceOrNull(override?.price ?? null),
-      variantPrice: variant.unitPrice === null ? null : decimal(variant.unitPrice),
-      parentMenuPrice: priceOrNull(offer.menuPrice),
-      parentPrice: centsToDecimal(offer.productPrice),
-    }),
   };
 }

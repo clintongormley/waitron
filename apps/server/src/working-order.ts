@@ -65,6 +65,7 @@ import {
   resolveAttachedModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
+  parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
   fillBlankLocalesWithStaffName,
@@ -358,6 +359,14 @@ async function priceOrderLines(
     productId: line.menuItemId ?? line.productId ?? "",
   }));
   const byId = new Map(available.map((p) => [p.id, p]));
+  // Only a menu offer can name a variant, so on the plain path a parent with an Active variant
+  // cannot be sold at all (spec §15.1). One read for the whole basket.
+  const requiresVariant = usesOffers
+    ? new Set<string>()
+    : await parentsWithActiveVariants(
+        tx,
+        lines.map((line) => line.productId),
+      );
 
   // ONE read per definition kind for the WHOLE basket, before the line loop below (CLAUDE.md §3).
   const modifiers = await resolveBasketModifiers(
@@ -418,6 +427,9 @@ async function priceOrderLines(
         : selectMenuVariant(offer, line.variantId ?? null);
     if (!usesOffers && line.variantId !== undefined) {
       throw new AppError("management.request_invalid", { field: "variantId" });
+    }
+    if (requiresVariant.has(underlyingProductId)) {
+      throw new AppError("product.variant_required", { productId: underlyingProductId });
     }
     const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
     const product = {

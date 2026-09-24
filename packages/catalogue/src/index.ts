@@ -29,7 +29,7 @@ export * from "./offered-modifiers.js";
 export {
   listMenuVariants,
   listProductVariants,
-  resolveMenuVariant,
+  parentsWithActiveVariants,
   selectMenuVariant,
   setMenuVariants,
   setProductVariants,

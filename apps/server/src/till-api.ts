@@ -333,6 +333,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
+  // A line rang up a product with an Active variant and named none (`selectMenuVariant` on a zone's
+  // offer, `priceOrderLines` on the plain path): a CLIENT request fault.
+  "product.variant_required": 400,
   "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
