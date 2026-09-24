@@ -28,6 +28,7 @@ import {
   updateExtraList,
 } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
+import { setProductVariants, type VariantWrite } from "./variants.js";
 
 // One SQLite file with the real migrations applied. The grants walkthrough this file used to end
 // with is gone with the grants themselves, and the concurrent-save cases live in
@@ -532,6 +533,102 @@ describe("extra list CRUD", () => {
     expect(error).toEqual(
       expect.objectContaining({ code: "extras.not_found", params: { extraListId: UNKNOWN_ID } }),
     );
+  });
+});
+
+describe("an extras list and products with variants", () => {
+  const variant = (
+    name: string,
+    flags: Partial<Pick<VariantWrite, "active" | "available">> = {},
+  ) => ({
+    name,
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    available: true,
+    ...flags,
+  });
+
+  it("refuses to create a list offering a product with an Active variant, naming the first such item", async () => {
+    // Focaccia's only Active variant is Unavailable, so a check that read `available` would pass
+    // it and name sourdough's position instead.
+    await run((tx) =>
+      setProductVariants(tx, breads.focaccia, [variant("Slab", { available: false })], "en"),
+    );
+    await run((tx) => setProductVariants(tx, breads.sourdough, [variant("Half loaf")], "en"));
+
+    const error = await refusal((tx) =>
+      createExtraList(
+        tx,
+        {
+          name: "Bread",
+          items: [
+            { productId: breads.rye },
+            { productId: breads.focaccia },
+            { productId: breads.sourdough },
+          ],
+        },
+        "en",
+      ),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({
+        code: "extras.product_has_variants",
+        params: { field: "items.1.productId", productId: breads.focaccia },
+      }),
+    );
+    expect(await run((tx) => listExtraLists(tx))).toEqual([]);
+  });
+
+  it("refuses to update a list to offer a product with an Active variant, leaving the list as it was", async () => {
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Bread", items: [{ productId: breads.rye }] }, "en"),
+    );
+    await run((tx) => setProductVariants(tx, breads.focaccia, [variant("Slab")], "en"));
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        created.id,
+        { name: "Bread", items: [{ productId: breads.rye }, { productId: breads.focaccia }] },
+        "en",
+      ),
+    );
+
+    expect(error).toEqual(
+      expect.objectContaining({
+        code: "extras.product_has_variants",
+        params: { field: "items.1.productId", productId: breads.focaccia },
+      }),
+    );
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(read.items.map((item) => item.productId)).toEqual([breads.rye]);
+  });
+
+  it("offers a product whose only variant is Inactive", async () => {
+    await run((tx) =>
+      setProductVariants(tx, breads.focaccia, [variant("Slab", { active: false })], "en"),
+    );
+
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Bread", items: [{ productId: breads.focaccia }] }, "en"),
+    );
+
+    expect(created.items.map((item) => item.productId)).toEqual([breads.focaccia]);
+  });
+
+  it("offers a variant itself as an item", async () => {
+    const [slab] = await run((tx) =>
+      setProductVariants(tx, breads.focaccia, [variant("Slab")], "en"),
+    );
+
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Bread", items: [{ productId: slab!.id }] }, "en"),
+    );
+
+    expect(created.items.map((item) => item.productId)).toEqual([slab!.id]);
   });
 });
 

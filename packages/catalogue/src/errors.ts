@@ -94,6 +94,13 @@ declare module "@waitron/shared" {
     "product.variant_required": { productId: string };
     /** A selected variant is disabled or absent from the menu offer. */
     "product.variant_unavailable": { variantId: string };
+    /**
+     * A save would leave a product with at least one Active variant while an extras list offers it.
+     * `extraLists` is every such list, by staff name then id. `field` is `variants.<i>.active` of the
+     * first variant a parent's save leaves Active, or `active` on a variant's own save. Thrown by
+     * `assertNotOfferedAsExtra` (variants.ts).
+     */
+    "product.offered_as_extra": { field: string; extraLists: { id: string; name: string }[] };
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
@@ -209,6 +216,13 @@ declare module "@waitron/shared" {
      * that is not text — and attaches the field path.
      */
     "extras.translation_required": { field: string; language: string };
+    /**
+     * An extras list save names a product with at least one Active variant, Available or not. The
+     * till never offers such a product as an extra (`readExtraProducts`, offered-modifiers.ts), so the
+     * item would never reach it. `field` is `items.<i>.productId` of the first such item. Thrown by
+     * `assertNoParentsWithVariants` (extras.ts).
+     */
+    "extras.product_has_variants": { field: string; productId: string };
     /**
      * A product cannot be removed while something still names it — an extras list item, or one menu
      * offer's repriced copy of that item, today.
