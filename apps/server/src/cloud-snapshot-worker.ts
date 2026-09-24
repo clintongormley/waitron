@@ -12,6 +12,7 @@ interface Pending {
   id: string;
   createdAt: number;
   keyVersion?: number;
+  uploaded?: boolean;
   month?: string;
   metadata?: CloudCaptureMetadata;
 }
@@ -92,6 +93,7 @@ async function readState(dir: string): Promise<State | undefined> {
   const p = s.pending;
   if (p) {
     if (!uuid(p.id) || !Number.isFinite(p.createdAt)) unavailable();
+    if (p.uploaded !== undefined && (typeof p.uploaded !== "boolean" || !p.metadata)) unavailable();
     const m = p.metadata;
     if (
       m &&
@@ -139,6 +141,7 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
       await chmod(dir, 0o700);
       await rm(join(dir, "staging"), { recursive: true, force: true });
       await rm(join(dir, "archive.enc.tmp"), { force: true });
+      await rm(join(dir, "state.json.tmp"), { force: true });
       let state = await readState(dir);
       const registration = status.registration;
       if (
@@ -162,7 +165,6 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         )
       )
         return;
-      const clock = await deps.readClock();
       state ??= {
         version: 1,
         installationId: registration.installationId,
@@ -170,6 +172,11 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         nextAt: 0,
         lastMonth: "",
       };
+      if (!state.pending && now().getTime() < state.nextAt) {
+        await rm(file, { force: true });
+        return;
+      }
+      const clock = await deps.readClock();
       const save = () => durableWrite(dir, "state.json", JSON.stringify(state));
       const allowed = () => {
         signal.throwIfAborted();
@@ -195,8 +202,9 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         try {
           await deps.connection.publishCapture(p.id, p.metadata, signal);
           published = true;
-        } catch {
+        } catch (error) {
           allowed();
+          if (p.uploaded && now().getTime() - p.createdAt < 86400000) throw error;
         }
         if (published) {
           await complete();
@@ -211,10 +219,6 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         p = undefined;
       }
       if (!p) {
-        if (now().getTime() < state.nextAt) {
-          await rm(file, { force: true });
-          return;
-        }
         p = { id: randomUUID(), createdAt: now().getTime() };
         state.pending = p;
         await save();
@@ -250,6 +254,8 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
       allowed();
       await deps.upload(grant, file, p.metadata, signal);
       allowed();
+      p.uploaded = true;
+      await save();
       await deps.connection.publishCapture(p.id, p.metadata, signal);
       await complete();
     } finally {

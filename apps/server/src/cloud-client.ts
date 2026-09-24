@@ -300,11 +300,28 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       throw new AppError("cloud.unavailable", {});
     }
   }
-  async function run<T>(work: () => Promise<T>, wait = false) {
+  async function run<T>(work: () => Promise<T>, wait = false, signal?: AbortSignal) {
     while (activePaths.has(path)) {
       if (!wait) throw new AppError("cloud.busy", {});
-      await activePaths.get(path);
+      signal?.throwIfAborted();
+      const active = activePaths.get(path)!;
+      if (signal) {
+        let remove = () => {};
+        try {
+          await Promise.race([
+            active,
+            new Promise<never>((_resolve, reject) => {
+              const abort = () => reject(signal.reason);
+              signal.addEventListener("abort", abort, { once: true });
+              remove = () => signal.removeEventListener("abort", abort);
+            }),
+          ]);
+        } finally {
+          remove();
+        }
+      } else await active;
     }
+    signal?.throwIfAborted();
     let release = () => {};
     activePaths.set(
       path,
@@ -329,12 +346,17 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   }
   return {
     async reserveCapture(id: string, signal?: AbortSignal) {
-      return run(async () => reserveCloudCapture(await captureState(signal), id, signal), true);
+      return run(
+        async () => reserveCloudCapture(await captureState(signal), id, signal),
+        true,
+        signal,
+      );
     },
     async publishCapture(id: string, metadata: CloudCaptureMetadata, signal?: AbortSignal) {
       return run(
         async () => publishCloudCapture(await captureState(signal), id, metadata, signal),
         true,
+        signal,
       );
     },
     async status() {

@@ -112,7 +112,11 @@ to the first successful capture in each venue-local calendar month. The file upl
 streams with a 14-minute/credential-expiry deadline and bounded retry backoff; shutdown
 cancellation does not record an outage. The Cloud local proof crashes after upload and
 restores the resumed archive without recapture. Production deployment and customer recovery
-UI remain open. Next: measure real venue uplink budgets and spool disk use, and stream
+UI remain open. Confirmed uploads retry publication without retransferring; an acknowledged
+object lost by storage waits until the 24-hour expiry before recapture. Capture requests
+waiting on the Cloud client can be cancelled. Shutdown waits for an in-progress local
+database copy or encryption step. Next: measure that shutdown latency, real venue uplink
+budgets and spool disk use, and stream
 archive assembly beyond its current in-memory 512 MiB format limit. Cloud documentation:
 `docs/authenticated-captures.md` in waitron-cloud.
 Cloud's independent Litestream storage proof does not supply the sealed state row,

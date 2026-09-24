@@ -372,8 +372,8 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
       expect(server.health.lastPassAt).not.toBeNull();
     } finally {
       await server.close();
-      expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
     }
+    expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 
   it("the singleton primary (primary, primary) of the same identity DOES run both (control: the secondary's absence is real)", async () => {
@@ -405,7 +405,7 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
       expect(runCloudSnapshotLoop).toHaveBeenCalledTimes(1);
     } finally {
       await server.close();
-      expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
     }
+    expect(vi.mocked(runCloudSnapshotLoop).mock.calls[0]?.[0].signal.aborted).toBe(true);
   }, 60_000);
 });

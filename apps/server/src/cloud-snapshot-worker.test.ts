@@ -64,7 +64,11 @@ async function fixture() {
         location: { endpoint: "https://storage.example", bucket: "venue", region: "local" },
         incomingKey: "incoming/" + id,
         recoveryKey: "secret-key",
-        credentials: { accessKeyId: "id", secretAccessKey: "secret", sessionToken: "token" },
+        credentials: {
+          accessKeyId: "private-access-id",
+          secretAccessKey: "private-access-secret",
+          sessionToken: "private-session-token",
+        },
         expiresAt: new Date(now + 900000).toISOString(),
       };
     },
@@ -143,7 +147,8 @@ it("keeps exact encrypted bytes across a failed upload and restart, without pers
   expect(files.sort()).toEqual(["archive.enc", "state.json"]);
   const saved = await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8");
   expect(saved).not.toContain("secret-key");
-  expect(saved).not.toContain("sessionToken");
+  for (const secret of ["private-access-id", "private-access-secret", "private-session-token"])
+    expect(saved).not.toContain(secret);
   const bytes = await readFile(join(f.root, "cloud-snapshots/archive.enc"));
   fail = false;
   await createCloudSnapshotWorker(f.deps).tick(signal());
@@ -191,6 +196,7 @@ it("does not capture for secondary, production, unconfigured or revoked installa
   f.status.environment = "test";
   f.status.installation!.services[0]!.state = "unconfigured";
   await w.tick(signal());
+  f.status.installation!.services[0]!.state = "ready";
   f.status.installation!.state = "revoked";
   await w.tick(signal());
   expect(f.captures()).toBe(0);
@@ -269,13 +275,14 @@ it("leaves malformed state visible rather than silently resetting the schedule",
   });
   expect(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")).toBe("{}");
 });
-it("does not follow a pre-existing temporary-file symlink when storing state", async () => {
+it("removes a stale temporary-file symlink without changing its target", async () => {
   const f = await fixture();
   const { mkdir, writeFile, symlink } = await import("node:fs/promises");
   await mkdir(join(f.root, "cloud-snapshots"));
   await writeFile(join(f.root, "keep"), "untouched");
   await symlink(join(f.root, "keep"), join(f.root, "cloud-snapshots/state.json.tmp"));
-  await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow();
+  await createCloudSnapshotWorker(f.deps).tick(signal());
+  expect(f.points.size).toBe(1);
   expect(await readFile(join(f.root, "keep"), "utf8")).toBe("untouched");
 });
 it("uses the real clock when no clock override is supplied and honours an already-aborted signal", async () => {
@@ -367,4 +374,54 @@ it("refuses oversized state files and invalid pending identifiers", async () => 
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
+});
+it("retries publication without another grant or upload after confirmed delivery", async () => {
+  const f = await fixture();
+  let uploads = 0;
+  const upload = f.deps.upload,
+    publish = f.deps.connection.publishCapture;
+  f.deps.upload = async (g, p) => {
+    uploads++;
+    await upload(g, p);
+  };
+  f.deps.connection.publishCapture = async () => {
+    throw Error("publication unavailable");
+  };
+  for (let n = 0; n < 3; n++)
+    await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow(
+      "publication unavailable",
+    );
+  expect(uploads).toBe(1);
+  expect(f.reservations).toHaveLength(1);
+  expect(f.captures()).toBe(1);
+  f.deps.connection.publishCapture = publish;
+  await createCloudSnapshotWorker(f.deps).tick(signal());
+  expect(f.points.size).toBe(1);
+});
+it("keeps an expired pending archive when shutdown interrupts the final publication attempt", async () => {
+  const f = await fixture();
+  f.deps.upload = async () => {
+    throw Error("offline");
+  };
+  await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow();
+  const before = await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8"),
+    bytes = await readFile(join(f.root, "cloud-snapshots/archive.enc"));
+  f.advance(25 * 3600000);
+  const c = new AbortController();
+  f.deps.connection.publishCapture = async () => {
+    c.abort();
+    throw Error("offline");
+  };
+  await expect(createCloudSnapshotWorker(f.deps).tick(c.signal)).rejects.toThrow();
+  expect(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")).toBe(before);
+  expect(await readFile(join(f.root, "cloud-snapshots/archive.enc"))).toEqual(bytes);
+});
+it("does not read the venue clock while the next snapshot is not due", async () => {
+  const f = await fixture();
+  await createCloudSnapshotWorker(f.deps).tick(signal());
+  f.deps.readClock = async () => {
+    throw Error("unnecessary read");
+  };
+  await createCloudSnapshotWorker(f.deps).tick(signal());
+  expect(f.captures()).toBe(1);
 });
