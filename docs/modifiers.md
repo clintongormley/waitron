@@ -12,10 +12,11 @@ what decides the kind.
 
 Use **Extras** for things a diner adds to a dish. Each entry on an extras list names a product you
 have already created, and takes that product's names, tax treatment, allergens, dietary labels and
-picture from it — you never retype them here. What you set on the entry is the terms of the offer:
-**Maximum quantity**, how many of it one dish may take (at least one, so 1 means "one or none");
-**Preselected**, whether it starts chosen; and **Price**, what the diner is charged for it. That
-price REPLACES the product's own rather than adding to it, so 1.50 against a 3.00 product bills
+picture from it — you never retype them here. A product that has Active variants cannot be an
+entry, because it is sold only as one of its variants. What you set on the entry is the terms of the
+offer: **Maximum quantity**, how many of it one dish may take (at least one, so 1 means "one or
+none"); **Preselected**, whether it starts chosen; and **Price**, what the diner is charged for it.
+That price REPLACES the product's own rather than adding to it, so 1.50 against a 3.00 product bills
 1.50. Leave it blank and the product's own price is what gets charged — the field shows you that
 price, greyed, while it is blank. The list itself sets **Minimum choices** — 0 makes the list optional, 1 or
 more makes it required — and **Maximum choices**, left blank for no limit.

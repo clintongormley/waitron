@@ -3097,6 +3097,100 @@ describe("mountCatalogueApi — extras lists", () => {
   });
 });
 
+describe("mountCatalogueApi — extras lists and products with variants", () => {
+  type Editor = Record<string, unknown> & { variants: { id: string; name: string }[] };
+  const editor = async (app: Hono, id: string) =>
+    (await (await send(app, "GET", `/management-api/products/${id}/editor`)).json()) as Editor;
+  const copa = (active: boolean) => ({
+    name: "Copa",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    available: true,
+    active,
+  });
+
+  it("answers 409 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {
+    const app = mountApp();
+    const pan = await createNamedProductVia(app, `Pan ${crypto.randomUUID()}`);
+    const vino = await createNamedProductVia(app, `Vino ${crypto.randomUUID()}`);
+    const withVariant = await send(app, "PUT", `/management-api/products/${vino}/editor`, {
+      body: { ...(await editor(app, vino)), variants: [copa(true)] },
+    });
+    expect(withVariant.status).toBe(200);
+    const refusal = {
+      error: {
+        code: "extras.product_has_variants",
+        params: { field: "items.1.productId", productId: vino },
+      },
+    };
+
+    const created = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name: "Acompañamientos", items: [{ productId: pan }, { productId: vino }] },
+    });
+    expect(created.status).toBe(409);
+    expect(await created.json()).toEqual(refusal);
+
+    const list = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name: "Acompañamientos", items: [{ productId: pan }] },
+    });
+    expect(list.status).toBe(201);
+    const { extraList } = (await list.json()) as { extraList: ExtraList };
+    const updated = await send(app, "PATCH", `/management-api/modifiers/extras/${extraList.id}`, {
+      body: { name: "Acompañamientos", items: [{ productId: pan }, { productId: vino }] },
+    });
+    expect(updated.status).toBe(409);
+    expect(await updated.json()).toEqual(refusal);
+  });
+
+  it("answers 409 product.offered_as_extra to an Active variant on a product a list offers, naming the list", async () => {
+    const app = mountApp();
+    const cerveza = await createNamedProductVia(app, `Cerveza ${crypto.randomUUID()}`);
+    const list = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name: "Bebidas extra", items: [{ productId: cerveza }] },
+    });
+    expect(list.status).toBe(201);
+    const { extraList } = (await list.json()) as { extraList: ExtraList };
+    const extraLists = [{ id: extraList.id, name: "Bebidas extra" }];
+    const parent = await editor(app, cerveza);
+
+    const fromParent = await send(app, "PUT", `/management-api/products/${cerveza}/editor`, {
+      body: { ...parent, variants: [copa(true)] },
+    });
+    expect(fromParent.status).toBe(409);
+    expect(await fromParent.json()).toEqual({
+      error: {
+        code: "product.offered_as_extra",
+        params: { field: "variants.0.active", extraLists },
+      },
+    });
+
+    const inactive = await send(app, "PUT", `/management-api/products/${cerveza}/editor`, {
+      body: { ...parent, variants: [copa(false)] },
+    });
+    expect(inactive.status).toBe(200);
+    const variantId = ((await inactive.json()) as Editor).variants[0]!.id;
+    const fromOwnPage = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+      body: { ...(await editor(app, variantId)), active: true },
+    });
+    expect(fromOwnPage.status).toBe(409);
+    expect(await fromOwnPage.json()).toEqual({
+      error: { code: "product.offered_as_extra", params: { field: "active", extraLists } },
+    });
+
+    // The product PATCH route refuses a variant's id before it writes anything.
+    const patched = await send(app, "PATCH", `/management-api/products/${variantId}`, {
+      body: { active: true },
+    });
+    expect(patched.status).toBe(403);
+    expect(await patched.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(
+      (await suite.db.execute(sql`select active from products where id = ${variantId}`)).rows,
+    ).toEqual([{ active: 0 }]);
+  });
+});
+
 describe("menu name edits", () => {
   it("renames a menu in place and validates name, identity and permission", async () => {
     const app = mountApp();
@@ -3595,8 +3689,15 @@ describe("catalogue routes that already refused a negative price", () => {
       error: { code: "product.variant_invalid", params: { field: "price" } },
     });
 
+    // An extras list may not offer a product with Active variants, so the list writes name one
+    // without any.
+    const plain = (await (
+      await send(app, "POST", editorPath, {
+        body: { ...editor, name: "Sin variantes", variants: [] },
+      })
+    ).json()) as { id: string };
     const badExtra = await send(app, "POST", "/management-api/modifiers/extras", {
-      body: { name: "Extras", items: [{ productId: saved.id, price: "-1.00", maxQuantity: 1 }] },
+      body: { name: "Extras", items: [{ productId: plain.id, price: "-1.00", maxQuantity: 1 }] },
     });
     expect(badExtra.status).toBe(400);
     expect(await badExtra.json()).toMatchObject({
@@ -3609,7 +3710,7 @@ describe("catalogue routes that already refused a negative price", () => {
     const goodExtra = await send(app, "POST", "/management-api/modifiers/extras", {
       body: {
         name: "Extras buenos",
-        items: [{ productId: saved.id, price: "1.00", maxQuantity: 1 }],
+        items: [{ productId: plain.id, price: "1.00", maxQuantity: 1 }],
       },
     });
     expect(goodExtra.status).toBe(201);
@@ -3621,7 +3722,7 @@ describe("catalogue routes that already refused a negative price", () => {
       {
         body: {
           name: "Extras buenos",
-          items: [{ productId: saved.id, price: "-1.00", maxQuantity: 1 }],
+          items: [{ productId: plain.id, price: "-1.00", maxQuantity: 1 }],
         },
       },
     );

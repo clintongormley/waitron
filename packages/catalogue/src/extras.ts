@@ -20,6 +20,7 @@ import {
 } from "./extra-contract.js";
 import type { ExtraListDependants } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
+import { parentsWithActiveVariants } from "./variants.js";
 import "./errors.js";
 
 /**
@@ -231,6 +232,20 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
   if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
 }
 
+/** The till never offers a product with an Active variant as an extra, so a list may not name one. */
+async function assertNoParentsWithVariants(tx: Transaction, input: ExtraListInput): Promise<void> {
+  const parents = await parentsWithActiveVariants(
+    tx,
+    input.items.map((item) => item.productId),
+  );
+  const at = input.items.findIndex((item) => parents.has(item.productId));
+  if (at !== -1)
+    throw new AppError("extras.product_has_variants", {
+      field: `items.${at}.productId`,
+      productId: input.items[at]!.productId,
+    });
+}
+
 /**
  * Replaces the list's items with the body's, in the body's order. An item the body omits is removed:
  * no foreign key anywhere references `extra_list_items` (re-taken 2026-09-22:
@@ -277,6 +292,7 @@ async function writeItems(
   input: ExtraListInput,
 ): Promise<void> {
   await assertProductsExist(tx, input);
+  await assertNoParentsWithVariants(tx, input);
   const bodyIds = input.items.flatMap((item) => (item.id === undefined ? [] : [item.id]));
   const existing = bodyIds.length
     ? await tx

@@ -46,8 +46,9 @@ An id that is not a uuid is refused with `shared.invalid_id`, whose `kind` says 
 (`OptionListId`, `ExtraListId`). A body fault is `options.invalid` or `extras.invalid` naming the
 offending `field`; an unknown list id is `options.not_found` / `extras.not_found`; a name missing in
 an enabled content language is `options.translation_required` / `extras.translation_required`
-naming both the field and the language. Every code is registered in
-`packages/catalogue/src/errors.ts`.
+naming both the field and the language. An extras item naming a product that has an Active
+variant is refused `extras.product_has_variants`, naming the item's `items.<i>.productId` and the
+product. Every code is registered in `packages/catalogue/src/errors.ts`.
 
 A list carries its labels or its items INSIDE it — there is no separate item endpoint. The order you
 send them in is the order they come back in: the write numbers each row's `sort` from its position
@@ -321,8 +322,16 @@ Six things it is worth knowing about that payload:
   as itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
   (`apps/server/src/working-order.ts`). A pick of a variant
-  still sells, as does a product whose only variants are Inactive. Tests: "an extra that is a
-  parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`; "refuses a
+  still sells, as does a product whose only variants are Inactive. The catalogue's own saves do
+  not build that state: an extras list save naming such a product is refused
+  `extras.product_has_variants` (`extras.ts`), and a save that would give a product an extras
+  list offers an Active variant — from the parent's editor or the variant's own page — is refused
+  `product.offered_as_extra`, naming every list that offers it (`assertNotOfferedAsExtra`,
+  `variants.ts`). Both answer 409. Tests: "an extras list and products with variants" in
+  `packages/catalogue/src/extras.test.ts`, "a product an extras list offers" in
+  `packages/catalogue/src/product-editor.test.ts`, and "mountCatalogueApi — extras lists and
+  products with variants" in `apps/server/src/catalogue-api.test.ts`. Tests for the order path:
+  "an extra that is a parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`; "refuses a
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
   `apps/server/src/working-order.test.ts`; and "sells an extras pick of a product whose only
   variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.

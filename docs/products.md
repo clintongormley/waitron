@@ -94,6 +94,10 @@ its past sales are kept. A variant you added and have not saved yet is simply dr
 shows only Active variants at first; set **Show variants** to **Inactive** or **Any status** to see
 removed ones, and choose **Restore** from a row's menu to make one Active again.
 
+You cannot add or restore an Active variant on a product that an extras list offers, because a
+product with Active variants cannot be an extra. The save is refused, and the dashboard names the
+extras lists to take the product off first.
+
 The products list shows each variant under its product, with its own name, the price it sells at and
 its categories. If a variant's VAT differs from its product's, the list notes it under the variant's
 price. A variant's row menu offers **Remove** or **Restore** there too, and an Inactive variant is

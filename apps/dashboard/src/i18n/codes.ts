@@ -497,9 +497,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Revisa los ajustes de selección mínima/máxima del grupo",
   },
   // Extras and options LISTS (the `/management-api/modifiers/{options,extras}` surface,
-  // apps/server/src/catalogue-api.ts). Six codes, three per kind and the same three both times: a
+  // apps/server/src/catalogue-api.ts). Three codes per kind, the same three both times: a
   // malformed authoring body (400), an id naming no list (404), and a customer-facing name with no
-  // text in the venue's default content language (400). The two order-time siblings on the same
+  // text in the venue's default content language (400). Extras has a fourth, an item naming a
+  // product with Active variants (409), and `product.offered_as_extra` below is its other side,
+  // answered by the product editor. The two order-time siblings on the same
   // STATUS map — `options.label_required` and `extras.limit_exceeded` — are deliberately absent:
   // they are thrown only by the selection validators the TILL's order path calls, never by a
   // management route, so the dashboard cannot be answered with them.
@@ -526,6 +528,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "extras.translation_required": {
     en: "Enter the customer-facing name in the site's default language.",
     es: "Introduce el nombre para clientes en el idioma predeterminado del sitio.",
+  },
+  "extras.product_has_variants": {
+    en: "This product has active variants, so it can't be offered as an extra.",
+    es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra.",
+  },
+  // The screen shows the names of the lists after this sentence.
+  "product.offered_as_extra": {
+    en: "A product offered as an extra can't have active variants. First remove it from these extras lists:",
+    es: "Un producto que se ofrece como extra no puede tener variantes activas. Quítalo primero de estas listas de extras:",
   },
   // The ingredient form's own client-side validation message: a non-empty name is required (the column
   // is NOT NULL and a nameless ingredient is a UI error), surfaced via `codeMessage` from the form's
