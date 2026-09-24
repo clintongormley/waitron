@@ -761,12 +761,12 @@ reads text instead of parsing — the header of `scripts/dashboard-browser-purit
 backlog note on `scripts/column-vocabulary.test.ts` — and both were corrected in the same change.
 
 Beyond that script, lint and typechecking, nothing in the repository depends on which compiler is
-installed, because **`tsc` is never asked to emit here**: every use of it is `tsc --noEmit` inside
-a `typecheck` script, the bundles are esbuild's, and Vitest strips types with esbuild too — a claim
-the tree also makes at `packages/payments-stripe/src/wiring.test.ts:205`, and one you can check
-directly by running a package's suite with no `tsc` involved. That is what bounds a TypeScript
-bump's blast radius to `pnpm typecheck`, `pnpm lint`, and `scripts/comments-only.mjs` with its
-suite `scripts/comments-only.test.mjs` in the root Vitest project.
+installed, because **`tsc` is never asked to emit here**: every use of it is `tsc --noEmit` inside a
+`typecheck` script, the bundles are esbuild's, and Vitest strips types without typechecking — a
+claim the tree also makes in `packages/payments-stripe/src/wiring.test.ts`'s barrel test, and one
+you can check directly by running a package's suite with no `tsc` involved. That is what bounds a
+TypeScript bump's blast radius to `pnpm typecheck`, `pnpm lint`, and `scripts/comments-only.mjs`
+with its suite `scripts/comments-only.test.mjs` in the root Vitest project.
 
 One thing version 7 catches that 5.9.3 did not: a file imported by a relative path that climbs out
 of its own package is `error TS6059` ("not under `rootDir`"). Exactly one **typechecked** file in

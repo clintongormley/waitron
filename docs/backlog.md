@@ -2576,11 +2576,11 @@ image constraints under *Detail → Box image*.
   root `vitest.config.ts` and `eslint.config.js`. Landed so far: `workforce` (#555, about 2,700
   comment lines to about 750), `payments` (#558, about 2,000 to about 750), `identity` (#559, about
   2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
-  about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310) and `packages/store`
-  (#568, about 1,120 to about 555, tests included). A pruning pull request cannot carry this file
-  (the checker refuses it), so each one's line lands here as a docs-only push after the merge.
-  Found by #555, #558, #559, #561, #562, #567 and #568 and left for the package that owns each, all
-  still OPEN:
+  about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
+  (#568, about 1,120 to about 555, tests included) and `packages/payments-stripe` (#570, about 1,080
+  to about 270, tests included). A pruning pull request cannot carry this file (the checker refuses
+  it), so each one's line lands here as a docs-only push after the merge. Found by #555, #558, #559,
+  #561, #562, #567, #568 and #570 and left for the package that owns each, all still OPEN:
   - The journal-table reason in the `drizzle.config.ts` of `credentials` and `scheduler`
     ("`generate` would … silently re-apply its own from zero") is wrong:
     drizzle runs only entries newer than the journal's latest `created_at`, so on a shared table
@@ -2598,17 +2598,14 @@ image constraints under *Detail → Box image*.
     the unmade fix; the gap is stated at `assertShiftInterval`.
   - A `nodeId` option nothing reads: `ReconcileDeps.nodeId` in `packages/payments/src/reconcile.ts`
     is declared and never read, `packages/payments-stripe/src/reconciler.ts` passes one in, and the
-    SumUp provider's options declare one it never reads. Comments in `payments-stripe` (`reverse.ts`,
-    `provider.ts`, `device-provider.ts`, `reconciler.ts`) and `payments-sumup/src/provider.ts` still
-    say it identifies the node; prune those with their packages, and drop the option as a code
-    change.
+    SumUp provider's options declare one it never reads. `payments-sumup/src/provider.ts:47` still
+    says it is stamped on the incident, which is false; prune it with that package (#570 made
+    `payments-stripe`'s comments say the value is passed on and not read). Dropping the option is a
+    code change.
   - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
     `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
     rows the first resolved. The comment at `listAttempting` now says so.
-  - `apps/till/src/widgets/tender-pay.ts` points at `packages/payments/src/provider.ts:113-137` and
-    lists `PaymentProvider`'s methods without `resolvePending`; both were wrong before #558. Prune
-    with `apps/till`.
   - Comments in `apps/server` tests cite
     `packages/identity/src/schema/persons.ts:26` and `:67`, already wrong before #559; name the
     column instead of the line when those packages are pruned.
@@ -2721,6 +2718,16 @@ image constraints under *Detail → Box image*.
     by line number, which the prune moved; it is a migration file, so it was left. The slice-2 plan's
     Task 6 Step 10 still finds the two comments it replaces by their opening words, but its line
     numbers into `index.ts` and `index.test.ts` are out of date.
+  - `packages/payments-stripe`, found by #570 and not changed (each a code or config change, not a
+    comment): the two `provider.test.ts` cases named "throws payment.not_found" assert only
+    `rejects.toThrow()`, not the code (CLAUDE.md §4); `tenant-scoping.test.ts` is named for tenant
+    scoping but now guards that no source file opens a bare `.transaction(`; and `vitest.config.ts`
+    leaves `src/stripe-client.ts` out of coverage although #570's review made that wrapper throw and
+    two tests in the normal suite failed, so the normal run does reach it — CLAUDE.md §2 says a gap
+    is never closed by an exclude over code a test could reach. Reversal retry-safety (one persisted
+    id per reversal) is still deferred: #570's review showed two identical `reverseViaStripe` calls
+    get different idempotency keys, so a retried reversal sends a second real refund; the comment
+    at `reverse.ts` says so.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
