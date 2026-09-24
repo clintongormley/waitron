@@ -60,7 +60,8 @@ which is the change it would most have been wanted for; that upgrade's build evi
 taken locally instead. `docs/backlog.md` carries the work item.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
-guards. A documentation-only push stops after formatting. Deletion-only pushes run no checks.
+guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
+also selects the members that read it. A documentation-only push stops after formatting. Deletion-only pushes run no checks.
 Unknown ranges keep the full local gate, including workspace typechecking.
 
 The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
@@ -514,7 +515,10 @@ The `changes` job skips the expensive `code`-gated jobs when every changed path 
 documentation, or root config no `code`-gated job reads (`.codex/`, `.vscode/`, the root
 `.gitignore`, the root `.editorconfig`) — or is the repository's own machinery (`scope=root`:
 `scripts/`, `.husky/`, `.github/`), and on a pull request narrows the shards and mutation jobs to
-the changed packages and their dependents.
+the changed packages and their dependents. A root file that members read — `scripts/bundle-node.mjs`,
+`scripts/dev-server-proxy.ts` — is the exception: `ROOT_SCOPE_CONSUMERS` in
+`scripts/changed-scope.mjs` selects the members that read it, so its change is `code=true`, and
+`scripts/root-scope-consumers.test.mjs` fails when a member starts reading an unlisted one.
 
 `lint` is ungated and runs on every push — eslint, `format:check` AND the repo-level Vitest
 project — so a regression in a skipped path is caught there only as far as the root suites
