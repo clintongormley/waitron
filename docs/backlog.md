@@ -4184,6 +4184,24 @@ Also left open: now that both ends are `state`, the keys #426 dropped could be d
 `google_oidc_states` to `persons` (`sessions` and `management_sessions` are rebuilt by
 `packages/identity/drizzle/0003_session_token_hash_required.sql` anyway). Doing so would change
 what deleting a person does.
+Task 2a, a recovery key that does not need an archive destination (`loadRecoveryKey` reads the
+key alone, `writeRecoveryKey` sets it in `backup.env` keeping the other settings, `rotate` changes
+the key of a box that holds a key and has no destination loaded, and `apply` reuses a key the box already holds,
+refusing a different one with `backup.recovery_key_exists`; every status answer carries
+`recoveryKeySet`), is on branch `feat/sqlite-slice2-recovery-key`. The dashboard words
+`backup.recovery_key_exists` (a stopgap wording Task 8b replaces) but does not yet read
+`recoveryKeySet`. The gap that leaves: the Backups screen's setup form
+(`apps/dashboard/src/screens/backup-screen.ts`, shown on a writable box whose backups are not
+enabled) sends a freshly made key unless the operator pastes one, so on a box that holds a key while
+backups are off — for instance one whose venue failed to open, which clears the running config while
+`backup.env` keeps the key — the apply is refused with that code. On that failed-venue box pasting
+the held key does not help either: the apply writes, reloads, the venue fails to open again, and the
+route answers `backup.effective_mismatch`. The edit-settings form can also meet
+`backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
+key. Making the setup form reuse the held key through `recoveryKeySet` is Task 8b's. Left open: the
+"key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always
+passes `keyRotatedAt: undefined` — this predates Task 2a (a settings re-apply already dropped it),
+and the value is what the Backups screen shows as the date the key was rotated.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's

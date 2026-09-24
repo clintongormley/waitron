@@ -15962,6 +15962,9 @@ In `codes.ts`, after `"backup.effective_mismatch"`:
   },
 ```
 
+> 2026-09-24: Task 2a already added this entry to `codes.ts`; this step replaces its wording rather
+> than adding it.
+
 - [ ] **Step 3: Write the failing panel tests**
 
 Create `apps/dashboard/src/screens/stream-settings-panel.test.ts`:

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { BackupSchedule } from "./backup-config.js";
@@ -80,4 +81,27 @@ export async function writeBackupEnv(stateDir: string, input: BackupEnvInput): P
   const record = backupEnvRecord(input);
   assertStorableRecord(record);
   await writeFileAtomic(join(stateDir, "backup.env"), formatEnvFile(record), 0o600);
+}
+
+/** Set the recovery key in `<stateDir>/backup.env`, keeping every other setting the file holds, so a box
+ * with no archive destination can hold a key and a box with one keeps its destination, schedule and
+ * retention. */
+export async function writeRecoveryKey(
+  stateDir: string,
+  input: { recoveryKey: string; keyRotatedAt: string | undefined },
+): Promise<void> {
+  const path = join(stateDir, "backup.env");
+  let existing: Record<string, string> = {};
+  try {
+    existing = parseEnvFile(await readFile(path, "utf8"));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  const record: Record<string, string> = {
+    ...existing,
+    WAITRON_BACKUP_RECOVERY_KEY: input.recoveryKey,
+  };
+  if (input.keyRotatedAt !== undefined) record.WAITRON_BACKUP_KEY_ROTATED_AT = input.keyRotatedAt;
+  assertStorableRecord(record);
+  await writeFileAtomic(path, formatEnvFile(record), 0o600);
 }

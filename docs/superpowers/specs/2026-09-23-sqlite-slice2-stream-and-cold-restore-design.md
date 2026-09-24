@@ -164,6 +164,9 @@ same key:**
   the 7-day history stay locked with the old key, so restoring to a point before the rotation needs
   the old kit; the screen says to keep it for seven days.
 
+> 2026-09-24: Task 2a (branch `feat/sqlite-slice2-recovery-key`) changed the "today" above —
+> `loadRecoveryKey` reads the key without an archive destination, and a box can hold one with none.
+
 ### 3.2 Why not simply stream the credentials
 
 Credentials are locked under the box's vault master key, which only that box holds. Streaming them

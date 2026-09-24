@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { loadBackupConfig } from "./backup-config.js";
+import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 
 describe("loadBackupConfig", () => {
   it("returns undefined when WAITRON_BACKUP_DIR is unset (backup off)", () => {
@@ -252,5 +252,24 @@ describe("loadBackupConfig destinations + recovery key", () => {
         WAITRON_BACKUP_DESTINATIONS: '[{"kind":"local-fs","id":"usb","dir":"/mnt/a"}]',
       }),
     ).toThrow(new AppError("backup.destinations_invalid", { reason: "duplicate_dir" }));
+  });
+});
+
+describe("loadRecoveryKey", () => {
+  it("is undefined when the key is unset or empty", () => {
+    expect(loadRecoveryKey({})).toBeUndefined();
+    expect(loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: "" })).toBeUndefined();
+  });
+
+  it("returns the key with no archive destination configured", () => {
+    // loadBackupConfig answers undefined here, before it ever reads the key.
+    expect(loadBackupConfig({ WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" })).toBeUndefined();
+    expect(loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" })).toBe("twelve-chars!");
+  });
+
+  it("refuses a key under the floor even with no destination", () => {
+    expect(() => loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: "short" })).toThrow(
+      new AppError("backup.recovery_key_too_short", { min: 12 }),
+    );
   });
 });
