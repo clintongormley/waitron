@@ -2,8 +2,6 @@ import { expect, test, afterEach, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-dialog.js";
 
-afterEach(cleanup);
-
 /**
  * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
  * close in a later task, which a zero-delay timer can run ahead of, so this closes a throwaway
@@ -20,6 +18,8 @@ async function closeReportsDelivered(): Promise<void> {
   await reported;
   probe.remove();
 }
+
+afterEach(cleanup);
 
 type Openable = HTMLElement & { open: boolean; updateComplete: Promise<unknown> };
 
