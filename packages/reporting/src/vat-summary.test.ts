@@ -87,7 +87,7 @@ describe("computeVatSummary", () => {
     expect(vat.byRate).toEqual([{ rate: "21.00", base: "95.00", tax: "19.95" }]);
   });
 
-  it("excludes a voided sale", async () => {
+  it("excludes a sale voided on its own business day", async () => {
     const s = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,

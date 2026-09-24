@@ -7,9 +7,10 @@ import type { DailyClose, DailyCloseInput } from "./types.js";
 
 /**
  * The daily close for one node — or the whole venue when `input.nodeId` is omitted (the
- * venue-wide dashboard overview) — over one business day: a VAT summary (issuance-anchored) and an
- * operational cash-up (settlement-anchored), plus record counts. Its three sub-aggregates each scope
- * by node only when one is given. Inputs are validated before any query runs.
+ * venue-wide dashboard overview) — over one business day: a VAT summary (sales on their issue
+ * day, a void on the day it was made) and an operational cash-up (settlement-anchored), plus record
+ * counts. Its three sub-aggregates each scope by node only when one is given. Inputs are validated
+ * before any query runs.
  */
 export async function computeDailyClose(
   tx: Transaction,

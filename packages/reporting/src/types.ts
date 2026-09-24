@@ -41,10 +41,10 @@ export interface TopSellersInput extends PeriodVatInput {
 export interface TopSeller {
   /** The frozen `sale_lines.name` — the parent's staff name on a variant line. */
   name: string;
-  /** Σ line quantity over the range, at three decimal places; corrections net in, so it can
-   * fall. */
+  /** Σ line quantity over the range, at three decimal places; corrections and the reversed lines
+   * of a sale whose void falls in the range net in, so it can fall below zero. */
   quantity: Decimal;
-  /** Σ line_total over the range, as an amount; corrections net in. */
+  /** Σ line_total over the range, as an amount; nets in as {@link TopSeller.quantity} does. */
   total: Decimal;
   /** One row per variant sold under this name, by quantity then name; `[]` when none was. */
   variants: TopSellerVariant[];
@@ -157,7 +157,7 @@ export interface CloseCounts {
   /** Rectificativas issued in the business day (corrects_sale_id set), excl. those voided in the
    * same business day. */
   corrections: number;
-  /** Void events (`sale_voids`) whose voided_at falls in the business day, for this node. */
+  /** Void events (`sale_voids`) whose voided_at falls in the business day. */
   voids: number;
 }
 

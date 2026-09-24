@@ -426,7 +426,7 @@ describe("computeTopSellers", () => {
       ]);
     });
 
-    it("leaves a variant line of a voided sale out of both its row and its parent's", async () => {
+    it("leaves a variant line of a sale voided the same day out of both its row and its parent's", async () => {
       const voided = await seedSale(suite.db, venue, {
         invoiceNumber: 2,
         issuedAt: noonUtc,
@@ -575,7 +575,7 @@ describe("computeTopSellers", () => {
     expect(rows).toEqual([{ name: coffeeName, quantity: "13.000", total: "130.00", variants: [] }]);
   });
 
-  it("excludes a voided sale", async () => {
+  it("excludes a sale voided on its own business day", async () => {
     const voided = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
@@ -605,7 +605,7 @@ describe("computeTopSellers", () => {
         },
       ],
     });
-    // The voided Coffee is gone; only the live Toast remains.
+    // The Coffee voided the same day is gone; only the live Toast remains.
     const rows = await run();
     expect(rows).toEqual([{ name: toastName, quantity: "1.000", total: "10.00", variants: [] }]);
   });
