@@ -31,7 +31,11 @@ function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): n
   );
 }
 
-function boundedCount(
+/**
+ * `count` when it fits `maxIntegerDigits` integer digits at `scale`, refused otherwise in the
+ * caller's own `value`. Package-internal — not re-exported from `index.ts`.
+ */
+export function boundedCount(
   count: bigint,
   value: string,
   scale: number,
