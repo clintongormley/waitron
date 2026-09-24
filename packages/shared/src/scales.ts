@@ -3,9 +3,10 @@ import { decimal, toScale } from "./money.js";
 import type { Decimal } from "./money.js";
 
 // The crossings between a scaled-integer column and a `Decimal` for the two scales that are not
-// money: a quantity counts whole thousandths, a rate whole basis points. Kept apart from
-// `./cents.ts` because one conversion for every scale would misread a quantity: 0.005 kg is 5
-// thousandths, but 1 at the money scale. The only rounding is `toScale`'s, in BigInt.
+// money: a quantity counts whole thousandths, a rate whole basis points. `scaledCount`, which takes
+// the scale as a parameter, also serves `./cents.ts`. A conversion fixed to one scale would misread
+// a quantity: 0.005 kg is 5 thousandths, but 1 at the money scale. The only rounding is
+// `toScale`'s, in BigInt.
 
 /** Three decimal places, so five grams is a quantity and not a rounding error. */
 export const QUANTITY_SCALE = 3;
@@ -22,7 +23,8 @@ export const RATE_SCALE = 2;
 /** Three integer digits: 999.99 is 99999 basis points. */
 export const MAX_RATE_INTEGER_DIGITS = 3;
 
-function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
+/** Package-internal — not re-exported from `index.ts`. */
+export function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): number {
   return boundedCount(
     BigInt(toScale(value, scale).replace(".", "")),
     value,
@@ -33,9 +35,9 @@ function scaledCount(value: Decimal, scale: number, maxIntegerDigits: number): n
 
 /**
  * `count` when it fits `maxIntegerDigits` integer digits at `scale`, refused otherwise in the
- * caller's own `value`. Package-internal — not re-exported from `index.ts`.
+ * caller's own `value`.
  */
-export function boundedCount(
+function boundedCount(
   count: bigint,
   value: string,
   scale: number,
@@ -135,8 +137,11 @@ export function rawThousandthsToDecimal(value: string): Decimal {
 }
 
 /**
- * The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT. Bounded at
- * the rate's three integer digits, refused past them with `shared.decimal_overflow`.
+ * The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT.
+ *
+ * Unlike the quantity reader, it keeps the rate's three-integer-digit bound, refused past it with
+ * `shared.decimal_overflow`: its caller, `packages/reporting/src/input-vat.ts`, reads a grouped rate
+ * column, never a sum.
  */
 export function rawBasisPointsToDecimal(value: string): Decimal {
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {

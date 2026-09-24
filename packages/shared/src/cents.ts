@@ -1,7 +1,7 @@
 import { AppError } from "./errors.js";
-import { decimal, MAX_MONEY_INTEGER_DIGITS, MONEY_SCALE, toScale } from "./money.js";
+import { decimal, MAX_MONEY_INTEGER_DIGITS, MONEY_SCALE } from "./money.js";
 import type { Decimal } from "./money.js";
-import { boundedCount, RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
+import { RAW_COUNT_PATTERN, scaledCount, scaledLiteral } from "./scales.js";
 
 // The crossing between a money column's stored count of whole cents and a `Decimal`. A file of its
 // own because `conventions.test.ts` fails `./money.ts` on any `Number(`. Exact: `decimalToCents`
@@ -10,12 +10,7 @@ import { boundedCount, RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
-  return boundedCount(
-    BigInt(toScale(value, MONEY_SCALE).replace(".", "")),
-    value,
-    MONEY_SCALE,
-    MAX_MONEY_INTEGER_DIGITS,
-  );
+  return scaledCount(value, MONEY_SCALE, MAX_MONEY_INTEGER_DIGITS);
 }
 
 /**
