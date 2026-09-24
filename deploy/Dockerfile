@@ -184,6 +184,6 @@ USER waitron
 WORKDIR /app
 
 # No CMD: the entrypoint takes no arguments, and the four operator CLIs are run by naming their file
-# with --entrypoint (deploy/README.md). A bare `docker run <image> <command>` would otherwise pass
-# the command to node-entry.js as arguments and re-run the bootstrap.
+# with --entrypoint (deploy/README.md). A bare `docker run <image> <command>` passes the command to
+# node-entry.js as arguments, which it refuses with server.entry_arguments_refused.
 ENTRYPOINT ["node", "/app/node-entry.js"]

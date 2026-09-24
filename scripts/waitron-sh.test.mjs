@@ -39,8 +39,8 @@ afterEach(() => {
 //     verdict yet, which is what the script's retry loop exists for.
 //   - `compose logs` -> prints the database_ahead line when $WT_AHEAD_LOGS is 1.
 //   - `compose run` -> the app image, and the stub MODELS ITS ENTRYPOINT: an invocation carrying no
-//     `--entrypoint` prints the boot_failed line and exits 1, the way the real image does (measured;
-//     see the entrypoint case in the reset block). Given the override it answers by what the command
+//     `--entrypoint` prints the boot_failed line and exits 1, the way the real entrypoint does (see
+//     the entrypoint case in the reset block). Given the override it answers by what the command
 //     NAMES — $WT_DB_STAMP for a `venue.db`, $WT_TRADING_ENV for a `trading.env` (set that to
 //     "__ABSENT__" to model an unprovisioned box whose state volume has no trading.env) — so a read
 //     pointed at the wrong file reads empty and its test fails. The reset's `find` names neither and
@@ -113,14 +113,14 @@ case "$1" in
       *" run "*)
         # Every throwaway container the script runs against the state volume is built from the APP
         # image, whose ENTRYPOINT is node /app/node-entry.js. An invocation that does not override it
-        # has its arguments APPENDED to that entrypoint, so the container boots a server instead of
-        # reading the volume: measured 2026-09-23, the server.boot_failed line below on stdout and
-        # exit 1. Modelling that here is what makes a missing --entrypoint fail a test — this arm
+        # has its arguments APPENDED to that entrypoint, which refuses them instead of reading the
+        # volume: the server.boot_failed line below on stdout and exit 1. Modelling that here is
+        # what makes a missing --entrypoint fail a test — this arm
         # used to answer a trading.env read whatever the entrypoint was, so every case stayed green
         # either way.
         case "$args" in
           *--entrypoint*) ;;
-          *) echo '{"errorCode":"server.config_missing","event":"server.boot_failed"}'; exit 1 ;;
+          *) echo '{"errorCode":"server.entry_arguments_refused","event":"server.boot_failed"}'; exit 1 ;;
         esac
         [ "\${WT_READ_ERROR}" = "1" ] && exit 1
         # Answered by what the command NAMES, so a read pointed at the wrong file reads empty.
@@ -428,12 +428,15 @@ describe("waitron.sh reset", () => {
 
   // Every throwaway container this script runs against the state volume runs the APP image, whose
   // ENTRYPOINT is `node /app/node-entry.js` (deploy/Dockerfile) — so an invocation that does not
-  // override it has its arguments APPENDED to that entrypoint and boots a server instead of reading
-  // the volume. Measured 2026-09-23 against `waitron:dev` (same ENTRYPOINT, same `USER waitron`) on
-  // a throwaway compose project mirroring the app service, both directions: with `--entrypoint sh`
-  // the trading.env read printed `WAITRON_ENV=production` and exited 0 and the state-emptying find
-  // left `tls/` standing and exited 0; WITHOUT it both printed
+  // override it has its arguments APPENDED to that entrypoint instead of reading the volume.
+  // Measured 2026-09-23 against `waitron:dev` (same ENTRYPOINT, same `USER waitron`) on a throwaway
+  // compose project mirroring the app service, both directions: with `--entrypoint sh` the
+  // trading.env read printed `WAITRON_ENV=production` and exited 0 and the state-emptying find left
+  // `tls/` standing and exited 0; WITHOUT it both booted a server, printed
   // `{"errorCode":"server.config_missing",...,"event":"server.boot_failed"}` on stdout and exited 1.
+  // The entrypoint now refuses arguments instead of booting; measured 2026-09-24 on the esbuild
+  // bundle of `apps/server/src/node-entry.ts` (not an image), `node node-entry.js /app/bin-restore.js`
+  // printed the `server.entry_arguments_refused` boot_failed line and exited 1.
   // What that costs is silence: a failed trading.env read makes `is_production` fail CLOSED, so a
   // demo box would refuse every reset as production.
   it("overrides the image entrypoint on every container it runs against the state volume", () => {
