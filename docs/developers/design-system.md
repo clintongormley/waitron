@@ -163,14 +163,22 @@ name is the one cell whose text can be long, so capping it makes the text wrap a
 controls after it (a switch, a row menu) on screen at phone width instead of pushing the row into a
 sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
 the product editor at a 390px-wide frame, removing it changed no column, while in a 1280px frame it
-held the name column to 231px against 342px without it. What keeps that table's row menus on a
-phone screen is its own rule for a table 30rem wide or less: the name column takes whatever width
-the others leave and may break inside a word, and the price and Available columns are bounded by
-`--wt-tap-min` plus a spacing token rather than by their words. Guard: the phone-width cases in
-`apps/dashboard/src/widgets/product-editor.test.ts`, run in English and Spanish and with the text
-sizes raised. There was a third, the old modifier form's choices table, until Task 13 of the
-extras-and-options plan deleted that form. That deleted table was the ONLY one that ever spelled the
-literal out for itself: `git log -S140px --oneline --all -- apps packages` returns two commits, and
+held the name column to 231px against 342px without it. At phone width it relies instead on its
+own rule for a table 30rem wide or less: the name column takes whatever width the others leave and
+is the one column that may break inside a word, while the price and Available headings are capped
+by `--wt-tap-min` plus a spacing token. An amount and a heading's word never break, so a longer
+amount or larger text widens those two columns and the room comes out of the name. Measured
+2026-09-24 in the product editor with a four-digit price: the row menus stay inside a 390px frame in
+English and Spanish at both text sizes, with the name column down to 32px at the larger size; at
+360px that holds only at the normal size, and at 320px the table scrolls sideways inside its box.
+Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390px only,
+in English and Spanish and with the text sizes raised. They check that the table does not scroll,
+that each row menu ends inside both the table's box and the frame, that each price sits on one
+line and ends inside its cell, that the Available heading sits on one line, and that the unit
+chooser is a tap target on both axes. There was a third, the old modifier form's choices table,
+until Task 13 of the extras-and-options plan deleted that form. That deleted table was the ONLY one
+that ever spelled the literal out for itself:
+`git log -S140px --oneline --all -- apps packages` returns two commits, and
 between them the only files they write the number into are `modifier-form.ts` (added, then removed
 by the change that created this token) and `packages/ui-core/src/tokens/structure.css` (the token's own
 value). So neither the variants table nor the attached-lists table has ever carried the number. The

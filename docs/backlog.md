@@ -721,6 +721,26 @@ What Task 7 (`feat/variants-editor-screen`, the dashboard's variant page) leaves
   because the column is bounded so the row fits. **Next action:** decide whether the unit select
   belongs in the price heading at phone width at all, since the base price field above the table
   already shows and changes the same unit.
+- **The variants table's name column is what gives way on a narrow phone.** Measured 2026-09-24 in
+  the product editor with a four-digit price, in English and Spanish: at 390px wide the rows fit, but
+  with the text sizes raised a step the name column is 32px and a long name wraps nearly letter by
+  letter, because a price and the Available switch no longer shrink below their own width; at 360px
+  the name column is 31–41px at the normal size and the table is 26px too wide at the larger size;
+  at 320px it is 20–66px too wide and scrolls sideways inside its box. The dialog around the table
+  takes 98px of the width: the table's box starts at x=49 and ends 49px short of the right edge at
+  every width measured. **Next action:** decide whether `wt-modal`'s margins and padding should
+  shrink at phone width, which would hand that room to the name column.
+- **Three dashboard tests believe they run at phone width and do not.** The `setViewportSize`
+  browser command (`apps/dashboard/vitest.config.ts`, whose comment says it exercises the responsive
+  breakpoints) resizes the outer Playwright page, not the frame a test renders in: measured
+  2026-09-24, `window.innerWidth` read 414 before and after `setViewportSize(390, 800)`, and 390
+  after `page.viewport(390, 800)` from `vitest/browser`. Its callers are two drawer cases in
+  `apps/dashboard/src/dashboard-app.test.ts` (one asking for 400px, one described as a 390px case)
+  and one in `apps/dashboard/src/dashboard-app.a11y.test.ts`, so each runs at 414px. It predates
+  the variants branch: `git log -S setViewportSize` over those files names #172 and #333, and the
+  branch changes none of the three. **Next action:** switch them to
+  `page.viewport`, assert `window.innerWidth` after resizing, and delete the command if nothing else
+  uses it.
 - **The product list's variant read repeats a grouping.** `listedVariantsOfProducts`
   (`packages/catalogue/src/operations.ts`) groups variants by parent the same way
   `variantsOfProducts` (`packages/catalogue/src/variants.ts`) does. **Next action:** share one

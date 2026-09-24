@@ -1080,21 +1080,19 @@ export class ProductEditor extends LitElement {
           this.unitPickerOpen = true;
         }}
       ></wt-price-input>
-      ${this.unitOpen ? this.renderUnit() : nothing}
-      ${parent ? nothing : this.renderVariants(unitLabel)}
+      ${this.unitOpen ? this.renderUnit() : nothing} ${parent ? nothing : this.renderVariants()}
     </fieldset>`;
   }
 
   /** The parent's quick variants section: the common fields inline, each variant's full set of
    * overrides on its own page (spec §4.4). */
-  private renderVariants(unitLabel: string) {
+  private renderVariants() {
     // Opening a variant's page replaces this form, so it waits until nothing here is unsaved.
     const unsaved = this.value !== null && !sameValue(this.draft, this.value);
     return html`${
         this.draft.variants.length
           ? html`<dashboard-variant-table
               .variants=${this.draft.variants}
-              unitLabel=${unitLabel}
               basePrice=${this.draft.unitPrice ?? ""}
               .unitId=${this.draft.unitId}
               .unitOptions=${[

@@ -118,7 +118,6 @@ function variantTable(el: ProductEditor) {
   return el.shadowRoot!.querySelector<
     HTMLElement & {
       variants: EditorVariant[];
-      unitLabel: string;
       errors: Record<number, string>;
       updateComplete: Promise<unknown>;
     }
@@ -926,7 +925,10 @@ it("names the product's unit in the variants table's price column", async () => 
     units: [unit],
     taxChoices: reduced,
   });
-  expect(variantTable(el)!.unitLabel).toBe("ea");
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  const select = table.shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!;
+  expect(select.selectedOptions[0]!.textContent!.trim()).toBe("ea");
 });
 
 it("saves station and course with a new product, without a separate routing event", async () => {
@@ -1956,9 +1958,24 @@ it("paints a variant's description hint from the muted-text token", async () => 
   expect(getComputedStyle(description, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
+/** How many lines `text` takes up inside `cell`: one rectangle per line the browser wrapped it onto. */
+function linesOf(cell: Element, text: string): number {
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const at = node.textContent!.indexOf(text);
+    if (at < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + text.length);
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  }
+  throw new Error(`"${text}" is not in the cell`);
+}
+
 // A wider font and a longer language are what CI's Linux fonts and a real phone bring, so each case
 // is also run with every text size raised to a larger token. English and Spanish label the columns
-// differently, and a product with no unit shows the longest unit name.
+// differently, and a product with no unit shows the longest unit name. A four-digit price is the
+// widest amount a row is likely to carry, and it must never break inside the number.
 it.each([
   { locale: "en-GB", scaled: false, unitId: unit.id },
   { locale: "es-ES", scaled: false, unitId: unit.id },
@@ -1984,7 +2001,7 @@ it.each([
           variants: [
             { ...small, name: "Vino tinto de la casa, copa grande 125 ml", unitPrice: null },
             { ...large, name: "Vino 175 ml" },
-            { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "12.00" },
+            { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "1250.00" },
           ],
         },
         locales: ["en"],
@@ -1999,13 +2016,36 @@ it.each([
       await table.updateComplete;
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const wrap = table.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
-      // A table that fits never needs its own scroller; the row menu is then inside the visible box.
+      // A table that fits never needs its own scroller. That alone does not put the menus on the
+      // screen: a table forced wider widens the box around it too, so each menu is also held to
+      // the frame's own right edge.
       expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
       const edge = wrap.getBoundingClientRect().right;
       for (const index of [0, 1, 2]) {
         const menu = table.shadowRoot!.querySelector(`[data-test="actions-${index}"]`)!;
-        expect(menu.getBoundingClientRect().right, `row ${index}`).toBeLessThanOrEqual(edge);
+        const right = menu.getBoundingClientRect().right;
+        expect(right, `row ${index}`).toBeLessThanOrEqual(edge);
+        expect(right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
       }
+      const cells = [...table.shadowRoot!.querySelectorAll("tbody tr")].map(
+        (row) => row.children[2]!,
+      );
+      expect(linesOf(cells[0]!, "9.00"), "the base price the first row falls back to").toBe(1);
+      expect(linesOf(cells[1]!, "3.00")).toBe(1);
+      expect(linesOf(cells[2]!, "1250.00")).toBe(1);
+      // Kept on one line, an amount wider than its column would run over the switch beside it.
+      for (const cell of cells) {
+        const amount = cell.querySelector(".amount")!.getBoundingClientRect();
+        expect(amount.right).toBeLessThanOrEqual(cell.getBoundingClientRect().right);
+      }
+      const available = table.shadowRoot!.querySelectorAll("thead th")[3]!;
+      expect(linesOf(available, t("editor.available")), "the Available heading").toBe(1);
+      // The unit chooser is a tap target on both axes, like every other control on the row.
+      const unitSelect = table.shadowRoot!.querySelector('select[name="pricing-unit"]')!;
+      const tapMin = parseFloat(getComputedStyle(table).getPropertyValue("--wt-tap-min"));
+      expect(tapMin).toBeGreaterThan(0);
+      expect(unitSelect.getBoundingClientRect().height).toBeGreaterThanOrEqual(tapMin);
+      expect(unitSelect.getBoundingClientRect().width).toBeGreaterThanOrEqual(tapMin);
     } finally {
       setLocale("es-ES");
       await page.viewport(width, height);

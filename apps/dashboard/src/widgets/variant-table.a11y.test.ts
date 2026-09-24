@@ -39,7 +39,6 @@ async function mount(
     {
       variants: rows,
       basePrice: "9.00",
-      unitLabel: "kg",
       unitId: "kg",
       unitOptions: [
         { value: null, label: "Each" },

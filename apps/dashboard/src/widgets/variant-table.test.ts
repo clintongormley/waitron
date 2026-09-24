@@ -49,7 +49,6 @@ async function mountTable(props: Partial<VariantTable> = {}) {
   return (
     await mountWidget<VariantTable>("dashboard-variant-table", {
       variants: threeVariants(),
-      unitLabel: "kg",
       ...props,
     })
   ).el;
@@ -118,6 +117,23 @@ it("returns the unit chooser to its saved value after Add unit is chosen", async
   select.dispatchEvent(new Event("change", { bubbles: true }));
   expect(added).toHaveBeenCalledOnce();
   expect(select.value).toBe("kg");
+});
+
+it("keeps the unit chooser in the price heading a tap target on both axes", async () => {
+  const el = await mountTable({
+    unitId: "kg",
+    unitOptions: [
+      { value: null, label: "Each" },
+      { value: "kg", label: "kg" },
+    ],
+  });
+  const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+  expect(tapMin).toBeGreaterThan(0);
+  const box = el
+    .shadowRoot!.querySelector<HTMLSelectElement>('select[name="pricing-unit"]')!
+    .getBoundingClientRect();
+  expect(box.height).toBeGreaterThanOrEqual(tapMin);
+  expect(box.width).toBeGreaterThanOrEqual(tapMin);
 });
 
 it("caps the name cell with the shared sizing token, not a literal width", async () => {

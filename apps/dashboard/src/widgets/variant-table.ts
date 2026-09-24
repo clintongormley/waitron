@@ -43,7 +43,8 @@ export class VariantTable extends LitElement {
         display: block;
         container-type: inline-size;
       }
-      /* A last resort only: the phone-width rules below keep the table inside its box. */
+      /* Where the columns cannot fit, the table scrolls sideways inside its own box rather than
+         widening the dialog. */
       .wrap {
         overflow-x: auto;
       }
@@ -93,25 +94,30 @@ export class VariantTable extends LitElement {
         field-sizing: content;
         width: auto;
         min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
         max-width: 100%;
         padding-inline: var(--wt-space-1);
       }
-      /* At phone width the name takes whatever the other columns leave, and each of those is
-         bounded by a token rather than by its words, so a wider font or a longer language makes
-         the rows taller rather than wider. Guard: the phone-width cases in
-         product-editor.test.ts. */
+      /* An amount never breaks inside the number. */
+      .amount {
+        white-space: nowrap;
+      }
+      /* At phone width the name takes whatever the other columns leave. The price and Available
+         headings are capped by a token, but an amount and a heading's word never break, so a
+         longer amount or larger text widens those columns and the room comes out of the name.
+         Measured 2026-09-24 in the product editor with a four-digit price: at 390px the table fits
+         its box in English and Spanish at both text sizes, with the name column down to 32px at
+         the larger size; at 360px it fits only at the normal size; at 320px it scrolls sideways.
+         Guard: the phone-width cases in product-editor.test.ts, at 390px only. */
       @container (max-width: 30rem) {
         th:nth-child(2) {
           width: 100%;
         }
-        th:nth-child(3),
-        td:nth-child(3) {
+        th:nth-child(3) {
           max-width: calc(var(--wt-tap-min) + var(--wt-space-4));
-          overflow-wrap: break-word;
         }
         th:nth-child(4) {
           max-width: calc(var(--wt-tap-min) + var(--wt-space-5));
-          overflow-wrap: break-word;
         }
       }
       /* A rejected row is marked in the row itself: a message in the summary alone does not say
@@ -166,8 +172,6 @@ export class VariantTable extends LitElement {
   /** True while the product has changes not yet saved: opening a variant's page would leave them
    * behind, so Open is held until they are saved. */
   @property({ type: Boolean }) openBlocked = false;
-  /** The product's pricing unit, named once in the price column's header. */
-  @property() unitLabel = "";
   @property({ attribute: false }) unitId: string | null = null;
   @property({ attribute: false }) unitOptions: { value: string | null; label: string }[] = [];
   @property() addUnitLabel = "";
@@ -265,6 +269,12 @@ export class VariantTable extends LitElement {
     return variant?.name.trim() || t("editor.variant");
   }
 
+  /** "Same as" the product's price, with the amount kept whole while the words around it wrap. */
+  #sameAs() {
+    const [before = "", after = ""] = t("editor.same_as").split("{value}");
+    return html`${before}<span class="amount">${this.basePrice}</span>${after}`;
+  }
+
   #emit(name: string, detail: Record<string, unknown>): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -323,12 +333,11 @@ export class VariantTable extends LitElement {
       </td>
       <td>
         ${
-          variant.unitPrice ??
-          (this.basePrice
-            ? html`<span class="muted"
-                >${t("editor.same_as").replace("{value}", this.basePrice)}</span
-              >`
-            : nothing)
+          variant.unitPrice !== null
+            ? html`<span class="amount">${variant.unitPrice}</span>`
+            : this.basePrice
+              ? html`<span class="muted">${this.#sameAs()}</span>`
+              : nothing
         }
       </td>
       <td>
