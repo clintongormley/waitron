@@ -32,12 +32,6 @@ const suite = useVenueDb({
 
 async function venue() {
   await seedTenant(suite.db);
-  // Every fixture row in this file goes through the insert BUILDER rather than raw SQL, for two
-  // things the raw statements relied on PostgreSQL for. `array['en']` is refused at prepare —
-  // `near "['en']": syntax error` — because SQLite has no array literal and `invoice_locales` is
-  // now a JSON array in a TEXT column that `labelList` encodes. And each table's `id` and its
-  // timestamps are JavaScript `$defaultFn` generators rather than SQL DEFAULTs, which only the
-  // builder runs; measured, a raw insert is refused with `NOT NULL constraint failed: <table>.id`.
   const [location] = await suite.db
     .insert(locations)
     .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Restaurant" })
@@ -91,24 +85,16 @@ it("an open order keeps its copied category label after the category is deleted"
       .insert(workingOrders)
       .values({ tillId: till!.id, orderNumber: 1, label: "Historical" })
       .returning({ id: workingOrders.id });
-    // This one stays raw SQL so the five counts below stay literally where the comment puts them.
-    // Two changes only: `id` is named (no SQL DEFAULT to fill it), and the `::jsonb` cast is gone —
-    // `descriptions` is a TEXT column holding JSON here, and the cast is refused at prepare with
-    // `unrecognized token: ":"`.
+    // Raw SQL so the stored counts are written literally; `id` is named because only the insert
+    // builder generates one.
     await tx.execute(sql`
       insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, category) values (${randomUUID()}, ${order!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
          200, 200, 1000, 200, 'Bakery')
     `);
 
     await deleteCategory(tx, category.id);
-    // The counts come back beside the snapshot this case is about, because every number in the
-    // insert above is a count at its own scale and the columns refuse none of the wrong ones:
-    // one loaf is 1000 thousandths, 10.00% is 1000 basis points, and the 2.00 the product was
-    // priced at is 200 cents. Written as `1` and `10` this case still passed, measured by doing
-    // exactly that.
-    // `cast(… as text)`, not `::text`: the cast this carried is refused at prepare with
-    // `unrecognized token: ":"`, a colon opening a bind parameter to SQLite's parser. It still
-    // yields the STRING the assertion below compares against, so no expected value moved.
+    // The counts are read back because each is at its own scale and the columns refuse none of
+    // the wrong ones: one loaf is 1000 thousandths, 10.00% is 1000 basis points, 2.00 is 200 cents.
     const snapshot = await tx.execute<{
       category: string | null;
       quantity: string;

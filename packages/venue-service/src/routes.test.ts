@@ -64,14 +64,6 @@ interface Fixture {
 
 async function fixture(): Promise<Fixture> {
   await seedTenant(db);
-  // These three go through the insert BUILDER rather than raw SQL, for two things the raw
-  // statements relied on PostgreSQL for. `array['en-GB']` is refused at prepare —
-  // `near "['en-GB']": syntax error` — because SQLite has no array literal and `invoice_locales` is
-  // now a JSON array in a TEXT column that `labelList` encodes. And each table's `id` and
-  // `created_at` are JavaScript `$defaultFn` generators rather than SQL DEFAULTs, which only the
-  // builder runs; measured on the same fixture, a raw insert is refused with
-  // `NOT NULL constraint failed: <table>.id`. Same shape as every converted fixture in the tree
-  // (`packages/identity/test/fixtures.ts`).
   const [location] = await db
     .insert(locations)
     .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
@@ -90,9 +82,6 @@ async function fixture(): Promise<Fixture> {
     async (tx) => {
       const menu = await createCatalogue(tx, { name: "Drinks" });
       const category = await createCategory(tx, { name: { en: "Cocktails" } });
-      // The builder for both, as for the venue rows above: `persons.id` and its timestamps are
-      // JavaScript `$defaultFn` generators rather than SQL DEFAULTs, so a raw insert is refused
-      // with `NOT NULL constraint failed: persons.id` — measured on this fixture.
       const [manager] = await tx
         .insert(persons)
         .values({
@@ -380,10 +369,8 @@ describe("venue service management routes", () => {
   });
 
   it("scopes edited rows and route references to their venue", async () => {
-    // A SECOND venue (a new location) in the SAME tenant — one tenant per database, so the scoping
-    // that still exists is by LOCATION, not tenant. `fx`'s manager (location L1) must not reach rows
-    // or references that live in `other`'s location (L2). (The cross-TENANT half of this probe was
-    // dropped: with one tenant per database it asserts a property the schema no longer has.)
+    // A second location in the same database: `fx`'s manager must not reach rows or references
+    // that live in `other`'s location.
     const fx = await fixture();
     const other = await fixture();
     const department = (await (

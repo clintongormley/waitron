@@ -18,10 +18,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments } from "./schema/service.js";
 
-// What `useVenueDb` + this set's migrations leave behind, read back out of the pragmas and
-// `sqlite_master`: no tenant column on any table, each table's primary key and its links to each
-// parent's primary key, and every index. Then the other direction — writing through the foreign
-// keys to watch a missing target refused.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,
@@ -62,17 +58,9 @@ async function primaryKeyOf(table: string): Promise<string[]> {
 
 /**
  * Each foreign key of `table`, as `(from columns) -> parent(to columns)` plus a delete rule when it
- * is not the default.
- *
- * The replacement for `pg_get_constraintdef` over `pg_constraint`. A foreign key HAS NO NAME here:
- * drizzle's SQLite generator emits it inline in the `CREATE TABLE` as `FOREIGN KEY (…) REFERENCES
- * …` and SQLite stores no name for it, so `pragma foreign_key_list` reports only an ordinal `id`.
- * That is why these are compared as a sorted list of shapes rather than as a name-to-definition
- * map: the name is the one thing the old catalogue gave that this one cannot.
- *
- * A composite key spans several rows sharing an `id`, ordered by `seq` — which is what
- * `zone_service_policies`' `(zone_id, default_menu_id)` key needs to read back as one entry rather
- * than two.
+ * is not the default. The keys are unnamed in the generated SQL, so they are compared as a sorted
+ * list of shapes; `./schema/service.test.ts` pins the names. A composite key spans several rows
+ * sharing an `id`, ordered by `seq`.
  */
 async function foreignKeysOf(table: string): Promise<string[]> {
   const rows = await db.execute<{
@@ -101,13 +89,8 @@ async function foreignKeysOf(table: string): Promise<string[]> {
 
 /**
  * Every index the migration set created for `table`, by name: its columns in index order, and the
- * statement SQLite stored for it.
- *
- * `sql is null` is the filter rather than a name pattern, the same discrimination
- * `packages/workforce/src/migrations.test.ts` makes: SQLite stores no statement for an index it
- * created itself to back a `PRIMARY KEY` or a single-column `UNIQUE`, so a null `sql` marks an
- * index the migration did not write. A partial index's `WHERE` clause is reported by nothing in the
- * PRAGMA family, so it is read out of that stored text — the only place SQLite keeps it.
+ * statement SQLite stored for it. SQLite stores no statement for an index it created itself to back
+ * a key constraint, so a null `sql` marks one the migration did not write.
  */
 async function indexesOf(
   table: string,
@@ -137,15 +120,10 @@ async function indexesOf(
 
 describe("the venue-service migration set carries no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
-    // `pragma table_info` per table, in place of one `information_schema.columns` query — which is
-    // answered here with `no such table: information_schema.columns`. Each table is named in the
-    // result so a failure says WHICH one carries the column, which the old `select` also did.
     const carrying: string[] = [];
     for (const table of TABLES) {
       const columns = await columnsOf(table);
-      // The loop is only as good as the read behind it, so this fails loudly on an empty answer:
-      // `pragma table_info` returns NO rows for a table that does not exist, and an empty list
-      // would otherwise satisfy the assertion below for every table at once.
+      // `pragma table_info` returns no rows for a table that does not exist.
       expect(columns.length, table).toBeGreaterThan(0);
       if (columns.some((column) => column.name === "tenant_id")) carrying.push(table);
     }
@@ -223,13 +201,8 @@ describe("the venue-service migration set carries no tenant column", () => {
     for (const table of TABLES) Object.assign(defs, await indexesOf(table));
     expect(Object.keys(defs).filter((name) => name.includes("tenant"))).toEqual([]);
     expect(Object.values(defs).filter((def) => def.sql.includes("tenant"))).toEqual([]);
-    // The unique constraints PostgreSQL reported through `pg_constraint` are `CREATE UNIQUE INDEX`
-    // statements here, so they are asserted with the rest of the indexes rather than beside the
-    // keys above.
     const columns = (name: string) => defs[name]?.columns;
-    // `WHERE …` is read off the stored statement because no PRAGMA reports it, and the text is
-    // drizzle's SQLite output verbatim rather than PostgreSQL's normalised `((a IS NOT NULL) AND
-    // …)` — a different spelling of the same predicate.
+    // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
     expect(columns("preparation_routes_lookup_idx")).toEqual([
       "location_id",
@@ -296,16 +269,6 @@ describe("the venue-service migration set carries no tenant column", () => {
 });
 
 describe("the venue-service foreign keys refuse a missing target", () => {
-  /**
-   * The three fixture rows, through the insert BUILDER rather than raw SQL.
-   *
-   * Two things the raw statements relied on PostgreSQL for are gone. `array['en']` is refused at
-   * prepare — `near "['en']": syntax error` — because SQLite has no array literal and
-   * `invoice_locales` is now a JSON array in a TEXT column that `labelList` encodes. And each
-   * table's `id` and `created_at` are JavaScript `$defaultFn` generators rather than SQL DEFAULTs,
-   * which only the builder runs. Same shape as every converted fixture in the tree
-   * (`packages/identity/test/fixtures.ts`).
-   */
   async function venue() {
     await seedTenant(db);
     const [location] = await db
@@ -336,15 +299,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   }
 
   /**
-   * Asserts that `statement` is refused by a foreign key.
-   *
-   * It checks the refusal CLASS and the engine's message, and cannot tell WHICH foreign key
-   * refused: SQLite's message is `FOREIGN KEY constraint failed` and stops there
-   * (`packages/db/src/constraint-target.ts` records that a foreign key's message names no key), so
-   * nothing here can tell one of a table's five foreign keys from another. `constraint` is the
-   * assertion's LABEL, so a failure still says which statement was expected to be refused. A case
-   * that needs to pin a specific foreign key has to reach a shape only that key can refuse, which
-   * is what each statement below already does.
+   * Asserts that `statement` is refused by a foreign key — but not WHICH one: SQLite's message names
+   * no key, so `constraint` is only the assertion's label. Each statement below reaches a shape only
+   * its named key can refuse.
    */
   async function refusal(statement: ReturnType<typeof sql>, constraint: string) {
     const error = await captureError(() => db.transaction((tx) => tx.execute(statement)));
@@ -356,9 +313,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const v = await venue();
     const missing = "00000000-0000-4000-8000-00000000dead";
     await refusal(
-      // `id` and `created_at` are named on every statement below. Without them the insert is
-      // refused with `NOT NULL constraint failed: <table>.id` BEFORE the foreign key is reached,
-      // which would pass `refusal` for the wrong reason — measured, that is exactly what happened.
+      // `id` and `created_at` are named, or the insert is refused as NOT NULL before the foreign
+      // key is reached.
       sql`insert into departments (id, location_id, name, trading_name, default_service_mode, created_at)
         values (${randomUUID()}, ${missing}, 'X', 'X', 'prepay', ${new Date().toISOString()})`,
       "departments_location_fk",
@@ -391,28 +347,11 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   });
 
   /**
-   * WHERE "CHECKED AT COMMIT" WENT. This key was declared `DEFERRABLE INITIALLY DEFERRED` on
-   * PostgreSQL, so a transaction could name a menu as a zone's default and add it to that zone's
-   * allowed set in either order. sqlite-core has no deferrable option and the key's own declaration
-   * carries no deferral (`./schema/service.js` records the same thing at the key), so on this engine
-   * the check lands at the STATEMENT — measured, and the second block below is that measurement.
-   *
-   * The guarantee did not disappear; it moved from the KEY to the TRANSACTION.
-   * `pragma defer_foreign_keys = on` moves every key's check in the open transaction to `commit`,
-   * and both places in this repository that write a table cycle in an order no per-statement check
-   * can satisfy already issue it: `apps/server/src/configuration-transfer.ts`, which empties and
-   * refills THIS cycle — `zone_menus.zone_id` points at `zone_service_policies`, whose
-   * `(zone_id, default_menu_id)` points back at `zone_menus` — and the test reset in
-   * `packages/db/src/testing/venue-db.ts`. So the third block below drives the original ordering
-   * through the mechanism that now carries it.
-   *
-   * NOT asserted here, deliberately, and reported as a finding rather than fixed: under that pragma
-   * a violation surfaces at `commit`, and the transaction is then left OPEN. Measured on this
-   * fixture — the refused write stayed readable afterwards and the next `begin immediate` failed
-   * with `cannot start a transaction within a transaction`. `node-sqlite-adapter.ts` in
-   * `packages/store` issues its `commit` outside the body's `try`, so the rollback path is never
-   * reached. A case asserting the commit-time refusal would therefore wedge this file's remaining
-   * cases; the fix belongs in `packages/store`, outside this package.
+   * The key is not deferred, so it is checked at each statement. `pragma defer_foreign_keys` moves
+   * the check to commit, which is how `apps/server/src/configuration-transfer.ts` empties and
+   * refills this cycle: `zone_menus.zone_id` points at `zone_service_policies`, whose
+   * `(zone_id, default_menu_id)` points back at `zone_menus`. The title's "at commit" half is not
+   * asserted: the case under the pragma is accepted, not refused.
    */
   it("refuses a default menu the zone does not allow, at the statement or at commit", async () => {
     const v = await venue();
@@ -424,8 +363,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       "zone_service_policies_default_allowed_fk",
     );
 
-    // Reversed order, no pragma: refused where PostgreSQL's deferral accepted it. This is the loss
-    // the block comment states, driven rather than described.
+    // Reversed order, no pragma: refused.
     const eager = await captureError(() =>
       db.transaction(async (tx) => {
         await tx.execute(
@@ -438,7 +376,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
     expect(isRefusal(eager, FOREIGN_KEY_VIOLATION)).toBe(true);
     expect(engineErrorMessage(eager)).toContain("FOREIGN KEY constraint failed");
-    // The statement-level refusal rolls its transaction back, so neither row survives it.
     expect(
       (
         await db.execute(
@@ -447,8 +384,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       ).rows,
     ).toEqual([{ default_menu_id: null }]);
 
-    // The same reversed order under the pragma: accepted, and the state it leaves is what the
-    // deferred key used to leave.
+    // The same reversed order under the pragma: accepted.
     await db.transaction(async (tx) => {
       await tx.execute(sql`pragma defer_foreign_keys = on`);
       await tx.execute(

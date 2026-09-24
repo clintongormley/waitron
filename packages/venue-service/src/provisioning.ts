@@ -7,17 +7,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the default department and counter zone",
     async run(tx, node) {
-      // Every write here goes through a table definition rather than raw SQL, because `departments`
-      // and `floor_zones` generate `id` and `created_at` with `$defaultFn`, which only the insert
-      // BUILDER runs, and both columns are `text PRIMARY KEY NOT NULL` in the generated DDL — so a
-      // raw insert that omits the id is refused `NOT NULL constraint failed: departments.id`. The
-      // same refusal on `persons` was run directly on node:sqlite; see `packages/provisioning/
-      // src/venue-apply.ts`'s seed-admin case for the receipt.
-      //
-      // The department's `where not exists` became a read-then-insert. The two are equivalent
-      // because a seed runs inside `withTransaction`, which holds the file's write lock for its
-      // whole body (`packages/store/src/write-queue.ts`, `createWriteQueue`), so nothing can seed
-      // a second default department between the read and the write.
+      // Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only
+      // the builder runs. Read-then-insert is safe because a seed runs inside `withTransaction`,
+      // which holds the file's write lock for its whole body.
       const existingDepartment = await tx
         .select({ id: departments.id })
         .from(departments)

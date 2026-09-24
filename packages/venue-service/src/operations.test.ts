@@ -75,17 +75,6 @@ async function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   });
 }
 
-/**
- * The venue's fixture rows, through the insert BUILDER rather than raw SQL.
- *
- * Two things the raw statements relied on PostgreSQL for are gone. `array['en-GB']` is refused at
- * prepare — `near "['en-GB']": syntax error` — because SQLite has no array literal and
- * `invoice_locales` is now a JSON array in a TEXT column that `labelList` encodes. And each table's
- * `id` and `created_at` are JavaScript `$defaultFn` generators rather than SQL DEFAULTs, which only
- * the builder runs; measured, a raw insert is refused with `NOT NULL constraint failed: <table>.id`.
- * Same shape as every converted fixture in the tree (`packages/identity/test/fixtures.ts`). Each
- * returns the new row's id, which is the one thing every call site read off the raw result.
- */
 async function seedLocation(name: string): Promise<string> {
   const [row] = await db
     .insert(locations)
@@ -116,14 +105,8 @@ async function seedTill(locationId: LocationId, name: string): Promise<string> {
 }
 
 /**
- * The drizzle session the two query-count cases below spy on.
- *
- * `tx.session`, not `tx._.session`. Drizzle's PostgreSQL database put the session on `_` beside the
- * schema; its SQLite database assigns `this.session` and puts only
- * `{ schema, fullSchema, tableNamesMap }` on `_` (`drizzle-orm/sqlite-core/db.js`, read against
- * 0.45.2). Measured, the old path handed `vi.spyOn` `undefined`: "The vi.spyOn() function could not
- * find an object to spy upon". The cast is because `session` is a constructor parameter marked
- * `@internal`, so it is on the object at runtime and off the published type.
+ * The drizzle session the two query-count cases below spy on. `session` is marked `@internal`, so
+ * it is on the object at runtime and off the published type.
  */
 const sessionOf = (tx: Transaction) =>
   (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
@@ -132,9 +115,7 @@ async function seedUnitTenant(): Promise<{
   eachUnitId: string;
   kgUnitId: string;
 }> {
-  // Raw SQL still, but with `id` named and the `::jsonb` casts gone: `units.name` and
-  // `abbreviation` are TEXT columns holding JSON here, and the cast is refused at prepare with
-  // `unrecognized token: ":"`. `units.id` has no SQL DEFAULT, for the reason the helpers above give.
+  // `id` is named because only the insert builder generates one.
   const seeded = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
     insert into units (id, seed_key, name, abbreviation, precision, hardware_unit) values
       (${randomUUID()}, 'each', '{"en":"each"}', '{"en":"ea"}', 0, null),
@@ -233,9 +214,7 @@ describe("venue service routing", () => {
           productName: "Sparkling water",
         },
       ]);
-      // A blank staff name is storable — `products.name` is only NOT NULL — so the list falls back
-      // to the product id rather than rendering an empty name. Written with raw SQL because no
-      // write path reachable from here produces a blank one.
+      // A blank staff name falls back to the product id.
       await tx.execute(sql`update products set name = '' where id = ${product.id}`);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
@@ -573,9 +552,6 @@ describe("venue service routing", () => {
   });
 
   it("records a working line context for a product with no unit (Each)", async () => {
-    // The sentinel Each id must survive the working_line_contexts.unit_id write, which is `uuid NOT
-    // NULL`. This proves the cross-package sentinel decision: an empty-string id would be rejected by
-    // the uuid column on the first sale of a no-unit product.
     await seedUnitTenant();
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
@@ -591,8 +567,7 @@ describe("venue service routing", () => {
       );
       await configureZone(tx, { locationId }, { zoneId: zone, departmentId: department.id });
       const menu = await createCatalogue(tx, { name: "Deli takeaway" });
-      // A product with NO stored unit: create it, then delete its product_units row so the offer read
-      // resolves it to the synthetic Each unit (the sentinel-id path).
+      // Deleting its product_units row makes the offer read resolve it to the synthetic Each unit.
       const sweets = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
@@ -649,7 +624,6 @@ describe("venue service routing", () => {
       const ctx = await tx.execute<{ unit_id: string }>(sql`
         select unit_id from working_line_contexts
         where working_order_line_id = ${workingLineId}`);
-      // The sentinel, not "" (which the uuid column rejects).
       expect(ctx.rows[0]!.unit_id).toBe("00000000-0000-0000-0000-000000000001");
     });
   });
@@ -978,21 +952,8 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  /**
-   * WHAT THIS CASE LOST. It used to pass a THIRD spelling, `{` + the 32 digits with no hyphens +
-   * `}`, and expect it to resolve to the same product and be folded into the first spelling. That
-   * spelling was accepted because PostgreSQL's uuid INPUT PARSER accepted it, and no parser accepts
-   * it now — the id column is plain `text` and the bytes are compared as they arrive. So the
-   * braced form is no longer a spelling of this id at all, and the case pins what it does instead:
-   * `shared.invalid_id`, refused by `normaliseUuid` before any query runs.
-   *
-   * Nothing was weakened to get there. The surviving half is CASE, which is the half that was
-   * actually broken: before `storedUuid` was taken through to SQL, the upper-cased id below was
-   * refused `route.subject_not_found` because the bind value never matched the stored row. Both
-   * halves of the old case's subject are still checked — an id still resolves however it is cased,
-   * and two spellings of one product still collapse to the first — with two cased spellings
-   * standing where the cased and braced pair stood.
-   */
+  /** A braced, unhyphenated spelling is not an id at all: `normaliseUuid` refuses it before any
+   * query runs. */
   it("matches a product id however the caller CASES it, keyed by the caller's spelling", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
