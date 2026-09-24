@@ -9,6 +9,8 @@ build/
 
 # Test / tooling caches
 coverage/
+# Pinned test and dev binaries the setup scripts download (`pnpm setup:litestream`).
+/.bin/
 .vitest/
 # vitest `--reporter=blob` output — the per-shard coverage blobs the sharded CI jobs (test-heavy /
 # test-server) upload as artifacts and the merge jobs consume. Generated, never committed.
