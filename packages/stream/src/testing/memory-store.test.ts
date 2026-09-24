@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createMemoryObjectStore } from "./memory-store.js";
@@ -16,15 +17,32 @@ async function code(promise: Promise<unknown>): Promise<string> {
 }
 
 describe("createMemoryObjectStore", () => {
-  it("stores, reads back and gives each write a new version tag", async () => {
+  it("stores, reads back and tags each object with the quoted MD5 of its bytes, as S3 does for a PUT stored unencrypted or with SSE-S3", async () => {
+    const store = createMemoryObjectStore();
+    const { etag } = await store.put("a", bytes("one"));
+    expect(etag).toBe(`"${createHash("md5").update("one").digest("hex")}"`);
+    const got = await store.get("a");
+    expect(text(got?.body)).toBe("one");
+    expect(got?.etag).toBe(etag);
+    expect(await store.get("missing")).toBeNull();
+  });
+
+  it("keeps the tag for a rewrite of the same bytes, so 'only if unchanged' cannot see it", async () => {
     const store = createMemoryObjectStore();
     const first = await store.put("a", bytes("one"));
     const second = await store.put("a", bytes("one"));
-    expect(second.etag).not.toBe(first.etag);
-    const got = await store.get("a");
-    expect(text(got?.body)).toBe("one");
-    expect(got?.etag).toBe(second.etag);
-    expect(await store.get("missing")).toBeNull();
+    expect(second.etag).toBe(first.etag);
+    await expect(store.put("a", bytes("two"), { ifMatch: first.etag })).resolves.toBeDefined();
+  });
+
+  it("accepts the first tag again once the bytes change and change back", async () => {
+    const store = createMemoryObjectStore();
+    const original = await store.put("a", bytes("one"));
+    const changed = await store.put("a", bytes("two"));
+    expect(changed.etag).not.toBe(original.etag);
+    await store.put("a", bytes("one"));
+    await expect(store.put("a", bytes("three"), { ifMatch: original.etag })).resolves.toBeDefined();
+    expect(text((await store.get("a"))?.body)).toBe("three");
   });
 
   it("refuses 'only if absent' on an existing key and allows it on a new one", async () => {
@@ -60,6 +78,17 @@ describe("createMemoryObjectStore", () => {
       { key: "v/a", lastModified: new Date("2026-09-02T00:00:00Z") },
       { key: "v/b", lastModified: new Date("2026-09-01T00:00:00Z") },
     ]);
+  });
+
+  it("hands out times that do not reach back into the store, and keeps none of the clock's", async () => {
+    const clock = new Date("2026-09-01T00:00:00Z");
+    const store = createMemoryObjectStore({ now: () => clock });
+    await store.put("a", bytes("one"));
+    clock.setUTCFullYear(2000);
+    store.snapshot().get("a")!.lastModified.setUTCFullYear(2001);
+    (await store.list(""))[0]!.lastModified.setUTCFullYear(2002);
+    expect((await store.list(""))[0]!.lastModified).toEqual(new Date("2026-09-01T00:00:00Z"));
+    expect(store.snapshot().get("a")!.lastModified).toEqual(new Date("2026-09-01T00:00:00Z"));
   });
 
   it("deletes, and deleting a missing key is not an error", async () => {

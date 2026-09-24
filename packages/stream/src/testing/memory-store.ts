@@ -33,7 +33,6 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
   const faults: Fault[] = [];
   const calls: MemoryObjectStore["calls"] = [];
   const now = options.now ?? (() => new Date());
-  let version = 0;
 
   function takeFault(operation: Operation, key: string): Fault | undefined {
     const index = faults.findIndex(
@@ -45,7 +44,12 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
   return {
     calls,
     snapshot: () =>
-      new Map([...objects].map(([key, entry]) => [key, { ...entry, body: entry.body.slice() }])),
+      new Map(
+        [...objects].map(([key, entry]) => [
+          key,
+          { ...entry, body: entry.body.slice(), lastModified: new Date(entry.lastModified) },
+        ]),
+      ),
     failNext(fault) {
       faults.push(fault);
     },
@@ -67,9 +71,9 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
           ? existing !== undefined
           : existing?.etag !== condition.ifMatch);
       if (refused) throw new AppError("backup.stream_precondition_failed", { key });
-      version += 1;
-      const etag = `"${createHash("sha256").update(body).update(String(version)).digest("hex").slice(0, 32)}"`;
-      objects.set(key, { body: body.slice(), etag, lastModified: now() });
+      // S3's tag for a PUT stored unencrypted or with SSE-S3 is the MD5 of the bytes (API_Object).
+      const etag = `"${createHash("md5").update(body).digest("hex")}"`;
+      objects.set(key, { body: body.slice(), etag, lastModified: new Date(now()) });
       if (fault) throw fault.error;
       return { etag };
     },
@@ -80,7 +84,7 @@ export function createMemoryObjectStore(options: { now?: () => Date } = {}): Mem
       return [...objects]
         .filter(([key]) => key.startsWith(prefix))
         .sort(([a], [b]) => (a < b ? -1 : 1))
-        .map(([key, entry]) => ({ key, lastModified: entry.lastModified }));
+        .map(([key, entry]) => ({ key, lastModified: new Date(entry.lastModified) }));
     },
     async delete(key) {
       calls.push({ operation: "delete", key });
