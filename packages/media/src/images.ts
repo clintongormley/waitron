@@ -114,9 +114,7 @@ async function metadata(
 ): Promise<ImageMetadataInput> {
   const value = normalizeImageMetadata(input);
   // A name in the default language is required; alt text is optional (its language codes and lengths
-  // are still validated by normalizeImageMetadata above). validateContentTranslations also takes the
-  // content-language advisory lock, so naming it once here serializes the whole save against a
-  // default-language change — alt text needs no second call.
+  // are still validated by normalizeImageMetadata above).
   try {
     await validateContentTranslations(tx, value.names, fallbackLanguage);
   } catch (error) {
@@ -206,8 +204,8 @@ export async function readImage(tx: Transaction, imageId: string): Promise<Image
 /**
  * Adds a photo to the library, or returns the existing entry when one already stores these exact
  * bytes. Takes a `PreparedImage`, so every photo stored through here has been through
- * `prepareImage`: shrunk, upright, stripped of metadata and re-encoded. Configuration import
- * copies the media image rows as they are (`MEDIA_CONFIGURATION_TRANSFER`) and does not shrink them.
+ * `prepareImage`. Configuration import copies the media image rows as they are and does not
+ * shrink them.
  */
 export async function uploadImage(
   tx: Transaction,
@@ -216,7 +214,8 @@ export async function uploadImage(
 ): Promise<{ created: boolean; image: ImageRecord }> {
   const { filename, bytes } = input.image;
   const values = await metadata(tx, input, options.fallbackLanguage ?? FALLBACK_LOCALE);
-  // The content-language lock also serializes duplicate uploads.
+  // Inside a `withTransaction` body nothing can insert between this read and the insert below: it
+  // holds the venue file's one write lock.
   const [existing] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
@@ -263,19 +262,7 @@ export async function updateImage(
   return readImage(tx, imageId);
 }
 
-/**
- * Every distinct label in use, in order.
- *
- * The distinct-and-sort happens in JavaScript because `labels` is one text column holding a JSON
- * array now, not an array column: there is no `unnest` to expand it and no per-element index to
- * order by. That is the replacement `labelList` names for a query that wants one entry of a list
- * (`packages/db/src/schema/columns.ts`).
- *
- * The order is by code point, which is the comparison the engine itself applies to text. It is not
- * the collation the array query ordered by, so two labels differing only in an accent or in case
- * can come back in a different order than they did — pinned for the ASCII labels the suite uses
- * (`images.test.ts`), unmeasured beyond them.
- */
+/** Every distinct label in use, in order. */
 export async function listImageLabels(tx: Transaction): Promise<string[]> {
   const rows = await tx.select({ labels: mediaImages.labels }).from(mediaImages);
   return [...new Set(rows.flatMap((row) => row.labels))].sort();
@@ -298,17 +285,10 @@ export async function deleteImage(
   tx: Transaction,
   imageId: string,
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
-  // This read took `for update` on the image row, and the sentence here named the PostgreSQL lock
-  // interaction that made it work: a writer attaching this image to a product or a category was
-  // made by the foreign key to take KEY SHARE on this row, which FOR UPDATE conflicts with — so the
-  // attach could not slip between the usage check below and the delete. Neither half of that
-  // sentence survives. SQLite has no row locks and drizzle's SQLite query builder has no `.for()`;
-  // what keeps the attach out is that one write transaction runs on the venue file at a time, so
-  // the usage check and the delete are still the last word when they commit (the pattern, with its
-  // measurement and its control, is on `assertExtraListForWrite`,
+  // No attach can slip between the usage check and the delete: one write transaction runs on the
+  // venue file at a time (the pattern is on `assertExtraListForWrite`,
   // `packages/catalogue/src/extras.ts`).
   //
-  // The check below is not the only thing standing between a delete and a dangling product row:
   // `packages/media/drizzle/0001_image_references.sql` refuses the delete at the database as well.
   // This returns the uses instead, which is what the library screen shows.
   const [image] = await tx
@@ -322,12 +302,7 @@ export async function deleteImage(
   return { deleted: true, uses: [] };
 }
 
-/**
- * One searchable unit of text, with the weight PostgreSQL's `setweight` gave the field it came from.
- *
- * The weights are PostgreSQL's own defaults for `ts_rank`: `A` 1.0 for a name, `B` 0.4 for a label,
- * `C` 0.2 for alt text. They order a result set; nothing asserts a particular number.
- */
+/** One searchable unit of text, with the weight of the field it came from. */
 interface Field {
   readonly tokens: readonly string[];
   readonly weight: number;
@@ -342,40 +317,22 @@ interface QueryItem {
 /**
  * Words, lowercased, with everything that is not a letter or a digit treated as a separator.
  *
- * This is where PostgreSQL's text search stopped being available, and the difference is not only
- * the tokenizer. `media_search_vector` ran each translation through the STEMMER for its own
- * language — `media_text_config` mapped thirty language codes onto snowball dictionaries — so a
- * search for `pera` found `Peras` and `formatge` found `Formatges`. Nothing here stems: matching is
- * by whole lowercased token, so a plural in the text is found only by that plural. The cases that
- * asserted the stemming are deleted, with the loss recorded at the head of `images.test.ts`.
- *
- * No PER-LANGUAGE stemmer is reachable from JavaScript without a new dependency on the box, and
- * that is the part that is genuinely gone. One English stemmer IS reachable and is deliberately not
- * taken: this SQLite is built with FTS5 (`sqlite_compileoption_used('ENABLE_FTS5')` returns 1 on
- * the bundled SQLite 3.53.4 under node v26.7.0), whose `porter` tokenizer stems `Breads`→`bread`,
- * `Peras`→`pera` and `formatges`→`formatge` but not `etxeak`→`etxe` — measured 2026-09-22 by
- * reading the stored terms back through `fts5vocab`. Using it would mean an FTS5 virtual table and
- * triggers keeping it in step with this one, which is a migration change, and it would apply
- * English suffix rules to every language, which is a product decision about search quality rather
- * than a storage conversion.
- *
- * Stopwords are kept, as they were: `media_text_vector` unioned the language vector with a `simple`
- * one precisely so that `the` stayed searchable.
+ * Nothing here stems: matching is by whole lowercased token, so a plural in the text is found only
+ * by that plural. FTS5's `porter` tokenizer is deliberately not taken: it would need an FTS5
+ * virtual table, and it would apply English suffix rules to every language. Stopwords are kept.
  */
 function searchTokens(value: string): string[] {
   return value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
 /**
- * The `websearch_to_tsquery` grammar, as far as it was used: double-quoted phrases, a leading `-`
- * for exclusion, and a bare `or` joining groups.
+ * Double-quoted phrases, a leading `-` for exclusion, and a bare `or` joining groups.
  *
- * `or` binds LOOSER than the implicit `and`, which is what PostgreSQL emitted — `bread -roll OR
- * fish` was `'bread' & !'roll' | 'fish'` — so the result is a list of groups and a row matches when
- * ANY group does.
+ * `or` binds LOOSER than the implicit `and`, so the result is a list of groups and a row matches
+ * when ANY group does.
  *
- * A non-empty query that yields no groups matches NOTHING, which is what an empty `tsquery` did
- * under `@@`. An EMPTY query never reaches here; its caller skips the filter entirely.
+ * A non-empty query that yields no groups matches NOTHING. An EMPTY query never reaches here; its
+ * caller skips the filter entirely.
  */
 function parseSearch(query: string): QueryItem[][] {
   const groups: QueryItem[][] = [];
@@ -406,9 +363,8 @@ function fieldHolds(field: readonly string[], tokens: readonly string[]): boolea
 /**
  * The best weight at which `item` is found, or `null` when it is not found at all.
  *
- * A phrase is matched WITHIN one field value — one translation, or one label. PostgreSQL held every
- * field in a single positioned vector, so a phrase there could straddle two labels; this cannot.
- * Nothing asserts the straddling case in either direction.
+ * A phrase is matched WITHIN one field value — one translation, or one label — so it cannot
+ * straddle two labels.
  */
 function itemWeight(fields: readonly Field[], item: QueryItem): number | null {
   let best: number | null = null;
@@ -424,10 +380,8 @@ function itemWeight(fields: readonly Field[], item: QueryItem): number | null {
  * Does any group match, and how strongly?
  *
  * `null` is "no match". The score is the summed weight of the positive terms of the best-scoring
- * group. It is NOT `ts_rank_cd`, which also weighed how close the matched terms sat to one another;
- * what the suites actually pin is the NAME-match-first ordering, which is a separate term
- * (`images.test.ts`, "keeps a name match above repeated alt-text matches"), so the score below
- * decides only ties under it.
+ * group. Under the relevance sort `listImages` orders by a name match first, so the score decides
+ * only ties under it.
  */
 function scoreSearch(groups: readonly QueryItem[][], fields: readonly Field[]): number | null {
   let best: number | null = null;
@@ -461,17 +415,11 @@ export interface ListImagesOptions {
 /**
  * The image library's list: search, label filter, ordering and one page.
  *
- * **It reads every row and filters in JavaScript.** Three of the four things this did in SQL have
- * no SQLite expression — the `tsvector`/`tsquery` match, the `unnest` over what is now a JSON list,
- * and the `und-x-icu` collation the name ordering sorted under — and a partial move would have left
- * the search in SQL and the ordering in JavaScript, which is two places to keep in step. The table
- * is one venue's photo library and the bytes live in `media_image_data`, so what is read here is
- * metadata only; a venue large enough for that to matter would want an index this engine does not
- * have, which is the point at which this should be revisited rather than tuned.
+ * **It reads every row and filters in JavaScript.** The bytes live in `media_image_data`, so what is
+ * read here is metadata only.
  *
- * **The name ordering is JavaScript's collator.** `Intl.Collator` is ICU, which is what
- * `collate pg_catalog."und-x-icu"` named; SQLite ships `BINARY`, `NOCASE` and `RTRIM` and nothing
- * accent-aware, so this is the one part of the conversion that could not have stayed in SQL at all.
+ * **The name ordering is JavaScript's collator:** SQLite ships `BINARY`, `NOCASE` and `RTRIM` and
+ * nothing accent-aware.
  */
 export async function listImages(
   tx: Transaction,
@@ -540,9 +488,7 @@ export async function listImages(
     matched.push({ row, nameMatch: scoreSearch(groups, names) !== null, score });
   }
 
-  // `lower()` then the collator, the two halves the PostgreSQL expression had. An empty or
-  // whitespace-only translation is not a name: it falls through to the site default, which is what
-  // `nullif(btrim(...), '')` did.
+  // An empty or whitespace-only translation is not a name: it falls through to the site default.
   const collator = new Intl.Collator();
   const displayName = (names: Record<string, string>): string =>
     (names[language]?.trim() !== undefined && names[language]!.trim() !== ""
@@ -564,7 +510,7 @@ export async function listImages(
       if (order !== 0) return sign * order;
     }
     // The id breaks every tie ASCENDING whichever way the page is ordered, so two rows that compare
-    // equal keep one order across pages. `order by ..., m.id asc` did the same.
+    // equal keep one order across pages.
     return left.row.id < right.row.id ? -1 : left.row.id > right.row.id ? 1 : 0;
   });
 

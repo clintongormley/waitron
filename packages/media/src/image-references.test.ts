@@ -8,20 +8,8 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
  * `products.image` and `category_details.image` may only name a photo that exists, and a photo one
- * of them still names cannot be deleted or renamed.
- *
- * Under PostgreSQL those were two foreign keys — `products_media_image_fk` and
- * `category_details_media_image_fk`, `REFERENCES media_images(filename) ON DELETE RESTRICT` — in
- * hand-written `--custom` SQL at `git show
- * aabdde6a8^:packages/media/drizzle/0001_media_baseline_sql.sql`, lines 106-112. Regenerating the
- * baselines for the storage switch dropped them, and `packages/media/drizzle/0001_image_references.sql`
- * is where they come back, as triggers rather than as keys. That file's header carries why.
- *
- * WHY HERE. `images.pg.test.ts` pinned both by name out of `pg_constraint` and needed a
- * PostgreSQL container, so nothing had been watching them during #489; that file was deleted
- * with the harness on 2026-09-22 (`git show aabdde6a8^:packages/media/src/images.pg.test.ts`).
- * This suite runs in the media package's own `node` project against a database the product's own
- * migration sets built.
+ * of them still names cannot be deleted or renamed. The rules are triggers, not keys
+ * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why).
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -120,8 +108,7 @@ describe("a written image filename", () => {
 
   it("is refused on a product insert unless an image carries it", async () => {
     // `errcode` is pinned once, here: a trigger raises 1811 (`SQLITE_CONSTRAINT_TRIGGER`) where a
-    // real foreign key raises 787, and that is the one difference a caller could see.
-    // `packages/layouts/src/canvas-store.ts` separates those two codes for keys of its own.
+    // real foreign key refuses an insert with 787.
     await expect(insertProduct(ABSENT)).rejects.toMatchObject({
       message: "products_media_image_fk",
       errcode: 1811,

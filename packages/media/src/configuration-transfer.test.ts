@@ -24,8 +24,7 @@ function tables() {
  * `exportConfigurationTables` does: `names`, `alt_text` and `labels` are one TEXT column holding
  * JSON (`packages/db/src/schema/columns.ts`), the export takes a raw `select *`, and nothing parses
  * them on the way into the bundle. A fixture in the object shape describes a bundle no venue
- * produces, which is what this one did until the database path was run end to end and refused with
- * `image.invalid_metadata`.
+ * produces.
  */
 function wire(input: ReturnType<typeof tables>) {
   return {

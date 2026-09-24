@@ -21,10 +21,7 @@ describeSchemaConformance({
   subjectName: "media",
   // Core, then catalogue: `drizzle/0001_image_references.sql` creates triggers ON core's `products`
   // and catalogue's `category_details`, and a trigger on a table that does not exist yet is refused
-  // when the migration runs. Neither media table has a key into another set. It is the list this
-  // package's own database suites apply, `src/image-references.test.ts` among them;
-  // `src/routes.test.ts` and `src/routes-authorization.test.ts` add identity before media, which no
-  // media SQL names.
+  // when the migration runs. Neither media table has a key into another set.
   prerequisites: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   subject: MEDIA_MIGRATIONS,
   declarations,

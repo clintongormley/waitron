@@ -9,20 +9,6 @@ import { samplePreparedImage } from "./testing/sample-image.js";
 /**
  * The query grammar `listImages` accepts: quoted phrases, `-` for exclusion, and `or`.
  *
- * Every case below is lifted from `search.pg.test.ts`, which asserted the same grammar against
- * PostgreSQL's `websearch_to_tsquery`. That suite needed a container, so the grammar had nothing
- * running behind it during #489 — and the grammar is OURS now (`parseSearch` in `images.ts`),
- * not the database's, which is exactly the code a dead suite must not be the only witness for. It
- * was deleted with the harness on 2026-09-22; recover it with
- * `git show aabdde6a8^:packages/media/src/search.pg.test.ts`.
- *
- * WHAT IS NOT LIFTED, so nobody reads this as the whole of that suite. Its stemming cases
- * (`bread -rolls`, `roll -rolls`, `"breads with rolls"`) assert that a search finds a word form it
- * does not spell. SQLite has no stemmer and this conversion has none, so those are LEFT FAILING
- * where they are — in `images.test.ts` — rather than restated here in a form that passes. Its role
- * assertions (`current_user`, `rolsuper`) and its `tsvector_to_array` probe describe an engine this
- * branch replaced.
- *
  * The suite seeds ONCE and does not reset between tests, so the punctuation block below adds rows
  * the exclusion block cannot see: it runs after it, and every one of its cases asks only whether
  * its OWN image came back.
@@ -58,14 +44,9 @@ describe("exclusions, phrases and or", () => {
     expect(result.images.map((image) => image.names.en).sort()).toEqual([...NAMES].sort());
   });
 
-  // Also lifted from `search.pg.test.ts` (deleted 2026-09-22 with the PostgreSQL harness; recover
-  // it with `git show aabdde6a8^:packages/media/src/search.pg.test.ts`). The library's first load
-  // sends `sort=relevance` with no query, and that combination was a 500 under PostgreSQL: without
-  // a query the rank and name-match expressions collapsed to bare constants, which it rejects in
-  // ORDER BY. The expressions are JavaScript now, so the OLD failure mode is gone — what is still
-  // a live requirement, and what this case holds, is that the pair returns the library rather than
-  // nothing. `listImages` meets it by falling back to a date ordering (`images.ts`'s
-  // `effectiveSort`).
+  // The library's first load sends `sort=relevance` with no query, and that pair must return the
+  // library rather than nothing. `listImages` meets it by falling back to a date ordering
+  // (`images.ts`'s `effectiveSort`).
   it("returns rows for the default relevance sort when the search is empty", async () => {
     const result = await withTransaction(suite.db, (tx) =>
       listImages(tx, { query: "", sort: "relevance", limit: 100, fallbackLanguage: "en" }),
@@ -111,12 +92,11 @@ describe("punctuation and degenerate queries", () => {
     { marker: 1, name: "Chef's bread", query: "chef's", matched: true },
     { marker: 2, name: "Back\\slash", query: "Back\\slash", matched: true },
     { marker: 3, name: "Pan-fried", query: "pan-fried", matched: true },
-    // Stopwords stay searchable: `media_text_vector` unioned in a `simple` vector to keep them, and
-    // this tokenizer removes nothing either.
+    // Stopwords stay searchable: the tokenizer removes nothing.
     { marker: 4, name: "The plate", query: "the", matched: true },
     { marker: 5, name: "The plate", query: "-the", matched: false },
     { marker: 6, name: "Toast", query: "", matched: true },
-    // A query holding no word at all is the empty `tsquery`, which matched nothing under `@@`.
+    // A query holding no word at all matches nothing.
     { marker: 7, name: "Toast", query: "---", matched: false },
     { marker: 8, name: "Toast", query: "!!!", matched: false },
     { marker: 9, name: "Toast", query: "\\", matched: false },

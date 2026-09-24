@@ -33,7 +33,7 @@ async function fixture(
 ) {
   const id = await seedTenant(suite.db);
   // Through the table definition, not raw SQL: `id` and the timestamps are JavaScript generators
-  // now (`$defaultFn`), never column DEFAULTs, so a raw insert naming none of them is refused with
+  // (`$defaultFn`), never column DEFAULTs, so a raw insert naming none of them is refused with
   // `NOT NULL constraint failed`.
   //
   // A fresh display name per call: live display names are unique across the database, and this
@@ -259,8 +259,8 @@ it("refuses a picture declaring too many pixels as 413", async () => {
 
 it("falls back to a 20 MiB upload limit when the host names none", async () => {
   const { app, headers } = await fixture("manager", null);
-  // Over the old 5 MiB limit and under the new one: the size check passes, and the bytes (a JPEG
-  // start and nothing a decoder can read) are refused by the decoder instead.
+  // The size check passes, and the bytes (a JPEG start and nothing a decoder can read) are refused
+  // by the decoder instead.
   const between = new Uint8Array(6 * 1024 * 1024);
   between.set([0xff, 0xd8, 0xff], 0);
   const accepted = body();

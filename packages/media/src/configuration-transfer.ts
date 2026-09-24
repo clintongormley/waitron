@@ -16,10 +16,6 @@ function invalid(): never {
  * says so (`apps/server/src/configuration-transfer.ts`). So an image's names, alt text and labels
  * reach this function as the JSON TEXT the engine stores, and a value that is anything else did not
  * come out of a venue.
- *
- * Measured, which is why this exists at all: without it the whole configuration-transfer database
- * path failed with `image.invalid_metadata`, thrown from `normalizeTranslations`
- * (`packages/media/src/images.ts:71`) because a string is not a record.
  */
 function parsedJson(value: unknown): unknown {
   if (typeof value !== "string") invalid();
