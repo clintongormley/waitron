@@ -2802,13 +2802,14 @@ image constraints under *Detail → Box image*.
   count, tests included; comments inside `css` and `html` template literals are strings and were
   left) and `packages/module` (#606, about 363 to about 200 counted with the parse-tree walk, tests
   included) and `apps/dashboard/src/screens` (#607, about 3,170 to about 1,110 counted with the
-  parse-tree walk, tests included; the rest of `apps/dashboard` follows in two more pull requests)
-  and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
+  parse-tree walk, tests included) and `apps/dashboard/src/api` + `src/widgets` (#610, about 2,830
+  to about 980, parse-tree walk, tests included; the rest of `apps/dashboard` follows in one more
+  pull request) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
   `drizzle/` SQL untouched).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607 and #609 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609 and #610 and left for the package that owns each, all
   still OPEN:
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
@@ -2818,16 +2819,21 @@ image constraints under *Detail → Box image*.
     `"alt"` case in its test), while an upload leaves alt text optional, so a venue holding such a
     photo may export a bundle it cannot import. Outside the package:
     `apps/server/src/configuration-transfer.ts` carries an "on this branch" history line.
-  - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder, left for the next
-    parts. "The #70 rule" for keeping a runtime import out of the browser bundle appears 29 times
-    in `apps/dashboard/src/api/client.ts` and is defined nowhere in the repository; #607 replaced it
-    in the screens with the reason (`@waitron/layouts`' main entry exports `canvas-store.js`, which
-    imports `@waitron/db`). "These methods never send a personId" is false for `requestSwap`, which
-    sends `toPersonId`: `apps/dashboard/src/api/client.ts:2847`, `apps/till/src/api/client.ts:2105`
-    and `apps/till/src/screens/till-schedule-screen.ts:66`. The fire-control modes are listed as
+  - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
+    change. `apps/dashboard/src/widgets/language-chooser.ts` puts `aria-haspopup` and
+    `aria-expanded` on the `wt-button` host, and `wt-button` does not pass them to its inner
+    button, so a screen reader probably never hears them (read, not run). `reorder.test.ts`'s test
+    names say an out-of-range move "clamps"; `reorder()` ignores it. The same false comments are in
+    `apps/till`, for its own pruning pull request: "a runtime shape error a view test catches"
+    (`apps/till/src/api/client.ts:16`), and "a `wt-button` forwards only `disabled`/`aria-label`"
+    (`apps/till/src/widgets/language-chooser.ts:31`, `menu-switcher.ts:26`; it also sets
+    `aria-busy` from its `loading` property).
+  - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
+    dashboard's copies. Still open: "these methods never send a personId" is false for
+    `requestSwap`, which sends `toPersonId`, at `apps/till/src/api/client.ts:2105` and
+    `apps/till/src/screens/till-schedule-screen.ts:66`; and the fire-control modes are listed as
     `waiter`/`kitchen` only, leaving out `expo` (`fireControlMode`,
-    `packages/db/src/schema/tenants.ts`), at `apps/dashboard/src/api/client.ts:2294` and
-    `apps/server/src/kitchen.ts:360`. Read only, not run: the recipe screen's `#loadRecipe` guard
+    `packages/db/src/schema/tenants.ts`), at `apps/server/src/kitchen.ts:360`. Read only, not run: the recipe screen's `#loadRecipe` guard
     compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn
     Save back on while the second A load is still running.
   - Found by #606 (`packages/module`), outside its package. `apps/server/src/provision.ts` (the
@@ -3189,10 +3195,9 @@ image constraints under *Detail → Box image*.
     commit message; `docs/developers/testing-guide.md` has no paragraph holding it, and
     `venue-service` still carries it in its config (#597 cut `payments-sumup`'s to a pointer at
     CLAUDE.md §4).
-  - The same false comments outside bookings, found by #574: "a mismatch surfaces as a runtime shape error a view
-    test catches" (no test compares client and server shapes) in about 15 places in
-    `apps/dashboard/src/api/client.ts`; "client validation mirrors the op's checks" in
-    `apps/dashboard/src/widgets/purchase-form.ts`; "per-venue timezone is a later slice" in
+  - The same false comments outside bookings, found by #574 (#610 removed the dashboard API
+    client's "runtime shape error a view test catches" and `purchase-form.ts`'s "client validation
+    mirrors the op's checks"): "per-venue timezone is a later slice" in
     `apps/dashboard/src/date-utils.ts` (`locations.time_zone` exists); PostgreSQL's `22P02`
     described as current in `apps/server`'s `print-api.printer-wiring.test.ts`, `print-api.test.ts`
     and `recipe-api.test.ts`; and `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
@@ -3653,15 +3658,12 @@ reading unless marked run:
   `grep -rn --include='*.ts' -E '\b(connectPaymentProvider|addReader)\b' apps packages` finds no
   call to either method in `apps/` or `packages/`, tests included; the other `addReader` hits are a
   local helper of that name in `apps/server/src/payments-api.test.ts`, the providers' own client
-  methods and the provider panels' calls to them. The comments on the two methods say a provider's
-  connect panel or add-reader panel calls them, which is stale: the provider panels
+  methods and the provider panels' calls to them. The provider panels
   (`packages/payments-stripe/src/dashboard/stripe-connect-form.ts`,
   `packages/payments-stripe/src/dashboard/stripe-add-reader.ts`,
   `packages/payments-sumup/src/dashboard/sumup-connect-form.ts`,
   `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) call their own packages' clients.
-  Deleting the methods removes those comments with them, and makes the block comment above
-  `listPaymentProviders` in that file, which says the connect and add-reader forms are not there,
-  true. Left in place because lane B's variants plan
+  #610 removed the stale comments on the two methods. Left in place because lane B's variants plan
   (`docs/superpowers/plans/2026-09-23-variants-as-products.md`) will change that file.
 - `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
   (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
