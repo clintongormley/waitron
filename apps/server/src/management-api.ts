@@ -113,7 +113,7 @@ import { readJsonBody } from "@waitron/server-kit";
 import { requireBodyUuid, requireEnum } from "@waitron/server-kit";
 import {
   clearManagementCookie,
-  readManagementSessionId,
+  readManagementSessionToken,
   requireManagementSession,
   setManagementCookie,
 } from "@waitron/server-kit";
@@ -733,7 +733,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const completion = await withTransaction(deps.db, async (tx) => {
         return loginWithGoogle(tx, { subject });
       });
-      setManagementCookie(c, completion.id, deps.secureCookies);
+      setManagementCookie(c, completion.token, deps.secureCookies);
       return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
@@ -840,7 +840,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw error;
       }
       finishAttempt("success");
-      setManagementCookie(c, session.id, deps.secureCookies);
+      setManagementCookie(c, session.token, deps.secureCookies);
       return c.json({ personId: session.personId, offerPasskey: session.offerPasskey });
     }),
   );
@@ -926,23 +926,23 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return completeAccountAction(tx, { ...common, token: body.token as string });
       });
       if (completion.session === null) clearManagementCookie(c);
-      else setManagementCookie(c, completion.session.id, deps.secureCookies);
+      else setManagementCookie(c, completion.session.token, deps.secureCookies);
       return c.json({ personId: completion.personId, authenticated: completion.session !== null });
     }),
   );
 
   // Logout: end the management session and clear the cookie. Idempotent — a request with no cookie, or
-  // one whose cookie is not even UUID-shaped (so it names no `uuid` row), still clears the cookie and
-  // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionId` +
-  // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a valid
-  // id ends its session under `withTransaction`, and `endManagementSession` is itself a no-op
-  // on an already-ended one.
+  // one whose cookie is not even UUID-shaped (so it names no session), still clears the cookie and
+  // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionToken` +
+  // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a
+  // UUID-shaped token ends its session under `withTransaction`, and `endManagementSession` is a
+  // no-op on an already-ended session or a token that names none.
   app.delete("/management-api/session", (c) =>
     run(c, log, async () => {
-      const id = readManagementSessionId(c);
-      if (id !== null && isUuid(id)) {
+      const token = readManagementSessionToken(c);
+      if (token !== null && isUuid(token)) {
         await withTransaction(deps.db, async (tx) => {
-          await endManagementSession(tx, id);
+          await endManagementSession(tx, token);
         });
       }
       clearManagementCookie(c);
@@ -996,10 +996,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           totp,
         });
         await authorizeManager(tx, {
-          managementSessionId: session.id,
+          managementSessionId: session.token,
           permission: "mirror.create",
         });
-        await endManagementSession(tx, session.id);
+        await endManagementSession(tx, session.token);
       });
       const document = await readNodeMembership(deps.db);
       return c.json({ document });
@@ -2519,7 +2519,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           origin: deps.origin,
         });
       });
-      setManagementCookie(c, session.id, deps.secureCookies);
+      setManagementCookie(c, session.token, deps.secureCookies);
       return c.json({ personId: session.personId });
     }),
   );

@@ -24,7 +24,7 @@ const SESSION_ID = "33333333-3333-3333-3333-333333333333";
 // `vi.mock` factory is hoisted above the file, so the refs it closes over must be too.
 const { loginManagerById, authorizeManager, endManagementSession, verifyBreakGlass } = vi.hoisted(
   () => ({
-    loginManagerById: vi.fn(async () => ({ id: "33333333-3333-3333-3333-333333333333" })),
+    loginManagerById: vi.fn(async () => ({ token: "33333333-3333-3333-3333-333333333333" })),
     authorizeManager: vi.fn(async () => {}),
     endManagementSession: vi.fn(async () => {}),
     verifyBreakGlass: vi.fn(

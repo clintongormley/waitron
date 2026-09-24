@@ -101,7 +101,7 @@ import {
   canonicaliseUuid,
   clearSessionCookie,
   isUuid,
-  readSessionId,
+  readSessionToken,
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
@@ -724,7 +724,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       // A clean login resets the streak, so the next wrong PIN starts from the free attempts again.
       pinThrottle.clear(device.deviceId, personId);
-      setSessionCookie(c, session.id, deps.secureCookies);
+      setSessionCookie(c, session.token, deps.secureCookies);
       // Surface the derived CAPABILITY the till needs — whether this operator may configure the till
       // (FP-2's on-till "Editar plano") — computed server-side from the session's role via the identity
       // package's own `roleHasPermission`, never mirrored as a role→permission map on the client (which
@@ -740,16 +740,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Log out: end the shift session and clear the cookie. Idempotent — a request with no cookie, one
-  // whose cookie is not even UUID-shaped (so it names no session row), or one naming an
-  // already-closed session (`endSession` returns false), still clears the cookie and answers 200, so
-  // a double logout or a stale tab is never an error. The `isUuid` screen keeps a malformed cookie a
-  // 200 no-op and is the only thing looking at its shape (see `till-session.ts`).
+  // whose cookie is not even UUID-shaped (so it names no session row), or one whose token names an
+  // already-closed session or none (`endSession` returns false), still clears the cookie and
+  // answers 200, so a double logout or a stale tab is never an error. The `isUuid` screen skips the
+  // database for a malformed cookie.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
-      const id = readSessionId(c);
-      if (id !== null && isUuid(id)) {
+      const token = readSessionToken(c);
+      if (token !== null && isUuid(token)) {
         await withTransaction(deps.db, async (tx) => {
-          await endSession(tx, id);
+          await endSession(tx, token);
         });
       }
       clearSessionCookie(c);

@@ -171,7 +171,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { isUnset } from "./env-value.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isFenced } from "./membership-fence.js";
-import { ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
+import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
@@ -1532,16 +1532,24 @@ export async function startServer(
     );
   }
   if (isMirror) {
+    let viewerToken: string;
     try {
-      await ensureMirrorViewer(db);
+      viewerToken = await ensureMirrorViewer(db);
     } catch (error) {
       await store.close();
       throw error;
     }
     app.use(
       "*",
-      mirrorSession(db, secureCookies, () => holders.mode.current),
+      mirrorSession(db, secureCookies, () => holders.mode.current, viewerToken),
     );
+  } else {
+    try {
+      await endMirrorViewer(db);
+    } catch (error) {
+      await store.close();
+      throw error;
+    }
   }
 
   // The node whose DATA this server DISPLAYS in its node-scoped read paths (report-api's per-till/fiscal

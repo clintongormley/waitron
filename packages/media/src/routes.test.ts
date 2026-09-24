@@ -67,7 +67,7 @@ async function fixture(
     },
     () => {},
   );
-  return { app, id, headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.id}` } };
+  return { app, id, headers: { Cookie: `${MANAGEMENT_COOKIE}=${session.token}` } };
 }
 function body() {
   const form = new FormData();

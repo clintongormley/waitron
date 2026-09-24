@@ -17,6 +17,7 @@ import {
 import { loginManager } from "./manager-login.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { updatePersonDetails } from "./staff.js";
+import { hashSessionToken } from "./session-token.js";
 import { codeOf, seedManager, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
@@ -199,14 +200,17 @@ describe("management account actions", () => {
       sql`select email_verified_at from persons where id = ${personId}`,
     );
     expect(verified.rows[0]!.email_verified_at).not.toBeNull();
-    const sessions = await suite.db.execute<{ id: string; ended_at: string | null }>(
-      sql`select id, ended_at from management_sessions
+    const sessions = await suite.db.execute<{ token_hash: string; ended_at: string | null }>(
+      sql`select token_hash, ended_at from management_sessions
           where person_id = ${personId} order by created_at`,
     );
     expect(sessions.rows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: oldSession.id, ended_at: expect.any(String) }),
-        expect.objectContaining({ id: session.id, ended_at: null }),
+        expect.objectContaining({
+          token_hash: hashSessionToken(oldSession.token),
+          ended_at: expect.any(String),
+        }),
+        expect.objectContaining({ token_hash: hashSessionToken(session.token), ended_at: null }),
       ]),
     );
 
@@ -215,7 +219,7 @@ describe("management account actions", () => {
     );
     await run((tx) =>
       updatePersonDetails(tx, {
-        managementSessionId: session.id,
+        managementSessionId: session.token,
         personId,
         displayName: "New person",
         firstNames: "New",

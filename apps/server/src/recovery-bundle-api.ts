@@ -43,20 +43,18 @@ const STATUS: Record<string, ContentfulStatusCode> = {
  * exactly like `GET /api/box/status`: `requireManagementSession` → 401, then `withTransaction` +
  * `authorizeManager("system.manage")`. The passphrase rides the JSON body (never the URL/query — it
  * is a secret). The bundle carries the box's UNRECOVERABLE state (vault master key + fiscal identity +
- * CA/leaf), so it is returned as an attachment and logged (session id only, never the passphrase or
- * any secret). POST, not GET: it carries a secret and produces a sensitive artifact.
+ * CA/leaf), so it is returned as an attachment and logged with the requesting person's id only —
+ * never the cookie, the passphrase or any secret. POST, not GET: it carries a secret and produces a
+ * sensitive artifact.
  */
 export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "recovery-bundle.failed");
   app.post("/api/box/recovery-bundle", (c) =>
     run(c, log, async () => {
-      const sessionId = requireManagementSession(c); // throws 401 if absent
-      await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "system.manage",
-        });
-      });
+      const token = requireManagementSession(c); // throws 401 if absent
+      const { authorizedBy: personId } = await withTransaction(deps.db, (tx) =>
+        authorizeManager(tx, { managementSessionId: token, permission: "system.manage" }),
+      );
       const body = await readJsonBody<{ passphrase?: unknown }>(c);
       if (typeof body.passphrase !== "string" || body.passphrase === "") {
         throw new AppError("recovery.passphrase_required", {});
@@ -64,7 +62,7 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
       // encryptBundle enforces MIN_PASSPHRASE_LENGTH (→ recovery.passphrase_too_short, 400).
       const envelope = encryptBundle(await collectStateSecrets(deps.stateDir), body.passphrase);
       const date = deps.now().toISOString().slice(0, 10);
-      log("info", "recovery.bundle_downloaded", { sessionId });
+      log("info", "recovery.bundle_downloaded", { personId });
       return c.body(envelope, 200, {
         "Content-Type": "application/octet-stream",
         "Content-Disposition": `attachment; filename="waitron-recovery-${date}.wrb"`,

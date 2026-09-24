@@ -9,6 +9,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import {
   hashPin,
+  hashSessionToken,
   persons,
   type PersonRoleValue,
   resolveManagementSession,
@@ -96,7 +97,7 @@ async function seedVenue(): Promise<Venue> {
         .values({ displayName: name, pinHash: hashPin("1234"), role })
         .returning({ id: persons.id });
       const session = await startManagementSession(tx, { personId: p!.id });
-      return `${MANAGEMENT_COOKIE}=${session.id}`;
+      return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
   return {
     tillId: brandTillId(till!.id),
@@ -495,7 +496,7 @@ describe("ongoing alert sources through the route", () => {
     // interval type. One statement, so there is no transaction-start reading to preserve.
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await db.execute(
-      sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where id = ${sid}`,
+      sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where token_hash = ${hashSessionToken(sid)}`,
     );
     const expiryOf = () =>
       withTransaction(db, (tx) => resolveManagementSession(tx, sid, { touch: false }));

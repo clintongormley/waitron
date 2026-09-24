@@ -193,7 +193,7 @@ async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return startManagementSession(tx, { personId });
   });
-  return `${MANAGEMENT_COOKIE}=${session.id}`;
+  return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 
 /** A shift for `personId`. Returns its id. Through the table definition, for `seedPerson`'s reason. */

@@ -118,8 +118,8 @@ async function fixture(): Promise<Fixture> {
       return {
         menuId: menu.id,
         categoryId: category.id,
-        managerSessionId: managerSession.id,
-        staffSessionId: staffSession.id,
+        managerSessionId: managerSession.token,
+        staffSessionId: staffSession.token,
       };
     },
   );

@@ -530,9 +530,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   write names (`node_roles`, `mirror_config`, `join_requests`), a seal only that node's key opens
   (`tenant_credentials`), or rows the transaction that wrote them deletes (`change_log`). A node
   holding another node's copy of `venue.db` must read its own rows or none. No guard makes a new
-  `local` table say which, and identity's `local` tables (`packages/identity/src/classification.ts`)
-  state none of these until slice-2 Task 1b reclassifies them `state`. Which node filters a
-  deletion pins: [conventions-data.md](docs/developers/conventions-data.md).
+  `local` table say which. Which node filters a deletion pins:
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
   puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
   descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has

@@ -129,7 +129,8 @@ function deps(db: Database): TillApiDeps {
 }
 
 /** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- * route runs — and returns its id, so a test can hand a cookie that names a genuine open row. */
+ * route runs — and returns its cookie token, so a test can hand a cookie that names a genuine open
+ * row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -138,7 +139,7 @@ async function openSession(db: Database): Promise<string> {
       pin: "5555",
     });
   });
-  return session.id;
+  return session.token;
 }
 
 describe("POST /api/tabs/:id/{move,join,merge}", () => {

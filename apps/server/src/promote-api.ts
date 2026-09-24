@@ -118,10 +118,10 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
             totp,
           });
           await authorizeManager(tx, {
-            managementSessionId: session.id,
+            managementSessionId: session.token,
             permission: "node.promote",
           });
-          await endManagementSession(tx, session.id);
+          await endManagementSession(tx, session.token);
         });
       } else {
         // No usable credential — reported as `password.invalid` so the response never says which of

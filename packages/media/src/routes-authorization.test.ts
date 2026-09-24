@@ -68,7 +68,7 @@ async function session(role: "manager" | "staff"): Promise<Record<string, string
   const started = await suite.db.transaction((tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
-  return { Cookie: `${MANAGEMENT_COOKIE}=${started.id}` };
+  return { Cookie: `${MANAGEMENT_COOKIE}=${started.token}` };
 }
 
 function mount(db: Database): Hono {

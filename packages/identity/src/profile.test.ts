@@ -9,6 +9,7 @@ import { generateSync } from "otplib";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { codeOf, seedManager, seedTill } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
+import { hashSessionToken } from "./session-token.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
 import { encryptTotpSecret } from "./mfa.js";
@@ -35,7 +36,7 @@ async function fixture() {
   const email = `${randomUUID()}@example.com`;
   const personId = await seedManager(suite.db, { email });
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
-  return { personId, email, managementSessionId: session.id };
+  return { personId, email, managementSessionId: session.token };
 }
 
 describe("your profile", () => {
@@ -256,7 +257,7 @@ describe("your profile", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        readOwnProfile(tx, { ...f, managementSessionId: other.id }),
+        readOwnProfile(tx, { ...f, managementSessionId: other.token }),
       ),
     ).rejects.toMatchObject({ code: "management_session.required" });
     await expect(withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).resolves.toMatchObject({
@@ -275,7 +276,7 @@ describe("your profile", () => {
     // `NOT NULL constraint failed`. They are named here for that reason, where PostgreSQL supplied
     // both server-side.
     const till = await suite.db.execute<{ id: string }>(
-      sql`insert into sessions (id, person_id, till_id, opened_at) values (${randomUUID()}, ${f.personId}, ${tillId}, ${new Date().toISOString()}) returning id`,
+      sql`insert into sessions (id, token_hash, person_id, till_id, opened_at) values (${randomUUID()}, ${hashSessionToken(randomUUID())}, ${f.personId}, ${tillId}, ${new Date().toISOString()}) returning id`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>

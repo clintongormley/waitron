@@ -77,7 +77,7 @@ const suite = useVenueDb({
         unitPrice: "1.00",
         vatClass: "general",
       });
-      return { managerSid: managerSession.id, staffSid: staffSession.id, prodId: product.id };
+      return { managerSid: managerSession.token, staffSid: staffSession.token, prodId: product.id };
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${seeded.managerSid}`;
     staffCookie = `${MANAGEMENT_COOKIE}=${seeded.staffSid}`;

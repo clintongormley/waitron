@@ -109,13 +109,13 @@ export async function seedManager(
 export async function openManagementSession(
   db: Database,
   role: PersonRoleValue = "manager",
-): Promise<{ personId: string; sessionId: string }> {
+): Promise<{ personId: string; token: string }> {
   const email = `mgr-${crypto.randomUUID()}@example.test`;
   const personId = await seedManager(db, { email, role });
   const session = await withTransaction(db, (tx) =>
     loginManager(tx, { email, password: "correct horse" }),
   );
-  return { personId, sessionId: session.id };
+  return { personId, token: session.token };
 }
 
 /** The AppError code a rejected call threw, or a describing string when it was not an AppError. */

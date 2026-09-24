@@ -158,22 +158,20 @@ describe("negative controls", () => {
   });
 
   it("reports a key from a node's own table into the venue's", () => {
-    // `sessions` is `local` and `persons` is `state` — the shape this branch removed six of.
-    expect(violationOf(edge("sessions", "persons"), classes)).toContain("[local -> state]");
+    // `join_requests` is `local` and `locations` is `state`: a key across the two classes.
+    expect(violationOf(edge("join_requests", "locations"), classes)).toContain("[local -> state]");
   });
 
   it("reports one in the other direction too", () => {
-    expect(violationOf(edge("persons", "sessions"), classes)).toContain("[state -> local]");
+    expect(violationOf(edge("locations", "join_requests"), classes)).toContain("[state -> local]");
   });
 
-  it("says nothing about a key between two tables on the same side", () => {
-    // Both `state`: the keys this rule leaves alone.
+  it("says nothing about a key that stays on one side", () => {
     expect(violationOf(edge("webauthn_credentials", "persons"), classes)).toBeNull();
-    // Both `local`.
-    expect(violationOf(edge("sessions", "management_sessions"), classes)).toBeNull();
+    expect(violationOf(edge("join_requests", "mirror_config"), classes)).toBeNull();
   });
 
   it("reports an endpoint no module classifies, rather than skipping it", () => {
-    expect(violationOf(edge("sessions", "not_a_table"), classes)).toContain("unclassified");
+    expect(violationOf(edge("join_requests", "not_a_table"), classes)).toContain("unclassified");
   });
 });

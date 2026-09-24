@@ -92,19 +92,19 @@ const suite = useVenueDb({
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-const begin = (sessionId: string) =>
+const begin = (token: string) =>
   run((tx) =>
     beginPasskeyRegistration(tx, {
-      managementSessionId: sessionId,
+      managementSessionId: token,
       rpId: "localhost",
       rpName: "Waitron",
     }),
   );
 
-const finish = (sessionId: string, challengeHandle: string, name?: unknown) =>
+const finish = (token: string, challengeHandle: string, name?: unknown) =>
   run((tx) =>
     finishPasskeyRegistration(tx, {
-      managementSessionId: sessionId,
+      managementSessionId: token,
       challengeHandle,
       response: {} as never,
       name,
@@ -141,10 +141,10 @@ afterEach(async () => {
 
 describe("passkey registration", () => {
   it("issues options, stores a challenge, then persists the credential and consumes the challenge", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-abc"));
 
-    const begun = await begin(sessionId);
+    const begun = await begin(token);
     expect(begun.challengeHandle).toBeTruthy();
     expect(begun.options.challenge).toBeTruthy();
 
@@ -155,7 +155,7 @@ describe("passkey registration", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0]!.personId).toBe(personId);
 
-    const done = await finish(sessionId, begun.challengeHandle);
+    const done = await finish(token, begun.challengeHandle);
     expect(done.credentialId).toBe("cred-abc");
 
     // Credential row landed, with the public key base64url-encoded and the counter persisted.
@@ -180,8 +180,8 @@ describe("passkey registration", () => {
   });
 
   it("pins userVerification to 'required' in the registration options (phishing-resistant primary login)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
-    const begun = await begin(sessionId);
+    const { token } = await openManagementSession(suite.db, "admin");
+    const begun = await begin(token);
     // Tell the authenticator user verification is MANDATORY up front, matching the verify side which
     // rejects a response lacking the UV flag. The library default is 'preferred'
     // (generateRegistrationOptions.js:14-15 in @simplewebauthn/server@14.0.2), which lets a device skip
@@ -197,8 +197,8 @@ describe("passkey registration", () => {
   });
 
   it("offers exactly the three signature algorithms the server pins, in that order", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
-    const begun = await begin(sessionId);
+    const { token } = await openManagementSession(suite.db, "admin");
+    const begun = await begin(token);
     // EdDSA (-8), ES256 (-7), RS256 (-257) — pinned by `supportedAlgorithmIDs` rather than left to
     // @simplewebauthn/server@14, which asks the running runtime what to offer and prepends ML-DSA-44
     // where Web Crypto reports it (generateRegistrationOptions.js:23-29). Delete the pin and this
@@ -213,10 +213,10 @@ describe("passkey registration", () => {
     [undefined, null],
     ["x".repeat(80), "x".repeat(80)],
   ])("stores the optional passkey name %j", async (name, expected) => {
-    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-named"));
-    const begun = await begin(sessionId);
-    await finish(sessionId, begun.challengeHandle, name);
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle, name);
     const [credential] = await run((tx) =>
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
     );
@@ -226,10 +226,10 @@ describe("passkey registration", () => {
   it.each(["x".repeat(81), 123, null])(
     "refuses an invalid passkey name %j before registering",
     async (name) => {
-      const { sessionId } = await openManagementSession(suite.db, "admin");
+      const { token } = await openManagementSession(suite.db, "admin");
       mockVerify.mockResolvedValue(verified("cred-invalid-name"));
-      const begun = await begin(sessionId);
-      await expect(finish(sessionId, begun.challengeHandle, name)).rejects.toMatchObject({
+      const begun = await begin(token);
+      await expect(finish(token, begun.challengeHandle, name)).rejects.toMatchObject({
         code: "profile.invalid",
         params: { field: "passkeyName" },
       });
@@ -238,20 +238,20 @@ describe("passkey registration", () => {
   );
 
   it("requires user verification on the registration verify (requireUserVerification: true)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-abc"));
-    const begun = await begin(sessionId);
-    await finish(sessionId, begun.challengeHandle);
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle);
     // Pinned explicitly rather than leaning on the library default (true, verifyRegistrationResponse.js:36),
     // so a future default flip cannot silently drop the UV requirement on a primary login.
     expect(mockVerify.mock.calls[0]![0]).toMatchObject({ requireUserVerification: true });
   });
 
   it("passes its pinned algorithm list to the registration verifier", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-abc"));
-    const begun = await begin(sessionId);
-    await finish(sessionId, begun.challengeHandle);
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle);
     // The verify side has its own algorithm list and the library defaults it to the SAME
     // runtime-decided list the options side uses (verifyRegistrationResponse.js:36 defaults to the
     // `defaultSupportedAlgorithmIDs` that generateRegistrationOptions.js:28-29 puts ML-DSA-44 into).
@@ -266,24 +266,24 @@ describe("passkey registration", () => {
   });
 
   it("excludes already-registered credentials from a second ceremony", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-existing"));
 
-    const first = await begin(sessionId);
-    await finish(sessionId, first.challengeHandle);
+    const first = await begin(token);
+    await finish(token, first.challengeHandle);
 
-    const second = await begin(sessionId);
+    const second = await begin(token);
     expect(second.options.excludeCredentials?.map((c) => c.id)).toContain("cred-existing");
   });
 
   it("persists the authenticator's transports as a JSON array string", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, token } = await openManagementSession(suite.db, "admin");
     // The authenticator reports its transports on registration; they are stored so a later ceremony
     // can hand them back as an excludeCredentials/allowCredentials hint (schema: webauthn.ts).
     mockVerify.mockResolvedValue(verified("cred-abc", ["internal", "usb"]));
 
-    const begun = await begin(sessionId);
-    await finish(sessionId, begun.challengeHandle);
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle);
 
     const [cred] = await run((tx) =>
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
@@ -292,14 +292,14 @@ describe("passkey registration", () => {
   });
 
   it("stores null for a non-array transports value the untrusted client could forge", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
+    const { personId, token } = await openManagementSession(suite.db, "admin");
     // `verifyRegistrationResponse` copies transports verbatim from the client, so at runtime it may be
     // a non-array despite its declared type. serializeTransports coerces anything but an array to null
     // (Array.isArray guard); drop that guard and this value would be stored as the string '"usb"'.
     mockVerify.mockResolvedValue(verified("cred-forged", "usb" as unknown as string[]));
 
-    const begun = await begin(sessionId);
-    await finish(sessionId, begun.challengeHandle);
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle);
 
     const [cred] = await run((tx) =>
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
@@ -308,26 +308,26 @@ describe("passkey registration", () => {
   });
 
   it("hands an excluded credential's stored transports back as an excludeCredentials hint", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-hybrid", ["hybrid", "internal"]));
 
     // Register a credential whose transports are recorded, then begin a second ceremony: the stored
     // transports ride along on the excludeCredentials descriptor so the authenticator can match the
     // already-registered credential across its transports and refuse the duplicate.
-    const first = await begin(sessionId);
-    await finish(sessionId, first.challengeHandle);
+    const first = await begin(token);
+    await finish(token, first.challengeHandle);
 
-    const second = await begin(sessionId);
+    const second = await begin(token);
     const descriptor = second.options.excludeCredentials?.find((c) => c.id === "cred-hybrid");
     expect(descriptor?.transports).toEqual(["hybrid", "internal"]);
   });
 
   it("throws passkey.verification_failed when the ceremony does not verify", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue({ verified: false });
 
-    const begun = await begin(sessionId);
-    expect(await codeOf(() => finish(sessionId, begun.challengeHandle))).toBe(
+    const begun = await begin(token);
+    expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
       "passkey.verification_failed",
     );
 
@@ -343,17 +343,17 @@ describe("passkey registration", () => {
   });
 
   it("throws passkey.verification_failed when no challenge is on file for the handle", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     // A well-formed but unknown handle: nothing was ever stored under it.
-    const code = await codeOf(() => finish(sessionId, "00000000-0000-4000-8000-000000000000"));
+    const code = await codeOf(() => finish(token, "00000000-0000-4000-8000-000000000000"));
     expect(code).toBe("passkey.verification_failed");
     // verify is never reached — the missing challenge short-circuits before it.
     expect(mockVerify).not.toHaveBeenCalled();
   });
 
   it("throws passkey.challenge_expired once the challenge is older than CHALLENGE_TTL_MS", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
-    const begun = await begin(sessionId);
+    const { token } = await openManagementSession(suite.db, "admin");
+    const begun = await begin(token);
     // Age the challenge past the TTL via a raw update — deterministic, no clock injection, exactly as
     // management-session.test.ts ages last_seen_at.
     await run((tx) =>
@@ -363,7 +363,7 @@ describe("passkey registration", () => {
         .where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
 
-    expect(await codeOf(() => finish(sessionId, begun.challengeHandle))).toBe(
+    expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
       "passkey.challenge_expired",
     );
     // The TTL check short-circuits before the verifier is ever reached.
@@ -371,14 +371,14 @@ describe("passkey registration", () => {
   });
 
   it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     // `@simplewebauthn/server` throws a GENERIC Error on a malformed/mismatched response — not a mapped
     // `passkey.*` code. Unwrapped it would reach `run` as a non-AppError → opaque server.internal 500;
     // finishPasskeyRegistration must turn it into a clean passkey.verification_failed.
     mockVerify.mockRejectedValue(new Error("Unexpected authenticator response"));
 
-    const begun = await begin(sessionId);
-    expect(await codeOf(() => finish(sessionId, begun.challengeHandle))).toBe(
+    const begun = await begin(token);
+    expect(await codeOf(() => finish(token, begun.challengeHandle))).toBe(
       "passkey.verification_failed",
     );
 
@@ -393,19 +393,19 @@ describe("passkey registration", () => {
   });
 
   it("rejects re-registering a credential already on file as passkey.already_registered (not an opaque 500)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-dup"));
 
     // First ceremony persists the credential.
-    const first = await begin(sessionId);
-    expect((await finish(sessionId, first.challengeHandle)).credentialId).toBe("cred-dup");
+    const first = await begin(token);
+    expect((await finish(token, first.challengeHandle)).credentialId).toBe("cred-dup");
 
     // A SECOND ceremony returning the SAME credential id collides on the `credential_id` unique
     // constraint: the insert raises 23505. Unwrapped it reaches
     // `run` as a non-AppError → opaque server.internal 500; finishPasskeyRegistration must translate
     // it into a clean passkey.already_registered (the register route maps that → 409).
-    const second = await begin(sessionId);
-    expect(await codeOf(() => finish(sessionId, second.challengeHandle))).toBe(
+    const second = await begin(token);
+    expect(await codeOf(() => finish(token, second.challengeHandle))).toBe(
       "passkey.already_registered",
     );
 
@@ -420,11 +420,11 @@ describe("passkey registration", () => {
     // The negative control for the isUniqueViolation catch: a NON-unique insert failure must propagate
     // untranslated. A forged verifier result with no credential id violates the NOT NULL constraint,
     // so `isUniqueViolation` is false and the raw error is rethrown.
-    const { sessionId } = await openManagementSession(suite.db, "admin");
+    const { token } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified(null as never));
-    const begun = await begin(sessionId);
+    const begun = await begin(token);
 
-    const error = await captureError(() => finish(sessionId, begun.challengeHandle));
+    const error = await captureError(() => finish(token, begun.challengeHandle));
     // `refusalOn` reads the engine's result code and the key it named off the RAW driver error; an
     // AppError carries neither, so this both proves the refusal is the NOT NULL on
     // `credential_id` AND that nothing translated it into an AppError.
@@ -469,7 +469,7 @@ describe("passkey authentication", () => {
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     // The verifier seam: a passkey resolves to its owner's management session, like loginManager.
     expect(session.personId).toBe(personId);
-    expect(session.id).toBeTruthy();
+    expect(session.token).toBeTruthy();
 
     // The stored counter advanced to the verifier's newCounter (replay defence).
     const [cred] = await run((tx) =>

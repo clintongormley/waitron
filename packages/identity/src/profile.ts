@@ -38,6 +38,7 @@ import {
  * issue an emailed proof also take the taxpayer id `hashCode` mixes into that proof, declared on
  * their own inputs rather than here, because nothing else in this file reads one. */
 interface Owner {
+  /** The dashboard cookie's value — the session's token, which this package hashes. */
   managementSessionId: string;
 }
 interface Credentials {
@@ -46,20 +47,20 @@ interface Credentials {
   keyRing?: TotpKeyRing;
 }
 
-async function ownPerson(tx: Transaction, input: Owner) {
-  const [session] = await tx
-    .select({ personId: managementSessions.personId })
-    .from(managementSessions)
-    .where(eq(managementSessions.id, input.managementSessionId));
-  if (session === undefined) throw new AppError("management_session.required", {});
+/** The signed-in person, and the row id of the session that signed them in. */
+async function ownSession(tx: Transaction, input: Owner) {
+  const { sessionRowId, personId } = await resolveManagementSession(tx, input.managementSessionId);
   // A plain read of the signed-in person. It took `for update`, so that two profile changes for
   // one person could not interleave — a password change also ends that person's other sessions.
   // One write transaction runs on the venue file at a time, so there is no second change to
   // interleave with; the pattern is stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
-  const [person] = await tx.select().from(persons).where(eq(persons.id, session.personId));
+  const [person] = await tx.select().from(persons).where(eq(persons.id, personId));
   if (person === undefined) throw new AppError("management_session.required", {});
-  await resolveManagementSession(tx, input.managementSessionId);
-  return person;
+  return { person, sessionRowId };
+}
+
+async function ownPerson(tx: Transaction, input: Owner) {
+  return (await ownSession(tx, input)).person;
 }
 
 function verifyCurrent(person: typeof persons.$inferSelect, credentials: Credentials): void {
@@ -122,7 +123,7 @@ export async function finishOwnTotpEnrollment(
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   // This read took `for update` too, so that the enrollment could not be consumed twice; the same
-  // answer applies ({@link ownPerson}).
+  // answer applies ({@link ownSession}).
   const [enrollment] = await tx
     .select({ encryptedSecret: totpEnrollments.encryptedSecret })
     .from(totpEnrollments)
@@ -304,7 +305,7 @@ export async function changeOwnPassword(
   tx: Transaction,
   input: Owner & Credentials & { password: string },
 ): Promise<void> {
-  const person = await ownPerson(tx, input);
+  const { person, sessionRowId } = await ownSession(tx, input);
   verifyCurrent(person, input);
   assertPasswordLength(input.password);
   await tx
@@ -318,7 +319,7 @@ export async function changeOwnPassword(
     .where(
       and(
         eq(managementSessions.personId, person.id),
-        ne(managementSessions.id, input.managementSessionId),
+        ne(managementSessions.id, sessionRowId),
         isNull(managementSessions.endedAt),
       ),
     );

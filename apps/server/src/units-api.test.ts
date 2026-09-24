@@ -35,7 +35,7 @@ beforeEach(async () => {
       .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: person!.id });
-    cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
+    cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
   });
 });
 

@@ -1,6 +1,12 @@
 import { uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  hashSessionToken,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
 import { createConnection, createServer } from "node:net";
@@ -683,17 +689,17 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
       const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
       return (
         await sharedDb.execute<{ seen: string }>(
-          sql`update management_sessions set last_seen_at = ${staleSeenAt} where id = ${session.id} returning last_seen_at as seen`,
+          sql`update management_sessions set last_seen_at = ${staleSeenAt} where token_hash = ${hashSessionToken(session.token)} returning last_seen_at as seen`,
         )
       ).rows[0]!.seen;
     };
     const seen = async (): Promise<string> =>
       (
         await sharedDb.execute<{ seen: string }>(
-          sql`select last_seen_at as seen from management_sessions where id = ${session.id}`,
+          sql`select last_seen_at as seen from management_sessions where token_hash = ${hashSessionToken(session.token)}`,
         )
       ).rows[0]!.seen;
-    const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
+    const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     const before = await age();
     const cloud = await fetch(`http://127.0.0.1:${port}/management-api/cloud/status`, {
       headers: { cookie },
@@ -2908,7 +2914,7 @@ describe("startServer — what a trading boot wires behind its management routes
     const session = await withTransaction(db, (tx) =>
       startManagementSession(tx, { personId: admin!.id }),
     );
-    cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
+    cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     port = await freePort();
     server = await startServer({
       ...KEY_ENV,

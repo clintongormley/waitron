@@ -7,6 +7,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { managementSessions } from "./schema/management-sessions.js";
 import { persons } from "./schema/persons.js";
 import type { PersonRoleValue } from "./permissions.js";
+import { hashSessionToken, mintSessionToken } from "./session-token.js";
 
 /**
  * The lifecycle of a browser MANAGEMENT session — the seam the dashboard login (Task 8) and the
@@ -27,7 +28,8 @@ export function withPassiveManagementRead<T>(read: () => T): T {
 }
 
 export interface ManagementSession {
-  id: string;
+  /** The bearer token the dashboard cookie carries. Only its hash is stored. */
+  token: string;
   personId: string;
 }
 
@@ -36,28 +38,31 @@ export async function startManagementSession(
   tx: Transaction,
   input: { personId: string },
 ): Promise<ManagementSession> {
-  const [row] = await tx
+  const token = mintSessionToken();
+  await tx
     .insert(managementSessions)
-    .values({ personId: input.personId })
-    .returning({ id: managementSessions.id });
-  return { id: row!.id, personId: input.personId };
+    .values({ personId: input.personId, tokenHash: hashSessionToken(token) });
+  return { token, personId: input.personId };
 }
 
 /**
- * Resolve a live session to its person + role, or throw. Missing, ended, or — since the storage
- * switch dropped the foreign key to `persons` — pointing at a person row that is gone →
+ * Resolve a live session to its person + role, or throw. `token` is the cookie's raw value; a
+ * session's row id or stored hash names no session. Missing, ended, or — the table declares no
+ * key to `persons` (why: `schema/management-sessions.ts`) — pointing at a person row that is gone →
  * `management_session.required` (two nets refuse that last one: the inner join finds nothing, and the
  * status check below refuses a status that is not `active`);
  * idled past `IDLE_TIMEOUT_MS` → `management_session.expired`; person suspended → `person.suspended`;
  * a pending person → `management_session.required`.
- * On success it bumps `last_seen_at` (the sliding window) and returns the person's current role plus
- * their stored UI `locale` (`persons.locale`, `null` when they have set no preference).
+ * On success it bumps `last_seen_at` (the sliding window) and returns the session's row id, the
+ * person's current role and their stored UI `locale` (`persons.locale`, `null` when they have set no
+ * preference).
  */
 export async function resolveManagementSession(
   tx: Transaction,
-  sessionId: string,
+  token: string,
   options: { touch?: boolean } = {},
 ): Promise<{
+  sessionRowId: string;
   personId: string;
   role: PersonRoleValue;
   email: string | null;
@@ -66,6 +71,7 @@ export async function resolveManagementSession(
 }> {
   const [row] = await tx
     .select({
+      sessionRowId: managementSessions.id,
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
       role: persons.role,
@@ -75,7 +81,12 @@ export async function resolveManagementSession(
     })
     .from(managementSessions)
     .innerJoin(persons, eq(persons.id, managementSessions.personId))
-    .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
+    .where(
+      and(
+        eq(managementSessions.tokenHash, hashSessionToken(token)),
+        isNull(managementSessions.endedAt),
+      ),
+    );
   if (row === undefined) throw new AppError("management_session.required", {});
   if (Date.now() - Date.parse(row.lastSeenAt) > IDLE_TIMEOUT_MS) {
     throw new AppError("management_session.expired", {});
@@ -89,9 +100,10 @@ export async function resolveManagementSession(
     await tx
       .update(managementSessions)
       .set({ lastSeenAt: nowIso() })
-      .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
+      .where(and(eq(managementSessions.id, row.sessionRowId), isNull(managementSessions.endedAt)));
   }
   return {
+    sessionRowId: row.sessionRowId,
     personId: row.personId,
     role: row.role as PersonRoleValue,
     email: row.email,
@@ -103,11 +115,12 @@ export async function resolveManagementSession(
 }
 
 /** Stamp `ended_at` on a live session. Returns true if one was ended, false if none was live. */
-export async function endManagementSession(tx: Transaction, sessionId: string): Promise<boolean> {
+export async function endManagementSession(tx: Transaction, token: string): Promise<boolean> {
+  const tokenHash = hashSessionToken(token);
   const updated = await tx
     .update(managementSessions)
     .set({ endedAt: nowIso() })
-    .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)))
+    .where(and(eq(managementSessions.tokenHash, tokenHash), isNull(managementSessions.endedAt)))
     .returning({ id: managementSessions.id });
   return updated.length > 0;
 }

@@ -9,6 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -98,7 +99,7 @@ async function seedStateDir(omit?: string): Promise<string> {
   return dir;
 }
 
-function buildApp(stateDir: string): Hono {
+function buildApp(stateDir: string, log: Logger = () => {}): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -116,7 +117,7 @@ function buildApp(stateDir: string): Hono {
   mountRecoveryBundleApi(
     app,
     { db: suite.db, stateDir, now: () => new Date("2026-08-29T10:00:00Z") },
-    () => {},
+    log,
   );
   return app;
 }
@@ -134,10 +135,14 @@ async function login(app: Hono, email: string): Promise<string> {
 describe("POST /api/box/recovery-bundle", () => {
   let app: Hono;
   let cookie: string;
+  let managerId: string;
+  const logged: { code: string; fields: unknown }[] = [];
 
   beforeAll(async () => {
-    await setupTenant();
-    app = buildApp(await seedStateDir());
+    ({ managerId } = await setupTenant());
+    app = buildApp(await seedStateDir(), (_level, code, fields) => {
+      logged.push({ code, fields });
+    });
     cookie = await login(app, MANAGER_EMAIL);
   });
 
@@ -180,6 +185,13 @@ describe("POST /api/box/recovery-bundle", () => {
     const files = decryptBundle(await res.text(), BUNDLE_PASS);
     expect(Object.keys(files).sort()).toEqual([...RECOVERY_FILES].sort());
     expect(files["secrets.env"]).toBe("contents-of-secrets.env\n");
+
+    // The download is logged by WHO asked, never by the cookie: the cookie's value is a live
+    // dashboard credential, and a log line is not a place to keep one.
+    const token = cookie.split("=")[1]!;
+    const line = logged.find((l) => l.code === "recovery.bundle_downloaded");
+    expect(line?.fields).toEqual({ personId: managerId });
+    expect(JSON.stringify(logged)).not.toContain(token);
   });
 
   it("500s with recovery.state_incomplete when the box lost one of its own secret files", async () => {

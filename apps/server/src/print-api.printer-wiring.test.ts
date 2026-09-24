@@ -123,7 +123,7 @@ beforeAll(async () => {
     const staffSession = await startManagementSession(tx, {
       personId: stf!.id,
     });
-    return { managerSid: managerSession.id, staffSid: staffSession.id };
+    return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
   managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;

@@ -1,22 +1,18 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { tablesCreatedBy } from "@waitron/sync-enrolment";
 import { IDENTITY_CLASSIFICATION } from "./classification.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
-function tablesInDrizzle(): string[] {
-  const names: string[] = [];
-  for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
-    const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    // Either quoting: drizzle-kit writes a SQLite identifier in backticks where it wrote a
-    // PostgreSQL one in double quotes, and a name may arrive unquoted. Both are accepted so the
-    // guard reads the generated SQL rather than one dialect's punctuation.
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
-      names.push(m[1]!);
-    }
-  }
-  return names;
+function tablesInDrizzle(): Set<string> {
+  return tablesCreatedBy(
+    readdirSync(DRIZZLE)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .map((f) => readFileSync(join(DRIZZLE, f), "utf8")),
+  );
 }
 
 describe("IDENTITY_CLASSIFICATION", () => {
@@ -32,7 +28,7 @@ describe("IDENTITY_CLASSIFICATION", () => {
   });
   it("classifies exactly the tables this module's migrations create", () => {
     const classified = new Set(IDENTITY_CLASSIFICATION.map((c) => c.table));
-    const created = new Set(tablesInDrizzle());
+    const created = tablesInDrizzle();
     // The control, and the reason this line exists: the assertion below it — the one that catches a
     // NEW table nobody classified — passes against an empty `created`, so it says nothing at all
     // unless the scan actually found the migrations. It found none when the DDL switched to
