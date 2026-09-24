@@ -10,34 +10,12 @@ import type { StripeRefunder } from "./reverse.js";
 
 const PROVIDER = "stripe";
 
-/** The prefix Stripe gives a Checkout Session id (`cs_test_…` / `cs_live_…`), and the only thing
- * that distinguishes a HOSTED payment's stored `external_ref` from a terminal or on-device one (a
- * PaymentIntent, `pi_…`). Sniffing the reference rather than reading the row's capture mode is
- * deliberate: all three adapters write `provider = "stripe"` and the `payments` table records no
- * capture mode at all, so the reference itself is the only signal the sweep has. */
+/** A Checkout Session id's prefix. All three adapters write `provider = "stripe"` and `payments`
+ * records no capture mode, so this prefix is what marks a HOSTED row's `external_ref`. */
 const SESSION_PREFIX = "cs_";
 
-/**
- * One tenant's Stripe account, as the sweep uses it: the read surface it audits against, and the
- * refund surface it hands money back through.
- *
- * The two are resolved TOGETHER, from a single call, rather than by two independent option
- * functions — because they are not independent. A standalone Stripe account (one per merchant, no
- * Connect) holds exactly one business's money and issues exactly one secret key, so `report` and
- * `refund` are two views of the SAME credentials. Two independent resolvers would not make a
- * mispairing IMPOSSIBLE — an implementation could still hand back a report surface and a refund
- * surface built from different credentials — but it would make that mispairing a second invariant
- * for every future caller to uphold by hand, at however many places `resolveAccount` gets invoked
- * from. Resolving both from one call makes the pairing a single decision, made once, at one
- * call site, instead of an open-ended number of places that must all agree independently; a caller
- * would have to go out of its way to mismatch two credentials it fetched together in one place.
- *
- * They stay two NAMED surfaces rather than one widened interface for the reason `report-client.ts`
- * already states: each seam names only the calls its own consumer makes. `StripeReportClient` is
- * the audit's read surface and `StripeRefunder` is the reversal path's write surface (shared
- * verbatim with both other Stripe providers); folding `refund` into the report client would give
- * every future report-only implementer a money-moving method to implement.
- */
+/** Both surfaces must be built from the SAME account's key, which is why one call resolves them
+ * together. */
 export interface StripeReconcileAccount {
   report: StripeReportClient;
   refund: StripeRefunder;
@@ -45,31 +23,14 @@ export interface StripeReconcileAccount {
 
 export interface StripeReconcilerOptions {
   db: Database;
-  /** The taxpayer's own Stripe account surfaces. A FUNCTION, not fixed clients: the account is
-   * resolved per sweep, so a credential provisioned or rotated while the host runs is picked up on
-   * the next pass rather than after a restart. Provisioning stays deferred. */
+  /** Called per sweep, so a credential rotated while the host runs is picked up without a restart. */
   resolveAccount: () => Promise<StripeReconcileAccount>;
-  /** How long the processor may legitimately take to report a settlement. Defaults to the neutral
-   * layer's own seven days. */
   settlementLagMs?: number;
-  /** This node's origin id, forwarded into `reconcilePayments`'s deps and `reverseViaStripe` as the
-   * sweep's node identity (it once fed sync capture; capture is gone — swap S5). */
+  /** Forwarded to `reconcilePayments` and `reverseViaStripe`, neither of which reads it. */
   nodeId: string;
 }
 
-/**
- * The Stripe implementation of the reconciliation audit — ONE reconciler for the whole settlement
- * identity, per `PaymentReconciler`'s own rule: whatever writes `provider = "stripe"` is audited by
- * this single sweep, however many capture mechanisms do the writing. Today that is three (server-driven
- * terminal, on-device, and hosted Checkout); a fourth landing tomorrow needs no new reconciler and no
- * change here — this class does not enumerate them, on purpose, so it cannot go stale the way an
- * exhaustive list would the moment one is added. That is exactly why the audit hangs off its own
- * interface instead of `PaymentProvider`, whose hosted implementer does not exist.
- *
- * The method is a delegation: the neutral `reconcilePayments` owns the algorithm, and this wires its
- * three vendor ports — the report source, a reversal that can address a hosted payment, and the
- * incident sink.
- */
+/** ONE reconciler audits every row written with `provider = "stripe"`, whichever adapter wrote it. */
 export class StripeReconciler implements PaymentReconciler {
   readonly provider = PROVIDER;
 
@@ -93,19 +54,8 @@ export class StripeReconciler implements PaymentReconciler {
     );
   }
 
-  /**
-   * Reverse one claimed orphan in full — the neutral sweep's `ReversalFn`, delegating to the same
-   * `reverseViaStripe` both interactive providers use, so the local pre-check, the failure
-   * bookkeeping and the state transitions are shared code rather than a second implementation.
-   *
-   * This caller adds the processor-ref resolver to the shared helper: a hosted orphan stores a
-   * Checkout Session id, which `stripe.refunds` cannot address, so it cannot be refunded without one.
-   *
-   * Throwing out of the resolver remains the correct failure mode: `reconcilePayments` catches it,
-   * records the `AppError` code on `remediationFailures` and folds it into ONE aggregated
-   * `payment.reconcile_remediation_failed` incident per till. An under-remediated orphan carrying an
-   * open incident is the safe failure, a double refund is not.
-   */
+  /** A throw from here is caught by `reconcilePayments` and reported as a remediation failure: an
+   * unrefunded orphan with an open incident is the safe failure, a double refund is not. */
   private async reverse(account: StripeReconcileAccount, paymentRef: string): Promise<void> {
     await reverseViaStripe(
       this.opts.db,
@@ -115,8 +65,6 @@ export class StripeReconciler implements PaymentReconciler {
       "refund",
       undefined,
       {
-        // The sweep's own node id — the reversal's node identity (it once fed sync capture; capture
-        // is gone — swap S5).
         nodeId: this.opts.nodeId,
         resolveProcessorRef: (externalRef) =>
           this.processorRef(account.report, externalRef, paymentRef),
@@ -124,20 +72,8 @@ export class StripeReconciler implements PaymentReconciler {
     );
   }
 
-  /**
-   * The stored `external_ref` translated into the identifier `stripe.refunds` addresses.
-   *
-   * A terminal or on-device payment already stores that identifier, so it passes through untouched
-   * and costs no network call. A hosted one stores its Checkout Session id, which the refund API
-   * cannot use — the gap that made every hosted orphan's auto-reversal fail permanently — so it is
-   * looked up. `reverseViaStripe` calls this outside every transaction, after the reversibility
-   * pre-check, precisely because that lookup is a network call.
-   *
-   * A session with no PaymentIntent behind it was never paid: there is no money to hand back, so
-   * `payment.not_found` (the same code the reversal path already raises for a payment it cannot
-   * address) is the honest answer rather than a silent success that would report a refund that
-   * never happened.
-   */
+  /** A session with no PaymentIntent was never paid, so there is nothing to refund: `not_found`
+   * rather than a success that would report a refund that never happened. */
   private async processorRef(
     report: StripeReportClient,
     externalRef: string,

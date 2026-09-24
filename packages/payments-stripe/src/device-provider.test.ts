@@ -17,8 +17,6 @@ import { freshNif, seedPaymentPolicy, seedWorkingOrder } from "@waitron/payments
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const AT = new Date("2026-07-24T10:00:00Z");
-// The provider's sync-origin node id — required option, value irrelevant here (no sync triggers in
-// this core+payments container); threaded into the adapter's withTransaction (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
@@ -56,7 +54,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
-    client.nextCollect("offline"); // the gate must ACCEPT (policy + consent + under cap) for the device to store
+    client.nextCollect("offline");
     const provider = providerFor(client);
     const r = await provider.collect(collectParams(s, true));
     expect(r.state).toBe("accepted_offline");
@@ -67,7 +65,7 @@ describe("StripeOnDeviceProvider.collect", () => {
   it("gate refuses offline (no policy) → device yields network_unavailable → nothing persisted", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     // No policy row → resolveOfflineDecision refuses → offlineAllowed=false is passed to the device →
-    // the offline scenario yields network_unavailable. This makes the gate wiring load-bearing.
+    // the offline scenario yields network_unavailable.
     const client = new FakeStripeDevice();
     client.nextCollect("offline");
     const provider = providerFor(client);
@@ -81,11 +79,8 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("stamps the working order and payment ref into the device PaymentIntent metadata", async () => {
-    // The same attribution hint the hosted create carries, for the same reason: this provider
-    // collects on the reader BEFORE it writes, so a crash in between leaves a captured charge with
-    // no local row — reconcile's `missingLocal`. Without these keys such a settlement can never be
-    // named to a till, so nobody is told about money we hold no record of. Mirrors
-    // hosted-provider.test.ts's "stamps the working order and payment ref into the session metadata".
+    // This provider collects BEFORE it writes, so a crash in between leaves a captured charge with
+    // no local row, and these keys are its only link back to a till.
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
@@ -97,10 +92,6 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("derives a stable wo idempotency key across two collects, decoupled from the random payment_ref (§4)", async () => {
-    // §4 capture idempotency, on-device half: the device PaymentIntent-creation idempotency key is
-    // derived from the working order (stable across retries → one PI → charged once), DECOUPLED from
-    // the per-attempt random `paymentRef`. `metadata.payment_ref` stays that random ref (the
-    // attribution hint the reconcile audit reads). `lastCollect` records what the device was handed.
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
@@ -119,7 +110,6 @@ describe("StripeOnDeviceProvider.collect", () => {
     expect(firstMetaRef).toBe(first.paymentRef);
     expect(secondMetaRef).toBe(second.paymentRef);
     expect(secondMetaRef).not.toBe(firstMetaRef);
-    // Decoupling: the Stripe key is neither random ref, and working_order_id is stamped unchanged.
     expect(firstKey).not.toBe(firstMetaRef);
     expect(client.lastCollect?.metadata.working_order_id).toBe(s.workingOrderId);
   });
@@ -157,13 +147,11 @@ describe("StripeOnDeviceProvider.forward", () => {
     const client = new FakeStripeDevice();
     const provider = providerFor(client);
 
-    // Two offline-accepted payments (policy accepts + consent + under cap → the device stores).
     client.nextCollect("offline");
     const a = await provider.collect(collectParams(s, true));
     client.nextCollect("offline");
     const b = await provider.collect(collectParams(s, true));
 
-    // The device queue: a cleared, b refused.
     client.queueResult({ settled: [a.paymentRef], declined: [b.paymentRef] });
     const result = await provider.forward(AT);
     expect(result).toMatchObject({
@@ -185,7 +173,6 @@ describe("StripeOnDeviceProvider.forward", () => {
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
 
-    // Empty queue → zeros.
     expect(await provider.forward(AT)).toEqual({
       nextDueAt: null,
       forwarded: 0,
@@ -205,8 +192,7 @@ describe("StripeOnDeviceProvider.forward", () => {
     client.nextCollect("offline");
     const b = await provider.collect(collectParams(s, true));
 
-    // The device resolves `a` and says nothing about `b` — the ordinary case where a ref has
-    // neither cleared nor been refused yet. `forward` leaves it for "a later pass".
+    // The device says nothing about `b`: it has neither cleared nor been refused yet.
     client.queueResult({ settled: [a.paymentRef], declined: [] });
     const result = await provider.forward(AT);
 
@@ -216,9 +202,8 @@ describe("StripeOnDeviceProvider.forward", () => {
     );
     expect(rowB?.state).toBe("accepted_offline");
 
-    // `ForwardResult.nextDueAt` is documented as "null = nothing pending". Something IS pending,
-    // so a host that sleeps until the earliest nextDueAt must be told to come back — otherwise
-    // this row stays accepted_offline for ever and the card revenue is never cleared.
+    // null means "nothing pending"; a host sleeping until nextDueAt would leave `b` accepted_offline
+    // for ever.
     expect(result.nextDueAt).not.toBeNull();
   });
 
@@ -322,7 +307,6 @@ describe("StripeOnDeviceProvider reversals", () => {
 
 describe("StripeOnDeviceProvider.connectionToken", () => {
   it("mints a connection token for the device to initialise its on-device SDK", async () => {
-    // Any tenant: `connectionToken` only calls the fake client and touches no database.
     const provider = providerFor(new FakeStripeDevice());
 
     const { secret } = await provider.connectionToken();

@@ -1,10 +1,5 @@
 import type { StripeReportClient, StripeSessionRef, StripeSettlement } from "../report-client.js";
 
-/** A deterministic in-memory `StripeReportClient` — the hermetic double for the reconcile adapter.
- * NOT barrel-exported (a production import cannot reach it), like `FakeStripe`/`FakeStripeDevice`/
- * `FakeStripeHosted`. It records every window it is asked for, so a test can assert the session pass
- * is widened backwards by the settlement lag — a silent regression there would leave hosted payments
- * unmatched and reading as `unsettled` for ever. */
 export class FakeStripeReport implements StripeReportClient {
   readonly settlementWindows: { from: Date; to: Date }[] = [];
   readonly sessionWindows: { from: Date; to: Date }[] = [];

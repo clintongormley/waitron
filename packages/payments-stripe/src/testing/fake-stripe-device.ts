@@ -4,26 +4,15 @@ import type { DeviceCollectOutcome, StripeDeviceClient } from "../device-client.
 let seq = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++seq).padStart(8, "0")}`;
 
-/** The next collect scenario, distinct from the resolved outcome — because the OFFLINE scenario's
- * outcome depends on `offlineAllowed`, so a test cannot script the outcome directly and still exercise
- * the provider's gate. */
+/** A scenario, not an outcome: the offline scenario's outcome depends on `offlineAllowed`, so the
+ * provider's gate is still exercised. */
 type DeviceScenario = "online" | "offline" | "declined";
 
-/** Deterministic in-memory `StripeDeviceClient` — the hermetic double for the on-device Stripe adapter.
- * NOT barrel-exported (a production import cannot reach it), like `FakeStripe`/`FakePaymentProvider`.
- * Controls: `nextCollect(scenario)` shapes the next `collectOnDevice` (default `online`, one-shot);
- * `queueResult({settled, declined})` scripts the next `syncOfflineQueue` (one-shot); `refundFailsNext`
- * fails the next refund. The OFFLINE scenario faithfully models a real device — it stores-and-forwards
- * (→ `accepted_offline`) only when `offlineAllowed`, otherwise refuses (→ `network_unavailable`) — so
- * the provider's neutral gate is load-bearing: a test only reaches `accepted_offline` by configuring
- * policy so the gate accepts. */
 export class FakeStripeDevice implements StripeDeviceClient {
   private scenario: DeviceScenario = "online";
   private nextQueue: { settled: string[]; declined: string[] } = { settled: [], declined: [] };
   private nextRefundFails = false;
 
-  /** The last `collectOnDevice` params, so a test can assert what was stamped onto the device's
-   * PaymentIntent — the `missingLocal` attribution hint. Mirrors `FakeStripeHosted.lastCreate`. */
   lastCollect: {
     amount: Decimal;
     currency: string;
@@ -58,8 +47,6 @@ export class FakeStripeDevice implements StripeDeviceClient {
     this.scenario = "online";
     if (scenario === "declined") return Promise.resolve({ outcome: "declined" });
     if (scenario === "offline") {
-      // A real device stores-and-forwards only when offline was permitted; otherwise it refuses and
-      // nothing is stored. This makes the provider's gate (which computes offlineAllowed) load-bearing.
       return Promise.resolve(
         params.offlineAllowed
           ? { outcome: "accepted_offline", externalRef: nextId("pi") }

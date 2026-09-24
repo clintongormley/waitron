@@ -4,9 +4,7 @@ import { STRIPE_STRINGS } from "./strings.js";
 import "./stripe-connect-form.js"; // side-effect: defines <stripe-connect-form>
 import "./stripe-add-reader.js"; // side-effect: defines <stripe-add-reader>
 
-/** The Stripe provider's dashboard panel: its connect form and reference add-reader dialog, plus the
- * strings they use. The generic Payments screen reaches Stripe only through this value (the browser twin
- * of the server's `STRIPE_CARD_PROVIDER` seat). */
+/** The generic Payments screen reaches Stripe only through this value. */
 export const STRIPE_PANEL: CardProviderPanel = {
   providerId: "stripe",
   displayNameKey: "payments.stripe.name",

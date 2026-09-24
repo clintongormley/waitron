@@ -9,17 +9,11 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { stripeHostedClient } from "./stripe-hosted-client.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
-// Nightly-only suite (.github/workflows/stripe-sandbox.yml). Creates a REAL Stripe test-mode Checkout
-// Session — the one place this package's coverage touches the actual Checkout SDK boundary rather than
-// FakeStripeHosted. `stripe-hosted-client.ts` is coverage-excluded precisely because this suite is its
-// only exerciser. Self-skips with no STRIPE_SECRET_KEY (deliberate — real-API fidelity on a cadence,
-// not correctness the PR gate depends on; the hermetic run already proves the provider's logic).
+// Nightly-only (.github/workflows/stripe-sandbox.yml): a real Stripe test-mode Checkout Session.
 const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip;
 
 d("Stripe test-mode sandbox: hosted Checkout Session", () => {
-  // `timeoutMs` carries over this suite's own 120s hook timeout rather than taking the helper's 60s
-  // default — the nightly config's long timeouts are for the real Stripe round trip this suite makes.
   const pg = useVenueDb({
     migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
     timeoutMs: 120_000,

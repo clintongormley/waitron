@@ -12,12 +12,7 @@ import { FakeStripe } from "./testing/fake-stripe.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  // One `delete from` per table in place of `truncate incidents, payment_refunds, payments cascade`:
-  // SQLite has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time.
-  // Child before parent, because `payment_refunds.payment_id` references `payments(id)` ON DELETE
-  // restrict (`packages/payments/drizzle/0000_baseline.sql`). `incidents` is independent — the only
-  // foreign key into any of these three is that one — so the CASCADE this replaces reached no
-  // fourth table. Same repair as `packages/payments/src/store.test.ts`.
+  // Child before parent: `payment_refunds.payment_id` references `payments(id)` ON DELETE restrict.
   await pg.db.execute(sql`delete from payment_refunds`);
   await pg.db.execute(sql`delete from payments`);
   await pg.db.execute(sql`delete from incidents`);
@@ -33,7 +28,6 @@ function reconciler(
 ): StripeReconciler {
   return new StripeReconciler({
     db: pg.db,
-    // Any node id: these suites assert the sweep's behaviour, not the captured origin.
     nodeId: "11111111-1111-4111-8111-111111111111",
     resolveAccount: () => Promise.resolve({ report: client, refund: refunder }),
   });
@@ -110,8 +104,6 @@ describe("StripeReconciler", () => {
       sessions: [{ sessionId: "cs_hosted", paymentIntentId: "pi_hosted" }],
     });
     const result = await reconciler(client).reconcile(now, NOW);
-    // so this is the missed-webhook
-    // class rather than an unrecognised settlement.
     expect(result.lostSettlement).toHaveLength(1);
     expect(result.missingLocal).toEqual([]);
   });
@@ -128,37 +120,23 @@ describe("StripeReconciler", () => {
   });
 
   it("threads a caller-supplied settlementLagMs to BOTH windows it must reach", async () => {
-    // No test elsewhere in this suite ever supplies `settlementLagMs`, so every other case takes
-    // only the `?? DEFAULT_SETTLEMENT_LAG_MS` fallback branch. That leaves two things unpinned: that
-    // an explicit override is honoured at all, and — the money-critical part — that the SAME value
-    // reaches both consumers `reconcile` hands it to. The neutral sweep (`reconcilePayments`) widens
-    // the settlement pass's `to` FORWARDS by it; `stripeSettlementReport` separately widens the
-    // session pass's `from` BACKWARDS by it. A divergence between the two — e.g. a future refactor
-    // that reads the option twice and defaults each read independently — would silently unmatch
-    // every hosted payment without failing loudly anywhere.
-    //
-    // The value must EXCEED the report source's 24h session-lookback floor, or the backwards window
-    // would be set by the floor rather than by the lag and this test would stop proving that the one
-    // value reached both consumers. Two days: not the seven-day default (so the override is really
-    // honoured), comfortably above the floor (so the lag is what sets both edges).
+    // Pins that ONE supplied value reaches both consumers: a divergence would silently unmatch every
+    // hosted payment. It must differ from the seven-day default and exceed the report source's 24h
+    // session-lookback floor, or the floor rather than the lag would set the backwards edge.
     const LAG_MS = 2 * 24 * 60 * 60 * 1000;
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: pg.db,
-      nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
+      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveAccount: () => Promise.resolve({ report: client, refund: new FakeStripe() }),
       settlementLagMs: LAG_MS,
     });
     await r.reconcile(PERIOD, NOW);
 
-    // Forward-widened ledger window, using the supplied lag rather than the seven-day default.
     expect(client.settlementWindows[0]).toEqual({
       from: PERIOD.from,
       to: new Date(PERIOD.to.getTime() + LAG_MS),
     });
-    // Backward-widened session window, off the SAME already-forward-widened `to` — proving the one
-    // value flowed to both places, not two independently-defaulted ones that happened to agree only
-    // because both fell back to the same default.
     expect(client.sessionWindows[0]).toEqual({
       from: new Date(PERIOD.from.getTime() - LAG_MS),
       to: new Date(PERIOD.to.getTime() + LAG_MS),
@@ -170,7 +148,7 @@ describe("StripeReconciler", () => {
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: pg.db,
-      nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
+      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveAccount: () => {
         resolved += 1;
         return Promise.resolve({ report: client, refund: new FakeStripe() });
@@ -204,9 +182,8 @@ describe("StripeReconciler", () => {
   });
 
   it("auto-reverses a terminal orphan against its stored payment intent, unresolved", async () => {
-    // The other half of the resolver: a non-`cs_` ref IS already the identifier `stripe.refunds`
-    // wants, so it must pass straight through — the report client is never consulted for it. This
-    // report carries no sessions at all, so a lookup would resolve to null and fail the reversal.
+    // This report carries no sessions at all, so a lookup would resolve to null and fail the
+    // reversal.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
       workingOrderId: seeded.workingOrderId,
@@ -231,9 +208,7 @@ describe("StripeReconciler", () => {
   });
 
   it("fails one hosted orphan's reversal when its session was never paid, and never retries it", async () => {
-    // A session with no PaymentIntent behind it: nobody paid, so there is nothing to hand back.
-    // `payment.not_found` is the honest outcome — reported, incident-raised, and (because the
-    // marker was stamped before the attempt) never attempted again.
+    // The marker is stamped before the attempt, so a failed reversal is never attempted again.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
       workingOrderId: seeded.workingOrderId,

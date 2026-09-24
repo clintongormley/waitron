@@ -64,11 +64,9 @@ describe("stripeSettlementReport", () => {
   it("widens the session window BACKWARDS by the settlement lag, leaving the ledger window alone", async () => {
     const client = new FakeStripeReport();
     await stripeSettlementReport(client, DEFAULT_SETTLEMENT_LAG_MS).fetch(WINDOW);
-    // The ledger pass asks for exactly the window the sweep gave it...
     expect(client.settlementWindows).toEqual([WINDOW]);
-    // ...while the session pass reaches further back, because a session created BEFORE the window
-    // can have its charge settle inside it. The seven-day default comfortably exceeds the 24h
-    // lookback floor, so the lag itself is what sets this window (the floor's own case is below).
+    // A session created BEFORE the window can have its charge settle inside it. The seven-day
+    // default exceeds the 24h lookback floor, so the lag is what sets this edge.
     expect(client.sessionWindows[0].from).toEqual(
       new Date(WINDOW.from.getTime() - DEFAULT_SETTLEMENT_LAG_MS),
     );
@@ -76,13 +74,9 @@ describe("stripeSettlementReport", () => {
   });
 
   it("never lets a short settlement tolerance shrink the session lookback below 24h", async () => {
-    // The two quantities are different things: `settlementLagMs` is how long the processor may take
-    // to REPORT a settlement, while the session lookback is how long before its charge a session may
-    // have been CREATED — bounded by Stripe's 24h Checkout expiry, not by our tolerance. An operator
-    // tightening the tolerance to an hour must not silently narrow this window: every hosted payment
-    // whose session was created earlier would lose its `cs_` reference, read as `unsettled` for ever,
-    // and have its settlement read as `missingLocal`. The literal 24h is written out rather than
-    // imported, so changing the constant cannot quietly change what this test demands.
+    // The session lookback is bounded by Stripe's 24h Checkout expiry, not by the settlement
+    // tolerance. The literal 24h is written out rather than imported, so changing the constant
+    // cannot quietly change what this test demands.
     const ONE_HOUR_MS = 60 * 60 * 1000;
     const client = new FakeStripeReport();
     await stripeSettlementReport(client, ONE_HOUR_MS).fetch(WINDOW);

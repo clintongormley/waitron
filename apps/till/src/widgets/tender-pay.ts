@@ -515,10 +515,10 @@ export class TillTenderPay extends LitElement {
    * Also the handler for TWO integrated-card actions (Task 9), both a plain return to idle with no
    * event of their own:
    *  - Cancel, from the `"collecting"` spinner — a CLIENT-SIDE ABORT ONLY. `PaymentProvider` has no
-   *    `cancel` method — its methods are `collect`/`forward`/`void`/`refund`/`partialRefund`
-   *    (`packages/payments/src/provider.ts:113-137`) — so there is nothing to tell the reader or the
-   *    server; the in-flight `POST /api/pay` (`till-app`'s `#onCollectCard`) keeps running to its own
-   *    terminal outcome regardless, and a later retry replays safely (capture idempotency, spec §4).
+   *    `cancel` method (`packages/payments/src/provider.ts`), so there is nothing to tell the
+   *    reader or the server; the in-flight `POST /api/pay` (`till-app`'s `#onCollectCard`) keeps
+   *    running to its own terminal outcome regardless, and a later retry replays safely (capture
+   *    idempotency, spec §4).
    *    A server-side reader-cancel endpoint is a DEFERRED `PaymentProvider` extension, not built here.
    *  - Switch tender, from the `"card_outcome"` screen — leaves cash / manual card one tap away
    *    (CLAUDE.md §5: a card decline must never wedge the till). `cardOutcome` itself is left
@@ -790,7 +790,7 @@ export class TillTenderPay extends LitElement {
    * only for `"stripe_on_device"` — a server-driven `"stripe_terminal"` fixed-counter reader has no
    * device-local offline queue to consent INTO (`StripeTerminalProvider.forward`'s own doc: "no
    * device-local offline queue... the pass is always a no-op",
-   * `packages/payments-stripe/src/provider.ts:142-145`). Read at tap time by `#onCardTap`, not bound
+   * `packages/payments-stripe/src/provider.ts`). Read at tap time by `#onCardTap`, not bound
    * into the emitted event until then.
    */
   /**

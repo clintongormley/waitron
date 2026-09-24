@@ -25,27 +25,16 @@ const DEFAULT_POLL = {
 
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
-  /** A plain `Database` handle. This adapter opens its own transactions and scopes each one with
-   * `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
-  /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path. A
-   * per-till provider serves one node, so the id is known at construction. */
+  /** Passed to `reverseViaStripe`, which does not read it. */
   nodeId: string;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
 
-/** The real Stripe Terminal `PaymentProvider` (server-driven). `collect` polls the reader to
- * completion under T1/T2: a committed `attempting` row (idempotency-uuid `payment_ref`) before the
- * network, the outcome after, PI id in `external_ref`. A stalled reader (poll window exhausted) is
- * cancelled and the payment resolves to `failed` — the caller always gets a `PaymentResult`, never
- * an exception; the `stripe.collect_timeout` code stays declared in `errors.ts` for a future
- * incident. Reversals (void / refund / partialRefund) look the payment up via `findPaymentByRef`
- * (the interface method carries only a ref).
- *
- * Deliberately carries NO session/PaymentIntent metadata analogous to the hosted create's
- * `metadata` stamp — see `hosted-client.ts`'s `createCheckoutSession` doc for why that stamp exists
- * and why it is Mode-3-only. A maintainer adding one here "for symmetry" would be undoing that
- * decision, not completing it. */
+/** The server-driven Stripe Terminal `PaymentProvider`. `collect` commits an `attempting` row
+ * BEFORE the network call, so a crash during it still leaves a local row; that is why, unlike the
+ * on-device and hosted creates, it stamps no attribution metadata. A stalled or failed reader
+ * resolves to `failed` rather than a throw. */
 export class StripeTerminalProvider implements PaymentProvider {
   readonly provider = PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
@@ -55,28 +44,23 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
   }
 
-  /** The adapter's ONE transaction boundary: every database phase runs through here, and the
-   * adapter opens no transaction of its own. `tenant-scoping.test.ts` is the guard — it refuses a
-   * bare `.transaction(` anywhere in this package's production sources. */
+  /** Guard: `tenant-scoping.test.ts` refuses a bare `.transaction(` in this package's sources. */
   private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    // The reader ref is a PER-COLLECT input, not baked into the provider: one cached provider serves
-    // every reader on this vendor, and the sale carries the reader it chose. A Terminal collect
-    // cannot proceed without one — its absence is a host wiring error, not an operator condition.
+    // Per-collect, not per-provider: one cached provider serves every reader on this vendor.
     if (params.readerRef === undefined)
       throw new Error(
         "stripe collect requires a readerRef (the chosen reader's provider reference)",
       );
     const readerId = params.readerRef;
     const paymentRef = randomUUID();
-    // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the on-device provider).
     const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
     const key = { provider: PROVIDER, paymentRef };
 
-    // T1 — commit the attempt before any network call.
+    // Commit the attempt before any network call.
     await this.inTransaction((tx) =>
       insertAttempting(tx, {
         workingOrderId: params.workingOrderId,
@@ -86,10 +70,8 @@ export class StripeTerminalProvider implements PaymentProvider {
       }),
     );
 
-    // Network — outside any transaction (T1/T2).
     const outcome = await this.drive(readerId, params.amount, stripeIdempotencyKey);
 
-    // T2 — persist the terminal outcome.
     const row = await this.inTransaction((tx) =>
       outcome.captured
         ? captureAttempting(tx, { ...key, settledAt: outcome.settledAt, externalRef: outcome.piId })
@@ -106,27 +88,22 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   /** Server-driven fixed-counter readers have no device-local offline queue, so a
    * `StripeTerminalProvider` never holds `accepted_offline` payments to forward: the pass is always a
-   * no-op. Offline store-and-forward is a property of the on-device SDK mechanism
-   * (`StripeOnDeviceProvider`), not of the integrated mode in the abstract. */
+   * no-op. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface; a no-op forward ignores it
   forward(_now: Date): Promise<ForwardResult> {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  /** `drive` resolves every stall and error to `failed` inside `collect` (it cancels the reader
-   * action first), so this adapter never leaves a row `attempting`. */
+  /** `collect` resolves its own `attempting` row before it returns. A row a crash leaves between the
+   * two transactions is not resolved here. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface
   resolvePending(_now: Date): Promise<ForwardResult> {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  /** Drive the reader from PaymentIntent creation through to a terminal outcome, entirely outside a
-   * DB transaction. Returns `{ captured: true, ... }` on success and `{ captured: false }` on every
-   * failure mode — a network error at ANY step (create, process, or the poll loop itself, including a
-   * stalled `sleep`), a declined reader, or a timeout. A timeout or a caught error both cancel the
-   * in-flight reader action first (best-effort) so the terminal is not left mid-action; either way the
-   * outcome is DATA that `collect`'s T2 turns into a `failed` row — `drive`/`collect` never throw for
-   * a terminal-interaction failure. */
+  /** Every failure — an error at any step, a decline or a timeout — returns `{ captured: false }`;
+   * a timeout or an error first cancels the reader action, best-effort, so the terminal is not left
+   * mid-action. */
   private async drive(
     readerId: string,
     amount: Decimal,
@@ -147,19 +124,14 @@ export class StripeTerminalProvider implements PaymentProvider {
         if (o.status === "failed") return { captured: false };
         await this.poll.sleep(this.poll.intervalMs);
       }
-      // Timed out — cancel the reader action (best-effort), then fail the payment. The row is resolved
-      // to `failed` by `collect`'s T2; `stripe.collect_timeout` is NOT thrown out of `collect`.
       await this.opts.client.cancelReaderAction(readerId).catch(() => {});
       return { captured: false };
     } catch {
-      // A network error at create/process time OR mid-poll (readerOutcome/sleep) → failed. Best-effort
-      // cancel so the terminal isn't left mid-action; the attempt row is recoverable via collect's T2.
       await this.opts.client.cancelReaderAction(readerId).catch(() => {});
       return { captured: false };
     }
   }
 
-  /** The one reversal path; the three public methods below differ only in kind and amount. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       nodeId: this.opts.nodeId,
