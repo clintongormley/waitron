@@ -2855,7 +2855,10 @@ image constraints under *Detail → Box image*.
     re-deriving a closed day and comparing it to its snapshot is a valid audit does not hold as
     written (a dated pointer there says so). **Owner decision 2026-09-24: a void counts on the day it is
     made, not the day of the sale**, so a later void no longer changes a closed day's re-derived
-    figures — queued as lane B's B10. The quarterly *modelo 303* keeps today's behaviour until the
+    figures — DONE on `fix/void-counts-on-its-own-day`: the daily close, the period VAT summary,
+    the close counts and top sellers count a sale on its issue day and its void as a reversal on
+    the void's business day; the cash-up is unchanged (a void writes no tender). The quarterly
+    *modelo 303* keeps its old behaviour, pinned by a test in `vat-return.test.ts`, until the
     asesor answers `docs/compliance/asesor-questions.md` Q25 (which VAT period a later annulment
     lands in). No till screen or server route calls `recordVoid` yet. `stableStringify`
     (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined` hashes

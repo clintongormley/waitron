@@ -1208,12 +1208,13 @@ correct treatment for the venue's particular product.
 invoice, and it checks nothing about the sale's date (`recordVoid`,
 `packages/core/src/record-void.ts`). No till screen or server route calls it yet (on 2026-09-24,
 `git grep recordVoid` outside `packages/payments` and the fiscal packages found only tests), so the
-product has not yet decided when a void is allowed — which part (b) below would settle. Today the
-quarterly *modelo 303* figure (`packages/reporting/src/vat-return.ts`) and the daily reports leave a
-voided sale out of the period it was ISSUED in, whenever the void happened, so a void on 5 August of
-a 4 August sale changed 4 August's recomputed VAT after that day's frozen close (*cierre Z*) had
-been taken (found by #601's review). The owner decided on 2026-09-24 that the daily reports count a
-void on the day it is made, so a later void no longer changes a closed day's re-derived figures. The
+product has not yet decided when a void is allowed — which part (b) below would settle. The
+quarterly *modelo 303* figure (`packages/reporting/src/vat-return.ts`) leaves a voided sale out of
+the period it was ISSUED in, whenever the void happened. Until 2026-09-24 the daily reports did the
+same, so a void on 5 August of a 4 August sale changed 4 August's recomputed VAT after that day's
+frozen close (*cierre Z*) had been taken (found by #601's review). The owner decided on 2026-09-24
+that the daily reports count a void on the day it is made, and they now do, so a later void no
+longer changes a closed day's re-derived figures. The
 *modelo 303* keeps its current behaviour until this question is answered.
 
 [verifactu-findings.md](verifactu-findings.md) §7 already settles that anulación is only for an

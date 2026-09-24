@@ -104,6 +104,11 @@ export interface PeriodVatInput {
 - **Same exclusions:** `activeSalesClause` verbatim (`business-day.ts:75-78`) — voided sales and
   F3-canje substitutes excluded, rectificativas netted in as negatives. Issuance anchor
   (`s.issued_at`), same as the daily close.
+
+> **2026-09-24:** superseded for the day-scoped reports: a sale voided on a LATER business day now
+> counts on its issue day and is subtracted on the void's day; a same-day void still cancels. The
+> quarterly modelo 303 keeps the exclusion. See `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`
+> ("Determinism").
 - **Exactness is inherited, not re-derived:** the aggregate is `Σ` of each sale's **filed** per-rate
   `tax` from `sales.vat_breakdown`, grouped by rate — the same read `computeVatSummary` already does,
   just over more days. No re-rounding: the per-invoice figures are already the filed, already-rounded
