@@ -317,3 +317,37 @@ it("reads certificate availability from the real discovery path", async () => {
   expect(await api.getDiscovery()).toEqual({ caDownloadAvailable: true });
   expect(paths).toEqual(["/setup-api/discovery"]);
 });
+
+describe("SetupApi calls the fetch it was given as a free function", () => {
+  // The browser's own fetch throws "Illegal invocation" when called as a method of another object;
+  // this stub refuses the same way, where a vi.fn accepts any receiver.
+  function receiverStrictFetch(this: unknown): Promise<Response> {
+    if (this !== undefined && this !== globalThis) {
+      return Promise.reject(new TypeError("Illegal invocation"));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ ok: true })));
+  }
+
+  const artifact = (): Blob => new Blob([Uint8Array.from([1])]);
+  const calls: [string, (api: SetupApi) => Promise<unknown>][] = [
+    ["getStatus", (api) => api.getStatus()],
+    ["restore", (api) => api.restore(artifact(), "recovery-key", "production")],
+    ["stageConfiguration", (api) => api.stageConfiguration(artifact(), "a strong passphrase")],
+  ];
+
+  it.each(calls)("%s calls it as a plain function", async (_name, call) => {
+    await expect(call(new SetupApi("", receiverStrictFetch))).resolves.toEqual({ ok: true });
+  });
+
+  it.each(calls)("%s reads a response through the browser's real fetch", async (_name, call) => {
+    // SetupApi reads a body only from the Response fetch returned, so a read means the server
+    // answered.
+    const readers = [vi.spyOn(Response.prototype, "text"), vi.spyOn(Response.prototype, "json")];
+    try {
+      await call(new SetupApi("", fetch)).catch(() => undefined);
+      expect(readers.flatMap((reader) => reader.mock.calls)).not.toHaveLength(0);
+    } finally {
+      for (const reader of readers) reader.mockRestore();
+    }
+  });
+});

@@ -1864,14 +1864,19 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
   "Provisioning…", with no retry. The connection check releases itself in the same case. The app
   mounts the wizard once and never removes it, so this may be unreachable in use.
 
-- *Restoring a backup and importing a configuration fail in a real browser — OPEN (found by #567,
-  2026-09-24).* `restore` and `stageConfiguration` in `apps/setup/src/api/client.ts` call
-  `this.#fetchImpl(...)` as a method, and `main.ts` builds the client with the browser's own `fetch`,
-  which refuses to run on any other object. A Chromium probe of that shape printed `TypeError: Failed
-  to execute 'fetch' on 'Window': Illegal invocation`; the control, copying it into a local first as
-  `#request` does, returned 200. The suites stub `fetch` with `vi.fn`, which does not care what it
-  is called on. The fix is small: call it the way `#request` does, with a test whose stub refuses a
-  wrong receiver.
+**Restoring a backup and importing a configuration failed in a real browser — FIXED #584 (found by
+#567, 2026-09-24).** `restore` and `stageConfiguration` in `apps/setup/src/api/client.ts` called
+`this.#fetchImpl(...)` as a method, which the browser's own `fetch` refuses with `Illegal
+invocation`. Both now copy it into a local first, as `#request` does; `client.test.ts` runs
+`getStatus` (for the shared `#request` path), `restore` and `stageConfiguration` against a stub that
+refuses a wrong receiver, and against Chromium's real `fetch`.
+
+**The dashboard's configuration export has the same fault, masked — OPEN (found 2026-09-24, fixing
+the setup client; lane B's package).** `apps/dashboard/src/api/client.ts`'s configuration export
+calls `this.#fetch(...)` as a method. It works today only because `main.ts` hands the client
+`createInstrumentedFetch`'s arrow wrapper (`packages/diagnostics/src/instrument-fetch.ts`), which
+calls the real `fetch` as a plain function. A `DashboardApi` built with its default `fetch` would be
+refused on the configuration export with `Illegal invocation`.
 
 The original walkthrough is retained under *Detail → Setup wizard*.
 
@@ -2868,20 +2873,19 @@ image constraints under *Detail → Box image*.
   - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
     to another", which #561 deleted from provisioning (`tenants` holds one row). Prune with
     `apps/server`.
-  - `apps/setup` code, found by #567 and not changed (the restore and import bug is filed under
-    *Setup wizard* above): `#onGoto` in `setup-app.ts` does not clear `fiscalTestError`, so the
-    routed-back fiscal-test banner survives navigating away and back; `deployment.already_stamped`
-    is labelled "Reload to open the till" on the provision path and plain "Reload" on the adopt
-    path, and a reload of a box still in setup mode reopens the wizard; `AdoptOutcome`'s
-    `breakGlassSecret` is typed as required, but a replayed adopt answers without it
-    (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box is
-    trading", so a passing 503 could offer the reload early; the mode screen's own text says a live
-    server files real invoices, which a live run on a development box does not; `setup-app.test.ts`
-    has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
-    `server.internal`, and one saying a re-POST is "unrecoverable" where the server answers 409;
-    `events.test.ts` has no case for the restore and fiscal-test dispatchers; the `*.css?inline`
-    declaration in `vite-env.d.ts` is redundant (vite/client declares it); `vitest.config.ts`
-    excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
+  - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
+    `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
+    `deployment.already_stamped` is labelled "Reload to open the till" on the provision path and
+    plain "Reload" on the adopt path, and a reload of a box still in setup mode reopens the wizard;
+    `AdoptOutcome`'s `breakGlassSecret` is typed as required, but a replayed adopt answers without
+    it (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box
+    is trading", so a passing 503 could offer the reload early; the mode screen's own text says a
+    live server files real invoices, which a live run on a development box does not;
+    `setup-app.test.ts` has two test titles naming a `SyntaxError` from a non-JSON error body that
+    `apiError` turns into `server.internal`, and one saying a re-POST is "unrecoverable" where the
+    server answers 409; `events.test.ts` has no case for the restore and fiscal-test dispatchers;
+    the `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
+    `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
     `widgets/test-helpers.ts` has no accessibility suite that fails without it; `done-screen.ts`'s
     styles use hex fallbacks and `rem`, and a CSS comment inside its style string is history; and
     `connection-screen.ts`'s `connection-continue` event is not named `wt-*` and carries no

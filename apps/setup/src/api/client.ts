@@ -129,6 +129,10 @@ async function apiError(res: Response): Promise<ApiError> {
 
 export class SetupApi {
   readonly #baseUrl: string;
+  /**
+   * Read into a local before calling, so it is called as a free function: called as a method of
+   * `this`, the browser's native `fetch` throws "Illegal invocation".
+   */
   readonly #fetchImpl: FetchLike;
 
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
@@ -161,7 +165,8 @@ export class SetupApi {
     recoveryKey: string,
     environment: "production" | "preproduction",
   ): Promise<RestoreOutcome> {
-    const res = await this.#fetchImpl(this.#baseUrl + "/setup-api/restore", {
+    const fetchImpl = this.#fetchImpl;
+    const res = await fetchImpl(this.#baseUrl + "/setup-api/restore", {
       method: "POST",
       credentials: "include",
       headers: {
@@ -176,7 +181,8 @@ export class SetupApi {
   }
 
   async stageConfiguration(artifact: Blob, passphrase: string): Promise<ConfigurationPreview> {
-    const res = await this.#fetchImpl(this.#baseUrl + "/setup-api/configuration", {
+    const fetchImpl = this.#fetchImpl;
+    const res = await fetchImpl(this.#baseUrl + "/setup-api/configuration", {
       method: "POST",
       credentials: "include",
       headers: {
@@ -193,10 +199,6 @@ export class SetupApi {
     return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
-  /**
-   * `fetchImpl` is read into a local so it is called as a free function: called as a method of
-   * `this`, the browser's native `fetch` throws "Illegal invocation".
-   */
   async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
