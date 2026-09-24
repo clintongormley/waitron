@@ -23,9 +23,8 @@ export type OrderFlow = (typeof orderFlow.enumValues)[number];
 /**
  * The deployed till's identity, resolved once at boot from the environment provisioning stamped it
  * with. The four fiscal ids are branded (a bare uuid string cannot be passed where one of these is
- * expected), and `locationId` rides alongside because the sale path needs it: `recordTillSale`
- * (Task 3) and `GET /api/products` (Task 6) both call `listAvailableProducts(tx, locationId)`, so
- * the config the till carries has to include the location it sells from, not just its fiscal keys.
+ * expected), and `locationId` rides alongside because the sale path reads the location it sells
+ * from (its invoice languages, `priceOrderLines`), not just its fiscal keys.
  *
  * `locale` / `invoiceLocales` are display-side: the till's own UI locale and the set of locales its
  * invoices are rendered in. One entry today (there is a single till locale), a list so the invoice

@@ -74,7 +74,7 @@ export type { ListedVariant, Product } from "./product-types.js";
 
 /**
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
- * assignment, and the read the till sells from (`listAvailableProducts`).
+ * assignment, and the sell-side reads (`listMenuOffers`, `listAvailableProducts`).
  *
  * Every operation shares the caller's transaction.
  *
@@ -1178,8 +1178,7 @@ export async function removeCatalogueFromLocation(
  * the union already read (or `null` when the location has none): returned alongside so a caller that
  * needs to flag the default menu ({@link listAccessibleCatalogues}) does not re-read `locations`.
  * `invoiceLocales` is that SAME `locations` row's `invoice_locales` (empty only when the location does
- * not exist), projected here so the sale path ({@link listAvailableProducts} → `priceOrderLines`) gets
- * it from this ONE read rather than issuing a second single-row `locations` query.
+ * not exist), so a caller needing both reads `locations` once.
  */
 export async function resolveAccessibleCatalogueIds(
   tx: Transaction,
@@ -1258,8 +1257,7 @@ export async function listAccessibleCatalogues(
  * catalogue name, then product `created_at`, then `id` so the result is stable and grouped by menu.
  *
  * Returns the location's `invoiceLocales` ALONGSIDE the products — both derived from the single
- * `resolveAccessibleCatalogueIds` read of `locations` — so the sale path (`priceOrderLines`) re-keys
- * catalogue content to the fiscal line's full tags without a SECOND `locations` query. `invoiceLocales`
+ * `resolveAccessibleCatalogueIds` read of `locations`. `invoiceLocales`
  * is `[]` ONLY when the `locations` row is missing; `products` empties more broadly (any location with
  * no accessible catalogue), so the two emptiness conditions are NOT equivalent — a real location with
  * an empty catalogue returns `[]` products but its actual `invoiceLocales`.

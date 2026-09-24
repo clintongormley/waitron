@@ -50,7 +50,7 @@ const noopLog: Logger = () => {};
 interface Venue {
   /**
    * This venue's single location id — the `:locationId` the location-menu routes act on, and the
-   * location-scoped read the till uses (`listAvailableProducts`).
+   * location-scoped read behind `GET /api/products` (`listAvailableProducts`).
    */
   locationId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `person.manage`). */

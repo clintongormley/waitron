@@ -14,7 +14,7 @@ import type { OfferedExtraItem, OfferedModifier } from "./menu-types.js";
 
 /**
  * One dish whose attachments are being resolved: the product it sells, and the menu offer it was
- * selected through, or null when the line names a plain product and no offer is involved.
+ * selected through, or null when no offer is involved (`listAvailableProducts`).
  */
 export interface ModifierHolder {
   productId: string;
@@ -84,8 +84,8 @@ async function walkAttachedModifiers(
   // (CLAUDE.md §3).
   const attachments = await readProductModifiers(tx, productIds);
 
-  // Each dish is read on the side its own identity puts it on, so a set mixing offer lines with
-  // plain product lines resolves both. The two key spaces are distinct ids, so nothing collides.
+  // Each dish is read on the side its own identity puts it on. The two key spaces are distinct
+  // ids, so nothing collides.
   const extrasByHolder = new Map<string, ResolvedExtraList[]>();
   if (menuItemIds.length > 0) {
     for (const [holder, lists] of await readMenuExtras(tx, menuItemIds)) {

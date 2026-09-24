@@ -1180,8 +1180,9 @@ async function readOrder(id: string): Promise<{
 }
 
 /**
- * The GROSS (VAT-inclusive) basket total the operator saw for `lines` — computed the SAME way the
- * server prices a basket (`listAvailableProducts` → `priceBasket`), then take its `.total`. This is
+ * The GROSS (VAT-inclusive) basket total the operator saw for `lines` — the products' own prices
+ * through `priceBasket`, which is what the offers `offerProducts` publishes charge (each offer's
+ * price is left blank, so it sells at its product's), then take its `.total`. This is
  * the number every other surface shows (the basket grand total, the printed ticket), and the
  * invariant a held-orders `total` MUST equal EXACTLY (Important review finding). Derived independently
  * of the persisted `line_total` column, so a held total computed from the NET base — the bug — fails

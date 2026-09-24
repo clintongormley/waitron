@@ -145,8 +145,9 @@ export type LineExtras = { note?: string; variantId?: string };
  * The LIST maps come from one body — `walkAttachedModifiers`
  * (`packages/catalogue/src/offered-modifiers.ts`). This path reaches it through
  * `resolveAttachedModifiers`, which is a wrapper over it and has no other caller in product code;
- * the two sell-side reads a till draws its picker from reach the SAME body through
- * `readOfferedModifiers` (`listAvailableProducts` and `listMenuOffers`), not through the wrapper.
+ * the two sell-side reads reach the SAME body through `readOfferedModifiers`
+ * (`listAvailableProducts` and `listMenuOffers`, the one the till draws its picker from), not
+ * through the wrapper.
  * Deliberate: what the till is OFFERED has to be the set the validators below answer, or a required
  * list the picker never drew refuses the order.
  *
