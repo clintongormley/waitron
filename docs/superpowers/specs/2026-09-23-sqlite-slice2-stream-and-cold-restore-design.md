@@ -56,6 +56,12 @@ chain with nothing re-entered but one recovery kit, and staff can see how curren
     machine's addresses and a membership document one term higher (§5.1 step 7).
 15. **The break-glass and `waitron-credentials` tools keep working beside a running server**; the
     single-process lock (§6) refuses everything else.
+    > 2026-09-24: the lock is built (`packages/store/src/venue-lock.ts`). Five callers open without
+    > it: break-glass, `waitron-credentials`, and the scripts `record-one-sale.ts`,
+    > `settle-invoice-first.ts` and `cloud-backup-fixture.ts`'s capture step. `deploy/waitron.sh`'s
+    > stamp read opens `venue.db` with its own read-only `node:sqlite` connection, not through the
+    > store, so it takes no lock either. See `docs/developers/conventions-data.md`, "One process per
+    > venue folder".
 16. **A box never replaces a pointer that names a higher term than its own**; it stops streaming and
     raises `backup.stream_refused` (§4.4).
 17. **The venue id is the node's location id** (`config.till.locationId`), which boot already treats as
@@ -74,7 +80,8 @@ chain with nothing re-entered but one recovery kit, and staff can see how curren
 - A rebuild of a dead box from the bucket — setup wizard and command line — that comes back as the
   same node, with its certificate authority and credentials, under a fresh fiscal chain.
 - The restart reset the topology design's §5.2 requires, and the single-process lock on the venue
-  folder that makes it safe. (2026-09-23: the reset landed first, see §6; the lock is still to build.)
+  folder that makes it safe. (2026-09-23: the reset landed first, see §6; the lock is still to build.
+  2026-09-24: the lock is built, see §6.)
 
 **Does not deliver**, stated so nobody assumes otherwise: promotion, seats, a second live node, the
 tail shipper, the mirror box, fencing a running box remotely, the Waitron Cloud bucket, streaming to a
@@ -411,6 +418,14 @@ process opening the folder today (no single-instance lock was found in `packages
 `apps/server`). **Slice 2 enforces it:** the store takes an exclusive lock on the venue folder at open,
 and a second opener is refused with a named error. The plan checks whether the migrator's existing
 lock can serve.
+
+> 2026-09-24: the lock is built (`packages/store/src/venue-lock.ts`); a second process is refused
+> `provisioning.database_in_use`. Five callers open without it: break-glass, `waitron-credentials`,
+> and the scripts `record-one-sale.ts`, `settle-invoice-first.ts` and `cloud-backup-fixture.ts`'s
+> capture step. `deploy/waitron.sh`'s stamp read opens `venue.db` with its own read-only
+> `node:sqlite` connection, not through the store, so it takes no lock either. The migrator's lock
+> could not serve: it queues a second migrator instead of refusing it. See
+> `docs/developers/conventions-data.md`, "One process per venue folder".
 
 ---
 

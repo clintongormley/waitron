@@ -72,13 +72,16 @@ unset everywhere in this codebase — it is `venue` under `WAITRON_STATE_DIR`, s
 beside the box's other persisted state (`config.ts`, `ServerConfig.venueDir`). Put it on durable,
 protected storage: it holds the fiscal records.
 
-Migrations run at every boot, over that directory. Two processes starting together are serialised
-by a third SQLite file, `migrations.lock`, which the migrator holds an open transaction on for the
+Migrations run at every boot, over that directory. Two migrators starting together queue on a
+third SQLite file, `migrations.lock`, which the migrator holds an open transaction on for the
 length of the run — a second migrator waits up to two minutes and is then refused
 `database is locked`. It is a SQLite file rather than an exclusively-created lock file on purpose:
 closing the connection releases it, and so does killing the process, where a plain lock file would
 survive the crash and wedge every later boot. `packages/migrations/src/apply.ts` carries the races
-that were run to decide both.
+that were run to decide both. Only the migrate step waits: opening the folder is guarded separately
+by `venue.lock`, so a second process that opens it WITH the lock while another holds it, a second
+server included, is refused `provisioning.database_in_use`; the tools meant to run beside the server
+open it without the lock ([conventions-data.md](../../docs/developers/conventions-data.md), "One process per venue folder").
 
 `applyMigrations` also installs each set's **append-only triggers** as it goes, from the table names
 that set declares. Those are SQLite `RAISE(ABORT)` triggers (`packages/store/src/append-only.ts`),
@@ -116,7 +119,7 @@ writes the stamp" above for why that file was removed).
 
 It runs **against a directory something has already migrated**, and stamps that directory itself
 when it carries no stamp (see "What actually writes the stamp" above). Stop the server first: while
-a server has the directory open, `venue` is refused with `provisioning.database_in_use`. A directory nothing has
+another process (usually the server) has the folder open, `venue` is refused with `provisioning.database_in_use`. A directory nothing has
 migrated is refused with `provisioning.database_unmigrated`, and one stamped for the other
 environment with `deployment.already_stamped` — one database per environment is a fiscal invariant. It opens the venue
 **directory** — `--venue-dir`, else `WAITRON_VENUE_DIR` (the same variable this server reads, so a
@@ -508,8 +511,10 @@ most — a purpose and a field NAME, never decrypted material, a Stripe secret, 
 ## Migrations
 
 Applied at boot, every time, behind the venue directory's own `migrations.lock` file
-(`@waitron/migrations`'s `apply.ts`) so two processes starting together cannot race the same
-journal. Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current
+(`@waitron/migrations`'s `apply.ts`) so two migrators starting together cannot race the same
+journal. Only the migrate step waits on it; a second process opening the folder WITH the lock is
+refused `provisioning.database_in_use` by `venue.lock`, while the tools meant to run beside the
+server open it without the lock ([conventions-data.md](../../docs/developers/conventions-data.md), "One process per venue folder"). Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current
 database — the cost is opening the files and reading each journal, not any actual DDL. A migration
 failure is a boot failure: the process logs and exits non-zero rather than starting half-migrated.
 Each set's append-only triggers are installed in the same run; see

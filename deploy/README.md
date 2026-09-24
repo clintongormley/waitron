@@ -5,9 +5,12 @@ the node keeps lives in the named Docker volumes below, so `docker volume` is th
 life. Back those up and you have backed up the box.
 
 **The venue's own database is a folder inside the `state` volume.** The app opens
-`/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars and
-the `migrations.lock` file two migrating processes queue on. There is no database server in the
-app's path, no connection string and no database password.
+`/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars,
+the `migrations.lock` file two migrating processes queue on, and the `venue.lock` file that refuses
+a second process opening the folder with the lock. While either lock file is held a `-journal`
+appears beside it, and a crash can leave that behind. None of these lock files holds data; do not
+delete them, because a process that finds one missing takes a new lock beside the one still held.
+There is no database server in the app's path, no connection string and no database password.
 
 | volume        | mounted at                     | holds                                                                                                                           |
 | ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -211,8 +214,9 @@ middle of a cold restore, so it is worth reading twice:
   The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …`, to
   `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
 
-  Restore and rejoin refuse, changing nothing, while another process, usually the running server,
-  is using the venue folder (`provisioning.database_in_use`). Break-glass is the exception by design: it runs beside the
+  Restore and rejoin are refused while another process, usually the running server, is using the
+  venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
+  before it writes, moves or removes any database, identity or secret file. Break-glass is the exception by design: it runs beside the
   server and takes no lock.
 
 ## The box's environment — `deploy/.env`

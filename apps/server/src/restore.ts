@@ -272,8 +272,10 @@ async function placeValidated(validated: ValidatedArtifact, deps: RestoreDeps): 
 
 /**
  * Writes a validated artifact ({@link placeValidated}) holding the venue folder, so a restore
- * started while another process holds the folder is refused `provisioning.database_in_use` with nothing on the box
- * changed. The hook's own open and the migrate inside share the hold.
+ * started while another process holds the folder is refused `provisioning.database_in_use` before
+ * any database, identity or secret file is written, moved or removed. (`validateArtifact`, which
+ * runs first, has already created `stagingDir` and `stateDir` if they were absent.) The hook's own
+ * open and the migrate inside share the hold.
  */
 export async function writeValidated(
   validated: ValidatedArtifact,

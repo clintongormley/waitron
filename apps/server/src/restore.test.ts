@@ -611,9 +611,9 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
       log: noopLog,
     });
 
-    // The stale handle is on an orphaned inode now. Nothing here stops it writing — refusing to
-    // restore under a running server is a separate guard — but neither its write nor the
-    // checkpoint its close performs may reach the file the next boot opens.
+    // The stale handle is on an orphaned inode now and can still write: `restoreDatabase` takes no
+    // lock, and the hold `writeValidated` takes is shared with opens in the same process. Neither
+    // its write nor the checkpoint its close performs may reach the file the next boot opens.
     live.venue.run(sql`insert into marker (v) values ('WRITTEN-AFTER-RESTORE')`);
     await live.close();
 

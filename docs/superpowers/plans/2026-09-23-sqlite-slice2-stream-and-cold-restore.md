@@ -103,6 +103,11 @@ single task is most likely to get wrong.
 - O2. **Up to 5,000 product images; shrink them on upload.** New Task 0, first in the order.
 - O3. **Break-glass and `waitron-credentials` keep working beside a running server** (the lock's
   `exclusive: false` exemptions in Task 3a). Everything else — a second server above all — is refused.
+  (2026-09-24: as built, three scripts also open without the lock — `record-one-sale.ts`,
+  `settle-invoice-first.ts` and `cloud-backup-fixture.ts`'s capture step — and `deploy/waitron.sh`'s
+  stamp read opens `venue.db` with its own read-only `node:sqlite` connection, not through the store,
+  so it takes no lock either; see `docs/developers/conventions-data.md`, "One process per venue
+  folder".)
 - O4. **An archive restore ALSO gets the first-start routine** of Task 9a: a certificate re-issued
   for this machine's addresses and a membership document one term higher. Task 9a triggers on a marker
   written by BOTH restore sources (Task 9b's stream path and the existing archive path), not the stream
@@ -5651,6 +5656,12 @@ Run: `pnpm --filter @waitron/provisioning exec vitest run src/cli.test.ts -t "ru
 Expected: FAIL — the printed line is `provisioning.state_unreadable {"database":…,"reason":"provisioning.database_in_use"}`.
 
 - [ ] **Step 12: Implement the callers**
+
+> 2026-09-24: as built, the refusals below are narrower than this step's wording ("with nothing on
+> the box changed", "while one runs", "changing nothing"). A refused restore writes, moves or removes
+> no database, identity or secret file, but `validateArtifact`, which runs before the lock, may
+> already have created `stagingDir` and `stateDir`. The refusal comes from any process holding the
+> venue folder's lock, usually the server.
 
 `apps/server/src/restore.ts`: import `lockVenueDatabase` and `type VenueLock` from `@waitron/db`
 (beside `openVenueDatabase`); add to `RestoreDeps`:

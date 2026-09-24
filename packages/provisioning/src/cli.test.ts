@@ -837,7 +837,7 @@ describe("runCli venue", () => {
     expect(printed).not.toContain("file is not a database");
   });
 
-  it("reports a venue folder a running server holds by its own code, not as unreadable", async () => {
+  it("reports a venue folder another process holds by its own code, not as unreadable", async () => {
     const h = harness({ env: VENUE_ENV });
     h.openVenue.mockRejectedValue(
       new AppError("provisioning.database_in_use", { database: VENUE_DIR }),

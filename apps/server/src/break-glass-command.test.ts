@@ -461,27 +461,29 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
   });
 });
 
-it("opens a venue folder a running server holds, because break-glass runs beside it", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "break-glass-beside-"));
-  const script = `import { DatabaseSync } from "node:sqlite";
+describe("openBreakGlassVenue", () => {
+  it("opens a venue folder a running server holds, because break-glass runs beside it", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "break-glass-beside-"));
+    const script = `import { DatabaseSync } from "node:sqlite";
 const db = new DatabaseSync(process.argv[1]);
 db.exec("begin immediate");
 process.stdout.write("held");
 setInterval(() => {}, 1000);`;
-  const holder = spawn(
-    process.execPath,
-    ["--input-type=module", "-e", script, join(directory, "venue.lock")],
-    { stdio: ["ignore", "pipe", "inherit"] },
-  );
-  try {
-    await new Promise<void>((resolve, reject) => {
-      holder.stdout.on("data", (c: Buffer) => c.toString().includes("held") && resolve());
-      holder.on("exit", (code) => reject(new Error(`holder exited early (${code})`)));
-    });
-    const opened = await openBreakGlassVenue(directory);
-    await opened.close();
-  } finally {
-    holder.kill("SIGKILL");
-    await rm(directory, { recursive: true, force: true });
-  }
-}, 20_000);
+    const holder = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script, join(directory, "venue.lock")],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        holder.stdout.on("data", (c: Buffer) => c.toString().includes("held") && resolve());
+        holder.on("exit", (code) => reject(new Error(`holder exited early (${code})`)));
+      });
+      const opened = await openBreakGlassVenue(directory);
+      await opened.close();
+    } finally {
+      holder.kill("SIGKILL");
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+});
