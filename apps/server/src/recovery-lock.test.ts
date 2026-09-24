@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RECOVERY_LOCK_FILE, withRecoveryLock } from "./recovery-lock.js";
 
+const children: ChildProcess[] = [];
 const dirs: string[] = [];
 async function stateDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "wt-reclock-"));
@@ -13,6 +14,7 @@ async function stateDir(): Promise<string> {
   return dir;
 }
 afterEach(async () => {
+  for (const child of children.splice(0)) child.kill("SIGKILL");
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -30,6 +32,7 @@ setTimeout(() => connection.close(), ${holdMs});`;
     ["--input-type=module", "-e", script, join(dir, RECOVERY_LOCK_FILE)],
     { stdio: ["ignore", "pipe", "inherit"] },
   );
+  children.push(child);
   const deadline = setTimeout(() => child.kill("SIGKILL"), 15_000);
   const released = new Promise<void>((resolve) =>
     child.on("exit", () => {
